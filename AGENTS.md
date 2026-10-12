@@ -5,7 +5,7 @@ This repository turns AcidCat into a standalone specification. Read [README.md](
 ## Where things stand
 
 - The repository is local only. It has no remote. Creating one, or publishing the site, is the user's decision.
-- Nothing is specified yet. The divergence inventory lists 18 open rows (D1–D18) and 4 gaps that neither implementation covers.
+- 14 of the 18 divergence rows are closed, each with a section in `spec/`. D5, D6, D11 and D18 have proposals that are waiting for the user's decision. 5 gaps remain that neither implementation covers.
 - Jarette's Box (JB) is the production origin. Its accepted spec is the starting text. heb-stack (HS) holds later refinements.
 - No toolchain is set up. Lean, Node and Moon are not pinned yet.
 
