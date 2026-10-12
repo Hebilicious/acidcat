@@ -6,10 +6,10 @@ Two implementations of AcidCat exist. This inventory lists where they agree, whe
 
 | Name | Repository | Ref | What to read |
 | --- | --- | --- | --- |
-| **JB** | `~/GitHub/jarettes-box` | `04c453459879` (branch `fix/iliya-map-marker-zoom`, 2026-10-09) | `docs/architecture/acidcat/spec.md`, `docs/architecture/acidcat/inventory.md`, `docs/adr/0014-make-acidcat-the-sole-application-interface.md`, `packages/acidcat-kernel/src`, `packages/acidcat/src`, `packages/{webmcp-adapter,mcp,cli}`, `tests/features/acidcat` |
+| **JB** | `~/GitHub/jarettes-box` | `8e8653273eb5` (branch `bartering`, 2026-10-11) | `docs/architecture/acidcat/spec.md`, `docs/architecture/acidcat/inventory.md`, `docs/adr/0014-make-acidcat-the-sole-application-interface.md`, `packages/acidcat-kernel/src`, `packages/acidcat/src`, `packages/{webmcp-adapter,mcp,cli}`, `tests/features/acidcat` |
 | **HS** | `~/GitHub/heb-stack` | `ae9c084a4c25` (`main`) | `README.md#acidcat`, `packages/acidcat-kernel/src`, `packages/acidcat/src`, `packages/{webmcp-adapter,mcp,cli,rpc}`, `features/` |
 
-JB's `main` was reset to a fresh specifications commit, so its AcidCat code is reachable only from branches. Read it with `git show <ref>:<path>`, and do not check it out over that repository's working tree.
+JB's application lives on `bartering`, while its `main` holds only the new specifications commit. Read it with `git show <ref>:<path>`, and do not check it out over that repository's working tree.
 
 JB is the accepted specification of a production application. HS is a smaller derivative with later refinements. When the two differ, JB's spec text is the starting point unless HS's change is deliberate.
 
