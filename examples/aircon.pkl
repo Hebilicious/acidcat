@@ -26,26 +26,25 @@ targets {
   }
 }
 
-local modes = new Listing { "cool"; "heat"; "dry"; "fan"; "auto" }
-local fanSpeeds = new Listing { "auto"; "low"; "medium"; "high" }
-
-local status = new Dynamic {
-  title = "Status"
-  type = "object"
-  required { "power"; "mode"; "fan"; "targetCelsius"; "roomCelsius" }
-  properties {
-    power { type = "boolean" }
-    mode { enum = modes }
-    fan { enum = fanSpeeds }
-    targetCelsius { type = "number" }
-    roomCelsius { type = "number" }
+types {
+  ["Mode"] { enum { "cool"; "heat"; "dry"; "fan"; "auto" } }
+  ["FanSpeed"] { enum { "auto"; "low"; "medium"; "high" } }
+  ["Status"] {
+    type = "object"
+    required { "power"; "mode"; "fan"; "targetCelsius"; "roomCelsius" }
+    properties {
+      power { type = "boolean" }
+      mode = module.ref("Mode")
+      fan = module.ref("FanSpeed")
+      targetCelsius { type = "number" }
+      roomCelsius { type = "number" }
+    }
   }
-}
-
-local offline = new Dynamic {
-  type = "object"
-  properties {
-    since { type = "string"; format = "date-time" }
+  ["Offline"] {
+    type = "object"
+    properties {
+      since { type = "string"; format = "date-time" }
+    }
   }
 }
 
@@ -61,7 +60,7 @@ local function setting(text: String, name: String, property: Dynamic) = new Capa
     required { name }
     properties { [name] = property }
   }
-  failures { ["Offline"] = offline }
+  failures { ["Offline"] = module.ref("Offline") }
 }
 
 capabilities {
@@ -69,16 +68,16 @@ capabilities {
     description = "Read the unit's power, mode, fan speed, target temperature and room temperature."
     audience = everywhere
     readOnly = true
-    output = status
-    state = status
-    failures { ["Offline"] = offline }
+    output = module.ref("Status")
+    state = module.ref("Status")
+    failures { ["Offline"] = module.ref("Offline") }
   }
 
   ["aircon.power.set"] = (setting("Turn the unit on or off.", "on", new Dynamic { type = "boolean" })) {
     audience = everywhere
   }
 
-  ["aircon.mode.set"] = (setting("Choose how the unit runs.", "mode", new Dynamic { enum = modes })) {
+  ["aircon.mode.set"] = (setting("Choose how the unit runs.", "mode", module.ref("Mode"))) {
     failures {
       ["PoweredOff"] {
         type = "object"
@@ -94,13 +93,13 @@ capabilities {
       maximum = 31
     })
 
-  ["aircon.fan.set"] = setting("Set the fan speed.", "speed", new Dynamic { enum = fanSpeeds })
+  ["aircon.fan.set"] = setting("Set the fan speed.", "speed", module.ref("FanSpeed"))
 
   ["aircon.firmware.update"] {
     description = "Install the latest firmware. The unit restarts and is offline for about a minute."
     audience { "app" }
     failures {
-      ["Offline"] = offline
+      ["Offline"] = module.ref("Offline")
       ["UpToDate"] {
         type = "object"
         properties {

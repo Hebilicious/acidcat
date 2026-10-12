@@ -15,6 +15,7 @@ Status: **draft 0.1, not published.** AcidCat started in Jarette's Box, where it
 | `examples/` | Complete catalogs, written in Pkl, with the JSON each one renders to |
 | `pkl/` | `Catalog.pkl`, the Pkl module for writing catalogs by hand |
 | `scripts/` | The checks behind the Moon tasks |
+| `adoption/` | Tools that bring existing implementations onto the specification, such as the catalog exporter for Jarette's Box |
 | `lean/` | A Lean 4 model of the semantics, its proofs, and the test vectors it generates |
 | `conformance/` | The conformance kit that every implementation runs |
 | `ref/ts/` | The TypeScript reference implementation: the kernel and the generic adapters |

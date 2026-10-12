@@ -11,6 +11,6 @@ A protocol binding that serves a view as a GraphQL schema generated from the cat
 - **Generic access.** `Mutation.acidcatInvoke(id: String!, input: JSON): JSON!` returns the outcome in its JSON form, so that every capability can also be reached by id.
 - **Cancellation.** Abandoning the request cancels its calls.
 
-Generated type names come from the schema's `title` when it has one, and otherwise from the field name with `Input`, `Value` or the failure tag added.
+Each type in `$defs` becomes a GraphQL type with the same name. Other generated types take their name from the schema's `title` when it has one, and otherwise from the field name with `Input`, `Value` or the failure tag added.
 
 The binding serves `POST` with `application/json` and screens requests as remote bindings must. A capability that declares `state` MAY also be served as a `Subscription` field.

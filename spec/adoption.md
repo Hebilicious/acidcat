@@ -14,8 +14,11 @@ This page shows how Jarette's Box (JB) and heb-stack (HS) move onto this specifi
 1. **Generate `acidcat.catalog.json` and commit it.** Extend the existing manifest generator, walking the same `definitions` tree:
    - write `acidcat: "0.1"` and a `targets` map;
    - for each leaf, write `description`, `audience`, `input` and `output` from the program's codecs;
-   - split the error union into `failures` keyed by each variant's `_tag` literal, and copy the `$defs` each variant uses into that variant's schema. A capability whose error is `never` gets no `failures`.
-2. **Check the catalog.** In the existing conformance gate, fail when the committed catalog differs from a fresh generation, and validate it against `schemas/catalog.schema.json`.
+   - split the error union into `failures` keyed by each variant's `_tag` literal. A capability whose error is `never` gets no `failures`;
+   - move every schema's own `$defs` up into the catalog's [`$defs`](catalog.md#types), and turn schemas that repeat into shared types.
+
+   [`adoption/jarettes-box/generate-acidcat-catalog-export.ts`](../adoption/jarettes-box/generate-acidcat-catalog-export.ts) does all of this for JB, using JB's own `manifestSchema`. HS's generator follows the same steps.
+2. **Check the catalog.** In the existing conformance gate, fail when the committed catalog differs from a fresh generation. Validate it with `node scripts/check-catalogs.ts <catalog.json>` from this repository, which applies the schema and the rules it cannot express.
 3. **Serve views.** The page fetches the view of its target instead of today's manifest. The MCP server and the CLI serve the views of theirs.
 4. **Give call failures their kind.** In the executor, set `kind` on the errors that `invokeExternal` throws (`cancelled`, `unavailable`, `invalid-input`, `internal`), and map them in each adapter, as each binding states.
 5. **MCP.** Wrap failures as `{ "ok": false, "error" }`, return call failures with `{ "kind", "message" }`, publish `outputSchema` and `readOnlyHint`, pass the request's signal to the call, and screen the media type and UTF-8.
@@ -30,6 +33,22 @@ This page shows how Jarette's Box (JB) and heb-stack (HS) move onto this specifi
 | Commit only a WebMCP pass that has succeeded, so that a failed pass cannot strand its registrations | `packages/webmcp-adapter/src/webmcp-machine.ts` |
 | Mark handle fields with `format: acidcat-attachment`, make handles in outputs belong to the provider, and release the handles of rejected OCR reviews | `packages/acidcat-kernel/src/attachments.ts`, the ships and bartering owners |
 | Slice `navigation.atlas.feature.inspect` connections to the declared maximum | `packages/application-navigation` |
+
+### Exporting JB today
+
+At `bartering@8e8653273eb5` the exporter produces a conforming catalog: 99 capabilities in 270 KB, with 106 shared types. Without shared types the same catalog is 2.6 MB, because 22 capabilities each repeat the 90 KB workbench schema.
+
+### Later: a pull request to JB
+
+Once the specification is stable, one pull request to JB improves what its catalog says. None of these items blocks adoption:
+
+- **Name the shared types.** Give the schemas that repeat, such as the workbench, sailors, ships and map items, an Effect `identifier`, so that `$defs` holds `Workbench` instead of `BarteringWorkbenchInspectOutputWorkbench`.
+- **List the failures.** `BarteringFailure`, `ShipFailure` and the other domain failures carry a free-text `code`, so neither an agent nor generated code can tell which failures can happen. Give each one its own tag, or at least make `code` an enum.
+- **Mark reads.** Add `readOnly` to `defineCapability`, and set it on the reads. 36 ids end in verbs such as `inspect`, `list` or `search`.
+- **Mark attachment handles** with `format: acidcat-attachment` in the three capabilities that take screenshots.
+- **Describe the fields.** The schemas carry about 36,000 typed nodes and 87 descriptions, so agents see types with little explanation.
+- **Reconsider union inputs.** 17 of the 99 inputs choose between shapes, which the CLI can only reach through `call`.
+- **Declare state.** JB's snapshots exist only in TypeScript. Declaring `state` would let other bindings observe them.
 
 JB's own requirements stay JB's own checks: every capability reaches `application`; `cli` and `mcp` are strict subsets; every array has `maxItems`; Product Promises cover every id. The specification allows all of them and requires none of them.
 

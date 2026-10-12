@@ -36,7 +36,7 @@ The full example is [`examples/aircon.acidcat.json`](../examples/aircon.acidcat.
 
 Only the JSON document is normative. A catalog MAY be written in any language that produces it: by hand in JSON, in YAML, in Pkl, or generated from code.
 
-[Pkl](https://pkl-lang.org) is the recommended language for writing a catalog by hand. A catalog that amends [`pkl/Catalog.pkl`](../pkl/Catalog.pkl) gets types, and its rules are checked while it is being written. An undeclared audience, an input that is not an object, or a malformed id is an error before any JSON is produced. Shared schemas are written once and reused, and members under `extensions` render with their `x-` prefix. `pkl eval` renders the JSON.
+[Pkl](https://pkl-lang.org) is the recommended language for writing a catalog by hand. A catalog that amends [`pkl/Catalog.pkl`](../pkl/Catalog.pkl) gets types, and its rules are checked while it is being written. An undeclared audience, an input that is not an object, or a malformed id is an error before any JSON is produced. Shared types go under `types`, which renders as `$defs`. `module.ref("Status")` references one, and fails if no type has that name. Members under `extensions` render with their `x-` prefix. `pkl eval` renders the JSON.
 
 ## Document
 
@@ -47,6 +47,7 @@ Only the JSON document is normative. A catalog MAY be written in any language th
 | `description` | no | What the application is |
 | `targets` | yes | The targets, keyed by name |
 | `capabilities` | yes | The capabilities, keyed by id |
+| `$defs` | no | Shared types, keyed by name. See [Types](#types) |
 
 ## Targets
 
@@ -70,7 +71,7 @@ Each key of `capabilities` is an [id](#ids), and each value describes the capabi
 | --- | --- | --- |
 | `description` | yes | What the capability does for its caller, written for people and agents |
 | `audience` | no | The targets the capability is offered to. Each entry MUST be a key of `targets`. When absent or empty, the capability reaches no target |
-| `input` | no | The schema of the input. Its top level MUST state `"type": "object"`. When absent, the input is an empty object |
+| `input` | no | The schema of the input. It MUST describe an object: its top level states `"type": "object"`, or it is a `$ref` to a type that does. When absent, the input is an empty object |
 | `output` | no | The schema of the value a successful call returns. When absent, the value is `null` |
 | `failures` | no | The capability's failures, keyed by tag. See [Failures](#failures) |
 | `readOnly` | no | `true` when a call changes nothing that the caller or anyone else can observe. It is a hint for clients, such as an agent deciding whether to ask the user first, and does not change how a call runs |
@@ -88,13 +89,36 @@ Each key of `failures` is a **tag**, a non-empty string, conventionally in Pasca
 
 ## Schemas
 
-Every schema in a catalog is a JSON Schema 2020-12 schema that stands on its own: its `$ref`s resolve within that schema, using its own `$defs`. A schema's `title` SHOULD name the type, so that language bindings can generate readable type names.
+Every schema in a catalog is a JSON Schema 2020-12 schema. A value that crosses a boundary is in the form its schema describes. Every input, output, failure and state value MUST conform to its schema.
 
-A value that crosses a boundary is in the form the schema describes. Every input, output, failure and state value MUST conform to its schema.
+## Types
+
+A type that is used in more than one place is written once, under the catalog's top-level `$defs`, and referenced by name:
+
+```json
+{
+  "$defs": {
+    "Status": { "type": "object", "required": ["power"], "properties": { "power": { "type": "boolean" } } }
+  },
+  "capabilities": {
+    "aircon.status.get": { "description": "…", "output": { "$ref": "#/$defs/Status" } }
+  }
+}
+```
+
+- A type name matches `[A-Za-z][A-Za-z0-9_]*`. PascalCase is conventional. Language bindings generate a named type from each one.
+- Every `$ref` in a catalog has the form `#/$defs/<Name>`, and names a type in the catalog's `$defs`. Types can reference each other.
+- Schemas inside capabilities do not carry `$defs` of their own.
+
+A schema's `title` SHOULD name the type when the schema is written inline, so that language bindings can still give it a readable name.
+
+## Bundling
+
+Some surfaces need a schema that stands on its own: an MCP tool's input schema is an example. A binding produces one by **bundling**. It copies every type the schema reaches, directly or through other types, into the schema's own `$defs`. When the schema is only a `$ref`, the bundle is the referenced type itself, carrying those `$defs`. References keep their form, so `#/$defs/Status` resolves the same way in the bundle as it does in the catalog.
 
 ## Views
 
-The **view** of a target is the catalog reduced to that target: `targets` keeps only that target, and `capabilities` keeps only the capabilities whose audience names it. A view is itself a catalog.
+The **view** of a target is the catalog reduced to that target: `targets` keeps only that target, and `capabilities` keeps only the capabilities whose audience names it. `$defs` keeps only the types those capabilities reach, so that a view reveals nothing about capabilities outside it. A view is itself a catalog.
 
 A binding serves exactly its target's view. A client of a target MUST NOT be able to learn about a capability outside the view. A call naming such a capability fails as a call naming an id that does not exist ([Invocation](invocation.md#call-failures)).
 
@@ -122,4 +146,4 @@ Consumers ignore members they do not know. Members that this specification does 
 
 **Failures keyed by tag.** Both implementations already send failures as objects with a `_tag`. Keying the schemas by tag makes the failures easy to read and to write by hand, and gives each language a natural union of named failures.
 
-**Schemas stand on their own.** MCP and WebMCP require an input schema that stands on its own. Both implementations already produce a separate document for each schema. A `$defs` shared across the whole catalog would break both.
+**Shared types, bundled where needed.** A draft of this specification required every schema to stand on its own, because MCP and WebMCP need that. Exporting Jarette's Box showed the cost. Its catalog came to 2.6 MB, and 22 capabilities each repeated the same 90 KB workbench schema. With shared types it is about 275 KB, and code generators get one `Workbench` type instead of 22 anonymous copies. Bundling gives MCP and WebMCP what they need, and it is mechanical. OpenAPI shares types between operations in the same way.

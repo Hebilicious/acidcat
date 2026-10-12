@@ -5,7 +5,7 @@ A protocol binding that serves a view as a command line generated from the catal
 ## Commands
 
 - **Names.** Every capability in the view is a command whose path is the id's segments: `aircon.power.set` becomes `cli aircon power set`. A shared prefix is a command that only groups the commands beneath it.
-- **Input.** Each top-level property of the input schema becomes a flag with the property's name, such as `--celsius 22` or `--celsius=22`. A property listed in `required` is a required flag. The flags only shape the input: the provider still validates the input it receives against the schema.
+- **Input.** Each top-level property of the input schema, after following a top-level `$ref`, becomes a flag with the property's name, such as `--celsius 22` or `--celsius=22`. A property listed in `required` is a required flag. The flags only shape the input: the provider still validates the input it receives against the schema.
 
   | Property schema | Flag value |
   | --- | --- |

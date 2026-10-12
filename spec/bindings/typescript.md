@@ -31,7 +31,7 @@ interface Handle<Input, Value, Failure, State = never> {
 - **Listing.** A session walks its handles. A handle outside the session's target reports itself unavailable, so adapters filter on availability alone.
 - **Cancellation.** `options.signal` cancels one call. The session has its own signal, which cancels everything it started.
 - **State.** `snapshot` observes the capability's [state](../invocation.md#state), and is present when the capability declares `state`. A handle MAY also offer a `snapshot` for in-process clients when the catalog declares no `state`. Other bindings cannot see that snapshot. Every value read from `getSnapshot`, or passed to a listener, is detached from the provider's own data.
-- **Types.** `Input`, `Value`, `Failure` and `State` are generated from the catalog's schemas, or written by hand and checked against them.
+- **Types.** Each type in `$defs` becomes a named TypeScript type, and `Input`, `Value`, `Failure` and `State` are generated from the capability's schemas. They may instead be written by hand and checked against the catalog.
 
 A session is disposed with `dispose(): Promise<void>`, which follows the [session lifecycle](../invocation.md#sessions).
 

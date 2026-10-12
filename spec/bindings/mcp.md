@@ -20,8 +20,8 @@ Every refusal carries `Cache-Control: no-store`.
 
 ## Tools
 
-- **Names and listing.** `tools/list` lists one tool for each capability in the view that is available. The tool's `name` is the id, its `description` is the capability's description, and its `inputSchema` is the capability's input schema.
-- **Output schema.** When the capability's output schema states `"type": "object"` at its top level, the tool declares it as `outputSchema`. Otherwise the tool has no `outputSchema`.
+- **Names and listing.** `tools/list` lists one tool for each capability in the view that is available. The tool's `name` is the id, its `description` is the capability's description, and its `inputSchema` is the capability's input schema, [bundled](../catalog.md#bundling).
+- **Output schema.** When the capability's bundled output schema states `"type": "object"` at its top level, the tool declares it as `outputSchema`. Otherwise the tool has no `outputSchema`.
 - **Hints.** `annotations.readOnlyHint` is `true` for a `readOnly` capability.
 - **Cancellation.** Closing the request, or cancelling it, cancels the call. The binding need not answer a cancelled call.
 - **Outcomes.**

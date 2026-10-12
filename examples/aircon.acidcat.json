@@ -36,6 +36,61 @@
       "description": "Home-automation systems and scripts."
     }
   },
+  "$defs": {
+    "Mode": {
+      "enum": [
+        "cool",
+        "heat",
+        "dry",
+        "fan",
+        "auto"
+      ]
+    },
+    "FanSpeed": {
+      "enum": [
+        "auto",
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "Status": {
+      "type": "object",
+      "required": [
+        "power",
+        "mode",
+        "fan",
+        "targetCelsius",
+        "roomCelsius"
+      ],
+      "properties": {
+        "power": {
+          "type": "boolean"
+        },
+        "mode": {
+          "$ref": "#/$defs/Mode"
+        },
+        "fan": {
+          "$ref": "#/$defs/FanSpeed"
+        },
+        "targetCelsius": {
+          "type": "number"
+        },
+        "roomCelsius": {
+          "type": "number"
+        }
+      }
+    },
+    "Offline": {
+      "type": "object",
+      "properties": {
+        "since": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
   "capabilities": {
     "aircon.status.get": {
       "description": "Read the unit's power, mode, fan speed, target temperature and room temperature.",
@@ -47,94 +102,16 @@
         "api"
       ],
       "output": {
-        "title": "Status",
-        "type": "object",
-        "required": [
-          "power",
-          "mode",
-          "fan",
-          "targetCelsius",
-          "roomCelsius"
-        ],
-        "properties": {
-          "power": {
-            "type": "boolean"
-          },
-          "mode": {
-            "enum": [
-              "cool",
-              "heat",
-              "dry",
-              "fan",
-              "auto"
-            ]
-          },
-          "fan": {
-            "enum": [
-              "auto",
-              "low",
-              "medium",
-              "high"
-            ]
-          },
-          "targetCelsius": {
-            "type": "number"
-          },
-          "roomCelsius": {
-            "type": "number"
-          }
-        }
+        "$ref": "#/$defs/Status"
       },
       "failures": {
         "Offline": {
-          "type": "object",
-          "properties": {
-            "since": {
-              "type": "string",
-              "format": "date-time"
-            }
-          }
+          "$ref": "#/$defs/Offline"
         }
       },
       "readOnly": true,
       "state": {
-        "title": "Status",
-        "type": "object",
-        "required": [
-          "power",
-          "mode",
-          "fan",
-          "targetCelsius",
-          "roomCelsius"
-        ],
-        "properties": {
-          "power": {
-            "type": "boolean"
-          },
-          "mode": {
-            "enum": [
-              "cool",
-              "heat",
-              "dry",
-              "fan",
-              "auto"
-            ]
-          },
-          "fan": {
-            "enum": [
-              "auto",
-              "low",
-              "medium",
-              "high"
-            ]
-          },
-          "targetCelsius": {
-            "type": "number"
-          },
-          "roomCelsius": {
-            "type": "number"
-          }
-        }
+        "$ref": "#/$defs/Status"
       }
     },
     "aircon.power.set": {
@@ -159,13 +136,7 @@
       },
       "failures": {
         "Offline": {
-          "type": "object",
-          "properties": {
-            "since": {
-              "type": "string",
-              "format": "date-time"
-            }
-          }
+          "$ref": "#/$defs/Offline"
         }
       }
     },
@@ -184,25 +155,13 @@
         ],
         "properties": {
           "mode": {
-            "enum": [
-              "cool",
-              "heat",
-              "dry",
-              "fan",
-              "auto"
-            ]
+            "$ref": "#/$defs/Mode"
           }
         }
       },
       "failures": {
         "Offline": {
-          "type": "object",
-          "properties": {
-            "since": {
-              "type": "string",
-              "format": "date-time"
-            }
-          }
+          "$ref": "#/$defs/Offline"
         },
         "PoweredOff": {
           "type": "object",
@@ -233,13 +192,7 @@
       },
       "failures": {
         "Offline": {
-          "type": "object",
-          "properties": {
-            "since": {
-              "type": "string",
-              "format": "date-time"
-            }
-          }
+          "$ref": "#/$defs/Offline"
         }
       }
     },
@@ -258,24 +211,13 @@
         ],
         "properties": {
           "speed": {
-            "enum": [
-              "auto",
-              "low",
-              "medium",
-              "high"
-            ]
+            "$ref": "#/$defs/FanSpeed"
           }
         }
       },
       "failures": {
         "Offline": {
-          "type": "object",
-          "properties": {
-            "since": {
-              "type": "string",
-              "format": "date-time"
-            }
-          }
+          "$ref": "#/$defs/Offline"
         }
       }
     },
@@ -286,13 +228,7 @@
       ],
       "failures": {
         "Offline": {
-          "type": "object",
-          "properties": {
-            "since": {
-              "type": "string",
-              "format": "date-time"
-            }
-          }
+          "$ref": "#/$defs/Offline"
         },
         "UpToDate": {
           "type": "object",

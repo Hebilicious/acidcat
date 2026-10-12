@@ -10,7 +10,7 @@ The binding MUST NOT depend on what `registerTool` returns. It withdraws a tool 
 
 ## Tools
 
-- **Names.** A tool's `name` is the id, its `description` is the capability's description, and its `inputSchema` is the capability's input schema, taken from the view. The page fetches the view, so it never has to convert schemas itself.
+- **Names.** A tool's `name` is the id, its `description` is the capability's description, and its `inputSchema` is the capability's input schema from the view, [bundled](../catalog.md#bundling). The page fetches the view, so it never has to convert schemas itself.
 - **Listing.** A capability is registered while it is available and withdrawn when it is not. Reconciliation runs one pass at a time. A change that arrives during a pass leads to another pass. A pass that fails leaves the tools as they were before it began.
 - **Outcomes.** `execute` resolves with the result in its JSON form. A call failure rejects with an `Error` whose `kind` property is the kind.
 - **Cancellation.** The signal the host passes to `execute` cancels the call. Disposing of the binding cancels every call in flight.

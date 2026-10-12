@@ -7,8 +7,9 @@ Conformance is judged from outside: from the catalog, and from what each binding
 A catalog conforms when it validates against [`schemas/catalog.schema.json`](../schemas/catalog.schema.json) and follows the rules in [Catalog](catalog.md) that the schema cannot express:
 
 - every audience entry is a declared target;
-- every input schema states `"type": "object"`;
-- every schema stands on its own.
+- every input describes an object, either directly or through the type it references;
+- every `$ref` names a type in the catalog's `$defs`, and no schema inside a capability carries `$defs` of its own;
+- every schema compiles once [bundled](catalog.md#bundling).
 
 ## Provider and bindings
 
