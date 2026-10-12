@@ -10,7 +10,7 @@ An **invocation** names a capability by its id, supplies an input, and may be ca
 
 Success and expected failure together form the **result**. Values cross a boundary in the encoded form that the manifest's schemas describe.
 
-Closes divergence row D13.
+Closes divergence rows D11 and D13.
 
 ## Expected failures
 
@@ -40,6 +40,16 @@ The message is meant for people and is not a stable value. Callers distinguish f
 
 A binding MUST map each outcome, and each invocation failure kind, onto its transport so that a caller can tell them apart.
 
+## Long work
+
+An invocation settles when its work is done, however long that takes. This specification defines no polling protocol and no execution timeout.
+
+Several patterns fit within that rule, and an application chooses among them:
+
+- A binding MAY report progress while a call runs, using whatever its protocol offers, such as MCP progress notifications.
+- A binding or deployment MAY bound how long it waits, as an HTTP platform does. The call then ends as `cancelled`.
+- A capability MAY start work and return straight away, leaving the owner to keep the work. Another capability reports how it is going, and a [snapshot](divergence.md#shared-core) can publish it.
+
 ## Rationale
 
 *This section is not normative.*
@@ -51,5 +61,7 @@ A binding MUST map each outcome, and each invocation failure kind, onto its tran
 **Interruption is cancellation.** When an owner replaces or cancels work it holds, the caller whose work was superseded has no result, and that is cancellation from the caller's point of view. Row D12 specifies when owners do this. Defects are a separate kind, so a bug never reads as a cancellation.
 
 **The order follows the code.** Both implementations check the signal first, then audience and availability, then decode the input. A cancelled answer does not depend on the id, so putting `cancelled` first reveals nothing.
+
+**Long work keeps JB's rule and leaves room around it (row D11).** JB and HS both await the final result, and a single rule for every capability keeps callers simple. Progress, transport deadlines, and starting work then inspecting it are all still open to applications, so the rule does not dictate how anyone runs long work.
 
 **In-process APIs are bindings.** The TypeScript handles throw `TypeError` and `AbortError`. That is how one binding represents these kinds, and it lives in `ref/ts/`.

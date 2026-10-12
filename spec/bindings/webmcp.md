@@ -14,7 +14,7 @@ The binding MUST NOT depend on what `registerTool` returns. It withdraws a tool 
 
 ## Registration
 
-The binding loads the `web` manifest. If the manifest's ids are not exactly the ids in the session's catalog, the load fails.
+The binding loads the `web` manifest. If its ids are not exactly the ids of the catalog's capabilities whose audience contains `web`, the load fails.
 
 Every capability the session serves is registered as a tool. `name` is the id, `description` is the capability's description, and `inputSchema` comes from the manifest. Registration follows availability: a capability is registered when it becomes available, and withdrawn when it stops being available.
 
@@ -22,7 +22,7 @@ Reconciliation is serial. A change of availability that arrives during a pass le
 
 ## Status
 
-The binding exposes a status that can be observed and a `retry` operation. The status has a `phase` and a `message`:
+The binding SHOULD expose a status that the page can observe, and a `retry` operation, so that a failure can be shown and recovered from. The status has a `phase` and a `message`:
 
 | Phase | Meaning |
 | --- | --- |

@@ -18,8 +18,8 @@ A handle is valid only within the session that registered the attachment.
 
 Each attachment carries:
 
-- `name`, at most 256 characters;
-- `mediaType`, at most 128 characters;
+- `name`;
+- `mediaType`;
 - `size`, the length of the data in bytes.
 
 ## Lifetime

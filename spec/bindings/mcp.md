@@ -32,6 +32,7 @@ Every refusal carries `Cache-Control: no-store`.
 - `description` is the capability's description.
 - `inputSchema` is the capability's `inputSchema` from the `mcp` manifest.
 - `outputSchema` is the capability's `outputSchema` when that schema's top level states `"type": "object"`. Otherwise it is omitted.
+- `annotations.readOnlyHint` is `true` when the capability is [`readOnly`](../manifest.md#document).
 
 ## Outcomes
 

@@ -15,13 +15,11 @@ Closes divergence rows D1, D2 and D3.
 
 A new core target is added only by a new version of this specification. An implementation MUST NOT use a core target name with another meaning.
 
-## Extension targets
+## Other targets
 
-An application MAY serve targets beyond the core set. An extension target name has the form `<prefix>:<name>`, where both parts match `[a-z][a-z0-9-]*`. The prefix identifies whoever defines the target, such as the application or a binding.
+An application MAY define targets of its own, such as a native shell, a chat bot or a scheduler. It SHOULD name them `<prefix>:<name>`, so that a future core target cannot collide with them. Every rule in this specification applies to them as it applies to core targets.
 
-An application declares the extension targets it serves. An implementation MUST refuse to build a catalog in which an audience names a target that is neither a core target nor a declared extension target.
-
-Every rule in this specification applies to extension targets as it applies to core targets.
+An implementation SHOULD report an audience that names a target the application does not serve, since that is usually a typo.
 
 ## Audience
 
@@ -33,7 +31,7 @@ A session serves a capability only when the capability's audience contains the s
 
 The `web` target covers the human interface and in-page agents alike. They act on one session, so neither sees a capability the other cannot.
 
-When an application serves the `web` target, every capability's audience MUST contain `web`. The page is then the complete interface. A tool target such as `cli`, `mcp` or `rpc` serves a subset that grows one declaration at a time.
+When an application serves the `web` target, every capability's audience SHOULD contain `web`, so that the page is the complete interface and a person can do anything an agent can. Tool targets such as `cli`, `mcp` or `rpc` then serve subsets that grow one declaration at a time. An application with a reason to keep a capability off the page, such as an operator-only RPC, may leave `web` out of that capability's audience.
 
 ## Rationale
 
@@ -43,8 +41,8 @@ When an application serves the `web` target, every capability's audience MUST co
 
 **`rpc` is a target.** A target exists when its clients need their own audience decision. A transport on its own is only a binding. HS's capnweb API serves a different subset from its command line (the check history is served to `cli` and not to `rpc`), so it needs an audience of its own.
 
-**A fixed core with prefixed extensions.** A closed set cannot cover surfaces nobody has built yet, such as a native shell, a chat bot or a scheduler. A fully open set would let an unknown target hide a capability with nobody noticing. Extension targets therefore need a prefix and a declaration, and a misspelt target is refused when the catalog is built.
+**A small core, and anything else allowed.** A closed set cannot cover surfaces nobody has built yet. The core names exist so that bindings and the conformance kit can rely on them. Everything else is left to the application. The prefix and the typo warning are recommendations, so a small application is not made to do any ceremony.
 
-**In-page agents share `web`.** An agent on the page acts through the user's live session and can drive anything the interface can, so a separate audience would hide tools from it without restricting what it can do. JB's explicit rule, that every capability reaches the page, is kept. It also means a human can always do everything an agent can. Whether some capabilities need authorisation beyond audience remains an open gap in the [inventory](divergence.md#not-yet-covered-by-either).
+**In-page agents share `web`.** An agent on the page acts through the user's live session and can drive anything the interface can, so a separate audience would hide tools from it without restricting what it can do. JB's rule, that every capability reaches the page, is kept as the default. It is a SHOULD rather than a MUST, so that JB can keep enforcing it in its own checks while other applications can serve capabilities only to tools. Whether some capabilities need authorisation beyond audience remains an open gap in the [inventory](divergence.md#not-yet-covered-by-either).
 
-**Changes for each implementation.** JB renames `application` to `web`. HS already conforms. Neither has extension targets yet.
+**Changes for each implementation.** JB renames `application` to `web`. HS already conforms. Neither defines targets of its own yet.

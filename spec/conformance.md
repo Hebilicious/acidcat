@@ -10,8 +10,9 @@ Closes divergence row D17.
 
 - the document's shape, from [Manifest](manifest.md);
 - the grammar and uniqueness of ids, from [Identifiers](identifiers.md);
-- that every input schema is an object, every error schema is made of tagged variants with distinct tags, and every array is bounded ([Collections](collections.md#bounds));
-- that, when the implementation serves `web`, the `web` manifest lists every capability that any other manifest lists ([The page](targets.md#the-page)).
+- that every input schema is an object, and that every error schema is made of tagged variants with distinct tags.
+
+The kit reports a SHOULD that is not met as a warning, not a failure. Examples are an unbounded array, and a `web` manifest that does not list every capability ([The page](targets.md#the-page)).
 
 **Behaviour**, through each binding:
 
