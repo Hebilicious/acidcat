@@ -1,6 +1,6 @@
 # Remote transports
 
-A **remote binding** serves a target to clients over the network, as the MCP and RPC bindings do. This section states what every remote binding does before it decodes a request. Each binding document gives the status codes and the protocol errors it uses.
+A **remote binding** serves a target to clients over the network, as the MCP and API bindings do. This section states what every remote binding does before it decodes a request. Each binding document gives the status codes and the protocol errors it uses.
 
 Closes divergence row D14.
 
@@ -26,7 +26,7 @@ The values of the limits are deployment configuration. Manifests do not carry th
 
 *This section is not normative.*
 
-**The rule is core; the numbers are not.** Both implementations screen origin and method, and both bound bodies by the bytes that actually arrive (JB's MCP reader, and HS's `readAtMost`). HS's RPC binding also checks the media type and UTF-8. Every remote surface needs the same protection, so the obligation is stated once here. Statuses and error codes depend on the protocol and belong to the bindings. Limits depend on the deployment: JB allows 4 MiB for its optimiser RPC and 64 KiB for its auth RPC.
+**The rule is core; the numbers are not.** Both implementations screen origin and method, and both bound bodies by the bytes that actually arrive (JB's MCP reader, and HS's `readAtMost`). HS's capnweb binding also checks the media type and UTF-8. Every remote surface needs the same protection, so the obligation is stated once here. Statuses and error codes depend on the protocol and belong to the bindings. Limits depend on the deployment: JB allows 4 MiB for its optimiser RPC and 64 KiB for its auth RPC.
 
 **Where the code lives is up to the implementation.** HS put the byte reader in its kernel and JB put it in the adapter. The specification states behaviour, not packages.
 

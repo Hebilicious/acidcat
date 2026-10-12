@@ -2,7 +2,7 @@
 
 The normative text, in RFC 2119 terms. Start from [the divergence inventory](divergence.md). Each closed row becomes a section here, and the spec is complete when no row is open.
 
-Bindings for each surface (WebMCP, MCP, CLI, RPC) are separate documents that depend on the core, never the reverse.
+Bindings for each surface (WebMCP, MCP, CLI, API) are separate documents that depend on the core, never the reverse.
 
 ## Sections
 
@@ -21,9 +21,11 @@ Bindings for each surface (WebMCP, MCP, CLI, RPC) are separate documents that de
 
 ## Bindings
 
-| Binding | Rows |
+| Binding | Rows or scope |
 | --- | --- |
 | [MCP](bindings/mcp.md) | D15 |
 | [WebMCP](bindings/webmcp.md) | D16 |
+| [CLI](bindings/cli.md) | Generated commands and flags, exit codes |
+| [API](bindings/api.md) | Protocol-neutral operations, the HTTP profile, GraphQL and RPC projections |
 
 Each section ends with a non-normative rationale that records why the decision was made and what each implementation has to change.

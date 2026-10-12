@@ -30,7 +30,7 @@ Both implementations agree on these points, which go into the spec almost unchan
 
 | # | Topic | JB | HS | Status |
 | --- | --- | --- | --- | --- |
-| D1 | Target names | `application \| cli \| mcp` | `web \| cli \| mcp \| rpc` | Closed: `web`, `cli`, `mcp`, `rpc`. See [Targets](targets.md#core-targets) |
+| D1 | Target names | `application \| cli \| mcp` | `web \| cli \| mcp \| rpc` | Closed: `web`, `cli`, `mcp`, `api` (HS's `rpc`, renamed because the API binding is not tied to one protocol). See [Targets](targets.md#core-targets) |
 | D2 | Target set | Closed union | Closed union | Closed: a fixed core, and applications may add their own targets (`prefix:name` recommended). See [Other targets](targets.md#other-targets) |
 | D3 | Human and agent on the page | One `application` target covers both Vue and WebMCP. Every capability reaches it | One `web` target covers both | Closed: no. Humans and in-page agents share `web`, which every capability should reach. See [The page](targets.md#the-page) |
 | D4 | Namespace | The catalog's top-level key is a "domain". Ids look like `bartering.plan.generate`, but nothing states that the id must begin with the key | The top-level key is the namespace, every id must begin with it, and the tree mirrors the ids. Lint enforces only the bypass rule; the prefix is a convention | Closed: the id grammar and the namespace prefix are adopted, and the tree below the namespace is free. See [Identifiers](identifiers.md) |
@@ -54,5 +54,4 @@ Both implementations agree on these points, which go into the spec almost unchan
 - Versioning of the spec itself, and how a manifest declares which spec version it follows.
 - Discovery: where a client finds the manifest for a target.
 - Authorisation per capability beyond audience, if any.
-- Idempotency of commands across retries, especially over MCP and RPC.
-- Binding documents for the CLI and RPC surfaces. The two CLIs differ today: JB uses `list` and `call` with exit code 1 for every failure, and HS derives a command from each id. The two RPC APIs are specific to their applications.
+- Idempotency of commands across retries, especially over MCP and the API.
