@@ -1,61 +1,24 @@
 # WebMCP binding
 
-This binding serves a `web` session's capabilities as WebMCP tools in the page, for agents that act through the browser. It depends on [Targets](../targets.md), [Manifest](../manifest.md) and [Invocation](../invocation.md).
-
-Closes divergence row D16.
+A protocol binding that registers a view's capabilities as WebMCP tools in a web page, for agents that act through the browser on the user's live session. It usually serves a target that also uses the [TypeScript binding](typescript.md). It depends on [Catalog](../catalog.md) and [Invocation](../invocation.md).
 
 ## Host
 
-The binding uses `document.modelContext` when it exists, and otherwise the window's `navigator.modelContext`. A host qualifies only when its `registerTool` is a function.
-
-If neither host qualifies, the binding installs nothing and does not fetch the manifest. The page and its session behave exactly as they would with WebMCP.
+The binding uses `document.modelContext` when it exists, and otherwise the window's `navigator.modelContext`. A host qualifies only when its `registerTool` is a function. If no host qualifies, the binding installs nothing and does not fetch the view, and the page behaves exactly as it would with WebMCP.
 
 The binding MUST NOT depend on what `registerTool` returns. It withdraws a tool by aborting the signal it passed at registration.
 
-## Registration
+## Tools
 
-The binding loads the `web` manifest. If its ids are not exactly the ids of the catalog's capabilities whose audience contains `web`, the load fails.
+- **Names.** A tool's `name` is the id, its `description` is the capability's description, and its `inputSchema` is the capability's input schema, taken from the view. The page fetches the view, so it never has to convert schemas itself.
+- **Listing.** A capability is registered while it is available and withdrawn when it is not. Reconciliation runs one pass at a time. A change that arrives during a pass leads to another pass. A pass that fails leaves the tools as they were before it began.
+- **Outcomes.** `execute` resolves with the result in its JSON form. A call failure rejects with an `Error` whose `kind` property is the kind.
+- **Cancellation.** The signal the host passes to `execute` cancels the call. Disposing of the binding cancels every call in flight.
 
-Every capability the session serves is registered as a tool. `name` is the id, `description` is the capability's description, and `inputSchema` comes from the manifest. Registration follows availability: a capability is registered when it becomes available, and withdrawn when it stops being available.
-
-Reconciliation is serial. A change of availability that arrives during a pass leads to another pass after it. A pass that fails leaves the tools registered as they were before it began, and does not commit its partial work.
-
-## Status
-
-The binding SHOULD expose a status that the page can observe, and a `retry` operation, so that a failure can be shown and recovered from. The status has a `phase` and a `message`:
-
-| Phase | Meaning |
-| --- | --- |
-| `loading` | Fetching and checking the manifest |
-| `reconciling` | Bringing registrations in line with availability |
-| `ready` | Registrations match availability |
-| `failed` | Loading or reconciling failed. `message` says why, and `retry` repeats the step that failed |
-| `closing` | Disposing |
-| `disposed` | Every tool is withdrawn and every call has settled |
-
-## Execution
-
-A tool's `execute` invokes the capability with the agent's input, under a signal that aborts when the host cancels the call or the binding is disposed.
-
-- On a result, `execute` resolves with the result object, `{ "ok": true, "value": … }` or `{ "ok": false, "error": … }`.
-- On an invocation failure, `execute` rejects with an `Error` whose `kind` property is the [kind](../invocation.md#invocation-failures). The error's `name` is `AbortError` for `cancelled` and `TypeError` for `invalid-input`.
-
-## Disposal
-
-Disposal withdraws every tool, waits for registrations and calls in flight to settle, and then reports `disposed`.
+The binding SHOULD expose a status the page can observe, with a `phase` (`loading`, `reconciling`, `ready`, `failed`, `closing` or `disposed`), a `message`, and a `retry` operation for the `failed` phase. Disposal withdraws every tool and waits for the calls in flight to settle.
 
 ## Rationale
 
 *This section is not normative.*
 
-**Taken from both implementations.** The host order, registration through an abort signal, a manifest that must match the catalog exactly, serial reconciliation with a dirty flag, the six phases, retry, and disposal are the same in JB and HS.
-
-**Neither host contract is assumed.** JB accepts a host whose `registerTool` returns a handle, while HS throws on anything other than `undefined`. WebMCP is still settling, so the binding relies only on the abort signal, which both hosts honour.
-
-**The last good set, as HS does it.** HS commits a pass's registrations only after the whole pass succeeds. JB records each registration as it resolves and aborts them all if the pass fails later. Those tools then stay marked as registered, and a retry skips them. HS's behaviour is what JB's own specification describes.
-
-**Errors carry `kind`.** Both implementations reject with a `TypeError`, an `AbortError` or a plain `Error`, which loses the difference between unavailable and internal. A `kind` property is the smallest change that keeps every kind apart.
-
-**Changes for each implementation.**
-- JB: fix the commit of a failed pass; add `kind` to rejections.
-- HS: accept any return value from `registerTool`; add `kind` to rejections.
+The host order, registration through an abort signal, serial reconciliation, retry and disposal are the same in both implementations. Relying only on the abort signal allows for both hosts: Jarette's Box accepts a `registerTool` that returns a handle, while heb-stack rejects one. Keeping the last good set when a pass fails is what heb-stack does, and what Jarette's Box's own specification describes.

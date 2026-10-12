@@ -1,10 +1,10 @@
 # Conformance kit
 
-Black-box checks any implementation can run against its own manifest and wire endpoints, whatever its language:
+Checks that any implementation can run, whatever its language. [Conformance](../spec/conformance.md) states what they cover:
 
-- the manifest validates against `schemas/`, ids are unique, and every id begins with its namespace;
-- a target lists exactly the available leaves whose audience names it, and refuses a direct call to any other;
-- undecodable input, cancellation and defects fail the invocation, while expected failures answer an error `Result`;
-- the Lean-generated vectors replay with the results the model predicts.
+- the catalog validates against `schemas/` and follows the rules the schema cannot express;
+- through each binding, a target serves exactly its view, and refuses every other id as unknown;
+- invalid input never starts the work, and every outcome arrives in the form its binding defines;
+- the Lean-generated vectors replay with the outcomes the model predicts, against a fixture catalog that the kit supplies.
 
 Jarette's Box and heb-stack are the first two implementations it must pass.

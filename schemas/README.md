@@ -1,5 +1,10 @@
 # Schemas
 
-JSON Schema for everything that crosses a boundary: the capability descriptor, the manifest a target serves, and the `Result` envelope with its failure kinds. These are normative alongside the prose, and the conformance kit validates against them.
+JSON Schema 2020-12 documents, normative alongside the prose:
 
-Fill this once the descriptor and the manifest are decided (rows D4–D7 and D13 of the divergence inventory).
+| Schema | Validates |
+| --- | --- |
+| [`catalog.schema.json`](catalog.schema.json) | A catalog or a view (see [Catalog](../spec/catalog.md)) |
+| [`outcome.schema.json`](outcome.schema.json) | The JSON form of an outcome (see [Invocation](../spec/invocation.md#outcomes)) |
+
+The catalog schema checks the document's shape. The rules it cannot express, such as an audience naming only declared targets, are listed in [Conformance](../spec/conformance.md#catalog).

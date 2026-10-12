@@ -1,26 +1,27 @@
 # AcidCat
 
-**AcidCat** (Application Capability IDentification Category) is a specification for building one application interface that serves humans and agents alike. An application is a catalog of typed capabilities. Each capability has a stable namespaced id, and every surface is a projection of that catalog: the UI, in-page WebMCP tools, MCP, a command line, RPC.
+**AcidCat** (Application Capability IDentification Category) is a specification for describing what an application can do once, and serving it everywhere. An application writes a **catalog**: one language-neutral document listing its capabilities, its targets, and which targets see which capabilities. Every surface is generated from that catalog by a **binding**, in whatever language the surface needs: a web app, a taskbar widget, an iOS or Android app, a command line, an MCP server, a REST or GraphQL API.
 
-Status: **draft, not published.** AcidCat started in Jarette's Box, where it runs in production, and was refined in heb-stack. The two implementations have diverged. This repository reconciles them into one specification and then becomes the source both consume.
+One catalog, many targets. Start with [the specification](spec/README.md), and [the air-conditioner example](examples/aircon.acidcat.yaml).
+
+Status: **draft 0.1, not published.** AcidCat started in Jarette's Box, where it runs in production, and was refined in heb-stack. [Adoption](spec/adoption.md) says how both move onto this specification.
 
 ## Layout
 
 | Path | Holds |
 | --- | --- |
-| `spec/` | The normative specification, and [the divergence inventory](spec/divergence.md) that drives it |
-| `schemas/` | JSON Schema for the wire contract: descriptor, manifest, result envelope |
+| `spec/` | The specification: the catalog, invocation, bindings, extensions, conformance, and adoption |
+| `schemas/` | JSON Schemas for the catalog and for outcomes |
+| `examples/` | Complete catalogs |
 | `lean/` | A Lean 4 model of the semantics, its proofs, and the test vectors it generates |
-| `conformance/` | The black-box conformance kit every implementation runs |
-| `ref/ts/` | The TypeScript reference implementation: kernel and generic adapters |
+| `conformance/` | The conformance kit that every implementation runs |
+| `ref/ts/` | The TypeScript reference implementation: the kernel and the generic adapters |
 | `site/` | The static site that publishes the specification |
-
-Each directory's README says what belongs there and what has to be true before it is filled.
 
 ## Layers
 
-1. **Prose and schemas** are normative, written in RFC 2119 terms. Implementations read these.
+1. **The prose and the schemas** are normative. Implementations in any language read them.
 2. **The Lean model** states the semantics precisely and proves its invariants. It is executable, so it also generates the conformance vectors.
-3. **The conformance kit** judges any implementation from the outside, by its manifest and its wire behaviour. An implementation written by hand, by a coding agent, or from the reference library is conforming when it passes.
+3. **The conformance kit** judges any implementation from outside, by its catalog and by its bindings' behaviour.
 
-Effect and XState implement the patterns AcidCat relies on. They belong to the reference implementation, not the specification.
+Libraries such as Effect and XState belong to the reference implementation, not to the specification.

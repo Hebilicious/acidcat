@@ -1,41 +1,26 @@
 # Conformance
 
-An implementation conforms when it passes the conformance kit. The kit judges an implementation from outside, by its manifests and by how it behaves on the wire, so it treats an implementation written by hand exactly like one built on the reference library.
+Conformance is judged from outside: from the catalog, and from what each binding does on its surface. An implementation written by hand, generated, or built on a reference library conforms the same way.
 
-Closes divergence row D17.
+## Catalog
 
-## What the kit checks
+A catalog conforms when it validates against [`schemas/catalog.schema.json`](../schemas/catalog.schema.json) and follows the rules in [Catalog](catalog.md) that the schema cannot express:
 
-**Manifests**, for each target the implementation serves:
+- every audience entry is a declared target;
+- every input schema states `"type": "object"`;
+- every schema stands on its own.
 
-- the document's shape, from [Manifest](manifest.md);
-- the grammar and uniqueness of ids, from [Identifiers](identifiers.md);
-- that every input schema is an object, and that every error schema is made of tagged variants with distinct tags.
+## Provider and bindings
 
-The kit reports a SHOULD that is not met as a warning, not a failure. Examples are an unbounded array, and a `web` manifest that does not list every capability ([The page](targets.md#the-page)).
+A provider and its bindings conform for a target when, through each binding that the target lists:
 
-**Behaviour**, through each binding:
+- the listing shows only capabilities in the target's view;
+- a call to an id outside the view fails exactly as a call to an id that does not exist;
+- an input that does not conform fails as `invalid-input`, and the work never starts;
+- values, failures and state conform to their schemas;
+- every outcome, and every kind of call failure, arrives as the binding defines it;
+- a remote binding screens requests as [remote bindings](bindings/README.md#remote-bindings) must.
 
-- that a listing holds only ids from the target's manifest;
-- that a call to an id outside the target's manifest fails exactly as a call to an id that does not exist does;
-- that input which does not conform fails as `invalid-input`;
-- that results conform to the output and error schemas;
-- that every outcome and every invocation failure kind arrives as the binding defines it;
-- that requests are screened as [Remote transports](transport.md) requires.
+Behaviour that depends on a domain, such as rejecting or replacing work, is checked against a fixture catalog that the conformance kit supplies.
 
-Behaviour that depends on a particular domain, such as rejecting or replacing work, is checked against a fixture catalog that the kit supplies and that the implementation serves.
-
-## What stays elsewhere
-
-- **In-process checks** belong to the test suite of the reference implementation. These include that the catalog walk groups leaves by namespace, that the manifest is regenerated from the source schemas, that defects are logged, and that disposal withdraws registrations.
-- **Product evidence** belongs to each application. JB's Product Promise manifests, its reverse index of capability ids and its orphan checks, and HS's Gherkin features, test what an application promises, not what AcidCat requires.
-
-## Rationale
-
-*This section is not normative.*
-
-**The kit is black-box.** Most of JB's catalog-conformance suite and every HS target proof check a manifest or wire behaviour: ids, descriptions, schema shapes, bounded arrays, listings, refusal of unknown tools, transport statuses. Those checks move into the kit. The rest, which needs root sessions, a recording port or the source schemas, is in-process and moves to the reference implementation.
-
-**The fixture catalog.** Without knowing a domain, the kit cannot provoke an expected failure, a rejection or a replacement. A small fixture catalog that every implementation can serve on a test stage makes those checks generic.
-
-**Product Promises stay in JB.** JB's reverse index ties product promises to capability ids. That is a useful practice, but it is about JB's product rather than about AcidCat. The reference implementation may offer it as a tool.
+The kit checks the bindings this specification defines. It reports a SHOULD that is not met as a warning, not a failure. Tests that need access to the code (internal logging, how a root is composed) belong to each implementation's own suite. Product evidence, such as Jarette's Box's Product Promises, belongs to each application.

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acidcat.dev/schemas/0.1/catalog.schema.json",
+  "title": "AcidCat catalog",
+  "description": "One document that states what an application can do and which targets see it. See spec/catalog.md.",
+  "type": "object",
+  "required": ["acidcat", "targets", "capabilities"],
+  "properties": {
+    "acidcat": {
+      "description": "The version of the AcidCat specification this catalog follows.",
+      "const": "0.1"
+    },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "targets": {
+      "description": "The targets, keyed by name.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/targetName" },
+      "additionalProperties": { "$ref": "#/$defs/target" }
+    },
+    "capabilities": {
+      "description": "The capabilities, keyed by id.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/capability" }
+    }
+  },
+  "patternProperties": { "^x-": true },
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$"
+    },
+    "targetName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?$"
+    },
+    "bindingName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?$"
+    },
+    "target": {
+      "type": "object",
+      "required": ["bindings"],
+      "properties": {
+        "bindings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/bindingName" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "description": { "type": "string" },
+        "options": { "type": "object" }
+      },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false
+    },
+    "schema": {
+      "description": "A JSON Schema 2020-12 schema that stands on its own.",
+      "type": ["object", "boolean"]
+    },
+    "objectSchema": {
+      "description": "An input schema, whose top level states that the input is an object.",
+      "type": "object",
+      "required": ["type"],
+      "properties": { "type": { "const": "object" } }
+    },
+    "capability": {
+      "type": "object",
+      "required": ["description"],
+      "properties": {
+        "description": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "audience": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/targetName" },
+          "uniqueItems": true
+        },
+        "input": { "$ref": "#/$defs/objectSchema" },
+        "output": { "$ref": "#/$defs/schema" },
+        "failures": {
+          "type": "object",
+          "propertyNames": { "type": "string", "minLength": 1 },
+          "additionalProperties": { "$ref": "#/$defs/schema" }
+        },
+        "readOnly": { "type": "boolean" },
+        "state": { "$ref": "#/$defs/schema" }
+      },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false
+    }
+  }
+}
