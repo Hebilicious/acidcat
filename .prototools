@@ -1,0 +1,12 @@
+moon = "2.5.6"
+node = "26.10.0"
+pnpm = "12.8.1"
+pkl = "0.32.1"
+
+[plugins.tools]
+pkl = "https://raw.githubusercontent.com/milesj/proto-plugins/refs/heads/master/pkl.toml"
+
+[settings]
+detect-strategy = "prefer-prototools"
+auto-install = true
+telemetry = false

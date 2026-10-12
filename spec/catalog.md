@@ -2,41 +2,41 @@
 
 A **catalog** is a JSON document that states what an application can do and where. It is the contract that every provider, binding and client is built from. An application MAY write it by hand or generate it from code, but it is one document, and every implementation reads that same document.
 
-YAML MAY be used to author a catalog when it maps to the same JSON value. [`schemas/catalog.schema.json`](../schemas/catalog.schema.json) validates the document's shape. This page states the rules that the schema cannot express.
+[`schemas/catalog.schema.json`](../schemas/catalog.schema.json) validates the document's shape. This page states the rules that the schema cannot express.
 
 ## Example
 
-```yaml
-acidcat: "0.1"
-title: Living-room air conditioner
-
-targets:
-  app:  { bindings: [typescript, acme:swift, acme:kotlin] }
-  cli:  { bindings: [cli] }
-  mcp:  { bindings: [mcp] }
-  api:  { bindings: [http, graphql] }
-
-capabilities:
-  aircon.status.get:
-    description: Read the unit's power, mode, target and room temperature.
-    audience: [app, cli, mcp, api]
-    readOnly: true
-    output: { $ref: "#/$defs/Status", $defs: { Status: { … } } }
-    failures:
-      Offline: { type: object, properties: { since: { type: string, format: date-time } } }
-
-  aircon.temperature.set:
-    description: Set the target temperature in degrees Celsius.
-    audience: [app, cli, mcp]
-    input:
-      type: object
-      properties: { celsius: { type: number, minimum: 16, maximum: 31 } }
-      required: [celsius]
-    failures:
-      Offline: { type: object }
+```json
+{
+  "acidcat": "0.1",
+  "title": "Living-room air conditioner",
+  "targets": {
+    "app": { "bindings": ["typescript", "acme:swift", "acme:kotlin"] },
+    "cli": { "bindings": ["cli"] },
+    "mcp": { "bindings": ["mcp"] }
+  },
+  "capabilities": {
+    "aircon.temperature.set": {
+      "description": "Set the target temperature in degrees Celsius.",
+      "audience": ["app", "cli", "mcp"],
+      "input": {
+        "type": "object",
+        "required": ["celsius"],
+        "properties": { "celsius": { "type": "number", "minimum": 16, "maximum": 31 } }
+      },
+      "failures": { "Offline": { "type": "object" } }
+    }
+  }
+}
 ```
 
-The full example is [`examples/aircon.acidcat.yaml`](../examples/aircon.acidcat.yaml).
+The full example is [`examples/aircon.acidcat.json`](../examples/aircon.acidcat.json), rendered from [`examples/aircon.pkl`](../examples/aircon.pkl).
+
+## Authoring
+
+Only the JSON document is normative. A catalog MAY be written in any language that produces it: by hand in JSON, in YAML, in Pkl, or generated from code.
+
+[Pkl](https://pkl-lang.org) is the recommended language for writing a catalog by hand. A catalog that amends [`pkl/Catalog.pkl`](../pkl/Catalog.pkl) gets types, and its rules are checked while it is being written. An undeclared audience, an input that is not an object, or a malformed id is an error before any JSON is produced. Shared schemas are written once and reused, and members under `extensions` render with their `x-` prefix. `pkl eval` renders the JSON.
 
 ## Document
 
@@ -113,6 +113,8 @@ Consumers ignore members they do not know. Members that this specification does 
 *This section is not normative.*
 
 **The catalog is the contract, even when code generates it.** Jarette's Box and heb-stack write capabilities in TypeScript and derive their manifests from that code. A Swift or Kotlin app cannot read TypeScript, so the shared artifact has to be a document. Generating that document from code remains allowed, provided the result is the one file every implementation reads (see [Adoption](adoption.md)).
+
+**JSON to read, Pkl to write.** Every language can read JSON, and the schemas inside a catalog are already JSON Schema, so the document every implementation reads is JSON. Writing a catalog is a different job: a long YAML file repeats itself and checks nothing. Pkl adds types, checks, reuse and templates, renders exactly the JSON, and has code generators for Swift, Kotlin, Go and Java, so it matches the many-languages goal. It is a recommendation, not a requirement, because applications that generate their catalog from code (as Jarette's Box and heb-stack do) never write one by hand.
 
 **The catalog declares its targets.** Declaring targets turns a misspelt audience into an error the schema catches. It also records, in the same place, which bindings serve each target: one catalog, many targets, stated once.
 

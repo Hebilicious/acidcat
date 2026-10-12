@@ -1,0 +1,112 @@
+/// An air conditioner that can be controlled over Wi-Fi, described once and served to every surface.
+amends "../pkl/Catalog.pkl"
+
+title = "Living-room air conditioner"
+description = "Control and monitor one split-unit air conditioner on the home network."
+
+targets {
+  ["app"] {
+    description = "The phone, desktop and web apps that people use."
+    bindings { "typescript"; "acme:swift"; "acme:kotlin" }
+  }
+  ["taskbar"] {
+    description = "A desktop taskbar widget showing the status and a power toggle."
+    bindings { "typescript" }
+  }
+  ["cli"] {
+    bindings { "cli" }
+  }
+  ["mcp"] {
+    description = "Agents, through an MCP server."
+    bindings { "mcp" }
+  }
+  ["api"] {
+    description = "Home-automation systems and scripts."
+    bindings { "http"; "graphql" }
+  }
+}
+
+local modes = new Listing { "cool"; "heat"; "dry"; "fan"; "auto" }
+local fanSpeeds = new Listing { "auto"; "low"; "medium"; "high" }
+
+local status = new Dynamic {
+  title = "Status"
+  type = "object"
+  required { "power"; "mode"; "fan"; "targetCelsius"; "roomCelsius" }
+  properties {
+    power { type = "boolean" }
+    mode { enum = modes }
+    fan { enum = fanSpeeds }
+    targetCelsius { type = "number" }
+    roomCelsius { type = "number" }
+  }
+}
+
+local offline = new Dynamic {
+  type = "object"
+  properties {
+    since { type = "string"; format = "date-time" }
+  }
+}
+
+local everywhere = new Listing { "app"; "taskbar"; "cli"; "mcp"; "api" }
+local controls = new Listing { "app"; "cli"; "mcp"; "api" }
+
+/// A command that takes one required input property.
+local function setting(text: String, name: String, property: Dynamic) = new Capability {
+  description = text
+  audience = controls
+  input {
+    type = "object"
+    required { name }
+    properties { [name] = property }
+  }
+  failures { ["Offline"] = offline }
+}
+
+capabilities {
+  ["aircon.status.get"] {
+    description = "Read the unit's power, mode, fan speed, target temperature and room temperature."
+    audience = everywhere
+    readOnly = true
+    output = status
+    state = status
+    failures { ["Offline"] = offline }
+  }
+
+  ["aircon.power.set"] = (setting("Turn the unit on or off.", "on", new Dynamic { type = "boolean" })) {
+    audience = everywhere
+  }
+
+  ["aircon.mode.set"] = (setting("Choose how the unit runs.", "mode", new Dynamic { enum = modes })) {
+    failures {
+      ["PoweredOff"] {
+        type = "object"
+        description = "The unit must be on before its mode can change."
+      }
+    }
+  }
+
+  ["aircon.temperature.set"] =
+    setting("Set the target temperature in degrees Celsius.", "celsius", new Dynamic {
+      type = "number"
+      minimum = 16
+      maximum = 31
+    })
+
+  ["aircon.fan.set"] = setting("Set the fan speed.", "speed", new Dynamic { enum = fanSpeeds })
+
+  ["aircon.firmware.update"] {
+    description = "Install the latest firmware. The unit restarts and is offline for about a minute."
+    audience { "app" }
+    failures {
+      ["Offline"] = offline
+      ["UpToDate"] {
+        type = "object"
+        properties {
+          version { type = "string" }
+        }
+      }
+    }
+  }
+}

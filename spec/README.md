@@ -49,7 +49,7 @@ These terms have exactly these meanings throughout the specification.
 | [Adoption](adoption.md) | How Jarette's Box and heb-stack move onto this specification |
 | [Divergence inventory](divergence.md) | How the decisions were reached, as a record |
 
-[`examples/aircon.acidcat.yaml`](../examples/aircon.acidcat.yaml) is a complete catalog for an air conditioner that can be controlled over Wi-Fi. [`schemas/`](../schemas) holds the JSON Schemas for the catalog and for outcomes.
+[`examples/aircon.pkl`](../examples/aircon.pkl), rendered to [`aircon.acidcat.json`](../examples/aircon.acidcat.json), is a complete catalog for an air conditioner that can be controlled over Wi-Fi. [`schemas/`](../schemas) holds the JSON Schemas for the catalog and for outcomes.
 
 ## Conventions
 
