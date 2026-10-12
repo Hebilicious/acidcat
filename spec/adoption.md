@@ -19,7 +19,7 @@ This page shows how Jarette's Box (JB) and heb-stack (HS) move onto this specifi
 
    [`adoption/jarettes-box/generate-acidcat-catalog-export.ts`](../adoption/jarettes-box/generate-acidcat-catalog-export.ts) does all of this for JB, using JB's own `manifestSchema`. HS's generator follows the same steps.
 2. **Check the catalog.** In the existing conformance gate, fail when the committed catalog differs from a fresh generation. Validate it with `node scripts/check-catalogs.ts <catalog.json>` from this repository, which applies the schema and the rules it cannot express.
-3. **Serve views.** The page fetches the view of its target instead of today's manifest. The MCP server and the CLI serve the views of theirs.
+3. **Publish views.** Each binding publishes exactly its target's view, from the definitions it already has. JB's page may keep loading its precomputed WebMCP manifest on first use, now derived from the `application` view.
 4. **Give call failures their kind.** In the executor, set `kind` on the errors that `invokeExternal` throws (`cancelled`, `unavailable`, `invalid-input`, `internal`), and map them in each adapter, as each binding states.
 5. **MCP.** Wrap failures as `{ "ok": false, "error" }`, return call failures with `{ "kind", "message" }`, publish `outputSchema` and `readOnlyHint`, pass the request's signal to the call, and screen the media type and UTF-8.
 

@@ -19,7 +19,7 @@ Every binding document MUST state:
 
 It MAY also state how [state](../invocation.md#state) is observed, how `readOnly` is used, and which [extensions](../extensions/README.md) it supports.
 
-A binding serves exactly its target's view, and nothing outside it. A binding holds no list of capabilities of its own: it derives everything from the catalog, so a new capability needs no change to the binding.
+A binding serves exactly its target's view, and nothing outside it. A binding holds no list of capabilities of its own: it derives everything from the application's definitions, which match the catalog, so a new capability needs no change to the binding. It does not need to read the catalog file at runtime (see [Build time and run time](../catalog.md#build-time-and-run-time)).
 
 ## Remote bindings
 

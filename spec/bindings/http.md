@@ -8,7 +8,7 @@ All paths are relative to a base URL that the deployment chooses:
 
 | Request | Answer |
 | --- | --- |
-| `GET {base}/catalog` | The target's view |
+| `GET {base}/catalog` | The target's view. Optional: a deployment MAY serve it so that clients can discover the API |
 | `GET {base}/capabilities` | A JSON array with one entry per capability in the view: its `id`, `available`, and `reason` when it is unavailable |
 | `POST {base}/capabilities/{id}`, with the input as the body | The outcome |
 

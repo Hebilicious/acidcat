@@ -1,0 +1,9 @@
+[project]
+name = "acidcat"
+version = "0.1.0"
+description = "Write an AcidCat catalog in Python and render it to JSON."
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

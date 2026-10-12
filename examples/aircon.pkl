@@ -1,5 +1,5 @@
 /// An air conditioner that can be controlled over Wi-Fi, described once and served to every surface.
-amends "../pkl/Catalog.pkl"
+amends "../sdk/pkl/Catalog.pkl"
 
 title = "Living-room air conditioner"
 description = "Control and monitor one split-unit air conditioner on the home network."

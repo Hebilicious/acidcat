@@ -1,0 +1,11 @@
+[package]
+name = "acidcat"
+version = "0.1.0"
+edition = "2024"
+description = "Write an AcidCat catalog in Rust and render it to JSON."
+license = "MIT"
+publish = false
+
+[dependencies]
+regex = "1"
+serde_json = { version = "1", features = ["preserve_order"] }

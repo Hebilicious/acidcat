@@ -1,6 +1,6 @@
 # Catalog
 
-A **catalog** is a JSON document that states what an application can do and where. It is the contract that every provider, binding and client is built from. An application MAY write it by hand or generate it from code, but it is one document, and every implementation reads that same document.
+A **catalog** is a JSON document that states what an application can do and where. It is the contract that every provider, binding and client is built from and checked against. An application MAY write it by hand, with an [SDK](../sdk/README.md), or generate it from code, but there is one catalog per application.
 
 [`schemas/catalog.schema.json`](../schemas/catalog.schema.json) validates the document's shape. This page states the rules that the schema cannot express.
 
@@ -32,11 +32,17 @@ A **catalog** is a JSON document that states what an application can do and wher
 
 The full example is [`examples/aircon.acidcat.json`](../examples/aircon.acidcat.json), rendered from [`examples/aircon.pkl`](../examples/aircon.pkl).
 
+## Build time and run time
+
+The catalog is a build-time artifact. It is committed with the application, reviewed as a diff, validated by the toolchain, used to generate code, and used by the conformance kit to check the running application. An implementation is not required to read it at runtime.
+
+At runtime, an implementation works from its own definitions: code generated from the catalog, or the code the catalog was generated from. What each binding publishes and does MUST match the catalog. The toolchain and the conformance kit check that match, so the running program never has to read the file. A binding MAY still load a precomputed part of the catalog at runtime when that is cheaper, for example to keep schema conversion out of a web page's bundle.
+
 ## Authoring
 
-Only the JSON document is normative. A catalog MAY be written in any language that produces it: by hand in JSON, in YAML, in Pkl, or generated from code.
+Only the JSON document is normative. A catalog MAY be written in any language that produces it: by hand in JSON or YAML, with Pkl or one of the [SDKs](../sdk/README.md), or generated from the application's own code.
 
-[Pkl](https://pkl-lang.org) is the recommended language for writing a catalog by hand. A catalog that amends [`pkl/Catalog.pkl`](../pkl/Catalog.pkl) gets types, and its rules are checked while it is being written. An undeclared audience, an input that is not an object, or a malformed id is an error before any JSON is produced. Shared types go under `types`, which renders as `$defs`. `module.ref("Status")` references one, and fails if no type has that name. Members under `extensions` render with their `x-` prefix. `pkl eval` renders the JSON.
+[Pkl](https://pkl-lang.org) is the recommended language for writing a catalog by hand. A catalog that amends [`sdk/pkl/Catalog.pkl`](../sdk/pkl/Catalog.pkl) gets types, and its rules are checked while it is being written. An undeclared audience, an input that is not an object, or a malformed id is an error before any JSON is produced. Shared types go under `types`, which renders as `$defs`. `module.ref("Status")` references one, and fails if no type has that name. Members under `extensions` render with their `x-` prefix. `pkl eval` renders the JSON.
 
 ## Document
 
@@ -124,7 +130,7 @@ A binding serves exactly its target's view. A client of a target MUST NOT be abl
 
 ## Change
 
-A catalog has no version of its own, and neither do capabilities. A catalog describes the build that serves it. When the build changes, the catalog changes with it, and a client that keeps a copy reads it again. An application that wants to keep old clients working keeps an id's meaning unchanged, and adds a new id when it needs a new meaning.
+A catalog has no version of its own, and neither do capabilities. A catalog describes the build that serves it. When the build changes, the catalog changes with it. A client that keeps a description of a target, such as an MCP client's tool list, fetches it again from the binding. An application that wants to keep old clients working keeps an id's meaning unchanged, and adds a new id when it needs a new meaning.
 
 The `acidcat` member is the version of this specification, not of the catalog.
 
@@ -136,9 +142,11 @@ Consumers ignore members they do not know. Members that this specification does 
 
 *This section is not normative.*
 
-**The catalog is the contract, even when code generates it.** Jarette's Box and heb-stack write capabilities in TypeScript and derive their manifests from that code. A Swift or Kotlin app cannot read TypeScript, so the shared artifact has to be a document. Generating that document from code remains allowed, provided the result is the one file every implementation reads (see [Adoption](adoption.md)).
+**The catalog is the contract, even when code generates it.** Jarette's Box and heb-stack write capabilities in TypeScript and derive their manifests from that code. A Swift or Kotlin app cannot read TypeScript, so the shared artifact has to be a document. Generating that document from code remains allowed, provided there is one catalog per application (see [Adoption](adoption.md)).
 
-**JSON to read, Pkl to write.** Every language can read JSON, and the schemas inside a catalog are already JSON Schema, so the document every implementation reads is JSON. Writing a catalog is a different job: a long YAML file repeats itself and checks nothing. Pkl adds types, checks, reuse and templates, renders exactly the JSON, and has code generators for Swift, Kotlin, Go and Java, so it matches the many-languages goal. It is a recommendation, not a requirement, because applications that generate their catalog from code (as Jarette's Box and heb-stack do) never write one by hand.
+**Checked at build time, not read at runtime.** If every program read the catalog when it started, it would pay for a file read, a parse and the compilation of validators, only to learn what its own code already says. It would also have two sources of truth to keep in step. Making the catalog a build-time contract keeps runtime cost at zero, lets each language use its native types, and moves the agreement between code and catalog into the toolchain, where a mismatch fails the build rather than a request. Jarette's Box already works this way for MCP, whose tools come from its definitions. It fetches a precomputed manifest only for WebMCP, as an optimisation.
+
+**JSON to exchange; Pkl or an SDK to write.** Every language and every tool can read JSON, and the schemas inside a catalog are already JSON Schema, so the contract is JSON. Writing a catalog is a different job: a long YAML file repeats itself and checks nothing. Pkl adds types, checks, reuse and templates, renders exactly the JSON, and has code generators for Swift, Kotlin, Go and Java, so it matches the many-languages goal. It is a recommendation, not a requirement, because applications that generate their catalog from code (as Jarette's Box and heb-stack do) never write one by hand.
 
 **The catalog declares its targets.** Declaring targets turns a misspelt audience into an error the schema catches. It also records, in the same place, which bindings serve each target: one catalog, many targets, stated once.
 

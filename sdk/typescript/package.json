@@ -1,0 +1,8 @@
+{
+  "name": "@acidcat/sdk",
+  "version": "0.1.0",
+  "description": "Write an AcidCat catalog in TypeScript and render it to JSON.",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts"
+}

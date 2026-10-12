@@ -7,7 +7,7 @@ A protocol binding that serves a view as a GraphQL schema generated from the cat
 - **Names.** Each capability is a root field, named by joining its id's segments in camelCase: `aircon.power.set` becomes `airconPowerSet`. A `readOnly` capability is a field of `Query`, and any other capability is a field of `Mutation`.
 - **Input.** The field takes one argument, `input`. Its type is generated from the input schema, or it is the `JSON` scalar when the schema has no faithful GraphQL type.
 - **Outcomes.** The field returns a union of a value type and one type for each failure tag, with `__typename` telling them apart. A call failure is a GraphQL error whose `extensions.kind` is the kind, and the field is `null`.
-- **Listing.** `Query.acidcatCatalog: JSON!` returns the view. `Query.acidcatCapabilities` returns the `id`, `available` and `reason` of each capability.
+- **Listing.** `Query.acidcatCapabilities` returns the `id`, `available` and `reason` of each capability. A deployment MAY also serve the view as `Query.acidcatCatalog: JSON!`.
 - **Generic access.** `Mutation.acidcatInvoke(id: String!, input: JSON): JSON!` returns the outcome in its JSON form, so that every capability can also be reached by id.
 - **Cancellation.** Abandoning the request cancels its calls.
 

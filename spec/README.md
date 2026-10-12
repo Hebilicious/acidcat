@@ -20,7 +20,7 @@ These terms have exactly these meanings throughout the specification.
 
 | Term | Meaning |
 | --- | --- |
-| **Catalog** | The JSON document that lists an application's capabilities and targets. It is the single source of truth: every implementation, in every language, reads it. See [Catalog](catalog.md). |
+| **Catalog** | The JSON document that lists an application's capabilities and targets. It is the single source of truth: written once, checked at build time, and matched by every implementation in every language. See [Catalog](catalog.md). |
 | **Capability** | One thing a caller can do or ask for, such as `aircon.power.set`. It has an id, a description, an input, an output, failures, an audience, and optional hints and state. |
 | **Id** | A capability's stable dotted name. Every surface name is derived from it. |
 | **Namespace** | The first segment of an id. It groups the capabilities of one domain. |
@@ -45,6 +45,7 @@ These terms have exactly these meanings throughout the specification.
 | [Invocation](invocation.md) | Outcomes, availability, sessions, cancellation, concurrency, long work, state |
 | [Bindings](bindings/README.md) | What every binding defines, the rules for remote bindings, and the bindings this specification provides |
 | [Extensions](extensions/README.md) | Optional conventions: attachments, pagination |
+| [SDKs](../sdk/README.md) | Writing a catalog in Pkl, TypeScript, Python, Go or Rust, at build time |
 | [Conformance](conformance.md) | What makes a catalog, a provider or a binding conforming |
 | [Adoption](adoption.md) | How Jarette's Box and heb-stack move onto this specification |
 | [Divergence inventory](divergence.md) | How the decisions were reached, as a record |

@@ -10,7 +10,7 @@ toolchains:
 
 fileGroups:
   catalogs:
-    - "pkl/**/*.pkl"
+    - "sdk/pkl/**/*.pkl"
     - "examples/**/*"
     - "schemas/**/*.json"
 
@@ -19,7 +19,7 @@ tasks:
     description: "Render every example catalog from Pkl to the JSON document implementations read."
     command: "pkl"
     args: ["eval", "examples/*.pkl", "--output-path", "%{moduleDir}/%{moduleName}.acidcat.json"]
-    inputs: ["pkl/**/*.pkl", "examples/*.pkl"]
+    inputs: ["sdk/pkl/**/*.pkl", "examples/*.pkl"]
     outputs: ["examples/*.acidcat.json"]
     options:
       runInCI: false
@@ -29,3 +29,37 @@ tasks:
     command: "node"
     args: ["scripts/check-catalogs.ts"]
     inputs: ["@group(catalogs)", "scripts/check-catalogs.ts"]
+
+  sdk-typescript:
+    description: "Test the TypeScript SDK: the air-conditioner catalog, and the rules it reports."
+    command: "node"
+    args: ["--test", "sdk/typescript/test/"]
+    inputs: ["sdk/typescript/**/*", "examples/aircon.acidcat.json"]
+
+  sdk-python:
+    description: "Test the Python SDK: the air-conditioner catalog, and the rules it reports."
+    command: "python"
+    args: ["-m", "unittest", "discover", "-s", "sdk/python/tests"]
+    inputs: ["sdk/python/**/*.py", "examples/aircon.acidcat.json"]
+    toolchains: ["system"]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+  sdk-go:
+    description: "Test the Go SDK: the air-conditioner catalog, and the rules it reports."
+    command: "go"
+    args: ["-C", "sdk/go", "test", "./..."]
+    inputs: ["sdk/go/**/*", "examples/aircon.acidcat.json"]
+    toolchains: ["system"]
+
+  sdk-rust:
+    description: "Test the Rust SDK: the air-conditioner catalog, and the rules it reports."
+    command: "cargo"
+    args: ["test", "--manifest-path", "sdk/rust/Cargo.toml"]
+    inputs: ["sdk/rust/src/**/*", "sdk/rust/examples/**/*", "sdk/rust/tests/**/*", "sdk/rust/Cargo.toml", "examples/aircon.acidcat.json"]
+    toolchains: ["system"]
+
+  verify:
+    description: "Every check: the example catalogs, and every SDK."
+    command: "noop"
+    deps: ["check", "sdk-typescript", "sdk-python", "sdk-go", "sdk-rust"]
