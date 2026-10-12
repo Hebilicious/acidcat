@@ -43,8 +43,8 @@ typealias Id = String(length <= 128, matches(Regex(#"[a-z][a-z0-9]*(-[a-z0-9]+)*
 /// A target or binding name, optionally `prefix:name`.
 typealias TargetName = String(matches(Regex(#"[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?"#)))
 
-/// A JSON Schema 2020-12 schema that stands on its own, written as a Pkl object. (The boolean schemas `true` and
-/// `false` are valid in JSON, but are not needed when writing a catalog by hand.)
+/// A JSON Schema 2020-12 schema that stands on its own, written as a Pkl object. Write `{}` for "any value" and
+/// `{ not {} }` for "no value".
 typealias Schema = Dynamic
 
 /// An input schema, whose top level states that the input is an object.
