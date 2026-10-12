@@ -12,20 +12,21 @@ Status: **draft 0.1, not published.** AcidCat started in Jarette's Box, where it
 | --- | --- |
 | `spec/` | The specification: the catalog, invocation, bindings, extensions, conformance, and adoption |
 | `schemas/` | JSON Schemas for the catalog and for outcomes |
+| `toolchain/` | `acidcat check`, `format` and `view`: the build-time tool for catalogs |
+| `sdk/` | Libraries for writing a catalog in Pkl, TypeScript, Python, Go or Rust, all producing the same canonical JSON |
 | `examples/` | Complete catalogs, written in Pkl, with the JSON each one renders to |
-| `sdk/` | Libraries for writing a catalog in Pkl, TypeScript, Python, Go or Rust. They run at build time, not at runtime |
-| `scripts/` | The checks behind the Moon tasks |
 | `adoption/` | Tools that bring existing implementations onto the specification, such as the catalog exporter for Jarette's Box |
-| `lean/` | A Lean 4 model of the semantics, its proofs, and the test vectors it generates |
-| `conformance/` | The conformance kit that every implementation runs |
-| `ref/ts/` | The TypeScript reference implementation: the kernel and the generic adapters |
-| `site/` | The static site that publishes the specification |
+| `conformance/` | The conformance kit every implementation will run |
+| `ref/ts/` | The TypeScript reference implementation, starting from heb-stack's kernel |
+| `site/` | The static site that will publish the specification |
+| `scripts/` | Repository checks behind the Moon tasks |
+| `history/` | How the first decisions were reached from Jarette's Box and heb-stack |
 
 ## Layers
 
 1. **The prose and the schemas** are normative. Implementations in any language read them.
-2. **The Lean model** states the semantics precisely and proves its invariants. It is executable, so it also generates the conformance vectors.
-3. **The conformance kit** judges any implementation from outside, by its catalog and by its bindings' behaviour.
+2. **The toolchain** checks catalogs at build time, and **the SDKs** write them.
+3. **The conformance kit** will judge any implementation from outside, by its catalog and by its bindings' behaviour.
 
 Libraries such as Effect and XState belong to the reference implementation, not to the specification.
 
@@ -35,7 +36,8 @@ The toolchains (Moon, Node, pnpm, Pkl, Python, Go and Rust) are pinned in `.prot
 
 | Command | Purpose |
 | --- | --- |
-| `moon run examples` | Render every example catalog from Pkl to JSON |
-| `moon run check` | Check that every example is rendered, valid against the schema, and follows the catalog rules |
-| `moon run sdk-typescript`, `sdk-python`, `sdk-go`, `sdk-rust` | Test one SDK against the air-conditioner catalog |
+| `moon run examples` | Render every example catalog from Pkl, in canonical form |
+| `moon run check` | Check that every example is rendered and canonical, and that every catalog and fixture conforms |
+| `moon run toolchain` | Test the toolchain |
+| `moon run sdk-typescript`, `sdk-python`, `sdk-go`, `sdk-rust` | Test one SDK against the air-conditioner catalog and the canonical fixture |
 | `moon run verify` | Every check above |

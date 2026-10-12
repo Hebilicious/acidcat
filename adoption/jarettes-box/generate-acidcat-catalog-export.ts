@@ -7,6 +7,11 @@
  *   ACIDCAT_CATALOG_OUT=/path/to/jarettes-box.acidcat.json \
  *     pnpm exec vitest run --config tests/vitest.generator.config.ts tools/generators/generate-acidcat-catalog-export.ts
  *
+ * Then put it in canonical form and check it with this repository's toolchain:
+ *
+ *   node toolchain/src/cli.ts format --write /path/to/jarettes-box.acidcat.json
+ *   node toolchain/src/cli.ts check /path/to/jarettes-box.acidcat.json
+ *
  * The catalog is built in three steps:
  *   1. Each capability's input, output and error schemas come from JB's own `manifestSchema`. The error union is split
  *      into one failure per `_tag`.

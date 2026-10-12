@@ -1,0 +1,47 @@
+{
+  "acidcat": "0.1",
+  "targets": {
+    "cli": {
+      "bindings": [
+        "cli"
+      ]
+    }
+  },
+  "capabilities": {
+    "edge.case.check": {
+      "description": "Strings: \"quoted\", back\\slash, tab\t, é,  , \u0001, 😀.",
+      "audience": [
+        "cli"
+      ],
+      "output": {
+        "aKey": "first",
+        "examples": [
+          {
+            "big": 123456789012345680000,
+            "half": 0.5,
+            "integer": 42,
+            "large": 1e+21,
+            "negative": -2.5e-10,
+            "small": 0.000001,
+            "tiny": 1e-7,
+            "whole": 16,
+            "zero": 0
+          }
+        ],
+        "properties": {
+          "Z": {
+            "type": "string"
+          },
+          "z": {
+            "type": "string"
+          },
+          "é": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "zKey": "last"
+      }
+    }
+  }
+}

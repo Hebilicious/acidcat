@@ -1,22 +1,46 @@
 use acidcat::{Capability, Catalog, Target};
-use serde_json::{Value, json};
+use serde_json::json;
 
 #[path = "../examples/aircon.rs"]
 mod aircon;
 
+fn expected(path: &str) -> String {
+    std::fs::read_to_string(format!("{}/../{path}", env!("CARGO_MANIFEST_DIR")))
+        .expect("the expected file exists")
+}
+
 #[test]
 fn writes_the_same_aircon_catalog_as_pkl() {
-    let expected = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../examples/aircon.acidcat.json"
-    ))
-    .expect("examples/aircon.acidcat.json exists");
     let rendered = aircon::aircon_catalog()
         .render()
         .expect("the catalog conforms");
-    let rendered: Value = serde_json::from_str(&rendered).unwrap();
-    let expected: Value = serde_json::from_str(&expected).unwrap();
-    assert_eq!(rendered, expected);
+    assert_eq!(rendered, expected("../examples/aircon.acidcat.json"));
+}
+
+#[test]
+fn writes_the_canonical_form_of_every_value() {
+    let mut catalog = Catalog::new(None, None);
+    catalog
+        .target("cli", Target { bindings: vec!["cli".into()], ..Target::default() })
+        .capability("edge.case.check", Capability {
+            description: "Strings: \"quoted\", back\\slash, tab\t, é, \u{2028}, \u{1}, 😀.".into(),
+            audience: vec!["cli".into()],
+            output: Some(json!({
+                "type": "object",
+                "zKey": "last",
+                "aKey": "first",
+                "properties": { "é": { "type": "string" }, "z": { "type": "string" }, "Z": { "type": "string" } },
+                "examples": [{
+                    "whole": 16.0, "half": 0.5, "tiny": 1e-7, "small": 0.000001, "large": 1e21,
+                    "big": 123456789012345680000.0, "negative": -2.5e-10, "zero": 0.0, "integer": 42
+                }]
+            })),
+            ..Capability::default()
+        });
+    assert_eq!(
+        catalog.render().expect("the catalog conforms"),
+        expected("fixtures/edge.acidcat.json")
+    );
 }
 
 #[test]

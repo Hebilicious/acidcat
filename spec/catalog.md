@@ -34,7 +34,7 @@ The full example is [`examples/aircon.acidcat.json`](../examples/aircon.acidcat.
 
 ## Build time and run time
 
-The catalog is a build-time artifact. It is committed with the application, reviewed as a diff, validated by the toolchain, used to generate code, and used by the conformance kit to check the running application. An implementation is not required to read it at runtime.
+The catalog is a build-time artifact. It is versioned with the application: either committed, or regenerated reproducibly by its build. It is reviewed as a diff, validated by the toolchain, used to generate code, and used by the conformance kit to check the running application. An implementation is not required to read it at runtime.
 
 At runtime, an implementation works from its own definitions: code generated from the catalog, or the code the catalog was generated from. What each binding publishes and does MUST match the catalog. The toolchain and the conformance kit check that match, so the running program never has to read the file. A binding MAY still load a precomputed part of the catalog at runtime when that is cheaper, for example to keep schema conversion out of a web page's bundle.
 
@@ -124,7 +124,7 @@ Some surfaces need a schema that stands on its own: an MCP tool's input schema i
 
 ## Views
 
-The **view** of a target is the catalog reduced to that target: `targets` keeps only that target, and `capabilities` keeps only the capabilities whose audience names it. `$defs` keeps only the types those capabilities reach, so that a view reveals nothing about capabilities outside it. A view is itself a catalog.
+The **view** of a target is the catalog reduced to that target: `targets` keeps only that target, `capabilities` keeps only the capabilities whose audience names it, and each of those capabilities' `audience` keeps only that target. `$defs` keeps only the types those capabilities reach, so that a view reveals nothing about capabilities outside it. A view is itself a catalog.
 
 A binding serves exactly its target's view. A client of a target MUST NOT be able to learn about a capability outside the view. A call naming such a capability fails as a call naming an id that does not exist ([Invocation](invocation.md#call-failures)).
 
@@ -133,6 +133,15 @@ A binding serves exactly its target's view. A client of a target MUST NOT be abl
 A catalog has no version of its own, and neither do capabilities. A catalog describes the build that serves it. When the build changes, the catalog changes with it. A client that keeps a description of a target, such as an MCP client's tool list, fetches it again from the binding. An application that wants to keep old clients working keeps an id's meaning unchanged, and adds a new id when it needs a new meaning.
 
 The `acidcat` member is the version of this specification, not of the catalog.
+
+## Canonical form
+
+A catalog has one canonical text, so that every tool and every SDK writes the same bytes for the same catalog, and a diff shows only real changes. A catalog that is committed SHOULD be in canonical form. `acidcat format` puts any catalog into it.
+
+- **Member order.** The catalog's members come in this order: `acidcat`, `title`, `description`, `targets`, `$defs`, `capabilities`. A target's members: `bindings`, `description`, `options`. A capability's members: `description`, `audience`, `input`, `output`, `failures`, `readOnly`, `state`. Members that are not listed, such as `x-` extensions, follow the listed ones, sorted.
+- **Sorted keys.** The keys of `targets`, `$defs`, `capabilities` and `failures` are sorted. So are the keys of every object inside a schema or `options`, at every depth. Keys are sorted by Unicode code point. Arrays keep their order.
+- **Values.** Strings and numbers are written as ECMAScript's `JSON.stringify` writes them. Numbers use the shortest form that reads back as the same number: `16`, `0.5`, `1e-7`, `1e+21`. Strings escape only `"`, `\`, and control characters. Every other character is written as itself.
+- **Layout.** UTF-8, with two spaces of indentation and one member or item per line. An empty object is `{}` and an empty array is `[]`. The text ends with a single line feed.
 
 ## Extensions
 

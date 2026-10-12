@@ -3,6 +3,10 @@
 //! This is an authoring library, not a runtime: a program uses it to produce `acidcat.catalog.json`, and nothing
 //! reads the catalog through it at runtime. See spec/catalog.md.
 
+mod canonical;
+
+pub use canonical::canonical_text;
+
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
@@ -227,13 +231,9 @@ impl Catalog {
         Ok(Value::Object(document))
     }
 
-    /// The catalog as JSON text, ready to write to `acidcat.catalog.json`, or the rules it breaks.
+    /// The catalog as JSON text in canonical form, ready to write to `acidcat.catalog.json`, or the rules it breaks.
     pub fn render(&self) -> Result<String, Vec<String>> {
-        let document = self.to_json()?;
-        Ok(format!(
-            "{}\n",
-            serde_json::to_string_pretty(&document).expect("a JSON value always serialises")
-        ))
+        Ok(canonical_text(&self.to_json()?))
     }
 
     fn type_named(&self, name: &str) -> Option<&Schema> {

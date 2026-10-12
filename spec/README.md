@@ -46,9 +46,10 @@ These terms have exactly these meanings throughout the specification.
 | [Bindings](bindings/README.md) | What every binding defines, the rules for remote bindings, and the bindings this specification provides |
 | [Extensions](extensions/README.md) | Optional conventions: attachments, pagination |
 | [SDKs](../sdk/README.md) | Writing a catalog in Pkl, TypeScript, Python, Go or Rust, at build time |
+| [Toolchain](../toolchain/README.md) | `acidcat check`, `format` and `view` |
 | [Conformance](conformance.md) | What makes a catalog, a provider or a binding conforming |
 | [Adoption](adoption.md) | How Jarette's Box and heb-stack move onto this specification |
-| [Divergence inventory](divergence.md) | How the decisions were reached, as a record |
+| [Divergence inventory](../history/divergence.md) | How the first decisions were reached, as a record |
 
 [`examples/aircon.pkl`](../examples/aircon.pkl), rendered to [`aircon.acidcat.json`](../examples/aircon.acidcat.json), is a complete catalog for an air conditioner that can be controlled over Wi-Fi. [`schemas/`](../schemas) holds the JSON Schemas for the catalog and for outcomes.
 

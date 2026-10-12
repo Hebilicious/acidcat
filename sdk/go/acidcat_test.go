@@ -1,7 +1,6 @@
 package acidcat_test
 
 import (
-	"encoding/json"
 	"os"
 	"reflect"
 	"strings"
@@ -16,20 +15,35 @@ func TestWritesTheSameAirconCatalogAsPkl(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected, err := os.ReadFile("../../examples/aircon.acidcat.json")
+	expectBytes(t, rendered, "../../examples/aircon.acidcat.json")
+}
+
+func TestWritesTheCanonicalFormOfEveryValue(t *testing.T) {
+	catalog := acidcat.New("", "").
+		Target("cli", acidcat.Target{Bindings: []string{"cli"}}).
+		Capability("edge.case.check", acidcat.Capability{
+			Description: "Strings: \"quoted\", back\\slash, tab\t, é, \u2028, \u0001, 😀.",
+			Audience:    []string{"cli"},
+			Output: acidcat.Schema{
+				"type": "object",
+				"zKey": "last",
+				"aKey": "first",
+				"properties": acidcat.Schema{
+					"é": acidcat.Schema{"type": "string"},
+					"z": acidcat.Schema{"type": "string"},
+					"Z": acidcat.Schema{"type": "string"},
+				},
+				"examples": []any{map[string]any{
+					"whole": 16.0, "half": 0.5, "tiny": 1e-7, "small": 0.000001, "large": 1e21,
+					"big": 123456789012345680000.0, "negative": -2.5e-10, "zero": 0.0, "integer": 42,
+				}},
+			},
+		})
+	rendered, err := catalog.Render()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got, want any
-	if err := json.Unmarshal(rendered, &got); err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(expected, &want); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("the catalog differs from examples/aircon.acidcat.json:\n%s", rendered)
-	}
+	expectBytes(t, rendered, "../fixtures/edge.acidcat.json")
 }
 
 func TestReportsTheRulesACatalogBreaks(t *testing.T) {
@@ -50,5 +64,16 @@ func TestReportsTheRulesACatalogBreaks(t *testing.T) {
 	}
 	if _, err := catalog.Render(); err == nil || !strings.Contains(err.Error(), "does not conform") {
 		t.Fatalf("Render should refuse a catalog that breaks a rule, got %v", err)
+	}
+}
+
+func expectBytes(t *testing.T, rendered, path string) {
+	t.Helper()
+	expected, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rendered != string(expected) {
+		t.Fatalf("the rendered catalog differs from %s:\n%s", path, rendered)
 	}
 }

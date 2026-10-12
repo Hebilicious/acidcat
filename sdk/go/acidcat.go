@@ -5,8 +5,6 @@
 package acidcat
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -161,58 +159,65 @@ func (c *Catalog) Validate() []string {
 	return problems
 }
 
-// Render returns the catalog as JSON text, ready to write to acidcat.catalog.json. It fails when the catalog
-// breaks a rule.
-func (c *Catalog) Render() ([]byte, error) {
+// Render returns the catalog as JSON text in canonical form, ready to write to acidcat.catalog.json. It fails when
+// the catalog breaks a rule.
+func (c *Catalog) Render() (string, error) {
 	if problems := c.Validate(); len(problems) > 0 {
-		return nil, errors.New("the catalog does not conform:\n" + strings.Join(problems, "\n"))
+		return "", errors.New("the catalog does not conform:\n" + strings.Join(problems, "\n"))
 	}
-	document := object{{"acidcat", "0.1"}}
-	document = document.optional("title", c.title, c.title != "")
-	document = document.optional("description", c.description, c.description != "")
+	document := map[string]any{"acidcat": "0.1"}
+	if c.title != "" {
+		document["title"] = c.title
+	}
+	if c.description != "" {
+		document["description"] = c.description
+	}
 
-	targets := object{}
+	targets := map[string]any{}
 	for _, t := range c.targets {
-		target := object{{"bindings", t.value.Bindings}}
-		target = target.optional("description", t.value.Description, t.value.Description != "")
-		target = target.optional("options", t.value.Options, t.value.Options != nil)
-		targets = append(targets, member{t.name, target})
+		target := map[string]any{"bindings": t.value.Bindings}
+		if t.value.Description != "" {
+			target["description"] = t.value.Description
+		}
+		if t.value.Options != nil {
+			target["options"] = t.value.Options
+		}
+		targets[t.name] = target
 	}
-	document = append(document, member{"targets", targets})
+	document["targets"] = targets
 
 	if len(c.types) > 0 {
-		types := object{}
+		types := map[string]any{}
 		for _, t := range c.types {
-			types = append(types, member{t.name, t.value})
+			types[t.name] = t.value
 		}
-		document = append(document, member{"$defs", types})
+		document["$defs"] = types
 	}
 
-	capabilities := object{}
+	capabilities := map[string]any{}
 	for _, entry := range c.capabilities {
 		capability := entry.value
 		audience := capability.Audience
 		if audience == nil {
 			audience = []string{}
 		}
-		out := object{{"description", capability.Description}, {"audience", audience}}
-		out = out.optional("input", capability.Input, capability.Input != nil)
-		out = out.optional("output", capability.Output, capability.Output != nil)
-		out = out.optional("failures", capability.Failures, len(capability.Failures) > 0)
-		out = out.optional("readOnly", true, capability.ReadOnly)
-		out = out.optional("state", capability.State, capability.State != nil)
-		capabilities = append(capabilities, member{entry.name, out})
+		out := map[string]any{"description": capability.Description, "audience": audience}
+		for key, schema := range map[string]Schema{"input": capability.Input, "output": capability.Output, "state": capability.State} {
+			if schema != nil {
+				out[key] = schema
+			}
+		}
+		if len(capability.Failures) > 0 {
+			out["failures"] = capability.Failures
+		}
+		if capability.ReadOnly {
+			out["readOnly"] = true
+		}
+		capabilities[entry.name] = out
 	}
-	document = append(document, member{"capabilities", capabilities})
+	document["capabilities"] = capabilities
 
-	var buffer bytes.Buffer
-	encoder := json.NewEncoder(&buffer)
-	encoder.SetEscapeHTML(false)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(document); err != nil {
-		return nil, err
-	}
-	return buffer.Bytes(), nil
+	return CanonicalText(document)
 }
 
 func (c *Catalog) target(name string) *Target {

@@ -5,9 +5,39 @@ import { test } from "node:test";
 import { Catalog } from "../src/index.ts";
 import { airconCatalog } from "../examples/aircon.ts";
 
+function expected(path: string): string {
+  return readFileSync(new URL(`../../${path}`, import.meta.url), "utf-8");
+}
+
 test("the SDK writes the same air-conditioner catalog as Pkl", () => {
-  const expected = JSON.parse(readFileSync(new URL("../../../examples/aircon.acidcat.json", import.meta.url), "utf-8"));
-  assert.deepEqual(JSON.parse(airconCatalog().render()), expected);
+  assert.equal(airconCatalog().render(), expected("../examples/aircon.acidcat.json"));
+});
+
+test("the SDK writes the canonical form of every value", () => {
+  const catalog = new Catalog().target("cli", { bindings: ["cli"] }).capability("edge.case.check", {
+    description: "Strings: \"quoted\", back\\slash, tab\t, é,  , \u0001, 😀.",
+    audience: ["cli"],
+    output: {
+      type: "object",
+      zKey: "last",
+      aKey: "first",
+      properties: { é: { type: "string" }, z: { type: "string" }, Z: { type: "string" } },
+      examples: [
+        {
+          whole: 16.0,
+          half: 0.5,
+          tiny: 1e-7,
+          small: 0.000001,
+          large: 1e21,
+          big: 123456789012345680000,
+          negative: -2.5e-10,
+          zero: 0,
+          integer: 42,
+        },
+      ],
+    },
+  });
+  assert.equal(catalog.render(), expected("fixtures/edge.acidcat.json"));
 });
 
 test("the SDK reports the catalog rules a catalog breaks", () => {

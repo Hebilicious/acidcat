@@ -1,10 +1,9 @@
 # Conformance kit
 
-Checks that any implementation can run, whatever its language. [Conformance](../spec/conformance.md) states what they cover:
+Black-box checks that judge any implementation from outside, whatever its language. [Conformance](../spec/conformance.md) states what they cover:
 
-- the catalog validates against `schemas/` and follows the rules the schema cannot express;
-- through each binding, a target serves exactly its view, and refuses every other id as unknown;
-- invalid input never starts the work, and every outcome arrives in the form its binding defines;
-- the Lean-generated vectors replay with the outcomes the model predicts, against a fixture catalog that the kit supplies.
+- **Catalogs:** `acidcat check` from the [toolchain](../toolchain/README.md) already covers the catalog half.
+- **Bindings:** through each binding a target lists, the target serves exactly its view, refuses every other id as unknown, never starts work on invalid input, and delivers every outcome in the form its binding defines.
+- **Guarantees:** every call settles exactly once, and cancelling one call never settles another. These are checked with property-based tests against a fixture catalog that the kit supplies and that the implementation serves.
 
-Jarette's Box and heb-stack are the first two implementations it must pass.
+heb-stack and Jarette's Box are the first two implementations it must pass.

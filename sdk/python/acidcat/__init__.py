@@ -6,11 +6,12 @@ the catalog through it at runtime. See spec/catalog.md.
 
 from __future__ import annotations
 
-import json
 import re
 from typing import Any, Mapping, Sequence
 
-__all__ = ["Catalog", "CatalogError", "Schema"]
+from .canonical import canonical_text
+
+__all__ = ["Catalog", "CatalogError", "Schema", "canonical_text"]
 
 Schema = dict[str, Any]
 """A JSON Schema 2020-12 schema, written as a plain dict."""
@@ -128,8 +129,8 @@ class Catalog:
         )
 
     def render(self) -> str:
-        """The catalog as JSON text, ready to write to `acidcat.catalog.json`."""
-        return json.dumps(self.to_json(), indent=2, ensure_ascii=False) + "\n"
+        """The catalog as JSON text in canonical form, ready to write to `acidcat.catalog.json`."""
+        return canonical_text(self.to_json())
 
     def _resolve(self, schema: Schema) -> Schema:
         match = _REFERENCE.fullmatch(str(schema.get("$ref", "")))

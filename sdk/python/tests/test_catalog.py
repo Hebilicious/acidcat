@@ -1,4 +1,3 @@
-import json
 import sys
 import unittest
 from pathlib import Path
@@ -10,12 +9,42 @@ sys.path.insert(0, str(HERE.parent / "examples"))
 from acidcat import Catalog, CatalogError  # noqa: E402
 from aircon import aircon_catalog  # noqa: E402
 
-EXPECTED = HERE.parent.parent.parent / "examples" / "aircon.acidcat.json"
+SDK = HERE.parent.parent
 
 
 class CatalogTest(unittest.TestCase):
     def test_writes_the_same_aircon_catalog_as_pkl(self) -> None:
-        self.assertEqual(json.loads(aircon_catalog().render()), json.loads(EXPECTED.read_text()))
+        expected = (SDK.parent / "examples" / "aircon.acidcat.json").read_text(encoding="utf-8")
+        self.assertEqual(aircon_catalog().render(), expected)
+
+    def test_writes_the_canonical_form_of_every_value(self) -> None:
+        catalog = Catalog().target("cli", bindings=["cli"])
+        catalog.capability(
+            "edge.case.check",
+            description='Strings: "quoted", back\\slash, tab\t, é, \u2028, \u0001, 😀.',
+            audience=["cli"],
+            output={
+                "type": "object",
+                "zKey": "last",
+                "aKey": "first",
+                "properties": {"é": {"type": "string"}, "z": {"type": "string"}, "Z": {"type": "string"}},
+                "examples": [
+                    {
+                        "whole": 16.0,
+                        "half": 0.5,
+                        "tiny": 1e-7,
+                        "small": 0.000001,
+                        "large": 1e21,
+                        "big": 123456789012345680000.0,
+                        "negative": -2.5e-10,
+                        "zero": 0,
+                        "integer": 42,
+                    }
+                ],
+            },
+        )
+        expected = (SDK / "fixtures" / "edge.acidcat.json").read_text(encoding="utf-8")
+        self.assertEqual(catalog.render(), expected)
 
     def test_reports_the_rules_a_catalog_breaks(self) -> None:
         catalog = (

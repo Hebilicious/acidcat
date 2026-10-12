@@ -5,6 +5,10 @@
  * reads the catalog through it at runtime. See spec/catalog.md.
  */
 
+import { canonicalText } from "./canonical.ts";
+
+export { canonicalText } from "./canonical.ts";
+
 /** A JSON Schema 2020-12 schema, written as a plain object. */
 export type Schema = { readonly [keyword: string]: unknown };
 
@@ -137,9 +141,9 @@ export class Catalog {
     });
   }
 
-  /** The catalog as JSON text, ready to write to `acidcat.catalog.json`. */
+  /** The catalog as JSON text in canonical form, ready to write to `acidcat.catalog.json`. */
   render(): string {
-    return `${JSON.stringify(this.toJSON(), null, 2)}\n`;
+    return canonicalText(this.toJSON());
   }
 
   #resolve(schema: Schema): Schema {

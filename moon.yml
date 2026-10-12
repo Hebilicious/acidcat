@@ -3,63 +3,75 @@ layer: "automation"
 
 project:
   title: "AcidCat"
-  description: "The AcidCat specification, its schemas, its Pkl authoring module, and its example catalogs."
+  description: "The AcidCat specification, its schemas, its toolchain, its SDKs, and its example catalogs."
 
 toolchains:
   default: ["javascript", "node", "pnpm"]
 
 fileGroups:
   catalogs:
-    - "sdk/pkl/**/*.pkl"
     - "examples/**/*"
     - "schemas/**/*.json"
+    - "sdk/fixtures/**/*"
+    - "sdk/pkl/**/*.pkl"
+    - "sdk/typescript/src/canonical.ts"
+    - "toolchain/src/**/*.ts"
+  fixtures:
+    - "examples/*.acidcat.json"
+    - "sdk/fixtures/**/*"
 
 tasks:
   examples:
-    description: "Render every example catalog from Pkl to the JSON document implementations read."
-    command: "pkl"
-    args: ["eval", "examples/*.pkl", "--output-path", "%{moduleDir}/%{moduleName}.acidcat.json"]
-    inputs: ["sdk/pkl/**/*.pkl", "examples/*.pkl"]
+    description: "Render every example catalog from Pkl, and put it in canonical form."
+    script: "pkl eval examples/*.pkl --output-path '%{moduleDir}/%{moduleName}.acidcat.json' && node toolchain/src/cli.ts format --write examples/*.acidcat.json"
+    inputs: ["sdk/pkl/**/*.pkl", "examples/*.pkl", "toolchain/src/**/*.ts", "sdk/typescript/src/canonical.ts"]
     outputs: ["examples/*.acidcat.json"]
+    toolchains: ["system"]
     options:
       runInCI: false
 
   check:
-    description: "Check that every example catalog is rendered, valid against the schema, and follows the catalog rules."
+    description: "Check that every example is rendered and canonical, and that every example and fixture conforms."
     command: "node"
-    args: ["scripts/check-catalogs.ts"]
-    inputs: ["@group(catalogs)", "scripts/check-catalogs.ts"]
+    args: ["scripts/check-examples.ts"]
+    inputs: ["@group(catalogs)", "scripts/check-examples.ts"]
+
+  toolchain:
+    description: "Test the toolchain: canonical form, views, bundling, and the catalog rules."
+    command: "node"
+    args: ["--test", "toolchain/test/"]
+    inputs: ["toolchain/**/*.ts", "sdk/typescript/src/canonical.ts", "schemas/**/*.json", "@group(fixtures)"]
 
   sdk-typescript:
-    description: "Test the TypeScript SDK: the air-conditioner catalog, and the rules it reports."
+    description: "Test the TypeScript SDK against the air-conditioner catalog and the canonical fixture."
     command: "node"
     args: ["--test", "sdk/typescript/test/"]
-    inputs: ["sdk/typescript/**/*", "examples/aircon.acidcat.json"]
+    inputs: ["sdk/typescript/**/*", "@group(fixtures)"]
 
   sdk-python:
-    description: "Test the Python SDK: the air-conditioner catalog, and the rules it reports."
+    description: "Test the Python SDK against the air-conditioner catalog and the canonical fixture."
     command: "python"
     args: ["-m", "unittest", "discover", "-s", "sdk/python/tests"]
-    inputs: ["sdk/python/**/*.py", "examples/aircon.acidcat.json"]
+    inputs: ["sdk/python/**/*.py", "@group(fixtures)"]
     toolchains: ["system"]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
 
   sdk-go:
-    description: "Test the Go SDK: the air-conditioner catalog, and the rules it reports."
+    description: "Test the Go SDK against the air-conditioner catalog and the canonical fixture."
     command: "go"
     args: ["-C", "sdk/go", "test", "./..."]
-    inputs: ["sdk/go/**/*", "examples/aircon.acidcat.json"]
+    inputs: ["sdk/go/**/*", "@group(fixtures)"]
     toolchains: ["system"]
 
   sdk-rust:
-    description: "Test the Rust SDK: the air-conditioner catalog, and the rules it reports."
+    description: "Test the Rust SDK against the air-conditioner catalog and the canonical fixture."
     command: "cargo"
     args: ["test", "--manifest-path", "sdk/rust/Cargo.toml"]
-    inputs: ["sdk/rust/src/**/*", "sdk/rust/examples/**/*", "sdk/rust/tests/**/*", "sdk/rust/Cargo.toml", "examples/aircon.acidcat.json"]
+    inputs: ["sdk/rust/src/**/*", "sdk/rust/examples/**/*", "sdk/rust/tests/**/*", "sdk/rust/Cargo.toml", "@group(fixtures)"]
     toolchains: ["system"]
 
   verify:
-    description: "Every check: the example catalogs, and every SDK."
+    description: "Every check: the examples and fixtures, the toolchain, and every SDK."
     command: "noop"
-    deps: ["check", "sdk-typescript", "sdk-python", "sdk-go", "sdk-rust"]
+    deps: ["check", "toolchain", "sdk-typescript", "sdk-python", "sdk-go", "sdk-rust"]
