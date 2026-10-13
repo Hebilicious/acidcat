@@ -51,10 +51,6 @@
       }
     }
   },
-  "patternProperties": {
-    "^x-": true
-  },
-  "additionalProperties": false,
   "$defs": {
     "id": {
       "type": "string",
@@ -93,11 +89,7 @@
         "options": {
           "type": "object"
         }
-      },
-      "patternProperties": {
-        "^x-": true
-      },
-      "additionalProperties": false
+      }
     },
     "schema": {
       "description": "A JSON Schema 2020-12 schema. Its $refs point into the catalog's $defs.",
@@ -107,9 +99,9 @@
       ]
     },
     "objectSchema": {
-      "description": "An input schema: it states that the input is an object, or references a type that does.",
+      "description": "An input schema: it states that the input is an object, or it references a type.",
       "type": "object",
-      "oneOf": [
+      "anyOf": [
         {
           "required": [
             "type"
@@ -124,10 +116,10 @@
           "required": [
             "$ref"
           ],
-          "not": {
-            "required": [
-              "type"
-            ]
+          "properties": {
+            "$ref": {
+              "type": "string"
+            }
           }
         }
       ]
@@ -172,11 +164,7 @@
         "state": {
           "$ref": "#/$defs/schema"
         }
-      },
-      "patternProperties": {
-        "^x-": true
-      },
-      "additionalProperties": false
+      }
     }
   }
 }

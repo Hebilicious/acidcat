@@ -1,3 +1,10 @@
 packages:
   - "packages/cli"
   - "packages/catalog/typescript"
+
+# Every dependency is pinned once, here. Packages name `catalog:` and never a version.
+catalog:
+  "@effect/platform-node": 4.0.3
+  "@types/node": 26.6.5
+  effect: 4.0.3
+  typescript: 7.0.2

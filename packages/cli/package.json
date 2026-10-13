@@ -5,11 +5,15 @@
   "license": "MIT",
   "private": true,
   "type": "module",
-  "bin": { "acid-cat": "./src/cli.ts" },
+  "bin": { "acid-cat": "./src/main.ts" },
   "exports": "./src/catalog.ts",
   "dependencies": {
     "@acid-cat/catalog": "workspace:*",
-    "ajv": "8.20.0",
-    "ajv-formats": "3.0.1"
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
   }
 }

@@ -1,5 +1,8 @@
 node_modules/
-.lake/
 dist/
 .moon/cache/
 .moon/docker/
+
+# Private working notes and tools, kept out of the repository.
+.local/
+CLAUDE.local.md

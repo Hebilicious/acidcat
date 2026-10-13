@@ -11,7 +11,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { canonicalText } from "@acid-cat/catalog";
-import { problemsOf } from "@acid-cat/cli";
+import { check } from "@acid-cat/cli";
 
 const root = path.resolve(import.meta.dirname, "..");
 const problems: string[] = [];
@@ -32,7 +32,8 @@ const catalogs = [
 ];
 for (const file of catalogs) {
   const text = readFileSync(path.join(root, file), "utf-8");
-  problems.push(...problemsOf(JSON.parse(text), text).map((problem) => `${file}: ${problem}`));
+  const report = check(JSON.parse(text), text);
+  problems.push(...[...report.errors, ...report.warnings].map((problem) => `${file}: ${problem}`));
 }
 
 if (problems.length > 0) {

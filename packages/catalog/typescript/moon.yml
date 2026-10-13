@@ -14,3 +14,9 @@ tasks:
     command: "node"
     args: ["--test", "test/"]
     inputs: ["src/**/*.ts", "examples/**/*.ts", "test/**/*.ts", "/examples/*.acidcat.json", "/packages/catalog/fixtures/**/*"]
+
+  typecheck:
+    description: "Type-check the sources, tests and examples."
+    command: "tsc"
+    args: ["-p", "."]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "examples/**/*.ts", "tsconfig.json", "/tsconfig.base.json"]
