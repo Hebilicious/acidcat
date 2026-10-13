@@ -1,6 +1,7 @@
 packages:
   - "packages/spec"
   - "packages/cli"
+  - "packages/core-effect"
   - "packages/catalog/typescript"
 
 # Every dependency is pinned once, here. Packages name `catalog:` and never a version.

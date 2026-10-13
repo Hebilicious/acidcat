@@ -2,6 +2,7 @@ projects:
   acid-cat: "."
   spec: "packages/spec"
   cli: "packages/cli"
+  core-effect: "packages/core-effect"
   catalog-typescript: "packages/catalog/typescript"
   catalog-python: "packages/catalog/python"
   catalog-go: "packages/catalog/go"

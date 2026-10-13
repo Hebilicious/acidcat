@@ -1,5 +1,5 @@
 language: "typescript"
-layer: "tool"
+layer: "library"
 
 project:
   title: "@acid-cat/cli"

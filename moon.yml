@@ -34,4 +34,4 @@ tasks:
   verify:
     description: "Every check: the examples and fixtures, the toolchain, and every catalog library."
     command: "noop"
-    deps: ["check", "spec:test", "spec:typecheck", "cli:test", "cli:typecheck", "catalog-typescript:test", "catalog-typescript:typecheck", "catalog-python:test", "catalog-go:test", "catalog-rust:test"]
+    deps: ["check", "spec:test", "spec:typecheck", "cli:test", "cli:typecheck", "core-effect:test", "core-effect:typecheck", "catalog-typescript:test", "catalog-typescript:typecheck", "catalog-python:test", "catalog-go:test", "catalog-rust:test"]

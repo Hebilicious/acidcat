@@ -1,0 +1,20 @@
+{
+  "name": "@acid-cat/core-effect",
+  "version": "0.1.0",
+  "description": "Serve AcidCat capabilities, written fully in Effect.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@acid-cat/catalog": "workspace:*",
+    "@acid-cat/spec": "workspace:*",
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@acid-cat/cli": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}
