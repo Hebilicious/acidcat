@@ -1,12 +1,12 @@
 projects:
-  acidcat: "."
-  toolchain: "packages/toolchain"
+  acid-cat: "."
+  cli: "packages/cli"
   catalog-typescript: "packages/catalog/typescript"
   catalog-python: "packages/catalog/python"
   catalog-go: "packages/catalog/go"
   catalog-rust: "packages/catalog/rust"
 
-defaultProject: "acidcat"
+defaultProject: "acid-cat"
 telemetry: false
 versionConstraint: ">=2.5.6 <2.6.0"
 

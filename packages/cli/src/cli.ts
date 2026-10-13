@@ -1,22 +1,22 @@
 #!/usr/bin/env node
 /**
- * `acidcat`: the toolchain for catalogs.
+ * `acid-cat`: the AcidCat command line.
  *
- *   acidcat check <catalog.json ...>            Validate catalogs, including their canonical form.
- *   acidcat format [--write] <catalog.json ...> Print each catalog in canonical form, or rewrite the file.
- *   acidcat view <catalog.json> <target>        Print the view of one target.
+ *   acid-cat check <catalog.json ...>            Validate catalogs, including their canonical form.
+ *   acid-cat format [--write] <catalog.json ...> Print each catalog in canonical form, or rewrite the file.
+ *   acid-cat view <catalog.json> <target>        Print the view of one target.
  *
  * Exit codes: 0 when everything conforms, 1 when a catalog breaks a rule, 2 for a usage error.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 
-import { canonicalText } from "@acidcat/catalog";
+import { canonicalText } from "@acid-cat/catalog";
 import { problemsOf, viewOf, type Catalog } from "./catalog.ts";
 
 const USAGE = `Usage:
-  acidcat check <catalog.json ...>
-  acidcat format [--write] <catalog.json ...>
-  acidcat view <catalog.json> <target>
+  acid-cat check <catalog.json ...>
+  acid-cat format [--write] <catalog.json ...>
+  acid-cat view <catalog.json> <target>
 `;
 
 const [command, ...rest] = process.argv.slice(2);

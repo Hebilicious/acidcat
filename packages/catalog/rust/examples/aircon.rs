@@ -2,7 +2,7 @@
 //!
 //! Run it with `cargo run --example aircon` to print the catalog.
 
-use acidcat_catalog::{Capability, Catalog, Schema, Target};
+use acid_cat_catalog::{Capability, Catalog, Schema, Target};
 use serde_json::json;
 
 pub fn aircon_catalog() -> Catalog {

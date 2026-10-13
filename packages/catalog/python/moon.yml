@@ -2,15 +2,15 @@ language: "python"
 layer: "library"
 
 project:
-  title: "acidcat-catalog"
-  description: "Write a catalog in Python and render it in canonical form. Published to PyPI as acidcat-catalog."
+  title: "acid-cat-catalog"
+  description: "Write a catalog in Python and render it in canonical form. Published to PyPI as acid-cat-catalog."
 
 tasks:
   test:
     description: "Rebuild the air-conditioner catalog and the canonical fixture, byte for byte."
     command: "python"
     args: ["-m", "unittest", "discover", "-s", "tests"]
-    inputs: ["acidcat_catalog/**/*.py", "examples/**/*.py", "tests/**/*.py", "/examples/*.acidcat.json", "/packages/catalog/fixtures/**/*"]
+    inputs: ["acid_cat_catalog/**/*.py", "examples/**/*.py", "tests/**/*.py", "/examples/*.acidcat.json", "/packages/catalog/fixtures/**/*"]
     toolchains: ["system"]
     env:
       PYTHONDONTWRITEBYTECODE: "1"

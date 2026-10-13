@@ -6,7 +6,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE.parent / "examples"))
 
-from acidcat_catalog import Catalog, CatalogError  # noqa: E402
+from acid_cat_catalog import Catalog, CatalogError  # noqa: E402
 from aircon import aircon_catalog  # noqa: E402
 
 CATALOG = HERE.parent.parent

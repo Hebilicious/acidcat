@@ -1,4 +1,4 @@
-use acidcat_catalog::{Capability, Catalog, Target};
+use acid_cat_catalog::{Capability, Catalog, Target};
 use serde_json::json;
 
 #[path = "../examples/aircon.rs"]

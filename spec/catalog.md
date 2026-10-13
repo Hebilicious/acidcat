@@ -136,7 +136,7 @@ The `acidcat` member is the version of this specification, not of the catalog.
 
 ## Canonical form
 
-A catalog has one canonical text, so that every tool and every catalog library writes the same bytes for the same catalog, and a diff shows only real changes. A catalog that is committed SHOULD be in canonical form. `acidcat format` puts any catalog into it.
+A catalog has one canonical text, so that every tool and every catalog library writes the same bytes for the same catalog, and a diff shows only real changes. A catalog that is committed SHOULD be in canonical form. `acid-cat format` puts any catalog into it.
 
 - **Member order.** The catalog's members come in this order: `acidcat`, `title`, `description`, `targets`, `$defs`, `capabilities`. A target's members: `bindings`, `description`, `options`. A capability's members: `description`, `audience`, `input`, `output`, `failures`, `readOnly`, `state`. Members that are not listed, such as `x-` extensions, follow the listed ones, sorted.
 - **Sorted keys.** The keys of `targets`, `$defs`, `capabilities` and `failures` are sorted. So are the keys of every object inside a schema or `options`, at every depth. Keys are sorted by Unicode code point. Arrays keep their order.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://acidcat.dev/schemas/0.1/catalog.schema.json",
+  "$id": "https://acid-cat.dev/schemas/0.1/catalog.schema.json",
   "title": "AcidCat catalog",
   "description": "One document that states what an application can do and which targets see it. See spec/catalog.md.",
   "type": "object",

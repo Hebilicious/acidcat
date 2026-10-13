@@ -45,7 +45,7 @@ These terms have exactly these meanings throughout the specification.
 | [Invocation](invocation.md) | Outcomes, availability, sessions, cancellation, concurrency, long work, state |
 | [Bindings](bindings/README.md) | What every binding defines, the rules for remote bindings, and the bindings this specification provides |
 | [Extensions](extensions/README.md) | Optional conventions: attachments, pagination |
-| [Packages](../packages/README.md) | The `acidcat` toolchain, the catalog libraries, and the planned runtime and conformance kit |
+| [Packages](../packages/README.md) | The `acid-cat` command line, the catalog libraries, and the planned core and Effect integration |
 | [Conformance](conformance.md) | What makes a catalog, a provider or a binding conforming |
 | [Adoption](adoption.md) | How Jarette's Box and heb-stack move onto this specification |
 | [Divergence inventory](../history/divergence.md) | How the first decisions were reached, as a record |

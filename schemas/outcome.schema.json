@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://acidcat.dev/schemas/0.1/outcome.schema.json",
+  "$id": "https://acid-cat.dev/schemas/0.1/outcome.schema.json",
   "title": "AcidCat outcome",
   "description": "The JSON form of an invocation's outcome: a value, a failure, or a call failure. See spec/invocation.md.",
   "oneOf": [

@@ -3,7 +3,7 @@
 version = 4
 
 [[package]]
-name = "acidcat-catalog"
+name = "acid-cat-catalog"
 version = "0.1.0"
 dependencies = [
  "regex",

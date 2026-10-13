@@ -1,11 +1,11 @@
-# @acidcat/catalog
+# @acid-cat/catalog
 
-The AcidCat catalog library for TypeScript, published to npm as `@acidcat/catalog`.
+The AcidCat catalog library for TypeScript, published to npm as `@acid-cat/catalog`.
 
 Write a catalog in TypeScript and render it in canonical form. No dependencies, and no runtime role: run it at build time to produce `acidcat.catalog.json`.
 
 ```ts
-import { Catalog } from "@acidcat/sdk";
+import { Catalog } from "@acid-cat/catalog";
 
 const catalog = new Catalog({ title: "Living-room air conditioner" });
 catalog.target("cli", { bindings: ["cli"] });

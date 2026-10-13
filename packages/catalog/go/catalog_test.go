@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"acidcat.dev/catalog"
-	"acidcat.dev/catalog/examples/aircon"
+	"acid-cat.dev/catalog"
+	"acid-cat.dev/catalog/examples/aircon"
 )
 
 func TestWritesTheSameAirconCatalogAsPkl(t *testing.T) {

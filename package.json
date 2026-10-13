@@ -1,11 +1,11 @@
 {
-  "name": "acidcat-workspace",
+  "name": "acid-cat-workspace",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.8.1",
   "devDependencies": {
-    "@acidcat/catalog": "workspace:*",
-    "acidcat": "workspace:*"
+    "@acid-cat/catalog": "workspace:*",
+    "@acid-cat/cli": "workspace:*"
   }
 }

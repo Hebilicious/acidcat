@@ -1,14 +1,14 @@
 {
-  "name": "acidcat",
+  "name": "@acid-cat/cli",
   "version": "0.1.0",
-  "description": "The AcidCat toolchain: check, format and view catalogs.",
+  "description": "The AcidCat command line: check, format and view catalogs.",
   "license": "MIT",
   "private": true,
   "type": "module",
-  "bin": { "acidcat": "./src/cli.ts" },
+  "bin": { "acid-cat": "./src/cli.ts" },
   "exports": "./src/catalog.ts",
   "dependencies": {
-    "@acidcat/catalog": "workspace:*",
+    "@acid-cat/catalog": "workspace:*",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1"
   }

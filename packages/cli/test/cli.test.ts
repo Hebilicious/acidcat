@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { canonicalText } from "@acidcat/catalog";
+import { canonicalText } from "@acid-cat/catalog";
 import { bundle, problemsOf, viewOf, type Catalog } from "../src/catalog.ts";
 
 const aircon = JSON.parse(

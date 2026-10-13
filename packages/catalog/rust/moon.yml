@@ -2,8 +2,8 @@ language: "rust"
 layer: "library"
 
 project:
-  title: "acidcat-catalog"
-  description: "Write a catalog in Rust and render it in canonical form. Published to crates.io as acidcat-catalog."
+  title: "acid-cat-catalog"
+  description: "Write a catalog in Rust and render it in canonical form. Published to crates.io as acid-cat-catalog."
 
 tasks:
   test:

@@ -166,18 +166,18 @@ importers:
 
   .:
     devDependencies:
-      '@acidcat/catalog':
+      '@acid-cat/catalog':
         specifier: workspace:*
         version: link:packages/catalog/typescript
-      acidcat:
+      '@acid-cat/cli':
         specifier: workspace:*
-        version: link:packages/toolchain
+        version: link:packages/cli
 
   packages/catalog/typescript: {}
 
-  packages/toolchain:
+  packages/cli:
     dependencies:
-      '@acidcat/catalog':
+      '@acid-cat/catalog':
         specifier: workspace:*
         version: link:../catalog/typescript
       ajv:

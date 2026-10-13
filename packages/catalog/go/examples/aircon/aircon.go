@@ -1,7 +1,7 @@
 // Package aircon writes the air-conditioner catalog (examples/aircon.pkl) with the Go catalog library.
 package aircon
 
-import "acidcat.dev/catalog"
+import "acid-cat.dev/catalog"
 
 type schema = catalog.Schema
 

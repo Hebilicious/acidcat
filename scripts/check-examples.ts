@@ -10,8 +10,8 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { canonicalText } from "@acidcat/catalog";
-import { problemsOf } from "acidcat";
+import { canonicalText } from "@acid-cat/catalog";
+import { problemsOf } from "@acid-cat/cli";
 
 const root = path.resolve(import.meta.dirname, "..");
 const problems: string[] = [];

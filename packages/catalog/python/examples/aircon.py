@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from acidcat_catalog import Catalog, Schema  # noqa: E402
+from acid_cat_catalog import Catalog, Schema  # noqa: E402
 
 
 def aircon_catalog() -> Catalog:

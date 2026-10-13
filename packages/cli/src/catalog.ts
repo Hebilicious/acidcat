@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
-import { canonicalText } from "@acidcat/catalog";
+import { canonicalText } from "@acid-cat/catalog";
 
 export type Schema = Record<string, unknown>;
 
@@ -44,7 +44,7 @@ export function problemsOf(catalog: unknown, text?: string): string[] {
   if (!validateShape(catalog)) return [ajv.errorsText(validateShape.errors)];
   const problems = ruleProblems(catalog as Catalog);
   if (text !== undefined && text !== canonicalText(catalog)) {
-    problems.push("the file is not in canonical form; run `acidcat format --write`");
+    problems.push("the file is not in canonical form; run `acid-cat format --write`");
   }
   return problems;
 }

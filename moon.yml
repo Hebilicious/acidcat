@@ -11,8 +11,8 @@ toolchains:
 tasks:
   examples:
     description: "Render every example catalog from Pkl, and put it in canonical form."
-    script: "pkl eval examples/*.pkl --output-path '%{moduleDir}/%{moduleName}.acidcat.json' && node packages/toolchain/src/cli.ts format --write examples/*.acidcat.json"
-    inputs: ["examples/*.pkl", "packages/catalog/pkl/**/*.pkl", "packages/toolchain/src/**/*.ts", "packages/catalog/typescript/src/**/*.ts"]
+    script: "pkl eval examples/*.pkl --output-path '%{moduleDir}/%{moduleName}.acidcat.json' && node packages/cli/src/cli.ts format --write examples/*.acidcat.json"
+    inputs: ["examples/*.pkl", "packages/catalog/pkl/**/*.pkl", "packages/cli/src/**/*.ts", "packages/catalog/typescript/src/**/*.ts"]
     outputs: ["examples/*.acidcat.json"]
     toolchains: ["system"]
     options:
@@ -29,9 +29,9 @@ tasks:
       - "packages/catalog/pkl/**/*.pkl"
       - "packages/catalog/fixtures/**/*"
       - "packages/catalog/typescript/src/**/*.ts"
-      - "packages/toolchain/src/**/*.ts"
+      - "packages/cli/src/**/*.ts"
 
   verify:
     description: "Every check: the examples and fixtures, the toolchain, and every catalog library."
     command: "noop"
-    deps: ["check", "toolchain:test", "catalog-typescript:test", "catalog-python:test", "catalog-go:test", "catalog-rust:test"]
+    deps: ["check", "cli:test", "catalog-typescript:test", "catalog-python:test", "catalog-go:test", "catalog-rust:test"]
