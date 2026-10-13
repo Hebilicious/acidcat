@@ -1,69 +1,76 @@
 # Invocation
 
-An **invocation** calls one capability in a session. It names the capability by id, supplies an input, can be cancelled, and settles exactly once with an **outcome**.
+An **invocation** is one call to one capability. The client gives the id of the capability and an input. The client can cancel the call. Each call ends exactly one time, with one **outcome**.
 
 ## Outcomes
 
 | Outcome | Meaning | JSON form |
 | --- | --- | --- |
-| Value | The capability did what was asked | `{ "ok": true, "value": <output> }` |
-| Failure | The capability declined in a way its catalog entry declares | `{ "ok": false, "error": <failure> }` |
-| Call failure | The call produced no result | `{ "kind": <kind>, "message": <text> }` |
+| Value | The capability did the operation | `{ "ok": true, "value": <output> }` |
+| Failure | The capability did not do the operation, for a reason in its `failures` | `{ "ok": false, "error": <failure> }` |
+| Call failure | The call did not give a result | `{ "kind": <kind>, "message": <text> }` |
 
-A value and a failure together form the **result**. A failure is data, so a binding MUST deliver it to the client as a result and never as a call failure.
+A value and a failure are both **results**. A failure is data. A binding MUST send a failure to the client as a result. It MUST NOT send a failure as a call failure.
 
-A binding MAY represent outcomes in its own form, such as exit codes, HTTP statuses, exceptions or a language's union types. Whatever the form, a client MUST be able to tell every outcome, and every kind of call failure, apart. Where a binding has no form of its own, it uses the JSON forms above, which [`schemas/outcome.schema.json`](../schemas/outcome.schema.json) defines.
+A binding MAY show outcomes in its own form, for example as exit codes, HTTP status codes or exceptions. A client MUST be able to identify each outcome and each kind of call failure. If a binding has no form of its own, it uses the JSON forms above. [`schemas/outcome.schema.json`](../schemas/outcome.schema.json) defines them.
 
 ## Call failures
 
-| Kind | Reported when |
+| Kind | When |
 | --- | --- |
-| `cancelled` | The call was cancelled before it settled: by its client, by its session closing, or by the provider replacing or stopping the work |
-| `unknown-capability` | The id is not in the target's view, whether the catalog does not hold it or the capability's audience does not name the target |
-| `unavailable` | The capability is in the view but cannot run now. The message is the availability's reason |
-| `invalid-input` | The input does not conform to the capability's input schema |
-| `internal` | Anything else, such as a defect in the provider |
+| `cancelled` | The call stopped before it ended. The client, the session or the provider stopped it |
+| `unknown-capability` | The id is not in the view of the target |
+| `unavailable` | The capability is in the view, but it cannot run now. The message gives the reason |
+| `invalid-input` | The input does not agree with the input schema |
+| `internal` | All other problems, for example a defect in the provider |
 
-When more than one kind applies, the first one in the table is reported.
+If more than one kind applies, use the first kind in the table.
 
-- The provider MUST NOT start the work until the input has been validated.
-- An `unknown-capability` failure MUST NOT reveal whether the id exists for another target.
-- The message of an `internal` failure MUST NOT reveal internal details. The provider SHOULD record the full cause where operators can read it.
-- Messages are written for people. Clients tell call failures apart by `kind`.
+- The provider MUST validate the input before it starts the operation.
+- An `unknown-capability` failure MUST NOT show if the id exists for a different target.
+- The message of an `internal` failure MUST NOT show internal data. The provider SHOULD record the full cause for operators.
+- Messages are for people. Clients identify call failures by `kind`.
 
 ## Availability
 
-In a session, each capability in the view is either available, or unavailable with a reason: `{ "available": true }` or `{ "available": false, "reason": <text> }`. Availability can change at any time. Bindings that list capabilities list only the available ones, or mark each one's availability.
+In a session, each capability in the view is available or unavailable:
+
+- `{ "available": true }`
+- `{ "available": false, "reason": <text> }`
+
+Availability can change at any time. A binding that lists capabilities lists only the available capabilities, or it shows the availability of each one.
 
 ## Sessions
 
-A session is the context that a client's invocations run in. Each binding decides how long its sessions last.
+A **session** is the context of the calls of one client. Each binding decides how long its sessions are open.
 
-- Inputs MUST NOT carry identity, credentials or tokens. A session closes over its client's identity, and the provider sees that identity through the session.
-- A session is **open**, then **closing**, then **closed**. When it starts closing, it stops admitting calls and cancels its signal, and its work then settles or is cancelled. A call made after closing has begun fails as `cancelled`.
-- A provider MAY give sessions any services it needs, such as authentication, storage or navigation. This specification does not define them.
+- An input MUST NOT contain identity data, credentials or tokens. The session holds the identity of its client.
+- A session is **open**, then **closing**, then **closed**. When a session starts to close, it accepts no new calls and cancels its work. A call after this time fails as `cancelled`.
+- A provider MAY give sessions the services that it needs, for example authentication or storage. This specification does not define these services.
 
 ## Cancellation and concurrency
 
-- Every call settles exactly once. A call never receives another call's outcome.
-- Cancelling one call affects only that call. Work that other calls are waiting for continues.
-- When a call arrives while other work is in flight, the provider decides what happens. It may run them alongside each other, join them to the same work, reject the new call, replace the work, or stop it. A failure used for a rejection or a replacement MUST be declared in `failures`.
-- A `cancelled` outcome does not tell the client whether the work had any effect. A capability whose effects can survive cancellation says so in its description.
+- Each call ends exactly one time. A call never gets the outcome of a different call.
+- When a client cancels a call, only that call stops. Work that other calls wait for continues.
+- When a call arrives during other work, the provider decides what to do. It can run the two at the same time, join them, reject the new call, replace the old work, or stop the old work.
+- If the provider uses a failure to reject or replace a call, that failure MUST be in `failures`.
+- A `cancelled` outcome does not tell if the work had an effect. If the effects of a capability can stay after a cancellation, its description MUST say so.
 
 ## Long work
 
-A call settles when its work is done, however long that takes. There is no polling protocol and no execution timeout in the core. A binding MAY report progress, and MAY bound how long it waits, in which case the call ends as `cancelled`. A capability MAY start work and return straight away, leaving another capability, or its state, to report how the work is going.
+A call ends when its work is complete. There is no polling and no time limit.
+
+- A binding MAY send progress messages.
+- A binding MAY stop waiting after a time limit. Then the call ends as `cancelled`.
+- A capability MAY start work and return immediately. Then a different capability, or the state, shows the progress.
 
 ## State
 
-A capability that declares `state` exposes a value that a client can read and then follow as it changes. It might be the unit's current status, or the progress of some long work. Each language binding defines how to read and subscribe to state. A protocol binding MAY leave state out.
+A capability with `state` has a value that a client can read and follow. Examples are the status of a device, or the progress of long work. Each language binding tells how to read state and how to get its changes. A protocol binding MAY omit state.
 
-## Rationale
+## Design notes
 
 *This section is not normative.*
 
-**The outcomes come from both implementations.** Jarette's Box and heb-stack both validate input before anything runs. Both return failures as tagged results and throw for invalid input, cancellation and defects, keeping defects private. This section names those cases so that every binding keeps them apart.
-
-**Concurrency is the provider's business.** Each owner in Jarette's Box chooses its own policy: history overlaps, atlas reads join one load, OCR rejects when it is busy, market fetches replace each other. Constraining providers would only take choices away. Callers need guarantees about their own call, and this section lists exactly those.
-
-**State is optional.** UI clients need live values, and both kernels expose snapshots that can be observed. Agents and APIs usually don't, so a protocol binding can ignore state.
+- **Why three outcomes.** A client must know the difference between "the capability said no" and "the call did not run". Failures are data that the client can act on. Call failures are problems with the call.
+- **Why the provider controls concurrency.** Different operations need different rules. The specification gives guarantees to each caller, and lets the provider choose the rules.

@@ -1,10 +1,10 @@
 # Catalog libraries
 
-Libraries for writing a catalog in the language you already use. Each one builds a catalog, checks the catalog rules, and renders it in [canonical form](../../spec/catalog.md#canonical-form).
+Write a catalog in the language that you use. Each library makes a catalog, checks the catalog rules, and writes the catalog in [canonical form](../../spec/catalog.md#canonical-form).
 
-They are **authoring tools, not runtimes**. A program uses one to produce `acidcat.catalog.json` at build time. At runtime an application works from its own code (see [Build time and run time](../../spec/catalog.md#build-time-and-run-time)), and nothing reads the catalog through these libraries.
+Use these libraries at build time, to write `acidcat.catalog.json`. At run time, an application does not use them (see [Build time and run time](../../spec/catalog.md#build-time-and-run-time)).
 
-| Language | Directory | Published as | Test |
+| Language | Directory | Registry name | Test |
 | --- | --- | --- | --- |
 | TypeScript | [`typescript/`](typescript) | npm `@acid-cat/catalog` | `moon run catalog-typescript:test` |
 | Python | [`python/`](python) | PyPI `acid-cat-catalog` | `moon run catalog-python:test` |
@@ -23,17 +23,17 @@ They are **authoring tools, not runtimes**. A program uses one to produce `acidc
 | Check the rules | while writing | `.validate()` | `.validate()` | `.Validate()` | `.validate()` |
 | Render canonical JSON | `pkl eval`, then `acid-cat format` | `.render()` | `.render()` | `.Render()` | `.render()` |
 
-Schemas are plain JSON Schema objects in every language. Declaring a shared type returns the schema that references it, so a reference cannot name a type that does not exist.
+In all languages, a schema is a plain JSON Schema object. When you declare a shared type, you get the schema that refers to it. Thus a reference always refers to a type that exists.
 
-The libraries check the [catalog rules](../../spec/conformance.md#catalog) that need no schema validator: well-formed ids, target, binding and type names; declared audiences; inputs that describe objects; references that resolve; no nested `$defs`. The [toolchain](../cli/README.md) (`acid-cat check`) then validates the rendered document completely.
+The libraries check the [catalog rules](../../spec/conformance.md#catalog) that need no schema validator: the form of ids and names, audiences, inputs, references, and nested `$defs`. Then `acid-cat check` from [`@acid-cat/cli`](../cli/README.md) does the full check.
 
-## Kept in step
+## Identical output
 
-Every library writes catalogs in canonical form, so the same catalog gives the same bytes in every language. Two fixtures hold them to it:
+All libraries write catalogs in canonical form. Thus the same catalog gives the same bytes in all languages. Two files test this:
 
-- [`examples/aircon.acidcat.json`](../../examples/aircon.acidcat.json): each library rebuilds the air-conditioner catalog from [`examples/aircon.pkl`](../../examples/aircon.pkl), and must render exactly this file.
-- [`fixtures/edge.acidcat.json`](fixtures/edge.acidcat.json): numbers and strings that languages disagree on by default (`16.0`, `1e-7`, `1e21`, escapes, non-ASCII keys), which each library must render exactly.
+- [`examples/aircon.acidcat.json`](../../examples/aircon.acidcat.json): each library makes the air-conditioner catalog of [`examples/aircon.pkl`](../../examples/aircon.pkl), and MUST write exactly this file.
+- [`fixtures/edge.acidcat.json`](fixtures/edge.acidcat.json): numbers and strings that languages write differently by default (`16.0`, `1e-7`, `1e21`, escapes, non-ASCII keys). Each library MUST write exactly this file.
 
-Pkl writes JSON in its own order, so `moon run examples` passes its output through `acid-cat format`.
+Pkl writes JSON in its own order. Thus `moon run examples` sends the Pkl output through `acid-cat format`.
 
-A new language is welcome on the same terms: the same five steps, the same rules, a canonical writer, and both fixtures.
+To add a language, use the same five steps and the same rules, write the canonical form, and pass the two tests.

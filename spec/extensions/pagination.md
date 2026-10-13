@@ -1,14 +1,14 @@
 # Pagination
 
-An output that holds only part of a collection MUST say so and MUST tell the client how to get the rest. This rule applies whether or not a capability follows the convention below. Truncation is never silent.
+An output that contains only part of a collection MUST say so. It MUST tell the client how to get the remaining part. This rule applies to all capabilities, also to capabilities that do not use the convention below.
 
 ## Convention
 
-A collection that grows with use, or that covers space, is returned in pages:
+Return a collection that can become large in pages:
 
-- **Input:** `limit`, an integer from 1 up to a maximum the capability states; and `cursor`, an optional opaque string taken from a previous page.
-- **Output:** `items`, an array whose `maxItems` is that maximum; and `nextCursor`, a string, or `null` when there is nothing more.
+- **Input:** `limit` is an integer from 1 to a maximum that the capability sets. `cursor` is an optional string from a previous page.
+- **Output:** `items` is an array. Its `maxItems` is the maximum. `nextCursor` is a string, or `null` if there are no more items.
 
-When the collection has changed in a way the cursor cannot follow, the capability returns a declared failure instead of skipping or repeating items.
+If the collection changes and the cursor cannot continue, the capability returns a failure. It MUST NOT skip or repeat items.
 
-Arrays elsewhere SHOULD state `maxItems`, so that every answer has a known bound. A collection bounded by its domain, such as the 20 most recent checks, says so in its description.
+Other arrays SHOULD have `maxItems`. If a collection has a fixed limit, for example the 20 most recent items, its description SHOULD say so.

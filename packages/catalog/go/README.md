@@ -1,8 +1,8 @@
 # acid-cat.dev/catalog
 
-The AcidCat catalog library for Go, published as the module `acid-cat.dev/catalog`.
+The AcidCat catalog library for Go. Go module: `acid-cat.dev/catalog`.
 
-Write a catalog in Go and render it in canonical form. Standard library only, and no runtime role: run it at build time to produce `acidcat.catalog.json`.
+Write a catalog in Go, and write it in canonical form. The library uses only the standard library. Use it at build time to write `acidcat.catalog.json`.
 
 ```go
 c := catalog.New("Living-room air conditioner", "")

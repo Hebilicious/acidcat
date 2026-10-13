@@ -1,8 +1,8 @@
 # acid-cat-catalog
 
-The AcidCat catalog library for Python, published to PyPI as `acid-cat-catalog`.
+The AcidCat catalog library for Python. PyPI package: `acid-cat-catalog`.
 
-Write a catalog in Python and render it in canonical form. Standard library only, and no runtime role: run it at build time to produce `acidcat.catalog.json`.
+Write a catalog in Python, and write it in canonical form. The library uses only the standard library. Use it at build time to write `acidcat.catalog.json`.
 
 ```python
 from pathlib import Path

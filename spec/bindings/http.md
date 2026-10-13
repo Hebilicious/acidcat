@@ -1,29 +1,29 @@
 # HTTP binding
 
-A protocol binding that serves a view as JSON over HTTP, in a REST style that any HTTP client can use. It depends on [Catalog](../catalog.md), [Invocation](../invocation.md) and the rules for [remote bindings](README.md#remote-bindings).
+A protocol binding that serves a view as JSON through HTTP. Any HTTP client can use it. It follows the rules for [remote bindings](README.md#remote-bindings).
 
 ## Requests
 
-All paths are relative to a base URL that the deployment chooses:
+The deployment chooses a base URL. All paths are relative to it.
 
 | Request | Answer |
 | --- | --- |
-| `GET {base}/catalog` | The target's view. Optional: a deployment MAY serve it so that clients can discover the API |
-| `GET {base}/capabilities` | A JSON array with one entry per capability in the view: its `id`, `available`, and `reason` when it is unavailable |
-| `POST {base}/capabilities/{id}`, with the input as the body | The outcome |
+| `GET {base}/capabilities` | A JSON array. Each item has the `id` of a capability in the view, `available`, and `reason` if the capability is unavailable |
+| `POST {base}/capabilities/{id}` with the input as the body | The outcome |
+| `GET {base}/catalog` | The view of the target. A deployment MAY serve this request |
 
-- **Names.** The id appears in the path as it is.
-- **Outcomes.** A result answers `200`, and its `ok` member tells a value from a failure. A call failure answers with the status below and the body `{ "kind", "message" }`.
+- **Names.** The id is in the path without change.
+- **Outcomes.** A result has the status 200. Its `ok` member tells if it is a value or a failure. A call failure has the body `{ "kind", "message" }` and one of these statuses:
 
   | Kind | Status |
   | --- | --- |
   | `unknown-capability` | 404 |
   | `invalid-input` | 422 |
   | `unavailable` | 503 |
-  | `cancelled` | 409, when the client is still there to receive it |
+  | `cancelled` | 409, if the client still waits |
   | `internal` | 500 |
 
-- **Cancellation.** Closing the request cancels the call.
-- **Screening.** The binding refuses requests with 405, 403, 415, 413 and 400, matching the [screens](README.md#remote-bindings) in the order they are listed there. The media type is `application/json`. Requests without an `Origin` header are accepted.
+- **Cancellation.** When the client closes the request, the call is cancelled.
+- **Rejected requests.** The binding uses 405, 403, 415, 413 and 400 for the problems in [Remote bindings](README.md#remote-bindings), in that order. The media type is `application/json`. The binding accepts requests that have no `Origin` header.
 
-A deployment MAY add resource-style routes generated from ids, such as `GET` with the input in the query string for `readOnly` capabilities. They answer exactly as the `POST` route does.
+A deployment MAY add routes that come from the ids. For example, `GET` with the input in the query string for a `readOnly` capability. These routes give the same answers as the `POST` route.

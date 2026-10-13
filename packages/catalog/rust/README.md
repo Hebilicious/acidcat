@@ -1,8 +1,8 @@
 # acid-cat-catalog
 
-The AcidCat catalog library for Rust, published to crates.io as `acid-cat-catalog`.
+The AcidCat catalog library for Rust. crates.io package: `acid-cat-catalog`.
 
-Write a catalog in Rust and render it in canonical form, with schemas written in `serde_json::json!`. No runtime role: run it at build time, for example from a `build.rs` or a small binary, to produce `acidcat.catalog.json`.
+Write a catalog in Rust, and write it in canonical form. Write schemas with `serde_json::json!`. Use it at build time, for example in `build.rs`, to write `acidcat.catalog.json`.
 
 ```rust
 use acid_cat_catalog::{Capability, Catalog, Target};

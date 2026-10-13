@@ -1,6 +1,6 @@
 # TypeScript binding
 
-A language binding for TypeScript and JavaScript. A session exposes each capability in its view as a **handle**. The same shape serves code in the same process and adapters such as WebMCP, MCP and the CLI. It depends on [Catalog](../catalog.md) and [Invocation](../invocation.md).
+A language binding for TypeScript and JavaScript. A session gives a **handle** for each capability in its view. Code in the same process uses handles. Protocol bindings, such as WebMCP, MCP and the command line, use the same handles.
 
 ## Handles
 
@@ -19,24 +19,18 @@ interface Handle<Input, Value, Failure, State = never> {
   readonly audience: readonly string[];
   readonly availability: Observable<Availability>;
   readonly snapshot?: Observable<State>;
-  /** A typed call from code that already holds a decoded input. */
+  /** A call with an input that is already decoded. */
   execute(input: Input, options?: { signal?: AbortSignal }): Promise<Result<Value, Failure>>;
-  /** A call with untrusted input, which is validated first. The result is in its encoded JSON form. */
+  /** A call with an input that is not trusted. The handle validates it first. The result is in its JSON form. */
   invokeExternal(input: unknown, options?: { signal?: AbortSignal }): Promise<Result<unknown, unknown>>;
 }
 ```
 
-- **Names.** A session gives access to every handle by id. It MAY also nest handles in an object tree. That tree is up to the application, and nothing is derived from it.
-- **Outcomes.** A result resolves the promise. A call failure rejects it with an `Error` whose `kind` property is the kind. The error's `name` is `AbortError` for `cancelled` and `TypeError` for `invalid-input`.
-- **Listing.** A session walks its handles. A handle outside the session's target reports itself unavailable, so adapters filter on availability alone.
-- **Cancellation.** `options.signal` cancels one call. The session has its own signal, which cancels everything it started.
-- **State.** `snapshot` observes the capability's [state](../invocation.md#state), and is present when the capability declares `state`. A handle MAY also offer a `snapshot` for in-process clients when the catalog declares no `state`. Other bindings cannot see that snapshot. Every value read from `getSnapshot`, or passed to a listener, is detached from the provider's own data.
-- **Types.** Each type in `$defs` becomes a named TypeScript type, and `Input`, `Value`, `Failure` and `State` are generated from the capability's schemas. They may instead be written by hand and checked against the catalog.
+- **Names.** A session gives each handle by id. It MAY also put the handles in a tree of objects. The application chooses the tree. No name comes from the tree.
+- **Outcomes.** A result resolves the promise. A call failure rejects the promise with an `Error` that has a `kind` property. For `cancelled`, the `name` of the error is `AbortError`. For `invalid-input`, it is `TypeError`.
+- **Listing.** A session gives all its handles. A handle that is not in the view of the target is always unavailable.
+- **Cancellation.** `options.signal` cancels one call. The session has its own signal. It cancels all the work of the session.
+- **State.** `snapshot` observes the [state](../invocation.md#state) of the capability. It is present when the capability has `state`. A handle MAY have a `snapshot` for code in the same process when the catalog has no `state`. Each value from `getSnapshot` or from a listener is a copy. It is not the data of the provider.
+- **Types.** Each type in `$defs` becomes a named TypeScript type. `Input`, `Value`, `Failure` and `State` come from the schemas of the capability. You can also write them by hand and check them against the catalog.
 
-A session is disposed with `dispose(): Promise<void>`, which follows the [session lifecycle](../invocation.md#sessions).
-
-## Rationale
-
-*This section is not normative.*
-
-**This is the shape both kernels already have.** Jarette's Box and heb-stack expose `id`, `description`, `audience`, `availability`, an optional `snapshot`, `execute` and `invokeExternal`, and they use `getSnapshot` and `subscribe` sources. Adding `kind` to rejected errors is the only change. The member keeps the name `snapshot`, which both codebases and XState already use, for what the core calls state. Effect, XState and the composition of the root stay implementation choices, made inside [`@acid-cat/core-effect`](../../packages/README.md#two-cores).
+`dispose(): Promise<void>` closes a session. It follows the [session lifecycle](../invocation.md#sessions).

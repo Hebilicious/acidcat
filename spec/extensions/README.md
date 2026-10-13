@@ -1,8 +1,8 @@
 # Extensions
 
-An extension is an optional convention built only from what the core already defines. A catalog that follows none of them is still complete. Bindings say which extensions they support.
+An extension is an optional convention. It uses only the members that the specification defines. A catalog that uses no extension is complete. Each binding tells which extensions it supports.
 
-| Extension | Covers |
+| Extension | Use |
 | --- | --- |
-| [Attachments](attachments.md) | Binary input, such as a screenshot, passed by handle |
-| [Pagination](pagination.md) | Collections that grow, returned one page at a time |
+| [Attachments](attachments.md) | Send binary data, for example an image, by handle |
+| [Pagination](pagination.md) | Return a large collection one page at a time |

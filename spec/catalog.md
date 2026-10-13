@@ -1,8 +1,8 @@
 # Catalog
 
-A **catalog** is a JSON document that states what an application can do and where. It is the contract that every provider, binding and client is built from and checked against. An application MAY write it by hand, with a [catalog library](../packages/catalog/README.md), or generate it from code, but there is one catalog per application.
+A **catalog** is a JSON document. It tells what an application can do, and which targets can use each capability. Each application has one catalog.
 
-[`schemas/catalog.schema.json`](../schemas/catalog.schema.json) validates the document's shape. This page states the rules that the schema cannot express.
+[`schemas/catalog.schema.json`](../schemas/catalog.schema.json) defines the structure of a catalog. This page gives the rules that the schema cannot express.
 
 ## Example
 
@@ -11,14 +11,13 @@ A **catalog** is a JSON document that states what an application can do and wher
   "acidcat": "0.1",
   "title": "Living-room air conditioner",
   "targets": {
-    "app": { "bindings": ["typescript", "acme:swift", "acme:kotlin"] },
-    "cli": { "bindings": ["cli"] },
+    "app": { "bindings": ["typescript"] },
     "mcp": { "bindings": ["mcp"] }
   },
   "capabilities": {
     "aircon.temperature.set": {
       "description": "Set the target temperature in degrees Celsius.",
-      "audience": ["app", "cli", "mcp"],
+      "audience": ["app", "mcp"],
       "input": {
         "type": "object",
         "required": ["celsius"],
@@ -30,76 +29,89 @@ A **catalog** is a JSON document that states what an application can do and wher
 }
 ```
 
-The full example is [`examples/aircon.acidcat.json`](../examples/aircon.acidcat.json), rendered from [`examples/aircon.pkl`](../examples/aircon.pkl).
+The full example is [`examples/aircon.acidcat.json`](../examples/aircon.acidcat.json). Its source is [`examples/aircon.pkl`](../examples/aircon.pkl).
 
 ## Build time and run time
 
-The catalog is a build-time artifact. It is versioned with the application: either committed, or regenerated reproducibly by its build. It is reviewed as a diff, validated by the toolchain, used to generate code, and used by the conformance kit to check the running application. An implementation is not required to read it at runtime.
+The catalog is a build-time file. Keep it with the source code of the application. You can commit it, or you can make it again in each build. Tools use the catalog to:
 
-At runtime, an implementation works from its own definitions: code generated from the catalog, or the code the catalog was generated from. What each binding publishes and does MUST match the catalog. The toolchain and the conformance kit check that match, so the running program never has to read the file. A binding MAY still load a precomputed part of the catalog at runtime when that is cheaper, for example to keep schema conversion out of a web page's bundle.
+- validate the catalog;
+- generate code;
+- test the application against the catalog.
 
-## Authoring
+An implementation does not read the catalog at run time. It uses its own code. That code can come from the catalog, or the catalog can come from that code. The behavior of each binding MUST agree with the catalog. A binding MAY load a precomputed part of the catalog at run time, if this is faster.
 
-Only the JSON document is normative. A catalog MAY be written in any language that produces it: by hand in JSON or YAML, with Pkl or one of the [catalog libraries](../packages/catalog/README.md), or generated from the application's own code.
+## Writing a catalog
 
-[Pkl](https://pkl-lang.org) is the recommended language for writing a catalog by hand. A catalog that amends [`packages/catalog/pkl/Catalog.pkl`](../packages/catalog/pkl/Catalog.pkl) gets types, and its rules are checked while it is being written. An undeclared audience, an input that is not an object, or a malformed id is an error before any JSON is produced. Shared types go under `types`, which renders as `$defs`. `module.ref("Status")` references one, and fails if no type has that name. Members under `extensions` render with their `x-` prefix. `pkl eval` renders the JSON.
+Only the JSON document is normative. You can write a catalog in these ways:
+
+- in JSON or YAML;
+- in [Pkl](https://pkl-lang.org), with [`Catalog.pkl`](../packages/catalog/pkl/Catalog.pkl);
+- with a [catalog library](../packages/catalog/README.md) for TypeScript, Python, Go or Rust;
+- with a generator that reads the code of the application.
+
+We recommend Pkl to write a catalog by hand. Pkl finds errors before it writes the JSON. In Pkl, shared types go in `types`, and `module.ref("Name")` refers to one.
 
 ## Document
 
-| Member | Required | Meaning |
+| Member | Required | Value |
 | --- | --- | --- |
-| `acidcat` | yes | The version of this specification that the catalog follows, `"0.1"` |
-| `title` | no | A name for people |
-| `description` | no | What the application is |
-| `targets` | yes | The targets, keyed by name |
-| `capabilities` | yes | The capabilities, keyed by id |
-| `$defs` | no | Shared types, keyed by name. See [Types](#types) |
+| `acidcat` | Yes | The version of this specification: `"0.1"` |
+| `title` | No | A name for people |
+| `description` | No | What the application does |
+| `targets` | Yes | The targets, by name. See [Targets](#targets) |
+| `$defs` | No | The shared types, by name. See [Types](#types) |
+| `capabilities` | Yes | The capabilities, by id. See [Capabilities](#capabilities) |
 
 ## Targets
 
-Each key of `targets` names a target, and each value says how that target is served:
+A **target** is a group of clients that can use a set of capabilities, for example `app`, `cli` or `mcp`. Each key of `targets` is the name of a target.
 
-| Member | Required | Meaning |
+| Member | Required | Value |
 | --- | --- | --- |
-| `bindings` | yes | The names of the bindings that serve this target, such as `["typescript", "webmcp"]` |
-| `description` | no | Who the target is for |
-| `options` | no | Settings for the bindings, in a form each binding defines |
+| `bindings` | Yes | The bindings that serve the target, for example `["typescript", "webmcp"]` |
+| `description` | No | The clients of the target |
+| `options` | No | Settings for the bindings. Each binding defines its settings |
 
-Target names match `[a-z][a-z0-9-]*`, optionally followed by `:` and a second name of the same form. They are the application's own choice. This specification reserves none.
-
-A binding name is either one that this specification defines (see [Bindings](bindings/README.md#bindings-in-this-specification)) or a name the application chooses. A binding that this specification does not define SHOULD be named `<prefix>:<name>`.
+- A target name matches `[a-z][a-z0-9-]*`. It can have a second part after a colon, as in `acme:panel`.
+- The application chooses its target names. This specification reserves no target name.
+- A binding name is a name from [Bindings](bindings/README.md#bindings-in-this-specification), or a name that the application chooses. Give a new binding a name with a prefix, as in `acme:swift`.
 
 ## Capabilities
 
-Each key of `capabilities` is an [id](#ids), and each value describes the capability:
+A **capability** is one operation that a client can do. Each key of `capabilities` is the [id](#ids) of a capability.
 
-| Member | Required | Meaning |
+| Member | Required | Value |
 | --- | --- | --- |
-| `description` | yes | What the capability does for its caller, written for people and agents |
-| `audience` | no | The targets the capability is offered to. Each entry MUST be a key of `targets`. When absent or empty, the capability reaches no target |
-| `input` | no | The schema of the input. It MUST describe an object: its top level states `"type": "object"`, or it is a `$ref` to a type that does. When absent, the input is an empty object |
-| `output` | no | The schema of the value a successful call returns. When absent, the value is `null` |
-| `failures` | no | The capability's failures, keyed by tag. See [Failures](#failures) |
-| `readOnly` | no | `true` when a call changes nothing that the caller or anyone else can observe. It is a hint for clients, such as an agent deciding whether to ask the user first, and does not change how a call runs |
-| `state` | no | The schema of a value the capability exposes for clients to observe. See [State](invocation.md#state) |
+| `description` | Yes | What the capability does. Write it for people and for agents |
+| `audience` | No | The targets that can use the capability. Each entry MUST be a key of `targets`. If there is no audience, no target can use the capability |
+| `input` | No | The schema of the input. It MUST be an object: `"type": "object"`, or a `$ref` to a type that is an object. If there is no input schema, the input is an empty object |
+| `output` | No | The schema of the value that a successful call returns. If there is no output schema, the value is `null` |
+| `failures` | No | The failures that the capability can return, by tag. See [Failures](#failures) |
+| `readOnly` | No | `true` if a call changes nothing that a client can see. This is a hint for clients. It does not change the behavior of a call |
+| `state` | No | The schema of a value that clients can observe. See [State](invocation.md#state) |
 
 ## Ids
 
-An id is two or more segments joined by `.`. Each segment matches `[a-z][a-z0-9]*(-[a-z0-9]+)*`, and the whole id is at most 128 characters long. The first segment is the capability's **namespace**.
+An id has two or more segments, with a dot between them. Each segment matches `[a-z][a-z0-9]*(-[a-z0-9]+)*`. An id has a maximum of 128 characters.
 
-Bindings derive every surface name from the id: tool names, commands, URLs, fields, methods. How a binding transforms the id is up to that binding, for example `aircon.power.set` → `cli aircon power set` → `airconPowerSet`.
+The first segment is the **namespace** of the capability.
+
+Each binding makes its surface names from the id. For example, `aircon.power.set` becomes the command `aircon power set` and the GraphQL field `airconPowerSet`.
 
 ## Failures
 
-Each key of `failures` is a **tag**, a non-empty string, conventionally in PascalCase. A failure value is a JSON object whose `_tag` member equals its tag. The value MUST conform to the schema stored under that tag.
+A **failure** is a result that tells why a capability did not do the operation. Each key of `failures` is a **tag**, for example `Offline`.
+
+A failure value is a JSON object. Its `_tag` member is equal to the tag. The value MUST agree with the schema for that tag.
 
 ## Schemas
 
-Every schema in a catalog is a JSON Schema 2020-12 schema. A value that crosses a boundary is in the form its schema describes. Every input, output, failure and state value MUST conform to its schema.
+Each schema in a catalog is a JSON Schema 2020-12 schema. Each input, output, failure and state value MUST agree with its schema.
 
 ## Types
 
-A type that is used in more than one place is written once, under the catalog's top-level `$defs`, and referenced by name:
+Put a type that you use in more than one location in `$defs`. Then refer to it by name:
 
 ```json
 {
@@ -112,55 +124,58 @@ A type that is used in more than one place is written once, under the catalog's 
 }
 ```
 
-- A type name matches `[A-Za-z][A-Za-z0-9_]*`. PascalCase is conventional. Language bindings generate a named type from each one.
-- Every `$ref` in a catalog has the form `#/$defs/<Name>`, and names a type in the catalog's `$defs`. Types can reference each other.
-- Schemas inside capabilities do not carry `$defs` of their own.
-
-A schema's `title` SHOULD name the type when the schema is written inline, so that language bindings can still give it a readable name.
+- A type name matches `[A-Za-z][A-Za-z0-9_]*`. Use PascalCase.
+- Each `$ref` has the form `#/$defs/<Name>`. It MUST refer to a type in `$defs`. Types can refer to other types.
+- A schema in a capability MUST NOT have its own `$defs`.
+- Give an inline schema a `title`. Code generators use it as the name of the type.
 
 ## Bundling
 
-Some surfaces need a schema that stands on its own: an MCP tool's input schema is an example. A binding produces one by **bundling**. It copies every type the schema reaches, directly or through other types, into the schema's own `$defs`. When the schema is only a `$ref`, the bundle is the referenced type itself, carrying those `$defs`. References keep their form, so `#/$defs/Status` resolves the same way in the bundle as it does in the catalog.
+Some surfaces need a schema that has no references to other locations. An MCP tool is an example. To **bundle** a schema:
+
+1. Find each type that the schema uses, directly or through other types.
+2. Copy these types into the `$defs` of the schema.
+3. If the schema is only a `$ref`, use the type that it refers to as the schema.
+
+After bundling, each `$ref` has the same form and refers to the same type.
 
 ## Views
 
-The **view** of a target is the catalog reduced to that target: `targets` keeps only that target, `capabilities` keeps only the capabilities whose audience names it, and each of those capabilities' `audience` keeps only that target. `$defs` keeps only the types those capabilities reach, so that a view reveals nothing about capabilities outside it. A view is itself a catalog.
+The **view** of a target is the part of the catalog that the target can see. A view is a catalog that contains:
 
-A binding serves exactly its target's view. A client of a target MUST NOT be able to learn about a capability outside the view. A call naming such a capability fails as a call naming an id that does not exist ([Invocation](invocation.md#call-failures)).
+- only that target in `targets`;
+- only the capabilities whose audience includes that target;
+- only that target in the audience of each capability;
+- only the types that these capabilities use.
 
-## Change
+A binding serves the view of its target. A client MUST NOT get information about a capability that is not in its view. A call to such a capability fails as a call to an unknown id ([Invocation](invocation.md#call-failures)).
 
-A catalog has no version of its own, and neither do capabilities. A catalog describes the build that serves it. When the build changes, the catalog changes with it. A client that keeps a description of a target, such as an MCP client's tool list, fetches it again from the binding. An application that wants to keep old clients working keeps an id's meaning unchanged, and adds a new id when it needs a new meaning.
+## Changes
 
-The `acidcat` member is the version of this specification, not of the catalog.
+A catalog has no version. A capability has no version. The catalog agrees with the build of the application. When the build changes, the catalog changes.
+
+To keep old clients working, do not change the meaning of an id. For a new meaning, add a new id.
+
+The `acidcat` member is the version of this specification. It is not the version of the catalog.
 
 ## Canonical form
 
-A catalog has one canonical text, so that every tool and every catalog library writes the same bytes for the same catalog, and a diff shows only real changes. A catalog that is committed SHOULD be in canonical form. `acid-cat format` puts any catalog into it.
+The **canonical form** is the one correct text for a catalog. All tools and catalog libraries write the same bytes for the same catalog. A committed catalog SHOULD be in canonical form. `acid-cat format` writes this form.
 
-- **Member order.** The catalog's members come in this order: `acidcat`, `title`, `description`, `targets`, `$defs`, `capabilities`. A target's members: `bindings`, `description`, `options`. A capability's members: `description`, `audience`, `input`, `output`, `failures`, `readOnly`, `state`. Members that are not listed, such as `x-` extensions, follow the listed ones, sorted.
-- **Sorted keys.** The keys of `targets`, `$defs`, `capabilities` and `failures` are sorted. So are the keys of every object inside a schema or `options`, at every depth. Keys are sorted by Unicode code point. Arrays keep their order.
-- **Values.** Strings and numbers are written as ECMAScript's `JSON.stringify` writes them. Numbers use the shortest form that reads back as the same number: `16`, `0.5`, `1e-7`, `1e+21`. Strings escape only `"`, `\`, and control characters. Every other character is written as itself.
-- **Layout.** UTF-8, with two spaces of indentation and one member or item per line. An empty object is `{}` and an empty array is `[]`. The text ends with a single line feed.
+- **Member order.** The catalog: `acidcat`, `title`, `description`, `targets`, `$defs`, `capabilities`. A target: `bindings`, `description`, `options`. A capability: `description`, `audience`, `input`, `output`, `failures`, `readOnly`, `state`. Other members come after these members, in sorted order.
+- **Sorted keys.** Sort the keys of `targets`, `$defs`, `capabilities` and `failures`. Sort the keys of all objects in schemas and in `options`, at all levels. Sort by Unicode code point. Do not sort arrays.
+- **Values.** Write strings and numbers as `JSON.stringify` in ECMAScript writes them. For example: `16`, `0.5`, `1e-7`, `1e+21`. Escape only `"`, `\` and control characters.
+- **Layout.** Use UTF-8. Indent with two spaces. Put each member and each item on its own line. Write an empty object as `{}` and an empty array as `[]`. End the text with one line feed.
 
 ## Extensions
 
-Consumers ignore members they do not know. Members that this specification does not define SHOULD be prefixed `x-`, as in `x-icon`. [Extensions](extensions/README.md) are optional conventions that use only the members defined here.
+A tool ignores members that it does not know. A member that this specification does not define SHOULD start with `x-`, as in `x-icon`. [Extensions](extensions/README.md) give optional conventions.
 
-## Rationale
+## Design notes
 
 *This section is not normative.*
 
-**The catalog is the contract, even when code generates it.** Jarette's Box and heb-stack write capabilities in TypeScript and derive their manifests from that code. A Swift or Kotlin app cannot read TypeScript, so the shared artifact has to be a document. Generating that document from code remains allowed, provided there is one catalog per application (see [Adoption](adoption.md)).
-
-**Checked at build time, not read at runtime.** If every program read the catalog when it started, it would pay for a file read, a parse and the compilation of validators, only to learn what its own code already says. It would also have two sources of truth to keep in step. Making the catalog a build-time contract keeps runtime cost at zero, lets each language use its native types, and moves the agreement between code and catalog into the toolchain, where a mismatch fails the build rather than a request. Jarette's Box already works this way for MCP, whose tools come from its definitions. It fetches a precomputed manifest only for WebMCP, as an optimisation.
-
-**JSON to exchange; Pkl or a catalog library to write.** Every language and every tool can read JSON, and the schemas inside a catalog are already JSON Schema, so the contract is JSON. Writing a catalog is a different job: a long YAML file repeats itself and checks nothing. Pkl adds types, checks, reuse and templates, renders exactly the JSON, and has code generators for Swift, Kotlin, Go and Java, so it matches the many-languages goal. It is a recommendation, not a requirement, because applications that generate their catalog from code (as Jarette's Box and heb-stack do) never write one by hand.
-
-**The catalog declares its targets.** Declaring targets turns a misspelt audience into an error the schema catches. It also records, in the same place, which bindings serve each target: one catalog, many targets, stated once.
-
-**No audience means no target.** Jarette's Box grows each tool surface one declaration at a time, so that a new capability never reaches an agent by accident. An explicit `audience` keeps that safety without any special case.
-
-**Failures keyed by tag.** Both implementations already send failures as objects with a `_tag`. Keying the schemas by tag makes the failures easy to read and to write by hand, and gives each language a natural union of named failures.
-
-**Shared types, bundled where needed.** A draft of this specification required every schema to stand on its own, because MCP and WebMCP need that. Exporting Jarette's Box showed the cost. Its catalog came to 2.6 MB, and 22 capabilities each repeated the same 90 KB workbench schema. With shared types it is about 275 KB, and code generators get one `Workbench` type instead of 22 anonymous copies. Bundling gives MCP and WebMCP what they need, and it is mechanical. OpenAPI shares types between operations in the same way.
+- **Why JSON.** All languages and tools can read JSON. The schemas in a catalog are JSON Schema. Thus the contract is JSON. Pkl and the catalog libraries help you write it.
+- **Why build time.** If a program read the catalog at run time, it would read a file and compile schemas to learn what its own code already says. A check at build time costs nothing at run time, and an error stops the build, not a request.
+- **Why no default audience.** A new capability does not go to an agent by accident. A target gets a capability only when the catalog says so.
+- **Why shared types.** Large catalogs use the same types many times. Shared types make the catalog smaller, and code generators make one named type for each.

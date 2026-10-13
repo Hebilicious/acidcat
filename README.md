@@ -1,33 +1,127 @@
-# AcidCat
+<div align="center">
 
-**AcidCat** (Application Capability IDentification Category) is a specification for describing what an application can do once, and serving it everywhere. An application writes a **catalog**: one language-neutral document, checked at build time, listing its capabilities, its targets, and which targets see which capabilities. Every surface is generated from that catalog by a **binding**, in whatever language the surface needs: a web app, a taskbar widget, an iOS or Android app, a command line, an MCP server, a REST or GraphQL API.
+# 🐱 AcidCat
 
-One catalog, many targets. Start with [the specification](spec/README.md), and [the air-conditioner example](examples/aircon.pkl), written in Pkl and rendered to [JSON](examples/aircon.acidcat.json).
+**One catalog. Every surface.**
 
-Status: **draft 0.1, not published.** AcidCat started in Jarette's Box, where it runs in production, and was refined in heb-stack. [Adoption](spec/adoption.md) says how both move onto this specification.
+Describe what your application can do one time. Serve it to your app, your command line, your agents and your APIs.
 
-## Layout
+![Specification](https://img.shields.io/badge/spec-0.1_draft-ff69b4)
+![JSON Schema](https://img.shields.io/badge/JSON_Schema-2020--12-0a7bbb)
+![MCP](https://img.shields.io/badge/MCP-2026--07--28-111111)
+![Effect](https://img.shields.io/badge/built_with-Effect-000000)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![Go](https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white)
+![Rust](https://img.shields.io/badge/Rust-B7410E?logo=rust&logoColor=white)
+![Pkl](https://img.shields.io/badge/Pkl-6B9543)
+![Moon](https://img.shields.io/badge/monorepo-moon-6E56CF)
 
-A monorepo: Moon runs every task, and proto pins every toolchain.
+</div>
 
-| Path | Holds |
+---
+
+## ✨ What is AcidCat?
+
+**AcidCat** (Application Capability IDentification Category) is a specification. An application writes one **catalog**: a JSON document that lists its capabilities, their inputs, outputs and failures, and the **targets** that can use each one. Each surface comes from the catalog through a **binding**:
+
+| Surface | `aircon.temperature.set` becomes |
 | --- | --- |
-| `spec/` | The specification: the catalog, invocation, bindings, extensions, conformance, and adoption |
-| `schemas/` | JSON Schemas for the catalog and for outcomes |
-| `examples/` | Complete catalogs, written in Pkl, with the canonical JSON each one renders to |
-| `packages/` | What this repository distributes, under the name `acid-cat`: the `acid-cat` command line, and the catalog libraries for TypeScript, Python, Go, Rust and Pkl. Two cores will join them: one written in Effect, one in plain TypeScript. See [packages/README.md](packages/README.md) |
-| `adoption/` | Tools that bring existing implementations onto the specification, such as the catalog exporter for Jarette's Box |
-| `scripts/` | Repository checks behind the Moon tasks |
-| `history/` | How the first decisions were reached from Jarette's Box and heb-stack |
+| 💻 Command line | `aircon temperature set --celsius 22` |
+| 🤖 MCP server | the tool `aircon.temperature.set` |
+| 🌐 WebMCP | an in-page tool for browser agents |
+| 🔌 HTTP | `POST /capabilities/aircon.temperature.set` |
+| 🧬 GraphQL | `mutation { airconTemperatureSet(input: { celsius: 22 }) }` |
+| 🧩 TypeScript | a typed handle: `execute({ celsius: 22 })` |
 
-## Tasks
+The catalog is checked at build time. Programs do not read it at run time.
 
-The toolchains (Moon, Node, pnpm, Pkl, Python, Go and Rust) are pinned in `.prototools`. Run `pnpm install` once.
+## 🧭 How it works
 
-| Command | Purpose |
+```
+                         catalog
+          (one document: what the application can do)
+                            │
+          ┌─────────────────┼──────────────────┐
+      provider          bindings            clients
+   (does the        (rules that make     (web, mobile,
+   operations)       one kind of          desktop, cli,
+                     surface)             mcp, api, …)
+```
+
+## 🌬️ Example
+
+An air conditioner, written in Pkl ([full example](examples/aircon.pkl)):
+
+```pkl
+amends "../packages/catalog/pkl/Catalog.pkl"
+
+targets {
+  ["app"] { bindings { "typescript" } }
+  ["mcp"] { bindings { "mcp" } }
+}
+
+capabilities {
+  ["aircon.temperature.set"] {
+    description = "Set the target temperature in degrees Celsius."
+    audience { "app"; "mcp" }
+    input {
+      type = "object"
+      required { "celsius" }
+      properties { ["celsius"] { type = "number"; minimum = 16; maximum = 31 } }
+    }
+    failures { ["Offline"] { type = "object" } }
+  }
+}
+```
+
+The same catalog in [TypeScript](packages/catalog/typescript/examples/aircon.ts), [Python](packages/catalog/python/examples/aircon.py), [Go](packages/catalog/go/examples/aircon/aircon.go) or [Rust](packages/catalog/rust/examples/aircon.rs) gives the same bytes: [`aircon.acidcat.json`](examples/aircon.acidcat.json).
+
+## 📚 Specification
+
+| Document | Contents |
 | --- | --- |
-| `moon run examples` | Render every example catalog from Pkl, in canonical form |
-| `moon run check` | Check that every example is rendered and canonical, and that every catalog and fixture conforms |
-| `moon run :test` | Test every package |
-| `moon run verify` | Every check above |
+| [Overview and vocabulary](spec/README.md) | The terms and the documents |
+| [Catalog](spec/catalog.md) | Targets, capabilities, types, views, canonical form |
+| [Invocation](spec/invocation.md) | Outcomes, availability, sessions, cancellation |
+| [Bindings](spec/bindings/README.md) | TypeScript, WebMCP, MCP, CLI, HTTP, GraphQL |
+| [Extensions](spec/extensions/README.md) | Attachments, pagination |
+| [Conformance](spec/conformance.md) | How to test a catalog and an implementation |
+
+## 📦 Packages
+
+| Package | Use |
+| --- | --- |
+| [`@acid-cat/cli`](packages/cli) | 🛠️ `acid-cat check`, `format` and `view` |
+| [`@acid-cat/catalog`](packages/catalog/typescript) | ✍️ Write a catalog in TypeScript |
+| [`acid-cat-catalog`](packages/catalog/python) | 🐍 Write a catalog in Python |
+| [`acid-cat.dev/catalog`](packages/catalog/go) | 🐹 Write a catalog in Go |
+| [`acid-cat-catalog`](packages/catalog/rust) | 🦀 Write a catalog in Rust |
+| [`Catalog.pkl`](packages/catalog/pkl/Catalog.pkl) | 🧾 Write a catalog in Pkl |
+
+## 🗺️ Roadmap
+
+- [ ] `acid-cat conform`: test a running implementation through each binding
+- [ ] `@acid-cat/spec`: the fixed details of the specification as data, with no dependencies
+- [ ] `@acid-cat/core-effect`: serve capabilities, written fully in Effect
+- [ ] `@acid-cat/core-ts`: serve capabilities in plain TypeScript, with no Effect dependency
+
+See [packages/README.md](packages/README.md).
+
+## 🛠️ Development
+
+[proto](https://moonrepo.dev/proto) installs the tools in `.prototools`: Moon, Node, pnpm, Pkl, Python, Go and Rust. [Moon](https://moonrepo.dev) runs the tasks.
+
+```sh
+proto install
+pnpm install
+moon run verify
+```
+
+| Command | Use |
+| --- | --- |
+| `moon run examples` | Write the example catalogs from Pkl, in canonical form |
+| `moon run check` | Check the examples and the test files |
+| `moon run :test` | Test all packages |
+| `moon run verify` | Do all checks and tests |
 | `pnpm exec acid-cat …` | Run the command line |

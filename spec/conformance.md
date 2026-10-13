@@ -1,29 +1,33 @@
 # Conformance
 
-Conformance is judged from outside: from the catalog, and from what each binding does on its surface. An implementation written by hand, generated, or built on a reference library conforms the same way. The conformance tests are run with `acid-cat conform`, from [`@acid-cat/cli`](../packages/cli/README.md).
+Conformance is a test from outside. It uses the catalog and the behavior of each binding. It does not look at the code. Thus an implementation that you write by hand, that you generate, or that uses a library is tested in the same way.
+
+`acid-cat check` tests a catalog. `acid-cat conform` tests a provider and its bindings. Both come from [`@acid-cat/cli`](../packages/cli/README.md).
 
 ## Catalog
 
-A catalog conforms when it validates against [`schemas/catalog.schema.json`](../schemas/catalog.schema.json) and follows the rules in [Catalog](catalog.md) that the schema cannot express:
+A catalog conforms if:
 
-- every audience entry is a declared target;
-- every input describes an object, either directly or through the type it references;
-- every `$ref` names a type in the catalog's `$defs`, and no schema inside a capability carries `$defs` of its own;
-- every schema compiles once [bundled](catalog.md#bundling).
+- it agrees with [`schemas/catalog.schema.json`](../schemas/catalog.schema.json);
+- each target in each audience is in `targets`;
+- each input is an object, directly or through the type that it refers to;
+- each `$ref` refers to a type in `$defs`;
+- no schema in a capability has its own `$defs`;
+- each schema is a valid JSON Schema 2020-12 schema.
 
-A committed catalog that is not in [canonical form](catalog.md#canonical-form) gets a warning. [`acid-cat check`](../packages/cli/README.md) applies all of these.
+A catalog that is not in [canonical form](catalog.md#canonical-form) gets a warning. A member that this specification does not define and that does not start with `x-` gets a warning.
 
 ## Provider and bindings
 
-A provider and its bindings conform for a target when, through each binding that the target lists:
+A provider and its bindings conform for a target if, through each binding of the target:
 
-- the listing shows only capabilities in the target's view;
-- a call to an id outside the view fails exactly as a call to an id that does not exist;
-- an input that does not conform fails as `invalid-input`, and the work never starts;
-- values, failures and state conform to their schemas;
-- every outcome, and every kind of call failure, arrives as the binding defines it;
-- a remote binding screens requests as [remote bindings](bindings/README.md#remote-bindings) must.
+- a list of capabilities shows only capabilities in the view of the target;
+- a call to an id that is not in the view fails as a call to an unknown id;
+- an input that does not agree with its schema fails as `invalid-input`, and the operation does not start;
+- values, failures and state agree with their schemas;
+- each outcome and each kind of call failure has the form that the binding defines;
+- a remote binding rejects requests as [Remote bindings](bindings/README.md#remote-bindings) tells.
 
-Behaviour that depends on a domain, such as rejecting or replacing work, is checked against a fixture catalog that the conformance kit supplies.
+The tests use a test catalog to examine behavior such as rejection and replacement.
 
-The kit checks the bindings this specification defines. It reports a SHOULD that is not met as a warning, not a failure. Tests that need access to the code (internal logging, how a root is composed) belong to each implementation's own suite. Product evidence, such as Jarette's Box's Product Promises, belongs to each application.
+A test that a SHOULD rule fails gives a warning, not an error. Tests that need access to the code, for example of internal logs, are not part of conformance.

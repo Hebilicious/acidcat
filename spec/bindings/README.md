@@ -1,47 +1,47 @@
 # Bindings
 
-A **binding** turns a target's [view](../catalog.md#views) into one kind of surface. A binding is written once and works for every catalog: the MCP binding serves an air conditioner and a bartering planner alike.
+A **binding** makes one kind of surface from the [view](../catalog.md#views) of a target. One binding works for all catalogs.
 
-- A **protocol binding** defines a surface on the wire. Any language can implement it, because the wire is fixed.
-- A **language binding** defines a surface in code: how a capability looks as a function, a type and an observable value in that language. Apps (web, desktop, iOS, Android) use language bindings, either in-process or over a protocol binding.
+- A **protocol binding** makes a surface on the network or in a terminal, for example MCP or a command line. Any language can implement it.
+- A **language binding** makes a surface in code, for example TypeScript. It tells how a capability looks as a function, as types and as an observable value. Apps use language bindings.
 
-A target lists the bindings that serve it. One target can use several, as the page uses both the TypeScript and WebMCP bindings.
+A target lists its bindings. A target can use more than one binding. For example, a web page can use `typescript` and `webmcp`.
 
-## What a binding defines
+## What a binding document tells
 
-Every binding document MUST state:
+Each binding document MUST tell:
 
-1. **Names.** How an id becomes a surface name. Names are derived from the id alone.
-2. **Input.** How a client supplies the input.
-3. **Outcomes.** How each outcome and each [call failure kind](../invocation.md#call-failures) is represented, in a way the client can tell apart.
-4. **Listing.** How a client learns what the target serves, including [availability](../invocation.md#availability).
+1. **Names.** How an id becomes a surface name. The name comes only from the id.
+2. **Input.** How a client gives the input.
+3. **Outcomes.** How each outcome and each [kind of call failure](../invocation.md#call-failures) looks. The client MUST be able to identify each one.
+4. **Listing.** How a client finds the capabilities of the target, and their [availability](../invocation.md#availability).
 5. **Cancellation.** How a client cancels a call.
 
-It MAY also state how [state](../invocation.md#state) is observed, how `readOnly` is used, and which [extensions](../extensions/README.md) it supports.
+It MAY also tell how a client observes [state](../invocation.md#state), how the binding uses `readOnly`, and which [extensions](../extensions/README.md) it supports.
 
-A binding serves exactly its target's view, and nothing outside it. A binding holds no list of capabilities of its own: it derives everything from the application's definitions, which match the catalog, so a new capability needs no change to the binding. It does not need to read the catalog file at runtime (see [Build time and run time](../catalog.md#build-time-and-run-time)).
+A binding serves the view of its target and nothing more. A binding has no list of capabilities of its own. It gets all information from the definitions of the application. Thus a new capability needs no change to the binding. A binding does not read the catalog file at run time (see [Build time and run time](../catalog.md#build-time-and-run-time)).
 
 ## Remote bindings
 
-A remote binding serves clients over the network. Before it opens a session or decodes the protocol, it MUST refuse a request:
+A remote binding serves clients through the network. Before it opens a session or reads the protocol, it MUST reject a request if:
 
-- whose method the binding does not accept;
-- whose `Origin` header names an origin the deployment does not allow;
-- whose media type is not the protocol's;
-- whose body is longer than the deployment's limit, counting the bytes as they arrive rather than trusting `Content-Length`;
-- whose body is not valid UTF-8, when the protocol is text.
+- the binding does not accept its method;
+- its `Origin` header gives an origin that the deployment does not allow;
+- its media type is not the media type of the protocol;
+- its body is longer than the limit of the deployment. Count the bytes as they arrive. Do not trust `Content-Length`;
+- its body is not valid UTF-8, for a text protocol.
 
-Each remote binding gives the status codes it uses, and states whether it accepts requests without an `Origin` header. The values of the limits are deployment configuration.
+Each remote binding tells its status codes. It also tells if it accepts requests that have no `Origin` header. The deployment sets the limits.
 
 ## Bindings in this specification
 
 | Name | Kind | Surface |
 | --- | --- | --- |
-| [`typescript`](typescript.md) | Language | Handles with `invoke`, availability and state, for TypeScript and JavaScript |
-| [`webmcp`](webmcp.md) | Protocol | WebMCP tools in the page, for in-page agents |
-| [`mcp`](mcp.md) | Protocol | An MCP server over HTTP |
-| [`cli`](cli.md) | Protocol | A command line generated from the catalog |
-| [`http`](http.md) | Protocol | JSON over HTTP |
-| [`graphql`](graphql.md) | Protocol | A GraphQL schema generated from the catalog |
+| [`typescript`](typescript.md) | Language | Handles in TypeScript and JavaScript |
+| [`webmcp`](webmcp.md) | Protocol | WebMCP tools in a web page |
+| [`mcp`](mcp.md) | Protocol | An MCP server through HTTP |
+| [`cli`](cli.md) | Protocol | A command line |
+| [`http`](http.md) | Protocol | JSON through HTTP |
+| [`graphql`](graphql.md) | Protocol | A GraphQL schema |
 
-Any other binding, such as Swift, Kotlin, gRPC or a taskbar widget, can be written to the same contract. An application that does so names it `<prefix>:<name>` until it is added here.
+You can write other bindings to the same rules, for example for Swift, Kotlin or gRPC. Give a new binding a name with a prefix, as in `acme:swift`.
