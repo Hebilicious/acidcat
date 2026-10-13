@@ -1,0 +1,10 @@
+javascript:
+  inferTasksFromScripts: false
+  packageManager: pnpm
+
+node: {}
+
+pnpm: {}
+
+proto:
+  version: "0.63.1"

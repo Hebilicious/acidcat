@@ -1,0 +1,38 @@
+language: "typescript"
+layer: "automation"
+
+project:
+  title: "AcidCat"
+  description: "The specification, its schemas and examples, and the checks that span every package."
+
+toolchains:
+  default: ["javascript", "node", "pnpm"]
+
+tasks:
+  examples:
+    description: "Render every example catalog from Pkl, and put it in canonical form."
+    script: "pkl eval examples/*.pkl packages/cli/conformance/*.pkl --output-path '%{moduleDir}/%{moduleName}.acidcat.json' && node packages/cli/src/main.ts format --write examples/*.acidcat.json packages/cli/conformance/*.acidcat.json"
+    inputs: ["examples/*.pkl", "packages/catalog/pkl/**/*.pkl", "packages/cli/src/**/*.ts", "packages/catalog/typescript/src/**/*.ts"]
+    outputs: ["examples/*.acidcat.json"]
+    toolchains: ["system"]
+    options:
+      runInCI: false
+
+  check:
+    description: "Check that every example is rendered and canonical, and that every example and fixture conforms."
+    command: "node"
+    args: ["scripts/check-examples.ts"]
+    inputs:
+      - "examples/**/*"
+      - "schemas/**/*.json"
+      - "scripts/check-examples.ts"
+      - "packages/catalog/pkl/**/*.pkl"
+      - "packages/catalog/fixtures/**/*"
+      - "packages/cli/conformance/**/*"
+      - "packages/catalog/typescript/src/**/*.ts"
+      - "packages/cli/src/**/*.ts"
+
+  verify:
+    description: "Every check: the examples and fixtures, the toolchain, and every catalog library."
+    command: "noop"
+    deps: ["check", "spec:test", "spec:typecheck", "cli:test", "cli:typecheck", "core-effect:test", "core-effect:typecheck", "core-ts:test", "core-ts:typecheck", "example-apis:test", "example-apis:typecheck", "catalog-typescript:test", "catalog-typescript:typecheck", "catalog-python:test", "catalog-go:test", "catalog-rust:test"]

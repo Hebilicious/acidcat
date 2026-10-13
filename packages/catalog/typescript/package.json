@@ -1,0 +1,13 @@
+{
+  "name": "@acid-cat/catalog",
+  "version": "0.1.0",
+  "description": "Write an AcidCat catalog in TypeScript and render it in canonical form.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

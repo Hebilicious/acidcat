@@ -1,0 +1,22 @@
+language: "typescript"
+layer: "library"
+
+project:
+  title: "@acid-cat/spec"
+  description: "The fixed details of the specification as data and pure functions. npm package: @acid-cat/spec."
+
+toolchains:
+  default: ["javascript", "node", "pnpm"]
+
+tasks:
+  test:
+    description: "Test outcomes, names, bindings and catalog operations."
+    command: "node"
+    args: ["--test", "test/"]
+    inputs: ["src/**/*.ts", "test/**/*.ts"]
+
+  typecheck:
+    description: "Type-check the sources and tests."
+    command: "tsc"
+    args: ["-p", "."]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "tsconfig.json", "/tsconfig.base.json"]

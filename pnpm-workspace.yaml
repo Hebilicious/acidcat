@@ -1,0 +1,30 @@
+packages:
+  - "packages/spec"
+  - "packages/cli"
+  - "packages/core-effect"
+  - "packages/core-ts"
+  - "packages/catalog/typescript"
+  - "examples/apis"
+
+# Every dependency is pinned once, here. Packages name `catalog:` and never a version.
+allowBuilds:
+  esbuild: true
+
+catalog:
+  "@modelcontextprotocol/client": 2.3.1
+  "@effect/platform-node": 4.0.3
+  "@pothos/core": 4.15.1
+  "@types/node": 26.6.5
+  capnweb: 0.12.0
+  effect: 4.0.3
+  esbuild: 0.28.2
+  elysia: 1.4.30
+  fast-check: 4.10.2
+  graphql: 17.0.2
+  graphql-yoga: 5.24.4
+  playwright: 1.64.0
+  typescript: 7.0.2
+  zod: 4.6.7
+
+minimumReleaseAgeExclude:
+  - zod@4.6.7

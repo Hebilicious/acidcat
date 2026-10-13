@@ -1,0 +1,14 @@
+language: "rust"
+layer: "library"
+
+project:
+  title: "acid-cat-catalog"
+  description: "Write a catalog in Rust and render it in canonical form. Published to crates.io as acid-cat-catalog."
+
+tasks:
+  test:
+    description: "Rebuild the air-conditioner catalog and the canonical fixture, byte for byte."
+    command: "cargo"
+    args: ["test"]
+    inputs: ["src/**/*", "examples/**/*", "tests/**/*", "Cargo.toml", "Cargo.lock", "/examples/*.acidcat.json", "/packages/catalog/fixtures/**/*"]
+    toolchains: ["system"]

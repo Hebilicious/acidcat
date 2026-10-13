@@ -1,0 +1,126 @@
+/// An AcidCat catalog, written in Pkl and rendered to the JSON document that every implementation reads.
+///
+/// Amend this module to write a catalog:
+///
+/// ```
+/// amends "Catalog.pkl"
+///
+/// targets { ["cli"] { bindings { "cli" } } }
+/// capabilities {
+///   ["aircon.power.set"] {
+///     description = "Turn the unit on or off."
+///     audience { "cli" }
+///   }
+/// }
+/// ```
+///
+/// The rules come from spec/catalog.md. This module checks them while the catalog is written. The JSON Schema in
+/// schemas/catalog.schema.json checks the rendered document.
+@ModuleInfo { minPklVersion = "0.30.0" }
+open module acidcat.Catalog
+
+/// The version of the AcidCat specification that this catalog follows.
+fixed acidcat: "0.1" = "0.1"
+
+/// A name for people.
+title: String?
+
+/// What the application is.
+description: String?
+
+/// The targets, keyed by name.
+targets: Mapping<TargetName, Target>
+
+/// Shared types, keyed by name, rendered as the catalog's `$defs`. Reference one with `module.ref("Name")`.
+types: Mapping<TypeName, Schema>
+
+/// The capabilities, keyed by id. Every audience entry must be one of [targets].
+capabilities: Mapping<Id, Capability>(audiencesAreDeclared(this))
+
+/// Members that this specification does not define, rendered with an `x-` prefix.
+extensions: Mapping<String, Any>
+
+/// A capability id: dotted kebab-case segments, the first of which is the namespace.
+typealias Id = String(length <= 128, matches(Regex(#"[a-z][a-z0-9]*(-[a-z0-9]+)*(\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+"#)))
+
+/// A target or binding name, optionally `prefix:name`.
+typealias TargetName = String(matches(Regex(#"[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?"#)))
+
+/// A shared type's name.
+typealias TypeName = String(matches(Regex(#"[A-Za-z][A-Za-z0-9_]*"#)))
+
+/// A JSON Schema 2020-12 schema, written as a Pkl object. Write `{}` for "any value" and `{ not {} }` for "no value".
+/// Reference a shared type with [ref].
+typealias Schema = Dynamic
+
+/// An input schema: its top level states that the input is an object, or it references a shared type.
+typealias ObjectSchema = Dynamic(this.getPropertyOrNull("type") == "object" || this.containsKey("$ref"))
+
+/// A reference to the shared type [name], which must be one of [types].
+function ref(name: TypeName): Dynamic =
+  if (types.containsKey(name)) new Dynamic { ["$ref"] = "#/$defs/\(name)" }
+  else throw("There is no type named \(name) in `types`")
+
+class Target {
+  /// The bindings that serve this target, such as `"typescript"` and `"webmcp"`.
+  bindings: Listing<TargetName>(!isEmpty, isDistinct)
+
+  /// Who the target is for.
+  description: String?
+
+  /// Settings for the bindings, in a form each binding defines.
+  options: Dynamic?
+
+  /// Members that this specification does not define, rendered with an `x-` prefix.
+  extensions: Mapping<String, Any>
+}
+
+class Capability {
+  /// What the capability does for its caller, written for people and agents.
+  description: String(!isBlank)
+
+  /// The targets the capability is offered to. Empty means no target.
+  audience: Listing<TargetName>(isDistinct)
+
+  /// The input schema. Absent means an empty object.
+  input: ObjectSchema?
+
+  /// The schema of a successful call's value. Absent means `null`.
+  output: Schema?
+
+  /// The failures, keyed by tag. Each value carries `_tag` with that key.
+  failures: Mapping<String(!isEmpty), Schema>
+
+  /// `true` when a call changes nothing anyone can observe. A hint for clients.
+  readOnly: Boolean?
+
+  /// The schema of a value that clients can observe.
+  state: Schema?
+
+  /// Members that this specification does not define, rendered with an `x-` prefix.
+  extensions: Mapping<String, Any>
+}
+
+local function audiencesAreDeclared(capabilities: Mapping<Id, Capability>): Boolean =
+  capabilities.toMap().values.every((capability) ->
+    capability.audience.toList().every((target) -> targets.containsKey(target))
+  )
+
+/// Turns an object into the map it renders as: absent members dropped, empty `types`, `failures` and `extensions`
+/// dropped, `types` renamed `$defs`, and extensions merged in under their `x-` names.
+local function rendered(value: Typed): Map<String, Any> =
+  let (members = value.toMap())
+    members
+      .filter((name, member) -> member != null && name != "extensions" && !(member is Mapping && member.isEmpty))
+      .mapKeys((name, _) -> if (name == "types") "$defs" else name)
+      + (members["extensions"] as Mapping).toMap().mapKeys((name, _) -> "x-\(name)")
+
+output {
+  renderer = new JsonRenderer {
+    converters {
+      [Target] = (target) -> rendered(target)
+      [Capability] = (capability) -> rendered(capability)
+    }
+  }
+  value = rendered(module)
+}
