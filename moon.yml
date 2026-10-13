@@ -3,28 +3,16 @@ layer: "automation"
 
 project:
   title: "AcidCat"
-  description: "The AcidCat specification, its schemas, its toolchain, its SDKs, and its example catalogs."
+  description: "The specification, its schemas and examples, and the checks that span every package."
 
 toolchains:
   default: ["javascript", "node", "pnpm"]
 
-fileGroups:
-  catalogs:
-    - "examples/**/*"
-    - "schemas/**/*.json"
-    - "sdk/fixtures/**/*"
-    - "sdk/pkl/**/*.pkl"
-    - "sdk/typescript/src/canonical.ts"
-    - "toolchain/src/**/*.ts"
-  fixtures:
-    - "examples/*.acidcat.json"
-    - "sdk/fixtures/**/*"
-
 tasks:
   examples:
     description: "Render every example catalog from Pkl, and put it in canonical form."
-    script: "pkl eval examples/*.pkl --output-path '%{moduleDir}/%{moduleName}.acidcat.json' && node toolchain/src/cli.ts format --write examples/*.acidcat.json"
-    inputs: ["sdk/pkl/**/*.pkl", "examples/*.pkl", "toolchain/src/**/*.ts", "sdk/typescript/src/canonical.ts"]
+    script: "pkl eval examples/*.pkl --output-path '%{moduleDir}/%{moduleName}.acidcat.json' && node packages/toolchain/src/cli.ts format --write examples/*.acidcat.json"
+    inputs: ["examples/*.pkl", "packages/catalog/pkl/**/*.pkl", "packages/toolchain/src/**/*.ts", "packages/catalog/typescript/src/**/*.ts"]
     outputs: ["examples/*.acidcat.json"]
     toolchains: ["system"]
     options:
@@ -34,44 +22,16 @@ tasks:
     description: "Check that every example is rendered and canonical, and that every example and fixture conforms."
     command: "node"
     args: ["scripts/check-examples.ts"]
-    inputs: ["@group(catalogs)", "scripts/check-examples.ts"]
-
-  toolchain:
-    description: "Test the toolchain: canonical form, views, bundling, and the catalog rules."
-    command: "node"
-    args: ["--test", "toolchain/test/"]
-    inputs: ["toolchain/**/*.ts", "sdk/typescript/src/canonical.ts", "schemas/**/*.json", "@group(fixtures)"]
-
-  sdk-typescript:
-    description: "Test the TypeScript SDK against the air-conditioner catalog and the canonical fixture."
-    command: "node"
-    args: ["--test", "sdk/typescript/test/"]
-    inputs: ["sdk/typescript/**/*", "@group(fixtures)"]
-
-  sdk-python:
-    description: "Test the Python SDK against the air-conditioner catalog and the canonical fixture."
-    command: "python"
-    args: ["-m", "unittest", "discover", "-s", "sdk/python/tests"]
-    inputs: ["sdk/python/**/*.py", "@group(fixtures)"]
-    toolchains: ["system"]
-    env:
-      PYTHONDONTWRITEBYTECODE: "1"
-
-  sdk-go:
-    description: "Test the Go SDK against the air-conditioner catalog and the canonical fixture."
-    command: "go"
-    args: ["-C", "sdk/go", "test", "./..."]
-    inputs: ["sdk/go/**/*", "@group(fixtures)"]
-    toolchains: ["system"]
-
-  sdk-rust:
-    description: "Test the Rust SDK against the air-conditioner catalog and the canonical fixture."
-    command: "cargo"
-    args: ["test", "--manifest-path", "sdk/rust/Cargo.toml"]
-    inputs: ["sdk/rust/src/**/*", "sdk/rust/examples/**/*", "sdk/rust/tests/**/*", "sdk/rust/Cargo.toml", "@group(fixtures)"]
-    toolchains: ["system"]
+    inputs:
+      - "examples/**/*"
+      - "schemas/**/*.json"
+      - "scripts/check-examples.ts"
+      - "packages/catalog/pkl/**/*.pkl"
+      - "packages/catalog/fixtures/**/*"
+      - "packages/catalog/typescript/src/**/*.ts"
+      - "packages/toolchain/src/**/*.ts"
 
   verify:
-    description: "Every check: the examples and fixtures, the toolchain, and every SDK."
+    description: "Every check: the examples and fixtures, the toolchain, and every catalog library."
     command: "noop"
-    deps: ["check", "toolchain", "sdk-typescript", "sdk-python", "sdk-go", "sdk-rust"]
+    deps: ["check", "toolchain:test", "catalog-typescript:test", "catalog-python:test", "catalog-go:test", "catalog-rust:test"]

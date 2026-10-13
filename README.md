@@ -8,36 +8,26 @@ Status: **draft 0.1, not published.** AcidCat started in Jarette's Box, where it
 
 ## Layout
 
+A monorepo: Moon runs every task, and proto pins every toolchain.
+
 | Path | Holds |
 | --- | --- |
 | `spec/` | The specification: the catalog, invocation, bindings, extensions, conformance, and adoption |
 | `schemas/` | JSON Schemas for the catalog and for outcomes |
-| `toolchain/` | `acidcat check`, `format` and `view`: the build-time tool for catalogs |
-| `sdk/` | Libraries for writing a catalog in Pkl, TypeScript, Python, Go or Rust, all producing the same canonical JSON |
-| `examples/` | Complete catalogs, written in Pkl, with the JSON each one renders to |
+| `examples/` | Complete catalogs, written in Pkl, with the canonical JSON each one renders to |
+| `packages/` | What this repository distributes: the `acidcat` toolchain, and the catalog libraries for TypeScript, Python, Go, Rust and Pkl. The runtime and the conformance kit will join them. See [packages/README.md](packages/README.md) |
 | `adoption/` | Tools that bring existing implementations onto the specification, such as the catalog exporter for Jarette's Box |
-| `conformance/` | The conformance kit every implementation will run |
-| `ref/ts/` | The TypeScript reference implementation, starting from heb-stack's kernel |
-| `site/` | The static site that will publish the specification |
 | `scripts/` | Repository checks behind the Moon tasks |
 | `history/` | How the first decisions were reached from Jarette's Box and heb-stack |
 
-## Layers
-
-1. **The prose and the schemas** are normative. Implementations in any language read them.
-2. **The toolchain** checks catalogs at build time, and **the SDKs** write them.
-3. **The conformance kit** will judge any implementation from outside, by its catalog and by its bindings' behaviour.
-
-Libraries such as Effect and XState belong to the reference implementation, not to the specification.
-
 ## Tasks
 
-The toolchains (Moon, Node, pnpm, Pkl, Python, Go and Rust) are pinned in `.prototools`.
+The toolchains (Moon, Node, pnpm, Pkl, Python, Go and Rust) are pinned in `.prototools`. Run `pnpm install` once.
 
 | Command | Purpose |
 | --- | --- |
 | `moon run examples` | Render every example catalog from Pkl, in canonical form |
 | `moon run check` | Check that every example is rendered and canonical, and that every catalog and fixture conforms |
-| `moon run toolchain` | Test the toolchain |
-| `moon run sdk-typescript`, `sdk-python`, `sdk-go`, `sdk-rust` | Test one SDK against the air-conditioner catalog and the canonical fixture |
+| `moon run :test` | Test every package |
 | `moon run verify` | Every check above |
+| `pnpm exec acidcat …` | Run the toolchain |

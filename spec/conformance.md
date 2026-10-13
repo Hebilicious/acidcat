@@ -11,7 +11,7 @@ A catalog conforms when it validates against [`schemas/catalog.schema.json`](../
 - every `$ref` names a type in the catalog's `$defs`, and no schema inside a capability carries `$defs` of its own;
 - every schema compiles once [bundled](catalog.md#bundling).
 
-A committed catalog that is not in [canonical form](catalog.md#canonical-form) gets a warning. [`acidcat check`](../toolchain/README.md) applies all of these.
+A committed catalog that is not in [canonical form](catalog.md#canonical-form) gets a warning. [`acidcat check`](../packages/toolchain/README.md) applies all of these.
 
 ## Provider and bindings
 

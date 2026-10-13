@@ -1,6 +1,6 @@
 # Catalog
 
-A **catalog** is a JSON document that states what an application can do and where. It is the contract that every provider, binding and client is built from and checked against. An application MAY write it by hand, with an [SDK](../sdk/README.md), or generate it from code, but there is one catalog per application.
+A **catalog** is a JSON document that states what an application can do and where. It is the contract that every provider, binding and client is built from and checked against. An application MAY write it by hand, with a [catalog library](../packages/catalog/README.md), or generate it from code, but there is one catalog per application.
 
 [`schemas/catalog.schema.json`](../schemas/catalog.schema.json) validates the document's shape. This page states the rules that the schema cannot express.
 
@@ -40,9 +40,9 @@ At runtime, an implementation works from its own definitions: code generated fro
 
 ## Authoring
 
-Only the JSON document is normative. A catalog MAY be written in any language that produces it: by hand in JSON or YAML, with Pkl or one of the [SDKs](../sdk/README.md), or generated from the application's own code.
+Only the JSON document is normative. A catalog MAY be written in any language that produces it: by hand in JSON or YAML, with Pkl or one of the [catalog libraries](../packages/catalog/README.md), or generated from the application's own code.
 
-[Pkl](https://pkl-lang.org) is the recommended language for writing a catalog by hand. A catalog that amends [`sdk/pkl/Catalog.pkl`](../sdk/pkl/Catalog.pkl) gets types, and its rules are checked while it is being written. An undeclared audience, an input that is not an object, or a malformed id is an error before any JSON is produced. Shared types go under `types`, which renders as `$defs`. `module.ref("Status")` references one, and fails if no type has that name. Members under `extensions` render with their `x-` prefix. `pkl eval` renders the JSON.
+[Pkl](https://pkl-lang.org) is the recommended language for writing a catalog by hand. A catalog that amends [`packages/catalog/pkl/Catalog.pkl`](../packages/catalog/pkl/Catalog.pkl) gets types, and its rules are checked while it is being written. An undeclared audience, an input that is not an object, or a malformed id is an error before any JSON is produced. Shared types go under `types`, which renders as `$defs`. `module.ref("Status")` references one, and fails if no type has that name. Members under `extensions` render with their `x-` prefix. `pkl eval` renders the JSON.
 
 ## Document
 
@@ -136,7 +136,7 @@ The `acidcat` member is the version of this specification, not of the catalog.
 
 ## Canonical form
 
-A catalog has one canonical text, so that every tool and every SDK writes the same bytes for the same catalog, and a diff shows only real changes. A catalog that is committed SHOULD be in canonical form. `acidcat format` puts any catalog into it.
+A catalog has one canonical text, so that every tool and every catalog library writes the same bytes for the same catalog, and a diff shows only real changes. A catalog that is committed SHOULD be in canonical form. `acidcat format` puts any catalog into it.
 
 - **Member order.** The catalog's members come in this order: `acidcat`, `title`, `description`, `targets`, `$defs`, `capabilities`. A target's members: `bindings`, `description`, `options`. A capability's members: `description`, `audience`, `input`, `output`, `failures`, `readOnly`, `state`. Members that are not listed, such as `x-` extensions, follow the listed ones, sorted.
 - **Sorted keys.** The keys of `targets`, `$defs`, `capabilities` and `failures` are sorted. So are the keys of every object inside a schema or `options`, at every depth. Keys are sorted by Unicode code point. Arrays keep their order.
@@ -155,7 +155,7 @@ Consumers ignore members they do not know. Members that this specification does 
 
 **Checked at build time, not read at runtime.** If every program read the catalog when it started, it would pay for a file read, a parse and the compilation of validators, only to learn what its own code already says. It would also have two sources of truth to keep in step. Making the catalog a build-time contract keeps runtime cost at zero, lets each language use its native types, and moves the agreement between code and catalog into the toolchain, where a mismatch fails the build rather than a request. Jarette's Box already works this way for MCP, whose tools come from its definitions. It fetches a precomputed manifest only for WebMCP, as an optimisation.
 
-**JSON to exchange; Pkl or an SDK to write.** Every language and every tool can read JSON, and the schemas inside a catalog are already JSON Schema, so the contract is JSON. Writing a catalog is a different job: a long YAML file repeats itself and checks nothing. Pkl adds types, checks, reuse and templates, renders exactly the JSON, and has code generators for Swift, Kotlin, Go and Java, so it matches the many-languages goal. It is a recommendation, not a requirement, because applications that generate their catalog from code (as Jarette's Box and heb-stack do) never write one by hand.
+**JSON to exchange; Pkl or a catalog library to write.** Every language and every tool can read JSON, and the schemas inside a catalog are already JSON Schema, so the contract is JSON. Writing a catalog is a different job: a long YAML file repeats itself and checks nothing. Pkl adds types, checks, reuse and templates, renders exactly the JSON, and has code generators for Swift, Kotlin, Go and Java, so it matches the many-languages goal. It is a recommendation, not a requirement, because applications that generate their catalog from code (as Jarette's Box and heb-stack do) never write one by hand.
 
 **The catalog declares its targets.** Declaring targets turns a misspelt audience into an error the schema catches. It also records, in the same place, which bindings serve each target: one catalog, many targets, stated once.
 

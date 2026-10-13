@@ -1,5 +1,10 @@
 projects:
   acidcat: "."
+  toolchain: "packages/toolchain"
+  catalog-typescript: "packages/catalog/typescript"
+  catalog-python: "packages/catalog/python"
+  catalog-go: "packages/catalog/go"
+  catalog-rust: "packages/catalog/rust"
 
 defaultProject: "acidcat"
 telemetry: false
@@ -12,6 +17,7 @@ hasher:
   walkStrategy: "glob"
   ignorePatterns:
     - "**/node_modules/**"
+    - "packages/catalog/rust/target/**"
 
 pipeline:
   installDependencies:

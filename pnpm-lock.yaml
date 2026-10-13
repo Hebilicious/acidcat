@@ -166,6 +166,20 @@ importers:
 
   .:
     devDependencies:
+      '@acidcat/catalog':
+        specifier: workspace:*
+        version: link:packages/catalog/typescript
+      acidcat:
+        specifier: workspace:*
+        version: link:packages/toolchain
+
+  packages/catalog/typescript: {}
+
+  packages/toolchain:
+    dependencies:
+      '@acidcat/catalog':
+        specifier: workspace:*
+        version: link:../catalog/typescript
       ajv:
         specifier: 8.20.0
         version: 8.20.0

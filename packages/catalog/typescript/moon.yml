@@ -1,0 +1,16 @@
+language: "typescript"
+layer: "library"
+
+project:
+  title: "@acidcat/catalog"
+  description: "Write a catalog in TypeScript and render it in canonical form. Published to npm as @acidcat/catalog."
+
+toolchains:
+  default: ["javascript", "node", "pnpm"]
+
+tasks:
+  test:
+    description: "Rebuild the air-conditioner catalog and the canonical fixture, byte for byte."
+    command: "node"
+    args: ["--test", "test/"]
+    inputs: ["src/**/*.ts", "examples/**/*.ts", "test/**/*.ts", "/examples/*.acidcat.json", "/packages/catalog/fixtures/**/*"]

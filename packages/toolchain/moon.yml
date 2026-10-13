@@ -1,0 +1,16 @@
+language: "typescript"
+layer: "tool"
+
+project:
+  title: "acidcat"
+  description: "The toolchain: acidcat check, format and view. Published to npm as acidcat."
+
+toolchains:
+  default: ["javascript", "node", "pnpm"]
+
+tasks:
+  test:
+    description: "Test canonical form, views, bundling and the catalog rules."
+    command: "node"
+    args: ["--test", "test/"]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "/schemas/**/*.json", "/examples/*.acidcat.json"]

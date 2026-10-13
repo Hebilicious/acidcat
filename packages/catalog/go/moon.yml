@@ -1,0 +1,14 @@
+language: "go"
+layer: "library"
+
+project:
+  title: "acidcat.dev/catalog"
+  description: "Write a catalog in Go and render it in canonical form. Published as the Go module acidcat.dev/catalog."
+
+tasks:
+  test:
+    description: "Rebuild the air-conditioner catalog and the canonical fixture, byte for byte."
+    command: "go"
+    args: ["test", "./..."]
+    inputs: ["**/*.go", "go.mod", "/examples/*.acidcat.json", "/packages/catalog/fixtures/**/*"]
+    toolchains: ["system"]
