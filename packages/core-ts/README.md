@@ -60,4 +60,5 @@ Standard Schema does not convert to JSON Schema. Give the converter of your sche
 
 - [`examples/aircon.ts`](examples/aircon.ts) is the air conditioner of [`examples/aircon.pkl`](../../examples/aircon.pkl), with a simulated unit. Its catalog agrees with the Pkl catalog.
 - [`examples/aircon-cli.ts`](examples/aircon-cli.ts) is its command line: `node examples/aircon-cli.ts aircon power set --on`.
+- [`examples/apis`](../../examples/apis/README.md) builds GraphQL, Cap'n Web and Elysia APIs on it, each beside the HTTP binding.
 - `moon run core-ts:test` tests sessions, handles and all bindings with a test application, and runs `acid-cat conform` against all bindings.

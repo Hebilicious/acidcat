@@ -1,0 +1,22 @@
+language: "typescript"
+layer: "application"
+
+project:
+  title: "@acid-cat/example-apis"
+  description: "APIs built on the air conditioner with GraphQL, Cap'n Web and Elysia, next to the HTTP binding. Not published."
+
+toolchains:
+  default: ["javascript", "node", "pnpm"]
+
+tasks:
+  test:
+    description: "Call each API and the HTTP binding beside it."
+    command: "node"
+    args: ["--test", "--test-timeout=60000", "test/"]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "/packages/core-ts/src/**/*.ts", "/packages/core-ts/examples/**/*.ts", "/packages/spec/src/**/*.ts"]
+
+  typecheck:
+    description: "Type-check the sources and tests."
+    command: "tsc"
+    args: ["-p", "."]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "/packages/core-ts/src/**/*.ts", "/packages/core-ts/examples/**/*.ts", "tsconfig.json", "/tsconfig.base.json"]

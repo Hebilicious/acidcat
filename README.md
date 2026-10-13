@@ -101,6 +101,8 @@ The same catalog in [TypeScript](packages/catalog/typescript/examples/aircon.ts)
 | [`acid-cat-catalog`](packages/catalog/rust) | 🦀 Write a catalog in Rust |
 | [`Catalog.pkl`](packages/catalog/pkl/Catalog.pkl) | 🧾 Write a catalog in Pkl |
 
+To build your own API, for example in GraphQL, see [`examples/apis`](examples/apis/README.md): GraphQL, Cap'n Web and Elysia APIs, each beside the HTTP binding.
+
 ## 🗺️ Roadmap
 
 - [x] `@acid-cat/spec`: the fixed details of the specification as data, with no dependencies

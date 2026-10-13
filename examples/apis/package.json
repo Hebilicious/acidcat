@@ -1,0 +1,23 @@
+{
+  "name": "@acid-cat/example-apis",
+  "version": "0.1.0",
+  "description": "APIs built on the air conditioner with GraphQL, Cap'n Web and Elysia, next to the HTTP binding.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@acid-cat/cli": "workspace:*",
+    "@acid-cat/core-ts": "workspace:*",
+    "@acid-cat/spec": "workspace:*",
+    "@pothos/core": "catalog:",
+    "capnweb": "catalog:",
+    "elysia": "catalog:",
+    "graphql": "catalog:",
+    "graphql-yoga": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}
