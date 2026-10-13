@@ -3,35 +3,21 @@
  * See spec/catalog.md and spec/conformance.md.
  */
 import { canonicalText } from "@acid-cat/catalog";
+import { bundle, REFERENCE, schemasOf, viewOf, visitObjects } from "@acid-cat/spec";
+import type { CatalogCapability as Capability, CatalogDocument as Catalog, JsonObject } from "@acid-cat/spec";
 import { Result, Schema, SchemaIssue, SchemaRepresentation } from "effect";
 import type { JsonSchema } from "effect";
 
 import catalogJsonSchema from "../../../schemas/catalog.schema.json" with { type: "json" };
 
-export type JsonObject = { readonly [key: string]: unknown };
-
-export interface Capability extends JsonObject {
-  readonly audience?: readonly string[];
-  readonly input?: JsonObject;
-  readonly output?: JsonObject;
-  readonly state?: JsonObject;
-  readonly failures?: { readonly [tag: string]: JsonObject };
-}
-
-export interface Catalog extends JsonObject {
-  readonly acidcat: string;
-  readonly targets: { readonly [name: string]: JsonObject };
-  readonly $defs?: { readonly [name: string]: JsonObject };
-  readonly capabilities: { readonly [id: string]: Capability };
-}
+export { bundle, viewOf };
+export type { Catalog };
 
 /** The result of a check. An error breaks a rule. A warning breaks a recommendation. */
 export interface Report {
   readonly errors: readonly string[];
   readonly warnings: readonly string[];
 }
-
-const REFERENCE = /^#\/\$defs\/([A-Za-z][A-Za-z0-9_]*)$/;
 
 const KNOWN_MEMBERS = {
   catalog: ["acidcat", "title", "description", "targets", "$defs", "capabilities"],
@@ -128,66 +114,9 @@ function schemaWarnings(catalog: Catalog): string[] {
   return warnings;
 }
 
-/**
- * The view of a target (spec/catalog.md#views): that target only, the capabilities whose audience names it, each with
- * that target as its only audience, and the types that those capabilities use.
- */
-export function viewOf(catalog: Catalog, target: string): Catalog {
-  const types = catalog.$defs ?? {};
-  const capabilities = Object.fromEntries(
-    Object.entries(catalog.capabilities)
-      .filter(([, capability]) => (capability.audience ?? []).includes(target))
-      .map(([id, capability]) => [id, { ...capability, audience: [target] }]),
-  );
-  const used = new Map<string, JsonObject>();
-  for (const capability of Object.values(capabilities)) {
-    for (const [, schema] of schemasOf(capability)) collectTypes(schema, types, used);
-  }
-  const { $defs: _, ...rest } = catalog;
-  return {
-    ...rest,
-    targets: target in catalog.targets ? { [target]: catalog.targets[target]! } : {},
-    ...(used.size > 0 ? { $defs: Object.fromEntries(used) } : {}),
-    capabilities,
-  };
-}
-
-/**
- * Bundle a schema (spec/catalog.md#bundling): copy every type that it uses into its own `$defs`. A schema that is
- * only a `$ref` becomes the type that it references.
- */
-export function bundle(schema: JsonObject, types: { readonly [name: string]: JsonObject }): JsonObject {
-  const only = Object.keys(schema).length === 1 ? REFERENCE.exec(String(schema.$ref))?.[1] : undefined;
-  const base = only === undefined ? schema : (types[only] ?? schema);
-  const used = new Map<string, JsonObject>();
-  collectTypes(base, types, used);
-  return used.size === 0 ? base : { ...base, $defs: Object.fromEntries(used) };
-}
-
-function schemasOf(capability: Capability): [string, JsonObject][] {
-  const members: [string, JsonObject | undefined][] = [
-    ["input", capability.input],
-    ["output", capability.output],
-    ["state", capability.state],
-    ...Object.entries(capability.failures ?? {}).map(([tag, schema]): [string, JsonObject] => [`failure ${tag}`, schema]),
-  ];
-  return members.filter((entry): entry is [string, JsonObject] => entry[1] !== undefined);
-}
-
-function collectTypes(schema: unknown, types: { readonly [name: string]: JsonObject }, used: Map<string, JsonObject>) {
-  visit(schema, (node) => {
-    const name = typeof node.$ref === "string" ? REFERENCE.exec(node.$ref)?.[1] : undefined;
-    const type = name === undefined ? undefined : types[name];
-    if (name !== undefined && type !== undefined && !used.has(name)) {
-      used.set(name, type);
-      collectTypes(type, types, used);
-    }
-  });
-}
-
 function referenceErrors(schema: unknown, types: { readonly [name: string]: JsonObject }): string[] {
   const errors: string[] = [];
-  visit(schema, (node) => {
+  visitObjects(schema, (node) => {
     if ("$defs" in node) errors.push("has its own $defs; put shared types in the catalog's $defs");
     if (node.$ref === undefined) return;
     const name = typeof node.$ref === "string" ? REFERENCE.exec(node.$ref)?.[1] : undefined;
@@ -196,11 +125,3 @@ function referenceErrors(schema: unknown, types: { readonly [name: string]: Json
   return errors;
 }
 
-function visit(value: unknown, onObject: (node: JsonObject) => void): void {
-  if (Array.isArray(value)) {
-    value.forEach((item) => visit(item, onObject));
-  } else if (value !== null && typeof value === "object") {
-    onObject(value as JsonObject);
-    Object.values(value).forEach((item) => visit(item, onObject));
-  }
-}

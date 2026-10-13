@@ -1,5 +1,6 @@
 projects:
   acid-cat: "."
+  spec: "packages/spec"
   cli: "packages/cli"
   catalog-typescript: "packages/catalog/typescript"
   catalog-python: "packages/catalog/python"

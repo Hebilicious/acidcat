@@ -202,12 +202,24 @@ importers:
       '@acid-cat/catalog':
         specifier: workspace:*
         version: link:../catalog/typescript
+      '@acid-cat/spec':
+        specifier: workspace:*
+        version: link:../spec
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.3(effect@4.0.3)(redis@6.3.0)
       effect:
         specifier: 'catalog:'
         version: 4.0.3
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/spec:
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

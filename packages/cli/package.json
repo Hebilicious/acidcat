@@ -5,10 +5,13 @@
   "license": "MIT",
   "private": true,
   "type": "module",
-  "bin": { "acid-cat": "./src/main.ts" },
+  "bin": {
+    "acid-cat": "./src/main.ts"
+  },
   "exports": "./src/catalog.ts",
   "dependencies": {
     "@acid-cat/catalog": "workspace:*",
+    "@acid-cat/spec": "workspace:*",
     "@effect/platform-node": "catalog:",
     "effect": "catalog:"
   },
