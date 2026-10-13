@@ -25,6 +25,11 @@ export interface Capability<
   readonly output?: Output | undefined;
   /** The failures, each a `Schema.TaggedStruct` with its own tag. */
   readonly failures?: readonly Failure[] | undefined;
+  /**
+   * A value that clients can observe (spec/invocation.md#state): its schema, and a stream of its values. The first
+   * value of the stream is the current value.
+   */
+  readonly state?: { readonly schema: AnySchema; readonly changes: Stream.Stream<unknown, never, R> } | undefined;
   /** The availability of the capability over time. With no stream, the capability is always available. */
   readonly availability?: Stream.Stream<Availability, never, R> | undefined;
   readonly run: (input: Input["Type"]) => Effect.Effect<Output["Type"], Failure["Type"], R>;

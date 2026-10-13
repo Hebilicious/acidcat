@@ -26,7 +26,11 @@ interface JsonRpcRequest {
   readonly jsonrpc: "2.0";
   readonly id?: string | number | null;
   readonly method: string;
-  readonly params?: { readonly name?: string; readonly arguments?: unknown };
+  readonly params?: {
+    readonly name?: string;
+    readonly arguments?: unknown;
+    readonly _meta?: { readonly "io.modelcontextprotocol/protocolVersion"?: string };
+  };
 }
 
 /** A web request handler for the MCP server. Each request has its own session. */
@@ -48,7 +52,18 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
     } catch {
       return rejection("not-utf8");
     }
-    if (message.id === undefined) return new Response(null, { status: 202 });
+
+    // Revision 2026-07-28: each request names its revision in a header, and each request repeats it in `_meta`.
+    const version = request.headers.get("MCP-Protocol-Version");
+    const id = message.id ?? null;
+    if (version === null) return error(400, id, -32020, "MCP-Protocol-Version header is required");
+    if (version !== MCP_PROTOCOL_VERSION) {
+      return error(400, id, -32022, `Unsupported protocol version ${version}`, { supported: [MCP_PROTOCOL_VERSION] });
+    }
+    if (message.id === undefined) return new Response(null, { status: 200, headers: { "Content-Type": "application/json" } });
+    const metaVersion = message.params?._meta?.["io.modelcontextprotocol/protocolVersion"];
+    if (metaVersion === undefined) return error(400, id, -32602, "Required request metadata is missing");
+    if (metaVersion !== version) return error(400, id, -32020, "MCP-Protocol-Version header does not match request metadata");
 
     const session = createSession(app, {
       target: options.target ?? "mcp",
@@ -56,40 +71,38 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
       toJsonSchema: options.toJsonSchema,
     });
     try {
-      return reply(message.id, await answer(session, message, options, request.signal));
+      return await answer(session, message, options, request.signal);
     } finally {
       await session.dispose();
     }
   };
 }
 
-type Answer = { readonly result: unknown } | { readonly error: { readonly code: number; readonly message: string } };
-
-async function answer<Context>(session: Session, message: JsonRpcRequest, options: McpOptions<Context>, signal: AbortSignal): Promise<Answer> {
+async function answer<Context>(session: Session, message: JsonRpcRequest, options: McpOptions<Context>, signal: AbortSignal): Promise<Response> {
+  const id = message.id ?? null;
+  const complete = (result: object, list = false) =>
+    reply(id, {
+      _meta: { "io.modelcontextprotocol/serverInfo": { name: options.name, version: options.version } },
+      resultType: "complete",
+      ...(list ? { ttlMs: 0, cacheScope: "private" } : {}),
+      ...result,
+    });
   switch (message.method) {
-    case "initialize":
-      return {
-        result: {
-          protocolVersion: MCP_PROTOCOL_VERSION,
-          capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: options.name, version: options.version },
-        },
-      };
-    case "ping":
-      return { result: {} };
+    case "server/discover":
+      return complete({ supportedVersions: [MCP_PROTOCOL_VERSION], capabilities: { tools: { listChanged: false } } }, true);
     case "tools/list":
-      return { result: { tools: listTools(session) } };
+      return complete({ tools: listTools(session) }, true);
     case "tools/call": {
       const name = message.params?.name ?? "";
       const handle = session.handles.get(name);
       if (handle === undefined || !handle.availability.getSnapshot().available) {
-        return { error: { code: MCP_UNKNOWN_TOOL, message: `Tool '${name}' not found` } };
+        return error(200, id, MCP_UNKNOWN_TOOL, `Tool '${name}' not found`);
       }
       const outcome = await session.invoke(name, message.params?.arguments ?? {}, { signal });
-      return { result: mcpToolResult(outcome, hasObjectOutput(session, name)) };
+      return complete(mcpToolResult(outcome, hasObjectOutput(session, name)));
     }
     default:
-      return { error: { code: -32601, message: `Method '${message.method}' not found` } };
+      return error(404, id, -32601, `Method not found: ${message.method}`);
   }
 }
 
@@ -115,8 +128,13 @@ function hasObjectOutput(session: Session, id: string): boolean {
   return output !== undefined && bundle(output, session.view.$defs ?? {}).type === "object";
 }
 
-function reply(id: string | number | null, answer: Answer): Response {
-  return new Response(JSON.stringify({ jsonrpc: "2.0", id, ...answer }), { status: 200, headers: { "Content-Type": "application/json" } });
+function reply(id: string | number | null, result: object): Response {
+  return new Response(JSON.stringify({ jsonrpc: "2.0", id, result }), { status: 200, headers: { "Content-Type": "application/json" } });
+}
+
+function error(status: number, id: string | number | null, code: number, message: string, data?: object): Response {
+  const body = { jsonrpc: "2.0", id, error: { code, message, ...(data === undefined ? {} : { data }) } };
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
 function rejection(reason: Rejection): Response {

@@ -95,7 +95,8 @@ The same catalog in [TypeScript](packages/catalog/typescript/examples/aircon.ts)
 | [`@acid-cat/core-effect`](packages/core-effect) | ⚡ Serve capabilities, written fully in Effect |
 | [`@acid-cat/core-ts`](packages/core-ts) | 🟦 Serve capabilities in plain TypeScript, with no Effect dependency |
 | [`@acid-cat/spec`](packages/spec) | 📐 The fixed details of the specification, as data |
-| [`@acid-cat/cli`](packages/cli) | 🛠️ `acid-cat check`, `format` and `view` |
+| [`@acid-cat/graphql`](packages/graphql) | 🧬 The GraphQL binding, used by both cores |
+| [`@acid-cat/cli`](packages/cli) | 🛠️ `acid-cat check`, `format`, `view` and `conform` |
 | [`@acid-cat/catalog`](packages/catalog/typescript) | ✍️ Write a catalog in TypeScript |
 | [`acid-cat-catalog`](packages/catalog/python) | 🐍 Write a catalog in Python |
 | [`acid-cat.dev/catalog`](packages/catalog/go) | 🐹 Write a catalog in Go |
@@ -107,7 +108,8 @@ The same catalog in [TypeScript](packages/catalog/typescript/examples/aircon.ts)
 - [x] `@acid-cat/spec`: the fixed details of the specification as data, with no dependencies
 - [x] `@acid-cat/core-effect`: serve capabilities, written fully in Effect
 - [x] `@acid-cat/core-ts`: serve capabilities in plain TypeScript, with no Effect dependency
-- [ ] `acid-cat conform`: test a running implementation through each binding
+- [x] `acid-cat conform`: test a running implementation through each binding
+- [ ] A site that publishes the specification
 
 See [packages/README.md](packages/README.md).
 

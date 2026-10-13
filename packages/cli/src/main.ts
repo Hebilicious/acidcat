@@ -6,11 +6,12 @@
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { canonicalText } from "@acid-cat/catalog";
-import { Console, Effect, FileSystem } from "effect";
+import { Console, Effect, FileSystem, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 
 import packageJson from "../package.json" with { type: "json" };
 import { check, viewOf, type Catalog } from "./catalog.ts";
+import { conform } from "./conform/index.ts";
 
 const readCatalog = Effect.fn("readCatalog")(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -81,9 +82,40 @@ const viewCommand = Command.make(
   }),
 ).pipe(Command.withDescription("Print the view of one target."));
 
+const url = (name: string, description: string) =>
+  Flag.String(name).pipe(Flag.withDescription(description), Flag.optional);
+
+const conformCommand = Command.make(
+  "conform",
+  {
+    mcp: url("mcp", "The URL of the MCP server"),
+    http: url("http", "The base URL of the HTTP API, before /capabilities"),
+    graphql: url("graphql", "The URL of the GraphQL API"),
+    cli: url("cli", "The command that starts the command line, for example \"node fixture-cli.ts\""),
+    maximumBytes: Flag.Int("max-bytes").pipe(Flag.withDescription("The body limit of the remote bindings"), Flag.withDefault(1_048_576)),
+  },
+  Effect.fn(function* (options) {
+    const value = (option: Option.Option<string>) => (Option.isSome(option) ? option.value : undefined);
+    const command = value(options.cli)?.split(/\s+/).filter((word) => word !== "");
+    const results = yield* Effect.promise(() =>
+      conform({ mcp: value(options.mcp), http: value(options.http), graphql: value(options.graphql), cli: command, maximumBytes: options.maximumBytes }),
+    );
+    if (results.length === 0) {
+      yield* Console.error("Give at least one binding: --mcp, --http, --graphql or --cli.");
+      return yield* fail;
+    }
+    for (const result of results) {
+      yield* Console.log(`${result.passed ? "✓" : "✗"} ${result.binding}: ${result.name} (${result.rule})${result.detail ? `\n    ${result.detail}` : ""}`);
+    }
+    const failed = results.filter((result) => !result.passed).length;
+    yield* Console.log(`\n${results.length - failed} passed, ${failed} failed.`);
+    if (failed > 0) return yield* fail;
+  }),
+).pipe(Command.withDescription("Test a running implementation of the conformance fixture through its bindings."));
+
 const acidCat = Command.make("acid-cat").pipe(
-  Command.withDescription("Check, format and view AcidCat catalogs."),
-  Command.withSubcommands([checkCommand, formatCommand, viewCommand]),
+  Command.withDescription("Check, format and view AcidCat catalogs, and test implementations."),
+  Command.withSubcommands([checkCommand, formatCommand, viewCommand, conformCommand]),
 );
 
 acidCat.pipe(

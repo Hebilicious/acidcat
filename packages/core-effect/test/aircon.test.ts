@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
 import type { CatalogDocument } from "@acid-cat/spec";
-import { Effect, Layer } from "effect";
+import { Effect, Fiber, Layer, Stream } from "effect";
 
 import { aircon, unitLayer } from "../examples/aircon.ts";
 import { App, Mcp, Session } from "../src/index.ts";
@@ -18,7 +18,7 @@ const shape = (catalog: CatalogDocument) => ({
   capabilities: Object.fromEntries(
     Object.entries(catalog.capabilities).map(([id, capability]) => [
       id,
-      { audience: capability.audience, readOnly: capability.readOnly ?? false, failures: Object.keys(capability.failures ?? {}).sort() },
+      { audience: capability.audience, readOnly: capability.readOnly ?? false, failures: Object.keys(capability.failures ?? {}).sort(), state: capability.state !== undefined },
     ]),
   ),
 });
@@ -39,6 +39,8 @@ test("the unit works through a session", () =>
         assert.deepEqual(yield* session.invoke("aircon.mode.set", { mode: "heat" }), { ok: true, value: null });
         const invalid = yield* session.invoke("aircon.temperature.set", { celsius: 40 });
         assert.equal("kind" in invalid && invalid.kind, "invalid-input");
+        const [state] = yield* session.state("aircon.status.get").pipe(Stream.take(1), Stream.runCollect);
+        assert.deepEqual(state, { power: true, mode: "heat", fan: "auto", targetCelsius: 22, roomCelsius: 25 });
         const status = yield* session.invoke("aircon.status.get", {});
         assert.deepEqual(status, { ok: true, value: { power: true, mode: "heat", fan: "auto", targetCelsius: 22, roomCelsius: 25 } });
       }),
@@ -66,3 +68,18 @@ test("a flag follows a $ref to its type", async () => {
   assert.deepEqual(JSON.parse(run.stdout), { _tag: "PoweredOff" });
   assert.equal(spawnSync(process.execPath, [cli, "aircon", "mode", "set", "--mode", "boil"], { timeout: 20_000 }).status, 3);
 });
+
+test("the state gives the current value, then each change", () =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make(aircon, { target: "app" });
+        const values = yield* session.state("aircon.status.get").pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }));
+        yield* session.invoke("aircon.power.set", { on: true });
+        const [first, second] = yield* Fiber.join(values).pipe(Effect.timeout(1000));
+        assert.equal((first as { power: boolean }).power, false);
+        assert.equal((second as { power: boolean }).power, true);
+        assert.deepEqual(yield* session.state("aircon.power.set").pipe(Stream.runCollect), []);
+      }),
+    ).pipe(Effect.provide(Layer.fresh(unitLayer))),
+  ));

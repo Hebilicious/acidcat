@@ -76,6 +76,15 @@ export const aircon = App.make({
       readOnly: true,
       output: Status,
       failures: [Offline],
+      state: {
+        schema: Status,
+        changes: Stream.unwrap(
+          Effect.gen(function* () {
+            const unit = yield* Unit;
+            return SubscriptionRef.changes(unit).pipe(Stream.map(({ online: _, firmware: __, ...status }) => status));
+          }),
+        ),
+      },
       run: () =>
         Effect.gen(function* () {
           const { online, firmware: _, ...status } = yield* SubscriptionRef.get(yield* Unit);

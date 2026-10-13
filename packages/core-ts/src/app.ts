@@ -33,6 +33,8 @@ export interface Capability<
   readonly output?: OutputSchema;
   /** The failures, by tag. The schema of a failure describes the object, without or with its `_tag`. */
   readonly failures?: Failures;
+  /** A value that clients can observe (spec/invocation.md#state): its schema, and its source. */
+  readonly state?: { readonly schema: StandardSchemaV1; readonly source: (context: Context) => Observable<unknown> } | undefined;
   /** The availability of the capability. With none, the capability is always available. */
   readonly availability?: ((context: Context) => Observable<Availability>) | undefined;
   readonly run: (
@@ -120,6 +122,7 @@ export function catalogOf(app: App<any>, options: { readonly toJsonSchema: ToJso
       ...(capability.output === undefined ? {} : { output: toJson(capability.output, capability.id) }),
       ...(Object.keys(failures).length === 0 ? {} : { failures }),
       ...(capability.readOnly === true ? { readOnly: true } : {}),
+      ...(capability.state === undefined ? {} : { state: toJson(capability.state.schema, capability.id) }),
     };
   }
 

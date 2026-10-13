@@ -23,6 +23,20 @@ export type State = z.infer<typeof Status> & { online: boolean; firmware: string
 
 /** The simulated unit. */
 export class Unit {
+  readonly #statusListeners = new Set<(value: z.infer<typeof Status>) => void>();
+
+  /** The status of the unit, as clients observe it. */
+  readonly status: Observable<z.infer<typeof Status>> = {
+    getSnapshot: () => {
+      const { online: _online, firmware: _firmware, ...status } = this.state;
+      return status;
+    },
+    subscribe: (listener) => {
+      this.#statusListeners.add(listener);
+      return { unsubscribe: () => this.#statusListeners.delete(listener) };
+    },
+  };
+
   state: State = { power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25, online: true, firmware: "1.0.0" };
   readonly #listeners = new Set<(value: Availability) => void>();
 
@@ -38,6 +52,7 @@ export class Unit {
   change(update: Partial<State>) {
     this.state = { ...this.state, ...update };
     this.#listeners.forEach((listener) => listener(this.online.getSnapshot()));
+    this.#statusListeners.forEach((listener) => listener(this.status.getSnapshot()));
   }
 }
 
@@ -77,6 +92,7 @@ export const aircon = defineApp<Context>({
       readOnly: true,
       output: Status,
       failures: { Offline },
+      state: { schema: Status, source: (context) => context.unit.status },
       run: (_, { context }) => {
         const { online, firmware: _firmware, ...status } = context.unit.state;
         return online ? ok(status) : fail("Offline");

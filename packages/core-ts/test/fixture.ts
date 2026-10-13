@@ -31,15 +31,16 @@ export interface Context {
 export const toJsonSchema = (schema: unknown) => z.toJSONSchema(schema as z.ZodType, { target: "draft-2020-12" });
 
 const Text = z.object({ text: z.string() });
-const everywhere = ["app", "mcp", "cli", "api"];
+const everywhere = ["app", "mcp", "cli", "api", "graphql"];
 
 export const fixture = defineApp<Context>({
   title: "Fixture",
   targets: {
-    app: { bindings: ["typescript"] },
+    app: { bindings: ["typescript", "webmcp"] },
     mcp: { bindings: ["mcp"] },
     cli: { bindings: ["cli"] },
     api: { bindings: ["http"] },
+    graphql: { bindings: ["graphql"] },
   },
   capabilities: [
     defineCapability({
@@ -53,7 +54,7 @@ export const fixture = defineApp<Context>({
     }),
     defineCapability({
       id: "fixture.refuse",
-      description: "Always refuse.",
+      description: "Always return the failure Refused.",
       audience: everywhere,
       failures: { Refused: z.object({ _tag: z.literal("Refused"), reason: z.string() }) },
       run: () => fail("Refused", { reason: "No." }),
@@ -68,7 +69,7 @@ export const fixture = defineApp<Context>({
     }),
     defineCapability({
       id: "fixture.slow",
-      description: "Wait, then return null.",
+      description: "Wait for some milliseconds, then return null.",
       audience: everywhere,
       input: z.object({ milliseconds: z.number() }),
       run: async ({ milliseconds }, { signal }) => {
@@ -91,6 +92,16 @@ export const fixture = defineApp<Context>({
       audience: everywhere,
       availability: (context) => context.switch,
       run: () => ok(null),
+    }),
+    defineCapability<Context, z.ZodObject<{ on: z.ZodBoolean }>>({
+      id: "fixture.switch.set",
+      description: "Turn the switch on or off. The switch controls the availability of fixture.toggle.",
+      audience: everywhere,
+      input: z.object({ on: z.boolean() }),
+      run: ({ on }, { context }) => {
+        context.switch.set(on);
+        return ok(null);
+      },
     }),
   ],
 });

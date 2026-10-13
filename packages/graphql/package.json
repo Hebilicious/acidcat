@@ -1,0 +1,17 @@
+{
+  "name": "@acid-cat/graphql",
+  "version": "0.1.0",
+  "description": "The AcidCat GraphQL binding, for any provider. No Effect dependency.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@acid-cat/spec": "workspace:*",
+    "graphql": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

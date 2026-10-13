@@ -61,12 +61,12 @@ test("MCP gives the view and each outcome", async () => {
         new Request("https://fixture.example/mcp", {
           method: "POST",
           headers: { "Content-Type": "application/json", "mcp-method": method, "mcp-protocol-version": "2026-07-28" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } } }),
         }),
       )
     ).json()) as { result?: any; error?: { code: number } };
   const tools = (await rpc("tools/list")).result.tools as { name: string; annotations: { readOnlyHint: boolean }; outputSchema?: object }[];
-  assert.deepEqual(tools.map((tool) => tool.name).sort(), ["fixture.crash", "fixture.echo", "fixture.refuse", "fixture.slow", "fixture.toggle"]);
+  assert.deepEqual(tools.map((tool) => tool.name).sort(), ["fixture.crash", "fixture.echo", "fixture.refuse", "fixture.slow", "fixture.switch.set", "fixture.toggle"]);
   assert.equal(tools.find((tool) => tool.name === "fixture.echo")!.annotations.readOnlyHint, true);
   const value = await rpc("tools/call", { name: "fixture.echo", arguments: { text: "hi" } });
   assert.deepEqual(value.result.structuredContent, { text: "hi" });

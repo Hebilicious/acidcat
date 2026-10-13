@@ -12,15 +12,16 @@ export const switchLayer = Layer.effect(Switch, SubscriptionRef.make(true));
 const Text = Schema.Struct({ text: Schema.String });
 const Refused = Schema.TaggedStruct("Refused", { reason: Schema.String });
 
-const everywhere = ["app", "mcp", "cli", "api"];
+const everywhere = ["app", "mcp", "cli", "api", "graphql"];
 
 export const fixture = App.make({
   title: "Fixture",
   targets: {
-    app: { bindings: ["typescript"] },
+    app: { bindings: ["typescript", "webmcp"] },
     mcp: { bindings: ["mcp"] },
     cli: { bindings: ["cli"] },
     api: { bindings: ["http"] },
+    graphql: { bindings: ["graphql"] },
   },
   capabilities: [
     Capability.make({
@@ -34,7 +35,7 @@ export const fixture = App.make({
     }),
     Capability.make({
       id: "fixture.refuse",
-      description: "Always refuse.",
+      description: "Always return the failure Refused.",
       audience: everywhere,
       failures: [Refused],
       run: () => Effect.fail(Refused.make({ reason: "No." })),
@@ -47,7 +48,7 @@ export const fixture = App.make({
     }),
     Capability.make({
       id: "fixture.slow",
-      description: "Wait, then return null.",
+      description: "Wait for some milliseconds, then return null.",
       audience: everywhere,
       input: Schema.Struct({ milliseconds: Schema.Finite }),
       run: ({ milliseconds }) => Effect.sleep(milliseconds).pipe(Effect.as(null)),
@@ -69,6 +70,17 @@ export const fixture = App.make({
         }),
       ),
       run: () => Effect.succeed(null),
+    }),
+    Capability.make({
+      id: "fixture.switch.set",
+      description: "Turn the switch on or off. The switch controls the availability of fixture.toggle.",
+      audience: everywhere,
+      input: Schema.Struct({ on: Schema.Boolean }),
+      run: ({ on }) =>
+        Effect.gen(function* () {
+          yield* SubscriptionRef.set(yield* Switch, on);
+          return null;
+        }),
     }),
   ],
 });

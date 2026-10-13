@@ -167,12 +167,21 @@ catalogs:
     '@effect/platform-node':
       specifier: 4.0.3
       version: 4.0.3
+    '@modelcontextprotocol/client':
+      specifier: 2.3.1
+      version: 2.3.1
     '@types/node':
       specifier: 26.6.5
       version: 26.6.5
     effect:
       specifier: 4.0.3
       version: 4.0.3
+    fast-check:
+      specifier: 4.10.2
+      version: 4.10.2
+    graphql:
+      specifier: 17.0.2
+      version: 17.0.2
     typescript:
       specifier: 7.0.2
       version: 7.0.2
@@ -211,9 +220,15 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.3(effect@4.0.3)(redis@6.3.0)
+      '@modelcontextprotocol/client':
+        specifier: 'catalog:'
+        version: 2.3.1
       effect:
         specifier: 'catalog:'
         version: 4.0.3
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -227,6 +242,9 @@ importers:
       '@acid-cat/catalog':
         specifier: workspace:*
         version: link:../catalog/typescript
+      '@acid-cat/graphql':
+        specifier: workspace:*
+        version: link:../graphql
       '@acid-cat/spec':
         specifier: workspace:*
         version: link:../spec
@@ -252,6 +270,9 @@ importers:
       '@acid-cat/catalog':
         specifier: workspace:*
         version: link:../catalog/typescript
+      '@acid-cat/graphql':
+        specifier: workspace:*
+        version: link:../graphql
       '@acid-cat/spec':
         specifier: workspace:*
         version: link:../spec
@@ -268,6 +289,22 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.6.7
+
+  packages/graphql:
+    dependencies:
+      '@acid-cat/spec':
+        specifier: workspace:*
+        version: link:../spec
+      graphql:
+        specifier: 'catalog:'
+        version: 17.0.2
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
 
   packages/spec:
     devDependencies:
@@ -292,6 +329,14 @@ packages:
     peerDependencies:
       effect: ^4.0.3
       redis: '>=5.0.0 <7.0.0'
+
+  '@modelcontextprotocol/client@2.3.1':
+    resolution: {integrity: sha512-mIGZXpHsjnZ6lD+gD/WCMpR5k8yVQQ8nNFH1N0Srf7AvnwTUMYD6pvTY8ng2+He5FfV7YMZLmrjL7cLa/cc3dQ==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/core@2.3.1':
+    resolution: {integrity: sha512-laVmIhPGpWi7rG9q+0UigblRN0Hws/Yjlb6qLFtVqryXVLkc4h+yN8z731POD2LnAGQlFe7/tXhUm7Bi0YB91g==}
+    engines: {node: '>=20'}
 
   '@redis/bloom@6.3.0':
     resolution: {integrity: sha512-NQ5poYpZr0jv6zazN1cy6JY5kIipKFZ3R9GTL4kOUTX3a9YAfY29U8bsE4lWhVQEM+G4V0BXVC57mubIdDijeA==}
@@ -455,12 +500,57 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  cross-spawn@7.0.6:
+    resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
+    engines: {node: '>= 8'}
+
   effect@4.0.3:
     resolution: {integrity: sha512-LoWn/Uwwx0JjHSDmBAAahx8sB+klzM6vsZovnbYowBNw6B4QScJLRLBByO61plvNiycx7HPN8FnsWUCu0eXW5w==}
+
+  eventsource-parser@3.1.1:
+    resolution: {integrity: sha512-EKN1vKAMcZ8MlYMpaNuxN6R9yakzH6uajHcHVTqWJzvu5pWw9DyhbP35HH8MVBQ+dZjAfDxk+A8NiR9KWaXiyQ==}
+    engines: {node: '>=18.0.0'}
+
+  eventsource@3.0.7:
+    resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
+    engines: {node: '>=18.0.0'}
+
+  fast-check@4.10.2:
+    resolution: {integrity: sha512-iK2f+YrcmoeGqk6fA0ea2bptcu/itMIm4NfEozq6N25+aG6h7s5HZbB/k1aV7b5w5sFLMCbbtRUsTVR+BgC3xw==}
+    engines: {node: '>=12.17.0'}
+
+  graphql@17.0.2:
+    resolution: {integrity: sha512-FRWbddMxfkjiB7z+aQDWIR+E34xo9I8c9mtK2RPv8PmMzKRvrdsreHL/Ui/TmwHJfhHChEtsFPyMHKI+xuarQQ==}
+    engines: {node: ^22.0.0 || ^24.0.0 || ^25.0.0 || >=26.0.0}
+
+  isexe@2.0.0:
+    resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
+
+  jose@6.2.12:
+    resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
+
+  path-key@3.1.1:
+    resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
+    engines: {node: '>=8'}
+
+  pkce-challenge@5.0.1:
+    resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
+    engines: {node: '>=16.20.0'}
+
+  pure-rand@8.4.2:
+    resolution: {integrity: sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng==}
 
   redis@6.3.0:
     resolution: {integrity: sha512-XFQbPie1lGpKeUZ8ySYY43yLnQy/iIQtHNvIr/1XdaABpb96rUSdm3Mfl+98FEVbv9ZJIzINMno5s0Nh8E5LEw==}
     engines: {node: '>= 20.0.0'}
+
+  shebang-command@2.0.0:
+    resolution: {integrity: sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==}
+    engines: {node: '>=8'}
+
+  shebang-regex@3.0.0:
+    resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
+    engines: {node: '>=8'}
 
   typescript@7.0.2:
     resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
@@ -473,6 +563,11 @@ packages:
   undici@8.11.2:
     resolution: {integrity: sha512-u4UB2/IrKdU6lFxumHmmo1a3fCQO5tzQllRorfoRS63txhrB7xTpSn1PftwC4qEHkOaqP95fCWW4lJzwErwzhQ==}
     engines: {node: '>=22.19.0'}
+
+  which@2.0.2:
+    resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
+    engines: {node: '>= 8'}
+    hasBin: true
 
   ws@8.22.0:
     resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
@@ -509,6 +604,20 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+
+  '@modelcontextprotocol/client@2.3.1':
+    dependencies:
+      '@modelcontextprotocol/core': 2.3.1
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.1
+      jose: 6.2.12
+      pkce-challenge: 5.0.1
+      zod: 4.6.7
+
+  '@modelcontextprotocol/core@2.3.1':
+    dependencies:
+      zod: 4.6.7
 
   '@redis/bloom@6.3.0(@redis/client@6.3.0)':
     dependencies:
@@ -596,7 +705,35 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
+  cross-spawn@7.0.6:
+    dependencies:
+      path-key: 3.1.1
+      shebang-command: 2.0.0
+      which: 2.0.2
+
   effect@4.0.3: {}
+
+  eventsource-parser@3.1.1: {}
+
+  eventsource@3.0.7:
+    dependencies:
+      eventsource-parser: 3.1.1
+
+  fast-check@4.10.2:
+    dependencies:
+      pure-rand: 8.4.2
+
+  graphql@17.0.2: {}
+
+  isexe@2.0.0: {}
+
+  jose@6.2.12: {}
+
+  path-key@3.1.1: {}
+
+  pkce-challenge@5.0.1: {}
+
+  pure-rand@8.4.2: {}
 
   redis@6.3.0:
     dependencies:
@@ -608,6 +745,12 @@ snapshots:
     transitivePeerDependencies:
       - '@node-rs/xxhash'
       - '@opentelemetry/api'
+
+  shebang-command@2.0.0:
+    dependencies:
+      shebang-regex: 3.0.0
+
+  shebang-regex@3.0.0: {}
 
   typescript@7.0.2:
     optionalDependencies:
@@ -635,6 +778,10 @@ snapshots:
   undici-types@8.9.0: {}
 
   undici@8.11.2: {}
+
+  which@2.0.2:
+    dependencies:
+      isexe: 2.0.0
 
   ws@8.22.0: {}
 

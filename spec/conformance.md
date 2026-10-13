@@ -28,6 +28,28 @@ A provider and its bindings conform for a target if, through each binding of the
 - each outcome and each kind of call failure has the form that the binding defines;
 - a remote binding rejects requests as [Remote bindings](bindings/README.md#remote-bindings) tells.
 
-The tests use a test catalog to examine behavior such as rejection and replacement.
+## The conformance fixture
+
+[`packages/cli/conformance/fixture.pkl`](../packages/cli/conformance/fixture.pkl) is the catalog that an implementation serves for the tests. Each capability shows one behavior:
+
+| Capability | Behavior |
+| --- | --- |
+| `fixture.echo` | Returns its input. It is read-only |
+| `fixture.refuse` | Returns the failure `Refused` |
+| `fixture.crash` | Fails with a defect |
+| `fixture.slow` | Waits, then returns `null`. The tests cancel it |
+| `fixture.hidden` | Only the `app` target can use it |
+| `fixture.toggle` | Available only while the switch is on |
+| `fixture.switch.set` | Turns the switch on or off |
+
+The switch MUST be on when the tests start.
+
+## `acid-cat conform`
+
+```sh
+acid-cat conform --mcp <url> --http <base url> --graphql <url> --cli "<command>"
+```
+
+Give one or more bindings. For each binding, `acid-cat conform` tests the rules above. It uses the official MCP client for MCP, and sends requests that a client never sends to test rejections. Through each remote binding, property-based tests examine two guarantees of [Invocation](invocation.md#cancellation-and-concurrency) with random sets of calls: each call gets exactly its own outcome, and the cancellation of one call does not change other calls.
 
 A test that a SHOULD rule fails gives a warning, not an error. Tests that need access to the code, for example of internal logs, are not part of conformance.

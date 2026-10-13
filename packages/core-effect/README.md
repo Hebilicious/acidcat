@@ -31,6 +31,7 @@ export const aircon = App.make({
 - `input` is a `Schema.Struct`. With no `input`, the input is an empty object. Use `Schema.Finite` or `Schema.Int` for numbers: `Schema.Number` also accepts `Infinity` and `NaN`, which JSON cannot hold.
 - Each failure is a `Schema.TaggedStruct`. Its tag is the tag in the catalog.
 - `availability` is an optional `Stream` of availability values.
+- `state` is an optional `{ schema, changes }`: the schema of the [state](../../spec/invocation.md#state), and a `Stream` of its values. `session.state(id)` follows it.
 - Give a shared type an `identifier` annotation. It becomes a named type in `$defs`.
 
 ## Write the catalog
@@ -48,6 +49,7 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 | `Session` | [Invocation](../../spec/invocation.md) | `Session.make(app, { target })`: `invoke` for untrusted input, `execute` for typed calls |
 | `Mcp` | [MCP](../../spec/bindings/mcp.md) | `Mcp.toWebHandler(app, layer, options)`, on `effect/ai/McpServer` |
 | `Http` | [HTTP](../../spec/bindings/http.md) | `Http.toWebHandler(app, layer, options)` |
+| `Graphql` | [GraphQL](../../spec/bindings/graphql.md) | `Graphql.toWebHandler(app, layer, options)` |
 | `Cli` | [CLI](../../spec/bindings/cli.md) | `Cli.main(app, layer, options)`, on `effect/cli` |
 | `WebMcp` | [WebMCP](../../spec/bindings/webmcp.md) | `WebMcp.install(session)` |
 
@@ -57,4 +59,4 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 
 - [`examples/aircon.ts`](examples/aircon.ts) is the air conditioner of [`examples/aircon.pkl`](../../examples/aircon.pkl), with a simulated unit. Its catalog agrees with the Pkl catalog.
 - [`examples/aircon-cli.ts`](examples/aircon-cli.ts) is its command line: `node examples/aircon-cli.ts aircon power set --on`.
-- `moon run core-effect:test` tests sessions and all bindings with a test application.
+- `moon run core-effect:test` tests sessions and all bindings with a test application, and runs `acid-cat conform` against all bindings.

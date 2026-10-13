@@ -1,0 +1,163 @@
+{
+  "acidcat": "0.1",
+  "title": "AcidCat conformance fixture",
+  "targets": {
+    "api": {
+      "bindings": [
+        "http"
+      ]
+    },
+    "app": {
+      "bindings": [
+        "typescript",
+        "webmcp"
+      ]
+    },
+    "cli": {
+      "bindings": [
+        "cli"
+      ]
+    },
+    "graphql": {
+      "bindings": [
+        "graphql"
+      ]
+    },
+    "mcp": {
+      "bindings": [
+        "mcp"
+      ]
+    }
+  },
+  "capabilities": {
+    "fixture.crash": {
+      "description": "Always fail with a defect.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api",
+        "graphql"
+      ]
+    },
+    "fixture.echo": {
+      "description": "Return the input text.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api",
+        "graphql"
+      ],
+      "input": {
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "readOnly": true
+    },
+    "fixture.hidden": {
+      "description": "Only the app target can use this capability.",
+      "audience": [
+        "app"
+      ]
+    },
+    "fixture.refuse": {
+      "description": "Always return the failure Refused.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api",
+        "graphql"
+      ],
+      "failures": {
+        "Refused": {
+          "properties": {
+            "_tag": {
+              "const": "Refused",
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "reason"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    "fixture.slow": {
+      "description": "Wait for some milliseconds, then return null.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api",
+        "graphql"
+      ],
+      "input": {
+        "properties": {
+          "milliseconds": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "milliseconds"
+        ],
+        "type": "object"
+      }
+    },
+    "fixture.switch.set": {
+      "description": "Turn the switch on or off. The switch controls the availability of fixture.toggle.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api",
+        "graphql"
+      ],
+      "input": {
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "type": "object"
+      }
+    },
+    "fixture.toggle": {
+      "description": "Available only while the switch is on.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api",
+        "graphql"
+      ]
+    }
+  }
+}

@@ -46,8 +46,7 @@ test("a capability outside the view is the same as an unknown id", () =>
 test("availability follows its stream, and changes are announced", () =>
   withSession("mcp", (session) =>
     Effect.gen(function* () {
-      const announced = yield* session.changes.pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped);
-      yield* Effect.sleep(10);
+      const announced = yield* session.changes.pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }));
       yield* SubscriptionRef.set(yield* Switch, false);
       yield* Fiber.join(announced).pipe(Effect.timeout(1000));
       assert.deepEqual(yield* session.availability("fixture.toggle"), { available: false, reason: "The switch is off." });

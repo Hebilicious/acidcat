@@ -13,6 +13,8 @@ export interface Handle {
   readonly description: string;
   readonly audience: readonly string[];
   readonly availability: Observable<Availability>;
+  /** The state of the capability, if it has one. Each value is a copy. */
+  readonly snapshot?: Observable<unknown>;
   /** A call with an input that is already valid. A call failure rejects with a `CallFailureError`. */
   execute(input: unknown, options?: { readonly signal?: AbortSignal | undefined }): Promise<Result<unknown, unknown>>;
   /** A call with an input that is not trusted. A call failure rejects with a `CallFailureError`. */
@@ -119,11 +121,13 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
       if (isCallFailure(settled)) throw new CallFailureError(settled);
       return settled;
     };
+    const state = capability.state?.source(options.context);
     handles.set(id, {
       id,
       description: capability.description,
       audience: capability.audience,
       availability,
+      ...(state === undefined ? {} : { snapshot: detached(state) }),
       execute: (input, callOptions) => reject(call(id, input, true, callOptions?.signal)),
       invokeExternal: (input, callOptions) => reject(call(id, input, false, callOptions?.signal)),
     });
@@ -144,6 +148,14 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
       subscriptions.forEach((subscription) => subscription.unsubscribe());
       await Promise.allSettled([...running]);
     },
+  };
+}
+
+/** An observable whose values are copies, so that a client cannot change the data of the provider. */
+function detached<T>(source: Observable<T>): Observable<T> {
+  return {
+    getSnapshot: () => structuredClone(source.getSnapshot()),
+    subscribe: (listener) => source.subscribe((value) => listener(structuredClone(value))),
   };
 }
 

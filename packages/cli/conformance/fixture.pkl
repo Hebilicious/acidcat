@@ -1,0 +1,75 @@
+/// The conformance fixture. Each implementation serves this catalog, and `acid-cat conform` tests it through
+/// its bindings. Each capability shows one behavior.
+amends "../../catalog/pkl/Catalog.pkl"
+
+title = "AcidCat conformance fixture"
+
+targets {
+  ["app"] { bindings { "typescript"; "webmcp" } }
+  ["mcp"] { bindings { "mcp" } }
+  ["cli"] { bindings { "cli" } }
+  ["api"] { bindings { "http" } }
+  ["graphql"] { bindings { "graphql" } }
+}
+
+local allTargets = new Listing { "app"; "mcp"; "cli"; "api"; "graphql" }
+
+local text = new Dynamic {
+  type = "object"
+  required { "text" }
+  properties { text { type = "string" } }
+}
+
+capabilities {
+  ["fixture.echo"] {
+    description = "Return the input text."
+    audience = allTargets
+    readOnly = true
+    input = text
+    output = text
+  }
+  ["fixture.refuse"] {
+    description = "Always return the failure Refused."
+    audience = allTargets
+    failures {
+      ["Refused"] {
+        type = "object"
+        required { "_tag"; "reason" }
+        properties {
+          _tag { type = "string"; `const` = "Refused" }
+          reason { type = "string" }
+        }
+      }
+    }
+  }
+  ["fixture.crash"] {
+    description = "Always fail with a defect."
+    audience = allTargets
+  }
+  ["fixture.slow"] {
+    description = "Wait for some milliseconds, then return null."
+    audience = allTargets
+    input {
+      type = "object"
+      required { "milliseconds" }
+      properties { milliseconds { type = "number" } }
+    }
+  }
+  ["fixture.hidden"] {
+    description = "Only the app target can use this capability."
+    audience { "app" }
+  }
+  ["fixture.toggle"] {
+    description = "Available only while the switch is on."
+    audience = allTargets
+  }
+  ["fixture.switch.set"] {
+    description = "Turn the switch on or off. The switch controls the availability of fixture.toggle."
+    audience = allTargets
+    input {
+      type = "object"
+      required { "on" }
+      properties { on { type = "boolean" } }
+    }
+  }
+}

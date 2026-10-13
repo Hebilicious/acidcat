@@ -40,6 +40,7 @@ test("tools/list gives the available capabilities of the view, with their schema
     "fixture.echo",
     "fixture.refuse",
     "fixture.slow",
+    "fixture.switch.set",
     "fixture.toggle",
   ]);
   const echo = tools.find((tool) => tool.name === "fixture.echo")!;

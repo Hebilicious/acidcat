@@ -16,7 +16,7 @@ const shape = (catalog: CatalogDocument) => ({
   capabilities: Object.fromEntries(
     Object.entries(catalog.capabilities).map(([id, capability]) => [
       id,
-      { audience: capability.audience, readOnly: capability.readOnly ?? false, failures: Object.keys(capability.failures ?? {}).sort() },
+      { audience: capability.audience, readOnly: capability.readOnly ?? false, failures: Object.keys(capability.failures ?? {}).sort(), state: capability.state !== undefined },
     ]),
   ),
 });
@@ -42,4 +42,19 @@ test("the unit works through a session and the command line", async () => {
   });
   assert.equal(code, 0);
   assert.equal(unit.state.mode, "heat");
+});
+
+test("a handle gives the state as copies, and each change", async () => {
+  const unit = new Unit();
+  const session = createSession(aircon, { target: "app", context: { unit }, toJsonSchema });
+  const snapshot = session.handles.get("aircon.status.get")!.snapshot!;
+  assert.equal((snapshot.getSnapshot() as { power: boolean }).power, false);
+  const seen: unknown[] = [];
+  snapshot.subscribe((value) => seen.push(value));
+  await session.invoke("aircon.power.set", { on: true });
+  assert.equal((seen.at(-1) as { power: boolean }).power, true);
+  (snapshot.getSnapshot() as { power: boolean }).power = false;
+  assert.equal(unit.state.power, true);
+  assert.equal(session.handles.get("aircon.power.set")!.snapshot, undefined);
+  await session.dispose();
 });

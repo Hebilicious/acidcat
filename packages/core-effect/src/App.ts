@@ -64,6 +64,7 @@ export function document(app: App<any>): CatalogDocument {
       ...(capability.output === undefined ? {} : { output: toJson(capability.output, capability.id) }),
       ...(Object.keys(failures).length === 0 ? {} : { failures }),
       ...(capability.readOnly === true ? { readOnly: true } : {}),
+      ...(capability.state === undefined ? {} : { state: toJson(capability.state.schema, capability.id) }),
     };
   }
 

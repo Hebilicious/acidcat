@@ -1,8 +1,8 @@
 /**
  * Check this repository's example catalogs and fixtures.
  *
- * Every `examples/<name>.pkl` must render, once put in canonical form, to exactly the committed
- * `examples/<name>.acidcat.json`. Every committed catalog, including the catalog libraries' fixtures, must then conform.
+ * Every Pkl catalog in `examples/` and `packages/cli/conformance/` must render, once put in canonical form, to
+ * exactly the committed `.acidcat.json` file beside it. Every committed catalog, including the catalog libraries' fixtures, must then conform.
  *
  * Usage: node scripts/check-examples.ts
  */
@@ -16,9 +16,14 @@ import { check } from "@acid-cat/cli";
 const root = path.resolve(import.meta.dirname, "..");
 const problems: string[] = [];
 
-for (const source of readdirSync(path.join(root, "examples")).filter((name) => name.endsWith(".pkl"))) {
-  const rendered = execFileSync("pkl", ["eval", path.join(root, "examples", source)], { encoding: "utf-8" });
-  const committed = `examples/${source.replace(/\.pkl$/, ".acidcat.json")}`;
+const sources = ["examples", "packages/cli/conformance"].flatMap((directory) =>
+  readdirSync(path.join(root, directory))
+    .filter((name) => name.endsWith(".pkl"))
+    .map((name) => `${directory}/${name}`),
+);
+for (const source of sources) {
+  const rendered = execFileSync("pkl", ["eval", path.join(root, source)], { encoding: "utf-8" });
+  const committed = source.replace(/\.pkl$/, ".acidcat.json");
   if (canonicalText(JSON.parse(rendered)) !== readFileSync(path.join(root, committed), "utf-8")) {
     problems.push(`${committed}: stale; run \`moon run examples\``);
   }
@@ -29,6 +34,7 @@ const catalogs = [
     .filter((name) => name.endsWith(".acidcat.json"))
     .map((name) => `examples/${name}`),
   ...readdirSync(path.join(root, "packages/catalog/fixtures")).map((name) => `packages/catalog/fixtures/${name}`),
+  "packages/cli/conformance/fixture.acidcat.json",
 ];
 for (const file of catalogs) {
   const text = readFileSync(path.join(root, file), "utf-8");
