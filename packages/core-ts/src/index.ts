@@ -6,8 +6,6 @@ export { mcpHandler } from "./mcp.ts";
 export type { McpOptions } from "./mcp.ts";
 export { httpHandler } from "./http.ts";
 export type { HttpOptions } from "./http.ts";
-export { graphqlHandler } from "./graphql.ts";
-export type { GraphqlOptions } from "./graphql.ts";
 export { main as cliMain, runCli } from "./cli.ts";
 export type { CliIo, CliOptions } from "./cli.ts";
 export { findHost, installWebMcp } from "./webmcp.ts";

@@ -42,6 +42,7 @@ Each remote binding tells its status codes. It also tells if it accepts requests
 | [`mcp`](mcp.md) | Protocol | An MCP server through HTTP |
 | [`cli`](cli.md) | Protocol | A command line |
 | [`http`](http.md) | Protocol | JSON through HTTP |
-| [`graphql`](graphql.md) | Protocol | A GraphQL schema |
 
 You can write other bindings to the same rules, for example for Swift, Kotlin or gRPC. Give a new binding a name with a prefix, as in `acme:swift`.
+
+An API whose design you want to control, for example a GraphQL API, is application code. Build it on a language binding, with the library that you prefer. The HTTP binding gives generic access to the capabilities.

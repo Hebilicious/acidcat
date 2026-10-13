@@ -2,7 +2,6 @@ projects:
   acid-cat: "."
   spec: "packages/spec"
   cli: "packages/cli"
-  graphql: "packages/graphql"
   core-effect: "packages/core-effect"
   core-ts: "packages/core-ts"
   catalog-typescript: "packages/catalog/typescript"

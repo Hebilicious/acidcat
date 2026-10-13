@@ -179,9 +179,6 @@ catalogs:
     fast-check:
       specifier: 4.10.2
       version: 4.10.2
-    graphql:
-      specifier: 17.0.2
-      version: 17.0.2
     typescript:
       specifier: 7.0.2
       version: 7.0.2
@@ -242,9 +239,6 @@ importers:
       '@acid-cat/catalog':
         specifier: workspace:*
         version: link:../catalog/typescript
-      '@acid-cat/graphql':
-        specifier: workspace:*
-        version: link:../graphql
       '@acid-cat/spec':
         specifier: workspace:*
         version: link:../spec
@@ -270,9 +264,6 @@ importers:
       '@acid-cat/catalog':
         specifier: workspace:*
         version: link:../catalog/typescript
-      '@acid-cat/graphql':
-        specifier: workspace:*
-        version: link:../graphql
       '@acid-cat/spec':
         specifier: workspace:*
         version: link:../spec
@@ -289,22 +280,6 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.6.7
-
-  packages/graphql:
-    dependencies:
-      '@acid-cat/spec':
-        specifier: workspace:*
-        version: link:../spec
-      graphql:
-        specifier: 'catalog:'
-        version: 17.0.2
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
 
   packages/spec:
     devDependencies:
@@ -519,10 +494,6 @@ packages:
     resolution: {integrity: sha512-iK2f+YrcmoeGqk6fA0ea2bptcu/itMIm4NfEozq6N25+aG6h7s5HZbB/k1aV7b5w5sFLMCbbtRUsTVR+BgC3xw==}
     engines: {node: '>=12.17.0'}
 
-  graphql@17.0.2:
-    resolution: {integrity: sha512-FRWbddMxfkjiB7z+aQDWIR+E34xo9I8c9mtK2RPv8PmMzKRvrdsreHL/Ui/TmwHJfhHChEtsFPyMHKI+xuarQQ==}
-    engines: {node: ^22.0.0 || ^24.0.0 || ^25.0.0 || >=26.0.0}
-
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
 
@@ -722,8 +693,6 @@ snapshots:
   fast-check@4.10.2:
     dependencies:
       pure-rand: 8.4.2
-
-  graphql@17.0.2: {}
 
   isexe@2.0.0: {}
 

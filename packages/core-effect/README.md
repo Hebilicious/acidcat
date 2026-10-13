@@ -49,7 +49,6 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 | `Session` | [Invocation](../../spec/invocation.md) | `Session.make(app, { target })`: `invoke` for untrusted input, `execute` for typed calls |
 | `Mcp` | [MCP](../../spec/bindings/mcp.md) | `Mcp.toWebHandler(app, layer, options)`, on `effect/ai/McpServer` |
 | `Http` | [HTTP](../../spec/bindings/http.md) | `Http.toWebHandler(app, layer, options)` |
-| `Graphql` | [GraphQL](../../spec/bindings/graphql.md) | `Graphql.toWebHandler(app, layer, options)` |
 | `Cli` | [CLI](../../spec/bindings/cli.md) | `Cli.main(app, layer, options)`, on `effect/cli` |
 | `WebMcp` | [WebMCP](../../spec/bindings/webmcp.md) | `WebMcp.install(session)` |
 

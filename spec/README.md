@@ -1,6 +1,6 @@
 # AcidCat specification
 
-AcidCat describes what an application can do in one document, the **catalog**. Each surface of the application comes from the catalog, in the language that the surface needs. Examples of surfaces are a web app, a desktop widget, a mobile app, a command line, an MCP server, and a REST or GraphQL API.
+AcidCat describes what an application can do in one document, the **catalog**. Each surface of the application comes from the catalog, in the language that the surface needs. Examples of surfaces are a web app, a desktop widget, a mobile app, a command line, an MCP server, and an HTTP API.
 
 ```
                          catalog

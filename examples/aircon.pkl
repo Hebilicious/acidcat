@@ -22,7 +22,7 @@ targets {
   }
   ["api"] {
     description = "Home-automation systems and scripts."
-    bindings { "http"; "graphql" }
+    bindings { "http" }
   }
 }
 

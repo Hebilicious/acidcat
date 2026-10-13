@@ -5,8 +5,7 @@
   "targets": {
     "api": {
       "bindings": [
-        "http",
-        "graphql"
+        "http"
       ],
       "description": "Home-automation systems and scripts."
     },

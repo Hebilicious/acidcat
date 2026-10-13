@@ -8,7 +8,6 @@
   "exports": "./src/index.ts",
   "dependencies": {
     "@acid-cat/catalog": "workspace:*",
-    "@acid-cat/graphql": "workspace:*",
     "@acid-cat/spec": "workspace:*",
     "@effect/platform-node": "catalog:",
     "effect": "catalog:"

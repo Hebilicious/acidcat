@@ -73,12 +73,6 @@ export const isId = (id: string): boolean => id.length <= 128 && ID_PATTERN.test
 /** The path of the CLI command for an id: `aircon.power.set` → `["aircon", "power", "set"]`. */
 export const commandPath = (id: string): readonly string[] => id.split(".");
 
-/** The GraphQL field for an id: `aircon.power.set` → `airconPowerSet`. */
-export const graphqlFieldName = (id: string): string =>
-  id
-    .split(/[.-]/)
-    .map((word, index) => (index === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1)))
-    .join("");
 
 // ---------------------------------------------------------------------------------------------------------------
 // CLI binding (spec/bindings/cli.md#outcomes)

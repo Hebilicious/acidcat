@@ -23,7 +23,7 @@ func Catalog() *catalog.Catalog {
 		}).
 		Target("cli", catalog.Target{Bindings: []string{"cli"}}).
 		Target("mcp", catalog.Target{Description: "Agents, through an MCP server.", Bindings: []string{"mcp"}}).
-		Target("api", catalog.Target{Description: "Home-automation systems and scripts.", Bindings: []string{"http", "graphql"}})
+		Target("api", catalog.Target{Description: "Home-automation systems and scripts.", Bindings: []string{"http"}})
 
 	mode := c.Type("Mode", schema{"enum": []any{"cool", "heat", "dry", "fan", "auto"}})
 	fanSpeed := c.Type("FanSpeed", schema{"enum": []any{"auto", "low", "medium", "high"}})

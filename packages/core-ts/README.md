@@ -53,7 +53,6 @@ Standard Schema does not convert to JSON Schema. Give the converter of your sche
 | `createSession(app, options)` | [TypeScript](../../spec/bindings/typescript.md) | A session with a handle for each capability in the view |
 | `mcpHandler(app, options)` | [MCP](../../spec/bindings/mcp.md) | `(request: Request) => Promise<Response>` |
 | `httpHandler(app, options)` | [HTTP](../../spec/bindings/http.md) | `(request: Request) => Promise<Response>` |
-| `graphqlHandler(app, options)` | [GraphQL](../../spec/bindings/graphql.md) | `(request: Request) => Promise<Response>` |
 | `cliMain(app, options)`, `runCli(…)` | [CLI](../../spec/bindings/cli.md) | The command line of the process, or an exit code |
 | `installWebMcp(session)` | [WebMCP](../../spec/bindings/webmcp.md) | Tools in the page, with a status |
 

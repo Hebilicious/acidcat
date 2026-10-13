@@ -9,10 +9,9 @@ targets {
   ["mcp"] { bindings { "mcp" } }
   ["cli"] { bindings { "cli" } }
   ["api"] { bindings { "http" } }
-  ["graphql"] { bindings { "graphql" } }
 }
 
-local allTargets = new Listing { "app"; "mcp"; "cli"; "api"; "graphql" }
+local allTargets = new Listing { "app"; "mcp"; "cli"; "api" }
 
 local text = new Dynamic {
   type = "object"

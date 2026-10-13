@@ -12,7 +12,7 @@ export const switchLayer = Layer.effect(Switch, SubscriptionRef.make(true));
 const Text = Schema.Struct({ text: Schema.String });
 const Refused = Schema.TaggedStruct("Refused", { reason: Schema.String });
 
-const everywhere = ["app", "mcp", "cli", "api", "graphql"];
+const everywhere = ["app", "mcp", "cli", "api"];
 
 export const fixture = App.make({
   title: "Fixture",
@@ -21,7 +21,6 @@ export const fixture = App.make({
     mcp: { bindings: ["mcp"] },
     cli: { bindings: ["cli"] },
     api: { bindings: ["http"] },
-    graphql: { bindings: ["graphql"] },
   },
   capabilities: [
     Capability.make({

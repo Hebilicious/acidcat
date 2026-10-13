@@ -31,7 +31,7 @@ export interface Context {
 export const toJsonSchema = (schema: unknown) => z.toJSONSchema(schema as z.ZodType, { target: "draft-2020-12" });
 
 const Text = z.object({ text: z.string() });
-const everywhere = ["app", "mcp", "cli", "api", "graphql"];
+const everywhere = ["app", "mcp", "cli", "api"];
 
 export const fixture = defineApp<Context>({
   title: "Fixture",
@@ -40,7 +40,6 @@ export const fixture = defineApp<Context>({
     mcp: { bindings: ["mcp"] },
     cli: { bindings: ["cli"] },
     api: { bindings: ["http"] },
-    graphql: { bindings: ["graphql"] },
   },
   capabilities: [
     defineCapability({

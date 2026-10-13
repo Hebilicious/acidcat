@@ -49,7 +49,7 @@ pub fn aircon_catalog() -> Catalog {
             "api",
             Target {
                 description: Some("Home-automation systems and scripts.".into()),
-                bindings: strings(&["http", "graphql"]),
+                bindings: strings(&["http"]),
                 ..Target::default()
             },
         );

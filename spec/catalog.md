@@ -97,7 +97,7 @@ An id has two or more segments, with a dot between them. Each segment matches `[
 
 The first segment is the **namespace** of the capability.
 
-Each binding makes its surface names from the id. For example, `aircon.power.set` becomes the command `aircon power set` and the GraphQL field `airconPowerSet`.
+Each binding makes its surface names from the id. For example, `aircon.power.set` becomes the command `aircon power set` and the HTTP route `POST /capabilities/aircon.power.set`.
 
 ## Failures
 

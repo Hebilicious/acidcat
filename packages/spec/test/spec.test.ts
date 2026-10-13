@@ -7,7 +7,6 @@ import {
   cliExitCode,
   commandPath,
   fail,
-  graphqlFieldName,
   httpStatus,
   isId,
   mcpToolResult,
@@ -23,7 +22,6 @@ test("ids become surface names", () => {
   assert.ok(!isId("Aircon.power"));
   assert.ok(!isId("aircon"));
   assert.deepEqual(commandPath("aircon.power.set"), ["aircon", "power", "set"]);
-  assert.equal(graphqlFieldName("economy.crow-coin.trade-catalog.inspect"), "economyCrowCoinTradeCatalogInspect");
 });
 
 test("each outcome has its exit code, status code and MCP result", () => {

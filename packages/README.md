@@ -6,7 +6,6 @@ Each package is a Moon project with a `test` task. The TypeScript packages share
 | --- | --- | --- | --- |
 | Command line | [`cli/`](cli) | npm `@acid-cat/cli` | Check, format and view catalogs, and test implementations with `acid-cat conform` |
 | Specification data | [`spec/`](spec) | npm `@acid-cat/spec` | The fixed details of the specification as data and pure functions, with no dependencies |
-| GraphQL binding | [`graphql/`](graphql) | npm `@acid-cat/graphql` | The GraphQL schema of a view, and the execution of requests. Both cores use it. It depends only on graphql-js |
 | Core for Effect | [`core-effect/`](core-effect) | npm `@acid-cat/core-effect` | Serve capabilities, written fully in Effect: capabilities are Effect programs, sessions are scopes, services are layers |
 | Core for TypeScript | [`core-ts/`](core-ts) | npm `@acid-cat/core-ts` | Serve capabilities in plain TypeScript, with no Effect dependency: capabilities return promises, inputs use Standard Schema |
 | Catalog library for TypeScript | [`catalog/typescript/`](catalog/typescript) | npm `@acid-cat/catalog` | Write a catalog in TypeScript |
@@ -17,7 +16,7 @@ Each package is a Moon project with a `test` task. The TypeScript packages share
 
 ## Two cores
 
-Each core is complete in its own style. Neither core wraps the other. Both cores serve the five protocol bindings: MCP, HTTP, GraphQL, CLI and WebMCP. Both cores use `@acid-cat/spec` for the fixed details, both write the catalog of an application from its code, and both pass all checks of `acid-cat conform`.
+Each core is complete in its own style. Neither core wraps the other. Both cores serve the four protocol bindings: MCP, HTTP, CLI and WebMCP. Both cores use `@acid-cat/spec` for the fixed details, both write the catalog of an application from its code, and both pass all checks of `acid-cat conform`.
 
 | | `@acid-cat/core-effect` | `@acid-cat/core-ts` |
 | --- | --- | --- |

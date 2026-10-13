@@ -18,11 +18,6 @@
         "cli"
       ]
     },
-    "graphql": {
-      "bindings": [
-        "graphql"
-      ]
-    },
     "mcp": {
       "bindings": [
         "mcp"
@@ -36,8 +31,7 @@
         "app",
         "mcp",
         "cli",
-        "api",
-        "graphql"
+        "api"
       ]
     },
     "fixture.echo": {
@@ -46,8 +40,7 @@
         "app",
         "mcp",
         "cli",
-        "api",
-        "graphql"
+        "api"
       ],
       "input": {
         "properties": {
@@ -85,8 +78,7 @@
         "app",
         "mcp",
         "cli",
-        "api",
-        "graphql"
+        "api"
       ],
       "failures": {
         "Refused": {
@@ -113,8 +105,7 @@
         "app",
         "mcp",
         "cli",
-        "api",
-        "graphql"
+        "api"
       ],
       "input": {
         "properties": {
@@ -134,8 +125,7 @@
         "app",
         "mcp",
         "cli",
-        "api",
-        "graphql"
+        "api"
       ],
       "input": {
         "properties": {
@@ -155,8 +145,7 @@
         "app",
         "mcp",
         "cli",
-        "api",
-        "graphql"
+        "api"
       ]
     }
   }

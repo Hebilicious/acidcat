@@ -82,7 +82,7 @@ export const aircon = defineApp<Context>({
     taskbar: { description: "A desktop taskbar widget showing the status and a power toggle.", bindings: ["typescript"] },
     cli: { bindings: ["cli"] },
     mcp: { description: "Agents, through an MCP server.", bindings: ["mcp"] },
-    api: { description: "Home-automation systems and scripts.", bindings: ["http", "graphql"] },
+    api: { description: "Home-automation systems and scripts.", bindings: ["http"] },
   },
   capabilities: [
     capability({

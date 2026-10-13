@@ -25,18 +25,6 @@ export function httpInvoke(base: string): Invoke {
   };
 }
 
-export function graphqlInvoke(url: string): Invoke {
-  return async (id, input, signal) => {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: "mutation ($id: String!, $input: JSON) { acidcatInvoke(id: $id, input: $input) }", variables: { id, input } }),
-      ...(signal ? { signal } : {}),
-    });
-    return ((await response.json()) as { data: { acidcatInvoke: Outcome<unknown, unknown> } }).data.acidcatInvoke;
-  };
-}
-
 export async function mcpInvoke(url: string): Promise<{ readonly invoke: Invoke; close(): Promise<void> }> {
   const client = await mcpClient(url);
   return {

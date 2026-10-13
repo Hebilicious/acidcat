@@ -18,7 +18,7 @@ export function airconCatalog(): Catalog {
     })
     .target("cli", { bindings: ["cli"] })
     .target("mcp", { description: "Agents, through an MCP server.", bindings: ["mcp"] })
-    .target("api", { description: "Home-automation systems and scripts.", bindings: ["http", "graphql"] });
+    .target("api", { description: "Home-automation systems and scripts.", bindings: ["http"] });
 
   const mode = catalog.type("Mode", { enum: ["cool", "heat", "dry", "fan", "auto"] });
   const fanSpeed = catalog.type("FanSpeed", { enum: ["auto", "low", "medium", "high"] });

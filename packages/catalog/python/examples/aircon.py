@@ -26,7 +26,7 @@ def aircon_catalog() -> Catalog:
     )
     catalog.target("cli", bindings=["cli"])
     catalog.target("mcp", description="Agents, through an MCP server.", bindings=["mcp"])
-    catalog.target("api", description="Home-automation systems and scripts.", bindings=["http", "graphql"])
+    catalog.target("api", description="Home-automation systems and scripts.", bindings=["http"])
 
     mode = catalog.type("Mode", {"enum": ["cool", "heat", "dry", "fan", "auto"]})
     fan_speed = catalog.type("FanSpeed", {"enum": ["auto", "low", "medium", "high"]})

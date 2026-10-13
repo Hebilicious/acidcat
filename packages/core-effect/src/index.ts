@@ -5,4 +5,3 @@ export * as Mcp from "./Mcp.ts";
 export * as Http from "./Http.ts";
 export * as Cli from "./Cli.ts";
 export * as WebMcp from "./WebMcp.ts";
-export * as Graphql from "./Graphql.ts";

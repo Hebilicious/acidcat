@@ -31,7 +31,6 @@ Describe what your application can do one time. Serve it to your app, your comma
 | 🤖 MCP server | the tool `aircon.temperature.set` |
 | 🌐 WebMCP | an in-page tool for browser agents |
 | 🔌 HTTP | `POST /capabilities/aircon.temperature.set` |
-| 🧬 GraphQL | `mutation { airconTemperatureSet(input: { celsius: 22 }) }` |
 | 🧩 TypeScript | a typed handle: `execute({ celsius: 22 })` |
 
 The catalog is checked at build time. Programs do not read it at run time.
@@ -84,7 +83,7 @@ The same catalog in [TypeScript](packages/catalog/typescript/examples/aircon.ts)
 | [Overview and vocabulary](spec/README.md) | The terms and the documents |
 | [Catalog](spec/catalog.md) | Targets, capabilities, types, views, canonical form |
 | [Invocation](spec/invocation.md) | Outcomes, availability, sessions, cancellation |
-| [Bindings](spec/bindings/README.md) | TypeScript, WebMCP, MCP, CLI, HTTP, GraphQL |
+| [Bindings](spec/bindings/README.md) | TypeScript, WebMCP, MCP, CLI, HTTP |
 | [Extensions](spec/extensions/README.md) | Attachments, pagination |
 | [Conformance](spec/conformance.md) | How to test a catalog and an implementation |
 
@@ -95,7 +94,6 @@ The same catalog in [TypeScript](packages/catalog/typescript/examples/aircon.ts)
 | [`@acid-cat/core-effect`](packages/core-effect) | ⚡ Serve capabilities, written fully in Effect |
 | [`@acid-cat/core-ts`](packages/core-ts) | 🟦 Serve capabilities in plain TypeScript, with no Effect dependency |
 | [`@acid-cat/spec`](packages/spec) | 📐 The fixed details of the specification, as data |
-| [`@acid-cat/graphql`](packages/graphql) | 🧬 The GraphQL binding, used by both cores |
 | [`@acid-cat/cli`](packages/cli) | 🛠️ `acid-cat check`, `format`, `view` and `conform` |
 | [`@acid-cat/catalog`](packages/catalog/typescript) | ✍️ Write a catalog in TypeScript |
 | [`acid-cat-catalog`](packages/catalog/python) | 🐍 Write a catalog in Python |

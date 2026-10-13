@@ -47,7 +47,7 @@ The switch MUST be on when the tests start.
 ## `acid-cat conform`
 
 ```sh
-acid-cat conform --mcp <url> --http <base url> --graphql <url> --cli "<command>"
+acid-cat conform --mcp <url> --http <base url> --cli "<command>"
 ```
 
 Give one or more bindings. For each binding, `acid-cat conform` tests the rules above. It uses the official MCP client for MCP, and sends requests that a client never sends to test rejections. Through each remote binding, property-based tests examine two guarantees of [Invocation](invocation.md#cancellation-and-concurrency) with random sets of calls: each call gets exactly its own outcome, and the cancellation of one call does not change other calls.
