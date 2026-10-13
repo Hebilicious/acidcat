@@ -81,4 +81,4 @@ The capnweb API can keep its typed `check` and `next` methods as an application 
 
 1. Both repositories generate, commit and check their catalogs. Nothing else changes yet, and both stay green.
 2. Each binding change lands behind `acid-cat conform`, one binding at a time.
-3. Once both repositories pass the kit, either can replace its kernel with [`@acid-cat/core`](../packages/README.md#core-and-effect), through `@acid-cat/effect`.
+3. Once both repositories pass the kit, either can replace its kernel with [`@acid-cat/core-effect`](../packages/README.md#two-cores).

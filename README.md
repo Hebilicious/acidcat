@@ -15,7 +15,7 @@ A monorepo: Moon runs every task, and proto pins every toolchain.
 | `spec/` | The specification: the catalog, invocation, bindings, extensions, conformance, and adoption |
 | `schemas/` | JSON Schemas for the catalog and for outcomes |
 | `examples/` | Complete catalogs, written in Pkl, with the canonical JSON each one renders to |
-| `packages/` | What this repository distributes, under the name `acid-cat`: the `acid-cat` command line, and the catalog libraries for TypeScript, Python, Go, Rust and Pkl. The core and its Effect integration will join them. See [packages/README.md](packages/README.md) |
+| `packages/` | What this repository distributes, under the name `acid-cat`: the `acid-cat` command line, and the catalog libraries for TypeScript, Python, Go, Rust and Pkl. Two cores will join them: one written in Effect, one in plain TypeScript. See [packages/README.md](packages/README.md) |
 | `adoption/` | Tools that bring existing implementations onto the specification, such as the catalog exporter for Jarette's Box |
 | `scripts/` | Repository checks behind the Moon tasks |
 | `history/` | How the first decisions were reached from Jarette's Box and heb-stack |

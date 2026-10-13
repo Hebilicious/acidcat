@@ -10,16 +10,17 @@ What this repository builds and distributes, all under the name `acid-cat`. Ever
 | Catalog library, Go | [`catalog/go/`](catalog/go) | Go module `acid-cat.dev/catalog` | Write a catalog |
 | Catalog library, Rust | [`catalog/rust/`](catalog/rust) | crates.io `acid-cat-catalog` | Write a catalog |
 | Catalog module, Pkl | [`catalog/pkl/`](catalog/pkl) | Pkl package | Write a catalog |
-| Core | `core/`, planned | npm `@acid-cat/core` | The reference implementation: serve a catalog's capabilities, with no dependency on Effect |
-| Effect | `effect/`, planned | npm `@acid-cat/effect` | Define capabilities with Effect, and run them on the core |
+| Core for Effect | `core-effect/`, planned | npm `@acid-cat/core-effect` | Serve a catalog's capabilities, written entirely in Effect |
+| Core for TypeScript | `core-ts/`, planned | npm `@acid-cat/core-ts` | Serve a catalog's capabilities in plain TypeScript, with no Effect in its dependencies |
+| Spec details | `spec/`, planned | npm `@acid-cat/spec` | The specification's fixed details as data and pure functions, with no dependencies, shared by both cores |
 
 Nothing is published yet. Every package is marked private until the user decides to release.
 
-## Several catalog libraries, one core
+## Several catalog libraries, two cores
 
 **Catalog libraries in several languages.** Writing a catalog is how every project starts, in whatever language it uses. A catalog library is small, has no runtime behaviour, and is held to identical output by two shared fixtures. Supporting several of them costs little and makes adoption easy.
 
-**One core, in TypeScript.** The core serves capabilities: handles, sessions, invocation, availability, and the WebMCP, MCP, CLI and HTTP bindings. That is real behaviour, and maintaining it in several languages would multiply the work and the bugs. AcidCat ships one, in TypeScript, because the first two implementations (Jarette's Box and heb-stack) are TypeScript. Other languages implement the specification themselves, and `acid-cat conform` proves that they do.
+**Two cores, both TypeScript.** A core serves capabilities: handles, sessions, invocation, availability, and the WebMCP, MCP, CLI and HTTP bindings. TypeScript users split into two groups that will not share one. Effect users want their whole program in Effect. Everyone else wants no Effect in their dependencies. A core that compromises for either group gets rewritten by that group, so AcidCat ships one core for each (see [Two cores](#two-cores)). Other languages implement the specification themselves, and `acid-cat conform` proves that they do.
 
 ## The command line
 
@@ -32,18 +33,21 @@ Nothing is published yet. Every package is marked private until the user decides
 | `acid-cat view <catalog.json> <target>` | Print the view of one target |
 | `acid-cat conform …` (planned) | Run the conformance tests against a running implementation: an MCP endpoint, an HTTP API, a CLI, or a page with WebMCP. They use a fixture catalog that the implementation serves, and property-based tests for the guarantees in [Invocation](../spec/invocation.md) |
 
-## Core and Effect
+## Two cores
 
-One implementation, with two ways to write capabilities for it:
+Each core is complete in its own style. Neither wraps the other.
 
-- **`@acid-cat/core`** is plain TypeScript. A capability's `run` takes its input and an `AbortSignal` and returns a promise of its result. Inputs are validated with any library that implements [Standard Schema](https://standardschema.dev), such as Zod, Valibot or ArkType. The bindings are entry points of the same package: `@acid-cat/core/webmcp`, `/mcp`, `/cli` and `/http`. Applications that do not use Effect never install it.
-- **`@acid-cat/effect`** depends on the core and on Effect. It defines capabilities with Effect Schema and Effect programs, runs them in an Effect runtime with the application's layers, and hands them to the core. Jarette's Box and heb-stack use this one.
+- **`@acid-cat/core-effect`** is written entirely in Effect. A capability is an Effect program with Effect Schema codecs. Sessions are scopes. The application's services are layers. The bindings are Effect services: an MCP server on `effect/ai`, the WebMCP adapter, a CLI on `effect/cli`, and an HTTP API. An Effect application never leaves Effect. Jarette's Box and heb-stack use this core.
+- **`@acid-cat/core-ts`** is plain TypeScript, and none of its dependencies is Effect. A capability's `run` takes its input and an `AbortSignal` and returns a promise of its result. Inputs are validated with any library that implements [Standard Schema](https://standardschema.dev), such as Zod, Valibot or ArkType. The bindings are entry points of the same package: `@acid-cat/core-ts/webmcp`, `/mcp`, `/cli` and `/http`.
 
-Two separate packages keep Effect out of the core's dependencies without optional peer dependencies. And because there is one core, there is one implementation for `acid-cat conform` to test, rather than two that drift apart.
+Two implementations could drift apart. Two things keep them together:
 
-### Where the core comes from
+- **`acid-cat conform`.** Both cores must pass the same conformance tests before either is released.
+- **`@acid-cat/spec`.** The details the specification fixes are written once, as plain data and pure functions with no dependencies: outcome and call-failure types; MCP result shapes; CLI exit codes; HTTP statuses; how an id becomes a tool name, a command path or a GraphQL field. Both cores import them instead of restating them. A package with no dependencies costs an Effect application nothing.
 
-The core follows heb-stack's design at `ae9c084a4c25` (`packages/acidcat-kernel`, the executor in `packages/acidcat`, and `packages/{webmcp-adapter,mcp,cli}`). Its Effect-specific parts move into `@acid-cat/effect`.
+### Where the cores come from
+
+`@acid-cat/core-effect` starts from heb-stack's kernel at `ae9c084a4c25`: `packages/acidcat-kernel`, the executor in `packages/acidcat`, and `packages/{webmcp-adapter,mcp,cli}`. It does not start from Jarette's Box's kernel:
 
 | | heb-stack | Jarette's Box |
 | --- | --- | --- |
@@ -53,7 +57,7 @@ The core follows heb-stack's design at `ae9c084a4c25` (`packages/acidcat-kernel`
 | WebMCP keeps the last good set when a pass fails | Yes | No: a failed pass can leave registrations stranded |
 
 Steps:
-1. Write the core's kernel in plain TypeScript, following heb-stack's handles, sessions and executor.
-2. Write the bindings: give call failures their `kind`, follow the outcome shapes of [the MCP binding](../spec/bindings/mcp.md) and the exit codes of [the CLI binding](../spec/bindings/cli.md), and add [the HTTP binding](../spec/bindings/http.md).
-3. Move heb-stack's Effect definitions and the catalog generator into `@acid-cat/effect`. The generator is the general form of [the JB exporter](../adoption/jarettes-box/generate-acid-cat-catalog-export.ts).
-4. Pass `acid-cat conform`. heb-stack switches first, then Jarette's Box.
+1. Write `@acid-cat/spec` from the binding documents.
+2. Build `@acid-cat/core-effect` from heb-stack's kernel and adapters, without the `primes` domain. Give call failures their `kind`, take the binding details from `@acid-cat/spec`, add the HTTP binding, and add a catalog generator for Effect definitions, the general form of [the JB exporter](../adoption/jarettes-box/generate-acid-cat-catalog-export.ts).
+3. Pass `acid-cat conform`. heb-stack switches first, then Jarette's Box.
+4. Build `@acid-cat/core-ts` on the same design, without Effect, and pass the same tests.
