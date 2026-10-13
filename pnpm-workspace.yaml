@@ -2,6 +2,7 @@ packages:
   - "packages/spec"
   - "packages/cli"
   - "packages/core-effect"
+  - "packages/core-ts"
   - "packages/catalog/typescript"
 
 # Every dependency is pinned once, here. Packages name `catalog:` and never a version.
@@ -10,3 +11,7 @@ catalog:
   "@types/node": 26.6.5
   effect: 4.0.3
   typescript: 7.0.2
+  zod: 4.6.7
+
+minimumReleaseAgeExclude:
+  - zod@4.6.7

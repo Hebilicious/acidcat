@@ -1,0 +1,19 @@
+{
+  "name": "@acid-cat/core-ts",
+  "version": "0.1.0",
+  "description": "Serve AcidCat capabilities in plain TypeScript, with no Effect dependency.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@acid-cat/catalog": "workspace:*",
+    "@acid-cat/spec": "workspace:*"
+  },
+  "devDependencies": {
+    "@acid-cat/cli": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "zod": "catalog:"
+  }
+}

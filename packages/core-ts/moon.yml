@@ -1,0 +1,22 @@
+language: "typescript"
+layer: "library"
+
+project:
+  title: "@acid-cat/core-ts"
+  description: "Serve AcidCat capabilities in plain TypeScript, with no Effect dependency. npm package: @acid-cat/core-ts."
+
+toolchains:
+  default: ["javascript", "node", "pnpm"]
+
+tasks:
+  test:
+    description: "Test sessions, handles and the MCP, HTTP, CLI and WebMCP bindings, with the test application and the air conditioner."
+    command: "node"
+    args: ["--test", "--test-timeout=60000", "test/"]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "examples/**/*.ts", "/examples/*.acidcat.json", "/packages/spec/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/cli/src/**/*.ts"]
+
+  typecheck:
+    description: "Type-check the sources, tests and examples."
+    command: "tsc"
+    args: ["-p", "."]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "examples/**/*.ts", "tsconfig.json", "/tsconfig.base.json"]

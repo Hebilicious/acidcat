@@ -23,9 +23,10 @@ If `.local/AGENTS.md` exists, read it too. The `.local/` directory contains priv
 
 ## Plan
 
-1. Add `acid-cat conform` to `packages/cli`: a test catalog, tests for each binding, and property-based tests for the guarantees in `spec/invocation.md`.
-2. Add `packages/spec` (`@acid-cat/spec`), then `packages/core-effect` (`@acid-cat/core-effect`), then `packages/core-ts` (`@acid-cat/core-ts`). Both cores must pass `acid-cat conform`.
-3. Add a site, as its own Moon project.
+1. Add `acid-cat conform` to `packages/cli`: a test catalog, tests for each binding, and property-based tests for the guarantees in `spec/invocation.md`. Both cores must pass it.
+2. Add a site, as its own Moon project.
+
+When a design decision is made for something that does not exist yet, build it. Do not only record it. At the end of each piece of work, tell what was asked and is not done, and why.
 
 ## Rules
 

@@ -176,6 +176,9 @@ catalogs:
     typescript:
       specifier: 7.0.2
       version: 7.0.2
+    zod:
+      specifier: 4.6.7
+      version: 4.6.7
 
 importers:
 
@@ -243,6 +246,28 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+
+  packages/core-ts:
+    dependencies:
+      '@acid-cat/catalog':
+        specifier: workspace:*
+        version: link:../catalog/typescript
+      '@acid-cat/spec':
+        specifier: workspace:*
+        version: link:../spec
+    devDependencies:
+      '@acid-cat/cli':
+        specifier: workspace:*
+        version: link:../cli
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
 
   packages/spec:
     devDependencies:
@@ -461,6 +486,9 @@ packages:
       utf-8-validate:
         optional: true
 
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
+
 snapshots:
 
   '@effect/platform-node-shared@4.0.3(effect@4.0.3)':
@@ -609,3 +637,5 @@ snapshots:
   undici@8.11.2: {}
 
   ws@8.22.0: {}
+
+  zod@4.6.7: {}
