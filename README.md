@@ -138,7 +138,7 @@ pnpm install
 moon run verify
 ```
 
-CI runs `moon run verify` on each push to `main` and on each pull request.
+CI runs `moon run verify` on each push to `main` and on each pull request. Changes go into `main` only through a pull request, with a squash merge. The `semantic` check requires the pull request title and each commit title to have the form `type(scope): subject`, for example `fix(catalog): reject duplicate ids`.
 
 | Command | Use |
 | --- | --- |

@@ -18,6 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # Moon compares the pull request with `main`, so it needs the full history.
+        with:
+          fetch-depth: 0
 
       # proto installs the tools in .prototools: Moon, Node, pnpm, Pkl, Python, Go and Rust.
       - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
