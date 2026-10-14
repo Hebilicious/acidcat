@@ -3,7 +3,7 @@
  *
  * The check packs each package, and checks each tarball: the license is in it, no `workspace:` or `catalog:` version
  * is left, and each file that `exports` and `bin` name is in it. It then installs the tarballs into an empty project
- * outside the repository, and in that project:
+ * outside the repository, and fails when a peer dependency is not met. In that project, the check:
  *
  * - runs `acid-cat check` on the air-conditioner catalog;
  * - copies the conformance test of each core, with its imports changed to the package names, type-checks it with
@@ -72,10 +72,11 @@ try {
       2,
     ),
   );
-  // Each package depends on the others at their published versions, which may not be on npm yet.
+  // Each package depends on the others at their published versions, which may not be on npm yet. An unmet peer
+  // dependency fails the install, because each user of the packages would see it as a warning.
   writeFileSync(
     path.join(project, "pnpm-workspace.yaml"),
-    `overrides:\n${packed.map(({ name, tarball }) => `  "${name}": "file:${tarball}"\n`).join("")}`,
+    `strictPeerDependencies: true\noverrides:\n${packed.map(({ name, tarball }) => `  "${name}": "file:${tarball}"\n`).join("")}`,
   );
   run("pnpm", ["install"]);
 

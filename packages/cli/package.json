@@ -47,6 +47,7 @@
     "@acid-cat/catalog": "workspace:*",
     "@acid-cat/spec-ts": "workspace:*",
     "@effect/platform-node": "catalog:",
+    "@effect/platform-node-shared": "catalog:",
     "@modelcontextprotocol/client": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:"
