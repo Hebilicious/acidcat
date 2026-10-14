@@ -52,7 +52,7 @@ Each core is complete in its own style. Neither core wraps the other. Both cores
 
 To release, merge the release pull request. release-please then tags each released package and creates its GitHub release, and `release.yml` starts the release workflow of each registry on the new tag. [`release-please-config.json`](../release-please-config.json) holds the settings, and [`.release-please-manifest.json`](../.release-please-manifest.json) holds the version of each package.
 
-Pull requests and tags that a workflow makes start no other workflows. Thus `release.yml` starts the checks of the release pull request, and the release workflows, with `workflow_dispatch`. The repository setting "Allow GitHub Actions to create and approve pull requests" must be on.
+release-please makes the release pull request with the token of the workflow. GitHub holds the checks of such a pull request until someone approves them, so `release.yml` approves them with [`scripts/approve-pull-request-runs.sh`](../scripts/approve-pull-request-runs.sh). Tags that a workflow makes start no other workflows, so `release.yml` starts the release workflows with `workflow_dispatch`. The repository setting "Allow GitHub Actions to create and approve pull requests" must be on.
 
 Each registry has its own release workflow. A tag that is pushed by hand on `main` also starts it. The version in the tag must be the version in the package files.
 

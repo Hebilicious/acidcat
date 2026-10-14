@@ -2,17 +2,9 @@ name: Semantic
 
 # The pull request title becomes the commit on main, because the repository allows squash merges only.
 # The commits in the pull request follow the same form.
-#
-# The release workflow starts this check with `workflow_dispatch` for the release pull request. GitHub does not run
-# workflows for pull requests that a workflow opens.
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
-  workflow_dispatch:
-    inputs:
-      pull-request:
-        description: "The number of the pull request to check"
-        required: true
 
 permissions:
   contents: read
@@ -35,7 +27,7 @@ jobs:
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
-          NUMBER: ${{ github.event.pull_request.number || inputs.pull-request }}
+          NUMBER: ${{ github.event.pull_request.number }}
         run: |
           gh pr view "$NUMBER" --json title,baseRefOid,headRefOid \
             --jq '"title=\(.title)\nbase=\(.baseRefOid)\nhead=\(.headRefOid)"' >> "$GITHUB_OUTPUT"
