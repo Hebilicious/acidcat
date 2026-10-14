@@ -1,0 +1,22 @@
+name: Approve probe
+on:
+  push:
+    branches: [ci-test/approve-probe]
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name probe && git config user.email probe@example.com
+          git checkout -b ci-test/approve-probe-pr
+          echo probe > probe.txt && git add probe.txt && git commit -qm "test(ci): approval probe"
+          git push -q origin ci-test/approve-probe-pr
+          number=$(gh pr create --base main --head ci-test/approve-probe-pr --title "test(ci): approval probe" --body "Throwaway. Tests that a workflow can approve the runs of a pull request that it opened." | grep -oE '[0-9]+$')
+          scripts/approve-pull-request-runs.sh "$number"
