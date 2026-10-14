@@ -6,6 +6,9 @@
  * outside the repository, and fails when a peer dependency is not met. In that project, the check:
  *
  * - runs `acid-cat check` on the air-conditioner catalog;
+ * - bundles a web page that imports `Session`, `Handles` and `WebMcp` from `@acid-cat/core-effect`, once from the main
+ *   entry point and once from the entry point of each module. The bundle must not contain `effect/cli` or `effect/ai`:
+ *   a page pays only for the modules that it imports;
  * - copies the conformance test of each core, with its imports changed to the package names, type-checks it with
  *   strict options and the declarations of all libraries, and runs it. `acid-cat conform` then tests both cores
  *   through MCP, HTTP, CLI and WebMCP, all from the installed packages.
@@ -16,6 +19,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { build } from "esbuild";
 
 import { npmPackages, pack, packedManifest, root } from "./npm-packages.ts";
 
@@ -81,6 +85,38 @@ try {
   run("pnpm", ["install"]);
 
   run(path.join(project, "node_modules/.bin/acid-cat"), ["check", path.join(root, "examples/aircon.acidcat.json")]);
+
+  const pages = {
+    "main entry point": `import { Session, Handles, WebMcp } from "@acid-cat/core-effect";`,
+    "module entry points": [
+      `import * as Session from "@acid-cat/core-effect/Session";`,
+      `import * as Handles from "@acid-cat/core-effect/Handles";`,
+      `import * as WebMcp from "@acid-cat/core-effect/WebMcp";`,
+    ].join("\n"),
+  };
+  for (const [name, imports] of Object.entries(pages)) {
+    const page = path.join(project, "page.ts");
+    writeFileSync(page, `${imports}\nconsole.log(Session.make, Handles.make, WebMcp.install);\n`);
+    const { metafile } = await build({
+      entryPoints: [page],
+      absWorkingDir: project,
+      bundle: true,
+      write: false,
+      minify: true,
+      platform: "browser",
+      format: "esm",
+      metafile: true,
+      logLevel: "error",
+    });
+    const bundled = Object.values(metafile.outputs).flatMap((output) =>
+      Object.entries(output.inputs).filter(([, input]) => input.bytesInOutput > 0).map(([file]) => file),
+    );
+    for (const module of ["cli", "ai"]) {
+      if (bundled.some((file) => file.includes(`/effect/dist/${module}/`))) {
+        problems.push(`@acid-cat/core-effect: a web page that imports from the ${name} bundles effect/${module}`);
+      }
+    }
+  }
 
   for (const core of ["core-effect", "core-ts"]) {
     mkdirSync(path.join(project, core));
