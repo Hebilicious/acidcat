@@ -17,6 +17,7 @@
   "homepage": "https://github.com/Hebilicious/acidcat/tree/main/packages/core-effect#readme",
   "bugs": "https://github.com/Hebilicious/acidcat/issues",
   "type": "module",
+  "sideEffects": false,
   "engines": {
     "node": ">=24"
   },
@@ -25,6 +26,14 @@
   ],
   "exports": {
     ".": "./src/index.ts",
+    "./App": "./src/App.ts",
+    "./Capability": "./src/Capability.ts",
+    "./Session": "./src/Session.ts",
+    "./Handles": "./src/Handles.ts",
+    "./Mcp": "./src/Mcp.ts",
+    "./Http": "./src/Http.ts",
+    "./Cli": "./src/Cli.ts",
+    "./WebMcp": "./src/WebMcp.ts",
     "./node": "./src/node.ts"
   },
   "publishConfig": {
@@ -33,6 +42,38 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "./App": {
+        "types": "./dist/App.d.ts",
+        "default": "./dist/App.js"
+      },
+      "./Capability": {
+        "types": "./dist/Capability.d.ts",
+        "default": "./dist/Capability.js"
+      },
+      "./Session": {
+        "types": "./dist/Session.d.ts",
+        "default": "./dist/Session.js"
+      },
+      "./Handles": {
+        "types": "./dist/Handles.d.ts",
+        "default": "./dist/Handles.js"
+      },
+      "./Mcp": {
+        "types": "./dist/Mcp.d.ts",
+        "default": "./dist/Mcp.js"
+      },
+      "./Http": {
+        "types": "./dist/Http.d.ts",
+        "default": "./dist/Http.js"
+      },
+      "./Cli": {
+        "types": "./dist/Cli.d.ts",
+        "default": "./dist/Cli.js"
+      },
+      "./WebMcp": {
+        "types": "./dist/WebMcp.d.ts",
+        "default": "./dist/WebMcp.js"
       },
       "./node": {
         "types": "./dist/node.d.ts",
