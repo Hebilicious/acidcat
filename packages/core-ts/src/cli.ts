@@ -1,7 +1,7 @@
 /**
  * The CLI binding (spec/bindings/cli.md): a command line made from the catalog.
  */
-import { bundle, CLI_EXIT_CODES, cliExitCode, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
+import { bundle, CLI_EXIT_CODES, cliExitCode, cliFlags, cliUsage, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
 import type { JsonObject, Outcome } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
@@ -72,12 +72,15 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     if (first === "list") {
       io.stdout(
         JSON.stringify(
-          [...session.handles.values()].map((handle) => ({
-            id: handle.id,
-            description: handle.description,
-            ...handle.availability.getSnapshot(),
-            usage: `${options.name} ${commandPath(handle.id).join(" ")}`,
-          })),
+          [...session.handles.values()].map((handle) => {
+            const input = session.view.capabilities[handle.id]!.input;
+            return {
+              id: handle.id,
+              description: handle.description,
+              ...handle.availability.getSnapshot(),
+              usage: cliUsage(options.name, handle.id, input === undefined ? undefined : bundle(input, types)),
+            };
+          }),
           null,
           2,
         ),
@@ -181,8 +184,5 @@ function help(name: string, paths: readonly string[]): string {
 }
 
 function usage(name: string, path: readonly string[], description: string, schema: JsonObject): string {
-  const properties = Object.keys((schema.properties ?? {}) as object);
-  const required = new Set((schema.required ?? []) as readonly string[]);
-  const flags = properties.map((property) => (required.has(property) ? `--${property} <value>` : `[--${property} <value>]`));
-  return [`Usage: ${name} ${[...path, ...flags].join(" ")}`, "", description].join("\n");
+  return [`Usage: ${[name, ...path, ...cliFlags(schema)].join(" ")}`, "", description].join("\n");
 }

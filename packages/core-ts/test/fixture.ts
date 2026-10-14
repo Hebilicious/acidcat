@@ -31,6 +31,15 @@ export interface Context {
 export const toJsonSchema = (schema: unknown) => z.toJSONSchema(schema as z.ZodType, { target: "draft-2020-12" });
 
 const Text = z.object({ text: z.string() });
+const Flags = z.object({
+  mode: z.enum(["fast", "slow"]),
+  count: z.number().int().optional(),
+  ratio: z.number().optional(),
+  label: z.string().optional(),
+  verbose: z.boolean().optional(),
+  extra: z.record(z.string(), z.unknown()).optional(),
+});
+
 const everywhere = ["app", "mcp", "cli", "api"];
 
 export const fixture = defineApp<Context>({
@@ -102,6 +111,14 @@ export const fixture = defineApp<Context>({
         context.switch.set(on);
         return ok(null);
       },
+    }),
+    defineCapability({
+      id: "fixture.flags",
+      description: "Return the input. The input has one property for each kind of command-line flag.",
+      audience: ["cli"],
+      input: Flags,
+      output: Flags,
+      run: (input) => ok(input),
     }),
   ],
 });

@@ -20,6 +20,19 @@ local text = new Dynamic {
   properties { text { type = "string" } }
 }
 
+local flags = new Dynamic {
+  type = "object"
+  required { "mode" }
+  properties {
+    mode { type = "string"; `enum` { "fast"; "slow" } }
+    count { type = "integer" }
+    ratio { type = "number" }
+    label { type = "string" }
+    verbose { type = "boolean" }
+    extra { type = "object" }
+  }
+}
+
 capabilities {
   ["fixture.echo"] {
     description = "Return the input text."
@@ -71,5 +84,11 @@ capabilities {
       required { "on" }
       properties { on { type = "boolean" } }
     }
+  }
+  ["fixture.flags"] {
+    description = "Return the input. The input has one property for each kind of command-line flag."
+    audience { "cli" }
+    input = flags
+    output = flags
   }
 }

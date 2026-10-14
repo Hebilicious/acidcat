@@ -92,6 +92,40 @@ export const CLI_EXIT_CODES = {
 export const cliExitCode = (outcome: Outcome<unknown, unknown>): number =>
   isCallFailure(outcome) ? CLI_EXIT_CODES[outcome.kind] : outcome.ok ? CLI_EXIT_CODES.value : CLI_EXIT_CODES.failure;
 
+/**
+ * The flags of a command, as `usage` writes them (spec/bindings/cli.md#commands): required flags first, each group in
+ * code point order of the names. `input` is the bundled input schema.
+ */
+export function cliFlags(input: JsonObject): string[] {
+  const properties = (input.properties ?? {}) as { readonly [name: string]: JsonObject };
+  const definitions = (input.$defs ?? {}) as { readonly [name: string]: JsonObject };
+  const required = new Set((input.required ?? []) as readonly string[]);
+  const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  const names = Object.keys(properties).sort(byName);
+  return [...names.filter((name) => required.has(name)), ...names.filter((name) => !required.has(name))].map((name) => {
+    const reference = properties[name]!.$ref;
+    const target = typeof reference === "string" ? REFERENCE.exec(reference)?.[1] : undefined;
+    const property = (target === undefined ? undefined : definitions[target]) ?? properties[name]!;
+    const flag = property.type === "boolean" ? `--${name}` : `--${name} <${flagValue(property)}>`;
+    return required.has(name) ? flag : `[${flag}]`;
+  });
+}
+
+function flagValue(property: JsonObject): string {
+  if (Array.isArray(property.enum) && property.enum.every((value) => typeof value === "string")) return property.enum.join("|");
+  if (property.type === "integer" || property.type === "number" || property.type === "string") return property.type;
+  return "json";
+}
+
+/**
+ * The `usage` of a capability in `list` (spec/bindings/cli.md#commands). `input` is the bundled input schema, or
+ * `undefined` when the capability has no input.
+ */
+export function cliUsage(program: string, id: string, input: JsonObject | undefined): string {
+  if (input !== undefined && input.properties === undefined) return `${program} call ${id} '<json>'`;
+  return [program, ...commandPath(id), ...(input === undefined ? [] : cliFlags(input))].join(" ");
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // HTTP binding (spec/bindings/http.md)
 // ---------------------------------------------------------------------------------------------------------------

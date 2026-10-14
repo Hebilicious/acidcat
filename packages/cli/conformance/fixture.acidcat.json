@@ -67,6 +67,72 @@
       },
       "readOnly": true
     },
+    "fixture.flags": {
+      "description": "Return the input. The input has one property for each kind of command-line flag.",
+      "audience": [
+        "cli"
+      ],
+      "input": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "extra": {
+            "type": "object"
+          },
+          "label": {
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "fast",
+              "slow"
+            ],
+            "type": "string"
+          },
+          "ratio": {
+            "type": "number"
+          },
+          "verbose": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "extra": {
+            "type": "object"
+          },
+          "label": {
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "fast",
+              "slow"
+            ],
+            "type": "string"
+          },
+          "ratio": {
+            "type": "number"
+          },
+          "verbose": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      }
+    },
     "fixture.hidden": {
       "description": "Only the app target can use this capability.",
       "audience": [

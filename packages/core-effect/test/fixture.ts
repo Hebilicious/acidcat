@@ -25,6 +25,15 @@ export function countedSwitchLayer() {
 const Text = Schema.Struct({ text: Schema.String });
 const Refused = Schema.TaggedStruct("Refused", { reason: Schema.String });
 
+const Flags = Schema.Struct({
+  mode: Schema.Literals(["fast", "slow"]),
+  count: Schema.optionalKey(Schema.Int),
+  ratio: Schema.optionalKey(Schema.Finite),
+  label: Schema.optionalKey(Schema.String),
+  verbose: Schema.optionalKey(Schema.Boolean),
+  extra: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),
+});
+
 const everywhere = ["app", "mcp", "cli", "api"];
 
 export const fixture = App.make({
@@ -94,6 +103,14 @@ export const fixture = App.make({
           yield* SubscriptionRef.set(yield* Switch, on);
           return null;
         }),
+    }),
+    Capability.make({
+      id: "fixture.flags",
+      description: "Return the input. The input has one property for each kind of command-line flag.",
+      audience: ["cli"],
+      input: Flags,
+      output: Flags,
+      run: (input) => Effect.succeed(input),
     }),
   ],
 });
