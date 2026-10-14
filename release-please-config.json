@@ -1,0 +1,44 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "ee9ae364f98238db2b56638f2611e3685e2125cc",
+  "bump-minor-pre-major": true,
+  "pull-request-title-pattern": "chore(release): release ${branch}",
+  "pull-request-header": "Merge this pull request to release the packages below. The release workflow then publishes each one to its registry.",
+  "include-v-in-tag": false,
+  "tag-separator": "@",
+  "packages": {
+    "packages/spec-ts": { "release-type": "node", "component": "@acid-cat/spec-ts" },
+    "packages/catalog/typescript": { "release-type": "node", "component": "@acid-cat/catalog" },
+    "packages/cli": { "release-type": "node", "component": "@acid-cat/cli" },
+    "packages/core-effect": { "release-type": "node", "component": "@acid-cat/core-effect" },
+    "packages/core-ts": { "release-type": "node", "component": "@acid-cat/core-ts" },
+    "packages/catalog/python": {
+      "release-type": "python",
+      "package-name": "acid-cat-catalog",
+      "component": "pypi",
+      "tag-separator": "/",
+      "include-v-in-tag": true
+    },
+    "packages/catalog/rust": {
+      "release-type": "rust",
+      "package-name": "acid-cat-catalog",
+      "component": "crates",
+      "tag-separator": "/",
+      "include-v-in-tag": true
+    },
+    "packages/catalog/go": {
+      "release-type": "go",
+      "component": "packages/catalog/go",
+      "tag-separator": "/",
+      "include-v-in-tag": true
+    },
+    "packages/catalog/pkl": { "release-type": "simple", "component": "acid-cat-catalog" }
+  },
+  "plugins": [
+    {
+      "type": "linked-versions",
+      "groupName": "npm",
+      "components": ["@acid-cat/spec-ts", "@acid-cat/catalog", "@acid-cat/cli", "@acid-cat/core-effect", "@acid-cat/core-ts"]
+    }
+  ]
+}
