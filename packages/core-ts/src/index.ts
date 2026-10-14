@@ -3,9 +3,10 @@ export type { AnyCapability, App, Capability, Observable, Target, ToJsonSchema }
 export { createSession } from "./session.ts";
 export type { Handle, Session, SessionOptions } from "./session.ts";
 export { mcpHandler } from "./mcp.ts";
-export type { McpOptions } from "./mcp.ts";
+export type { McpOptions, McpSettings } from "./mcp.ts";
 export { httpHandler } from "./http.ts";
-export type { HttpOptions } from "./http.ts";
+export type { HttpOptions, HttpSettings } from "./http.ts";
+export type { ContextOption } from "./context.ts";
 export { main as cliMain, runCli } from "./cli.ts";
 export type { CliIo, CliOptions } from "./cli.ts";
 export { findHost, installWebMcp } from "./webmcp.ts";

@@ -6,15 +6,19 @@ import { bundle, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpTool
 import type { Rejection } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
+import { withContext } from "./context.ts";
+import type { ContextOption } from "./context.ts";
 import { createSession } from "./session.ts";
 import type { Session } from "./session.ts";
 
-export interface McpOptions<Context> {
+/** The options of `mcpHandler`. Give `context` to share one context, or `createContext` to make one for each request. */
+export type McpOptions<Context> = McpSettings & ContextOption<Context>;
+
+export interface McpSettings {
   readonly name: string;
   readonly version: string;
   /** The origins that can call the server. A request with no `Origin` header is accepted. */
   readonly allowedOrigins: readonly string[];
-  readonly context: Context;
   readonly toJsonSchema: ToJsonSchema;
   /** The target that the server serves. The default is `"mcp"`. */
   readonly target?: string | undefined;
@@ -33,7 +37,7 @@ interface JsonRpcRequest {
   };
 }
 
-/** A web request handler for the MCP server. Each request has its own session. */
+/** A web request handler for the MCP server. Each request has its own session, and with `createContext` its own context. */
 export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Context>) {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
   return async (request: Request): Promise<Response> => {
@@ -65,20 +69,18 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
     if (metaVersion === undefined) return error(400, id, -32602, "Required request metadata is missing");
     if (metaVersion !== version) return error(400, id, -32020, "MCP-Protocol-Version header does not match request metadata");
 
-    const session = createSession(app, {
-      target: options.target ?? "mcp",
-      context: options.context,
-      toJsonSchema: options.toJsonSchema,
+    return withContext<Context, Response>(options, request, async (context) => {
+      const session = createSession(app, { target: options.target ?? "mcp", context, toJsonSchema: options.toJsonSchema });
+      try {
+        return await answer(session, message, options, request.signal);
+      } finally {
+        await session.dispose();
+      }
     });
-    try {
-      return await answer(session, message, options, request.signal);
-    } finally {
-      await session.dispose();
-    }
   };
 }
 
-async function answer<Context>(session: Session, message: JsonRpcRequest, options: McpOptions<Context>, signal: AbortSignal): Promise<Response> {
+async function answer(session: Session, message: JsonRpcRequest, options: McpSettings, signal: AbortSignal): Promise<Response> {
   const id = message.id ?? null;
   const complete = (result: object, list = false) =>
     reply(id, {
