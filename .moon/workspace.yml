@@ -9,6 +9,7 @@ projects:
   catalog-python: "packages/catalog/python"
   catalog-go: "packages/catalog/go"
   catalog-rust: "packages/catalog/rust"
+  catalog-pkl: "packages/catalog/pkl"
 
 defaultProject: "acid-cat"
 telemetry: false

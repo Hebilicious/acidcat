@@ -1,0 +1,33 @@
+name: Release Pkl
+
+# Push a tag `acid-cat-catalog@<version>` on main to publish the Pkl package at that version.
+# The package is a GitHub release with that name. pkg.pkl-lang.org redirects the package URI to it.
+on:
+  push:
+    tags: ["acid-cat-catalog@*"]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: publish the Pkl package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - run: moon run catalog-pkl:test
+
+      # The release fails if the version in PklProject differs from the tag: .out/<tag>/ does not exist then.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "The Pkl package acid-cat-catalog." \
+            "packages/catalog/pkl/.out/$GITHUB_REF_NAME/"*

@@ -6,6 +6,8 @@
   "packageManager": "pnpm@12.8.1",
   "devDependencies": {
     "@acid-cat/catalog": "workspace:*",
-    "@acid-cat/cli": "workspace:*"
+    "@acid-cat/cli": "workspace:*",
+    "esbuild": "catalog:",
+    "typescript": "catalog:"
   }
 }

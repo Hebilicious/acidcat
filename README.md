@@ -10,6 +10,7 @@ A language-neutral specification. Describe what your application can do one time
 ![Specification](https://img.shields.io/badge/spec-0.1_draft-ff69b4)
 ![JSON Schema](https://img.shields.io/badge/JSON_Schema-2020--12-0a7bbb)
 ![MCP](https://img.shields.io/badge/MCP-2026--07--28-111111)
+[![npm](https://img.shields.io/npm/v/@acid-cat/cli?label=%40acid-cat%2Fcli)](https://www.npmjs.com/package/@acid-cat/cli)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
 ![Go](https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white)
@@ -20,7 +21,7 @@ A language-neutral specification. Describe what your application can do one time
 </div>
 
 > [!WARNING]
-> **AcidCat is experimental and a work in progress.** The specification, the packages and their APIs can change at any time. No package is published yet. Do not use AcidCat in production.
+> **AcidCat is experimental and a work in progress.** The specification is a draft. The packages have versions `0.x`, and each minor version can break their APIs. Pin exact versions.
 
 ---
 
@@ -101,7 +102,7 @@ These tools work with an implementation in any language.
 | [`@acid-cat/cli`](packages/cli) | 🛠️ `acid-cat check`, `format` and `view` for catalogs. `acid-cat conform` tests a running implementation through its bindings |
 | [`@acid-cat/catalog`](packages/catalog/typescript) | ✍️ Write a catalog in TypeScript |
 | [`acid-cat-catalog`](packages/catalog/python) | 🐍 Write a catalog in Python |
-| [`acid-cat.dev/catalog`](packages/catalog/go) | 🐹 Write a catalog in Go |
+| [`github.com/Hebilicious/acidcat/packages/catalog/go`](packages/catalog/go) | 🐹 Write a catalog in Go |
 | [`acid-cat-catalog`](packages/catalog/rust) | 🦀 Write a catalog in Rust |
 | [`Catalog.pkl`](packages/catalog/pkl/Catalog.pkl) | 🧾 Write a catalog in Pkl |
 
@@ -147,3 +148,7 @@ CI runs `moon run verify` on each push to `main` and on each pull request. Chang
 | `moon run :test` | Test all packages |
 | `moon run verify` | Do all checks and tests |
 | `pnpm exec acid-cat …` | Run the command line |
+| `moon run :build` | Build the npm packages into `dist/` |
+| `moon run packages` | Install the packed npm packages into an empty project, and test them |
+
+To publish the packages, see [Publishing](packages/README.md#publishing).

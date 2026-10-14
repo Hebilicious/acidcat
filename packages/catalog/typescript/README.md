@@ -4,6 +4,10 @@ The AcidCat catalog library for TypeScript. npm package: `@acid-cat/catalog`.
 
 Write a catalog in TypeScript, and write it in canonical form. The library has no dependencies. Use it at build time to write `acidcat.catalog.json`.
 
+```sh
+pnpm add -D @acid-cat/catalog
+```
+
 ```ts
 import { Catalog } from "@acid-cat/catalog";
 

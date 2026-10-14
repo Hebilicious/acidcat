@@ -1,0 +1,18 @@
+/// The Pkl package of the AcidCat catalog module.
+///
+/// `pkl project package` writes the package into `.out/`. The release workflow attaches it to the GitHub release
+/// `acid-cat-catalog@<version>`, where pkg.pkl-lang.org finds it.
+amends "pkl:Project"
+
+package {
+  name = "acid-cat-catalog"
+  version = "0.1.0"
+  baseUri = "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/\(name)"
+  packageZipUrl = "https://github.com/Hebilicious/acidcat/releases/download/\(name)@\(version)/\(name)@\(version).zip"
+  description = "Write an AcidCat catalog in Pkl, and render it to JSON."
+  license = "MIT"
+  sourceCode = "https://github.com/Hebilicious/acidcat"
+  sourceCodeUrlScheme = "https://github.com/Hebilicious/acidcat/blob/\(name)@\(version)/packages/catalog/pkl%{path}#L%{line}-L%{endLine}"
+  issueTracker = "https://github.com/Hebilicious/acidcat/issues"
+  exclude { "moon.yml" }
+}

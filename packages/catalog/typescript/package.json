@@ -2,10 +2,35 @@
   "name": "@acid-cat/catalog",
   "version": "0.1.0",
   "description": "Write an AcidCat catalog in TypeScript and render it in canonical form.",
+  "keywords": [
+    "acidcat",
+    "catalog"
+  ],
   "license": "MIT",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hebilicious/acidcat.git",
+    "directory": "packages/catalog/typescript"
+  },
+  "homepage": "https://github.com/Hebilicious/acidcat/tree/main/packages/catalog/typescript#readme",
+  "bugs": "https://github.com/Hebilicious/acidcat/issues",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist"
+  ],
   "exports": "./src/index.ts",
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:"

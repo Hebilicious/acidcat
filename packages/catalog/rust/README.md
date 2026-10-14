@@ -4,6 +4,10 @@ The AcidCat catalog library for Rust. crates.io package: `acid-cat-catalog`.
 
 Write a catalog in Rust, and write it in canonical form. Write schemas with `serde_json::json!`. Use it at build time, for example in `build.rs`, to write `acidcat.catalog.json`.
 
+```sh
+cargo add acid-cat-catalog
+```
+
 ```rust
 use acid_cat_catalog::{Capability, Catalog, Target};
 use serde_json::json;

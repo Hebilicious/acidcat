@@ -4,6 +4,10 @@ Serve AcidCat capabilities in plain TypeScript. npm package: `@acid-cat/core-ts`
 
 This package has no Effect dependency. A capability returns a promise. Inputs are validated with any library that implements [Standard Schema](https://standardschema.dev), for example Zod, Valibot or ArkType. The application writes its own catalog.
 
+```sh
+pnpm add @acid-cat/core-ts
+```
+
 ## Write capabilities
 
 ```ts

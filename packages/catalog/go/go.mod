@@ -1,3 +1,3 @@
-module acid-cat.dev/catalog
+module github.com/Hebilicious/acidcat/packages/catalog/go
 
 go 1.27

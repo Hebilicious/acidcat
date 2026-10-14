@@ -9,7 +9,13 @@ acid-cat view <catalog.json> <target>         # write the view of one target
 acid-cat conform --mcp <url> --http <url> --cli "<command>" --webmcp <url>  # test an implementation
 ```
 
-In this repository, run `pnpm exec acid-cat …`.
+Install it as a development dependency, and run it with `pnpm exec acid-cat …`:
+
+```sh
+pnpm add -D @acid-cat/cli
+```
+
+It needs Node.js 24 or later. `acid-cat conform --webmcp <url>` also needs [Playwright](https://playwright.dev) and Chromium.
 
 ## check
 

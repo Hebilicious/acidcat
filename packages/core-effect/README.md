@@ -4,6 +4,13 @@ Serve AcidCat capabilities with [Effect](https://effect.website). npm package: `
 
 All of this package is Effect: a capability is an Effect program with Effect Schema types, a session is a scope, and the services of the application are layers. The application writes its own catalog.
 
+```sh
+pnpm add @acid-cat/core-effect effect
+pnpm add @effect/platform-node  # only for @acid-cat/core-effect/node
+```
+
+`effect` and `@effect/platform-node` are peer dependencies, so that the application and the core share one Effect. The package supports Effect 4.
+
 ## Write capabilities
 
 ```ts

@@ -1,0 +1,15 @@
+language: "unknown"
+layer: "library"
+
+project:
+  title: "acid-cat-catalog (Pkl)"
+  description: "Write a catalog in Pkl. Published as the Pkl package package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog."
+
+tasks:
+  test:
+    description: "Package the module. Packaging evaluates every module in the package."
+    command: "pkl"
+    args: ["project", "package", "--skip-publish-check"]
+    inputs: ["*.pkl", "PklProject", "LICENSE"]
+    outputs: [".out/**/*"]
+    toolchains: ["system"]

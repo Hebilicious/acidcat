@@ -1,0 +1,37 @@
+name: Release npm
+
+# Push a tag `npm/v<version>` on main to publish the npm packages at that version.
+# npm authenticates this workflow with trusted publishing, and adds provenance to each package.
+on:
+  push:
+    tags: ["npm/v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release-npm
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --dir packages/cli exec playwright install --with-deps chromium
+
+      # `verify` also builds the packages, and tests them as they are installed from their tarballs.
+      - run: moon run verify
+
+      - run: node scripts/publish-npm.ts --version "${GITHUB_REF_NAME#npm/v}"

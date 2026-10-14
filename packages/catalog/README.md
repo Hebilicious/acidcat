@@ -8,9 +8,9 @@ Use these libraries at build time, to write `acidcat.catalog.json`. At run time,
 | --- | --- | --- | --- |
 | TypeScript | [`typescript/`](typescript) | npm `@acid-cat/catalog` | `moon run catalog-typescript:test` |
 | Python | [`python/`](python) | PyPI `acid-cat-catalog` | `moon run catalog-python:test` |
-| Go | [`go/`](go) | `acid-cat.dev/catalog` | `moon run catalog-go:test` |
+| Go | [`go/`](go) | `github.com/Hebilicious/acidcat/packages/catalog/go` | `moon run catalog-go:test` |
 | Rust | [`rust/`](rust) | crates.io `acid-cat-catalog` | `moon run catalog-rust:test` |
-| Pkl | [`pkl/`](pkl/Catalog.pkl) | Pkl package | `moon run check` |
+| Pkl | [`pkl/`](pkl) | Pkl package `package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog` | `moon run catalog-pkl:test` |
 
 ## One shape in every language
 

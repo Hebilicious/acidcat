@@ -12,3 +12,10 @@ tasks:
     args: ["test"]
     inputs: ["src/**/*", "examples/**/*", "tests/**/*", "Cargo.toml", "Cargo.lock", "/examples/*.acidcat.json", "/packages/catalog/fixtures/**/*"]
     toolchains: ["system"]
+
+  package:
+    description: "Package the crate, and build it from the package, for crates.io."
+    command: "cargo"
+    args: ["package", "--allow-dirty"]
+    inputs: ["src/**/*", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]
+    toolchains: ["system"]

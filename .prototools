@@ -5,6 +5,7 @@ pkl = "0.32.1"
 python = "3.14.0"
 go = "1.27.2"
 rust = "1.99.0"
+uv = "0.13.1"
 
 [plugins.tools]
 pkl = "https://raw.githubusercontent.com/milesj/proto-plugins/refs/heads/master/pkl.toml"
