@@ -8,6 +8,7 @@
     "@acid-cat/catalog": "workspace:*",
     "@acid-cat/cli": "workspace:*",
     "esbuild": "catalog:",
+    "rolldown": "catalog:",
     "typescript": "catalog:"
   }
 }

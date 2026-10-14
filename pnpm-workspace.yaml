@@ -26,6 +26,7 @@ catalog:
   graphql: 17.0.2
   graphql-yoga: 5.24.4
   playwright: 1.64.0
+  rolldown: 1.2.13
   typescript: 7.0.2
   zod: 4.6.7
 
