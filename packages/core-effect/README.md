@@ -62,6 +62,39 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 
 `layer` gives the services that the capabilities need. A web handler is `(request: Request) => Promise<Response>`. It works in Node, Bun, Deno and Cloudflare Workers.
 
+### Services for each request
+
+By default, a web handler builds the services from `layer` once, and all requests use them. With the option `services: "per-request"`, the handler builds them for each request that passes the screening, and releases them after the response. Use it when a request must not use objects that an earlier request made, for example on Cloudflare Workers, or when a stateful service must not be shared between callers:
+
+```ts
+const handler = Mcp.toWebHandler(app, makeLayer(env), { ...options, services: "per-request" });
+```
+
+`Mcp.handle(app, request, options)` and `Http.handle(app, request, options)` screen one request and answer it. A host that builds the services itself provides them to this Effect.
+
+### Flags of the application
+
+The CLI binding allows an application to add its own flags. `Cli.command(app, options)` gives the command. Change it with `effect/cli`, then run it with `Cli.runCommand`, or with `NodeCli.runCommand` from `@acid-cat/core-effect/node`. Both set the exit codes of the binding. `Cli.exitCodeOf(error)` gives the exit code of one usage error.
+
+```ts
+import { Cli } from "@acid-cat/core-effect";
+import { NodeCli } from "@acid-cat/core-effect/node";
+import { Effect, Layer } from "effect";
+import { Command, Flag, GlobalFlag } from "effect/cli";
+
+const historyFile = GlobalFlag.Setting("history-file")({ flag: Flag.String("history-file") });
+
+// The services depend on the flag.
+const services = Layer.unwrap(Effect.map(historyFile, (path) => historyLayer(path)));
+
+const command = Cli.command(app, { name: "aircon", version: "0.1.0" }).pipe(
+  Command.provide(services),
+  Command.withGlobalFlags([historyFile]),
+);
+
+NodeCli.runCommand(command, { version: "0.1.0" });
+```
+
 `@acid-cat/core-effect` works in all runtimes, including browsers. Only `@acid-cat/core-effect/node` needs Node.js.
 
 Each module also has its own entry point, for example `@acid-cat/core-effect/Session`. The package has no side effects, so a bundler keeps only the modules that a program imports, from either entry point. A web page that imports `Session`, `Handles` and `WebMcp` does not contain `Cli` or `Mcp`, or the `effect/cli` and `effect/ai` modules that they use.

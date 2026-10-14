@@ -5,7 +5,8 @@
 import { bundle, CLI_EXIT_CODES, cliExitCode, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
 import type { CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec-ts";
 import { Console, Effect, Layer, Option, Schema } from "effect";
-import { Argument, Command, Flag } from "effect/cli";
+import type { Terminal } from "effect";
+import { Argument, CliError, Command, Flag } from "effect/cli";
 
 import * as App from "./App.ts";
 import * as Session from "./Session.ts";
@@ -21,17 +22,31 @@ export interface Options {
  * The command line as an Effect. Exit codes follow spec/bindings/cli.md. To run it as the main program of a Node.js
  * process, use `NodeCli.main` from `@acid-cat/core-effect/node`.
  */
-export const run = <R>(app: App.App<R>, options: Options) =>
-  Command.run(command(app, options), { version: options.version }).pipe(
-    Effect.catch((error) => Effect.sync(() => (process.exitCode = usageExitCode(error)))),
+export const run = <R>(app: App.App<R>, options: Options) => runCommand(command(app, options), options);
+
+/**
+ * Run a command that `command` made, after the application changed it: for example with its own flags
+ * (`Command.withGlobalFlags`), or with services that depend on them (`Command.provide`). Usage errors set the exit
+ * code with `exitCodeOf`. Other failures of the command stay in the error channel.
+ */
+export const runCommand = <Name extends string, Input, ContextInput, E, R>(
+  command: Command.Command<Name, Input, ContextInput, E, R>,
+  options: { readonly version: string },
+): Effect.Effect<void | number, Exclude<E, CliError.CliError | Terminal.QuitError>, R | Command.Environment> =>
+  Command.run(command, { version: options.version }).pipe(
+    Effect.catch((error) =>
+      CliError.isCliError(error)
+        ? Effect.sync(() => (process.exitCode = exitCodeOf(error)))
+        : Effect.fail(error as Exclude<E, CliError.CliError | Terminal.QuitError>),
+    ),
   );
 
 /**
- * The exit code for a usage error. `effect/cli` shows the help for each usage error, and gives the errors in the
- * `errors` of `ShowHelp`. Help with no errors is a request for help.
+ * The exit code for a usage error (spec/bindings/cli.md#exit-codes). `effect/cli` shows the help for each usage error,
+ * and gives the errors in the `errors` of `ShowHelp`. Help with no errors is a request for help.
  */
-function usageExitCode(error: { readonly _tag?: string; readonly errors?: readonly { readonly _tag?: string }[] }): number {
-  const errors = error._tag === "ShowHelp" ? (error.errors ?? []) : [error];
+export function exitCodeOf(error: CliError.CliError): number {
+  const errors: readonly CliError.CliError[] = error._tag === "ShowHelp" ? error.errors : [error];
   if (errors.length === 0) return CLI_EXIT_CODES.value;
   return errors.some((inner) => inner._tag === "UnknownSubcommand")
     ? CLI_EXIT_CODES["unknown-capability"]

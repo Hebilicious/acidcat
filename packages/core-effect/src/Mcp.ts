@@ -22,37 +22,66 @@ export interface Options {
   readonly path?: `/${string}` | undefined;
   /** The maximum size of a request body, in bytes. The default is 1 MiB. */
   readonly maximumBytes?: number | undefined;
+  /**
+   * When `toWebHandler` builds the services from `layer`. With `"shared"`, the default, it builds them once, and all
+   * requests use them. With `"per-request"`, it builds them for each request that passes the screening, and releases
+   * them when the response is complete. Use `"per-request"` when a request must not use objects that an earlier request
+   * made, for example on Cloudflare Workers, or when a stateful service must not be shared between callers.
+   */
+  readonly services?: "shared" | "per-request" | undefined;
 }
 
 /**
  * A web request handler for the MCP server: `(request) => Promise<Response>`. Each request has its own session.
- * `layer` gives the services that the capabilities need.
+ * `layer` gives the services that the capabilities need. `options.services` tells when the handler builds them.
  */
 export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Options) {
+  if (options.services === "per-request") {
+    return async (request: Request): Promise<Response> => {
+      const admitted = await admit(request, options);
+      if (admitted instanceof Response) return admitted;
+      return Effect.runPromise(respond(app, admitted, options).pipe(Effect.provide(layer)));
+    };
+  }
   const runtime = ManagedRuntime.make(layer);
-  const maximumBytes = options.maximumBytes ?? 1_048_576;
-  return async (request: Request): Promise<Response> => {
-    const screened = screenRequest(request, {
-      methods: ["POST"],
-      allowedOrigins: options.allowedOrigins,
-      mediaType: "application/json",
-      maximumBytes,
-    });
-    if (screened !== undefined) return rejection(screened);
-    const body = await readBounded(request, maximumBytes);
-    if ("rejection" in body) return rejection(body.rejection);
-    try {
-      JSON.parse(body.text);
-    } catch {
-      return rejection("not-utf8");
-    }
-    const message = new Request(request.url, { body: body.text, headers: request.headers, method: "POST" });
-    return runtime.runPromise(handle(app, message, options));
-  };
+  return (request: Request): Promise<Response> => runtime.runPromise(handle(app, request, options));
 }
 
-/** Answer one MCP request with a new session. */
+/**
+ * Answer one MCP request with a new session. The request is screened and its body is bounded, as in `toWebHandler`.
+ * A host that builds the services itself provides them to this Effect.
+ */
 export const handle = <R>(app: App.App<R>, request: Request, options: Options) =>
+  Effect.flatMap(
+    Effect.promise(() => admit(request, options)),
+    (admitted) => (admitted instanceof Response ? Effect.succeed(admitted) : respond(app, admitted, options)),
+  );
+
+/**
+ * Screen a request and read its body (spec/bindings/mcp.md). The result is the rejection, or the request with the body
+ * that was read.
+ */
+async function admit(request: Request, options: Options): Promise<Request | Response> {
+  const maximumBytes = options.maximumBytes ?? 1_048_576;
+  const screened = screenRequest(request, {
+    methods: ["POST"],
+    allowedOrigins: options.allowedOrigins,
+    mediaType: "application/json",
+    maximumBytes,
+  });
+  if (screened !== undefined) return rejection(screened);
+  const body = await readBounded(request, maximumBytes);
+  if ("rejection" in body) return rejection(body.rejection);
+  try {
+    JSON.parse(body.text);
+  } catch {
+    return rejection("not-utf8");
+  }
+  return new Request(request.url, { body: body.text, headers: request.headers, method: "POST" });
+}
+
+/** Answer one MCP request that passed the screening, with a new session. */
+const respond = <R>(app: App.App<R>, request: Request, options: Options) =>
   Effect.scoped(
     Effect.gen(function* () {
       const session = yield* Session.make(app, { target: options.target ?? "mcp" });
