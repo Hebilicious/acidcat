@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
-import type { CatalogDocument } from "@acid-cat/spec";
+import type { CatalogDocument } from "@acid-cat/spec-ts";
 import { Effect, Fiber, Layer, Stream } from "effect";
 
 import { aircon, unitLayer } from "../examples/aircon.ts";

@@ -1,8 +1,8 @@
 /**
  * Sessions and handles (spec/invocation.md, spec/bindings/typescript.md).
  */
-import { AVAILABLE, CallFailureError, callFailure, isCallFailure, viewOf } from "@acid-cat/spec";
-import type { Availability, CallFailure, CatalogDocument, Outcome, Result } from "@acid-cat/spec";
+import { AVAILABLE, CallFailureError, callFailure, isCallFailure, viewOf } from "@acid-cat/spec-ts";
+import type { Availability, CallFailure, CatalogDocument, Outcome, Result } from "@acid-cat/spec-ts";
 
 import { catalogOf } from "./app.ts";
 import type { AnyCapability, App, Observable, ToJsonSchema } from "./app.ts";

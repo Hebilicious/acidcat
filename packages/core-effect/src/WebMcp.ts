@@ -1,7 +1,7 @@
 /**
  * The WebMCP binding (spec/bindings/webmcp.md): register capabilities as WebMCP tools in a web page.
  */
-import { bundle, callFailure, CallFailureError, isCallFailure } from "@acid-cat/spec";
+import { bundle, callFailure, CallFailureError, isCallFailure } from "@acid-cat/spec-ts";
 import { Effect, Option, Queue, Scope, Stream, SubscriptionRef } from "effect";
 
 import type * as Session from "./Session.ts";

@@ -5,8 +5,8 @@
  * and call them. The page can run in a browser, or the implementation can install itself on the host in the same
  * process.
  */
-import { REFERENCE, visitObjects } from "@acid-cat/spec";
-import type { JsonObject } from "@acid-cat/spec";
+import { REFERENCE, visitObjects } from "@acid-cat/spec-ts";
+import type { JsonObject } from "@acid-cat/spec-ts";
 
 import { Checks, expect, expectEqual, fixture, idsOf, sorted } from "./check.ts";
 

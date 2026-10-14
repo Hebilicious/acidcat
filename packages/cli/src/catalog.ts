@@ -3,8 +3,8 @@
  * See spec/catalog.md and spec/conformance.md.
  */
 import { canonicalText } from "@acid-cat/catalog";
-import { bundle, REFERENCE, schemasOf, viewOf, visitObjects } from "@acid-cat/spec";
-import type { CatalogCapability as Capability, CatalogDocument as Catalog, JsonObject } from "@acid-cat/spec";
+import { bundle, REFERENCE, schemasOf, viewOf, visitObjects } from "@acid-cat/spec-ts";
+import type { CatalogCapability as Capability, CatalogDocument as Catalog, JsonObject } from "@acid-cat/spec-ts";
 import { Result, Schema, SchemaIssue, SchemaRepresentation } from "effect";
 import type { JsonSchema } from "effect";
 

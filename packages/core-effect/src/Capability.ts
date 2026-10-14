@@ -2,7 +2,7 @@
  * A capability, written in Effect: Effect Schema for its input, output and failures, and an Effect program that does
  * the operation. See spec/catalog.md#capabilities.
  */
-import type { Availability } from "@acid-cat/spec";
+import type { Availability } from "@acid-cat/spec-ts";
 import type { Effect, Schema, Stream } from "effect";
 
 /** A schema that needs no services to decode or encode. */

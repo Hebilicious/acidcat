@@ -7,6 +7,7 @@ If `.local/AGENTS.md` exists, read it too. The `.local/` directory contains priv
 ## Principles
 
 - **One catalog, many targets.** The catalog is the contract. Each surface comes from it through a binding. The catalog is checked at build time. Implementations do not read it at run time.
+- **Language-neutral.** The specification does not depend on a language. The TypeScript packages are a reference implementation, not the product. Describe them as one implementation among possible others. A core in another language follows the specification and passes `acid-cat conform`.
 - **Simple and permissive.** Require only what clients must rely on. Recommend the rest.
 - **Serve each kind of user fully.** When users want different things, give each group a complete package in their own style. Do not make one package that is a compromise. For example: one core in Effect, and one core in plain TypeScript.
 - **Precise vocabulary.** Use the terms in [spec/README.md](spec/README.md#vocabulary) with exactly those meanings. Add a term there before you use it.

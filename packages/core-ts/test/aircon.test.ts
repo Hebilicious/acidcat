@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
-import type { CatalogDocument } from "@acid-cat/spec";
+import type { CatalogDocument } from "@acid-cat/spec-ts";
 
 import { aircon, toJsonSchema, Unit } from "../examples/aircon.ts";
 import { catalogOf, createSession, renderCatalog, runCli } from "../src/index.ts";

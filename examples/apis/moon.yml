@@ -13,7 +13,7 @@ tasks:
     description: "Call each API and the binding beside it."
     command: "node"
     args: ["--test", "--test-timeout=60000", "test/"]
-    inputs: ["src/**/*.ts", "test/**/*.ts", "/packages/core-ts/src/**/*.ts", "/packages/core-ts/examples/**/*.ts", "/packages/core-effect/src/**/*.ts", "/packages/core-effect/examples/**/*.ts", "/packages/spec/src/**/*.ts"]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "/packages/core-ts/src/**/*.ts", "/packages/core-ts/examples/**/*.ts", "/packages/core-effect/src/**/*.ts", "/packages/core-effect/examples/**/*.ts", "/packages/spec-ts/src/**/*.ts"]
 
   typecheck:
     description: "Type-check the sources and tests."

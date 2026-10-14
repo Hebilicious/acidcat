@@ -1,5 +1,6 @@
 /**
- * The fixed details of the AcidCat specification, as data and pure functions. This package has no dependencies.
+ * The fixed details of the AcidCat specification, as TypeScript data and pure functions, for the TypeScript reference
+ * implementation. This package has no dependencies.
  *
  * - Outcomes and call failures: spec/invocation.md
  * - Names, views and bundling: spec/catalog.md

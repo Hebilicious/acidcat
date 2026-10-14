@@ -1,8 +1,8 @@
 /**
  * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP, built on `effect/ai/McpServer`.
  */
-import { bundle, MCP_REJECTIONS, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec";
-import type { JsonObject, Rejection } from "@acid-cat/spec";
+import { bundle, MCP_REJECTIONS, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec-ts";
+import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
 import { Context, Effect, Layer, ManagedRuntime } from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";

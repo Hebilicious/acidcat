@@ -4,13 +4,12 @@
 
 **One catalog. Every surface.**
 
-Describe what your application can do one time. Serve it to your app, your command line, your agents and your APIs.
+A language-neutral specification. Describe what your application can do one time. Serve it to your app, your command line, your agents and your APIs, in any language.
 
 [![CI](https://github.com/Hebilicious/acidcat/actions/workflows/ci.yml/badge.svg)](https://github.com/Hebilicious/acidcat/actions/workflows/ci.yml)
 ![Specification](https://img.shields.io/badge/spec-0.1_draft-ff69b4)
 ![JSON Schema](https://img.shields.io/badge/JSON_Schema-2020--12-0a7bbb)
 ![MCP](https://img.shields.io/badge/MCP-2026--07--28-111111)
-![Effect](https://img.shields.io/badge/built_with-Effect-000000)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
 ![Go](https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white)
@@ -27,7 +26,7 @@ Describe what your application can do one time. Serve it to your app, your comma
 
 ## ✨ What is AcidCat?
 
-**AcidCat** (Application Capability IDentification Category) is a specification. An application writes one **catalog**: a JSON document that lists its capabilities, their inputs, outputs and failures, and the **targets** that can use each one. Each surface comes from the catalog through a **binding**:
+**AcidCat** (Application Capability IDentification Category) is a specification. It does not depend on a language or a library. An application writes one **catalog**: a JSON document that lists its capabilities, their inputs, outputs and failures, and the **targets** that can use each one. Each surface comes from the catalog through a **binding**:
 
 | Surface | `aircon.temperature.set` becomes |
 | --- | --- |
@@ -35,7 +34,7 @@ Describe what your application can do one time. Serve it to your app, your comma
 | 🤖 MCP server | the tool `aircon.temperature.set` |
 | 🌐 WebMCP | an in-page tool for browser agents |
 | 🔌 HTTP | `POST /capabilities/aircon.temperature.set` |
-| 🧩 TypeScript | a typed handle: `execute({ celsius: 22 })` |
+| 🧩 Your language | a typed function, for example `execute({ celsius: 22 })` in TypeScript |
 
 The catalog is checked at build time. Programs do not read it at run time.
 
@@ -93,26 +92,38 @@ The same catalog in [TypeScript](packages/catalog/typescript/examples/aircon.ts)
 
 ## 📦 Packages
 
+### Tools for all implementations
+
+These tools work with an implementation in any language.
+
 | Package | Use |
 | --- | --- |
-| [`@acid-cat/core-effect`](packages/core-effect) | ⚡ Serve capabilities, written fully in Effect |
-| [`@acid-cat/core-ts`](packages/core-ts) | 🟦 Serve capabilities in plain TypeScript, with no Effect dependency |
-| [`@acid-cat/spec`](packages/spec) | 📐 The fixed details of the specification, as data |
-| [`@acid-cat/cli`](packages/cli) | 🛠️ `acid-cat check`, `format`, `view` and `conform` |
+| [`@acid-cat/cli`](packages/cli) | 🛠️ `acid-cat check`, `format` and `view` for catalogs. `acid-cat conform` tests a running implementation through its bindings |
 | [`@acid-cat/catalog`](packages/catalog/typescript) | ✍️ Write a catalog in TypeScript |
 | [`acid-cat-catalog`](packages/catalog/python) | 🐍 Write a catalog in Python |
 | [`acid-cat.dev/catalog`](packages/catalog/go) | 🐹 Write a catalog in Go |
 | [`acid-cat-catalog`](packages/catalog/rust) | 🦀 Write a catalog in Rust |
 | [`Catalog.pkl`](packages/catalog/pkl/Catalog.pkl) | 🧾 Write a catalog in Pkl |
 
+### Reference implementation in TypeScript
+
+These packages show one way to implement the specification. They serve the TypeScript binding and the MCP, WebMCP, CLI and HTTP bindings, and they pass all checks of `acid-cat conform`. The specification does not depend on them.
+
+| Package | Use |
+| --- | --- |
+| [`@acid-cat/spec-ts`](packages/spec-ts) | 📐 The fixed details of the specification, as TypeScript data and functions |
+| [`@acid-cat/core-effect`](packages/core-effect) | ⚡ Serve capabilities, written fully in Effect |
+| [`@acid-cat/core-ts`](packages/core-ts) | 🟦 Serve capabilities in plain TypeScript, with no Effect dependency |
+
+Reference implementations in more languages will follow. You do not need a package from this repository to implement AcidCat. A program that serves the bindings as the specification tells is an implementation. You, or an agent, can write a core for your language from [the specification](spec/README.md), and test it with `acid-cat conform`.
+
 To build your own API, for example in GraphQL, see [`examples/apis`](examples/apis/README.md): GraphQL, Cap'n Web and Elysia APIs, each beside the HTTP binding, and an MCP server in Effect beside the MCP binding.
 
 ## 🗺️ Roadmap
 
-- [x] `@acid-cat/spec`: the fixed details of the specification as data, with no dependencies
-- [x] `@acid-cat/core-effect`: serve capabilities, written fully in Effect
-- [x] `@acid-cat/core-ts`: serve capabilities in plain TypeScript, with no Effect dependency
 - [x] `acid-cat conform`: test a running implementation through each binding
+- [x] A reference implementation in TypeScript: `@acid-cat/spec-ts`, `@acid-cat/core-effect` and `@acid-cat/core-ts`
+- [ ] Reference implementations in more languages
 - [ ] A site that publishes the specification
 
 See [packages/README.md](packages/README.md).

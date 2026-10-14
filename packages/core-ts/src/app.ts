@@ -3,7 +3,7 @@
  * See spec/catalog.md.
  */
 import { canonicalText } from "@acid-cat/catalog";
-import type { Availability, CatalogCapability, CatalogDocument, JsonObject, Result } from "@acid-cat/spec";
+import type { Availability, CatalogCapability, CatalogDocument, JsonObject, Result } from "@acid-cat/spec-ts";
 
 import type { StandardSchemaV1 } from "./standard-schema.ts";
 

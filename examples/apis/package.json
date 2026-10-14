@@ -9,7 +9,7 @@
     "@acid-cat/cli": "workspace:*",
     "@acid-cat/core-effect": "workspace:*",
     "@acid-cat/core-ts": "workspace:*",
-    "@acid-cat/spec": "workspace:*",
+    "@acid-cat/spec-ts": "workspace:*",
     "@pothos/core": "catalog:",
     "capnweb": "catalog:",
     "effect": "catalog:",

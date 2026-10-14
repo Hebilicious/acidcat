@@ -1,5 +1,5 @@
 /** A test application with one capability for each behavior that the tests examine. */
-import { unavailable, AVAILABLE } from "@acid-cat/spec";
+import { unavailable, AVAILABLE } from "@acid-cat/spec-ts";
 import { Context, Effect, Layer, Schema, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability } from "../src/index.ts";

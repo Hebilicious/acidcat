@@ -229,9 +229,9 @@ importers:
       '@acid-cat/core-ts':
         specifier: workspace:*
         version: link:../../packages/core-ts
-      '@acid-cat/spec':
+      '@acid-cat/spec-ts':
         specifier: workspace:*
-        version: link:../../packages/spec
+        version: link:../../packages/spec-ts
       '@pothos/core':
         specifier: 'catalog:'
         version: 4.15.1(graphql@17.0.2)
@@ -278,9 +278,9 @@ importers:
       '@acid-cat/catalog':
         specifier: workspace:*
         version: link:../catalog/typescript
-      '@acid-cat/spec':
+      '@acid-cat/spec-ts':
         specifier: workspace:*
-        version: link:../spec
+        version: link:../spec-ts
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.3(effect@4.0.3)(redis@6.3.0)
@@ -309,9 +309,9 @@ importers:
       '@acid-cat/catalog':
         specifier: workspace:*
         version: link:../catalog/typescript
-      '@acid-cat/spec':
+      '@acid-cat/spec-ts':
         specifier: workspace:*
-        version: link:../spec
+        version: link:../spec-ts
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.3(effect@4.0.3)(redis@6.3.0)
@@ -340,9 +340,9 @@ importers:
       '@acid-cat/catalog':
         specifier: workspace:*
         version: link:../catalog/typescript
-      '@acid-cat/spec':
+      '@acid-cat/spec-ts':
         specifier: workspace:*
-        version: link:../spec
+        version: link:../spec-ts
     devDependencies:
       '@acid-cat/cli':
         specifier: workspace:*
@@ -363,7 +363,7 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
 
-  packages/spec:
+  packages/spec-ts:
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

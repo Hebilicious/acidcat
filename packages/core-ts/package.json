@@ -8,7 +8,7 @@
   "exports": "./src/index.ts",
   "dependencies": {
     "@acid-cat/catalog": "workspace:*",
-    "@acid-cat/spec": "workspace:*"
+    "@acid-cat/spec-ts": "workspace:*"
   },
   "devDependencies": {
     "@acid-cat/cli": "workspace:*",

@@ -2,7 +2,7 @@
  * Property-based checks for the guarantees of spec/invocation.md#cancellation-and-concurrency, through each remote
  * binding. fast-check makes random sets of concurrent calls and cancellations.
  */
-import type { Outcome } from "@acid-cat/spec";
+import type { Outcome } from "@acid-cat/spec-ts";
 import fc from "fast-check";
 
 import { Checks, expect } from "./check.ts";

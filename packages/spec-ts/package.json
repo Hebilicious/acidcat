@@ -1,0 +1,13 @@
+{
+  "name": "@acid-cat/spec-ts",
+  "version": "0.1.0",
+  "description": "The fixed details of the AcidCat specification as TypeScript data and pure functions, with no dependencies. Part of the TypeScript reference implementation.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

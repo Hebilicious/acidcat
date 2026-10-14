@@ -2,8 +2,8 @@
  * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP, revision 2026-07-28, with no state on the
  * server between requests.
  */
-import { bundle, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec";
-import type { Rejection } from "@acid-cat/spec";
+import { bundle, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec-ts";
+import type { Rejection } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
 import { createSession } from "./session.ts";

@@ -2,8 +2,8 @@ language: "typescript"
 layer: "library"
 
 project:
-  title: "@acid-cat/spec"
-  description: "The fixed details of the specification as data and pure functions. npm package: @acid-cat/spec."
+  title: "@acid-cat/spec-ts"
+  description: "The fixed details of the specification as TypeScript data and pure functions, for the reference implementation. npm package: @acid-cat/spec-ts."
 
 toolchains:
   default: ["javascript", "node", "pnpm"]

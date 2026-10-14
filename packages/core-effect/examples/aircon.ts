@@ -1,7 +1,7 @@
 /**
  * The air conditioner of examples/aircon.pkl, written with @acid-cat/core-effect. The unit is simulated in memory.
  */
-import { AVAILABLE, unavailable } from "@acid-cat/spec";
+import { AVAILABLE, unavailable } from "@acid-cat/spec-ts";
 import { Context, Effect, Layer, Schema, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability } from "../src/index.ts";

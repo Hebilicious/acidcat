@@ -1,8 +1,8 @@
 /**
  * A session: the context of the calls of one client, for one target. See spec/invocation.md.
  */
-import { AVAILABLE, callFailure, viewOf } from "@acid-cat/spec";
-import type { Availability, CallFailure, CatalogDocument, Outcome } from "@acid-cat/spec";
+import { AVAILABLE, callFailure, viewOf } from "@acid-cat/spec-ts";
+import type { Availability, CallFailure, CatalogDocument, Outcome } from "@acid-cat/spec-ts";
 import { Cause, Data, Deferred, Effect, Exit, Fiber, FiberSet, PubSub, Ref, Schema, SchemaIssue, Scope, Stream, SubscriptionRef } from "effect";
 
 import * as App from "./App.ts";

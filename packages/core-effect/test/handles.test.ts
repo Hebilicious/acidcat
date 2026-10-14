@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { CallFailureError } from "@acid-cat/spec";
+import { CallFailureError } from "@acid-cat/spec-ts";
 
 import { Handles } from "../src/index.ts";
 import { aircon, unitLayer } from "../examples/aircon.ts";

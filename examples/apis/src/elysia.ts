@@ -6,7 +6,7 @@
  * application chooses: `409` with the failure in the body.
  */
 import { CallFailureError } from "@acid-cat/core-ts";
-import { HTTP_STATUS } from "@acid-cat/spec";
+import { HTTP_STATUS } from "@acid-cat/spec-ts";
 import { Elysia } from "elysia";
 import { z } from "zod";
 

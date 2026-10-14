@@ -1,7 +1,7 @@
 /** The result of one conformance check, and helpers to write checks. */
 import fixtureJson from "../../conformance/fixture.acidcat.json" with { type: "json" };
-import { viewOf } from "@acid-cat/spec";
-import type { CatalogDocument } from "@acid-cat/spec";
+import { viewOf } from "@acid-cat/spec-ts";
+import type { CatalogDocument } from "@acid-cat/spec-ts";
 
 export interface Check {
   readonly binding: string;

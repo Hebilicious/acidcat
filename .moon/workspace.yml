@@ -1,6 +1,6 @@
 projects:
   acid-cat: "."
-  spec: "packages/spec"
+  spec-ts: "packages/spec-ts"
   cli: "packages/cli"
   core-effect: "packages/core-effect"
   core-ts: "packages/core-ts"

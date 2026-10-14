@@ -1,8 +1,8 @@
 /**
  * The CLI binding (spec/bindings/cli.md): a command line made from the catalog.
  */
-import { bundle, CLI_EXIT_CODES, cliExitCode, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec";
-import type { JsonObject, Outcome } from "@acid-cat/spec";
+import { bundle, CLI_EXIT_CODES, cliExitCode, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
+import type { JsonObject, Outcome } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
 import { createSession } from "./session.ts";

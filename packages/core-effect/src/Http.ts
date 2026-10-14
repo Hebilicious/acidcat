@@ -1,8 +1,8 @@
 /**
  * The HTTP binding (spec/bindings/http.md): JSON through HTTP.
  */
-import { callFailure, httpStatus, isCallFailure, readBounded, screenRequest } from "@acid-cat/spec";
-import type { Rejection } from "@acid-cat/spec";
+import { callFailure, httpStatus, isCallFailure, readBounded, screenRequest } from "@acid-cat/spec-ts";
+import type { Rejection } from "@acid-cat/spec-ts";
 import { Effect, Layer, ManagedRuntime } from "effect";
 
 import type * as App from "./App.ts";

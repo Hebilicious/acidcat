@@ -4,8 +4,8 @@
  *
  * The handles use a session of Effect. The program that opens the session keeps its services and its scope.
  */
-import { CallFailureError, callFailure } from "@acid-cat/spec";
-import type { Availability, Result } from "@acid-cat/spec";
+import { CallFailureError, callFailure } from "@acid-cat/spec-ts";
+import type { Availability, Result } from "@acid-cat/spec-ts";
 import { Cause, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect";
 
 import type * as App from "./App.ts";

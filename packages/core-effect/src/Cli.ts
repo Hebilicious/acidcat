@@ -2,8 +2,8 @@
  * The CLI binding (spec/bindings/cli.md): a command line made from the catalog, with `effect/cli`. This module works
  * in all runtimes. `NodeCli` in `@acid-cat/core-effect/node` runs it in Node.js.
  */
-import { bundle, CLI_EXIT_CODES, cliExitCode, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec";
-import type { CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec";
+import { bundle, CLI_EXIT_CODES, cliExitCode, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
+import type { CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec-ts";
 import { Console, Effect, Layer, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 

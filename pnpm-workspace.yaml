@@ -1,5 +1,5 @@
 packages:
-  - "packages/spec"
+  - "packages/spec-ts"
   - "packages/cli"
   - "packages/core-effect"
   - "packages/core-ts"

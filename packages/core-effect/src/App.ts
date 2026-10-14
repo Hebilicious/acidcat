@@ -3,8 +3,8 @@
  * source and the catalog is checked at build time. See spec/catalog.md#build-time-and-run-time.
  */
 import { canonicalText } from "@acid-cat/catalog";
-import { REFERENCE } from "@acid-cat/spec";
-import type { CatalogCapability, CatalogDocument, JsonObject } from "@acid-cat/spec";
+import { REFERENCE } from "@acid-cat/spec-ts";
+import type { CatalogCapability, CatalogDocument, JsonObject } from "@acid-cat/spec-ts";
 import { Schema } from "effect";
 
 import type * as Capability from "./Capability.ts";
