@@ -95,10 +95,11 @@ export const fixture = defineApp<Context>({
       audience: ["app"],
       run: () => ok(null),
     }),
-    defineCapability<Context>({
+    defineCapability<Context, z.ZodObject<{}>>({
       id: "fixture.toggle",
       description: "Available only while the switch is on.",
       audience: everywhere,
+      input: z.object({}),
       availability: (context) => context.switch,
       run: () => ok(null),
     }),

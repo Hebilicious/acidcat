@@ -85,7 +85,7 @@ A **capability** is one operation that a client can do. Each key of `capabilitie
 | --- | --- | --- |
 | `description` | Yes | What the capability does. Write it for people and for agents |
 | `audience` | No | The targets that can use the capability. Each entry MUST be a key of `targets`. If there is no audience, no target can use the capability |
-| `input` | No | The schema of the input. It MUST be an object: `"type": "object"`, or a `$ref` to a type that is an object. If there is no input schema, the input is an empty object |
+| `input` | No | The schema of the input. It MUST be an object: `"type": "object"`, or a `$ref` to a type that is an object. If there is no input schema, the input is an empty object. An input schema with `"properties": {}` takes no properties. An input schema with no `properties` member takes any object |
 | `output` | No | The schema of the value that a successful call returns. If there is no output schema, the value is `null` |
 | `failures` | No | The failures that the capability can return, by tag. See [Failures](#failures) |
 | `readOnly` | No | `true` if a call changes nothing that a client can see. This is a hint for clients. It does not change the behavior of a call |
