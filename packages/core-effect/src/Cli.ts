@@ -38,8 +38,13 @@ function usageExitCode(error: { readonly _tag?: string; readonly errors?: readon
     : CLI_EXIT_CODES["invalid-input"];
 }
 
+/**
+ * A command of the command line. Its handler needs `R`, the services of the capabilities. `Command.provide` gives them.
+ */
+export type AppCommand<R> = Command.Command<string, {}, {}, never, R>;
+
 /** The root command: one command for each capability in the view, plus `call` and `list`. */
-export function command<R>(app: App.App<R>, options: Options) {
+export function command<R>(app: App.App<R>, options: Options): AppCommand<R> {
   const target = options.target ?? "cli";
   const view = Session.make(app, { target });
   const document = App.document(app);
@@ -61,7 +66,7 @@ export function command<R>(app: App.App<R>, options: Options) {
       Object.entries(properties).map(([name, property]) => [name, flagFor(name, resolve(property, definitions), required.has(name))]),
     );
     const path = commandPath(id);
-    const leaf = Command.make(path.at(-1)!, flags, (parsed: Record<string, unknown>) => invoke(id, inputFrom(parsed))).pipe(
+    const leaf: AppCommand<R> = Command.make(path.at(-1)!, flags, (parsed: Record<string, unknown>) => invoke(id, inputFrom(parsed))).pipe(
       Command.withDescription(capability.description),
     );
     return { path, leaf };
@@ -105,14 +110,19 @@ export function command<R>(app: App.App<R>, options: Options) {
 
   return Command.make(options.name).pipe(
     Command.withDescription(app.description ?? app.title ?? options.name),
-    Command.withSubcommands([call, list, ...group(leaves, [])] as never),
+    Command.withSubcommands([call, list, ...group(leaves, [])]),
   );
 }
 
+interface Leaf<R> {
+  readonly path: readonly string[];
+  readonly leaf: AppCommand<R>;
+}
+
 /** Make the commands that only contain other commands, from the shared prefixes of the ids. */
-function group(leaves: readonly { readonly path: readonly string[]; readonly leaf: unknown }[], prefix: readonly string[]): unknown[] {
-  const commands: unknown[] = [];
-  const byWord = new Map<string, { readonly path: readonly string[]; readonly leaf: unknown }[]>();
+function group<R>(leaves: readonly Leaf<R>[], prefix: readonly string[]): AppCommand<R>[] {
+  const commands: AppCommand<R>[] = [];
+  const byWord = new Map<string, Leaf<R>[]>();
   for (const entry of leaves) {
     if (entry.path.length === 1) {
       commands.push(entry.leaf);
@@ -126,7 +136,7 @@ function group(leaves: readonly { readonly path: readonly string[]; readonly lea
     commands.push(
       Command.make(word).pipe(
         Command.withDescription(`The ${[...prefix, word].join(".")} capabilities.`),
-        Command.withSubcommands(group(children, [...prefix, word]) as never),
+        Command.withSubcommands(group(children, [...prefix, word])),
       ),
     );
   }
