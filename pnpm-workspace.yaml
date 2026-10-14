@@ -10,13 +10,16 @@ packages:
 allowBuilds:
   esbuild: true
 
+# `effect`, `@effect/platform-node` and `@effect/platform-node-shared` have one version. `@acid-cat/cli` depends on all
+# three, so that the versions it brings agree, and no peer dependency of `effect` is unmet.
 catalog:
   "@modelcontextprotocol/client": 2.3.1
-  "@effect/platform-node": 4.0.3
+  "@effect/platform-node": 4.0.4
+  "@effect/platform-node-shared": 4.0.4
   "@pothos/core": 4.15.1
   "@types/node": 26.6.5
   capnweb: 0.12.0
-  effect: 4.0.3
+  effect: 4.0.4
   esbuild: 0.28.2
   elysia: 1.4.30
   fast-check: 4.10.2
