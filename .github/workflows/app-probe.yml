@@ -1,0 +1,29 @@
+name: App probe
+on:
+  push:
+    branches: [ci-test/app-probe]
+    tags: ["ci-test/app-probe-tag"]
+permissions:
+  contents: read
+jobs:
+  probe:
+    if: github.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      - env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/heads/ci-test/app-probe-pr" -f sha="$GITHUB_SHA" > /dev/null
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/probe.txt" -f message="test(ci): app probe" -f content="$(echo probe | base64)" -f branch=ci-test/app-probe-pr > /dev/null
+          gh pr create --repo "$GITHUB_REPOSITORY" --base main --head ci-test/app-probe-pr --title "test(ci): app probe" --body "Throwaway. Tests the token of the App heb-release."
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/ci-test/app-probe-tag" -f sha="$GITHUB_SHA" > /dev/null
+  tag:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "The tag started this workflow."
