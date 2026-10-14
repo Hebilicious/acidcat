@@ -2,9 +2,15 @@
 name = "acid-cat-catalog"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 description = "Write an AcidCat catalog in Rust and render it in canonical form."
 license = "MIT"
-publish = false
+readme = "README.md"
+repository = "https://github.com/Hebilicious/acidcat"
+homepage = "https://github.com/Hebilicious/acidcat/tree/main/packages/catalog/rust#readme"
+keywords = ["acidcat", "catalog", "json-schema"]
+categories = ["development-tools"]
+include = ["src/**/*.rs", "Cargo.toml", "README.md", "LICENSE"]
 
 [dependencies]
 regex = "1"

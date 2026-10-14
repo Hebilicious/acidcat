@@ -9,6 +9,13 @@ toolchains:
   default: ["javascript", "node", "pnpm"]
 
 tasks:
+  build:
+    description: "Bundle the package and write its declarations into dist/, for npm."
+    command: "node"
+    args: ["../../scripts/build-package.ts"]
+    inputs: ["src/**/*", "package.json", "tsconfig.json", "tsconfig.build.json", "/tsconfig.base.json", "/scripts/build-package.ts"]
+    outputs: ["dist/**/*"]
+
   test:
     deps: ["cli:browser"]
     description: "Test sessions and the MCP, HTTP, CLI and WebMCP bindings, with the test application and the air conditioner."

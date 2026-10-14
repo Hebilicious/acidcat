@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"acid-cat.dev/catalog"
-	"acid-cat.dev/catalog/examples/aircon"
+	"github.com/Hebilicious/acidcat/packages/catalog/go"
+	"github.com/Hebilicious/acidcat/packages/catalog/go/examples/aircon"
 )
 
 func TestWritesTheSameAirconCatalogAsPkl(t *testing.T) {

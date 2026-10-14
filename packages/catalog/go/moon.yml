@@ -2,8 +2,8 @@ language: "go"
 layer: "library"
 
 project:
-  title: "acid-cat.dev/catalog"
-  description: "Write a catalog in Go and render it in canonical form. Published as the Go module acid-cat.dev/catalog."
+  title: "github.com/Hebilicious/acidcat/packages/catalog/go"
+  description: "Write a catalog in Go and render it in canonical form. Published as the Go module github.com/Hebilicious/acidcat/packages/catalog/go."
 
 tasks:
   test:

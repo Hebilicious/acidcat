@@ -9,6 +9,13 @@ toolchains:
   default: ["javascript", "node", "pnpm"]
 
 tasks:
+  build:
+    description: "Bundle the package and write its declarations into dist/, for npm."
+    command: "node"
+    args: ["../../../scripts/build-package.ts"]
+    inputs: ["src/**/*", "package.json", "tsconfig.json", "tsconfig.build.json", "/tsconfig.base.json", "/scripts/build-package.ts"]
+    outputs: ["dist/**/*"]
+
   test:
     description: "Rebuild the air-conditioner catalog and the canonical fixture, byte for byte."
     command: "node"

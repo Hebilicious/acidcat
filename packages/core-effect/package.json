@@ -2,22 +2,62 @@
   "name": "@acid-cat/core-effect",
   "version": "0.1.0",
   "description": "Serve AcidCat capabilities, written fully in Effect.",
+  "keywords": [
+    "acidcat",
+    "effect",
+    "mcp",
+    "webmcp"
+  ],
   "license": "MIT",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hebilicious/acidcat.git",
+    "directory": "packages/core-effect"
+  },
+  "homepage": "https://github.com/Hebilicious/acidcat/tree/main/packages/core-effect#readme",
+  "bugs": "https://github.com/Hebilicious/acidcat/issues",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./node": "./src/node.ts"
   },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./node": {
+        "types": "./dist/node.d.ts",
+        "default": "./dist/node.js"
+      }
+    }
+  },
   "dependencies": {
     "@acid-cat/catalog": "workspace:*",
-    "@acid-cat/spec-ts": "workspace:*",
-    "@effect/platform-node": "catalog:",
-    "effect": "catalog:"
+    "@acid-cat/spec-ts": "workspace:*"
+  },
+  "peerDependencies": {
+    "@effect/platform-node": "catalog:peers",
+    "effect": "catalog:peers"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-node": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@acid-cat/cli": "workspace:*",
+    "@effect/platform-node": "catalog:",
     "@types/node": "catalog:",
+    "effect": "catalog:",
     "esbuild": "catalog:",
     "playwright": "catalog:",
     "typescript": "catalog:"

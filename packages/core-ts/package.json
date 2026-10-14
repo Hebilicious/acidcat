@@ -2,10 +2,36 @@
   "name": "@acid-cat/core-ts",
   "version": "0.1.0",
   "description": "Serve AcidCat capabilities in plain TypeScript, with no Effect dependency.",
+  "keywords": [
+    "acidcat",
+    "mcp",
+    "webmcp"
+  ],
   "license": "MIT",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hebilicious/acidcat.git",
+    "directory": "packages/core-ts"
+  },
+  "homepage": "https://github.com/Hebilicious/acidcat/tree/main/packages/core-ts#readme",
+  "bugs": "https://github.com/Hebilicious/acidcat/issues",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist"
+  ],
   "exports": "./src/index.ts",
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
   "dependencies": {
     "@acid-cat/catalog": "workspace:*",
     "@acid-cat/spec-ts": "workspace:*"

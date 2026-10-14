@@ -1,0 +1,37 @@
+name: Release PyPI
+
+# Push a tag `pypi/v<version>` on main to publish acid-cat-catalog to PyPI at that version.
+# PyPI authenticates this workflow with trusted publishing, from the `pypi` environment.
+on:
+  push:
+    tags: ["pypi/v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish to PyPI
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - run: moon run catalog-python:test catalog-python:package
+
+      - name: Check the version
+        run: |
+          test "$(grep -m1 '^version = ' packages/catalog/python/pyproject.toml)" = "version = \"${GITHUB_REF_NAME#pypi/v}\""
+
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: packages/catalog/python/dist

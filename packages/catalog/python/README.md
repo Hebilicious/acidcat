@@ -4,6 +4,10 @@ The AcidCat catalog library for Python. PyPI package: `acid-cat-catalog`.
 
 Write a catalog in Python, and write it in canonical form. The library uses only the standard library. Use it at build time to write `acidcat.catalog.json`.
 
+```sh
+pip install acid-cat-catalog
+```
+
 ```python
 from pathlib import Path
 from acid_cat_catalog import Catalog

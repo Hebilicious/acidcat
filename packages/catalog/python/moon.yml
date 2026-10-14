@@ -14,3 +14,11 @@ tasks:
     toolchains: ["system"]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
+
+  package:
+    description: "Build the source distribution and the wheel into dist/, for PyPI."
+    command: "uv"
+    args: ["build", "--out-dir", "dist"]
+    inputs: ["acid_cat_catalog/**/*.py", "pyproject.toml", "README.md", "LICENSE"]
+    outputs: ["dist/**/*"]
+    toolchains: ["system"]

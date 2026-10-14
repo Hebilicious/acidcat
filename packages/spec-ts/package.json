@@ -2,10 +2,35 @@
   "name": "@acid-cat/spec-ts",
   "version": "0.1.0",
   "description": "The fixed details of the AcidCat specification as TypeScript data and pure functions, with no dependencies. Part of the TypeScript reference implementation.",
+  "keywords": [
+    "acidcat",
+    "specification"
+  ],
   "license": "MIT",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hebilicious/acidcat.git",
+    "directory": "packages/spec-ts"
+  },
+  "homepage": "https://github.com/Hebilicious/acidcat/tree/main/packages/spec-ts#readme",
+  "bugs": "https://github.com/Hebilicious/acidcat/issues",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist"
+  ],
   "exports": "./src/index.ts",
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:"
