@@ -4,21 +4,18 @@ name: Release
 # releasable commits since its last release: `feat`, `fix`, `perf`, `revert` and `deps`.
 #
 # Merge the release pull request to release. release-please then tags each released package and creates its GitHub
-# release, and this workflow starts the release workflow of each registry on the new tag.
+# release. Each tag starts the release workflow of its registry.
 #
-# release-please opens and updates the release pull request with GITHUB_TOKEN. GitHub holds the `pull_request` runs of
-# such a pull request until someone approves them, so this workflow approves them
-# (`scripts/approve-pull-request-runs.sh`). Tags that a workflow makes with GITHUB_TOKEN start no workflows, so this
-# workflow starts the release workflows with `workflow_dispatch`.
+# release-please uses a token of the GitHub App `heb-release` (variable RELEASE_APP_CLIENT_ID, secret
+# RELEASE_APP_PRIVATE_KEY), not GITHUB_TOKEN. GitHub starts no workflows for tags that GITHUB_TOKEN makes, and holds
+# the checks of pull requests that GITHUB_TOKEN opens. With the token of the App, the release pull request has its
+# checks, and the tags start the release workflows, as for any other pull request and tag.
 on:
   push:
     branches: [main]
 
 permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-  actions: write
+  contents: read
 
 concurrency:
   group: release
@@ -29,50 +26,23 @@ jobs:
     name: release-please
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
+        with:
+          token: ${{ steps.app.outputs.token }}
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: steps.release.outputs.pr
-
-      - name: Start the checks of the release pull request
-        if: steps.release.outputs.pr
-        env:
-          GH_TOKEN: ${{ github.token }}
-          # GitHub evaluates `env` before `if`, so the JSON is parsed in the script, where it is sure to exist.
-          PR: ${{ steps.release.outputs.pr }}
-        run: scripts/approve-pull-request-runs.sh "$(jq -r .number <<< "$PR")"
-
-      # The npm packages share one version, and one tag `npm/v<version>` publishes them all.
-      - name: Publish to npm
+      # The npm packages share one version, and one tag `npm/v<version>` publishes them all. release-please makes one
+      # tag for each package, so this step makes the shared tag.
+      - name: Tag the npm release
         if: steps.release.outputs['packages/cli--release_created']
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           TAG: npm/v${{ steps.release.outputs['packages/cli--version'] }}
           SHA: ${{ steps.release.outputs['packages/cli--sha'] }}
-        run: |
-          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$SHA"
-          gh workflow run release-npm.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
-
-      - name: Publish to PyPI
-        if: steps.release.outputs['packages/catalog/python--release_created']
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs['packages/catalog/python--tag_name'] }}
-        run: gh workflow run release-pypi.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
-
-      - name: Publish to crates.io
-        if: steps.release.outputs['packages/catalog/rust--release_created']
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs['packages/catalog/rust--tag_name'] }}
-        run: gh workflow run release-crates.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
-
-      - name: Publish the Pkl package
-        if: steps.release.outputs['packages/catalog/pkl--release_created']
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs['packages/catalog/pkl--tag_name'] }}
-        run: gh workflow run release-pkl.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
-
-      # Go needs no step: the Go module proxy reads the tag `packages/catalog/go/v<version>` that release-please makes.
+        run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$SHA"

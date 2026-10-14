@@ -50,9 +50,9 @@ Each core is complete in its own style. Neither core wraps the other. Both cores
 - The five npm packages are linked: they always have the same version, and they are released together.
 - The release pull request changes the versions in the package files, and the `CHANGELOG.md` of each package. release-please writes these changelogs.
 
-To release, merge the release pull request. release-please then tags each released package and creates its GitHub release, and `release.yml` starts the release workflow of each registry on the new tag. [`release-please-config.json`](../release-please-config.json) holds the settings, and [`.release-please-manifest.json`](../.release-please-manifest.json) holds the version of each package.
+To release, merge the release pull request. release-please then tags each released package and creates its GitHub release. Each new tag starts the release workflow of its registry. [`release-please-config.json`](../release-please-config.json) holds the settings, and [`.release-please-manifest.json`](../.release-please-manifest.json) holds the version of each package.
 
-release-please makes the release pull request with the token of the workflow. GitHub holds the checks of such a pull request until someone approves them, so `release.yml` approves them with [`scripts/approve-pull-request-runs.sh`](../scripts/approve-pull-request-runs.sh). Tags that a workflow makes start no other workflows, so `release.yml` starts the release workflows with `workflow_dispatch`. The repository setting "Allow GitHub Actions to create and approve pull requests" must be on.
+release-please works with a token of the GitHub App `heb-release`, not with the token of the workflow. GitHub starts no workflows for tags that the token of a workflow makes, and holds the checks of pull requests that it opens. With the token of the App, the release pull request has its checks, and each tag starts the release workflow of its registry. The App needs write access to contents, pull requests and issues. The repository holds its client ID in the variable `RELEASE_APP_CLIENT_ID` and its private key in the secret `RELEASE_APP_PRIVATE_KEY`.
 
 Each registry has its own release workflow. A tag that is pushed by hand on `main` also starts it. The version in the tag must be the version in the package files.
 
