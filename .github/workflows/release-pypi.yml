@@ -6,7 +6,7 @@ name: Release PyPI
 on:
   push:
     tags: ["pypi/v*"]
-  # The release workflow starts this workflow on the tag, because tags that a workflow pushes do not start workflows.
+  # Run it by hand on a tag to publish that release again.
   workflow_dispatch:
 
 permissions:
