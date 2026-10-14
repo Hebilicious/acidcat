@@ -41,6 +41,7 @@ A provider and its bindings conform for a target if, through each binding of the
 | `fixture.hidden` | Only the `app` target can use it |
 | `fixture.toggle` | Available only while the switch is on |
 | `fixture.switch.set` | Turns the switch on or off |
+| `fixture.flags` | Returns its input. The input has one property for each kind of command-line flag. Only the `cli` target can use it |
 
 The switch MUST be on when the tests start. The implementation gives no MCP instructions of its own, so its MCP instructions are the `description` of the fixture.
 

@@ -16,6 +16,22 @@ A protocol binding that serves a view as a command line. The commands come from 
   | Other | JSON text |
 
 - **Generic commands.** `call <id> [input]` calls a capability with its input as JSON text. The default input is `{}`. Use `call` when the input schema has no top-level `properties`. `list` writes the capabilities of the view as JSON: `id`, `description`, `available` and `usage`.
+- **Usage.** The `usage` of a capability is one line of text that tells how to call it. Each part has one space before it:
+
+  1. The name of the program.
+  2. If the capability has an input schema with no top-level `properties`: `call <id> '<json>'`, with the id of the capability. Nothing comes after it.
+  3. If not, the path of the command, then one part for each flag. The required flags come first. In each group, the flags are in code point order of their names.
+
+  | Property schema | Required flag | Optional flag |
+  | --- | --- | --- |
+  | `enum` of strings | `--name <a\|b>`, with the strings in the order of the `enum` | `[--name <a\|b>]` |
+  | `integer` | `--name <integer>` | `[--name <integer>]` |
+  | `number` | `--name <number>` | `[--name <number>]` |
+  | `boolean` | `--name` | `[--name]` |
+  | `string` | `--name <string>` | `[--name <string>]` |
+  | Other | `--name <json>` | `[--name <json>]` |
+
+  If a property schema is a `$ref`, use the type that it refers to. A capability with no input schema has no flags. For example, with the program name `aircon`: `aircon power set --on`, `aircon fan set --speed <auto|low|medium|high>` and `aircon status get`.
 - **Cancellation.** An interrupt (`SIGINT`) cancels the call.
 
 An application MAY add its own commands and flags. If two commands have the same path, or two flags have the same name, the program MUST stop with an error when it starts.

@@ -5,6 +5,7 @@ import {
   bundle,
   CallFailureError,
   cliExitCode,
+  cliUsage,
   commandPath,
   fail,
   httpStatus,
@@ -22,6 +23,25 @@ test("ids become surface names", () => {
   assert.ok(!isId("Aircon.power"));
   assert.ok(!isId("aircon"));
   assert.deepEqual(commandPath("aircon.power.set"), ["aircon", "power", "set"]);
+});
+
+test("the usage of a command gives its flags, required flags first", () => {
+  const input = {
+    type: "object",
+    required: ["speed", "on"],
+    properties: {
+      speed: { $ref: "#/$defs/FanSpeed" },
+      on: { type: "boolean" },
+      note: { type: "string" },
+      quiet: { type: "boolean" },
+      limits: { type: "array" },
+    },
+    $defs: { FanSpeed: { enum: ["auto", "low"] } },
+  };
+  assert.equal(cliUsage("aircon", "aircon.fan.set", input), "aircon aircon fan set --on --speed <auto|low> [--limits <json>] [--note <string>] [--quiet]");
+  assert.equal(cliUsage("aircon", "aircon.status.get", undefined), "aircon aircon status get");
+  assert.equal(cliUsage("aircon", "aircon.status.get", { type: "object", properties: {} }), "aircon aircon status get");
+  assert.equal(cliUsage("aircon", "aircon.batch.run", { oneOf: [{ type: "object" }] }), "aircon call aircon.batch.run '<json>'");
 });
 
 test("each outcome has its exit code, status code and MCP result", () => {

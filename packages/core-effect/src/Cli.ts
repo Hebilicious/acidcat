@@ -2,7 +2,7 @@
  * The CLI binding (spec/bindings/cli.md): a command line made from the catalog, with `effect/cli`. This module works
  * in all runtimes. `NodeCli` in `@acid-cat/core-effect/node` runs it in Node.js.
  */
-import { bundle, CLI_EXIT_CODES, cliExitCode, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
+import { bundle, CLI_EXIT_CODES, cliExitCode, cliUsage, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
 import type { CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec-ts";
 import { Console, Effect, Layer, Option, Schema } from "effect";
 import type { Terminal } from "effect";
@@ -111,7 +111,8 @@ export function command<R>(app: App.App<R>, options: Options): AppCommand<R> {
         const session = yield* view;
         const entries = [];
         for (const [id, capability] of Object.entries(catalogView.capabilities)) {
-          entries.push({ id, description: capability.description, ...(yield* session.availability(id)), usage: `${options.name} ${commandPath(id).join(" ")}` });
+          const usage = cliUsage(options.name, id, capability.input === undefined ? undefined : bundle(capability.input, types));
+          entries.push({ id, description: capability.description, ...(yield* session.availability(id)), usage });
         }
         yield* Console.log(JSON.stringify(entries, null, 2));
       }),

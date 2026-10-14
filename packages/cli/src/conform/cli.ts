@@ -5,6 +5,17 @@ import { Checks, expect, expectEqual, idsOf, sorted } from "./check.ts";
 
 const RULE = "spec/bindings/cli.md";
 
+/** The `usage` of each capability in the view of the fixture, after the name of the program. */
+const USAGES: { readonly [id: string]: string } = {
+  "fixture.crash": "fixture crash",
+  "fixture.echo": "fixture echo --text <string>",
+  "fixture.flags": "fixture flags --mode <fast|slow> [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--verbose]",
+  "fixture.refuse": "fixture refuse",
+  "fixture.slow": "fixture slow --milliseconds <number>",
+  "fixture.switch.set": "fixture switch set --on",
+  "fixture.toggle": "fixture toggle",
+};
+
 /** The time that a command line has to start before the interrupt, in milliseconds. */
 const INTERRUPT_AFTER = 2_000;
 
@@ -77,6 +88,15 @@ export async function checkCli(command: readonly string[]): Promise<Checks> {
   await checks.run("list gives the view", `${RULE}#commands`, async () => {
     const result = await cli("list");
     expectEqual(sorted((JSON.parse(result.stdout) as { id: string }[]).map((entry) => entry.id)), idsOf("cli"), "ids");
+  });
+  await checks.run("list gives the usage of each capability, with its flags", `${RULE}#commands`, async () => {
+    const entries = JSON.parse((await cli("list")).stdout) as { id: string; usage?: unknown }[];
+    for (const { id, usage } of entries) {
+      expect(typeof usage === "string", `${id} must have a usage`);
+      const [program, ...rest] = usage.split(" ");
+      expect(program !== "" && rest.length > 0, `the usage of ${id} must start with the name of the program, got ${JSON.stringify(usage)}`);
+      expectEqual(rest.join(" "), USAGES[id], `usage of ${id} after the name of the program`);
+    }
   });
 
   return checks;
