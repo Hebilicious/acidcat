@@ -37,6 +37,8 @@ When a design decision is made for something that does not exist yet, build it. 
 - proto installs the tools (`.prototools`). Moon runs the operations.
 - After a change to `packages/`, `schemas/` or `examples/`, run `moon run examples`, then `moon run verify`. Commit the JSON files that change.
 - Commits have no AI attribution.
+- Each published package has the license file of the repository, and a task in `moon run verify` that builds or packages it the way that its registry receives it.
+- Release by merging the release pull request of release-please. Do not change a version or a `CHANGELOG.md` by hand. See [Publishing](packages/README.md#publishing).
 
 ## Branches and pull requests
 

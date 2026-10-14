@@ -43,7 +43,18 @@ Each core is complete in its own style. Neither core wraps the other. Both cores
 
 ## Publishing
 
-Each registry has its own release workflow in [`.github/workflows/`](../.github/workflows). A tag on `main` starts it. The version in the tag must be the version in the package files.
+[release-please](https://github.com/googleapis/release-please) makes the releases, in [`release.yml`](../.github/workflows/release.yml). It reads the commits on `main`, whose titles have the form `type(scope): subject`, and keeps one release pull request open:
+
+- A package gets a release when a commit with the type `feat`, `fix`, `perf`, `revert` or `deps` changes a file in its directory. Other types, and files outside the packages, give no release.
+- Before version 1.0, `feat` and a breaking change (`!`) increase the minor version. The other types increase the patch version.
+- The five npm packages are linked: they always have the same version, and they are released together.
+- The release pull request changes the versions in the package files, and the `CHANGELOG.md` of each package. release-please writes these changelogs.
+
+To release, merge the release pull request. release-please then tags each released package and creates its GitHub release, and `release.yml` starts the release workflow of each registry on the new tag. [`release-please-config.json`](../release-please-config.json) holds the settings, and [`.release-please-manifest.json`](../.release-please-manifest.json) holds the version of each package.
+
+Pull requests and tags that a workflow makes start no other workflows. Thus `release.yml` starts the checks of the release pull request, and the release workflows, with `workflow_dispatch`. The repository setting "Allow GitHub Actions to create and approve pull requests" must be on.
+
+Each registry has its own release workflow. A tag that is pushed by hand on `main` also starts it. The version in the tag must be the version in the package files.
 
 | Registry | Packages | Tag | Workflow |
 | --- | --- | --- | --- |
@@ -78,7 +89,7 @@ crates.io accepts a trusted publisher only for a crate that exists. Publish the 
 
 ### Pkl
 
-`moon run catalog-pkl:test` writes the package into `packages/catalog/pkl/.out/`. The workflow attaches these files to the release `acid-cat-catalog@<version>`. pkg.pkl-lang.org redirects `package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@<version>` to that release.
+`PklProject` reads the version from `version.txt`, which release-please changes. `moon run catalog-pkl:test` writes the package into `packages/catalog/pkl/.out/`. The workflow attaches these files to the release `acid-cat-catalog@<version>`. pkg.pkl-lang.org redirects `package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@<version>` to that release.
 
 ### Go
 
