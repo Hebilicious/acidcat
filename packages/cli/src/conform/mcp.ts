@@ -4,7 +4,7 @@
  */
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
-import { Checks, expect, expectEqual, FORBIDDEN_ORIGIN, idsOf, sorted } from "./check.ts";
+import { Checks, expect, expectEqual, fixture, FORBIDDEN_ORIGIN, idsOf, sorted } from "./check.ts";
 
 const RULE = "spec/bindings/mcp.md";
 
@@ -33,6 +33,10 @@ export async function checkMcp(url: string, options: { readonly maximumBytes: nu
   if (client === undefined) return checks;
   const mcp = client;
   const call = (name: string, args: Record<string, unknown>) => mcp.callTool({ name, arguments: args }) as Promise<ToolResult>;
+
+  await checks.run("server/discover gives the description of the catalog as instructions", `${RULE}#server`, () => {
+    expectEqual(mcp.getInstructions(), fixture.description, "instructions");
+  });
 
   await checks.run("tools/list gives each available capability of the view", `${RULE}#tools`, async () => {
     const { tools } = await mcp.listTools();

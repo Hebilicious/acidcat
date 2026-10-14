@@ -78,6 +78,22 @@ test("MCP gives the view and each outcome", async () => {
   assert.equal((await handler(new Request("https://fixture.example/mcp"))).status, 405);
 });
 
+test("MCP gives the instructions of the options, or else the description of the application", async () => {
+  const discover = async (instructions?: string) => {
+    const handler = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], instructions, ...options() });
+    const response = await handler(
+      new Request("https://fixture.example/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "mcp-method": "server/discover", "mcp-protocol-version": "2026-07-28" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "server/discover", params: { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } } }),
+      }),
+    );
+    return ((await response.json()) as { result: { instructions?: string } }).result.instructions;
+  };
+  assert.equal(await discover(), fixture.description);
+  assert.equal(await discover("Use fixture.echo to test the server."), "Use fixture.echo to test the server.");
+});
+
 test("HTTP gives each outcome its status code", async () => {
   const handler = httpHandler(fixture, { allowedOrigins: [], base: "/api", ...options() });
   const post = (id: string, body: unknown) =>

@@ -3,6 +3,7 @@
 amends "../../catalog/pkl/Catalog.pkl"
 
 title = "AcidCat conformance fixture"
+description = "One capability for each behavior that acid-cat conform tests."
 
 targets {
   ["app"] { bindings { "typescript"; "webmcp" } }

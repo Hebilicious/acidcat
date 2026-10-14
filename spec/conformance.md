@@ -42,7 +42,7 @@ A provider and its bindings conform for a target if, through each binding of the
 | `fixture.toggle` | Available only while the switch is on |
 | `fixture.switch.set` | Turns the switch on or off |
 
-The switch MUST be on when the tests start.
+The switch MUST be on when the tests start. The implementation gives no MCP instructions of its own, so its MCP instructions are the `description` of the fixture.
 
 ## `acid-cat conform`
 

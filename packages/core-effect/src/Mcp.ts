@@ -14,6 +14,11 @@ export interface Options {
   /** The name and version that the server tells to clients. */
   readonly name: string;
   readonly version: string;
+  /**
+   * Guidance for a model about the whole server, which `server/discover` gives as `instructions`. The default is the
+   * description of the application.
+   */
+  readonly instructions?: string | undefined;
   /** The origins that can call the server. A request with no `Origin` header is accepted. */
   readonly allowedOrigins: readonly string[];
   /** The target that the server serves. The default is `"mcp"`. */
@@ -88,6 +93,7 @@ const respond = <R>(app: App.App<R>, request: Request, options: Options) =>
       const server = McpServer.layerHttp({
         name: options.name,
         version: options.version,
+        instructions: options.instructions ?? app.description,
         path: options.path ?? "/mcp",
         protocols: [McpProtocol.v2026_07_28],
         allowedOrigins: [...options.allowedOrigins],

@@ -7,6 +7,7 @@ A protocol binding that serves a view as a Model Context Protocol server through
 - The server uses one URL. It SHOULD be `/mcp` on the origin of the application.
 - The server uses MCP revision `2026-07-28`. This revision keeps no state on the server between requests. The server rejects revisions that keep state.
 - The server answers `server/discover`, `tools/list` and `tools/call`.
+- **Instructions.** The `instructions` of `server/discover` tell a model how to use the server as a whole. The application MAY give its own instructions. If it gives none, the instructions are the `description` of the catalog. If the catalog has no `description` either, the result has no `instructions`.
 - Each request has its own session. The session closes when the response is complete.
 - The server accepts requests that have no `Origin` header.
 

@@ -34,6 +34,18 @@ async function mcp(method: string, params: object = {}, name?: string) {
 
 const call = (name: string, args: object) => mcp("tools/call", { name, arguments: args }, name);
 
+test("server/discover gives the instructions of the options, or else the description of the application", async () => {
+  assert.equal((await mcp("server/discover")).result.instructions, fixture.description);
+  const instructed = Mcp.toWebHandler(fixture, Layer.fresh(switchLayer), {
+    name: "fixture",
+    version: "0.0.0",
+    allowedOrigins: [ORIGIN],
+    instructions: "Use fixture.echo to test the server.",
+  });
+  const response = await instructed(mcpRequest("server/discover"));
+  assert.equal(((await response.json()) as { result: { instructions?: string } }).result.instructions, "Use fixture.echo to test the server.");
+});
+
 test("tools/list gives the available capabilities of the view, with their schemas and hints", async () => {
   const { result } = await mcp("tools/list");
   const tools = result.tools as { name: string; inputSchema: object; outputSchema?: object; annotations: { readOnlyHint?: boolean } }[];
