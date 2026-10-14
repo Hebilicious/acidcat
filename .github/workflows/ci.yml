@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The release workflow starts this check for the release pull request. GitHub does not run workflows for pull
+  # requests that a workflow opens.
+  workflow_dispatch:
 
 permissions:
   contents: read

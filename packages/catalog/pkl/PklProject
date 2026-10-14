@@ -6,7 +6,7 @@ amends "pkl:Project"
 
 package {
   name = "acid-cat-catalog"
-  version = "0.1.0"
+  version = read("version.txt").text.trim()
   baseUri = "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/\(name)"
   packageZipUrl = "https://github.com/Hebilicious/acidcat/releases/download/\(name)@\(version)/\(name)@\(version).zip"
   description = "Write an AcidCat catalog in Pkl, and render it to JSON."
@@ -14,5 +14,5 @@ package {
   sourceCode = "https://github.com/Hebilicious/acidcat"
   sourceCodeUrlScheme = "https://github.com/Hebilicious/acidcat/blob/\(name)@\(version)/packages/catalog/pkl%{path}#L%{line}-L%{endLine}"
   issueTracker = "https://github.com/Hebilicious/acidcat/issues"
-  exclude { "moon.yml" }
+  exclude { "moon.yml"; "version.txt"; "CHANGELOG.md" }
 }

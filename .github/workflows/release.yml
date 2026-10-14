@@ -1,0 +1,75 @@
+name: Release
+
+# release-please keeps a release pull request open. It holds the next version and the changelog of each package with
+# releasable commits since its last release: `feat`, `fix`, `perf`, `revert` and `deps`.
+#
+# Merge the release pull request to release. release-please then tags each released package and creates its GitHub
+# release, and this workflow starts the release workflow of each registry on the new tag.
+#
+# Tags and pull requests that a workflow makes with GITHUB_TOKEN start no workflows. Thus this workflow starts the
+# checks of the release pull request, and the release workflows, with `workflow_dispatch`.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: release-please
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+
+      - name: Check the release pull request
+        if: steps.release.outputs.pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          NUMBER: ${{ fromJSON(steps.release.outputs.pr).number }}
+        run: |
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+          gh workflow run semantic.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH" -f pull-request="$NUMBER"
+
+      # The npm packages share one version, and one tag `npm/v<version>` publishes them all.
+      - name: Publish to npm
+        if: steps.release.outputs['packages/cli--release_created']
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: npm/v${{ steps.release.outputs['packages/cli--version'] }}
+          SHA: ${{ steps.release.outputs['packages/cli--sha'] }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$SHA"
+          gh workflow run release-npm.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+
+      - name: Publish to PyPI
+        if: steps.release.outputs['packages/catalog/python--release_created']
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs['packages/catalog/python--tag_name'] }}
+        run: gh workflow run release-pypi.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+
+      - name: Publish to crates.io
+        if: steps.release.outputs['packages/catalog/rust--release_created']
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs['packages/catalog/rust--tag_name'] }}
+        run: gh workflow run release-crates.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+
+      - name: Publish the Pkl package
+        if: steps.release.outputs['packages/catalog/pkl--release_created']
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs['packages/catalog/pkl--tag_name'] }}
+        run: gh workflow run release-pkl.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+
+      # Go needs no step: the Go module proxy reads the tag `packages/catalog/go/v<version>` that release-please makes.

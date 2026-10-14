@@ -1,10 +1,13 @@
 name: Release npm
 
-# Push a tag `npm/v<version>` on main to publish the npm packages at that version.
+# Publish the npm packages at the version of the tag `npm/v<version>`.
+# release.yml starts this workflow after a release. A tag pushed by hand on main also starts it.
 # npm authenticates this workflow with trusted publishing, and adds provenance to each package.
 on:
   push:
     tags: ["npm/v*"]
+  # The release workflow starts this workflow on the tag, because tags that a workflow pushes do not start workflows.
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -1,10 +1,13 @@
 name: Release Pkl
 
-# Push a tag `acid-cat-catalog@<version>` on main to publish the Pkl package at that version.
+# Publish the Pkl package at the version of the tag `acid-cat-catalog@<version>`.
+# release.yml starts this workflow after a release. A tag pushed by hand on main also starts it.
 # The package is a GitHub release with that name. pkg.pkl-lang.org redirects the package URI to it.
 on:
   push:
     tags: ["acid-cat-catalog@*"]
+  # The release workflow starts this workflow on the tag, because tags that a workflow pushes do not start workflows.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -24,10 +27,12 @@ jobs:
 
       - run: moon run catalog-pkl:test
 
-      # The release fails if the version in PklProject differs from the tag: .out/<tag>/ does not exist then.
-      - name: Create the release
+      # The upload fails if the version in PklProject differs from the tag: .out/<tag>/ does not exist then.
+      # release-please creates the release first. A tag pushed by hand has no release yet.
+      - name: Attach the package to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "The Pkl package acid-cat-catalog." \
-            "packages/catalog/pkl/.out/$GITHUB_REF_NAME/"*
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "The Pkl package acid-cat-catalog."
+          gh release upload "$GITHUB_REF_NAME" --clobber "packages/catalog/pkl/.out/$GITHUB_REF_NAME/"*
