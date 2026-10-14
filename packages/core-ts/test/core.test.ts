@@ -6,6 +6,7 @@ import { check } from "@acid-cat/cli";
 import { CallFailureError, createSession, httpHandler, installWebMcp, mcpHandler, renderCatalog, runCli } from "../src/index.ts";
 import type { ModelContextTool } from "../src/index.ts";
 import { fixture, options, Switch, toJsonSchema } from "./fixture.ts";
+import type { Context } from "./fixture.ts";
 
 test("the application writes a catalog that conforms", () => {
   const text = renderCatalog(fixture, { toJsonSchema });
@@ -87,6 +88,51 @@ test("HTTP gives each outcome its status code", async () => {
   assert.equal((await post("fixture.crash", {})).status, 500);
   const list = (await (await handler(new Request("https://fixture.example/api/capabilities"))).json()) as { id: string }[];
   assert.ok(!list.some((entry) => entry.id === "fixture.hidden"));
+});
+
+/** A `createContext` that counts the contexts it makes and the contexts that the handler releases. */
+function countedContexts() {
+  const counts = { created: 0, released: 0 };
+  const createContext = (): Context & AsyncDisposable => {
+    counts.created += 1;
+    return { switch: new Switch(), [Symbol.asyncDispose]: async () => void (counts.released += 1) };
+  };
+  return { counts, createContext };
+}
+
+test("with createContext, each MCP request that passes the screening has its own context", async () => {
+  const { counts, createContext } = countedContexts();
+  const handler = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], toJsonSchema, createContext });
+  const rpc = (method: string, params: object = {}) =>
+    handler(
+      new Request("https://fixture.example/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "mcp-method": method, "mcp-protocol-version": "2026-07-28" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } } }),
+      }),
+    );
+  await rpc("tools/call", { name: "fixture.switch.set", arguments: { on: false } });
+  const { result } = (await (await rpc("tools/list")).json()) as { result: { tools: { name: string }[] } };
+  assert.ok(result.tools.some((tool) => tool.name === "fixture.toggle"));
+  assert.deepEqual(counts, { created: 2, released: 2 });
+
+  assert.equal((await handler(new Request("https://fixture.example/mcp"))).status, 405);
+  assert.deepEqual(counts, { created: 2, released: 2 });
+});
+
+test("with createContext, each HTTP request that passes the screening has its own context", async () => {
+  const { counts, createContext } = countedContexts();
+  const handler = httpHandler(fixture, { allowedOrigins: [], base: "/api", toJsonSchema, createContext });
+  const set = await handler(
+    new Request("https://fixture.example/api/capabilities/fixture.switch.set", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ on: false }) }),
+  );
+  assert.equal(set.status, 200);
+  const list = (await (await handler(new Request("https://fixture.example/api/capabilities"))).json()) as { id: string; available: boolean }[];
+  assert.equal(list.find((entry) => entry.id === "fixture.toggle")?.available, true);
+  assert.deepEqual(counts, { created: 2, released: 2 });
+
+  assert.equal((await handler(new Request("https://fixture.example/api/capabilities", { method: "PUT" }))).status, 405);
+  assert.deepEqual(counts, { created: 2, released: 2 });
 });
 
 test("the command line gives each outcome its exit code", async () => {
