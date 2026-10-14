@@ -6,3 +6,6 @@ dist/
 # Private working notes and tools, kept out of the repository.
 .local/
 CLAUDE.local.md
+
+# Task worktrees, one for each branch.
+.worktrees/

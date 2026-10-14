@@ -1,0 +1,34 @@
+name: Semantic
+
+# The pull request title becomes the commit on main, because the repository allows squash merges only.
+# The commits in the pull request follow the same form.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: semantic-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semantic:
+    name: semantic
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Check the pull request title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$TITLE" | scripts/check-semantic.sh
+
+      - name: Check the commit titles
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: git log --format=%s "$BASE..$HEAD" | scripts/check-semantic.sh

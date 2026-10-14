@@ -36,4 +36,17 @@ When a design decision is made for something that does not exist yet, build it. 
 - Each Node dependency comes from the `catalog:` in `pnpm-workspace.yaml`. Never put a version in a `package.json`.
 - proto installs the tools (`.prototools`). Moon runs the operations.
 - After a change to `packages/`, `schemas/` or `examples/`, run `moon run examples`, then `moon run verify`. Commit the JSON files that change.
-- Commits have no AI attribution. Push only when the user asks.
+- Commits have no AI attribution.
+
+## Branches and pull requests
+
+- Never work directly on `main`. GitHub blocks pushes to `main`. Changes go in through a pull request that is merged with a squash merge.
+- Each issue or task gets its own branch and its own worktree in `.worktrees/<branch>`. Create it from `main` with `git worktree add .worktrees/<branch> -b <branch> main`, and do all the work in that worktree. Keep the main worktree as you found it.
+- When you start a subagent, tell it which branch and worktree it uses: the parent's, or a new one that you name. The subagent does not choose.
+- Commit titles and pull request titles are semantic: `type(scope): subject`, for example `fix(catalog): reject duplicate ids`. The types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore` and `revert`. The scope is required. Add `!` after the scope for a breaking change. The `semantic` check (`scripts/check-semantic.sh`) enforces this. The pull request title becomes the commit on `main`.
+- Push the branch and open a pull request against `main` with `gh pr create --base main --head <branch>`. A pull request that closes an issue says `Closes #<number>` in its body.
+- When a change is too large for one pull request, use `gh stack` (see `.agents/skills/gh-stack`): one branch and one pull request for each layer, in one worktree. Use it when the work splits into layers that a reviewer can read one at a time.
+- A human reviews each pull request. Hand off the pull request URL. Merge only after the human accepts the work, or when the human explicitly says to merge without review.
+- Each session owns its own branch. Do not push to, rebase or merge a branch that another session owns.
+- The session that merges a branch makes CI pass on it. Rebase on `main`, fix what fails, and merge only when every required check is green. Never skip or weaken a check to make it pass.
+- After the merge, remove the worktree with `git worktree remove .worktrees/<branch>`.
