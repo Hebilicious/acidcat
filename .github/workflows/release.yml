@@ -34,9 +34,11 @@ jobs:
         if: steps.release.outputs.pr
         env:
           GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
-          NUMBER: ${{ fromJSON(steps.release.outputs.pr).number }}
+          # GitHub evaluates `env` before `if`, so the JSON is parsed in the script, where it is sure to exist.
+          PR: ${{ steps.release.outputs.pr }}
         run: |
+          BRANCH=$(jq -r .headBranchName <<< "$PR")
+          NUMBER=$(jq -r .number <<< "$PR")
           gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
           gh workflow run semantic.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH" -f pull-request="$NUMBER"
 
