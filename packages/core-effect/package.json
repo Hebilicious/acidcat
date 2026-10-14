@@ -1,6 +1,6 @@
 {
   "name": "@acid-cat/core-effect",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Serve AcidCat capabilities, written fully in Effect.",
   "keywords": [
     "acidcat",

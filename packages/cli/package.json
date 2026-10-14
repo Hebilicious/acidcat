@@ -1,6 +1,6 @@
 {
   "name": "@acid-cat/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The AcidCat command line: check, format and view catalogs, and test implementations.",
   "keywords": [
     "acidcat",
