@@ -17,6 +17,11 @@ export type McpOptions<Context> = McpSettings & ContextOption<Context>;
 export interface McpSettings {
   readonly name: string;
   readonly version: string;
+  /**
+   * Guidance for a model about the whole server, which `server/discover` gives as `instructions`. The default is the
+   * description of the application.
+   */
+  readonly instructions?: string | undefined;
   /** The origins that can call the server. A request with no `Origin` header is accepted. */
   readonly allowedOrigins: readonly string[];
   readonly toJsonSchema: ToJsonSchema;
@@ -72,7 +77,7 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
     return withContext<Context, Response>(options, request, async (context) => {
       const session = createSession(app, { target: options.target ?? "mcp", context, toJsonSchema: options.toJsonSchema });
       try {
-        return await answer(session, message, options, request.signal);
+        return await answer(session, message, { ...options, instructions: options.instructions ?? app.description }, request.signal);
       } finally {
         await session.dispose();
       }
@@ -91,7 +96,14 @@ async function answer(session: Session, message: JsonRpcRequest, options: McpSet
     });
   switch (message.method) {
     case "server/discover":
-      return complete({ supportedVersions: [MCP_PROTOCOL_VERSION], capabilities: { tools: { listChanged: false } } }, true);
+      return complete(
+        {
+          supportedVersions: [MCP_PROTOCOL_VERSION],
+          capabilities: { tools: { listChanged: false } },
+          ...(options.instructions === undefined ? {} : { instructions: options.instructions }),
+        },
+        true,
+      );
     case "tools/list":
       return complete({ tools: listTools(session) }, true);
     case "tools/call": {

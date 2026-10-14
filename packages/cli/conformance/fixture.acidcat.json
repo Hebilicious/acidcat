@@ -1,6 +1,7 @@
 {
   "acidcat": "0.1",
   "title": "AcidCat conformance fixture",
+  "description": "One capability for each behavior that acid-cat conform tests.",
   "targets": {
     "api": {
       "bindings": [

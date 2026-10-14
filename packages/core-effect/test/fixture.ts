@@ -29,6 +29,7 @@ const everywhere = ["app", "mcp", "cli", "api"];
 
 export const fixture = App.make({
   title: "Fixture",
+  description: "One capability for each behavior that acid-cat conform tests.",
   targets: {
     app: { bindings: ["typescript", "webmcp"] },
     mcp: { bindings: ["mcp"] },
