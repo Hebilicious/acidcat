@@ -9,6 +9,19 @@ export class Switch extends Context.Service<Switch, SubscriptionRef.Subscription
 
 export const switchLayer = Layer.effect(Switch, SubscriptionRef.make(true));
 
+/** A switch layer that counts how many times it is built and released, to test when a host builds the services. */
+export function countedSwitchLayer() {
+  const counts = { built: 0, released: 0 };
+  const layer = Layer.effect(
+    Switch,
+    Effect.acquireRelease(
+      Effect.sync(() => counts.built++).pipe(Effect.andThen(SubscriptionRef.make(true))),
+      () => Effect.sync(() => counts.released++),
+    ),
+  );
+  return { counts, layer };
+}
+
 const Text = Schema.Struct({ text: Schema.String });
 const Refused = Schema.TaggedStruct("Refused", { reason: Schema.String });
 

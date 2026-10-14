@@ -2,13 +2,20 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
-const cli = (...args: string[]) => {
-  const run = spawnSync(process.execPath, [new URL("./fixture-cli.ts", import.meta.url).pathname, ...args], {
+const program = (file: string) => (...args: string[]) => {
+  const run = spawnSync(process.execPath, [new URL(file, import.meta.url).pathname, ...args], {
     encoding: "utf-8",
     timeout: 20_000,
   });
   return { code: run.status, stdout: run.stdout, stderr: run.stderr };
 };
+
+const cli = program("./fixture-cli.ts");
+/** The command line with the flag `--switch` of the application. The services of the capabilities depend on it. */
+const cliWithFlag = program("./fixture-cli-flags.ts");
+
+const toggle = (stdout: string) =>
+  (JSON.parse(stdout) as { id: string; available: boolean }[]).find((entry) => entry.id === "fixture.toggle");
 
 test("a value goes to standard output with exit code 0", () => {
   const run = cli("fixture", "echo", "--text", "hi");
@@ -39,4 +46,15 @@ test("list gives the capabilities of the view", () => {
   const ids = (JSON.parse(cli("list").stdout) as { id: string }[]).map((entry) => entry.id);
   assert.ok(ids.includes("fixture.echo"));
   assert.ok(!ids.includes("fixture.hidden"));
+});
+
+test("a flag of the application decides the services of the capabilities", () => {
+  assert.equal(toggle(cliWithFlag("list").stdout)?.available, true);
+  assert.equal(toggle(cliWithFlag("--switch", "false", "list").stdout)?.available, false);
+});
+
+test("a command that the application changed keeps the exit codes", () => {
+  assert.equal(cliWithFlag("--switch", "false", "fixture", "echo", "--text", "hi").code, 0);
+  assert.equal(cliWithFlag("--switch", "false", "nope").code, 2);
+  assert.equal(cliWithFlag("--switch", "false", "fixture", "echo").code, 3);
 });
