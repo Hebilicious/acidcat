@@ -367,12 +367,17 @@ test("the availability of a group gives no value, and does not throw, when only 
     Effect.scoped(
       Effect.gen(function* () {
         const group = yield* Domains;
+        const reads = { started: 0 };
         const current = group.current(
-          () => ({ get: Effect.sleep(1).pipe(Effect.as(unavailable("Later."))), changes: Stream.make(unavailable("Later.")) }),
+          () => ({
+            get: Effect.sync(() => reads.started++).pipe(Effect.andThen(Effect.sleep(1)), Effect.as(unavailable("Later."))),
+            changes: Stream.make(unavailable("Later.")),
+          }),
           { dormant: AVAILABLE },
         );
         yield* group.start;
-        assert.equal(current.getUnsafe?.(), undefined);
+        for (let read = 0; read < 10; read++) assert.equal(current.getUnsafe?.(), undefined);
+        assert.equal(reads.started, 0);
       }),
     ).pipe(Effect.provide(layer)),
   );
