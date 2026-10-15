@@ -3,7 +3,8 @@
  * the operation. See spec/catalog.md#capabilities.
  */
 import type { Availability } from "@acid-cat/spec-ts";
-import type { Effect, Schema, Stream } from "effect";
+import { Effect, Queue, Stream, SubscriptionRef } from "effect";
+import type { Schema } from "effect";
 
 /** A schema that needs no services to decode or encode. */
 export type AnySchema = Schema.Codec<any, any, never, never>;
@@ -30,10 +31,57 @@ export interface Capability<
    * value of the stream is the current value.
    */
   readonly state?: { readonly schema: AnySchema; readonly changes: Stream.Stream<unknown, never, R> } | undefined;
-  /** The availability of the capability over time. With no stream, the capability is always available. */
-  readonly availability?: Stream.Stream<Availability, never, R> | undefined;
+  /**
+   * The availability of the capability. With no availability, the capability is always available.
+   *
+   * - A `Stream` gives each value. The session keeps the last value, and decides each call on it. A value reaches the
+   *   session when its fiber runs, so a call that comes in the same turn as a change is decided on the value before
+   *   the change.
+   * - An Effect that gives a `Current` gives a value that the session reads when a call comes in. Use it when the
+   *   availability changes in code that does not wait, so that a call just after a change is decided on the new value.
+   *   `fromSubscriptionRef` and `fromObservable` make a `Current`.
+   */
+  readonly availability?: Stream.Stream<Availability, never, R> | Effect.Effect<Current<Availability>, never, R> | undefined;
   readonly run: (input: Input["Type"]) => Effect.Effect<Output["Type"], Failure["Type"], R>;
 }
+
+/** A value that a session reads when it needs it, and follows for its listeners. */
+export interface Current<A> {
+  /** The value now. This effect does not wait, so that code that does not use Effect can read it at once. */
+  readonly get: Effect.Effect<A>;
+  /** The current value, then each change. */
+  readonly changes: Stream.Stream<A>;
+}
+
+/** The value of a `SubscriptionRef`, as a `Current`. */
+export const fromSubscriptionRef = <A>(ref: SubscriptionRef.SubscriptionRef<A>): Current<A> => ({
+  get: SubscriptionRef.get(ref),
+  changes: SubscriptionRef.changes(ref),
+});
+
+/** A source of values for code that does not use Effect. Its listeners hear each change. */
+export interface Observable<A> {
+  getSnapshot(): A;
+  subscribe(listener: (value: A) => void): { unsubscribe(): void };
+}
+
+/**
+ * The value of an observable, as a `Current`. `get` reads `getSnapshot`. `changes` subscribes while a reader follows
+ * it, and unsubscribes when the reader stops.
+ */
+export const fromObservable = <A>(source: Observable<A>): Current<A> => ({
+  get: Effect.sync(() => source.getSnapshot()),
+  changes: Stream.callback<A>((queue) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const subscription = source.subscribe((value) => void Queue.offerUnsafe(queue, value));
+        Queue.offerUnsafe(queue, source.getSnapshot());
+        return subscription;
+      }),
+      (subscription) => Effect.sync(() => subscription.unsubscribe()),
+    ),
+  ),
+});
 
 export type Any<R = any> = Capability<any, any, any, R>;
 

@@ -109,25 +109,25 @@ test("the schemas of each capability are the bundled schemas of the view", () =>
   }
 });
 
-test("a change of availability reaches only the handle of its capability, with no reads of the other capabilities", async () => {
+test("a change of availability reaches only the handle of its capability, and reads only that capability", async () => {
   const { app, switches } = largeApplication(40);
   const scope = Effect.runSync(Scope.make());
   try {
-    const reads = { availability: 0 };
+    const reads: string[] = [];
     const { handles } = await Effect.runPromise(
       Effect.gen(function* () {
         const session = yield* Session.make(app, { target: "app" });
         const counted: Session.Session = {
           ...session,
           availability: (id) => {
-            reads.availability++;
+            reads.push(id);
             return session.availability(id);
           },
         };
         return { handles: yield* Handles.make(app, counted) };
       }).pipe(Scope.provide(scope)),
     );
-    const readsAtOpen = reads.availability;
+    const readsAtOpen = reads.length;
     const notified = new Map<string, Availability[]>();
     for (const [id, handle] of handles) {
       notified.set(id, []);
@@ -140,7 +140,7 @@ test("a change of availability reaches only the handle of its capability, with n
     await reached;
 
     assert.deepEqual(handles.get(target)!.availability.getSnapshot(), unavailable("Off."));
-    assert.equal(reads.availability, readsAtOpen);
+    assert.deepEqual(new Set(reads.slice(readsAtOpen)), new Set([target]));
     for (const [id, values] of notified) assert.equal(values.length, id === target ? 1 : 0, id);
   } finally {
     await Effect.runPromise(Scope.close(scope, Exit.void));

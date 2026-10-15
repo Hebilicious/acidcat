@@ -24,7 +24,10 @@ export interface Session {
    * read, so a session that only calls capabilities never writes JSON Schema.
    */
   readonly view: CatalogDocument;
-  /** The current availability of a capability in the view. */
+  /**
+   * The current availability of a capability in the view. For a capability whose availability is a `Current`, this
+   * reads it now. A call is decided on this value.
+   */
   readonly availability: (id: string) => Effect.Effect<Availability>;
   /** The availability of one capability: the current value, then each change. */
   readonly availabilityChanges: (id: string) => Stream.Stream<Availability>;
@@ -60,15 +63,28 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
 
   const announcements = yield* PubSub.unbounded<void>();
   const served = new Map<string, Capability.Any<R>>();
-  // A capability with no availability stream is always available, and has no ref.
+  // A capability with no availability is always available, and has no ref. The ref holds the last value that the
+  // session announced. `reads` holds how the session reads the availability when a call comes in.
   const availability = new Map<string, SubscriptionRef.SubscriptionRef<Availability>>();
+  const reads = new Map<string, Effect.Effect<Availability>>();
   for (const capability of App.capabilitiesOf(app, options.target)) {
     if (served.has(capability.id)) throw new Error(`The capability ${capability.id} is declared two times.`);
     served.set(capability.id, capability);
     if (capability.availability === undefined) continue;
-    const ref = yield* SubscriptionRef.make<Availability>(AVAILABLE);
+    let values: Stream.Stream<Availability, never, R>;
+    let initial: Availability = AVAILABLE;
+    if (Stream.isStream(capability.availability)) {
+      values = capability.availability;
+    } else {
+      const current = yield* capability.availability.pipe(Effect.provideContext(context));
+      initial = yield* current.get;
+      values = current.changes;
+      reads.set(capability.id, current.get);
+    }
+    const ref = yield* SubscriptionRef.make<Availability>(initial);
     availability.set(capability.id, ref);
-    yield* capability.availability.pipe(
+    reads.set(capability.id, reads.get(capability.id) ?? SubscriptionRef.get(ref));
+    yield* values.pipe(
       Stream.runForEach((value) =>
         Effect.gen(function* () {
           if (sameAvailability(yield* SubscriptionRef.get(ref), value)) return;
@@ -114,11 +130,8 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
 
   const notServed = (id: string): Availability => ({ available: false, reason: unknown(id).message });
 
-  const availabilityOf = (id: string): Effect.Effect<Availability> => {
-    const ref = availability.get(id);
-    if (ref !== undefined) return SubscriptionRef.get(ref);
-    return Effect.succeed(served.has(id) ? AVAILABLE : notServed(id));
-  };
+  const availabilityOf = (id: string): Effect.Effect<Availability> =>
+    reads.get(id) ?? Effect.succeed(served.has(id) ? AVAILABLE : notServed(id));
 
   const availabilityChanges = (id: string): Stream.Stream<Availability> => {
     const ref = availability.get(id);

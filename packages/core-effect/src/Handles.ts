@@ -9,14 +9,12 @@ import type { Availability, Result } from "@acid-cat/spec-ts";
 import { Cause, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect";
 
 import type * as App from "./App.ts";
+import type * as Capability from "./Capability.ts";
 import { sameAvailability } from "./internal/availability.ts";
 import * as Session from "./Session.ts";
 
 /** A value that changes, and that code without Effect can read and observe. */
-export interface Observable<T> {
-  getSnapshot(): T;
-  subscribe(listener: (value: T) => void): { unsubscribe(): void };
-}
+export type Observable<T> = Capability.Observable<T>;
 
 export interface CallOptions {
   readonly signal?: AbortSignal | undefined;
@@ -54,6 +52,42 @@ function observable<T>(initial: T) {
   };
 }
 
+/**
+ * The availability of one capability as an observable. `getSnapshot` reads the session now, so code that does not use
+ * Effect sees a change of a `Current` availability at once. It gives the same object while the value stays the same.
+ * Listeners hear each change one time.
+ */
+const followAvailability = (session: Session.Session, id: string, changes: boolean) =>
+  Effect.gen(function* () {
+    let snapshot = yield* session.availability(id);
+    let heard = snapshot;
+    const listeners = new Set<(value: Availability) => void>();
+    const read = (): Availability => {
+      const exit = Effect.runSyncExit(session.availability(id));
+      if (Exit.isSuccess(exit) && !sameAvailability(snapshot, exit.value)) snapshot = exit.value;
+      return snapshot;
+    };
+    if (changes) {
+      yield* session.availabilityChanges(id).pipe(
+        Stream.runForEach((next) =>
+          Effect.sync(() => {
+            if (sameAvailability(heard, next)) return;
+            heard = next;
+            listeners.forEach((listener) => listener(read()));
+          }),
+        ),
+        Effect.forkScoped({ startImmediately: true }),
+      );
+    }
+    return {
+      getSnapshot: read,
+      subscribe(listener: (value: Availability) => void) {
+        listeners.add(listener);
+        return { unsubscribe: () => listeners.delete(listener) };
+      },
+    } satisfies Observable<Availability>;
+  });
+
 /** A copy of each value, so that a client cannot change the data of the provider. */
 const detached = <T>(source: Observable<T>): Observable<T> => ({
   getSnapshot: () => structuredClone(source.getSnapshot()),
@@ -85,17 +119,7 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
     const handles = new Map<string, Handle>();
     for (const [id, capability] of session.capabilities) {
       // Each handle follows the availability of its own capability, so a change reaches one handle.
-      const availability = observable(yield* session.availability(id));
-      if (capability.availability !== undefined) {
-        yield* session.availabilityChanges(id).pipe(
-          Stream.runForEach((next) =>
-            Effect.sync(() => {
-              if (!sameAvailability(availability.observable.getSnapshot(), next)) availability.set(next);
-            }),
-          ),
-          Effect.forkIn(scope, { startImmediately: true }),
-        );
-      }
+      const availability = yield* followAvailability(session, id, capability.availability !== undefined);
 
       let snapshot: Observable<unknown> | undefined;
       if (capability.state !== undefined) {
@@ -114,7 +138,7 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
         id,
         description: capability.description,
         audience: [session.target],
-        availability: availability.observable,
+        availability,
         ...(snapshot === undefined ? {} : { snapshot }),
         execute: (input, options) =>
           run(

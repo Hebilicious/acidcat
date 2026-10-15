@@ -37,7 +37,11 @@ export const aircon = App.make({
 
 - `input` is a `Schema.Struct`. With no `input`, the input is an empty object. Use `Schema.Finite` or `Schema.Int` for numbers: `Schema.Number` also accepts `Infinity` and `NaN`, which JSON cannot hold.
 - Each failure is a `Schema.TaggedStruct`. Its tag is the tag in the catalog.
-- `availability` is an optional `Stream` of availability values.
+- `availability` is optional. It is a `Stream` of availability values, or an Effect that gives a `Capability.Current`: a value that the session reads when a call comes in. With a `Stream`, a value reaches the session when its fiber runs, so a call in the same turn as a change is decided on the value before the change. When the availability changes in code that does not wait, use a `Current`, so that each call is decided on the value at that time. `Capability.fromSubscriptionRef(ref)` and `Capability.fromObservable(source)` make one:
+
+  ```ts
+  availability: Owner.useSync((owner) => Capability.fromObservable(owner.availability)),
+  ```
 - `state` is an optional `{ schema, changes }`: the schema of the [state](../../spec/invocation.md#state), and a `Stream` of its values. `session.state(id)` follows it.
 - Give a shared type an `identifier` annotation. It becomes a named type in `$defs`.
 
