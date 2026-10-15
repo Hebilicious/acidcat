@@ -178,12 +178,11 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
       }
       const outcome = yield* call(capability, decoded.success);
       if ("kind" in outcome) return outcome;
-      const encoded = outcome.ok
-        ? yield* encode(capability.output ?? Schema.Null, outcome.value).pipe(Effect.map((value) => ({ ok: true as const, value })))
-        : yield* encode(Schema.Union(capability.failures ?? []), outcome.error).pipe(
-            Effect.map((error) => ({ ok: false as const, error })),
-          );
-      return encoded ?? callFailure("internal", "The capability returned a value that does not agree with its schema.");
+      const encoded = yield* (outcome.ok
+        ? encode(capability.output ?? Schema.Null, outcome.value)
+        : encode(Schema.Union(capability.failures ?? []), outcome.error));
+      if (encoded === undefined) return callFailure("internal", "The capability returned a value that does not agree with its schema.");
+      return outcome.ok ? { ok: true as const, value: encoded.json } : { ok: false as const, error: encoded.json };
     });
 
   const execute: Session["execute"] = (capability, input) =>
@@ -214,8 +213,8 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
   });
 
 /** Encode a value with its schema. `undefined` if the value does not agree with the schema. */
-const encode = (schema: Schema.Top, value: unknown) =>
+const encode = (schema: Schema.Top, value: unknown): Effect.Effect<{ readonly json: unknown } | undefined> =>
   Schema.encodeUnknownEffect(schema as Schema.Codec<unknown, unknown>)(value).pipe(
-    Effect.map((encoded) => encoded as unknown),
+    Effect.map((json) => ({ json })),
     Effect.catch(() => Effect.succeed(undefined)),
   );

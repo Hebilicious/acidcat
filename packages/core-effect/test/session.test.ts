@@ -87,3 +87,34 @@ test("execute puts failures and call failures in the error channel", () =>
       assert.equal(value, null);
     }),
   ));
+
+test("a value or a failure that does not agree with its schema is an internal call failure", () => {
+  const wrong = App.make({
+    targets: { app: { bindings: ["typescript"] } },
+    capabilities: [
+      Capability.make({
+        id: "probe.value.give",
+        description: "Give a value that is not null.",
+        audience: ["app"],
+        run: () => Effect.succeed(1 as unknown as null),
+      }),
+      Capability.make({
+        id: "probe.failure.give",
+        description: "Give a failure that is not in failures.",
+        audience: ["app"],
+        failures: [Schema.TaggedStruct("Known", {})],
+        run: () => Effect.fail({ _tag: "Unknown" } as unknown as { readonly _tag: "Known" }),
+      }),
+    ],
+  });
+  const internal = { kind: "internal", message: "The capability returned a value that does not agree with its schema." };
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make(wrong, { target: "app" });
+        assert.deepEqual(yield* session.invoke("probe.value.give", {}), internal);
+        assert.deepEqual(yield* session.invoke("probe.failure.give", {}), internal);
+      }),
+    ),
+  );
+});
