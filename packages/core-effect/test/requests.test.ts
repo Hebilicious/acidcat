@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { Context, Deferred, Effect, Layer } from "effect";
 
 import { App, Capability, Http, Mcp } from "../src/index.ts";
-import { countedSwitchLayer, fixture } from "./fixture.ts";
+import { countedSwitchLayer, fixture, Switch } from "./fixture.ts";
 
 const ORIGIN = "https://probe.example";
 
@@ -130,3 +130,18 @@ for (const services of ["shared", "per-request"] as const) {
     await Effect.runPromise(Deferred.await(interrupted));
   });
 }
+
+test("shared handlers build nothing for a request that they reject, and reject it when the services cannot be built", async () => {
+  const { counts, layer } = countedSwitchLayer();
+  const mcp = Mcp.toWebHandler(fixture, layer, { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] });
+  const http = Http.toWebHandler(fixture, layer, { allowedOrigins: [ORIGIN], base: "/api" });
+  for (const request of [...rejected("/mcp")]) assert.ok((await mcp(request)).status >= 400);
+  for (const request of [...rejected("/api/capabilities/fixture.echo")]) assert.ok((await http(request)).status >= 400);
+  assert.deepEqual(counts, { built: 0, released: 0 });
+
+  const broken = Layer.effect(Switch, Effect.die(new Error("The services cannot be built.")));
+  const brokenMcp = Mcp.toWebHandler(fixture, broken, { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] });
+  const brokenHttp = Http.toWebHandler(fixture, broken, { allowedOrigins: [ORIGIN], base: "/api" });
+  assert.equal((await brokenMcp(new Request(`${ORIGIN}/mcp`, { method: "GET" }))).status, 405);
+  assert.equal((await brokenHttp(new Request(`${ORIGIN}/api/capabilities`, { method: "PUT" }))).status, 405);
+});

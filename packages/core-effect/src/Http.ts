@@ -39,9 +39,13 @@ export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, op
     return (request: Request): Promise<Response> =>
       answer(request, Effect.runPromiseExit(handle(app, request, options, layer), { signal: request.signal }));
   }
+  // The runtime builds the services the first time that it runs, so the request is screened before it.
   const runtime = ManagedRuntime.make(layer);
-  return (request: Request): Promise<Response> =>
-    answer(request, runtime.runPromiseExit(handle(app, request, options), { signal: request.signal }));
+  return async (request: Request): Promise<Response> => {
+    const routed = await route(request, options);
+    if (routed instanceof Response) return routed;
+    return answer(request, runtime.runPromiseExit(respond(app, routed, options), { signal: request.signal }));
+  };
 }
 
 /**
