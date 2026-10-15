@@ -114,3 +114,32 @@ test("a handle gives the same availability object while the value stays the same
     await session.dispose();
   }
 });
+
+test("listeners hear each change in order, also when changes come faster than they are delivered", async () => {
+  const owner = gate();
+  const session = await Handles.open(
+    app,
+    Layer.mergeAll(Layer.succeed(Gate, owner), Layer.effect(Door, SubscriptionRef.make<Availability>(AVAILABLE))),
+    { target: "app" },
+  );
+  try {
+    const heard: Availability[] = [];
+    const waiters: { readonly count: number; readonly resolve: () => void }[] = [];
+    session.handles.get("probe.gate.pass")!.availability.subscribe((value) => {
+      heard.push(value);
+      for (const waiter of waiters) if (heard.length === waiter.count) waiter.resolve();
+    });
+    const heardCount = (count: number) => new Promise<void>((resolve) => waiters.push({ count, resolve }));
+
+    // The first change reaches the listener, so the session and the handle both follow the gate.
+    owner.set(unavailable("Closed for the night."));
+    await heardCount(1);
+    owner.set(AVAILABLE);
+    owner.set(unavailable("Closed for repairs."));
+    owner.set(AVAILABLE);
+    await heardCount(4);
+    assert.deepEqual(heard, [unavailable("Closed for the night."), AVAILABLE, unavailable("Closed for repairs."), AVAILABLE]);
+  } finally {
+    await session.dispose();
+  }
+});

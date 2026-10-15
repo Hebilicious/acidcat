@@ -55,12 +55,12 @@ function observable<T>(initial: T) {
 /**
  * The availability of one capability as an observable. `getSnapshot` reads the session now, so code that does not use
  * Effect sees a change of a `Current` availability at once. It gives the same object while the value stays the same.
- * Listeners hear each change one time.
+ * Listeners hear each value that the session announces, in order, and never the same value two times in a row.
  */
 const followAvailability = (session: Session.Session, id: string, changes: boolean) =>
   Effect.gen(function* () {
     let snapshot = yield* session.availability(id);
-    let heard = snapshot;
+    let delivered = snapshot;
     const listeners = new Set<(value: Availability) => void>();
     const read = (): Availability => {
       const exit = Effect.runSyncExit(session.availability(id));
@@ -71,9 +71,9 @@ const followAvailability = (session: Session.Session, id: string, changes: boole
       yield* session.availabilityChanges(id).pipe(
         Stream.runForEach((next) =>
           Effect.sync(() => {
-            if (sameAvailability(heard, next)) return;
-            heard = next;
-            listeners.forEach((listener) => listener(read()));
+            if (sameAvailability(delivered, next)) return;
+            delivered = next;
+            listeners.forEach((listener) => listener(next));
           }),
         ),
         Effect.forkScoped({ startImmediately: true }),
