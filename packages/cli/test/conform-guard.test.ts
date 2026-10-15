@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { getEventListeners } from "node:events";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import fc from "fast-check";
 
+import { Checks } from "../src/conform/check.ts";
 import { checkCli } from "../src/conform/cli.ts";
 import { conform, serve } from "../src/conform/index.ts";
 import { cancellations } from "../src/conform/properties.ts";
@@ -72,6 +74,20 @@ test("an installation that ends after the guard is removed", async () => {
   await removal;
 });
 
+test("a wait for a change of the tools stops at a signal that aborted before, and leaves no listener on its signal", async () => {
+  const host = createTestHost();
+  const aborted = new AbortController();
+  const reason = new Error("The check ended before.");
+  aborted.abort(reason);
+  await assert.rejects(host.changed(0, aborted.signal), (error) => error === reason);
+
+  const waiting = new AbortController();
+  const changed = host.changed(0, waiting.signal);
+  host.modelContext.registerTool({ name: "probe.tool" }, { signal: new AbortController().signal });
+  assert.equal(await changed, 1);
+  assert.equal(getEventListeners(waiting.signal, "abort").length, 0);
+});
+
 test("a wait for a change of the tools stops at its signal", async () => {
   const host = createTestHost();
   const controller = new AbortController();
@@ -87,6 +103,7 @@ function lateDriver() {
   const starts = new Promise<void>((resolve) => (open = resolve));
   const cancelled: number[] = [];
   let calls = 0;
+  let allCancelled = () => undefined as void;
   const driver: WebMcpDriver = {
     tools: async () => [],
     version: async () => 0,
@@ -96,18 +113,24 @@ function lateDriver() {
       await starts;
       return ++calls;
     },
-    cancel: async (call) => void cancelled.push(call),
+    cancel: async (call) => {
+      cancelled.push(call);
+      if (cancelled.length === calls) allCancelled();
+    },
     result: async () => ({ missing: true }),
     close: async () => undefined,
   };
-  return { driver, open, cancelled, started: () => calls };
+  /** Resolves when each call that started is cancelled. */
+  const eachCancelled = () => new Promise<void>((resolve) => (allCancelled = resolve));
+  return { driver, open, cancelled, eachCancelled, started: () => calls };
 }
 
 test("a tool call that starts after the deadline of its check is cancelled", async () => {
   const late = lateDriver();
   await checkWebMcp(late.driver, 100);
+  const cancelled = late.eachCancelled();
   late.open();
-  await new Promise((resolve) => setImmediate(resolve));
+  await cancelled;
   assert.ok(late.started() > 0);
   assert.deepEqual([...late.cancelled].sort(), Array.from({ length: late.started() }, (_, index) => index + 1));
 });
@@ -168,4 +191,13 @@ setInterval(() => undefined, 1000);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("a check whose work does not stop when it is cancelled says so", async () => {
+  const checks = new Checks("probe", 100);
+  await checks.run("a check that never ends", "spec/conformance.md", () => new Promise<void>(() => undefined));
+  const [result] = checks.results;
+  assert.equal(result?.passed, false);
+  assert.match(result?.detail ?? "", /did not settle within 100 ms/);
+  assert.match(result?.detail ?? "", /the work of the check did not stop within 100 ms after it was cancelled/);
 });

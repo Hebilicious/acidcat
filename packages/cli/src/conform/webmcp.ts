@@ -90,15 +90,21 @@ export function createTestHost(): TestHost {
     version: () => version,
     changed: (after, signal) =>
       new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(signal.reason);
+          return;
+        }
+        const stop = () => {
+          waiting.delete(wake);
+          reject(signal?.reason);
+        };
         const wake = () => {
           if (version <= after) return;
           waiting.delete(wake);
+          signal?.removeEventListener("abort", stop);
           resolve(version);
         };
-        signal?.addEventListener("abort", () => {
-          waiting.delete(wake);
-          reject(signal.reason);
-        });
+        signal?.addEventListener("abort", stop, { once: true });
         waiting.add(wake);
         wake();
       }),
@@ -208,10 +214,6 @@ async function untilTools(driver: WebMcpDriver, deadline: Deadline, condition: (
   }
 }
 
-/**
- * Call a tool until the deadline. If the deadline comes first, cancel the call, so that it does not run on in the
- * page.
- */
 /** Start a call to a tool, until the deadline. A call that starts after the deadline is cancelled at once. */
 function startTool(driver: WebMcpDriver, deadline: Deadline, name: string, input: unknown): Promise<number> {
   const starting = driver.start(name, input);
@@ -221,6 +223,10 @@ function startTool(driver: WebMcpDriver, deadline: Deadline, name: string, input
   });
 }
 
+/**
+ * Call a tool until the deadline. If the deadline comes first, cancel the call, so that it does not run on in the
+ * page.
+ */
 async function callTool(driver: WebMcpDriver, deadline: Deadline, name: string, input: unknown): Promise<ToolCall> {
   const started = await startTool(driver, deadline, name, input);
   try {

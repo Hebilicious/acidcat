@@ -21,8 +21,9 @@ export const idsOf = (target: string): string[] => Object.keys(viewOf(fixture, t
 /**
  * Collects checks for one binding. Each check has one deadline, `guard` milliseconds after it starts. At the deadline,
  * the check fails with "did not settle", and its signal aborts, so that the operations of the check that still run on
- * the side of the client stop. A check that fails ends only when its operations have stopped, so that none of them
- * outlives it. That wait has its own guard.
+ * the side of the client stop. A check that fails waits for its operations to stop, for one more guard at most, before
+ * the next check starts. An operation that does not stop in that time, for example a call that a page in a browser
+ * runs and that ends only when the page closes, can outlive its check: the detail of the check says so.
  */
 export class Checks {
   readonly results: Check[] = [];
@@ -44,6 +45,7 @@ export class Checks {
     } catch (error) {
       deadline.cancel(new Error(`${check} ended`));
       // The reason that the body gives is more precise than the deadline of the whole check, when it has one.
+      let stopped = true;
       const reason = await within(
         done.then(
           () => error,
@@ -51,8 +53,18 @@ export class Checks {
         ),
         this.guard,
         `the end of ${check}`,
-      ).catch(() => error);
-      this.results.push({ binding: this.binding, name, rule, passed: false, detail: reason instanceof Error ? reason.message : String(reason) });
+      ).catch(() => {
+        stopped = false;
+        return error;
+      });
+      const detail = reason instanceof Error ? reason.message : String(reason);
+      this.results.push({
+        binding: this.binding,
+        name,
+        rule,
+        passed: false,
+        detail: stopped ? detail : `${detail} (the work of the check did not stop within ${this.guard} ms after it was cancelled)`,
+      });
     } finally {
       deadline.end();
     }
@@ -141,7 +153,10 @@ export class Deadline {
     });
   }
 
-  /** Read a state until `condition` is true, until the deadline. The reads are the trigger, not the time. */
+  /**
+   * Read a state until `condition` is true, until the deadline. The state has no notification of its changes through
+   * all bindings, so this reads it again 5 ms after each read. The state decides when the wait ends, not the time.
+   */
   async until<T>(read: (signal: AbortSignal) => Promise<T>, condition: (value: T) => boolean, what: string): Promise<void> {
     for (;;) {
       if (condition(await this.within(read(this.signal), what))) return;
