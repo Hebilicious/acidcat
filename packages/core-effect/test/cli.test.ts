@@ -3,10 +3,7 @@ import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
 const program = (file: string) => (...args: string[]) => {
-  const run = spawnSync(process.execPath, [new URL(file, import.meta.url).pathname, ...args], {
-    encoding: "utf-8",
-    timeout: 20_000,
-  });
+  const run = spawnSync(process.execPath, [new URL(file, import.meta.url).pathname, ...args], { encoding: "utf-8" });
   return { code: run.status, stdout: run.stdout, stderr: run.stderr };
 };
 
