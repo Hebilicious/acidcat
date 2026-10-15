@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CallFailureError } from "@acid-cat/spec-ts";
-import { Context, Deferred, Effect, Exit, Layer, Scope } from "effect";
+import { Context, Deferred, Effect, Exit, Layer, Logger, Scope } from "effect";
 
 import { Group } from "../src/index.ts";
 
@@ -95,4 +95,27 @@ test("startPromise stops the start when its signal aborts, and rejects a closed 
   const closed = await counting.startPromise().then(() => assert.fail("a closed group must not start"), (error: unknown) => error);
   assert.ok(closed instanceof CallFailureError);
   assert.equal(closed.kind, "cancelled");
+});
+
+test("a listener that throws does not stop the group: it starts, the other listeners hear it, and it closes", async () => {
+  const { group: counting, scope } = group();
+  counting.observe((services) => Context.get(services, Owner).snapshot, { dormant: -1, closed: -2 }).subscribe(() => {
+    throw new Error("The listener is broken.");
+  });
+  const heard: number[] = [];
+  counting.observe((services) => Context.get(services, Owner).snapshot, { dormant: -1, closed: -2 }).subscribe((value) => heard.push(value));
+
+  await Effect.runPromise(counting.start.pipe(Effect.provide(Logger.layer([]))));
+  assert.equal(Effect.runSync(counting.phase.get), "started");
+  const closed = await Effect.runPromiseExit(Scope.close(scope, Exit.void).pipe(Effect.provide(Logger.layer([]))));
+  assert.ok(Exit.isSuccess(closed));
+  assert.deepEqual(heard, [0, -2]);
+});
+
+test("a closed group with no closed value says that it is closed", async () => {
+  const { group: counting, close } = group();
+  const count = counting.observe((services) => Context.get(services, Owner).snapshot);
+  await counting.startPromise();
+  await close();
+  assert.throws(() => count.getSnapshot(), /group is closed/);
 });

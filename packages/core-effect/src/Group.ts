@@ -94,8 +94,24 @@ export const make = <S, E, R>(
     const lock = yield* Semaphore.make(1);
     // Code that does not use Effect hears each change of the phase at once, in the fiber that makes it.
     const phaseListeners = new Set<() => void>();
+    // A listener that throws is a defect of the listener, not of the group: it is logged, and the other listeners and
+    // the group go on.
     const setState = (next: State<S>) =>
-      SubscriptionRef.set(state, next).pipe(Effect.andThen(Effect.sync(() => phaseListeners.forEach((listener) => listener()))));
+      SubscriptionRef.set(state, next).pipe(
+        Effect.andThen(
+          Effect.suspend(() => {
+            const failures: unknown[] = [];
+            for (const listener of phaseListeners) {
+              try {
+                listener();
+              } catch (cause) {
+                failures.push(cause);
+              }
+            }
+            return Effect.forEach(failures, (cause) => Effect.logError("A listener of a group failed", Cause.die(cause)), { discard: true });
+          }),
+        ),
+      );
     const locked = lock.withPermits(1);
 
     /** Build the services in their own scope. If the build does not succeed, release what it built. */
@@ -283,6 +299,7 @@ export const make = <S, E, R>(
         if (now.phase === "started") return from(now.services).getSnapshot();
         if (now.phase === "closed" && "closed" in values) return values.closed as A;
         if ("dormant" in values) return values.dormant as A;
+        if (now.phase === "closed") throw new Error("The group is closed, so this value does not exist any more.");
         throw new Error(`The group has not started, so this value does not exist yet. Start the group before reading it.`);
       };
       return {

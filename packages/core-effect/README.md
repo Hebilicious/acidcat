@@ -47,30 +47,44 @@ export const aircon = App.make({
 
 ### Services that start on the first call
 
-A `Group` holds services that a group of capabilities shares, and that start on the first call to one of them. For example, the runtime of one domain of an application, which a dynamic `import()` loads:
+A `Group` holds services that a group of capabilities shares, and that start on the first call to one of them. For example, the runtime of one domain of an application, which a dynamic `import()` loads. In this example, `./planner-runtime.ts` exports `plannerLayer`, a `Layer` of the `Planner` service:
 
 ```ts
 import { Capability, Group } from "@acid-cat/core-effect";
 import { AVAILABLE, unavailable } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer } from "effect";
+import type { Availability } from "@acid-cat/spec-ts";
+import { Context, Effect, Layer, Schema } from "effect";
 
-class Bartering extends Context.Service<Bartering, Group.Group<BarteringOwner>>()("app/Bartering") {}
+// The owner of the plans: it makes a plan, and tells if it can make one now.
+class Planner extends Context.Service<
+  Planner,
+  {
+    readonly availability: Capability.Observable<Availability>;
+    readonly generate: (stops: number) => Effect.Effect<string>;
+  }
+>()("app/Planner") {}
 
-const barteringLayer = Layer.effect(
-  Bartering,
-  Group.make(Effect.promise(() => import("./bartering-runtime.ts")).pipe(Effect.map((module) => module.ownerLayer))),
+// The group of the planner, a service of the application.
+class Planning extends Context.Service<Planning, Group.Group<Planner>>()("app/Planning") {}
+
+const planningLayer = Layer.effect(
+  Planning,
+  Group.make(Effect.promise(() => import("./planner-runtime.ts")).pipe(Effect.map((module) => module.plannerLayer))),
 );
 
-Capability.make({
-  id: "bartering.plan.generate",
-  // ...
-  availability: Bartering.useSync((group) =>
-    group.current((services) => Capability.fromObservable(Context.get(services, BarteringOwner).availability), {
+const generate = Capability.make({
+  id: "plan.generate",
+  description: "Make a plan with some stops.",
+  audience: ["app"],
+  input: Schema.Struct({ stops: Schema.Int }),
+  output: Schema.String,
+  availability: Planning.useSync((group) =>
+    group.current((services) => Capability.fromObservable(Context.get(services, Planner).availability), {
       dormant: AVAILABLE,
-      closed: unavailable("The bartering domain is closed."),
+      closed: unavailable("The planner is closed."),
     }),
   ),
-  run: (input) => Bartering.use((group) => group.provide(BarteringOwner.use((owner) => owner.generate(input)))),
+  run: ({ stops }) => Planning.use((group) => group.provide(Planner.use((planner) => planner.generate(stops)))),
 });
 ```
 
@@ -87,9 +101,13 @@ For code that does not use Effect, for example a user interface:
 - `group.startPromise({ signal })` starts the services and waits until they run. The signal stops the wait, and stops the start too when no other call waits for it.
 
 ```ts
-const bartering = runtime.runSync(Bartering); // the group, from the services of the application
-await bartering.startPromise({ signal });
-const workbench = bartering.observe((services) => Context.get(services, BarteringOwner).snapshot);
+// `planning` is the group, which code without Effect gets from the services of the application, for example with
+// `ManagedRuntime.runSync(Planning)`.
+async function showPlanner(planning: Group.Group<Planner>, signal: AbortSignal) {
+  await planning.startPromise({ signal });
+  const availability = planning.observe((services) => Context.get(services, Planner).availability);
+  availability.subscribe((value) => console.info(value.available ? "The planner can make a plan." : value.reason));
+}
 ```
 
 ## Write the catalog
