@@ -20,17 +20,74 @@ export interface CallOptions {
   readonly signal?: AbortSignal | undefined;
 }
 
-export interface Handle {
+/**
+ * The handle of one capability (spec/bindings/typescript.md#handles). `Input`, `Value` and `Failure` are the types of
+ * the capability's schemas. `HandleOf` gives them for a capability.
+ */
+export interface Handle<Input = unknown, Value = unknown, Failure = unknown, State = unknown> {
   readonly id: string;
   readonly description: string;
   readonly audience: readonly string[];
   readonly availability: Observable<Availability>;
   /** The state of the capability, if it has one, in its JSON form. Each value is a copy. */
-  readonly snapshot?: Observable<unknown>;
+  readonly snapshot?: Observable<State>;
   /** A call with an input that is already decoded. A call failure rejects with a `CallFailureError`. */
-  execute(input: unknown, options?: CallOptions): Promise<Result<unknown, unknown>>;
+  execute(input: Input, options?: CallOptions): Promise<Result<Value, Failure>>;
   /** A call with an input that is not trusted. The result is in its JSON form. */
   invokeExternal(input: unknown, options?: CallOptions): Promise<Result<unknown, unknown>>;
+}
+
+/** The handle of a capability, with the types of its schemas. */
+export type HandleOf<C> =
+  C extends Capability.Capability<infer Input, infer Output, infer Failure, any>
+    ? Handle<Input["Type"], Output["Type"], Failure["Type"]>
+    : never;
+
+/** A tree of capabilities, in the shape that the application chooses. */
+export interface CapabilityTree {
+  readonly [key: string]: Capability.Any | CapabilityTree;
+}
+
+/** The handles of a tree of capabilities, in the same shape, each with the types of its capability. */
+export type HandleTree<Tree> = {
+  readonly [Key in keyof Tree]: Tree[Key] extends Capability.Any ? HandleOf<Tree[Key]> : HandleTree<Tree[Key]>;
+};
+
+const isCapability = (value: Capability.Any | CapabilityTree): value is Capability.Any =>
+  typeof value.id === "string" && typeof value.run === "function";
+
+/**
+ * The handle of a capability, with the types of its schemas. A capability outside the view of the session has a handle
+ * that is always unavailable, and whose calls reject with `unknown-capability`.
+ */
+export function get<C extends Capability.Any>(handles: ReadonlyMap<string, Handle>, capability: C): HandleOf<C> {
+  return (handles.get(capability.id) ?? outsideView(capability)) as HandleOf<C>;
+}
+
+/**
+ * The handles of a tree of capabilities, in the same shape. The application chooses the tree, and no name comes from
+ * it (spec/bindings/typescript.md#handles). See `get` for a capability outside the view.
+ */
+export function tree<const Tree extends CapabilityTree>(handles: ReadonlyMap<string, Handle>, capabilities: Tree): HandleTree<Tree> {
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(capabilities).map(([key, value]) => [key, isCapability(value) ? get(handles, value) : tree(handles, value)]),
+    ),
+  ) as HandleTree<Tree>;
+}
+
+function outsideView(capability: Capability.Any): Handle {
+  const failure = callFailure("unknown-capability", `There is no capability ${capability.id}.`);
+  const availability: Availability = { available: false, reason: failure.message };
+  const reject = () => Promise.reject(new CallFailureError(failure));
+  return Object.freeze({
+    id: capability.id,
+    description: capability.description,
+    audience: [],
+    availability: { getSnapshot: () => availability, subscribe: () => ({ unsubscribe() {} }) },
+    execute: reject,
+    invokeExternal: reject,
+  });
 }
 
 /** A source of values with listeners. */

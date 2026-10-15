@@ -101,6 +101,14 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 
 A session opens from the declarations of the capabilities. It writes no JSON Schema when it opens. `session.capabilities` gives the capabilities of the view by id. A binding writes the schemas of a capability only when it needs them, with `App.inputJsonSchema(capability)` and `App.outputJsonSchema(capability)`, and the application keeps them for all later sessions. `session.view` writes the whole view the first time that it is read. A handle follows the availability of its own capability with `session.availabilityChanges(id)`, so a change reaches only that handle. When the availability changes, the listeners of the handle hear the value that `getSnapshot` gives at that moment, never the same value two times in a row. A listener may skip values that changed again before it was told.
 
+`Handles.tree(handles, tree)` gives the handles in a tree that the application chooses, each typed by its capability: `execute` takes the input type and resolves with the value and failure types of its schemas. `Handles.get(handles, capability)` gives one typed handle. A capability outside the view has a handle that is always unavailable.
+
+```ts
+const session = await Handles.open(app, layer, { target: "app" });
+const aircon = Handles.tree(session.handles, { power: { set: powerSet }, status: statusGet });
+await aircon.power.set.execute({ on: true }); // Promise<Result<null, Offline>>
+```
+
 `layer` gives the services that the capabilities need. A web handler is `(request: Request) => Promise<Response>`. It works in Node, Bun, Deno and Cloudflare Workers.
 
 ### Services for each request
