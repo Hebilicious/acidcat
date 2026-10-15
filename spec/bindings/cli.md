@@ -36,11 +36,15 @@ A protocol binding that serves a view as a command line. The commands come from 
 
 An application MAY add its own commands and flags. If two commands have the same path, or two flags have the same name, the program MUST stop with an error when it starts.
 
+## Loading
+
+A program can [load](../invocation.md#loading-on-first-use) the schemas and the program of a capability on first use. It loads only what the command needs: the capability of the command, or of `call`; all the capabilities of the view for `list` and for help, which show the usage of each one; and none for the version. A command whose capability does not load ends with the call failure `internal`, and the next command loads again.
+
 ## Outcomes
 
 All output is JSON. A result goes to standard output. A call failure goes to standard error as `{ "kind", "message" }`.
 
-Standard output carries the result and nothing else, so that a script can read it. From the start of a command to its outcome, no code of the program, and no library that it uses, MUST write anything else to standard output: logs, messages for people, and the help that the program shows for a usage error go to standard error. Before the command starts and after its outcome, the rule does not apply. Help and the version, when the user asks for them, are not outcomes, and go to standard output.
+Standard output carries the result and nothing else, so that a script can read it. From the moment that the program starts to serve a command, which includes loading what the command needs, to the outcome of the command, no code of the program, and no library that it uses, MUST write anything else to standard output: logs, messages for people, and the help that the program shows for a usage error go to standard error. Before the command starts and after its outcome, the rule does not apply. Help and the version, when the user asks for them, are not outcomes, and go to standard output.
 
 | Outcome | Standard output | Exit code |
 | --- | --- | --- |

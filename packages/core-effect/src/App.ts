@@ -8,6 +8,7 @@ import type { CatalogCapability, CatalogDocument, JsonObject } from "@acid-cat/s
 import { Effect, Schema } from "effect";
 
 import * as Capability from "./Capability.ts";
+import { declarationOf } from "./internal/declarations.ts";
 
 export interface Target {
   /** The bindings that serve the target, for example `["mcp"]`. */
@@ -117,7 +118,8 @@ const views = new WeakMap<App<any>, Map<string, CatalogDocument>>();
 /**
  * The view of a target (spec/catalog.md#views). It is written from the capabilities of the target the first time that
  * it is asked for, then kept for the application. The lazy capabilities of the target must have loaded: see `load`
- * with a target.
+ * with a target. It checks the identifiers of the schemas of its target only: `render` of the whole application, at
+ * build time, checks all of them.
  */
 export function view(app: App<any>, target: string): CatalogDocument {
   let byTarget = views.get(app);
@@ -145,11 +147,13 @@ interface Rendered {
 
 const rendered = new WeakMap<Capability.Any, Rendered>();
 
+/** The schemas that a capability has written. A lazy capability and the capability that it loaded share one entry. */
 const renderedOf = (capability: Capability.Any): Rendered => {
-  let entry = rendered.get(capability);
+  const key = declarationOf(capability) as Capability.Any;
+  let entry = rendered.get(key);
   if (entry === undefined) {
     entry = {};
-    rendered.set(capability, entry);
+    rendered.set(key, entry);
   }
   return entry;
 };

@@ -94,3 +94,18 @@ test("standard output carries only the answer: logs, and the help of a usage err
   assert.equal(help.code, 0);
   assert.match(help.stdout, /probe/);
 });
+
+const lazyCli = program("./fixture-cli-lazy.ts");
+
+test("the command line loads only the capabilities that a command needs, so one that does not load fails only what needs it", () => {
+  const generated = lazyCli("plan", "generate", "--stops", "2");
+  assert.equal(generated.code, 0, generated.stderr);
+  assert.deepEqual(JSON.parse(generated.stdout), { stops: 2, label: "2 stops" });
+  assert.equal(lazyCli("call", "plan.generate", '{"stops":1}').code, 0);
+  const version = lazyCli("--version");
+  assert.equal(version.code, 0, version.stderr);
+  assert.match(version.stdout, /1\.2\.3/);
+  const listed = lazyCli("list");
+  assert.equal(listed.code, 5);
+  assert.match(listed.stderr, /"kind":"internal"/);
+});

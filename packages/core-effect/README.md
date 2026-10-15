@@ -130,6 +130,22 @@ const app = App.make({ targets: { app: { bindings: ["typescript"] }, mcp: { bind
 - It loads on its first call, when MCP lists its tools, when WebMCP registers it, when the HTTP binding gives the catalog, in `Cli.run` and `NodeCli.main`, and in `App.load(app)`. It loads one time ([spec/invocation.md#loading-on-first-use](../../spec/invocation.md#loading-on-first-use)).
 - A call that is cancelled while the module loads does not stop the load for other calls. A load that fails, for any reason, gives the call failure `internal`, and the next use loads again. MCP and WebMCP leave out a capability that does not load, and try again on the next listing or update. The HTTP catalog answers `internal` with the status 500, and the command line writes `internal` and exits with 5.
 - `App.document`, `App.render`, `App.view`, `session.view` and `Cli.command` need the schemas, and throw an error for a lazy capability that has not loaded: run `App.load(app)` first, or `App.load(app, { target })` for the capabilities of one target. The catalog is the same as the catalog of the same capabilities declared at once.
+- `Cli.run` and `NodeCli.main` load only what the command needs: its own capability, all of them for `list` and help, and none for `--version` ([spec/bindings/cli.md#loading](../../spec/bindings/cli.md#loading)).
+- Two schemas with one `identifier` are an error. `App.make` cannot check this for a lazy capability, whose schemas it does not have yet. `App.view` checks the capabilities of its target, and `App.render` of the whole application checks all of them: write the catalog at build time, as the specification asks, so that the check runs.
+- A load that fails the same way as the load before it is not logged again.
+
+The module of a lazy capability gives a capability with no `availability` of its own and no `state`: the lazy declaration holds the availability, and a lazy capability has no state.
+
+These functions work with lazy capabilities:
+
+| Function | Use |
+| --- | --- |
+| `Capability.load(capability)` | The capability with its schemas: the capability itself, or the one that a lazy capability loads. It can fail with `Capability.LoadFailed` |
+| `Capability.loadedNow(capability)` | The capability with its schemas if it has them now, or `undefined` for a lazy capability that has not loaded |
+| `Capability.isLazy(capability)` | True for a lazy capability |
+| `App.withSchemas(capability)` | The capability with its schemas, or an error for a lazy capability that has not loaded |
+| `Capability.InputOf<C>`, `ValueOf<C>`, `FailureOf<C>` | The types of the input, value and failures of a capability, lazy or not |
+| `Capability.LoadFailed` | The failure of a load, with the id, the reason, and `repeated` when the load before it failed the same way |
 - The capability that the module gives must have the id, description, audience and `readOnly` of the declaration, no availability of its own and no state. If not, it does not load.
 - A lazy capability has no state.
 

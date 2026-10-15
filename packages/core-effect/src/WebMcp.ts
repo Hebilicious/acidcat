@@ -2,12 +2,13 @@
  * The WebMCP binding (spec/bindings/webmcp.md): register capabilities as WebMCP tools in a web page.
  */
 import { callFailure, CallFailureError, isCallFailure } from "@acid-cat/spec-ts";
-import { Cause, Effect, Exit, Option, Queue, Scope, Stream, SubscriptionRef } from "effect";
+import { Cause, Effect, Exit, FiberSet, Option, Queue, Scope, Stream, SubscriptionRef } from "effect";
 
 import * as App from "./App.ts";
 import * as Capability from "./Capability.ts";
 import { notify } from "./internal/listeners.ts";
 import type * as Session from "./Session.ts";
+import { logLoadFailure } from "./internal/load.ts";
 
 /** A WebMCP tool, as `registerTool` receives it. */
 export interface ModelContextTool {
@@ -72,6 +73,25 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
     const registered = new Map<string, AbortController>();
     const calls = new Set<Promise<unknown>>();
     const requests = yield* Queue.sliding<void>(1);
+    // A lazy capability that has not loaded is not a tool in an update. Its load goes on in the background, so that a
+    // load that does not end keeps no update waiting, and the end of the load asks for one more update. A load that
+    // fails is logged, and a later update loads again, as the MCP binding does for tools/list.
+    const loading = new Set<string>();
+    const runLoad = yield* FiberSet.makeRuntime<never, void, never>();
+    const startLoad = (id: string, capability: Capability.Any) => {
+      if (loading.has(id)) return;
+      loading.add(id);
+      runLoad(
+        Effect.exit(Capability.load(capability)).pipe(
+          Effect.flatMap((loaded) =>
+            Effect.sync(() => loading.delete(id)).pipe(
+              Effect.andThen(Exit.isSuccess(loaded) ? Queue.offer(requests, undefined) : logLoadFailure(loaded.cause)),
+              Effect.asVoid,
+            ),
+          ),
+        ),
+      );
+    };
 
     const toolFor = (id: string): ModelContextTool => {
       const capability = session.capabilities.get(id)!;
@@ -104,11 +124,8 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
       const wanted = new Set<string>();
       for (const [id, capability] of session.capabilities) {
         if (!(yield* session.availability(id)).available) continue;
-        // A lazy capability loads its schemas here. One that does not load is not a tool in this update, its error is
-        // logged, and the next update tries again, as the MCP binding does for tools/list.
-        const loaded = yield* Effect.exit(Capability.load(capability));
-        if (Exit.isFailure(loaded)) {
-          yield* Effect.logError("A capability did not load", Cause.pretty(loaded.cause));
+        if (Capability.loadedNow(capability) === undefined) {
+          startLoad(id, capability);
           continue;
         }
         wanted.add(id);

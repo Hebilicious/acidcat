@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { check } from "@acid-cat/cli";
 import { CallFailureError } from "@acid-cat/spec-ts";
-import { Console, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Scope } from "effect";
+import { Console, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Schema, Scope } from "effect";
 import { Command } from "effect/cli";
 
 import { App, Capability, Cli, Handles, Http, Mcp, Session, WebMcp } from "../src/index.ts";
@@ -157,7 +157,33 @@ test("MCP loads the lazy capabilities of its view to list them", async () => {
   assert.equal(loads.count, 1);
 });
 
-test("WebMCP registers the capabilities that load, leaves out one that does not, and tries it again on the next update", async () => {
+/** A WebMCP host that tells when a tool is registered. */
+function recordingHost() {
+  const tools = new Set<string>();
+  const waiters = new Map<string, () => void>();
+  const host: WebMcp.ModelContext = {
+    registerTool(tool) {
+      tools.add(tool.name);
+      waiters.get(tool.name)?.();
+    },
+  };
+  const registered = (name: string) => (tools.has(name) ? Promise.resolve() : new Promise<void>((resolve) => waiters.set(name, resolve)));
+  return { host, tools, registered };
+}
+
+/** Install the WebMCP binding for an application on a host, in a scope that the result closes. */
+async function installed(app: App.App<never>, host: WebMcp.ModelContext) {
+  const scope = Effect.runSync(Scope.make());
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const session = yield* Session.make(app, { target: "app" });
+      yield* WebMcp.install(session, { host });
+    }).pipe(Scope.provide(scope), Effect.provide(quiet)),
+  );
+  return () => Effect.runPromise(Scope.close(scope, Exit.void));
+}
+
+test("WebMCP registers each lazy capability when it loads, and loads again one that failed", async () => {
   const good = lazyProbe("webmcp-good");
   let attempts = 0;
   const flaky = Capability.lazy({ id: "plan.list", description: "List the plans.", audience: ["app"], readOnly: true }, async () => {
@@ -165,37 +191,30 @@ test("WebMCP registers the capabilities that load, leaves out one that does not,
     if (attempts === 1) throw new Error("The module did not load.");
     return ((await import(probeUrl("webmcp-flaky"))) as Probe).list;
   });
-  const app = App.make({ targets: { app: { bindings: ["webmcp"] } }, capabilities: [good.capability, flaky] });
-  const tools = new Set<string>();
-  const host: WebMcp.ModelContext = { registerTool: (tool) => void tools.add(tool.name) };
-  const scope = Effect.runSync(Scope.make());
-  const installed = await Effect.runPromise(
-    Effect.gen(function* () {
-      const session = yield* Session.make(app, { target: "app" });
-      return Option.getOrThrow(yield* WebMcp.install(session, { host }));
-    }).pipe(Scope.provide(scope), Effect.provide(quiet)),
-  );
-  /** Wait for the next update that ends ready, after `after` updates. */
-  const updates = { ready: 0 };
-  const waiters: { readonly count: number; readonly resolve: () => void }[] = [];
-  installed.statusObservable.subscribe((value) => {
-    if (value.phase !== "ready") return;
-    updates.ready++;
-    for (const waiter of waiters) if (updates.ready >= waiter.count) waiter.resolve();
-  });
-  const readyCount = (count: number) =>
-    updates.ready >= count || installed.statusObservable.getSnapshot().phase === "ready" && count === 1
-      ? Promise.resolve()
-      : new Promise<void>((resolve) => waiters.push({ count, resolve }));
+  const { host, tools, registered } = recordingHost();
+  const close = await installed(App.make({ targets: { app: { bindings: ["webmcp"] } }, capabilities: [good.capability, flaky] }), host);
   try {
-    await readyCount(1);
-    assert.deepEqual([...tools], ["plan.generate"]);
-    await installed.retryPromise();
-    await readyCount(2);
+    await registered("plan.generate");
+    await registered("plan.list");
     assert.deepEqual([...tools].sort(), ["plan.generate", "plan.list"]);
     assert.equal(attempts, 2);
   } finally {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
+    await close();
+  }
+});
+
+test("a load that does not end keeps no other capability from WebMCP", async () => {
+  const good = lazyProbe("webmcp-stuck-good");
+  const stuck = Capability.lazy({ id: "plan.list", description: "List the plans.", audience: ["app"], readOnly: true }, () =>
+    new Promise<Probe["list"]>(() => undefined),
+  );
+  const { host, tools, registered } = recordingHost();
+  const close = await installed(App.make({ targets: { app: { bindings: ["webmcp"] } }, capabilities: [stuck, good.capability] }), host);
+  try {
+    await registered("plan.generate");
+    assert.deepEqual([...tools], ["plan.generate"]);
+  } finally {
+    await close();
   }
 });
 
@@ -236,4 +255,45 @@ test("the command line lists a lazy capability with its flags, and a capability 
   } finally {
     process.exitCode = exitCode;
   }
+});
+
+test("a load that fails the same way again is logged one time", async () => {
+  const probe = lazyProbe("logged", { failures: 2 });
+  const logged: unknown[] = [];
+  const recording = Logger.layer([Logger.make((options) => void logged.push(options.message))]);
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make(probe.app, { target: "app" });
+        assert.equal(((yield* session.invoke("plan.generate", { stops: 1 })) as { kind: string }).kind, "internal");
+        assert.equal(((yield* session.invoke("plan.generate", { stops: 1 })) as { kind: string }).kind, "internal");
+      }),
+    ).pipe(Effect.provide(recording)),
+  );
+  assert.equal(probe.loads.count, 2);
+  assert.equal(logged.length, 1);
+});
+
+test("a lazy capability is not a capability with schemas, and its schemas are written one time for both", async () => {
+  const { capability } = lazyProbe("types");
+  // @ts-expect-error A lazy capability has no schemas, so it is not a capability with its schemas.
+  const eager: Capability.Capability<any, any, any, never> = capability;
+  void eager;
+
+  const renders = { count: 0 };
+  const Counted = Schema.String.check(
+    Schema.makeFilter((value: string) => value.length < 100, {
+      toJsonSchema: () => {
+        renders.count++;
+        return { maxLength: 99 };
+      },
+    }),
+  );
+  const counted = Capability.lazy({ id: "probe.name.set", description: "Set a name.", audience: ["app"] }, async () =>
+    Capability.make({ id: "probe.name.set", description: "Set a name.", audience: ["app"], input: Schema.Struct({ name: Counted }), run: () => Effect.succeed(null) }),
+  );
+  await Effect.runPromise(Capability.load(counted));
+  App.inputJsonSchema(counted);
+  App.inputJsonSchema(App.withSchemas(counted));
+  assert.equal(renders.count, 1);
 });

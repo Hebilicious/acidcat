@@ -4,10 +4,14 @@
  */
 import type { Availability } from "@acid-cat/spec-ts";
 import { Data, Effect, Queue, Stream, SubscriptionRef } from "effect";
+
+import { declarations } from "./internal/declarations.ts";
 import type { Schema } from "effect";
 
 /** A schema that needs no services to decode or encode. */
 export type AnySchema = Schema.Codec<any, any, never, never>;
+
+const lazyTypeId: unique symbol = Symbol.for("@acid-cat/core-effect/Capability/Lazy");
 
 export interface Capability<
   Input extends AnySchema = AnySchema,
@@ -43,6 +47,8 @@ export interface Capability<
    */
   readonly availability?: Stream.Stream<Availability, never, R> | Effect.Effect<Current<Availability>, never, R> | undefined;
   readonly run: (input: Input["Type"]) => Effect.Effect<Output["Type"], Failure["Type"], R>;
+  /** A capability with its schemas is not lazy: only `Capability.Lazy` has this member. */
+  readonly [lazyTypeId]?: never;
 }
 
 /** A value that a session reads when it needs it, and follows for its listeners. */
@@ -98,13 +104,19 @@ export const allAvailable = (...sources: readonly Current<Availability>[]): Curr
   };
 };
 
-const lazyTypeId: unique symbol = Symbol.for("@acid-cat/core-effect/Capability/Lazy");
-
 /** The part of a capability that a lazy capability declares at once. */
 export type Metadata<R> = Pick<Capability<any, any, any, R>, "id" | "description" | "audience" | "readOnly" | "availability">;
 
-/** A lazy capability did not load: its module failed, or does not agree with the declaration. */
-export class LoadFailed extends Data.TaggedError("LoadFailed")<{ readonly id: string; readonly reason: string; readonly cause?: unknown }> {
+/**
+ * A lazy capability did not load: its module failed, or does not agree with the declaration. `repeated` is true when
+ * the load before it failed for the same reason, so that a binding logs a failure one time, not at each retry.
+ */
+export class LoadFailed extends Data.TaggedError("LoadFailed")<{
+  readonly id: string;
+  readonly reason: string;
+  readonly repeated: boolean;
+  readonly cause?: unknown;
+}> {
   override get message() {
     return `The capability ${this.id} did not load: ${this.reason}`;
   }
@@ -124,6 +136,11 @@ export interface Lazy<Input extends AnySchema = AnySchema, Output extends AnySch
   extends Metadata<R> {
   readonly run: (input: Input["Type"]) => Effect.Effect<Output["Type"], Failure["Type"], R>;
   readonly [lazyTypeId]: LazyState;
+  /** A lazy capability has no schemas and no state: load it for its schemas. */
+  readonly input?: never;
+  readonly output?: never;
+  readonly failures?: never;
+  readonly state?: never;
   /** The types of the schemas that the module gives. There is no such value. */
   readonly "~schemas"?: { readonly input: Input; readonly output: Output; readonly failure: Failure };
 }
@@ -174,28 +191,36 @@ export const lazy = <
 ): Lazy<Input, Output, Failure, R> => {
   let loading: Promise<Capability<any, any, any, any>> | undefined;
   let loaded: Capability<any, any, any, any> | undefined;
+  let lastFailure: string | undefined;
   const loadOnce = (): Promise<Capability<any, any, any, any>> => {
     loading ??= Promise.resolve()
       .then(load)
       .then((module) => {
         const reason = disagreement(metadata, module);
-        if (reason !== undefined) throw new LoadFailed({ id: metadata.id, reason });
+        if (reason !== undefined) throw new Error(reason);
         // The metadata of the lazy capability is the one that the catalog and the view have.
-        loaded = { ...metadata, input: module.input, output: module.output, failures: module.failures, run: module.run };
-        return loaded;
+        const concrete: Capability<any, any, any, any> = { ...metadata, input: module.input, output: module.output, failures: module.failures, run: module.run };
+        declarations.set(concrete, lazyCapability);
+        lastFailure = undefined;
+        loaded = concrete;
+        return concrete;
       })
       .catch((cause: unknown) => {
         loading = undefined;
-        throw cause instanceof LoadFailed ? cause : new LoadFailed({ id: metadata.id, reason: String((cause as Error)?.message ?? cause), cause });
+        const reason = String((cause as Error)?.message ?? cause);
+        const repeated = lastFailure === reason;
+        lastFailure = reason;
+        throw new LoadFailed({ id: metadata.id, reason, repeated, cause });
       });
     return loading;
   };
   const state: LazyState = { load: loadOnce, loaded: () => loaded };
-  return {
+  const lazyCapability: Lazy<Input, Output, Failure, R> = {
     ...metadata,
     run: (input) => Effect.flatMap(Effect.orDie(loadState(state)), (concrete) => concrete.run(input)),
     [lazyTypeId]: state,
   };
+  return lazyCapability;
 };
 
 const loadState = (state: LazyState) =>

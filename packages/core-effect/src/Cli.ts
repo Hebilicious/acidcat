@@ -9,8 +9,10 @@ import type { Terminal } from "effect";
 import { Argument, CliError, Command, Flag, GlobalFlag, Param } from "effect/cli";
 
 import * as App from "./App.ts";
+import * as Capability from "./Capability.ts";
 import { flagNames } from "./internal/flags.ts";
 import * as Session from "./Session.ts";
+import { logLoadFailure } from "./internal/load.ts";
 
 /**
  * Where the command line writes its answers: the values and the failures of `print`, and the list of `list`. Standard
@@ -35,14 +37,37 @@ export interface Options {
  * process, use `NodeCli.main` from `@acid-cat/core-effect/node`.
  */
 export const run = <R>(app: App.App<R>, options: Options) =>
-  Effect.matchCauseEffect(App.load(app, { target: options.target ?? "cli" }), {
-    // A capability that does not load is the call failure `internal`, with its exit code (spec/bindings/cli.md#outcomes).
-    onFailure: (cause) =>
-      Effect.logError("A capability did not load", Cause.pretty(cause)).pipe(
-        Effect.andThen(print({ kind: "internal", message: "A capability did not load." })),
-      ),
-    onSuccess: () => runCommand(command(app, options), options),
+  Effect.suspend(() => {
+    const target = options.target ?? "cli";
+    const needed = neededBy(App.capabilitiesOf(app, target), typeof process === "undefined" ? [] : process.argv.slice(2));
+    return Effect.matchCauseEffect(Effect.forEach(needed, Capability.load, { concurrency: "unbounded", discard: true }), {
+      // A capability that does not load is the call failure `internal`, with its exit code (spec/bindings/cli.md#outcomes).
+      onFailure: (cause) =>
+        logLoadFailure(cause).pipe(Effect.andThen(print({ kind: "internal", message: "A capability did not load." }))),
+      onSuccess: () => runCommand(command(app, { ...options, [onlyLoaded]: true }), options),
+    });
   });
+
+/** The names of the built-in flag that asks for the version. */
+const versionFlags = new Set(flagNames(GlobalFlag.Version.flag).map((name) => (name.length === 1 ? `-${name}` : `--${name}`)));
+
+/**
+ * The lazy capabilities that a command line needs to load for its arguments: the capability of the command, or the one
+ * that `call` names. The version needs none. `list`, help, a group and a command that no capability has need all, for
+ * the usage of each capability.
+ */
+function neededBy(capabilities: readonly Capability.Any[], args: readonly string[]): readonly Capability.Any[] {
+  const lazy = capabilities.filter((capability) => Capability.loadedNow(capability) === undefined);
+  const words = args.filter((arg) => !arg.startsWith("-"));
+  if (words[0] === "call") return lazy.filter((capability) => capability.id === words[1]);
+  const named = capabilities.find((capability) => commandPath(capability.id).every((word, index) => words[index] === word));
+  if (named !== undefined) return lazy.filter((capability) => capability === named);
+  if (words.length === 0 && args.some((arg) => versionFlags.has(arg))) return [];
+  return lazy;
+}
+
+/** An option that only `run` gives: make the commands of the capabilities that have loaded, and leave out the others. */
+const onlyLoaded: unique symbol = Symbol("@acid-cat/core-effect/Cli/onlyLoaded");
 
 /**
  * Run a command that `command` made, after the application changed it: for example with its own flags
@@ -175,6 +200,7 @@ export interface CommandOptions<
    * application do not get them.
    */
   readonly services?: Layer.Layer<LA, LE, LR> | undefined;
+  readonly [onlyLoaded]?: boolean | undefined;
 }
 
 /**
@@ -202,8 +228,16 @@ export function command<
 > {
   const target = options.target ?? "cli";
   const view = Session.make(app, { target });
-  // The capabilities with their schemas: a lazy capability must have loaded (App.load, which Cli.run runs).
-  const served = App.capabilitiesOf(app, target).map(App.withSchemas);
+  // The capabilities with their schemas: a lazy capability must have loaded (App.load), or, for `run`, is left out
+  // when the arguments do not need it.
+  const declared = App.capabilitiesOf(app, target);
+  const served =
+    options[onlyLoaded] === true
+      ? declared.flatMap((capability) => {
+          const loaded = Capability.loadedNow(capability);
+          return loaded === undefined ? [] : [loaded];
+        })
+      : declared.map(App.withSchemas);
 
   const invoke = (id: string, input: unknown) =>
     Effect.scoped(Effect.flatMap(view, (session) => session.invoke(id, input))).pipe(

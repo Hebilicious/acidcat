@@ -8,6 +8,7 @@ import { Cause, Data, Deferred, Effect, Exit, Fiber, FiberSet, PubSub, Ref, Sche
 import * as App from "./App.ts";
 import * as Capability from "./Capability.ts";
 import { sameAvailability } from "./internal/availability.ts";
+import { logLoadFailure } from "./internal/load.ts";
 
 /** A call failure in the error channel of `execute`. */
 export class CallFailed extends Data.TaggedError("CallFailed")<CallFailure> {}
@@ -172,7 +173,7 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
       const loaded = yield* Effect.exit(Capability.load(admitted));
       if (Exit.isFailure(loaded)) {
         if (Cause.hasInterruptsOnly(loaded.cause)) return yield* Effect.interrupt;
-        yield* Effect.logError("A capability did not load", Cause.pretty(loaded.cause));
+        yield* logLoadFailure(loaded.cause);
         return callFailure("internal", "The capability failed.");
       }
       const capability = loaded.value;

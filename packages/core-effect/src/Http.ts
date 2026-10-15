@@ -8,6 +8,7 @@ import { Cause, Effect, Layer, ManagedRuntime } from "effect";
 import * as App from "./App.ts";
 import { answer } from "./internal/answer.ts";
 import * as Session from "./Session.ts";
+import { logLoadFailure } from "./internal/load.ts";
 
 export interface Options {
   /** The origins that can call the API. A request with no `Origin` header is accepted. */
@@ -128,7 +129,7 @@ const respond = <R>(app: App.App<R>, routed: Route, options: Options): Effect.Ef
         // The view needs the schemas of the capabilities of the target. One that does not load is `internal`.
         const loaded = yield* Effect.exit(App.load(app, { target: session.target }));
         if (loaded._tag === "Failure") {
-          yield* Effect.logError("A capability did not load", Cause.pretty(loaded.cause));
+          yield* logLoadFailure(loaded.cause);
           return json(500, callFailure("internal", "A capability did not load."));
         }
         return json(200, session.view);
