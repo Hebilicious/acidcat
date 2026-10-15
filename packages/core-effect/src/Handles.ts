@@ -250,7 +250,7 @@ const followAvailability = (
   changes: boolean,
   runFork: (effect: Effect.Effect<void>) => Fiber.Fiber<void>,
   initial: Availability,
-): Observable<Availability> => {
+): Observable<Availability> & { readonly stop: () => void } => {
   let snapshot = initial;
   let delivered = initial;
   let following: Fiber.Fiber<void> | undefined;
@@ -260,35 +260,33 @@ const followAvailability = (
   const listeners = new Set<(value: Availability) => void>();
   // Each value that the handle keeps has a version, so that a read that started before a newer value does not undo it.
   let version = 0;
-  let refreshing = false;
   const keep = (value: Availability) => {
     version++;
     if (!sameAvailability(snapshot, value)) snapshot = value;
   };
-  /** Read again in the background, one read at a time, for a `Current` whose read waits. */
-  const refresh = () => {
-    if (refreshing) return;
-    refreshing = true;
-    const from = version;
-    runFork(
-      Effect.map(session.availability(id), (value) => {
-        if (version === from) keep(value);
-      }).pipe(Effect.ensuring(Effect.sync(() => (refreshing = false)))),
-    );
-  };
-  // A read that waits starts the read, so once the handle knows that the availability waits, it reads only in the
-  // background.
-  let waits = false;
+  // A read of a `Current` whose read waits goes on in the background. It is the only one, while no newer value came;
+  // after a newer value, the next read replaces it, so a read that never ends does not keep the handle from reading.
+  let inFlight: { readonly fiber: Fiber.Fiber<Availability>; readonly from: number } | undefined;
   const read = (): Availability => {
-    if (!waits) {
-      const exit = Effect.runSyncExit(session.availability(id));
-      if (Exit.isSuccess(exit)) {
-        keep(exit.value);
-        return snapshot;
-      }
-      waits = true;
+    if (inFlight !== undefined) {
+      if (inFlight.from === version) return snapshot;
+      inFlight.fiber.interruptUnsafe();
+      inFlight = undefined;
     }
-    refresh();
+    // The read starts at once. If it gives its value now, that is the value; if it waits, it is the read in the
+    // background, so no read is started and then left.
+    const fiber = Effect.runFork(session.availability(id));
+    const exit = fiber.pollUnsafe();
+    if (exit !== undefined) {
+      if (Exit.isSuccess(exit)) keep(exit.value);
+      return snapshot;
+    }
+    const started = { fiber, from: version };
+    inFlight = started;
+    fiber.addObserver((done) => {
+      if (inFlight === started) inFlight = undefined;
+      if (Exit.isSuccess(done) && version === started.from) keep(done.value);
+    });
     return snapshot;
   };
   // The handle follows the availability only while a listener listens, so a handle that nobody observes costs nothing.
@@ -306,6 +304,8 @@ const followAvailability = (
       ),
     );
   return {
+    /** Interrupt the read in the background, when the handles close. */
+    stop: () => inFlight?.fiber.interruptUnsafe(),
     getSnapshot: read,
     subscribe(listener: (value: Availability) => void) {
       listeners.add(listener);
@@ -360,7 +360,8 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
     const handles = new Map<string, Handle>();
     for (const [id, capability] of session.capabilities) {
       // Each handle follows the availability of its own capability, so a change reaches one handle.
-      const availability = followAvailability(session, id, capability.availability !== undefined, runFork, yield* session.availability(id));
+      const { stop, ...availability } = followAvailability(session, id, capability.availability !== undefined, runFork, yield* session.availability(id));
+      yield* Scope.addFinalizer(scope, Effect.sync(stop));
 
       let snapshot: Observable<unknown> | undefined;
       if (capability.state !== undefined) {

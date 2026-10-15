@@ -47,7 +47,10 @@ export interface Capability<
 
 /** A value that a session reads when it needs it, and follows for its listeners. */
 export interface Current<A> {
-  /** The value now. This effect does not wait, so that code that does not use Effect can read it at once. */
+  /**
+   * The value now. A session reads it when a call comes in. It can wait: a handle then reads it in the background, and
+   * gives the last value that it read until the read ends. A value that code without Effect reads at once does not wait.
+   */
   readonly get: Effect.Effect<A>;
   /** The current value, then each change. */
   readonly changes: Stream.Stream<A>;

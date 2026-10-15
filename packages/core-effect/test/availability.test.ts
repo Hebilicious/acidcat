@@ -327,42 +327,50 @@ test("a listener that comes back in the same turn hears each change one time", a
   }
 });
 
-test("reads that wait start one refresh at a time, and a late refresh does not undo a newer value", async () => {
+test("reads that wait start one read in the background, and a newer value replaces a read that never ends", async () => {
   const owner = gate();
-  // Each read of `get` waits until the test answers it.
-  const pending: ((value: Availability) => void)[] = [];
+  // Each read of `get` waits until the test answers it, and records if it was interrupted.
+  const reads: { readonly resolve: (value: Availability) => void; interrupted: boolean }[] = [];
+  let started = () => undefined as void;
+  const nextRead = () => new Promise<void>((resolve) => (started = resolve));
   const current = Capability.fromObservable(owner);
+  const first = nextRead();
   const opening = Handles.open(
-    single({ get: Effect.promise(() => new Promise<Availability>((resolve) => pending.push(resolve))), changes: current.changes }),
+    single({
+      get: Effect.promise(
+        (signal) =>
+          new Promise<Availability>((resolve) => {
+            const read = { resolve, interrupted: false };
+            signal.addEventListener("abort", () => (read.interrupted = true));
+            reads.push(read);
+            started();
+          }),
+      ),
+      changes: current.changes,
+    }),
     Layer.empty,
     { target: "app" },
   );
-  while (pending.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  pending[0]!(AVAILABLE);
+  await first;
+  reads[0]!.resolve(AVAILABLE);
   const session = await opening;
   try {
     const availability = session.handles.get("probe.gate.pass")!.availability;
-    for (let read = 0; read < 10; read++) availability.getSnapshot();
-    // The refreshes start in their own fibers: let each of them run, then count them.
-    // The first read finds that the availability waits, and starts one read in the background; the others start none.
-    while (pending.length < 3) await new Promise((resolve) => setImmediate(resolve));
-    for (let turn = 0; turn < 5; turn++) await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(pending.length, 3);
+    // The first read waits, and goes on in the background; the nine after it start no read.
+    for (let read = 0; read < 10; read++) assert.deepEqual(availability.getSnapshot(), AVAILABLE);
+    assert.equal(reads.length, 2);
 
+    // A newer value comes through a listener: the read in the background cannot win any more, and is replaced.
     const heard = hearing();
     availability.subscribe(heard.listener);
     const next = heard.nextValue();
     owner.set(unavailable("Newer."));
     await next;
-    pending[2]!(AVAILABLE);
-    // The refresh ends: then the next read that waits starts the next one.
-    while (pending.length === 3) {
-      availability.getSnapshot();
-      await new Promise((resolve) => setImmediate(resolve));
-    }
     assert.deepEqual(availability.getSnapshot(), unavailable("Newer."));
+    assert.equal(reads[1]!.interrupted, true);
+    assert.equal(reads.length, 3);
   } finally {
-    pending.forEach((resolve) => resolve(AVAILABLE));
+    reads.forEach((read) => read.resolve(AVAILABLE));
     await session.dispose();
   }
 });
