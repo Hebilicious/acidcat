@@ -179,36 +179,60 @@ test("the command line gives each outcome its exit code", async () => {
 test("WebMCP tools follow availability, and a failed update keeps the last tools", async () => {
   const tools = new Map<string, ModelContextTool>();
   const refuse = new Set<string>();
+  const waiters = new Set<() => void>();
+  const changed = () => waiters.forEach((waiter) => waiter());
   const host = {
     registerTool(tool: ModelContextTool, { signal }: { signal: AbortSignal }) {
       if (refuse.has(tool.name)) return Promise.reject(new Error(`refused ${tool.name}`));
       tools.set(tool.name, tool);
-      signal.addEventListener("abort", () => tools.delete(tool.name));
+      changed();
+      signal.addEventListener("abort", () => {
+        tools.delete(tool.name);
+        changed();
+      });
       return undefined;
     },
   };
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+  /** Wait until the tools of the host agree with `condition`. */
+  const toolsUntil = (condition: () => boolean) =>
+    new Promise<void>((resolve) => {
+      const check = () => {
+        if (!condition()) return;
+        waiters.delete(check);
+        resolve();
+      };
+      waiters.add(check);
+      check();
+    });
   const context = options();
   const session = createSession(fixture, { target: "app", ...context });
   const installed = installWebMcp(session, { host })!;
-  await settle();
-  assert.equal(installed.status.getSnapshot().phase, "ready");
+  /** Wait until the status of the installation has a phase. */
+  const reached = (phase: string) =>
+    new Promise<void>((resolve) => {
+      if (installed.status.getSnapshot().phase === phase) return resolve();
+      const subscription = installed.status.subscribe((value) => {
+        if (value.phase !== phase) return;
+        subscription.unsubscribe();
+        resolve();
+      });
+    });
+  await reached("ready");
   assert.ok(tools.has("fixture.hidden"));
   assert.deepEqual(await tools.get("fixture.echo")!.execute({ text: "hi" }), { ok: true, value: { text: "hi" } });
 
   context.context.switch.set(false);
-  await settle();
-  assert.ok(!tools.has("fixture.toggle"));
+  await toolsUntil(() => !tools.has("fixture.toggle"));
 
   refuse.add("fixture.toggle");
   context.context.switch.set(true);
-  await settle();
-  assert.equal(installed.status.getSnapshot().phase, "failed");
+  await reached("failed");
   assert.ok(tools.has("fixture.echo"));
+  assert.ok(!tools.has("fixture.toggle"));
 
   refuse.clear();
   installed.retry();
-  await settle();
+  await reached("ready");
   assert.ok(tools.has("fixture.toggle"));
 
   await installed.dispose();
