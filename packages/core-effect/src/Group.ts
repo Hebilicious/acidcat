@@ -17,9 +17,8 @@
  * same time. When the build fails, the waiting calls die, so a session reports an
  * `internal` call failure, not `cancelled`, and the group becomes dormant again: the next call tries again.
  */
-import { Cause, Context, Data, Deferred, Effect, Exit, Fiber, Layer, Scope, Semaphore, Stream, SubscriptionRef } from "effect";
-
 import { CallFailureError, callFailure } from "@acid-cat/spec-ts";
+import { Cause, Context, Data, Deferred, Effect, Exit, Fiber, FiberSet, Layer, Scope, Semaphore, Stream, SubscriptionRef } from "effect";
 
 import type * as Capability from "./Capability.ts";
 import { notify } from "./internal/listeners.ts";
@@ -34,7 +33,10 @@ export class StartFailed extends Data.TaggedError("StartFailed")<{ readonly caus
 }
 
 export interface Group<S> {
-  /** Run an effect with the services of the group. The first call starts them. */
+  /**
+   * Run an effect with the services of the group. The first call starts them. The effect runs in the lifetime of the
+   * group: when the group closes, it is interrupted before the services are released, and the call is cancelled.
+   */
   readonly provide: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Exclude<R, S>>;
   /** Start the services, if they are dormant, and wait until they run. */
   readonly start: Effect.Effect<void>;
@@ -93,6 +95,10 @@ export const make = <S, E, R>(
     const scope = yield* Effect.scope;
     const state = yield* SubscriptionRef.make<State<S>>({ phase: "dormant" });
     const lock = yield* Semaphore.make(1);
+    // The services live in their own scope, which closes after the finalizer of the group has cancelled the calls.
+    const servicesScope = yield* Scope.fork(scope);
+    // The calls that use the services. Closing the group interrupts them before it releases the services.
+    const calls = yield* FiberSet.make<unknown, unknown>();
     // Code that does not use Effect hears each change of the phase at once, in the fiber that makes it.
     const phaseListeners = new Set<() => void>();
     // A listener that throws does not stop the group: `notify` logs its error, and calls the other listeners.
@@ -105,7 +111,7 @@ export const make = <S, E, R>(
       const layer = Layer.isLayer(services)
         ? (services as Layer.Layer<S, E, R>)
         : yield* services as Effect.Effect<Layer.Layer<S, E, R>, E, R>;
-      const own = yield* Scope.fork(scope);
+      const own = yield* Scope.fork(servicesScope);
       return yield* Layer.buildWithScope(layer, own).pipe(Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : Scope.close(own, exit))));
     }).pipe(Effect.provideContext(context));
 
@@ -213,6 +219,7 @@ export const make = <S, E, R>(
         Effect.gen(function* () {
           const current = yield* SubscriptionRef.get(state);
           yield* setState({ phase: "closed" });
+          yield* FiberSet.clear(calls);
           return current;
         }),
       ).pipe(
@@ -321,7 +328,12 @@ export const make = <S, E, R>(
     };
 
     return {
-      provide: (effect) => Effect.flatMap(acquire, (services) => Effect.provideContext(effect, services)),
+      provide: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        Effect.flatMap(acquire, (services) =>
+          FiberSet.run(calls, Effect.provideContext(effect, services)).pipe(
+            Effect.flatMap((fiber) => Fiber.join(fiber).pipe(Effect.onInterrupt(() => Fiber.interrupt(fiber)))),
+          ),
+        ) as Effect.Effect<A, E, Exclude<R, S>>,
       start: Effect.asVoid(acquire),
       startPromise,
       phase,

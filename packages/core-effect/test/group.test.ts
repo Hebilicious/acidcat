@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { AVAILABLE, CallFailureError, unavailable } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, SubscriptionRef } from "effect";
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, SubscriptionRef } from "effect";
 
 import { App, Capability, Group, Handles, Session } from "../src/index.ts";
 
@@ -250,4 +250,34 @@ test("a new build waits until the build that the last cancelled call stopped has
       }).pipe(Effect.ensuring(Deferred.succeed(releaseGate, undefined))),
     ).pipe(Effect.provide(Layer.effect(Domains, Group.make(Effect.succeed(exclusive))))),
   );
+});
+
+test("closing the group cancels the calls that use its services, before it releases them", async () => {
+  const order: string[] = [];
+  const running = Effect.runSync(Deferred.make<void>());
+  const groupScope = Effect.runSync(Scope.make());
+  const layer = Layer.effect(
+    Domain,
+    Effect.acquireRelease(
+      Effect.gen(function* () {
+        return { count: yield* SubscriptionRef.make(0), writes: yield* SubscriptionRef.make<Availability>(AVAILABLE) };
+      }),
+      () => Effect.sync(() => order.push("released")),
+    ),
+  );
+  const domains = await Effect.runPromise(Layer.buildWithScope(Layer.effect(Domains, Group.make(layer)), groupScope));
+  const group = Context.get(domains, Domains);
+  const call = Effect.runFork(
+    group.provide(
+      Deferred.succeed(running, undefined).pipe(
+        Effect.andThen(Effect.never),
+        Effect.onInterrupt(() => Effect.sync(() => order.push("call cancelled"))),
+      ),
+    ),
+  );
+  await Effect.runPromise(Deferred.await(running));
+  await Effect.runPromise(Scope.close(groupScope, Exit.void));
+  const exit = await Effect.runPromise(Fiber.await(call));
+  assert.ok(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause));
+  assert.deepEqual(order, ["call cancelled", "released"]);
 });

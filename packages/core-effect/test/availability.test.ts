@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { AVAILABLE, CallFailureError, unavailable } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer, SubscriptionRef } from "effect";
+import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability, Handles, Session } from "../src/index.ts";
 
@@ -156,3 +156,19 @@ test("a listener hears the value that is current when it is told, and may skip t
     await session.dispose();
   }
 });
+
+test("allAvailable is available when each source is, and gives the reason of the first one that is not", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const admission = yield* SubscriptionRef.make<Availability>(AVAILABLE);
+      const guard = yield* SubscriptionRef.make<Availability>(AVAILABLE);
+      const both = Capability.allAvailable(Capability.fromSubscriptionRef(admission), Capability.fromSubscriptionRef(guard));
+      assert.deepEqual(yield* both.get, AVAILABLE);
+      yield* SubscriptionRef.set(guard, unavailable("The owner is busy."));
+      assert.deepEqual(yield* both.get, unavailable("The owner is busy."));
+      yield* SubscriptionRef.set(admission, unavailable("Signed out."));
+      assert.deepEqual(yield* both.get, unavailable("Signed out."));
+      const [first] = yield* both.changes.pipe(Stream.take(1), Stream.runCollect);
+      assert.deepEqual(first, unavailable("Signed out."));
+    }),
+  ));

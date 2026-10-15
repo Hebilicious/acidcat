@@ -4,13 +4,22 @@
  */
 import { CLI_EXIT_CODES, cliExitCode, cliUsage, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
 import type { JsonObject, Outcome } from "@acid-cat/spec-ts";
-import { Console, Effect, Layer, Option, Schema } from "effect";
+import { Console, Context, Effect, Layer, Option, Schema } from "effect";
 import type { Terminal } from "effect";
-import { Argument, CliError, Command, Flag, GlobalFlag } from "effect/cli";
-import { Param } from "effect/cli";
+import { Argument, CliError, Command, Flag, GlobalFlag, Param } from "effect/cli";
 
 import * as App from "./App.ts";
+import { flagNames } from "./internal/flags.ts";
 import * as Session from "./Session.ts";
+
+/**
+ * Where the command line writes its answers: the values and the failures of `print`, and the list of `list`. Standard
+ * output carries the answers and nothing else (spec/bindings/cli.md#outcomes). The default is the `Console` of Effect.
+ * `NodeCli` writes the answers to standard output, and sends the other output of the console to standard error.
+ */
+export const Answers = Context.Reference<{ readonly write: (text: string) => Effect.Effect<void> }>("@acid-cat/core-effect/Cli/Answers", {
+  defaultValue: () => ({ write: (text) => Console.log(text) }),
+});
 
 export interface Options {
   readonly name: string;
@@ -237,7 +246,7 @@ export function command<
           const usage = cliUsage(options.name, id, capability.input === undefined ? undefined : App.inputJsonSchema(capability));
           entries.push({ id, description: capability.description, ...(yield* session.availability(id)), usage });
         }
-        yield* Console.log(JSON.stringify(entries, null, 2));
+        yield* (yield* Answers).write(JSON.stringify(entries, null, 2));
       }),
     ),
   ).pipe(Command.withDescription("List the capabilities, with their availability."));
@@ -316,20 +325,6 @@ function shapesOf(leaves: readonly { readonly id: string; readonly path: readonl
   return shapes;
 }
 
-/** The names and the aliases of a flag. */
-function flagNames(flag: Param.Param<"flag", unknown>): string[] {
-  const node = flag as Param.Single<"flag", unknown> | Param.Map<"flag", unknown, unknown> | Param.Transform<"flag", unknown, unknown> | Param.Optional<"flag", unknown> | Param.Variadic<"flag", unknown>;
-  switch (node._tag) {
-    case "Single":
-      return [node.name, ...node.aliases];
-    case "Transform":
-      return [...flagNames(node.param), ...node.alternatives.flatMap((alternative) => flagNames(alternative() as Param.Param<"flag", unknown>))];
-    case "Map":
-    case "Optional":
-    case "Variadic":
-      return flagNames(node.param);
-  }
-}
 
 interface Leaf<R> {
   readonly path: readonly string[];
@@ -409,7 +404,7 @@ export const print = (outcome: Outcome<unknown, unknown>): Effect.Effect<void> =
     if (isCallFailure(outcome)) {
       yield* Console.error(JSON.stringify({ kind: outcome.kind, message: outcome.message }));
     } else {
-      yield* Console.log(JSON.stringify(outcome.ok ? outcome.value : outcome.error, null, 2));
+      yield* (yield* Answers).write(JSON.stringify(outcome.ok ? outcome.value : outcome.error, null, 2));
     }
     process.exitCode = cliExitCode(outcome);
   });

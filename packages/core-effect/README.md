@@ -37,7 +37,7 @@ export const aircon = App.make({
 
 - `input` is a `Schema.Struct`. With no `input`, the input is an empty object. Use `Schema.Finite` or `Schema.Int` for numbers: `Schema.Number` also accepts `Infinity` and `NaN`, which JSON cannot hold.
 - Each failure is a `Schema.TaggedStruct`. Its tag is the tag in the catalog.
-- `availability` is optional. It is a `Stream` of availability values, or an Effect that gives a `Capability.Current`: a value that the session reads when a call comes in. With a `Stream`, a value reaches the session when its fiber runs, so a call in the same turn as a change is decided on the value before the change. When the availability changes in code that does not wait, use a `Current`, so that each call is decided on the value at that time. `Capability.fromSubscriptionRef(ref)` and `Capability.fromObservable(source)` make one:
+- `availability` is optional. It is a `Stream` of availability values, or an Effect that gives a `Capability.Current`: a value that the session reads when a call comes in. With a `Stream`, a value reaches the session when its fiber runs, so a call in the same turn as a change is decided on the value before the change. When the availability changes in code that does not wait, use a `Current`, so that each call is decided on the value at that time. `Capability.fromSubscriptionRef(ref)` and `Capability.fromObservable(source)` make one. `Capability.allAvailable(...sources)` is available only when each source is, for example the admission of the session and the guard of an owner:
 
   ```ts
   availability: Owner.useSync((owner) => Capability.fromObservable(owner.availability)),
@@ -88,7 +88,7 @@ const generate = Capability.make({
 });
 ```
 
-- `group.provide(effect)` starts the services if they are dormant, waits for them, and runs the effect with them. All calls share one start.
+- `group.provide(effect)` starts the services if they are dormant, waits for them, and runs the effect with them. All calls share one start. The effect runs in the lifetime of the group: when the group closes, it is interrupted before the services are released, and the call is cancelled.
 - When the last call that waits for the start is cancelled, the start is interrupted. The group is `stopping` until the start has released what it built, and a new call waits until then, so two starts never run at the same time. Then the group is dormant again.
 - When the start fails, each waiting call dies with `Group.StartFailed`, so a session gives the call failure `internal`. The next call starts the services again.
 - `group.current(select, { dormant, closed })` gives a `Capability.Current`, for an availability or a state, that comes from the services once they run. Reading it does not start them.
@@ -237,6 +237,8 @@ const command = Cli.command(app, {
 
 NodeCli.runCommand(command, { version: "0.1.0" });
 ```
+
+Standard output carries only the answers (spec/bindings/cli.md#outcomes). The command line writes them through `Cli.Answers`. `NodeCli` writes them to standard output, and sends all other output of the console to standard error: logs of Effect, the `Console` of Effect, the global console that other runtimes of the program use, and the help that `effect/cli` shows for a usage error. The output of `--help`, `--version` and `--completions` goes to standard output.
 
 `@acid-cat/core-effect` works in all runtimes, including browsers. Only `@acid-cat/core-effect/node` needs Node.js.
 

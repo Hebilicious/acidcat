@@ -83,6 +83,18 @@ export const fromObservable = <A>(source: Observable<A>): Current<A> => ({
   ),
 });
 
+/**
+ * Availability that is available only when each source is, for example the admission of the session and the guard of
+ * an owner. When one is not, it gives the reason of the first source that is not.
+ */
+export const allAvailable = (...sources: readonly Current<Availability>[]): Current<Availability> => {
+  const first = (values: readonly Availability[]): Availability => values.find((value) => !value.available) ?? { available: true };
+  return {
+    get: Effect.map(Effect.all(sources.map((source) => source.get)), first),
+    changes: Stream.zipLatestAll(...sources.map((source) => source.changes)).pipe(Stream.map(first)),
+  };
+};
+
 export type Any<R = any> = Capability<any, any, any, R>;
 
 /** The services that a capability needs. */

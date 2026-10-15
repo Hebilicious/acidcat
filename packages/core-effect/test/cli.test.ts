@@ -75,3 +75,20 @@ test("an interrupt before the program first waits cancels the call with exit cod
   assert.equal(run.code, 130);
   assert.equal(run.stdout, "");
 });
+
+const noisy = program("./fixture-cli-noisy.ts");
+
+test("standard output carries only the answer: logs, and the help of a usage error, go to standard error", () => {
+  const answered = noisy("probe", "noisy", "run");
+  assert.equal(answered.code, 0);
+  assert.equal(answered.stdout, `${JSON.stringify("the answer", null, 2)}\n`);
+  for (const line of ["a log of Effect", "a line of the console service", "a line of the global console"]) assert.match(answered.stderr, new RegExp(line));
+  for (const args of [["nothing"], ["probe", "noisy", "run", "--unknown"]]) {
+    const refused = noisy(...args);
+    assert.notEqual(refused.code, 0);
+    assert.equal(refused.stdout, "", args.join(" "));
+  }
+  const help = noisy("--help");
+  assert.equal(help.code, 0);
+  assert.match(help.stdout, /probe/);
+});
