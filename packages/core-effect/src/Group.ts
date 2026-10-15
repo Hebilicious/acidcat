@@ -19,6 +19,8 @@
  */
 import { Cause, Context, Data, Deferred, Effect, Exit, Fiber, Layer, Scope, Semaphore, Stream, SubscriptionRef } from "effect";
 
+import { CallFailureError, callFailure } from "@acid-cat/spec-ts";
+
 import type * as Capability from "./Capability.ts";
 
 export type Phase = "dormant" | "starting" | "started" | "stopping" | "closed";
@@ -35,6 +37,24 @@ export interface Group<S> {
   readonly provide: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Exclude<R, S>>;
   /** Start the services, if they are dormant, and wait until they run. */
   readonly start: Effect.Effect<void>;
+  /**
+   * `start` for code that does not use Effect. The signal stops the wait, and the start too when no other call waits
+   * for it: the promise then rejects with the reason of the signal. For a closed group, it rejects with the call failure
+   * `cancelled`. For a start that fails, it rejects with `StartFailed`.
+   */
+  readonly startPromise: (options?: { readonly signal?: AbortSignal | undefined }) => Promise<void>;
+  /**
+   * A value of the services for code that does not use Effect, for example a value that a user interface shows. It is
+   * the value of `select` once the services run, `dormant` before, and `closed` after the group closes. Listeners hear
+   * each change at once, and subscribing does not start the services. With no `dormant`, reading the value before the
+   * services run is an error.
+   */
+  readonly observe: <A>(
+    select: (services: Context.Context<S>) => Capability.Observable<A>,
+    values?: { readonly dormant?: A; readonly closed?: A },
+  ) => Capability.Observable<A>;
+  /** Read the services if they run now, or give `undefined`. It never starts them. */
+  readonly peek: <A>(select: (services: Context.Context<S>) => A) => A | undefined;
   /** The phase of the group. */
   readonly phase: Capability.Current<Phase>;
   /**
@@ -72,6 +92,10 @@ export const make = <S, E, R>(
     const scope = yield* Effect.scope;
     const state = yield* SubscriptionRef.make<State<S>>({ phase: "dormant" });
     const lock = yield* Semaphore.make(1);
+    // Code that does not use Effect hears each change of the phase at once, in the fiber that makes it.
+    const phaseListeners = new Set<() => void>();
+    const setState = (next: State<S>) =>
+      SubscriptionRef.set(state, next).pipe(Effect.andThen(Effect.sync(() => phaseListeners.forEach((listener) => listener()))));
     const locked = lock.withPermits(1);
 
     /** Build the services in their own scope. If the build does not succeed, release what it built. */
@@ -89,7 +113,7 @@ export const make = <S, E, R>(
         Effect.gen(function* () {
           const current = yield* SubscriptionRef.get(state);
           if (current.phase !== "starting" || current.done !== done) return;
-          yield* SubscriptionRef.set(state, Exit.isSuccess(exit) ? { phase: "started", services: exit.value } : { phase: "dormant" });
+          yield* setState(Exit.isSuccess(exit) ? { phase: "started", services: exit.value } : { phase: "dormant" });
         }),
       ).pipe(Effect.andThen(Deferred.succeed(done, exit)));
 
@@ -104,7 +128,7 @@ export const make = <S, E, R>(
             return current;
           case "starting": {
             const next = { ...current, waiting: current.waiting + 1 };
-            yield* SubscriptionRef.set(state, next);
+            yield* setState(next);
             return next;
           }
           case "dormant": {
@@ -116,7 +140,7 @@ export const make = <S, E, R>(
               Effect.forkIn(scope, { startImmediately: true }),
             );
             const next = { phase: "starting" as const, build: fiber, done, waiting: 1 };
-            yield* SubscriptionRef.set(state, next);
+            yield* setState(next);
             return next;
           }
         }
@@ -133,11 +157,11 @@ export const make = <S, E, R>(
           const current = yield* SubscriptionRef.get(state);
           if (current.phase !== "starting" || current.done !== done) return undefined;
           if (current.waiting > 1) {
-            yield* SubscriptionRef.set(state, { ...current, waiting: current.waiting - 1 });
+            yield* setState({ ...current, waiting: current.waiting - 1 });
             return undefined;
           }
           const stopped = yield* Deferred.make<void>();
-          yield* SubscriptionRef.set(state, { phase: "stopping", stopped });
+          yield* setState({ phase: "stopping", stopped });
           return { build: current.build, stopped };
         }),
       ).pipe(
@@ -149,7 +173,7 @@ export const make = <S, E, R>(
                   locked(
                     Effect.gen(function* () {
                       const current = yield* SubscriptionRef.get(state);
-                      if (current.phase === "stopping" && current.stopped === stopping.stopped) yield* SubscriptionRef.set(state, { phase: "dormant" });
+                      if (current.phase === "stopping" && current.stopped === stopping.stopped) yield* setState({ phase: "dormant" });
                     }),
                   ),
                 ),
@@ -186,7 +210,7 @@ export const make = <S, E, R>(
       locked(
         Effect.gen(function* () {
           const current = yield* SubscriptionRef.get(state);
-          yield* SubscriptionRef.set(state, { phase: "closed" });
+          yield* setState({ phase: "closed" });
           return current;
         }),
       ).pipe(
@@ -227,10 +251,79 @@ export const make = <S, E, R>(
       };
     };
 
+    const startPromise = async (options: { readonly signal?: AbortSignal | undefined } = {}): Promise<void> => {
+      const exit = await Effect.runPromiseExit(acquire, options.signal === undefined ? {} : { signal: options.signal });
+      if (Exit.isSuccess(exit)) return;
+      if (options.signal?.aborted === true && Cause.hasInterruptsOnly(exit.cause)) throw options.signal.reason;
+      if (Cause.hasInterruptsOnly(exit.cause)) throw new CallFailureError(callFailure("cancelled", "The group is closed."));
+      throw Cause.squash(exit.cause);
+    };
+
+    const peek = <A>(select: (services: Context.Context<S>) => A): A | undefined => {
+      const now = SubscriptionRef.getUnsafe(state);
+      return now.phase === "started" ? select(now.services) : undefined;
+    };
+
+    const observe = <A>(
+      select: (services: Context.Context<S>) => Capability.Observable<A>,
+      values: { readonly dormant?: A; readonly closed?: A } = {},
+    ): Capability.Observable<A> => {
+      let selected: { readonly services: Context.Context<S>; readonly value: Capability.Observable<A> } | undefined;
+      const from = (services: Context.Context<S>) => {
+        if (selected?.services !== services) selected = { services, value: select(services) };
+        return selected.value;
+      };
+      /** What the value comes from now: the services, the closed value, or the dormant value. */
+      const kind = (): "started" | "closed" | "dormant" => {
+        const phase = SubscriptionRef.getUnsafe(state).phase;
+        return phase === "started" ? "started" : phase === "closed" && "closed" in values ? "closed" : "dormant";
+      };
+      const getSnapshot = (): A => {
+        const now = SubscriptionRef.getUnsafe(state);
+        if (now.phase === "started") return from(now.services).getSnapshot();
+        if (now.phase === "closed" && "closed" in values) return values.closed as A;
+        if ("dormant" in values) return values.dormant as A;
+        throw new Error(`The group has not started, so this value does not exist yet. Start the group before reading it.`);
+      };
+      return {
+        getSnapshot,
+        subscribe(listener) {
+          let inner: { unsubscribe(): void } | undefined;
+          let last = kind();
+          const follow = () => {
+            const now = SubscriptionRef.getUnsafe(state);
+            if (now.phase === "started" && inner === undefined) inner = from(now.services).subscribe(listener);
+            if (now.phase !== "started" && inner !== undefined) {
+              inner.unsubscribe();
+              inner = undefined;
+            }
+          };
+          const onPhase = () => {
+            follow();
+            const next = kind();
+            if (next === last) return;
+            last = next;
+            if (next !== "dormant" || "dormant" in values) listener(getSnapshot());
+          };
+          phaseListeners.add(onPhase);
+          follow();
+          return {
+            unsubscribe() {
+              phaseListeners.delete(onPhase);
+              inner?.unsubscribe();
+            },
+          };
+        },
+      };
+    };
+
     return {
       provide: (effect) => Effect.flatMap(acquire, (services) => Effect.provideContext(effect, services)),
       start: Effect.asVoid(acquire),
+      startPromise,
       phase,
       current,
+      observe,
+      peek,
     } satisfies Group<S>;
   });

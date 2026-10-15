@@ -80,6 +80,18 @@ Capability.make({
 - `group.current(select, { dormant, closed })` gives a `Capability.Current`, for an availability or a state, that comes from the services once they run. Reading it does not start them.
 - The services live in the scope of the group, here the scope of the layer, and are released when it closes. A call that waits when the group closes is cancelled.
 
+For code that does not use Effect, for example a user interface:
+
+- `group.observe(select, { dormant, closed })` gives an observable of a value of the services. Listeners hear each change at once, and subscribing does not start the services. With no `dormant`, reading it before the services run is an error.
+- `group.peek(select)` reads the services if they run now, or gives `undefined`. It never starts them.
+- `group.startPromise({ signal })` starts the services and waits until they run. The signal stops the wait, and stops the start too when no other call waits for it.
+
+```ts
+const bartering = runtime.runSync(Bartering); // the group, from the services of the application
+await bartering.startPromise({ signal });
+const workbench = bartering.observe((services) => Context.get(services, BarteringOwner).snapshot);
+```
+
 ## Write the catalog
 
 ```ts
