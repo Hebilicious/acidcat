@@ -171,24 +171,44 @@ export function screenRequest(
   return undefined;
 }
 
-/** Read a request body as UTF-8 text. Count the bytes as they arrive, and stop at the limit. */
+/**
+ * Read a request body as UTF-8 text. Count the bytes as they arrive, and stop at the limit. The signal of the request
+ * stops the read: the body is cancelled, and the promise rejects with the reason of the signal.
+ */
 export async function readBounded(
   request: Request,
   maximumBytes: number,
 ): Promise<{ readonly text: string } | { readonly rejection: Rejection }> {
   if (request.body === null) return { text: "" };
+  const signal = request.signal;
+  signal.throwIfAborted();
   const reader = request.body.getReader();
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => {
+      void reader.cancel(signal.reason).catch(() => undefined);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  aborted.catch(() => undefined);
   const chunks: Uint8Array[] = [];
   let length = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    length += value.byteLength;
-    if (length > maximumBytes) {
-      await reader.cancel().catch(() => undefined);
-      return { rejection: "too-large" };
+  try {
+    for (;;) {
+      const { done, value } = await Promise.race([reader.read(), aborted]);
+      // A runtime can end the body of an aborted request as if it were complete.
+      signal.throwIfAborted();
+      if (done) break;
+      length += value.byteLength;
+      if (length > maximumBytes) {
+        await reader.cancel().catch(() => undefined);
+        return { rejection: "too-large" };
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } finally {
+    signal.removeEventListener("abort", onAbort!);
   }
   const bytes = new Uint8Array(length);
   let offset = 0;

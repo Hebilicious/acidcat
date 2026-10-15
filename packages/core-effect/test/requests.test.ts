@@ -145,3 +145,27 @@ test("shared handlers build nothing for a request that they reject, and reject i
   assert.equal((await brokenMcp(new Request(`${ORIGIN}/mcp`, { method: "GET" }))).status, 405);
   assert.equal((await brokenHttp(new Request(`${ORIGIN}/api/capabilities`, { method: "PUT" }))).status, 405);
 });
+
+/** A POST whose body sends one byte, then never ends. */
+function stalled(path: string, signal: AbortSignal) {
+  const body = new ReadableStream<Uint8Array>({ start: (controller) => controller.enqueue(new TextEncoder().encode("{")) });
+  return new Request(`${ORIGIN}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal, duplex: "half" } as RequestInit);
+}
+
+for (const services of ["shared", "per-request"] as const) {
+  test(`with ${services} services, an aborted request whose body never ends rejects with the reason of its signal`, async () => {
+    const { counts, layer } = countedSwitchLayer();
+    const handlers = {
+      "/mcp": Mcp.toWebHandler(fixture, layer, { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN], services }),
+      "/api/capabilities/fixture.echo": Http.toWebHandler(fixture, layer, { allowedOrigins: [ORIGIN], base: "/api", services }),
+    };
+    for (const [path, handler] of Object.entries(handlers)) {
+      const controller = new AbortController();
+      const reason = new Error(`The client of ${path} went away.`);
+      const answered = handler(stalled(path, controller.signal));
+      controller.abort(reason);
+      await assert.rejects(answered, (error) => error === reason);
+    }
+    assert.deepEqual(counts, { built: 0, released: 0 });
+  });
+}

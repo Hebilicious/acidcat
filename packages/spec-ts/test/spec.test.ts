@@ -98,3 +98,18 @@ test("views keep one target, and bundles keep the types they use", () => {
   assert.equal(bundled.type, "object");
   assert.deepEqual(Object.keys(bundled.$defs as object), ["Mode"]);
 });
+
+test("the signal of a request stops the read of a body that never ends, and cancels the body", async () => {
+  let cancelled: unknown;
+  const body = new ReadableStream<Uint8Array>({
+    start: (controller) => controller.enqueue(new TextEncoder().encode("{")),
+    cancel: (reason) => void (cancelled = reason),
+  });
+  const controller = new AbortController();
+  const reason = new Error("The client went away.");
+  const request = new Request("https://example.test/", { method: "POST", body, signal: controller.signal, duplex: "half" } as RequestInit);
+  const read = readBounded(request, 1024);
+  controller.abort(reason);
+  await assert.rejects(read, (error) => error === reason);
+  assert.notEqual(cancelled, undefined);
+});
