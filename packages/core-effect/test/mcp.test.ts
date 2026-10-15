@@ -4,10 +4,10 @@ import { test } from "node:test";
 import { Effect, Layer } from "effect";
 
 import { Mcp } from "../src/index.ts";
-import { countedSwitchLayer, fixture, switchLayer } from "./fixture.ts";
+import { countedFixtureLayer, fixture, fixtureLayer } from "./fixture.ts";
 
 const ORIGIN = "https://fixture.example";
-const handler = Mcp.toWebHandler(fixture, Layer.fresh(switchLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] });
+const handler = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] });
 
 /** One MCP request in the stateless 2026-07-28 revision. */
 function mcpRequest(method: string, params: object = {}, name?: string) {
@@ -36,7 +36,7 @@ const call = (name: string, args: object) => mcp("tools/call", { name, arguments
 
 test("server/discover gives the instructions of the options, or else the description of the application", async () => {
   assert.equal((await mcp("server/discover")).result.instructions, fixture.description);
-  const instructed = Mcp.toWebHandler(fixture, Layer.fresh(switchLayer), {
+  const instructed = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), {
     name: "fixture",
     version: "0.0.0",
     allowedOrigins: [ORIGIN],
@@ -52,8 +52,10 @@ test("tools/list gives the available capabilities of the view, with their schema
   assert.deepEqual(tools.map((tool) => tool.name).sort(), [
     "fixture.crash",
     "fixture.echo",
+    "fixture.held",
+    "fixture.hold",
     "fixture.refuse",
-    "fixture.slow",
+    "fixture.release",
     "fixture.switch.set",
     "fixture.toggle",
   ]);
@@ -92,7 +94,7 @@ test("requests are rejected before the protocol is read", async () => {
 });
 
 test("with per-request services, each request that passes the screening has its own services", async () => {
-  const { counts, layer } = countedSwitchLayer();
+  const { counts, layer } = countedFixtureLayer();
   const perRequest = Mcp.toWebHandler(fixture, layer, { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN], services: "per-request" });
 
   const set = mcpRequest("tools/call", { name: "fixture.switch.set", arguments: { on: false } }, "fixture.switch.set");
@@ -107,7 +109,7 @@ test("with per-request services, each request that passes the screening has its 
 
 test("Mcp.handle screens the request", async () => {
   const options = { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] };
-  const answer = (request: Request) => Effect.runPromise(Mcp.handle(fixture, request, options).pipe(Effect.provide(switchLayer)));
+  const answer = (request: Request) => Effect.runPromise(Mcp.handle(fixture, request, options).pipe(Effect.provide(fixtureLayer)));
   assert.equal((await answer(new Request(`${ORIGIN}/mcp`, { method: "GET" }))).status, 405);
   const foreign = mcpRequest("tools/list");
   foreign.headers.set("Origin", "https://evil.example");

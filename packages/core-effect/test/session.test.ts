@@ -5,12 +5,12 @@ import { check } from "@acid-cat/cli";
 import { Effect, Fiber, Layer, Schema, Scope, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability, Session } from "../src/index.ts";
-import { fixture, Switch, switchLayer } from "./fixture.ts";
+import { fixture, Switch, fixtureLayer } from "./fixture.ts";
 
 /** Run a test with a session for a target, and the fixture's services. */
 const withSession = <A, E>(target: string, body: (session: Session.Session) => Effect.Effect<A, E, Switch | Scope.Scope>) =>
   Effect.runPromise(
-    Effect.scoped(Effect.flatMap(Session.make(fixture, { target }), body)).pipe(Effect.provide(Layer.fresh(switchLayer))),
+    Effect.scoped(Effect.flatMap(Session.make(fixture, { target }), body)).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
   );
 
 test("the application writes a catalog that conforms", () => {
@@ -75,19 +75,24 @@ test("availability follows its stream, and changes are announced", () =>
 test("closing a session cancels its calls, and later calls fail as cancelled", async () => {
   const scope = await Effect.runPromise(Scope.make());
   const session = await Effect.runPromise(
-    Session.make(fixture, { target: "mcp" }).pipe(Scope.provide(scope), Effect.provide(Layer.fresh(switchLayer))),
+    Session.make(fixture, { target: "mcp" }).pipe(Scope.provide(scope), Effect.provide(Layer.fresh(fixtureLayer))),
   );
-  const slow = Effect.runPromise(session.invoke("fixture.slow", { milliseconds: 60_000 }));
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  const held = Effect.runPromise(session.invoke("fixture.hold", { key: "closing" }));
+  await Effect.runPromise(
+    Effect.repeat(session.invoke("fixture.held", {}), {
+      until: (outcome) => "ok" in outcome && outcome.ok && (outcome.value as { keys: string[] }).keys.includes("closing"),
+    }),
+  );
   await Effect.runPromise(Scope.close(scope, { _tag: "Success", value: undefined } as never));
-  assert.equal((await slow as { kind?: string }).kind, "cancelled");
+  assert.equal(((await held) as { kind?: string }).kind, "cancelled");
   assert.equal(((await Effect.runPromise(session.invoke("fixture.echo", { text: "x" }))) as { kind?: string }).kind, "cancelled");
 });
 
 test("execute puts failures and call failures in the error channel", () =>
   withSession("app", (session) =>
     Effect.gen(function* () {
-      const [, refuse, , , hidden] = fixture.capabilities;
+      const byId = (id: string) => fixture.capabilities.find((capability) => capability.id === id);
+      const [refuse, hidden] = [byId("fixture.refuse"), byId("fixture.hidden")];
       assert.deepEqual(yield* Effect.flip(session.execute(refuse!, {})), { _tag: "Refused", reason: "No." });
       const value = yield* session.execute(hidden!, {});
       assert.equal(value, null);

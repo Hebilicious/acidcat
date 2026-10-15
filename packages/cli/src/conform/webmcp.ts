@@ -34,8 +34,18 @@ export interface TestHost {
     registerTool(tool: object, options: { readonly signal: AbortSignal }): void;
   };
   tools(): RecordedTool[];
-  /** Call a tool. If `cancelAfter` is given, abort the signal of the call after that many milliseconds. */
-  call(name: string, input: unknown, cancelAfter?: number): Promise<ToolCall>;
+  /** The number of changes of the tools so far. Each registration and each removal is one change. */
+  version(): number;
+  /** Resolve with the number of changes when it is more than `after`. */
+  changed(after: number): Promise<number>;
+  /** Call a tool, and wait for its outcome. */
+  call(name: string, input: unknown): Promise<ToolCall>;
+  /** Start a call to a tool, and give its number. `cancel` and `result` take the number. */
+  start(name: string, input: unknown): number;
+  /** Abort the signal of a call that `start` started. */
+  cancel(call: number): void;
+  /** The outcome of a call that `start` started. */
+  result(call: number): Promise<ToolCall>;
 }
 
 /**
@@ -45,37 +55,70 @@ export interface TestHost {
 export function createTestHost(): TestHost {
   type Tool = RecordedTool & { execute(input: unknown, options: { signal: AbortSignal }): Promise<unknown> };
   const registered = new Map<string, Tool>();
+  let version = 0;
+  const waiting = new Set<() => void>();
+  const change = () => {
+    version += 1;
+    waiting.forEach((wake) => wake());
+  };
+  const calls = new Map<number, { readonly controller: AbortController; readonly result: Promise<ToolCall> }>();
+  const run = async (name: string, input: unknown, signal: AbortSignal): Promise<ToolCall> => {
+    const tool = registered.get(name);
+    if (tool === undefined) return { missing: true };
+    try {
+      return { resolved: await tool.execute(input, { signal }) };
+    } catch (error) {
+      const { name: errorName, kind, message } = error as { name?: unknown; kind?: unknown; message?: unknown };
+      return { rejected: { name: String(errorName), kind, message: String(message) } };
+    }
+  };
   return {
     modelContext: {
       registerTool(tool, options) {
         const recorded = tool as Tool;
         registered.set(recorded.name, recorded);
+        change();
         options.signal.addEventListener("abort", () => {
-          if (registered.get(recorded.name) === recorded) registered.delete(recorded.name);
+          if (registered.get(recorded.name) !== recorded) return;
+          registered.delete(recorded.name);
+          change();
         });
       },
     },
     tools: () =>
       [...registered.values()].map((tool) => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema })),
-    async call(name, input, cancelAfter) {
-      const tool = registered.get(name);
-      if (tool === undefined) return { missing: true };
+    version: () => version,
+    changed: (after) =>
+      new Promise((resolve) => {
+        const wake = () => {
+          if (version <= after) return;
+          waiting.delete(wake);
+          resolve(version);
+        };
+        waiting.add(wake);
+        wake();
+      }),
+    call: (name, input) => run(name, input, new AbortController().signal),
+    start(name, input) {
       const controller = new AbortController();
-      if (cancelAfter !== undefined) setTimeout(() => controller.abort(), cancelAfter);
-      try {
-        return { resolved: await tool.execute(input, { signal: controller.signal }) };
-      } catch (error) {
-        const { name: errorName, kind, message } = error as { name?: unknown; kind?: unknown; message?: unknown };
-        return { rejected: { name: String(errorName), kind, message: String(message) } };
-      }
+      const number = calls.size + 1;
+      calls.set(number, { controller, result: run(name, input, controller.signal) });
+      return number;
     },
+    cancel: (call) => calls.get(call)?.controller.abort(),
+    result: (call) => calls.get(call)?.result ?? Promise.resolve({ missing: true }),
   };
 }
 
 /** The view from the checks: the tools of the page, and calls to them. */
 export interface WebMcpDriver {
   tools(): Promise<RecordedTool[]>;
-  call(name: string, input: unknown, cancelAfter?: number): Promise<ToolCall>;
+  version(): Promise<number>;
+  changed(after: number): Promise<number>;
+  call(name: string, input: unknown): Promise<ToolCall>;
+  start(name: string, input: unknown): Promise<number>;
+  cancel(call: number): Promise<void>;
+  result(call: number): Promise<ToolCall>;
   close(): Promise<void>;
 }
 
@@ -94,7 +137,12 @@ export async function processDriver(install: WebMcpInstall): Promise<WebMcpDrive
   const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
   return {
     tools: async () => copy(host.tools()),
-    call: async (name, input, cancelAfter) => copy(await host.call(name, input, cancelAfter)),
+    version: async () => host.version(),
+    changed: (after) => host.changed(after),
+    call: async (name, input) => copy(await host.call(name, input)),
+    start: async (name, input) => host.start(name, input),
+    cancel: async (call) => host.cancel(call),
+    result: async (call) => copy(await host.result(call)),
     close: async () => {
       if (typeof remove === "function") await remove();
     },
@@ -128,22 +176,52 @@ export async function browserDriver(url: string): Promise<WebMcpDriver> {
       if (errors.length > 0) throw new Error(`The page has errors: ${errors.join("; ")}`);
       return page.evaluate(() => (window as unknown as Window).__acidCatConform.tools());
     },
-    call: (name, input, cancelAfter) =>
-      page.evaluate(
-        ([name, input, cancelAfter]) => (window as unknown as Window).__acidCatConform.call(name, input, cancelAfter),
-        [name, input, cancelAfter] as const,
-      ),
+    version: () => page.evaluate(() => (window as unknown as Window).__acidCatConform.version()),
+    changed: (after) => page.evaluate((after) => (window as unknown as Window).__acidCatConform.changed(after), after),
+    call: (name, input) =>
+      page.evaluate(([name, input]) => (window as unknown as Window).__acidCatConform.call(name, input), [name, input] as const),
+    start: (name, input) =>
+      page.evaluate(([name, input]) => (window as unknown as Window).__acidCatConform.start(name, input), [name, input] as const),
+    cancel: (call) => page.evaluate((call) => (window as unknown as Window).__acidCatConform.cancel(call), call),
+    result: (call) => page.evaluate((call) => (window as unknown as Window).__acidCatConform.result(call), call),
     close: () => browser.close(),
   };
 }
 
-/** Wait until `condition` is true. Give up after `timeout` milliseconds. */
-async function eventually(condition: () => Promise<boolean>, what: string, timeout = 5_000): Promise<void> {
-  const end = Date.now() + timeout;
-  for (;;) {
-    if (await condition()) return;
-    if (Date.now() > end) throw new Error(`after ${timeout} ms: ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+/**
+ * Wait until the tools of the page agree with `condition`. The check reads the tools after each change of them, and
+ * fails after `MAXIMUM_CHANGES` changes. If the tools do not change, it fails when `guard` ends: the guard keeps a page
+ * that never changes from stopping the checks, and it is not part of what the check tests.
+ */
+async function untilTools(driver: WebMcpDriver, condition: (tools: readonly RecordedTool[]) => boolean, what: string): Promise<void> {
+  for (let changes = 0; ; changes++) {
+    const version = await driver.version();
+    if (condition(await driver.tools())) return;
+    if (changes === MAXIMUM_CHANGES) throw new Error(`after ${MAXIMUM_CHANGES} changes of the tools: ${what}`);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const guard = new Promise<"guard">((resolve) => (timer = setTimeout(() => resolve("guard"), GUARD)));
+    const next = await Promise.race([driver.changed(version), guard]);
+    clearTimeout(timer);
+    if (next === "guard") throw new Error(`the tools did not change: ${what}`);
+  }
+}
+
+const MAXIMUM_CHANGES = 100;
+const GUARD = 30_000;
+
+/** The keys that fixture.held gives through a tool. */
+async function heldKeys(driver: WebMcpDriver): Promise<readonly string[]> {
+  const call = await driver.call("fixture.held", {});
+  expect("resolved" in call, `fixture.held gave ${JSON.stringify(call)}`);
+  return ((call.resolved as { value?: { keys?: readonly string[] } }).value?.keys ?? []) as readonly string[];
+}
+
+/** Call fixture.held until `condition` is true. The number of calls is a guard, as in `untilTools`. */
+async function untilHeld(driver: WebMcpDriver, condition: (held: readonly string[]) => boolean, what: string): Promise<void> {
+  for (let read = 1; ; read++) {
+    if (condition(await heldKeys(driver))) return;
+    if (read === 2_000) throw new Error(`after 2000 reads of fixture.held: ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
 
@@ -159,15 +237,13 @@ function isBundled(schema: JsonObject): boolean {
   return bundled;
 }
 
-const names = async (driver: WebMcpDriver) => sorted((await driver.tools()).map((tool) => tool.name));
-
 export async function checkWebMcp(driver: WebMcpDriver): Promise<Checks> {
   const checks = new Checks("webmcp");
   const view = fixture.capabilities;
   const expected = idsOf(TARGET);
 
   await checks.run("each available capability of the view is a tool", `${RULE}#tools`, async () => {
-    await eventually(async () => JSON.stringify(await names(driver)) === JSON.stringify(expected), `the tools must be ${expected.join(", ")}`);
+    await untilTools(driver, (tools) => JSON.stringify(sorted(tools.map((tool) => tool.name))) === JSON.stringify(expected), `the tools must be ${expected.join(", ")}`);
   });
   await checks.run("a tool has the description and the bundled input schema of its capability", `${RULE}#tools`, async () => {
     for (const tool of await driver.tools()) {
@@ -202,16 +278,22 @@ export async function checkWebMcp(driver: WebMcpDriver): Promise<Checks> {
     });
   }
   await checks.run("the signal of the host cancels a call, as an AbortError", `${RULE}#tools`, async () => {
-    const call = await driver.call("fixture.slow", { milliseconds: 60_000 }, 50);
+    const key = `webmcp-cancel-${crypto.randomUUID()}`;
+    const started = await driver.start("fixture.hold", { key });
+    await untilHeld(driver, (held) => held.includes(key), `the call must hold ${key}`);
+    await driver.cancel(started);
+    const call = await driver.result(started);
     expect("rejected" in call, `the call must reject, got ${JSON.stringify(call)}`);
     expectEqual(call.rejected.kind, "cancelled", "kind");
     expectEqual(call.rejected.name, "AbortError", "name");
+    await untilHeld(driver, (held) => !held.includes(key), `the cancelled call must stop holding ${key}`);
   });
   await checks.run("a tool is removed while its capability is unavailable, and registered again after", `${RULE}#tools`, async () => {
+    const toggle = (tools: readonly RecordedTool[]) => tools.some((tool) => tool.name === "fixture.toggle");
     await driver.call("fixture.switch.set", { on: false });
-    await eventually(async () => !(await names(driver)).includes("fixture.toggle"), "fixture.toggle must be removed");
+    await untilTools(driver, (tools) => !toggle(tools), "fixture.toggle must be removed");
     await driver.call("fixture.switch.set", { on: true });
-    await eventually(async () => (await names(driver)).includes("fixture.toggle"), "fixture.toggle must be registered again");
+    await untilTools(driver, toggle, "fixture.toggle must be registered again");
   });
 
   return checks;

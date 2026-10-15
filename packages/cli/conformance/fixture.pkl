@@ -20,6 +20,12 @@ local text = new Dynamic {
   properties { text { type = "string" } }
 }
 
+local key = new Dynamic {
+  type = "object"
+  required { "key" }
+  properties { key { type = "string" } }
+}
+
 local flags = new Dynamic {
   type = "object"
   required { "mode" }
@@ -59,13 +65,37 @@ capabilities {
     description = "Always fail with a defect."
     audience = allTargets
   }
-  ["fixture.slow"] {
-    description = "Wait for some milliseconds, then return null."
+  ["fixture.hold"] {
+    description = "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held lists the key. With a marker, the call creates the file at that path when it starts to hold."
     audience = allTargets
     input {
       type = "object"
-      required { "milliseconds" }
-      properties { milliseconds { type = "number" } }
+      required { "key" }
+      properties {
+        key { type = "string" }
+        marker { type = "string" }
+      }
+    }
+    output = key
+  }
+  ["fixture.held"] {
+    description = "List the keys of the calls to fixture.hold that hold now, in code point order."
+    audience = allTargets
+    readOnly = true
+    output {
+      type = "object"
+      required { "keys" }
+      properties { keys { type = "array"; items { type = "string" } } }
+    }
+  }
+  ["fixture.release"] {
+    description = "Release the calls to fixture.hold that hold the key, and return how many calls it released."
+    audience = allTargets
+    input = key
+    output {
+      type = "object"
+      required { "released" }
+      properties { released { type = "integer" } }
     }
   }
   ["fixture.hidden"] {

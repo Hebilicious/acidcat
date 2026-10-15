@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { Context, Deferred, Effect, Layer } from "effect";
 
 import { App, Capability, Http, Mcp } from "../src/index.ts";
-import { countedSwitchLayer, fixture, Switch } from "./fixture.ts";
+import { countedFixtureLayer, fixture, holdsLayer, Switch } from "./fixture.ts";
 
 const ORIGIN = "https://probe.example";
 
@@ -80,7 +80,7 @@ const rejected = (path: string) => [
 ];
 
 test("Mcp.handle with services builds nothing for a request that it rejects", async () => {
-  const { counts, layer } = countedSwitchLayer();
+  const { counts, layer } = countedFixtureLayer();
   const options = { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] };
   for (const request of rejected("/mcp")) {
     const response = await Effect.runPromise(Mcp.handle(fixture, request, options, layer));
@@ -92,7 +92,7 @@ test("Mcp.handle with services builds nothing for a request that it rejects", as
 });
 
 test("Http.handle with services builds nothing for a request that it rejects or that has no route", async () => {
-  const { counts, layer } = countedSwitchLayer();
+  const { counts, layer } = countedFixtureLayer();
   const options = { allowedOrigins: [ORIGIN], base: "/api" };
   const requests = [
     ...rejected("/api/capabilities/fixture.echo"),
@@ -132,14 +132,14 @@ for (const services of ["shared", "per-request"] as const) {
 }
 
 test("shared handlers build nothing for a request that they reject, and reject it when the services cannot be built", async () => {
-  const { counts, layer } = countedSwitchLayer();
+  const { counts, layer } = countedFixtureLayer();
   const mcp = Mcp.toWebHandler(fixture, layer, { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] });
   const http = Http.toWebHandler(fixture, layer, { allowedOrigins: [ORIGIN], base: "/api" });
   for (const request of [...rejected("/mcp")]) assert.ok((await mcp(request)).status >= 400);
   for (const request of [...rejected("/api/capabilities/fixture.echo")]) assert.ok((await http(request)).status >= 400);
   assert.deepEqual(counts, { built: 0, released: 0 });
 
-  const broken = Layer.effect(Switch, Effect.die(new Error("The services cannot be built.")));
+  const broken = Layer.merge(Layer.effect(Switch, Effect.die(new Error("The services cannot be built."))), holdsLayer());
   const brokenMcp = Mcp.toWebHandler(fixture, broken, { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] });
   const brokenHttp = Http.toWebHandler(fixture, broken, { allowedOrigins: [ORIGIN], base: "/api" });
   assert.equal((await brokenMcp(new Request(`${ORIGIN}/mcp`, { method: "GET" }))).status, 405);

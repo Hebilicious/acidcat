@@ -1,5 +1,10 @@
 /** Conformance checks for the CLI binding (spec/bindings/cli.md). Each check runs the command line as a process. */
 import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { existsSync, watch } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { Checks, expect, expectEqual, idsOf, sorted } from "./check.ts";
 
@@ -11,13 +16,12 @@ const USAGES: { readonly [id: string]: string } = {
   "fixture.echo": "fixture echo --text <string>",
   "fixture.flags": "fixture flags --mode <fast|slow> [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--verbose]",
   "fixture.refuse": "fixture refuse",
-  "fixture.slow": "fixture slow --milliseconds <number>",
+  "fixture.held": "fixture held",
+  "fixture.hold": "fixture hold --key <string> [--marker <string>]",
+  "fixture.release": "fixture release --key <string>",
   "fixture.switch.set": "fixture switch set --on",
   "fixture.toggle": "fixture toggle",
 };
-
-/** The time that a command line has to start before the interrupt, in milliseconds. */
-const INTERRUPT_AFTER = 2_000;
 
 interface Run {
   readonly code: number | null;
@@ -26,21 +30,30 @@ interface Run {
   readonly stderr: string;
 }
 
-/** Run the command line. If `interruptAfter` is given, send `SIGINT` after that many milliseconds. */
-function run(command: readonly string[], args: readonly string[], interruptAfter?: number): Promise<Run> {
+/** Run the command line. `whileRunning` gets the process while it runs, for example to interrupt it. */
+function run(command: readonly string[], args: readonly string[], whileRunning?: (child: ChildProcess) => void): Promise<Run> {
   return new Promise((resolve, reject) => {
     const child = spawn(command[0]!, [...command.slice(1), ...args], { stdio: ["ignore", "pipe", "pipe"] });
-    const timer = interruptAfter === undefined ? undefined : setTimeout(() => child.kill("SIGINT"), interruptAfter);
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
     child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
     child.on("error", reject);
-    child.on("close", (code, signal) => {
-      clearTimeout(timer);
-      resolve({ code, signal, stdout, stderr });
-    });
+    child.on("close", (code, signal) => resolve({ code, signal, stdout, stderr }));
+    whileRunning?.(child);
   });
+}
+
+/** Call `then` when the file at `path` exists. Stop watching when the process exits. */
+function whenCreated(path: string, child: ChildProcess, then: () => void): void {
+  const watcher = watch(join(path, ".."), () => check());
+  const check = () => {
+    if (!existsSync(path)) return;
+    watcher.close();
+    then();
+  };
+  child.on("close", () => watcher.close());
+  check();
 }
 
 export async function checkCli(command: readonly string[]): Promise<Checks> {
@@ -66,7 +79,7 @@ export async function checkCli(command: readonly string[]): Promise<Checks> {
     ["an unknown command has exit code 2", ["fixture", "nothing"], 2],
     ["a capability outside the view has exit code 2", ["call", "fixture.hidden"], 2],
     ["a missing required flag has exit code 3", ["fixture", "echo"], 3],
-    ["a flag that is not valid has exit code 3", ["fixture", "slow", "--milliseconds", "soon"], 3],
+    ["a flag that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--count", "soon"], 3],
     ["invalid input through call has exit code 3", ["call", "fixture.echo", '{"text":1}'], 3],
   ] as const) {
     await checks.run(name, `${RULE}#outcomes`, async () => {
@@ -74,11 +87,20 @@ export async function checkCli(command: readonly string[]): Promise<Checks> {
     });
   }
   await checks.run("an interrupt cancels the call with exit code 130", `${RULE}#commands`, async () => {
-    // The call waits for one minute. The interrupt comes when the program has started and the call runs.
-    const result = await run(command, ["fixture", "slow", "--milliseconds", "60000"], INTERRUPT_AFTER);
-    expect(result.signal === null, `the process must exit, not end by the signal ${result.signal}`);
-    expectEqual(result.code, 130, "exit code");
-    expectEqual(result.stdout, "", "standard output");
+    // The call holds until it is released. It creates the marker file when it holds, and the interrupt comes then.
+    const directory = await mkdtemp(join(tmpdir(), "acid-cat-conform-"));
+    const marker = join(directory, "held");
+    try {
+      const result = await run(command, ["fixture", "hold", "--key", "interrupt", "--marker", marker], (child) =>
+        whenCreated(marker, child, () => child.kill("SIGINT")),
+      );
+      expect(existsSync(marker), `the call must hold before the interrupt; it ended with ${result.code}: ${result.stderr}`);
+      expect(result.signal === null, `the process must exit, not end by the signal ${result.signal}`);
+      expectEqual(result.code, 130, "exit code");
+      expectEqual(result.stdout, "", "standard output");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
   await checks.run("call gives the value of a capability", `${RULE}#commands`, async () => {
     const result = await cli("call", "fixture.echo", '{"text":"hello"}');

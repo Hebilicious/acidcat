@@ -24,13 +24,66 @@ export class Switch implements Observable<Availability> {
   }
 }
 
+/**
+ * The calls to `fixture.hold` that hold now, for all the sessions of the provider. `mark` creates the file of a marker:
+ * only the command line of the fixture can write files.
+ */
+export class Holds {
+  readonly #holding = new Set<{ readonly key: string; readonly release: () => void }>();
+  readonly #mark: (path: string) => Promise<void>;
+
+  constructor(mark: (path: string) => Promise<void> = () => Promise.reject(new Error("This host writes no files."))) {
+    this.#mark = mark;
+  }
+
+  /**
+   * Hold until `release` releases the key, or until the signal aborts. A promise alone does not keep a Node.js process
+   * running, so a timer keeps the command line running while the call holds.
+   */
+  async hold(key: string, marker: string | undefined, signal: AbortSignal): Promise<void> {
+    const running = setInterval(() => undefined, 2 ** 30);
+    const released = new Promise<void>((resolve) => {
+      const entry = { key, release: resolve };
+      this.#holding.add(entry);
+      signal.addEventListener("abort", () => {
+        this.#holding.delete(entry);
+        resolve();
+      });
+    });
+    try {
+      if (marker !== undefined) await this.#mark(marker);
+      await released;
+    } finally {
+      clearInterval(running);
+    }
+  }
+
+  held(): string[] {
+    return [...this.#holding].map((entry) => entry.key).sort();
+  }
+
+  release(key: string): number {
+    const released = [...this.#holding].filter((entry) => entry.key === key);
+    for (const entry of released) {
+      this.#holding.delete(entry);
+      entry.release();
+    }
+    return released.length;
+  }
+}
+
 export interface Context {
   readonly switch: Switch;
+  readonly holds: Holds;
 }
 
 export const toJsonSchema = (schema: unknown) => z.toJSONSchema(schema as z.ZodType, { target: "draft-2020-12" });
 
 const Text = z.object({ text: z.string() });
+const Key = z.object({ key: z.string() });
+const Hold = z.object({ key: z.string(), marker: z.string().optional() });
+const Keys = z.object({ keys: z.array(z.string()) });
+const Released = z.object({ released: z.number().int() });
 const Flags = z.object({
   mode: z.enum(["fast", "slow"]),
   count: z.number().int().optional(),
@@ -76,18 +129,33 @@ export const fixture = defineApp<Context>({
         throw new Error("secret internal detail");
       },
     }),
-    defineCapability({
-      id: "fixture.slow",
-      description: "Wait for some milliseconds, then return null.",
+    defineCapability<Context, typeof Hold, typeof Key>({
+      id: "fixture.hold",
+      description:
+        "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held lists the key. With a marker, the call creates the file at that path when it starts to hold.",
       audience: everywhere,
-      input: z.object({ milliseconds: z.number() }),
-      run: async ({ milliseconds }, { signal }) => {
-        await new Promise((resolve) => {
-          const timer = setTimeout(resolve, milliseconds);
-          signal.addEventListener("abort", () => clearTimeout(timer));
-        });
-        return ok(null);
+      input: Hold,
+      output: Key,
+      run: async ({ key, marker }, { signal, context }) => {
+        await context.holds.hold(key, marker, signal);
+        return ok({ key });
       },
+    }),
+    defineCapability<Context, undefined, typeof Keys>({
+      id: "fixture.held",
+      description: "List the keys of the calls to fixture.hold that hold now, in code point order.",
+      audience: everywhere,
+      readOnly: true,
+      output: Keys,
+      run: (_, { context }) => ok({ keys: context.holds.held() }),
+    }),
+    defineCapability<Context, typeof Key, typeof Released>({
+      id: "fixture.release",
+      description: "Release the calls to fixture.hold that hold the key, and return how many calls it released.",
+      audience: everywhere,
+      input: Key,
+      output: Released,
+      run: ({ key }, { context }) => ok({ released: context.holds.release(key) }),
     }),
     defineCapability({
       id: "fixture.hidden",
@@ -124,4 +192,9 @@ export const fixture = defineApp<Context>({
   ],
 });
 
-export const options = () => ({ context: { switch: new Switch() }, toJsonSchema, onDefect: () => undefined });
+/** The options of a session or a binding of the fixture. `mark` creates the file of a marker. */
+export const options = (mark?: (path: string) => Promise<void>) => ({
+  context: { switch: new Switch(), holds: new Holds(mark) },
+  toJsonSchema,
+  onDefect: () => undefined,
+});

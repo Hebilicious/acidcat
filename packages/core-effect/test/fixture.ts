@@ -1,28 +1,78 @@
 /** A test application with one capability for each behavior that the tests examine. */
 import { unavailable, AVAILABLE } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer, Schema, Stream, SubscriptionRef } from "effect";
+import { Context, Deferred, Effect, Layer, Schema, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability } from "../src/index.ts";
 
 /** A switch that the tests turn on and off, to change the availability of `fixture.toggle`. */
 export class Switch extends Context.Service<Switch, SubscriptionRef.SubscriptionRef<boolean>>()("fixture/Switch") {}
 
-export const switchLayer = Layer.effect(Switch, SubscriptionRef.make(true));
+/**
+ * The calls to `fixture.hold` that hold now, for all the sessions of the provider. `mark` creates the file of a marker:
+ * only the command line of the fixture can write files.
+ */
+export class Holds extends Context.Service<
+  Holds,
+  {
+    readonly hold: (key: string, marker: string | undefined) => Effect.Effect<{ readonly key: string }>;
+    readonly held: Effect.Effect<readonly string[]>;
+    readonly release: (key: string) => Effect.Effect<number>;
+  }
+>()("fixture/Holds") {}
 
-/** A switch layer that counts how many times it is built and released, to test when a host builds the services. */
-export function countedSwitchLayer() {
+/** The holds of a provider. `mark` creates the file at a path. With no `mark`, a call with a marker is a defect. */
+export const holdsLayer = (mark: (path: string) => Effect.Effect<void> = () => Effect.die(new Error("This host writes no files."))) =>
+  Layer.sync(Holds, () => {
+    const holding = new Set<{ readonly key: string; readonly release: Deferred.Deferred<void> }>();
+    return {
+      hold: (key, marker) =>
+        Effect.acquireUseRelease(
+          Effect.map(Deferred.make<void>(), (release) => {
+            const entry = { key, release };
+            holding.add(entry);
+            return entry;
+          }),
+          (entry) =>
+            (marker === undefined ? Effect.void : mark(marker)).pipe(
+              Effect.andThen(Deferred.await(entry.release)),
+              Effect.as({ key }),
+            ),
+          (entry) => Effect.sync(() => holding.delete(entry)),
+        ),
+      held: Effect.sync(() => [...holding].map((entry) => entry.key).sort()),
+      release: (key) =>
+        Effect.gen(function* () {
+          const released = [...holding].filter((entry) => entry.key === key);
+          for (const entry of released) {
+            holding.delete(entry);
+            yield* Deferred.succeed(entry.release, undefined);
+          }
+          return released.length;
+        }),
+    };
+  });
+
+/** The services of the fixture: the switch, on, and the holds. */
+export const fixtureLayer = Layer.merge(Layer.effect(Switch, SubscriptionRef.make(true)), holdsLayer());
+
+/** The layer of the fixture, which counts how many times it is built and released, to test when a host builds services. */
+export function countedFixtureLayer() {
   const counts = { built: 0, released: 0 };
-  const layer = Layer.effect(
-    Switch,
-    Effect.acquireRelease(
-      Effect.sync(() => counts.built++).pipe(Effect.andThen(SubscriptionRef.make(true))),
-      () => Effect.sync(() => counts.released++),
+  const layer = Layer.merge(
+    Layer.effect(
+      Switch,
+      Effect.acquireRelease(
+        Effect.sync(() => counts.built++).pipe(Effect.andThen(SubscriptionRef.make(true))),
+        () => Effect.sync(() => counts.released++),
+      ),
     ),
+    holdsLayer(),
   );
   return { counts, layer };
 }
 
 const Text = Schema.Struct({ text: Schema.String });
+const Key = Schema.Struct({ key: Schema.String });
 const Refused = Schema.TaggedStruct("Refused", { reason: Schema.String });
 
 const Flags = Schema.Struct({
@@ -69,11 +119,29 @@ export const fixture = App.make({
       run: () => Effect.die(new Error("secret internal detail")),
     }),
     Capability.make({
-      id: "fixture.slow",
-      description: "Wait for some milliseconds, then return null.",
+      id: "fixture.hold",
+      description:
+        "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held lists the key. With a marker, the call creates the file at that path when it starts to hold.",
       audience: everywhere,
-      input: Schema.Struct({ milliseconds: Schema.Finite }),
-      run: ({ milliseconds }) => Effect.sleep(milliseconds).pipe(Effect.as(null)),
+      input: Schema.Struct({ key: Schema.String, marker: Schema.optionalKey(Schema.String) }),
+      output: Key,
+      run: ({ key, marker }) => Holds.use((holds) => holds.hold(key, marker)),
+    }),
+    Capability.make({
+      id: "fixture.held",
+      description: "List the keys of the calls to fixture.hold that hold now, in code point order.",
+      audience: everywhere,
+      readOnly: true,
+      output: Schema.Struct({ keys: Schema.Array(Schema.String) }),
+      run: () => Holds.use((holds) => Effect.map(holds.held, (keys) => ({ keys }))),
+    }),
+    Capability.make({
+      id: "fixture.release",
+      description: "Release the calls to fixture.hold that hold the key, and return how many calls it released.",
+      audience: everywhere,
+      input: Key,
+      output: Schema.Struct({ released: Schema.Int }),
+      run: ({ key }) => Holds.use((holds) => Effect.map(holds.release(key), (released) => ({ released }))),
     }),
     Capability.make({
       id: "fixture.hidden",

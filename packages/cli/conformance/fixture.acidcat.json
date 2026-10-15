@@ -133,11 +133,69 @@
         "type": "object"
       }
     },
+    "fixture.held": {
+      "description": "List the keys of the calls to fixture.hold that hold now, in code point order.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "output": {
+        "properties": {
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "type": "object"
+      },
+      "readOnly": true
+    },
     "fixture.hidden": {
       "description": "Only the app target can use this capability.",
       "audience": [
         "app"
       ]
+    },
+    "fixture.hold": {
+      "description": "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held lists the key. With a marker, the call creates the file at that path when it starts to hold.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "input": {
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "marker": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      }
     },
     "fixture.refuse": {
       "description": "Always return the failure Refused.",
@@ -166,8 +224,8 @@
         }
       }
     },
-    "fixture.slow": {
-      "description": "Wait for some milliseconds, then return null.",
+    "fixture.release": {
+      "description": "Release the calls to fixture.hold that hold the key, and return how many calls it released.",
       "audience": [
         "app",
         "mcp",
@@ -176,12 +234,23 @@
       ],
       "input": {
         "properties": {
-          "milliseconds": {
-            "type": "number"
+          "key": {
+            "type": "string"
           }
         },
         "required": [
-          "milliseconds"
+          "key"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "released": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "released"
         ],
         "type": "object"
       }

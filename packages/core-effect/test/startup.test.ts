@@ -7,7 +7,7 @@ import { Effect, Exit, Fiber, Layer, Schema, Scope, Stream, SubscriptionRef } fr
 
 import { aircon } from "../examples/aircon.ts";
 import { App, Capability, Handles, Mcp, Session } from "../src/index.ts";
-import { fixture, switchLayer } from "./fixture.ts";
+import { fixture, fixtureLayer } from "./fixture.ts";
 
 /** A string schema that counts how many times it is written as JSON Schema. */
 function countedString() {
@@ -155,7 +155,7 @@ test("the view is written only when it is read, and it is the view of the target
         assert.deepEqual([...session.capabilities.keys()], Object.keys(session.view.capabilities));
         assert.equal(session.view, App.view(fixture, "mcp"));
       }),
-    ).pipe(Effect.provide(Layer.fresh(switchLayer))),
+    ).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
   ));
 
 test("the availability of a capability gives its current value, then each change", () =>
