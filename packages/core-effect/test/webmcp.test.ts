@@ -192,3 +192,24 @@ test("a change while the first update registers the tools reaches the tools", as
   await removal;
   await Effect.runPromise(Scope.close(scope, Exit.void));
 });
+
+test("after an install in its own run, a later change of availability removes the tool", async () => {
+  let current: Availability = AVAILABLE;
+  const listeners = new Set<(value: Availability) => void>();
+  const owner = { getSnapshot: () => current, subscribe(listener: (value: Availability) => void) { listeners.add(listener); return { unsubscribe: () => void listeners.delete(listener) }; } };
+  const app = App.make({ targets: { app: { bindings: ["webmcp"] } }, capabilities: [Capability.make({ id: "probe.gate.pass", description: "Pass.", audience: ["app"], availability: Effect.succeed(Capability.fromObservable(owner)), run: () => Effect.succeed(null) })] });
+  const tools = new Map<string, AbortSignal>();
+  let registered!: () => void; const isRegistered = new Promise<void>((r) => (registered = r));
+  let removed!: () => void; const isRemoved = new Promise<void>((r) => (removed = r));
+  const host: WebMcp.ModelContext = { registerTool(tool, options) { tools.set(tool.name, options.signal); registered(); options.signal.addEventListener("abort", () => removed()); } };
+  const sessionScope = Effect.runSync(Scope.make());
+  const session = await Effect.runPromise(Session.make(app, { target: "app" }).pipe(Scope.provide(sessionScope)));
+  const lifetime = Effect.runSync(Scope.make());
+  await Effect.runPromise(WebMcp.install(session, { host }).pipe(Scope.provide(lifetime)));
+  await isRegistered;
+  current = unavailable("Closed.");
+  listeners.forEach((listener) => listener(current));
+  await isRemoved;
+  await Effect.runPromise(Scope.close(lifetime, Exit.void));
+  await Effect.runPromise(Scope.close(sessionScope, Exit.void));
+});
