@@ -57,11 +57,17 @@ test("availability follows its stream, and changes are announced", () =>
     Effect.gen(function* () {
       const announced = yield* session.changes.pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }));
       yield* SubscriptionRef.set(yield* Switch, false);
-      yield* Fiber.join(announced).pipe(Effect.timeout(1000));
+      yield* Fiber.join(announced);
       assert.deepEqual(yield* session.availability("fixture.toggle"), { available: false, reason: "The switch is off." });
       assert.deepEqual(yield* session.invoke("fixture.toggle", {}), { kind: "unavailable", message: "The switch is off." });
+      const reopened = yield* session.availabilityChanges("fixture.toggle").pipe(
+        Stream.filter((availability) => availability.available),
+        Stream.take(1),
+        Stream.runDrain,
+        Effect.forkScoped({ startImmediately: true }),
+      );
       yield* SubscriptionRef.set(yield* Switch, true);
-      yield* Effect.sleep(10);
+      yield* Fiber.join(reopened);
       assert.deepEqual(yield* session.invoke("fixture.toggle", {}), { ok: true, value: null });
     }),
   ));
