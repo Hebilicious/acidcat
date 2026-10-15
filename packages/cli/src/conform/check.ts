@@ -54,3 +54,32 @@ export const sorted = (values: Iterable<string>): string[] => [...values].sort()
 
 /** An origin that no deployment allows. */
 export const FORBIDDEN_ORIGIN = "https://not-allowed.acid-cat.invalid";
+
+/**
+ * The longest time, in milliseconds, that a check waits for one thing of the implementation by default: an outcome, a
+ * state, a process. It is a limit of the infrastructure, so that an implementation that never answers fails its check
+ * and the run ends. It is never a condition for a check to pass.
+ */
+export const GUARD = 30_000;
+
+/** Wait for a promise, for `guard` milliseconds at most. After that, fail with "did not settle". */
+export function within<T>(promise: Promise<T>, guard: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} did not settle within ${guard} ms, the guard of acid-cat conform`)), guard);
+  });
+  return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Read a state until `condition` is true. After `guard` milliseconds, fail with "did not settle". The reads are the
+ * trigger; the guard only ends a wait that would not end.
+ */
+export async function until<T>(read: () => Promise<T>, condition: (value: T) => boolean, guard: number, what: string): Promise<void> {
+  const end = performance.now() + guard;
+  for (;;) {
+    if (condition(await within(read(), guard, what))) return;
+    if (performance.now() > end) throw new Error(`${what} did not settle within ${guard} ms, the guard of acid-cat conform`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}

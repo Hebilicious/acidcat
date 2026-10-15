@@ -6,7 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Checks, expect, expectEqual, idsOf, sorted } from "./check.ts";
+import { Checks, expect, expectEqual, GUARD, idsOf, sorted } from "./check.ts";
 
 const RULE = "spec/bindings/cli.md";
 
@@ -28,19 +28,46 @@ interface Run {
   readonly signal: NodeJS.Signals | null;
   readonly stdout: string;
   readonly stderr: string;
+  /** True if the guard ended the process with `SIGKILL`. */
+  readonly guarded: boolean;
 }
 
-/** Run the command line. `whileRunning` gets the process while it runs, for example to interrupt it. */
-function run(command: readonly string[], args: readonly string[], whileRunning?: (child: ChildProcess) => void): Promise<Run> {
+/**
+ * Run the command line. If it runs for longer than `guard` milliseconds, end it with `SIGKILL`: the guard is a limit of
+ * the infrastructure, so that a command line that never exits fails its check and the run ends. `whileRunning` gets
+ * the process while it runs, for example to interrupt it, and a function that starts the guard again.
+ */
+function run(
+  command: readonly string[],
+  args: readonly string[],
+  guard: number,
+  whileRunning?: (child: ChildProcess, restartGuard: () => void) => void,
+): Promise<Run> {
   return new Promise((resolve, reject) => {
     const child = spawn(command[0]!, [...command.slice(1), ...args], { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
+    let guarded = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const startGuard = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        guarded = true;
+        child.kill("SIGKILL");
+      }, guard);
+    };
     child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
     child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
-    child.on("error", reject);
-    child.on("close", (code, signal) => resolve({ code, signal, stdout, stderr }));
-    whileRunning?.(child);
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      resolve({ code, signal, stdout, stderr, guarded });
+    });
+    startGuard();
+    whileRunning?.(child, startGuard);
   });
 }
 
@@ -56,9 +83,13 @@ function whenCreated(path: string, child: ChildProcess, then: () => void): void 
   check();
 }
 
-export async function checkCli(command: readonly string[]): Promise<Checks> {
+export async function checkCli(command: readonly string[], guard = GUARD): Promise<Checks> {
   const checks = new Checks("cli");
-  const cli = (...args: string[]) => run(command, args);
+  const cli = async (...args: string[]) => {
+    const result = await run(command, args, guard);
+    expect(!result.guarded, `the command line with ${args.join(" ")} did not exit within ${guard} ms, the guard of acid-cat conform`);
+    return result;
+  };
 
   await checks.run("a value goes to standard output with exit code 0", `${RULE}#outcomes`, async () => {
     const result = await cli("fixture", "echo", "--text", "hello");
@@ -91,10 +122,21 @@ export async function checkCli(command: readonly string[]): Promise<Checks> {
     const directory = await mkdtemp(join(tmpdir(), "acid-cat-conform-"));
     const marker = join(directory, "held");
     try {
-      const result = await run(command, ["fixture", "hold", "--key", "interrupt", "--marker", marker], (child) =>
-        whenCreated(marker, child, () => child.kill("SIGINT")),
+      let interrupted = false;
+      const result = await run(command, ["fixture", "hold", "--key", "interrupt", "--marker", marker], guard, (child, restartGuard) =>
+        whenCreated(marker, child, () => {
+          interrupted = true;
+          restartGuard();
+          child.kill("SIGINT");
+        }),
       );
-      expect(existsSync(marker), `the call must hold before the interrupt; it ended with ${result.code}: ${result.stderr}`);
+      expect(
+        interrupted,
+        result.guarded
+          ? `the call did not hold within ${guard} ms, the guard of acid-cat conform`
+          : `the call must hold before the interrupt; it ended with ${result.code}: ${result.stderr}`,
+      );
+      expect(!result.guarded, `the command line did not exit after the interrupt within ${guard} ms, the guard of acid-cat conform`);
       expect(result.signal === null, `the process must exit, not end by the signal ${result.signal}`);
       expectEqual(result.code, 130, "exit code");
       expectEqual(result.stdout, "", "standard output");

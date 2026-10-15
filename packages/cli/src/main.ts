@@ -93,6 +93,10 @@ const conformCommand = Command.make(
     cli: url("cli", "The command that starts the command line, for example \"node fixture-cli.ts\""),
     webmcp: url("webmcp", "The URL of a web page that serves the app target. It runs in Chromium, through Playwright"),
     maximumBytes: Flag.Int("max-bytes").pipe(Flag.withDescription("The body limit of the remote bindings"), Flag.withDefault(1_048_576)),
+    guard: Flag.Int("guard").pipe(
+      Flag.withDescription("The longest wait, in milliseconds, for one answer of the implementation, before its check fails"),
+      Flag.withDefault(30_000),
+    ),
   },
   Effect.fn(function* (options) {
     const value = (option: Option.Option<string>) => (Option.isSome(option) ? option.value : undefined);
@@ -104,6 +108,7 @@ const conformCommand = Command.make(
         cli: command,
         webmcp: value(options.webmcp),
         maximumBytes: options.maximumBytes,
+        guard: options.guard,
       }),
     );
     if (results.length === 0) {

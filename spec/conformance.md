@@ -59,4 +59,6 @@ Give one or more bindings. For each binding, `acid-cat conform` tests the rules 
 
 The tests wait for states that they can observe, not for times. Before they cancel a call to `fixture.hold`, they wait until `fixture.held` lists its key, or, for the CLI, until its marker file exists. A cancelled call passes only if the binding gives the call failure `cancelled`, or if the call rejects with the reason that the test gave to its signal. After the cancellation, its key must leave `fixture.held`, and each call that was not cancelled must still hold, then return its own key when it is released.
 
+Each wait has a guard, 30 seconds by default (`--guard`). The guard is a limit of the infrastructure, not a rule for the implementation. When a wait reaches it, the check fails with "did not settle". The guard never makes a check pass. After a check that holds calls, `acid-cat conform` releases each key that it used, and ends a command line that does not exit, so that the run always ends.
+
 A test that a SHOULD rule fails gives a warning, not an error. Tests that need access to the code, for example of internal logs, are not part of conformance.

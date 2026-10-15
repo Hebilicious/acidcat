@@ -5,7 +5,7 @@
 import type { Outcome } from "@acid-cat/spec-ts";
 import fc from "fast-check";
 
-import { Checks, expect, expectEqual } from "./check.ts";
+import { Checks, expect, expectEqual, GUARD, until, within } from "./check.ts";
 import { mcpClient } from "./mcp.ts";
 
 const RULE = "spec/invocation.md#cancellation-and-concurrency";
@@ -116,19 +116,9 @@ async function heldKeys(invoke: Invoke): Promise<readonly string[]> {
   return (outcome.value as { readonly keys: readonly string[] }).keys;
 }
 
-/**
- * Read fixture.held through the binding until `condition` is true. The number of reads is a guard for an implementation
- * that never gets there, so that the check fails instead of waiting forever. It is not part of what the check tests.
- */
-async function untilHeld(invoke: Invoke, condition: (held: readonly string[]) => boolean, what: string): Promise<void> {
-  for (let read = 1; ; read++) {
-    if (condition(await heldKeys(invoke))) return;
-    if (read === MAXIMUM_READS) throw new Error(`after ${MAXIMUM_READS} reads of fixture.held: ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-}
-
-const MAXIMUM_READS = 2_000;
+/** Read fixture.held through the binding until `condition` is true, within the guard. */
+const untilHeld = (invoke: Invoke, condition: (held: readonly string[]) => boolean, guard: number, what: string) =>
+  until(() => heldKeys(invoke), condition, guard, what);
 
 interface HoldingCall {
   readonly key: string;
@@ -142,41 +132,53 @@ interface HoldingCall {
  * Wait until each call holds, cancel the calls that `cancelled` marks, and check that only they stop: each one ends as
  * cancelled and stops holding, and each other call still holds, then gives its own key when it is released.
  */
-async function cancelSome(invoke: Invoke, calls: readonly HoldingCall[]): Promise<void> {
+async function cancelSome(invoke: Invoke, calls: readonly HoldingCall[], guard: number): Promise<void> {
   const keys = calls.map((call) => call.key);
-  await untilHeld(invoke, (held) => keys.every((key) => held.includes(key)), `the calls must hold ${keys.join(", ")}`);
+  await untilHeld(invoke, (held) => keys.every((key) => held.includes(key)), guard, `the calls that hold ${keys.join(", ")}`);
 
   const cancelled = calls.filter((call) => call.cancelled);
   const kept = calls.filter((call) => !call.cancelled);
   for (const call of cancelled) call.controller.abort(call.reason);
   for (const call of cancelled) {
-    const settled = await call.settled;
+    const settled = await within(call.settled, guard, `the cancelled call that held ${call.key}`);
     expect(isCancellation(settled, call.reason), `a cancelled call gave ${describe(settled)}`);
   }
   await untilHeld(
     invoke,
     (held) => cancelled.every((call) => !held.includes(call.key)),
-    `the cancelled calls must stop holding ${cancelled.map((call) => call.key).join(", ")}`,
+    guard,
+    `the stop of the cancelled calls that held ${cancelled.map((call) => call.key).join(", ")}`,
   );
-  const held = await heldKeys(invoke);
+  const held = await within(heldKeys(invoke), guard, "fixture.held");
   for (const call of kept) expect(held.includes(call.key), `the call that holds ${call.key} was not cancelled, but it stopped`);
 
   for (const call of kept) {
-    const released = await invoke("fixture.release", { key: call.key });
+    const released = await within(invoke("fixture.release", { key: call.key }), guard, `the release of ${call.key}`);
     expectEqual(released, { ok: true, value: { released: 1 } }, `the release of ${call.key}`);
-    const settled = await call.settled;
+    const settled = await within(call.settled, guard, `the call that held ${call.key}, after its release`);
     expect("outcome" in settled, `a call that was not cancelled gave ${describe(settled)}`);
     expectEqual(settled.outcome, { ok: true, value: { key: call.key } }, `the outcome of the call that held ${call.key}`);
   }
 }
 
-export async function checkProperties(binding: string, invoke: Invoke): Promise<Checks> {
+/**
+ * Check a property. Stop at the first failure, with no shrinking, because each run can wait up to the guard. The
+ * error gives the input and the reason of the failure.
+ */
+async function holds<T>(property: fc.IAsyncProperty<T>, options: { readonly numRuns: number }): Promise<void> {
+  const details = await fc.check(property, { ...options, endOnFailure: true });
+  if (!details.failed) return;
+  const reason = details.errorInstance instanceof Error ? details.errorInstance.message : String(details.errorInstance);
+  throw new Error(`for ${JSON.stringify(details.counterexample)}: ${reason}`);
+}
+
+export async function checkProperties(binding: string, invoke: Invoke, guard = GUARD): Promise<Checks> {
   const checks = new Checks(`${binding} properties`);
 
   await checks.run("concurrent calls each get exactly their own outcome", RULE, async () => {
-    await fc.assert(
+    await holds(
       fc.asyncProperty(fc.array(operation, { minLength: 1, maxLength: 12 }), async (operations) => {
-        const outcomes = await Promise.all(operations.map((op) => callFor(invoke, op)));
+        const outcomes = await within(Promise.all(operations.map((op) => callFor(invoke, op))), guard, "the concurrent calls");
         operations.forEach((op, index) => expect(agrees(op, outcomes[index]!), `${op.kind} gave ${JSON.stringify(outcomes[index])}`));
       }),
       { numRuns: 25 },
@@ -184,7 +186,7 @@ export async function checkProperties(binding: string, invoke: Invoke): Promise<
   });
 
   await checks.run("cancelling a call affects only that call", RULE, async () => {
-    await fc.assert(
+    await holds(
       fc.asyncProperty(fc.array(fc.boolean(), { minLength: 2, maxLength: 5 }), async (cancel) => {
         const calls = cancel.map((cancelled) => {
           const key = nextKey();
@@ -197,11 +199,13 @@ export async function checkProperties(binding: string, invoke: Invoke): Promise<
           return { key, cancelled, controller, reason, settled };
         });
         try {
-          await cancelSome(invoke, calls);
+          await cancelSome(invoke, calls, guard);
         } finally {
-          // A call that an implementation did not stop would hold forever. Release it, so that the checks can end.
-          await Promise.allSettled(calls.map((call) => invoke("fixture.release", { key: call.key })));
-          await Promise.allSettled(calls.map((call) => call.settled));
+          // A call that an implementation did not stop would hold forever. Release each call, then stop waiting for
+          // the calls on the side of the client, so that the checks end. Each step has the guard.
+          await Promise.allSettled(calls.map((call) => within(invoke("fixture.release", { key: call.key }), guard, `the release of ${call.key}`)));
+          for (const call of calls) call.controller.abort(call.reason);
+          await Promise.allSettled(calls.map((call) => within(call.settled, guard, `the call that held ${call.key}`)));
         }
       }),
       { numRuns: 5 },

@@ -39,7 +39,7 @@ The exit code is 0 if there are no errors. It is 1 if there are errors. With `--
 - **WebMCP:** the checks act as the WebMCP host. `--webmcp <url>` opens a page that serves the `app` target in Chromium, through [Playwright](https://playwright.dev), with a test `modelContext`. Install Playwright to use it: `pnpm add -D playwright`, then `pnpm exec playwright install chromium`. In code, `webmcp` can also be a function that installs the implementation on a host in the same process.
 - **Properties:** with fast-check, through each remote binding: concurrent calls each get exactly their own outcome, and a cancellation changes only its own call.
 
-The checks wait for states that they can observe, not for times: a check cancels a call to `fixture.hold` only after `fixture.held` lists it, or after its marker file exists.
+The checks wait for states that they can observe, not for times: a check cancels a call to `fixture.hold` only after `fixture.held` lists it, or after its marker file exists. Each wait has a guard, 30 seconds by default (`--guard <ms>`, or `guard` in code). A wait that reaches the guard fails its check with "did not settle", and the checks release each call that holds, so that the run always ends. The guard never makes a check pass.
 
 The exit code is 1 if a check fails. Both AcidCat cores run `conform` in their tests. In code, use `conform()` and `serve()` from `@acid-cat/cli`. `createTestHost()` gives the WebMCP host of the checks.
 
