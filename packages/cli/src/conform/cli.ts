@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Checks, expect, expectEqual, GUARD, idsOf, sorted } from "./check.ts";
+import type { Deadline } from "./check.ts";
 
 const RULE = "spec/bindings/cli.md";
 
@@ -28,46 +29,38 @@ interface Run {
   readonly signal: NodeJS.Signals | null;
   readonly stdout: string;
   readonly stderr: string;
-  /** True if the guard ended the process with `SIGKILL`. */
+  /** True if the deadline of the check ended the process with `SIGKILL`. */
   readonly guarded: boolean;
 }
 
 /**
- * Run the command line. If it runs for longer than `guard` milliseconds, end it with `SIGKILL`: the guard is a limit of
- * the infrastructure, so that a command line that never exits fails its check and the run ends. `whileRunning` gets
- * the process while it runs, for example to interrupt it, and a function that starts the guard again.
+ * Run the command line in a check. When the deadline of the check aborts its signal, end the process with `SIGKILL`, so
+ * that no process outlives its check: the deadline is a limit of the infrastructure, and a command line that does not
+ * exit fails its check. `whileRunning` gets the process while it runs, for example to interrupt it.
  */
-function run(
-  command: readonly string[],
-  args: readonly string[],
-  guard: number,
-  whileRunning?: (child: ChildProcess, restartGuard: () => void) => void,
-): Promise<Run> {
+function run(command: readonly string[], args: readonly string[], deadline: Deadline, whileRunning?: (child: ChildProcess) => void): Promise<Run> {
   return new Promise((resolve, reject) => {
     const child = spawn(command[0]!, [...command.slice(1), ...args], { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     let guarded = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const startGuard = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        guarded = true;
-        child.kill("SIGKILL");
-      }, guard);
+    const stop = () => {
+      guarded = true;
+      child.kill("SIGKILL");
     };
+    if (deadline.signal.aborted) stop();
+    else deadline.signal.addEventListener("abort", stop, { once: true });
     child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
     child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
     child.on("error", (error) => {
-      clearTimeout(timer);
+      deadline.signal.removeEventListener("abort", stop);
       reject(error);
     });
     child.on("close", (code, signal) => {
-      clearTimeout(timer);
+      deadline.signal.removeEventListener("abort", stop);
       resolve({ code, signal, stdout, stderr, guarded });
     });
-    startGuard();
-    whileRunning?.(child, startGuard);
+    whileRunning?.(child);
   });
 }
 
@@ -85,24 +78,24 @@ function whenCreated(path: string, child: ChildProcess, then: () => void): void 
 
 export async function checkCli(command: readonly string[], guard = GUARD): Promise<Checks> {
   const checks = new Checks("cli", guard);
-  const cli = async (...args: string[]) => {
-    const result = await run(command, args, guard);
+  const cli = async (deadline: Deadline, ...args: string[]) => {
+    const result = await run(command, args, deadline);
     expect(!result.guarded, `the command line with ${args.join(" ")} did not exit within ${guard} ms, the guard of acid-cat conform`);
     return result;
   };
 
-  await checks.run("a value goes to standard output with exit code 0", `${RULE}#outcomes`, async () => {
-    const result = await cli("fixture", "echo", "--text", "hello");
+  await checks.run("a value goes to standard output with exit code 0", `${RULE}#outcomes`, async (deadline) => {
+    const result = await cli(deadline, "fixture", "echo", "--text", "hello");
     expectEqual(result.code, 0, "exit code");
     expectEqual(JSON.parse(result.stdout), { text: "hello" }, "standard output");
   });
-  await checks.run("a failure goes to standard output with exit code 1", `${RULE}#outcomes`, async () => {
-    const result = await cli("fixture", "refuse");
+  await checks.run("a failure goes to standard output with exit code 1", `${RULE}#outcomes`, async (deadline) => {
+    const result = await cli(deadline, "fixture", "refuse");
     expectEqual(result.code, 1, "exit code");
     expectEqual((JSON.parse(result.stdout) as { _tag?: string })._tag, "Refused", "_tag");
   });
-  await checks.run("a defect goes to standard error with exit code 5", `${RULE}#outcomes`, async () => {
-    const result = await cli("fixture", "crash");
+  await checks.run("a defect goes to standard error with exit code 5", `${RULE}#outcomes`, async (deadline) => {
+    const result = await cli(deadline, "fixture", "crash");
     expectEqual(result.code, 5, "exit code");
     expect(/"kind":"internal"/.test(result.stderr), "standard error must contain the call failure");
   });
@@ -113,20 +106,19 @@ export async function checkCli(command: readonly string[], guard = GUARD): Promi
     ["a flag that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--count", "soon"], 3],
     ["invalid input through call has exit code 3", ["call", "fixture.echo", '{"text":1}'], 3],
   ] as const) {
-    await checks.run(name, `${RULE}#outcomes`, async () => {
-      expectEqual((await cli(...args)).code, code, "exit code");
+    await checks.run(name, `${RULE}#outcomes`, async (deadline) => {
+      expectEqual((await cli(deadline, ...args)).code, code, "exit code");
     });
   }
-  await checks.run("an interrupt cancels the call with exit code 130", `${RULE}#commands`, async () => {
+  await checks.run("an interrupt cancels the call with exit code 130", `${RULE}#commands`, async (deadline) => {
     // The call holds until it is released. It creates the marker file when it holds, and the interrupt comes then.
     const directory = await mkdtemp(join(tmpdir(), "acid-cat-conform-"));
     const marker = join(directory, "held");
     try {
       let interrupted = false;
-      const result = await run(command, ["fixture", "hold", "--key", "interrupt", "--marker", marker], guard, (child, restartGuard) =>
+      const result = await run(command, ["fixture", "hold", "--key", "interrupt", "--marker", marker], deadline, (child) =>
         whenCreated(marker, child, () => {
           interrupted = true;
-          restartGuard();
           child.kill("SIGINT");
         }),
       );
@@ -144,17 +136,17 @@ export async function checkCli(command: readonly string[], guard = GUARD): Promi
       await rm(directory, { recursive: true, force: true });
     }
   });
-  await checks.run("call gives the value of a capability", `${RULE}#commands`, async () => {
-    const result = await cli("call", "fixture.echo", '{"text":"hello"}');
+  await checks.run("call gives the value of a capability", `${RULE}#commands`, async (deadline) => {
+    const result = await cli(deadline, "call", "fixture.echo", '{"text":"hello"}');
     expectEqual(result.code, 0, "exit code");
     expectEqual(JSON.parse(result.stdout), { text: "hello" }, "standard output");
   });
-  await checks.run("list gives the view", `${RULE}#commands`, async () => {
-    const result = await cli("list");
+  await checks.run("list gives the view", `${RULE}#commands`, async (deadline) => {
+    const result = await cli(deadline, "list");
     expectEqual(sorted((JSON.parse(result.stdout) as { id: string }[]).map((entry) => entry.id)), idsOf("cli"), "ids");
   });
-  await checks.run("list gives the usage of each capability, with its flags", `${RULE}#commands`, async () => {
-    const entries = JSON.parse((await cli("list")).stdout) as { id: string; usage?: unknown }[];
+  await checks.run("list gives the usage of each capability, with its flags", `${RULE}#commands`, async (deadline) => {
+    const entries = JSON.parse((await cli(deadline, "list")).stdout) as { id: string; usage?: unknown }[];
     for (const { id, usage } of entries) {
       expect(typeof usage === "string", `${id} must have a usage`);
       const [program, ...rest] = usage.split(" ");

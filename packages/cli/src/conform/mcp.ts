@@ -15,10 +15,17 @@ type ToolResult = {
   readonly structuredContent?: unknown;
 };
 
-/** A connected MCP client. The signal stops the connection. */
+/**
+ * A connected MCP client. The signal stops the connection, and each request of the client: the client does not stop its
+ * own requests when the signal of `connect` aborts, so its transport takes the signal too.
+ */
 export async function mcpClient(url: string, signal?: AbortSignal): Promise<Client> {
   const client = new Client({ name: "acid-cat-conform", version: "0.1.0" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
-  await client.connect(new StreamableHTTPClientTransport(new URL(url)), signal === undefined ? undefined : { signal });
+  const transport = new StreamableHTTPClientTransport(new URL(url), {
+    fetch: (input, init) =>
+      fetch(input, { ...init, ...(signal === undefined ? {} : { signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal }) }),
+  });
+  await client.connect(transport, signal === undefined ? undefined : { signal });
   return client;
 }
 

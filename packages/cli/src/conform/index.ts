@@ -40,6 +40,18 @@ export interface ConformOptions {
   readonly guard?: number | undefined;
 }
 
+/**
+ * Wait for something that the checks open, for example a connection, until the guard. The result is what was opened,
+ * or the reason of the failure. When it opens after the guard, `close` closes it, so that nothing that the checks opened
+ * stays open.
+ */
+async function opened<T>(opening: Promise<T>, guard: number, what: string, close: (late: T) => Promise<unknown>): Promise<T | string> {
+  return within(opening, guard, what).catch((error: unknown) => {
+    void opening.then(close, () => undefined).catch(() => undefined);
+    return error instanceof Error ? error.message : String(error);
+  });
+}
+
 /** Run all checks for the bindings that the options give. */
 export async function conform(options: ConformOptions): Promise<readonly Check[]> {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
@@ -47,11 +59,16 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
   const results: Check[] = [];
   if (options.mcp !== undefined) {
     results.push(...(await checkMcp(options.mcp, { maximumBytes, guard })).results);
-    const mcp = await within(mcpInvoke(options.mcp, AbortSignal.timeout(guard)), guard, "the connection of the MCP client").catch(() => undefined);
-    if (mcp !== undefined) {
-      results.push(...(await checkProperties("mcp", mcp.invoke, guard)).results);
-      await within(mcp.close(), guard, "the close of the MCP client").catch(() => undefined);
+    // The connection of the property checks. Aborting it stops each request of its client.
+    const connection = new AbortController();
+    const connected = await opened(mcpInvoke(options.mcp, connection.signal), guard, "the connection of the MCP client", (late) => late.close());
+    if (typeof connected === "string") {
+      results.push({ binding: "mcp properties", name: "an MCP client connects", rule: "spec/bindings/mcp.md#server", passed: false, detail: connected });
+    } else {
+      results.push(...(await checkProperties("mcp", connected.invoke, guard)).results);
+      await within(connected.close(), guard, "the close of the MCP client").catch(() => undefined);
     }
+    connection.abort();
   }
   if (options.http !== undefined) {
     results.push(...(await checkHttp(options.http, { maximumBytes, guard })).results);
@@ -59,16 +76,16 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
   }
   if (options.cli !== undefined) results.push(...(await checkCli(options.cli, guard)).results);
   if (options.webmcp !== undefined) {
-    const opened = await within(
+    const driver = await opened(
       typeof options.webmcp === "string" ? browserDriver(options.webmcp, guard) : processDriver(options.webmcp),
       guard,
       "the installation of the WebMCP tools",
-    ).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
-    if (typeof opened === "string") {
-      results.push({ binding: "webmcp", name: "the implementation installs its tools", rule: "spec/bindings/webmcp.md", passed: false, detail: opened });
+      (late) => late.close(),
+    );
+    if (typeof driver === "string") {
+      results.push({ binding: "webmcp", name: "the implementation installs its tools", rule: "spec/bindings/webmcp.md", passed: false, detail: driver });
       return results;
     }
-    const driver = opened;
     try {
       results.push(...(await checkWebMcp(driver, guard)).results);
     } finally {

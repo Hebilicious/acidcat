@@ -36,8 +36,8 @@ export interface TestHost {
   tools(): RecordedTool[];
   /** The number of changes of the tools so far. Each registration and each removal is one change. */
   version(): number;
-  /** Resolve with the number of changes when it is more than `after`. */
-  changed(after: number): Promise<number>;
+  /** Resolve with the number of changes when it is more than `after`. The signal stops the wait. */
+  changed(after: number, signal?: AbortSignal): Promise<number>;
   /** Call a tool, and wait for its outcome. */
   call(name: string, input: unknown): Promise<ToolCall>;
   /** Start a call to a tool, and give its number. `cancel` and `result` take the number. */
@@ -88,13 +88,17 @@ export function createTestHost(): TestHost {
     tools: () =>
       [...registered.values()].map((tool) => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema })),
     version: () => version,
-    changed: (after) =>
-      new Promise((resolve) => {
+    changed: (after, signal) =>
+      new Promise((resolve, reject) => {
         const wake = () => {
           if (version <= after) return;
           waiting.delete(wake);
           resolve(version);
         };
+        signal?.addEventListener("abort", () => {
+          waiting.delete(wake);
+          reject(signal.reason);
+        });
         waiting.add(wake);
         wake();
       }),
@@ -114,7 +118,8 @@ export function createTestHost(): TestHost {
 export interface WebMcpDriver {
   tools(): Promise<RecordedTool[]>;
   version(): Promise<number>;
-  changed(after: number): Promise<number>;
+  /** The signal stops the wait. A page in a browser cannot take it, so its wait ends when the page closes. */
+  changed(after: number, signal?: AbortSignal): Promise<number>;
   call(name: string, input: unknown): Promise<ToolCall>;
   start(name: string, input: unknown): Promise<number>;
   cancel(call: number): Promise<void>;
@@ -138,7 +143,7 @@ export async function processDriver(install: WebMcpInstall): Promise<WebMcpDrive
   return {
     tools: async () => copy(host.tools()),
     version: async () => host.version(),
-    changed: (after) => host.changed(after),
+    changed: (after, signal) => host.changed(after, signal),
     call: async (name, input) => copy(await host.call(name, input)),
     start: async (name, input) => host.start(name, input),
     cancel: async (call) => host.cancel(call),
@@ -199,7 +204,7 @@ async function untilTools(driver: WebMcpDriver, deadline: Deadline, condition: (
   for (;;) {
     const version = await deadline.within(driver.version(), `the tools: ${what}`);
     if (condition(await deadline.within(driver.tools(), `the tools: ${what}`))) return;
-    await deadline.within(driver.changed(version), `the tools: ${what}`);
+    await deadline.within(driver.changed(version, deadline.signal), `the tools: ${what}`);
   }
 }
 
@@ -207,8 +212,17 @@ async function untilTools(driver: WebMcpDriver, deadline: Deadline, condition: (
  * Call a tool until the deadline. If the deadline comes first, cancel the call, so that it does not run on in the
  * page.
  */
+/** Start a call to a tool, until the deadline. A call that starts after the deadline is cancelled at once. */
+function startTool(driver: WebMcpDriver, deadline: Deadline, name: string, input: unknown): Promise<number> {
+  const starting = driver.start(name, input);
+  return deadline.within(starting, `the call to ${name}`).catch((error: unknown) => {
+    void starting.then((late) => driver.cancel(late)).catch(() => undefined);
+    throw error;
+  });
+}
+
 async function callTool(driver: WebMcpDriver, deadline: Deadline, name: string, input: unknown): Promise<ToolCall> {
-  const started = await deadline.within(driver.start(name, input), `the call to ${name}`);
+  const started = await startTool(driver, deadline, name, input);
   try {
     return await deadline.within(driver.result(started), `the call to ${name}`);
   } catch (error) {
@@ -220,8 +234,9 @@ async function callTool(driver: WebMcpDriver, deadline: Deadline, name: string, 
 /** The keys that fixture.held gives through a tool. */
 async function heldKeys(driver: WebMcpDriver, deadline: Deadline): Promise<readonly string[]> {
   const call = await callTool(driver, deadline, "fixture.held", {});
-  expect("resolved" in call, `fixture.held gave ${JSON.stringify(call)}`);
-  return ((call.resolved as { value?: { keys?: readonly string[] } }).value?.keys ?? []) as readonly string[];
+  const result = "resolved" in call ? (call.resolved as { readonly ok?: unknown; readonly value?: { readonly keys?: unknown } }) : undefined;
+  expect(result?.ok === true && Array.isArray(result.value?.keys), `fixture.held gave ${JSON.stringify(call)}`);
+  return result.value!.keys as readonly string[];
 }
 
 /** Call fixture.held until `condition` is true, until the deadline. */
@@ -283,7 +298,7 @@ export async function checkWebMcp(driver: WebMcpDriver, guard = GUARD): Promise<
   }
   await checks.run("the signal of the host cancels a call, as an AbortError", `${RULE}#tools`, async (deadline) => {
     const key = `webmcp-cancel-${crypto.randomUUID()}`;
-    const started = await deadline.within(driver.start("fixture.hold", { key }), "the call to fixture.hold");
+    const started = await startTool(driver, deadline, "fixture.hold", { key });
     try {
       await untilHeld(driver, deadline, (held) => held.includes(key), `the call that holds ${key}`);
       await deadline.within(driver.cancel(started), `the cancellation of the call that holds ${key}`);

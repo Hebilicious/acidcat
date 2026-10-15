@@ -21,7 +21,8 @@ export const idsOf = (target: string): string[] => Object.keys(viewOf(fixture, t
 /**
  * Collects checks for one binding. Each check has one deadline, `guard` milliseconds after it starts. At the deadline,
  * the check fails with "did not settle", and its signal aborts, so that the operations of the check that still run on
- * the side of the client stop.
+ * the side of the client stop. A check that fails ends only when its operations have stopped, so that none of them
+ * outlives it. That wait has its own guard.
  */
 export class Checks {
   readonly results: Check[] = [];
@@ -34,13 +35,24 @@ export class Checks {
   }
 
   async run(name: string, rule: string, body: (deadline: Deadline) => Promise<void> | void): Promise<void> {
-    const deadline = new Deadline(this.guard);
+    const check = `the check "${name}"`;
+    const deadline = new Deadline(this.guard, check);
+    const done = Promise.resolve().then(() => body(deadline));
     try {
-      await deadline.within(Promise.resolve().then(() => body(deadline)), `the check "${name}"`);
+      await deadline.within(done, check);
       this.results.push({ binding: this.binding, name, rule, passed: true });
     } catch (error) {
-      deadline.cancel(new Error(`the check "${name}" failed`));
-      this.results.push({ binding: this.binding, name, rule, passed: false, detail: error instanceof Error ? error.message : String(error) });
+      deadline.cancel(new Error(`${check} ended`));
+      // The reason that the body gives is more precise than the deadline of the whole check, when it has one.
+      const reason = await within(
+        done.then(
+          () => error,
+          (bodyError: unknown) => bodyError,
+        ),
+        this.guard,
+        `the end of ${check}`,
+      ).catch(() => error);
+      this.results.push({ binding: this.binding, name, rule, passed: false, detail: reason instanceof Error ? reason.message : String(reason) });
     } finally {
       deadline.end();
     }
@@ -76,19 +88,20 @@ export const GUARD = 30_000;
 const unsettled = (what: string, guard: number) => `${what} did not settle within ${guard} ms, the guard of acid-cat conform`;
 
 /**
- * One deadline for a check, or for a step of the checks: `guard` milliseconds after it starts. Each wait in it gets the
- * time that is left, so that no wait starts the guard again. At the deadline, `signal` aborts.
+ * One deadline for a check, or for a step of the checks: `guard` milliseconds after it starts. It has one timer, which
+ * aborts `signal`. Each wait in it ends when the signal aborts, so that no wait starts the guard again.
  */
 export class Deadline {
   readonly guard: number;
   readonly #end: number;
   readonly #controller = new AbortController();
-  #timer: ReturnType<typeof setTimeout> | undefined;
+  readonly #timer: ReturnType<typeof setTimeout>;
 
-  constructor(guard: number) {
+  /** `what` names the check or the step in the message of the deadline. */
+  constructor(guard: number, what = "the step") {
     this.guard = guard;
     this.#end = performance.now() + guard;
-    this.#timer = setTimeout(() => this.#controller.abort(new Error(unsettled("the step", guard))), guard);
+    this.#timer = setTimeout(() => this.#controller.abort(new Error(unsettled(what, guard))), guard);
   }
 
   /** Aborts at the deadline. Give it to each operation of the client, so that the operation stops. */
@@ -103,28 +116,36 @@ export class Deadline {
 
   /** Wait for a promise until the deadline. After that, fail with "did not settle". */
   within<T>(promise: Promise<T>, what: string): Promise<T> {
-    const expire = (reject: (error: Error) => void) => {
-      const error = new Error(unsettled(what, this.guard));
-      this.#controller.abort(error);
-      reject(error);
-    };
-    if (this.left === 0) {
+    const signal = this.signal;
+    const reason = () =>
+      signal.reason instanceof Error && !/did not settle/.test(signal.reason.message) ? signal.reason : new Error(unsettled(what, this.guard));
+    // Code that only waits for promises that resolve at once never lets the timer run, so the time is checked here too.
+    if (!signal.aborted && this.left === 0) this.#controller.abort(new Error(unsettled(what, this.guard)));
+    if (signal.aborted) {
       promise.catch(() => undefined);
-      return new Promise<never>((_, reject) => expire(reject));
+      return Promise.reject(reason());
     }
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const limit = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => expire(reject), this.left);
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () => reject(reason());
+      signal.addEventListener("abort", onAbort, { once: true });
+      promise.then(
+        (value) => {
+          signal.removeEventListener("abort", onAbort);
+          resolve(value);
+        },
+        (error: unknown) => {
+          signal.removeEventListener("abort", onAbort);
+          reject(error);
+        },
+      );
     });
-    return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
   }
 
   /** Read a state until `condition` is true, until the deadline. The reads are the trigger, not the time. */
   async until<T>(read: (signal: AbortSignal) => Promise<T>, condition: (value: T) => boolean, what: string): Promise<void> {
     for (;;) {
       if (condition(await this.within(read(this.signal), what))) return;
-      if (this.left === 0) throw new Error(unsettled(what, this.guard));
-      await new Promise((resolve) => setTimeout(resolve, 5));
+      await this.within(new Promise((resolve) => setTimeout(resolve, 5)), what);
     }
   }
 
