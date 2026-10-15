@@ -1,10 +1,10 @@
 /** Conformance checks for the HTTP binding (spec/bindings/http.md). */
 import { Checks, expect, expectEqual, fetchUntil, FORBIDDEN_ORIGIN, GUARD, idsOf, sorted } from "./check.ts";
-import type { Deadline } from "./check.ts";
+import type { Deadline, Guard } from "./check.ts";
 
 const RULE = "spec/bindings/http.md";
 
-export async function checkHttp(base: string, options: { readonly maximumBytes: number; readonly guard?: number | undefined }): Promise<Checks> {
+export async function checkHttp(base: string, options: { readonly maximumBytes: number; readonly guard?: Guard | undefined }): Promise<Checks> {
   const checks = new Checks("http", options.guard ?? GUARD);
   const post = (deadline: Deadline, id: string, body: unknown, headers: Record<string, string> = {}) =>
     fetchUntil(deadline, `${base}/capabilities/${id}`, {

@@ -6,6 +6,7 @@ import type { Outcome } from "@acid-cat/spec-ts";
 import fc from "fast-check";
 
 import { Checks, Deadline, expect, expectEqual, GUARD } from "./check.ts";
+import type { Guard } from "./check.ts";
 import { mcpClient } from "./mcp.ts";
 
 const RULE = "spec/invocation.md#cancellation-and-concurrency";
@@ -180,7 +181,7 @@ async function holds<T>(property: fc.IAsyncProperty<T>, options: { readonly numR
   throw new Error(`for ${JSON.stringify(details.counterexample)}: ${reason}`);
 }
 
-export async function checkProperties(binding: string, invoke: Invoke, guard = GUARD): Promise<Checks> {
+export async function checkProperties(binding: string, invoke: Invoke, guard: Guard = GUARD): Promise<Checks> {
   const checks = new Checks(`${binding} properties`, guard);
 
   await checks.run("concurrent calls each get exactly their own outcome", RULE, async (deadline) => {
@@ -212,7 +213,7 @@ export async function checkProperties(binding: string, invoke: Invoke, guard = G
           // A call that an implementation did not stop would hold forever. Release each call, then stop waiting for
           // the calls on the side of the client, so that the checks end. The cleanup has its own deadline, because
           // the deadline of the check can be over.
-          const cleanup = new Deadline(guard);
+          const cleanup = new Deadline(deadline.guard);
           await Promise.allSettled(calls.map((call) => cleanup.within(invoke("fixture.release", { key: call.key }, cleanup.signal), `the release of ${call.key}`)));
           for (const call of calls) call.controller.abort(call.reason);
           await Promise.allSettled(calls.map((call) => cleanup.within(call.settled, `the call that held ${call.key}`)));

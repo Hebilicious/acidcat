@@ -2,8 +2,8 @@
  * `acid-cat conform`: test a running implementation through its bindings (spec/conformance.md). The implementation
  * serves the conformance fixture (conformance/fixture.acidcat.json), with its switch on.
  */
-import { GUARD, within } from "./check.ts";
-import type { Check } from "./check.ts";
+import { GUARD, guardOf, within } from "./check.ts";
+import type { Check, Guard } from "./check.ts";
 import { checkCli } from "./cli.ts";
 import { checkHttp } from "./http.ts";
 import { checkMcp } from "./mcp.ts";
@@ -11,7 +11,7 @@ import { checkProperties, httpInvoke, mcpInvoke } from "./properties.ts";
 import { browserDriver, checkWebMcp, processDriver } from "./webmcp.ts";
 import type { WebMcpInstall } from "./webmcp.ts";
 
-export type { Check } from "./check.ts";
+export type { Check, Guard } from "./check.ts";
 export { fixture } from "./check.ts";
 export { serve } from "./serve.ts";
 export type { Served, WebHandler } from "./serve.ts";
@@ -35,9 +35,10 @@ export interface ConformOptions {
   /**
    * The longest time, in milliseconds, that a check waits for one thing of the implementation: an outcome, a state, a
    * process. The default is 30 seconds. It is a limit of the infrastructure, so that an implementation that never
-   * answers fails its check and the run ends. A check never passes because of it.
+   * answers fails its check and the run ends. A check never passes because of it. A function gives each check its own
+   * guard, from the binding and the name of the check.
    */
-  readonly guard?: number | undefined;
+  readonly guard?: Guard | undefined;
 }
 
 /**
@@ -56,17 +57,19 @@ async function opened<T>(opening: Promise<T>, guard: number, what: string, close
 export async function conform(options: ConformOptions): Promise<readonly Check[]> {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
   const guard = options.guard ?? GUARD;
+  const mcpConnects = guardOf(guard, "mcp properties", "an MCP client connects");
+  const webMcpInstalls = guardOf(guard, "webmcp", "the implementation installs its tools");
   const results: Check[] = [];
   if (options.mcp !== undefined) {
     results.push(...(await checkMcp(options.mcp, { maximumBytes, guard })).results);
     // The connection of the property checks. Aborting it stops each request of its client.
     const connection = new AbortController();
-    const connected = await opened(mcpInvoke(options.mcp, connection.signal), guard, "the connection of the MCP client", (late) => late.close());
+    const connected = await opened(mcpInvoke(options.mcp, connection.signal), mcpConnects, "the connection of the MCP client", (late) => late.close());
     if (typeof connected === "string") {
       results.push({ binding: "mcp properties", name: "an MCP client connects", rule: "spec/bindings/mcp.md#server", passed: false, detail: connected });
     } else {
       results.push(...(await checkProperties("mcp", connected.invoke, guard)).results);
-      await within(connected.close(), guard, "the close of the MCP client").catch(() => undefined);
+      await within(connected.close(), mcpConnects, "the close of the MCP client").catch(() => undefined);
     }
     connection.abort();
   }
@@ -77,8 +80,8 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
   if (options.cli !== undefined) results.push(...(await checkCli(options.cli, guard)).results);
   if (options.webmcp !== undefined) {
     const driver = await opened(
-      typeof options.webmcp === "string" ? browserDriver(options.webmcp, guard) : processDriver(options.webmcp),
-      guard,
+      typeof options.webmcp === "string" ? browserDriver(options.webmcp, webMcpInstalls) : processDriver(options.webmcp),
+      webMcpInstalls,
       "the installation of the WebMCP tools",
       (late) => late.close(),
     );
@@ -89,7 +92,7 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
     try {
       results.push(...(await checkWebMcp(driver, guard)).results);
     } finally {
-      const closed = await within(driver.close(), guard, "the removal of the WebMCP tools").then(
+      const closed = await within(driver.close(), guardOf(guard, "webmcp", "the implementation removes its tools"), "the removal of the WebMCP tools").then(
         () => undefined,
         (error: unknown) => (error instanceof Error ? error.message : String(error)),
       );

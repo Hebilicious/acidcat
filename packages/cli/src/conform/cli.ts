@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Checks, expect, expectEqual, GUARD, idsOf, sorted } from "./check.ts";
-import type { Deadline } from "./check.ts";
+import type { Deadline, Guard } from "./check.ts";
 
 const RULE = "spec/bindings/cli.md";
 
@@ -76,11 +76,11 @@ function whenCreated(path: string, child: ChildProcess, then: () => void): void 
   check();
 }
 
-export async function checkCli(command: readonly string[], guard = GUARD): Promise<Checks> {
+export async function checkCli(command: readonly string[], guard: Guard = GUARD): Promise<Checks> {
   const checks = new Checks("cli", guard);
   const cli = async (deadline: Deadline, ...args: string[]) => {
     const result = await run(command, args, deadline);
-    expect(!result.guarded, `the command line with ${args.join(" ")} did not exit within ${guard} ms, the guard of acid-cat conform`);
+    expect(!result.guarded, `the command line with ${args.join(" ")} did not exit within ${deadline.guard} ms, the guard of acid-cat conform`);
     return result;
   };
 
@@ -125,10 +125,10 @@ export async function checkCli(command: readonly string[], guard = GUARD): Promi
       expect(
         interrupted,
         result.guarded
-          ? `the call did not hold within ${guard} ms, the guard of acid-cat conform`
+          ? `the call did not hold within ${deadline.guard} ms, the guard of acid-cat conform`
           : `the call must hold before the interrupt; it ended with ${result.code}: ${result.stderr}`,
       );
-      expect(!result.guarded, `the command line did not exit after the interrupt within ${guard} ms, the guard of acid-cat conform`);
+      expect(!result.guarded, `the command line did not exit after the interrupt within ${deadline.guard} ms, the guard of acid-cat conform`);
       expect(result.signal === null, `the process must exit, not end by the signal ${result.signal}`);
       expectEqual(result.code, 130, "exit code");
       expectEqual(result.stdout, "", "standard output");

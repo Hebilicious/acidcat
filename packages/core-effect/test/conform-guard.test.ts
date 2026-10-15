@@ -12,16 +12,25 @@ import { fixtureIgnoringCancellation, fixtureNeverAnswering } from "./fixture-ig
 type Binding = "mcp" | "http" | "cli" | "webmcp";
 
 /**
- * The guard of each binding. Each one is the time that one check of a broken implementation takes to fail, so these
- * tests take about that long for each failing check. The guard must also be long enough for the checks that pass. A
- * check of the command line starts a Node.js process, which takes more than a second on a busy machine. Through MCP and
- * HTTP, the property of concurrent calls makes some hundred requests in one check, which took more than 2 seconds on a
- * CI runner. WebMCP has no such check.
+ * The guard of the checks that the broken implementation must fail, by binding. Each one is the time that such a check
+ * takes to fail, so these tests take about that long for each of them.
  */
-const GUARDS: { readonly [B in Binding]: number } = { mcp: 5_000, http: 5_000, cli: 5_000, webmcp: 2_000 };
+const GUARDS: { readonly [B in Binding]: number } = { mcp: 2_000, http: 2_000, cli: 2_000, webmcp: 2_000 };
+
+/**
+ * The guard of every other check: the longest delay of a timer, about 24 days. These checks must pass, and they pass
+ * when the implementation answers, however long a loaded machine takes to run them, so their guard must not end them.
+ */
+const NO_GUARD = 2 ** 31 - 1;
+
+/** A short guard for the checks that must fail, and none for the others. */
+const guardFor =
+  (binding: Binding, failing: readonly string[]): ConformOptions["guard"] =>
+  (check) =>
+    failing.includes(`${check.binding}: ${check.name}`) ? GUARDS[binding] : NO_GUARD;
 
 /** Run acid-cat conform through one binding of a broken implementation. */
-async function conformThrough(binding: Binding, app: App.App<Holds | Switch>, cliEntry: string): Promise<readonly Check[]> {
+async function conformThrough(binding: Binding, app: App.App<Holds | Switch>, cliEntry: string, failing: readonly string[]): Promise<readonly Check[]> {
   const services = Layer.fresh(fixtureLayer);
   const served = await serve({
     "/mcp": Mcp.toWebHandler(app, services, { name: "fixture", version: "0.0.0", allowedOrigins: [] }),
@@ -41,7 +50,7 @@ async function conformThrough(binding: Binding, app: App.App<Holds | Switch>, cl
   };
   try {
     return await conform({
-      guard: GUARDS[binding],
+      guard: guardFor(binding, failing),
       ...(binding === "mcp" ? { mcp: `${served.url}/mcp` } : {}),
       ...(binding === "http" ? { http: `${served.url}/api` } : {}),
       ...(binding === "cli" ? { cli: [process.execPath, new URL(cliEntry, import.meta.url).pathname] } : {}),
@@ -78,10 +87,10 @@ const echoChecks: { readonly [B in Binding]: readonly string[] } = {
 
 for (const binding of ["mcp", "http", "cli", "webmcp"] as const) {
   test(`acid-cat conform reports an implementation that ignores cancellation through ${binding}, and ends`, async () => {
-    failedAtGuard(await conformThrough(binding, fixtureIgnoringCancellation, "./fixture-ignoring-cli.ts"), binding, cancellationChecks[binding]);
+    failedAtGuard(await conformThrough(binding, fixtureIgnoringCancellation, "./fixture-ignoring-cli.ts", cancellationChecks[binding]), binding, cancellationChecks[binding]);
   });
 
   test(`acid-cat conform reports an implementation whose fixture.echo never answers through ${binding}, and ends`, async () => {
-    failedAtGuard(await conformThrough(binding, fixtureNeverAnswering, "./fixture-silent-cli.ts"), binding, echoChecks[binding]);
+    failedAtGuard(await conformThrough(binding, fixtureNeverAnswering, "./fixture-silent-cli.ts", echoChecks[binding]), binding, echoChecks[binding]);
   });
 }

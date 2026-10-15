@@ -9,6 +9,7 @@ import { REFERENCE, visitObjects } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
 import { Checks, Deadline, expect, expectEqual, fixture, GUARD, idsOf, sorted } from "./check.ts";
+import type { Guard } from "./check.ts";
 
 const RULE = "spec/bindings/webmcp.md";
 
@@ -262,7 +263,7 @@ function isBundled(schema: JsonObject): boolean {
 }
 
 
-export async function checkWebMcp(driver: WebMcpDriver, guard = GUARD): Promise<Checks> {
+export async function checkWebMcp(driver: WebMcpDriver, guard: Guard = GUARD): Promise<Checks> {
   const checks = new Checks("webmcp", guard);
   const view = fixture.capabilities;
   const expected = idsOf(TARGET);
@@ -316,7 +317,7 @@ export async function checkWebMcp(driver: WebMcpDriver, guard = GUARD): Promise<
     } finally {
       // A call that the implementation did not stop would hold forever. Release it, so that the checks can end. The
       // release has its own deadline, because the deadline of the check can be over.
-      const cleanup = new Deadline(guard);
+      const cleanup = new Deadline(deadline.guard);
       await callTool(driver, cleanup, "fixture.release", { key }).catch(() => undefined);
       cleanup.end();
     }

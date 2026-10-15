@@ -4,8 +4,8 @@
  */
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
-import type { Deadline } from "./check.ts";
-import { Checks, expect, expectEqual, fetchUntil, fixture, FORBIDDEN_ORIGIN, GUARD, idsOf, sorted, within } from "./check.ts";
+import type { Deadline, Guard } from "./check.ts";
+import { Checks, expect, expectEqual, fetchUntil, fixture, FORBIDDEN_ORIGIN, GUARD, guardOf, idsOf, sorted, within } from "./check.ts";
 
 const RULE = "spec/bindings/mcp.md";
 
@@ -31,7 +31,7 @@ export async function mcpClient(url: string, signal?: AbortSignal): Promise<Clie
 
 const textOf = (result: ToolResult): unknown => JSON.parse(result.content?.[0]?.text ?? "null");
 
-export async function checkMcp(url: string, options: { readonly maximumBytes: number; readonly guard?: number | undefined }): Promise<Checks> {
+export async function checkMcp(url: string, options: { readonly maximumBytes: number; readonly guard?: Guard | undefined }): Promise<Checks> {
   const guard = options.guard ?? GUARD;
   const checks = new Checks("mcp", guard);
   let client: Client | undefined;
@@ -108,7 +108,7 @@ export async function checkMcp(url: string, options: { readonly maximumBytes: nu
     }
   });
 
-  await within(mcp.close(), guard, "the close of the MCP client").catch(() => undefined);
+  await within(mcp.close(), guardOf(guard, "mcp", "the MCP client closes"), "the close of the MCP client").catch(() => undefined);
 
   const post = (deadline: Deadline, init: RequestInit & { headers?: Record<string, string> }) =>
     fetchUntil(deadline, url, { method: "POST", ...init, headers: { "Content-Type": "application/json", ...init.headers } });

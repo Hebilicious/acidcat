@@ -2,4 +2,4 @@
 export { bundle, check, viewOf } from "./catalog.ts";
 export type { Catalog, Report } from "./catalog.ts";
 export { conform, fixture, serve } from "./conform/index.ts";
-export type { Check, ConformOptions, Served, WebHandler } from "./conform/index.ts";
+export type { Check, ConformOptions, Guard, Served, WebHandler } from "./conform/index.ts";

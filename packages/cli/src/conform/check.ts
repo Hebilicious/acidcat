@@ -28,16 +28,17 @@ export const idsOf = (target: string): string[] => Object.keys(viewOf(fixture, t
 export class Checks {
   readonly results: Check[] = [];
   readonly binding: string;
-  readonly guard: number;
+  readonly guard: Guard;
 
-  constructor(binding: string, guard: number = GUARD) {
+  constructor(binding: string, guard: Guard = GUARD) {
     this.binding = binding;
     this.guard = guard;
   }
 
   async run(name: string, rule: string, body: (deadline: Deadline) => Promise<void> | void): Promise<void> {
     const check = `the check "${name}"`;
-    const deadline = new Deadline(this.guard, check);
+    const guard = guardOf(this.guard, this.binding, name);
+    const deadline = new Deadline(guard, check);
     const done = Promise.resolve().then(() => body(deadline));
     try {
       await deadline.within(done, check);
@@ -51,7 +52,7 @@ export class Checks {
           () => error,
           (bodyError: unknown) => bodyError,
         ),
-        this.guard,
+        guard,
         `the end of ${check}`,
       ).catch(() => {
         stopped = false;
@@ -63,7 +64,7 @@ export class Checks {
         name,
         rule,
         passed: false,
-        detail: stopped ? detail : `${detail} (the work of the check did not stop within ${this.guard} ms after it was cancelled)`,
+        detail: stopped ? detail : `${detail} (the work of the check did not stop within ${guard} ms after it was cancelled)`,
       });
     } finally {
       deadline.end();
@@ -95,6 +96,16 @@ export const FORBIDDEN_ORIGIN = "https://not-allowed.acid-cat.invalid";
  * condition for a check to pass.
  */
 export const GUARD = 30_000;
+
+/**
+ * The guard of the checks: one time for all of them, or a time for each check, which it gets from the binding and the
+ * name of the check, as the results give them. A step that a binding needs before or after its checks, such as the
+ * connection of a client, has the name of the result that it fails with.
+ */
+export type Guard = number | ((check: { readonly binding: string; readonly name: string }) => number);
+
+/** The guard of one check. */
+export const guardOf = (guard: Guard, binding: string, name: string): number => (typeof guard === "number" ? guard : guard({ binding, name }));
 
 /** The message of a wait that reached the guard. */
 const unsettled = (what: string, guard: number) => `${what} did not settle within ${guard} ms, the guard of acid-cat conform`;
