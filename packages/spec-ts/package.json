@@ -1,6 +1,6 @@
 {
   "name": "@acid-cat/spec-ts",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "The fixed details of the AcidCat specification as TypeScript data and pure functions, with no dependencies. Part of the TypeScript reference implementation.",
   "keywords": [
     "acidcat",
