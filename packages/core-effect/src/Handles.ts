@@ -134,11 +134,29 @@ const isCapability = (value: Capability.Any | CapabilityTree): value is Capabili
   typeof value.id === "string" && typeof value.run === "function";
 
 /** The leaves of a tree, in the order of the tree. */
-function leavesOf(tree: CapabilityTree): Leaf<Capability.Any, unknown, unknown>[] {
-  return Object.values(tree).flatMap((value) =>
-    isLeaf(value) ? [value] : isCapability(value as Capability.Any | CapabilityTree) ? [] : leavesOf(value as CapabilityTree),
+/** A capability or a leaf: a node of a tree that has a handle. */
+type Node = Capability.Any | Leaf<Capability.Any, unknown, unknown>;
+
+/** Give the tree of the results of `visit` for each node of a tree, in the same shape. The one walk of a tree. */
+function mapTree(tree: CapabilityTree, visit: (node: Node) => unknown): object {
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(tree).map(([key, value]) => {
+        const branch = value as Node | CapabilityTree;
+        return [key, isLeaf(branch) || isCapability(branch as Capability.Any | CapabilityTree) ? visit(branch as Node) : mapTree(branch as CapabilityTree, visit)];
+      }),
+    ),
   );
 }
+
+/** The nodes of a tree, in the order of the tree. */
+function nodesOf(tree: CapabilityTree): Node[] {
+  const nodes: Node[] = [];
+  mapTree(tree, (node) => nodes.push(node));
+  return nodes;
+}
+
+const leavesOf = (tree: CapabilityTree): Leaf<Capability.Any, unknown, unknown>[] => nodesOf(tree).filter(isLeaf);
 
 /** The capabilities of a tree, as a union of their types. */
 export type CapabilitiesOf<Tree> = {
@@ -155,9 +173,7 @@ export type CapabilitiesOf<Tree> = {
  */
 export function capabilities<const Tree extends CapabilityTree>(tree: Tree): CapabilitiesOf<Tree>[];
 export function capabilities(tree: CapabilityTree): Capability.Any[] {
-  return Object.values(tree).flatMap((value): Capability.Any[] =>
-    isLeaf(value) ? [value.capability] : isCapability(value as Capability.Any | CapabilityTree) ? [value as Capability.Any] : capabilities(value as CapabilityTree),
-  );
+  return nodesOf(tree).map((node) => (isLeaf(node) ? node.capability : node));
 }
 
 /**
@@ -173,21 +189,14 @@ export function get<C extends Capability.Any>(handles: ReadonlyMap<string, Handl
  * snapshot would give data that the view does not have.
  */
 function build(handles: ReadonlyMap<string, Handle>, tree: CapabilityTree, snapshotOf: (leaf: Leaf<Capability.Any, unknown, unknown>) => Observable<unknown>): object {
-  return Object.freeze(
-    Object.fromEntries(
-      Object.entries(tree).map(([key, value]) => {
-        if (isLeaf(value)) {
-          const handle = handles.get(value.capability.id);
-          if (handle === undefined) {
-            throw new Error(`The capability ${value.capability.id} is outside the view of the session, so its handle cannot have a snapshot.`);
-          }
-          return [key, Object.freeze({ ...handle, snapshot: detached(snapshotOf(value)) })];
-        }
-        const branch = value as Capability.Any | CapabilityTree;
-        return [key, isCapability(branch) ? get(handles, branch) : build(handles, branch, snapshotOf)];
-      }),
-    ),
-  );
+  return mapTree(tree, (node) => {
+    if (!isLeaf(node)) return get(handles, node);
+    const handle = handles.get(node.capability.id);
+    if (handle === undefined) {
+      throw new Error(`The capability ${node.capability.id} is outside the view of the session, so its handle cannot have a snapshot.`);
+    }
+    return Object.freeze({ ...handle, snapshot: detached(snapshotOf(node)) });
+  });
 }
 
 /**
