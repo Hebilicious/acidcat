@@ -115,7 +115,7 @@ test("a handle gives the same availability object while the value stays the same
   }
 });
 
-test("listeners hear each change in order, also when changes come faster than they are delivered", async () => {
+test("a listener hears the value that is current when it is told, and may skip the values in between", async () => {
   const owner = gate();
   const session = await Handles.open(
     app,
@@ -123,22 +123,35 @@ test("listeners hear each change in order, also when changes come faster than th
     { target: "app" },
   );
   try {
-    const heard: Availability[] = [];
-    const waiters: { readonly count: number; readonly resolve: () => void }[] = [];
-    session.handles.get("probe.gate.pass")!.availability.subscribe((value) => {
-      heard.push(value);
-      for (const waiter of waiters) if (heard.length === waiter.count) waiter.resolve();
+    const availability = session.handles.get("probe.gate.pass")!.availability;
+    const heard: { readonly value: Availability; readonly owner: Availability; readonly snapshot: Availability }[] = [];
+    const waiters: { readonly value: Availability; readonly resolve: () => void }[] = [];
+    availability.subscribe((value) => {
+      heard.push({ value, owner: owner.getSnapshot(), snapshot: availability.getSnapshot() });
+      for (const waiter of waiters) if (JSON.stringify(waiter.value) === JSON.stringify(value)) waiter.resolve();
     });
-    const heardCount = (count: number) => new Promise<void>((resolve) => waiters.push({ count, resolve }));
+    const heardValue = (value: Availability) => new Promise<void>((resolve) => waiters.push({ value, resolve }));
 
     // The first change reaches the listener, so the session and the handle both follow the gate.
-    owner.set(unavailable("Closed for the night."));
-    await heardCount(1);
+    const night = unavailable("Closed for the night.");
+    owner.set(night);
+    await heardValue(night);
+    // The owner changes A, B, A, C in one turn, while the fiber that tells the listeners cannot run.
+    const repairs = unavailable("Closed for repairs.");
+    const good = unavailable("Closed for good.");
     owner.set(AVAILABLE);
-    owner.set(unavailable("Closed for repairs."));
+    owner.set(repairs);
     owner.set(AVAILABLE);
-    await heardCount(4);
-    assert.deepEqual(heard, [unavailable("Closed for the night."), AVAILABLE, unavailable("Closed for repairs."), AVAILABLE]);
+    owner.set(good);
+    await heardValue(good);
+    for (const each of heard) {
+      assert.deepEqual(each.value, each.owner);
+      assert.deepEqual(each.value, each.snapshot);
+    }
+    assert.deepEqual(
+      heard.map((each) => each.value),
+      [night, good],
+    );
   } finally {
     await session.dispose();
   }

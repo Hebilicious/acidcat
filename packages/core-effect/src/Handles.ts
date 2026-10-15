@@ -55,25 +55,33 @@ function observable<T>(initial: T) {
 /**
  * The availability of one capability as an observable. `getSnapshot` reads the session now, so code that does not use
  * Effect sees a change of a `Current` availability at once. It gives the same object while the value stays the same.
- * Listeners hear each value that the session announces, in order, and never the same value two times in a row.
+ * When the session announces a change, listeners hear the value that `getSnapshot` gives at that moment, and never the
+ * same value two times in a row. Values that changed again before the listeners were told are skipped.
  */
 const followAvailability = (session: Session.Session, id: string, changes: boolean) =>
   Effect.gen(function* () {
     let snapshot = yield* session.availability(id);
     let delivered = snapshot;
     const listeners = new Set<(value: Availability) => void>();
-    const read = (): Availability => {
+    const keep = (value: Availability) => {
+      if (!sameAvailability(snapshot, value)) snapshot = value;
+    };
+    /** The value now, or `otherwise` when the read waits. */
+    const readOr = (otherwise: Availability): Availability => {
       const exit = Effect.runSyncExit(session.availability(id));
-      if (Exit.isSuccess(exit) && !sameAvailability(snapshot, exit.value)) snapshot = exit.value;
+      keep(Exit.isSuccess(exit) ? exit.value : otherwise);
       return snapshot;
     };
+    const read = (): Availability => readOr(snapshot);
     if (changes) {
       yield* session.availabilityChanges(id).pipe(
         Stream.runForEach((next) =>
           Effect.sync(() => {
-            if (sameAvailability(delivered, next)) return;
-            delivered = next;
-            listeners.forEach((listener) => listener(next));
+            // The announced value can be old by now: the listeners hear the value of the moment.
+            const current = readOr(next);
+            if (sameAvailability(delivered, current)) return;
+            delivered = current;
+            listeners.forEach((listener) => listener(current));
           }),
         ),
         Effect.forkScoped({ startImmediately: true }),
