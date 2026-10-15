@@ -6,6 +6,7 @@ import type { Rejection } from "@acid-cat/spec-ts";
 import { Effect, Layer, ManagedRuntime } from "effect";
 
 import type * as App from "./App.ts";
+import { answer } from "./internal/answer.ts";
 import * as Session from "./Session.ts";
 
 export interface Options {
@@ -30,65 +31,102 @@ export interface Options {
 
 /**
  * A web request handler for the API. Each request has its own session. `layer` gives the services that the
- * capabilities need. `options.services` tells when the handler builds them.
+ * capabilities need. `options.services` tells when the handler builds them. The signal of the request cancels its call.
+ * A request that is aborted before its response rejects with the reason of its signal, as an aborted `fetch` does.
  */
 export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Options) {
   if (options.services === "per-request") {
-    return async (request: Request): Promise<Response> =>
-      screen(request, options) ?? Effect.runPromise(respond(app, request, options).pipe(Effect.provide(layer)));
+    return (request: Request): Promise<Response> =>
+      answer(request, Effect.runPromiseExit(handle(app, request, options, layer), { signal: request.signal }));
   }
   const runtime = ManagedRuntime.make(layer);
-  return (request: Request): Promise<Response> => runtime.runPromise(handle(app, request, options));
+  return (request: Request): Promise<Response> =>
+    answer(request, runtime.runPromiseExit(handle(app, request, options), { signal: request.signal }));
 }
 
-/** Answer one API request with a new session. A host that builds the services itself provides them to this Effect. */
-export const handle = <R>(app: App.App<R>, request: Request, options: Options): Effect.Effect<Response, never, R> =>
-  Effect.suspend(() => {
-    const rejected = screen(request, options);
-    return rejected === undefined ? respond(app, request, options) : Effect.succeed(rejected);
-  });
+/**
+ * Answer one API request with a new session. The request is screened, its route is found and its body is read before
+ * the session opens.
+ *
+ * With `services`, the services are built for this request only after that, and released when the response is
+ * complete, so a request that is rejected builds nothing. With no `services`, a host that builds the services itself
+ * provides them to this Effect.
+ */
+export function handle<R>(app: App.App<R>, request: Request, options: Options): Effect.Effect<Response, never, R>;
+export function handle<R, E, RIn>(
+  app: App.App<R>,
+  request: Request,
+  options: Options,
+  services: Layer.Layer<R, E, RIn>,
+): Effect.Effect<Response, E, RIn>;
+export function handle<R, E, RIn>(
+  app: App.App<R>,
+  request: Request,
+  options: Options,
+  services?: Layer.Layer<R, E, RIn>,
+): Effect.Effect<Response, E, R | RIn> {
+  return Effect.flatMap(
+    Effect.promise(() => route(request, options)),
+    (routed): Effect.Effect<Response, E, R | RIn> => {
+      if (routed instanceof Response) return Effect.succeed(routed);
+      const answered = respond(app, routed, options);
+      return services === undefined ? answered : Effect.provide(answered, services);
+    },
+  );
+}
 
-/** The rejection of a request that does not pass the screening (spec/bindings/http.md), or nothing. */
-function screen(request: Request, options: Options): Response | undefined {
+/** What a request that passed the screening asks for. */
+type Route =
+  | { readonly kind: "list" }
+  | { readonly kind: "catalog" }
+  | { readonly kind: "call"; readonly id: string; readonly input: unknown };
+
+/**
+ * Screen a request (spec/bindings/http.md), find its route, and read the body of a call. The result is the route, or the
+ * response for a request that is rejected or that has no route.
+ */
+async function route(request: Request, options: Options): Promise<Route | Response> {
+  const maximumBytes = options.maximumBytes ?? 1_048_576;
   const screened = screenRequest(request, {
     methods: ["GET", "POST"],
     allowedOrigins: options.allowedOrigins,
     mediaType: "application/json",
-    maximumBytes: options.maximumBytes ?? 1_048_576,
+    maximumBytes,
   });
-  return screened === undefined ? undefined : rejection(screened);
+  if (screened !== undefined) return rejection(screened);
+
+  const path = new URL(request.url).pathname.slice((options.base ?? "").length);
+  if (request.method === "GET" && path === "/capabilities") return { kind: "list" };
+  if (request.method === "GET" && path === "/catalog" && options.serveCatalog !== false) return { kind: "catalog" };
+  const id = request.method === "POST" && path.startsWith("/capabilities/") ? path.slice("/capabilities/".length) : undefined;
+  if (id === undefined) return json(404, callFailure("unknown-capability", "There is no such route."));
+
+  const body = await readBounded(request, maximumBytes);
+  if ("rejection" in body) return rejection(body.rejection);
+  try {
+    return { kind: "call", id: decodeURIComponent(id), input: body.text === "" ? {} : JSON.parse(body.text) };
+  } catch {
+    return json(422, callFailure("invalid-input", "The request body is not JSON."));
+  }
 }
 
-/** Answer one API request that passed the screening, with a new session. */
-const respond = <R>(app: App.App<R>, request: Request, options: Options): Effect.Effect<Response, never, R> =>
+/** Answer one API request that has a route, with a new session. */
+const respond = <R>(app: App.App<R>, routed: Route, options: Options): Effect.Effect<Response, never, R> =>
   Effect.gen(function* () {
-    const maximumBytes = options.maximumBytes ?? 1_048_576;
-    const path = new URL(request.url).pathname.slice((options.base ?? "").length);
     const session = yield* Session.make(app, { target: options.target ?? "api" });
-
-    if (request.method === "GET" && path === "/capabilities") {
-      const list = [];
-      for (const id of session.capabilities.keys()) {
-        list.push({ id, ...(yield* session.availability(id)) });
+    switch (routed.kind) {
+      case "list": {
+        const list = [];
+        for (const id of session.capabilities.keys()) list.push({ id, ...(yield* session.availability(id)) });
+        return json(200, list);
       }
-      return json(200, list);
+      case "catalog":
+        return json(200, session.view);
+      case "call": {
+        const outcome = yield* session.invoke(routed.id, routed.input);
+        return json(httpStatus(outcome), isCallFailure(outcome) ? { kind: outcome.kind, message: outcome.message } : outcome);
+      }
     }
-    if (request.method === "GET" && path === "/catalog" && options.serveCatalog !== false) {
-      return json(200, session.view);
-    }
-    const id = request.method === "POST" && path.startsWith("/capabilities/") ? path.slice("/capabilities/".length) : undefined;
-    if (id === undefined) return json(404, callFailure("unknown-capability", "There is no such route."));
-
-    const body = yield* Effect.promise(() => readBounded(request, maximumBytes));
-    if ("rejection" in body) return rejection(body.rejection);
-    let input: unknown;
-    try {
-      input = body.text === "" ? {} : JSON.parse(body.text);
-    } catch {
-      return json(422, callFailure("invalid-input", "The request body is not JSON."));
-    }
-    const outcome = yield* session.invoke(decodeURIComponent(id), input);
-    return json(httpStatus(outcome), isCallFailure(outcome) ? { kind: outcome.kind, message: outcome.message } : outcome);
   }).pipe(Effect.scoped);
 
 const json = (status: number, body: unknown) =>

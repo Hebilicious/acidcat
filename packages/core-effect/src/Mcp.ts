@@ -8,6 +8,7 @@ import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
 import * as App from "./App.ts";
+import { answer } from "./internal/answer.ts";
 import * as Session from "./Session.ts";
 
 export interface Options {
@@ -38,29 +39,49 @@ export interface Options {
 
 /**
  * A web request handler for the MCP server: `(request) => Promise<Response>`. Each request has its own session.
- * `layer` gives the services that the capabilities need. `options.services` tells when the handler builds them.
+ * `layer` gives the services that the capabilities need. `options.services` tells when the handler builds them. The
+ * signal of the request cancels its call. A request that is aborted before its response rejects with the reason of
+ * its signal, as an aborted `fetch` does.
  */
 export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Options) {
   if (options.services === "per-request") {
-    return async (request: Request): Promise<Response> => {
-      const admitted = await admit(request, options);
-      if (admitted instanceof Response) return admitted;
-      return Effect.runPromise(respond(app, admitted, options).pipe(Effect.provide(layer)));
-    };
+    return (request: Request): Promise<Response> =>
+      answer(request, Effect.runPromiseExit(handle(app, request, options, layer), { signal: request.signal }));
   }
   const runtime = ManagedRuntime.make(layer);
-  return (request: Request): Promise<Response> => runtime.runPromise(handle(app, request, options));
+  return (request: Request): Promise<Response> =>
+    answer(request, runtime.runPromiseExit(handle(app, request, options), { signal: request.signal }));
 }
 
 /**
  * Answer one MCP request with a new session. The request is screened and its body is bounded, as in `toWebHandler`.
- * A host that builds the services itself provides them to this Effect.
+ *
+ * With `services`, the services are built for this request only after it passes the screening, and released when the
+ * response is complete, so a request that is rejected builds nothing. With no `services`, a host that builds the
+ * services itself provides them to this Effect.
  */
-export const handle = <R>(app: App.App<R>, request: Request, options: Options) =>
-  Effect.flatMap(
+export function handle<R>(app: App.App<R>, request: Request, options: Options): Effect.Effect<Response, ServerError, R>;
+export function handle<R, E, RIn>(
+  app: App.App<R>,
+  request: Request,
+  options: Options,
+  services: Layer.Layer<R, E, RIn>,
+): Effect.Effect<Response, ServerError | E, RIn>;
+export function handle<R, E, RIn>(
+  app: App.App<R>,
+  request: Request,
+  options: Options,
+  services?: Layer.Layer<R, E, RIn>,
+): Effect.Effect<Response, ServerError | E, R | RIn> {
+  return Effect.flatMap(
     Effect.promise(() => admit(request, options)),
-    (admitted) => (admitted instanceof Response ? Effect.succeed(admitted) : respond(app, admitted, options)),
+    (admitted): Effect.Effect<Response, ServerError | E, R | RIn> => {
+      if (admitted instanceof Response) return Effect.succeed(admitted);
+      const answered = respond(app, admitted, options);
+      return services === undefined ? answered : Effect.provide(answered, services);
+    },
   );
+}
 
 /**
  * Screen a request and read its body (spec/bindings/mcp.md). The result is the rejection, or the request with the body
@@ -84,6 +105,9 @@ async function admit(request: Request, options: Options): Promise<Request | Resp
   }
   return new Request(request.url, { body: body.text, headers: request.headers, method: "POST" });
 }
+
+/** An error of the MCP server of `effect/ai` while it answers a request. */
+export type ServerError = Effect.Error<ReturnType<typeof respond<unknown>>>;
 
 /** Answer one MCP request that passed the screening, with a new session. */
 const respond = <R>(app: App.App<R>, request: Request, options: Options) =>

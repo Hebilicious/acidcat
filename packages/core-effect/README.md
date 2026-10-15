@@ -135,7 +135,9 @@ By default, a web handler builds the services from `layer` once, and all request
 const handler = Mcp.toWebHandler(app, makeLayer(env), { ...options, services: "per-request" });
 ```
 
-`Mcp.handle(app, request, options)` and `Http.handle(app, request, options)` screen one request and answer it. A host that builds the services itself provides them to this Effect.
+Both handlers screen a request, and read its body, before they build services or open a session, so a request that they reject builds nothing. The signal of the request cancels its call. A request that is aborted before its response rejects with the reason of its signal, as an aborted `fetch` does.
+
+`Mcp.handle(app, request, options, layer)` and `Http.handle(app, request, options, layer)` screen one request and answer it, with services that they build from `layer` for this request only after the screening. With no `layer`, a host that builds the services itself provides them to this Effect.
 
 ### Flags of the application
 
