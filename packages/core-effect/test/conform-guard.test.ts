@@ -13,10 +13,12 @@ type Binding = "mcp" | "http" | "cli" | "webmcp";
 
 /**
  * The guard of each binding. Each one is the time that one check of a broken implementation takes to fail, so these
- * tests take about that long for each failing check. A check of the command line starts a Node.js process, which takes
- * more than a second on a busy machine, so the CLI has a larger guard than the bindings in the same process.
+ * tests take about that long for each failing check. The guard must also be long enough for the checks that pass. A
+ * check of the command line starts a Node.js process, which takes more than a second on a busy machine. Through MCP and
+ * HTTP, the property of concurrent calls makes some hundred requests in one check, which took more than 2 seconds on a
+ * CI runner. WebMCP has no such check.
  */
-const GUARDS: { readonly [B in Binding]: number } = { mcp: 2_000, http: 2_000, cli: 5_000, webmcp: 2_000 };
+const GUARDS: { readonly [B in Binding]: number } = { mcp: 5_000, http: 5_000, cli: 5_000, webmcp: 2_000 };
 
 /** Run acid-cat conform through one binding of a broken implementation. */
 async function conformThrough(binding: Binding, app: App.App<Holds | Switch>, cliEntry: string): Promise<readonly Check[]> {
