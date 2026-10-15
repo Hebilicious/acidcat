@@ -254,6 +254,12 @@ export const make = <S, E, R>(
         get: Effect.flatMap(SubscriptionRef.get(state), (current) =>
           current.phase === "started" ? from(current.services).get : Effect.succeed(idle(current)),
         ),
+        getUnsafe: () => {
+          const current = SubscriptionRef.getUnsafe(state);
+          if (current.phase !== "started") return idle(current);
+          const selected = from(current.services);
+          return selected.getUnsafe === undefined ? Effect.runSync(selected.get) : selected.getUnsafe();
+        },
         changes: SubscriptionRef.changes(state).pipe(
           Stream.changesWith((left, right) => left.phase === right.phase),
           Stream.switchMap((current) => (current.phase === "started" ? from(current.services).changes : Stream.make(idle(current)))),

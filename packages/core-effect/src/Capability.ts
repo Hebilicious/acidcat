@@ -60,12 +60,18 @@ export interface Current<A> {
   readonly get: Effect.Effect<A>;
   /** The current value, then each change. */
   readonly changes: Stream.Stream<A>;
+  /**
+   * The value now, read with no Effect, for code that reads it often, such as a user interface that reads it on each
+   * render. It gives the value that `get` gives. The constructors of this module give it.
+   */
+  readonly getUnsafe?: (() => A) | undefined;
 }
 
 /** The value of a `SubscriptionRef`, as a `Current`. */
 export const fromSubscriptionRef = <A>(ref: SubscriptionRef.SubscriptionRef<A>): Current<A> => ({
   get: SubscriptionRef.get(ref),
   changes: SubscriptionRef.changes(ref),
+  getUnsafe: () => SubscriptionRef.getUnsafe(ref),
 });
 
 /** A source of values for code that does not use Effect. Its listeners hear each change. */
@@ -80,6 +86,7 @@ export interface Observable<A> {
  */
 export const fromObservable = <A>(source: Observable<A>): Current<A> => ({
   get: Effect.sync(() => source.getSnapshot()),
+  getUnsafe: () => source.getSnapshot(),
   changes: Stream.callback<A>((queue) =>
     Effect.acquireRelease(
       Effect.sync(() => {
@@ -98,9 +105,11 @@ export const fromObservable = <A>(source: Observable<A>): Current<A> => ({
  */
 export const allAvailable = (...sources: readonly Current<Availability>[]): Current<Availability> => {
   const first = (values: readonly Availability[]): Availability => values.find((value) => !value.available) ?? { available: true };
+  const unsafe = sources.every((source) => source.getUnsafe !== undefined);
   return {
     get: Effect.map(Effect.all(sources.map((source) => source.get)), first),
     changes: Stream.zipLatestAll(...sources.map((source) => source.changes)).pipe(Stream.map(first)),
+    ...(unsafe ? { getUnsafe: () => first(sources.map((source) => source.getUnsafe!())) } : {}),
   };
 };
 

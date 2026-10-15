@@ -374,3 +374,33 @@ test("reads that wait start one read in the background, and a newer value replac
     await session.dispose();
   }
 });
+
+test("a handle reads the availability of a Current with no Effect, followed or not", async () => {
+  const owner = gate();
+  const counted = { effectReads: 0 };
+  const current = Capability.fromObservable(owner);
+  const session = await Handles.open(
+    single({
+      ...current,
+      get: Effect.sync(() => {
+        counted.effectReads++;
+        return owner.getSnapshot();
+      }),
+    }),
+    Layer.empty,
+    { target: "app" },
+  );
+  try {
+    const availability = session.handles.get("probe.gate.pass")!.availability;
+    const atOpen = counted.effectReads;
+    for (let read = 0; read < 100; read++) availability.getSnapshot();
+    owner.set(unavailable("Closed."));
+    assert.deepEqual(availability.getSnapshot(), unavailable("Closed."));
+    const heard = hearing();
+    availability.subscribe(heard.listener);
+    for (let read = 0; read < 100; read++) availability.getSnapshot();
+    assert.equal(counted.effectReads, atOpen);
+  } finally {
+    await session.dispose();
+  }
+});

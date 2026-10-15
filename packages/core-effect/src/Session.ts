@@ -30,6 +30,11 @@ export interface Session {
    * reads it now. A call is decided on this value.
    */
   readonly availability: (id: string) => Effect.Effect<Availability>;
+  /**
+   * The availability of a capability now, read with no Effect, or `undefined` when only an Effect can read it: a
+   * `Current` with no `getUnsafe`.
+   */
+  readonly availabilityNow: (id: string) => Availability | undefined;
   /** The availability of one capability: the current value, then each change. */
   readonly availabilityChanges: (id: string) => Stream.Stream<Availability>;
   /** An event each time the availability of a capability changes. */
@@ -133,6 +138,14 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
   const availabilityOf = (id: string): Effect.Effect<Availability> =>
     reads.get(id) ?? Effect.succeed(served.has(id) ? AVAILABLE : notServed(id));
 
+  const availabilityNow = (id: string): Availability | undefined => {
+    const ref = availability.get(id);
+    if (ref !== undefined) return SubscriptionRef.getUnsafe(ref);
+    const current = currents.get(id);
+    if (current !== undefined) return current.getUnsafe?.();
+    return served.has(id) ? AVAILABLE : notServed(id);
+  };
+
   const availabilityChanges = (id: string): Stream.Stream<Availability> => {
     const ref = availability.get(id);
     if (ref !== undefined) return SubscriptionRef.changes(ref);
@@ -235,6 +248,7 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
       return App.view(app, options.target);
     },
     availability: availabilityOf,
+    availabilityNow,
     availabilityChanges,
     changes,
     state: stateOf,

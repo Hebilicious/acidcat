@@ -288,6 +288,12 @@ const followAvailability = (
   // after a newer value, the next read replaces it, so a read that never ends does not keep the handle from reading.
   let inFlight: { readonly fiber: Fiber.Fiber<Availability>; readonly from: number } | undefined;
   const read = (): Availability => {
+    // A read with no Effect, when the availability has one: a user interface reads this on each render.
+    const now = session.availabilityNow(id);
+    if (now !== undefined) {
+      keep(now);
+      return snapshot;
+    }
     if (inFlight !== undefined) {
       if (inFlight.from === version) return snapshot;
       inFlight.fiber.interruptUnsafe();

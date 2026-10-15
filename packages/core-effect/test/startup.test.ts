@@ -123,6 +123,10 @@ test("a change of availability reaches only the handle of its capability, and re
             reads.push(id);
             return session.availability(id);
           },
+          availabilityNow: (id) => {
+            reads.push(id);
+            return session.availabilityNow(id);
+          },
         };
         return { handles: yield* Handles.make(app, counted) };
       }).pipe(Scope.provide(scope)),

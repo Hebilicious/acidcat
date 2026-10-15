@@ -340,3 +340,23 @@ test("closing a group cancels its calls before it releases its services, also wh
   await Effect.runPromise(Fiber.await(call));
   assert.deepEqual(order, ["call cancelled", "released"]);
 });
+
+test("the availability of a group reads with no Effect", async () => {
+  const { layer } = domain();
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const group = yield* Domains;
+        const current = group.current((services) => Capability.fromSubscriptionRef(Context.get(services, Domain).writes), {
+          dormant: AVAILABLE,
+          closed: unavailable("Closed."),
+        });
+        assert.deepEqual(current.getUnsafe?.(), AVAILABLE);
+        yield* group.start;
+        const writes = Context.get(yield* group.provide(Effect.context<Domain>()), Domain).writes;
+        yield* SubscriptionRef.set(writes, unavailable("Read only."));
+        assert.deepEqual(current.getUnsafe?.(), unavailable("Read only."));
+      }),
+    ).pipe(Effect.provide(layer)),
+  );
+});
