@@ -242,7 +242,8 @@ function observable<T>(initial: T) {
  * The availability of one capability as an observable. `getSnapshot` reads the session now, so code that does not use
  * Effect sees a change of a `Current` availability at once. A `Current` whose read waits gives the last value that the
  * handle read, and the handle reads it again in the background. It gives the same object while the value stays the
- * same. Listeners hear each value that the session announces, in order, and never the same value two times in a row.
+ * same. When the session announces a change, listeners hear the value that `getSnapshot` gives at that moment, and
+ * never the same value two times in a row. Values that changed again before the listeners were told are skipped.
  */
 const followAvailability = (
   session: Session.Session,
@@ -295,10 +296,13 @@ const followAvailability = (
       session.availabilityChanges(id).pipe(
         Stream.runForEach((next) =>
           Effect.suspend(() => {
-            if (mine !== generation || sameAvailability(delivered, next)) return Effect.void;
-            delivered = next;
+            if (mine !== generation) return Effect.void;
+            // The announced value can be old by now: the listeners hear the value of the moment.
             keep(next);
-            return notify(listeners, next, "A listener of an availability failed");
+            const current = read();
+            if (sameAvailability(delivered, current)) return Effect.void;
+            delivered = current;
+            return notify(listeners, current, "A listener of an availability failed");
           }),
         ),
       ),
