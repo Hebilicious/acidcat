@@ -3,7 +3,7 @@
  */
 import { callFailure, httpStatus, isCallFailure, readBounded, screenRequest } from "@acid-cat/spec-ts";
 import type { Rejection } from "@acid-cat/spec-ts";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Cause, Effect, Layer, ManagedRuntime } from "effect";
 
 import * as App from "./App.ts";
 import { answer } from "./internal/answer.ts";
@@ -124,9 +124,15 @@ const respond = <R>(app: App.App<R>, routed: Route, options: Options): Effect.Ef
         for (const id of session.capabilities.keys()) list.push({ id, ...(yield* session.availability(id)) });
         return json(200, list);
       }
-      case "catalog":
-        yield* App.load(app);
+      case "catalog": {
+        // The view needs the schemas of the capabilities of the target. One that does not load is `internal`.
+        const loaded = yield* Effect.exit(App.load(app, { target: session.target }));
+        if (loaded._tag === "Failure") {
+          yield* Effect.logError("A capability did not load", Cause.pretty(loaded.cause));
+          return json(500, callFailure("internal", "A capability did not load."));
+        }
         return json(200, session.view);
+      }
       case "call": {
         const outcome = yield* session.invoke(routed.id, routed.input);
         return json(httpStatus(outcome), isCallFailure(outcome) ? { kind: outcome.kind, message: outcome.message } : outcome);

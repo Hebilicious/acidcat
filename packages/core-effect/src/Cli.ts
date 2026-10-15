@@ -4,7 +4,7 @@
  */
 import { CLI_EXIT_CODES, cliExitCode, cliUsage, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
 import type { JsonObject, Outcome } from "@acid-cat/spec-ts";
-import { Console, Context, Effect, Layer, Option, Schema } from "effect";
+import { Cause, Console, Context, Effect, Layer, Option, Schema } from "effect";
 import type { Terminal } from "effect";
 import { Argument, CliError, Command, Flag, GlobalFlag, Param } from "effect/cli";
 
@@ -35,10 +35,14 @@ export interface Options {
  * process, use `NodeCli.main` from `@acid-cat/core-effect/node`.
  */
 export const run = <R>(app: App.App<R>, options: Options) =>
-  Effect.andThen(
-    App.load(app),
-    Effect.suspend(() => runCommand(command(app, options), options)),
-  );
+  Effect.matchCauseEffect(App.load(app, { target: options.target ?? "cli" }), {
+    // A capability that does not load is the call failure `internal`, with its exit code (spec/bindings/cli.md#outcomes).
+    onFailure: (cause) =>
+      Effect.logError("A capability did not load", Cause.pretty(cause)).pipe(
+        Effect.andThen(print({ kind: "internal", message: "A capability did not load." })),
+      ),
+    onSuccess: () => runCommand(command(app, options), options),
+  });
 
 /**
  * Run a command that `command` made, after the application changed it: for example with its own flags
@@ -198,7 +202,8 @@ export function command<
 > {
   const target = options.target ?? "cli";
   const view = Session.make(app, { target });
-  const served = App.capabilitiesOf(app, target);
+  // The capabilities with their schemas: a lazy capability must have loaded (App.load, which Cli.run runs).
+  const served = App.capabilitiesOf(app, target).map(App.withSchemas);
 
   const invoke = (id: string, input: unknown) =>
     Effect.scoped(Effect.flatMap(view, (session) => session.invoke(id, input))).pipe(

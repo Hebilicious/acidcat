@@ -3,7 +3,7 @@
  * the operation. See spec/catalog.md#capabilities.
  */
 import type { Availability } from "@acid-cat/spec-ts";
-import { Effect, Queue, Stream, SubscriptionRef } from "effect";
+import { Data, Effect, Queue, Stream, SubscriptionRef } from "effect";
 import type { Schema } from "effect";
 
 /** A schema that needs no services to decode or encode. */
@@ -103,31 +103,65 @@ const lazyTypeId: unique symbol = Symbol.for("@acid-cat/core-effect/Capability/L
 /** The part of a capability that a lazy capability declares at once. */
 export type Metadata<R> = Pick<Capability<any, any, any, R>, "id" | "description" | "audience" | "readOnly" | "availability">;
 
-/** A lazy capability did not load: its module failed. A call to it gives the call failure `internal`. */
-export class LoadFailed extends Error {
-  constructor(id: string, cause: unknown) {
-    super(`The capability ${id} did not load.`, { cause });
-    this.name = "LoadFailed";
+/** A lazy capability did not load: its module failed, or does not agree with the declaration. */
+export class LoadFailed extends Data.TaggedError("LoadFailed")<{ readonly id: string; readonly reason: string; readonly cause?: unknown }> {
+  override get message() {
+    return `The capability ${this.id} did not load: ${this.reason}`;
   }
 }
 
-interface Lazy {
-  readonly load: () => Promise<Any>;
-  readonly loaded: () => Any | undefined;
+interface LazyState {
+  readonly load: () => Promise<Capability<any, any, any, any>>;
+  readonly loaded: () => Capability<any, any, any, any> | undefined;
+}
+
+/**
+ * A capability whose schemas and program load when they are needed. It has the metadata of a capability, and `run`,
+ * which loads the module first. It has no `input`, `output`, `failures` or `state`: `load` gives the capability that
+ * has them. Its type parameters are the types of that capability.
+ */
+export interface Lazy<Input extends AnySchema = AnySchema, Output extends AnySchema = AnySchema, Failure extends AnySchema = AnySchema, R = never>
+  extends Metadata<R> {
+  readonly run: (input: Input["Type"]) => Effect.Effect<Output["Type"], Failure["Type"], R>;
+  readonly [lazyTypeId]: LazyState;
+  /** The types of the schemas that the module gives. There is no such value. */
+  readonly "~schemas"?: { readonly input: Input; readonly output: Output; readonly failure: Failure };
+}
+
+/** True if two audiences have the same targets, in the same order. */
+const sameAudience = (left: readonly string[], right: readonly string[]) =>
+  left.length === right.length && left.every((target, index) => target === right[index]);
+
+/** Why the capability that a module gives does not agree with the declaration of the lazy capability, or nothing. */
+function disagreement(metadata: Metadata<unknown>, module: unknown): string | undefined {
+  if (typeof module !== "object" || module === null || typeof (module as { run?: unknown }).run !== "function") {
+    return "the module gave no capability";
+  }
+  const capability = module as Capability<any, any, any, any>;
+  if (capability.id !== metadata.id) return `the module gave the capability ${capability.id}`;
+  if (capability.description !== metadata.description) return "the description of the module is not the description of the declaration";
+  if (!sameAudience(capability.audience, metadata.audience)) return "the audience of the module is not the audience of the declaration";
+  if ((capability.readOnly === true) !== (metadata.readOnly === true)) return "readOnly of the module is not readOnly of the declaration";
+  if (capability.availability !== undefined && capability.availability !== metadata.availability) {
+    return "the module declares its own availability: declare it in the lazy declaration only";
+  }
+  if (capability.state !== undefined) return "a lazy capability has no state";
+  return undefined;
 }
 
 /**
  * A capability whose schemas and program load when they are needed: on its first call, when a binding writes its
- * schemas (MCP `tools/list`, a WebMCP update), or in `App.load` before the catalog is written. The metadata is
- * declared at once, so that a session and its handles open without the module. The capability has the types of the
- * capability that `load` gives, and `load` usually imports its module:
+ * schemas (MCP `tools/list`, a WebMCP update, the HTTP catalog), or in `App.load` before the catalog is written. The
+ * metadata is declared at once, so that a session and its handles open without the module. The lazy capability has
+ * the types of the capability that `load` gives, and `load` usually imports its module:
  *
  * ```ts
  * Capability.lazy({ id: "plan.generate", description, audience: ["app"] }, () => import("./plan.ts").then((m) => m.generate));
  * ```
  *
- * The capability loads one time. A call that is cancelled while the module loads does not stop the load for other
- * calls. A load that fails is forgotten, so that the next call loads again. A lazy capability has no state.
+ * The capability that the module gives must have the same id, description, audience and `readOnly`, no availability
+ * of its own and no state. The capability loads one time. A call that is cancelled while the module loads does not stop
+ * the load for other calls. A load that fails, for any reason, is forgotten, so that the next call loads again.
  */
 export const lazy = <
   Input extends AnySchema = Schema.Struct<{}>,
@@ -137,57 +171,70 @@ export const lazy = <
 >(
   metadata: Metadata<R>,
   load: () => Promise<Capability<Input, Output, Failure, R>>,
-): Capability<Input, Output, Failure, R> => {
-  let loading: Promise<Any> | undefined;
-  let loaded: Any | undefined;
-  const loadOnce = (): Promise<Any> => {
-    loading ??= load().then(
-      (module): Any => {
+): Lazy<Input, Output, Failure, R> => {
+  let loading: Promise<Capability<any, any, any, any>> | undefined;
+  let loaded: Capability<any, any, any, any> | undefined;
+  const loadOnce = (): Promise<Capability<any, any, any, any>> => {
+    loading ??= Promise.resolve()
+      .then(load)
+      .then((module) => {
+        const reason = disagreement(metadata, module);
+        if (reason !== undefined) throw new LoadFailed({ id: metadata.id, reason });
         // The metadata of the lazy capability is the one that the catalog and the view have.
         loaded = { ...metadata, input: module.input, output: module.output, failures: module.failures, run: module.run };
         return loaded;
-      },
-      (cause: unknown) => {
+      })
+      .catch((cause: unknown) => {
         loading = undefined;
-        throw new LoadFailed(metadata.id, cause);
-      },
-    );
+        throw cause instanceof LoadFailed ? cause : new LoadFailed({ id: metadata.id, reason: String((cause as Error)?.message ?? cause), cause });
+      });
     return loading;
   };
-  const lazyCapability = {
+  const state: LazyState = { load: loadOnce, loaded: () => loaded };
+  return {
     ...metadata,
-    run: (input: Input["Type"]) => Effect.flatMap(loadEffect(lazyCapability as Any), (concrete) => concrete.run(input)),
-    [lazyTypeId]: { load: loadOnce, loaded: () => loaded } satisfies Lazy,
+    run: (input) => Effect.flatMap(Effect.orDie(loadState(state)), (concrete) => concrete.run(input)),
+    [lazyTypeId]: state,
   };
-  return lazyCapability as unknown as Capability<Input, Output, Failure, R>;
 };
 
-const lazyOf = (capability: Any): Lazy | undefined => (capability as { readonly [lazyTypeId]?: Lazy })[lazyTypeId];
+const loadState = (state: LazyState) =>
+  Effect.tryPromise({ try: () => state.load(), catch: (cause) => cause as LoadFailed });
+
+const lazyOf = (capability: Any): LazyState | undefined => (capability as { readonly [lazyTypeId]?: LazyState })[lazyTypeId];
 
 /** True if a capability loads its schemas and program when they are needed. */
-export const isLazy = (capability: Any): boolean => lazyOf(capability) !== undefined;
+export const isLazy = (capability: Any): capability is Lazy<any, any, any, any> => lazyOf(capability) !== undefined;
 
-const loadEffect = (capability: Any): Effect.Effect<Any> => {
-  const lazily = lazyOf(capability);
-  return lazily === undefined ? Effect.succeed(capability) : Effect.orDie(Effect.tryPromise({ try: () => lazily.load(), catch: (cause) => cause }));
+/** The capability with its schemas and program: the capability itself, or the capability that a lazy one loads. */
+export const load = <R>(capability: Any<R>): Effect.Effect<Capability<any, any, any, R>, LoadFailed> => {
+  const state = lazyOf(capability);
+  return state === undefined ? Effect.succeed(capability as Capability<any, any, any, R>) : loadState(state);
+};
+
+/** The capability with its schemas and program, if it has them now: a lazy capability that has not loaded gives nothing. */
+export const loadedNow = <R>(capability: Any<R>): Capability<any, any, any, R> | undefined => {
+  const state = lazyOf(capability);
+  return state === undefined ? (capability as Capability<any, any, any, R>) : state.loaded();
 };
 
 /**
- * The capability with its schemas and program: the capability itself, or the capability that a lazy one loads. A load
- * that fails is a defect (`LoadFailed`), which a session gives as the call failure `internal`.
+ * A capability that a session can serve: one with its schemas, or a lazy one. A lazy capability matches the type of a
+ * capability with no schemas, so the types below test for a lazy capability first.
  */
-export const load = (capability: Any): Effect.Effect<Any> => loadEffect(capability);
-
-/** The capability with its schemas and program, if it has them now: a lazy capability that has not loaded gives nothing. */
-export const loadedNow = (capability: Any): Any | undefined => {
-  const lazily = lazyOf(capability);
-  return lazily === undefined ? capability : lazily.loaded();
-};
-
-export type Any<R = any> = Capability<any, any, any, R>;
+export type Any<R = any> = Capability<any, any, any, R> | Lazy<any, any, any, R>;
 
 /** The services that a capability needs. */
-export type Services<C> = C extends Capability<any, any, any, infer R> ? R : never;
+export type Services<C> = C extends Lazy<any, any, any, infer R> ? R : C extends Capability<any, any, any, infer R> ? R : never;
+
+/** The type of the input of a capability. */
+export type InputOf<C> = C extends Lazy<infer I, any, any, any> ? I["Type"] : C extends Capability<infer I, any, any, any> ? I["Type"] : never;
+
+/** The type of the value of a capability. */
+export type ValueOf<C> = C extends Lazy<any, infer O, any, any> ? O["Type"] : C extends Capability<any, infer O, any, any> ? O["Type"] : never;
+
+/** The type of the failures of a capability. */
+export type FailureOf<C> = C extends Lazy<any, any, infer F, any> ? F["Type"] : C extends Capability<any, any, infer F, any> ? F["Type"] : never;
 
 /** Declare a capability. */
 export const make = <

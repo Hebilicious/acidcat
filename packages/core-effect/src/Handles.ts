@@ -9,7 +9,7 @@ import type { Availability, Result } from "@acid-cat/spec-ts";
 import { Cause, Deferred, Effect, Exit, Fiber, FiberSet, Layer, Scope, Stream } from "effect";
 
 import type * as App from "./App.ts";
-import type * as Capability from "./Capability.ts";
+import * as Capability from "./Capability.ts";
 import { sameAvailability } from "./internal/availability.ts";
 import { notify } from "./internal/listeners.ts";
 import * as Session from "./Session.ts";
@@ -39,10 +39,7 @@ export interface Handle<Input = unknown, Value = unknown, Failure = unknown, Sta
 }
 
 /** The handle of a capability, with the types of its schemas. */
-export type HandleOf<C> =
-  C extends Capability.Capability<infer Input, infer Output, infer Failure, any>
-    ? Handle<Input["Type"], Output["Type"], Failure["Type"]>
-    : never;
+export type HandleOf<C> = [C] extends [Capability.Any] ? Handle<Capability.InputOf<C>, Capability.ValueOf<C>, Capability.FailureOf<C>> : never;
 
 const leafTypeId: unique symbol = Symbol.for("@acid-cat/core-effect/Handles/Leaf");
 
@@ -92,7 +89,7 @@ export function leaf<C extends Capability.Any, State, R>(
   capability: C,
   options: { readonly snapshot: Observable<State> | Effect.Effect<Observable<State>, never, R> },
 ): Leaf<C, State, R> {
-  if (capability.state !== undefined) {
+  if (!Capability.isLazy(capability) && capability.state !== undefined) {
     throw new Error(`The capability ${capability.id} has state, which its handle gives. A leaf gives a snapshot only to a capability with no state.`);
   }
   return Object.freeze({ [leafTypeId]: true as const, capability, snapshot: options.snapshot as Observable<State> });
@@ -390,7 +387,7 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
       yield* Scope.addFinalizer(scope, Effect.sync(stop));
 
       let snapshot: Observable<unknown> | undefined;
-      if (capability.state !== undefined) {
+      if (!Capability.isLazy(capability) && capability.state !== undefined) {
         // The stream gives the current value first. Wait for it, so that `getSnapshot` always has a value.
         const first = yield* Deferred.make<void>();
         const state = observable<unknown>(undefined);

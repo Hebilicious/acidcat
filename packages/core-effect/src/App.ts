@@ -35,7 +35,7 @@ export const make = <const Capabilities extends readonly Capability.Any[]>(app: 
  * The capability with its schemas. A lazy capability must have loaded: `load` loads the lazy capabilities of an
  * application.
  */
-function withSchemas(capability: Capability.Any): Capability.Any {
+export function withSchemas(capability: Capability.Any): Capability.Capability<any, any, any, any> {
   const loaded = Capability.loadedNow(capability);
   if (loaded === undefined) {
     throw new Error(`The capability ${capability.id} is lazy, and has not loaded. Load the lazy capabilities with App.load(app) first.`);
@@ -43,9 +43,15 @@ function withSchemas(capability: Capability.Any): Capability.Any {
   return loaded;
 }
 
-/** Load the lazy capabilities of an application, so that `document`, `render` and `Cli.command` can write their schemas. */
-export const load = (app: App<any>): Effect.Effect<void> =>
-  Effect.forEach(app.capabilities, Capability.load, { concurrency: "unbounded", discard: true });
+/**
+ * Load the lazy capabilities of an application, so that `document`, `render` and `Cli.command` can write their schemas.
+ * With a target, load only the capabilities that the target can use. A load that fails is `Capability.LoadFailed`.
+ */
+export const load = (app: App<any>, options: { readonly target?: string | undefined } = {}): Effect.Effect<void, Capability.LoadFailed> =>
+  Effect.forEach(options.target === undefined ? app.capabilities : capabilitiesOf(app, options.target), Capability.load, {
+    concurrency: "unbounded",
+    discard: true,
+  });
 
 /** The catalog of an application, as a JSON document. A lazy capability must have loaded (see `load`). */
 export function document(app: App<any>): CatalogDocument {
@@ -109,8 +115,9 @@ export const render = (app: App<any>): string => canonicalText(document(app));
 const views = new WeakMap<App<any>, Map<string, CatalogDocument>>();
 
 /**
- * The view of a target (spec/catalog.md#views). It is written from the whole catalog the first time that it is asked
- * for, then kept for the application.
+ * The view of a target (spec/catalog.md#views). It is written from the capabilities of the target the first time that
+ * it is asked for, then kept for the application. The lazy capabilities of the target must have loaded: see `load`
+ * with a target.
  */
 export function view(app: App<any>, target: string): CatalogDocument {
   let byTarget = views.get(app);
@@ -120,7 +127,8 @@ export function view(app: App<any>, target: string): CatalogDocument {
   }
   let written = byTarget.get(target);
   if (written === undefined) {
-    written = viewOf(document(app), target);
+    // Only the capabilities of the target: a lazy capability of another target need not have loaded.
+    written = viewOf(document({ ...app, capabilities: capabilitiesOf(app, target) }), target);
     byTarget.set(target, written);
   }
   return written;
@@ -158,9 +166,10 @@ function bundled(schema: Schema.Top, json: (schema: JsonObject) => JsonObject = 
  */
 export function inputJsonSchema(declared: Capability.Any): JsonObject {
   const entry = renderedOf(declared);
-  const capability = entry.input === undefined ? withSchemas(declared) : declared;
-  entry.input ??=
-    capability.input === undefined ? { type: "object" } : bundled(capability.input, (json) => inputSchema(capability.input!, json));
+  if (entry.input === undefined) {
+    const capability = withSchemas(declared);
+    entry.input = capability.input === undefined ? { type: "object" } : bundled(capability.input, (json) => inputSchema(capability.input!, json));
+  }
   return entry.input;
 }
 
@@ -170,8 +179,10 @@ export function inputJsonSchema(declared: Capability.Any): JsonObject {
  */
 export function outputJsonSchema(declared: Capability.Any): JsonObject | undefined {
   const entry = renderedOf(declared);
-  const capability = "output" in entry ? declared : withSchemas(declared);
-  if (!("output" in entry)) entry.output = capability.output === undefined ? undefined : bundled(capability.output);
+  if (!("output" in entry)) {
+    const capability = withSchemas(declared);
+    entry.output = capability.output === undefined ? undefined : bundled(capability.output);
+  }
   return entry.output;
 }
 

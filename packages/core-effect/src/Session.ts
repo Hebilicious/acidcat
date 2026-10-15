@@ -43,8 +43,8 @@ export interface Session {
   /** A typed call from Effect code. Failures and call failures are in the error channel. */
   readonly execute: <C extends Capability.Any>(
     capability: C,
-    input: C["input"]["Type"],
-  ) => Effect.Effect<NonNullable<C["output"]>["Type"], NonNullable<C["failures"]>[number]["Type"] | CallFailed>;
+    input: Capability.InputOf<C>,
+  ) => Effect.Effect<Capability.ValueOf<C>, Capability.FailureOf<C> | CallFailed>;
 }
 
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
@@ -100,7 +100,7 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
   // Each state is a ref, made when its stream gives its first value. A reader waits for that value.
   const states = new Map<string, Deferred.Deferred<SubscriptionRef.SubscriptionRef<unknown>>>();
   for (const capability of served.values()) {
-    if (capability.state === undefined) continue;
+    if (Capability.isLazy(capability) || capability.state === undefined) continue;
     const encodeState = Schema.encodeUnknownEffect(capability.state.schema as Schema.Codec<unknown, unknown>);
     const ready = yield* Deferred.make<SubscriptionRef.SubscriptionRef<unknown>>();
     states.set(capability.id, ready);

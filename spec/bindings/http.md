@@ -10,7 +10,7 @@ The deployment chooses a base URL. All paths are relative to it.
 | --- | --- |
 | `GET {base}/capabilities` | A JSON array. Each item has the `id` of a capability in the view, `available`, and `reason` if the capability is unavailable |
 | `POST {base}/capabilities/{id}` with the input as the body | The outcome |
-| `GET {base}/catalog` | The view of the target. A deployment MAY serve this request |
+| `GET {base}/catalog` | The view of the target. A deployment MAY serve this request. If a capability of the view does not [load](../invocation.md#loading-on-first-use), the answer is the call failure `internal` |
 
 - **Names.** The id is in the path without change.
 - **Outcomes.** A result has the status 200. Its `ok` member tells if it is a value or a failure. A call failure has the body `{ "kind", "message" }` and one of these statuses:

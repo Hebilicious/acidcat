@@ -4,44 +4,64 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { NodeServices } from "@effect/platform-node";
 import { check } from "@acid-cat/cli";
 import { CallFailureError } from "@acid-cat/spec-ts";
-import { Deferred, Effect, Fiber, Layer } from "effect";
+import { Console, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Scope } from "effect";
+import { Command } from "effect/cli";
 
-import { App, Capability, Handles, Mcp, Session } from "../src/index.ts";
+import { App, Capability, Cli, Handles, Http, Mcp, Session, WebMcp } from "../src/index.ts";
 
-const evaluations = () => (globalThis as { lazyProbeEvaluations?: number }).lazyProbeEvaluations ?? 0;
+type Probe = typeof import("./lazy-probe.capability.ts");
 
-/** A lazy capability of the probe module, with a count of its loads, and an optional gate or failure before each load. */
-function lazyProbe(options: { readonly gate?: Deferred.Deferred<void>; readonly failures?: number } = {}) {
-  const loads = { count: 0, failures: options.failures ?? 0 };
-  const capability = Capability.lazy(
-    { id: "plan.generate", description: "Make a plan with some stops.", audience: ["app", "mcp"], readOnly: true },
-    async () => {
-      loads.count++;
-      if (options.gate !== undefined) await Effect.runPromise(Deferred.await(options.gate));
-      if (loads.failures > 0) {
-        loads.failures--;
-        throw new Error("The module did not load.");
-      }
-      return (await import("./lazy-probe.capability.ts")).generate;
-    },
-  );
-  const app = App.make({ targets: { app: { bindings: ["typescript"] }, mcp: { bindings: ["mcp"] } }, capabilities: [capability] });
-  return { capability, app, loads };
+/** The URL of the probe module for one test, so that the test counts only its own evaluations of it. */
+const probeUrl = (name: string) => new URL(`./lazy-probe.capability.ts?case=${name}`, import.meta.url).href;
+const evaluations = (url: string) => (globalThis as { lazyProbeEvaluations?: Record<string, number> }).lazyProbeEvaluations?.[url] ?? 0;
+
+const declaration = { id: "plan.generate", description: "Make a plan with some stops.", audience: ["app", "mcp", "cli", "api"], readOnly: true };
+const targets = { app: { bindings: ["typescript"] }, mcp: { bindings: ["mcp"] }, cli: { bindings: ["cli"] }, api: { bindings: ["http"] } };
+
+/**
+ * A lazy capability of the probe module, with a count of its loads. Before each load it can wait for `gate`, fail
+ * `failures` times, or give `undefined` `undefinedTimes` times.
+ */
+function lazyProbe(name: string, options: { readonly gate?: Deferred.Deferred<void>; readonly failures?: number; readonly undefinedTimes?: number; readonly metadata?: Partial<typeof declaration> } = {}) {
+  const url = probeUrl(name);
+  const loads = { count: 0, failures: options.failures ?? 0, undefinedTimes: options.undefinedTimes ?? 0 };
+  let begun = () => undefined as void;
+  /** Resolves when the first load begins. */
+  const started = new Promise<void>((resolve) => (begun = resolve));
+  const capability = Capability.lazy({ ...declaration, ...options.metadata }, async () => {
+    loads.count++;
+    begun();
+    if (options.gate !== undefined) await Effect.runPromise(Deferred.await(options.gate));
+    if (loads.failures > 0) {
+      loads.failures--;
+      throw new Error("The module did not load.");
+    }
+    if (loads.undefinedTimes > 0) {
+      loads.undefinedTimes--;
+      return undefined as unknown as Probe["generate"];
+    }
+    return ((await import(url)) as Probe).generate;
+  });
+  const app = App.make({ targets, capabilities: [capability] });
+  return { capability, app, loads, url, started };
 }
 
+const quiet = Logger.layer([]);
+
 test("opening a session and its handles loads no lazy capability, and the first call loads it once", async () => {
-  const { capability, app, loads } = lazyProbe();
+  const { capability, app, loads, url } = lazyProbe("open");
   const session = await Handles.open(app, Layer.empty, { target: "app" });
   try {
     const handles = Handles.tree(session.handles, { plan: { generate: capability } });
     assert.equal(loads.count, 0);
-    assert.equal(evaluations(), 0);
+    assert.equal(evaluations(url), 0);
     assert.deepEqual(await handles.plan.generate.execute({ stops: 3 }), { ok: true, value: { stops: 3, label: "3 stops" } });
     assert.deepEqual(await handles.plan.generate.invokeExternal({ stops: 11 }), { ok: false, error: { _tag: "TooFar", stops: 11 } });
     assert.equal(loads.count, 1);
-    assert.equal(evaluations(), 1);
+    assert.equal(evaluations(url), 1);
     // @ts-expect-error The input of the lazy capability has the type of the loaded module.
     void (() => handles.plan.generate.execute({ stops: "three" }));
   } finally {
@@ -49,48 +69,81 @@ test("opening a session and its handles loads no lazy capability, and the first 
   }
 });
 
-test("a cancelled load does not keep the next call from loading, and a failed load is internal, then tried again", async () => {
+test("a cancelled load does not keep the next call from loading, and loads one time for both", async () => {
   const gate = Effect.runSync(Deferred.make<void>());
-  const gated = lazyProbe({ gate });
+  const gated = lazyProbe("cancelled", { gate });
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
         const session = yield* Session.make(gated.app, { target: "app" });
         const first = yield* Effect.forkScoped(session.invoke("plan.generate", { stops: 1 }), { startImmediately: true });
+        yield* Effect.promise(() => gated.started);
         yield* Fiber.interrupt(first);
+        assert.equal(gated.loads.count, 1);
         yield* Deferred.succeed(gate, undefined);
         assert.deepEqual(yield* session.invoke("plan.generate", { stops: 2 }), { ok: true, value: { stops: 2, label: "2 stops" } });
+        assert.equal(gated.loads.count, 1);
+        assert.equal(evaluations(gated.url), 1);
       }),
     ),
   );
+});
 
-  const failing = lazyProbe({ failures: 1 });
-  const session = await Handles.open(failing.app, Layer.empty, { target: "app" });
-  try {
-    const handle = session.handles.get("plan.generate")!;
-    const failed = await handle.invokeExternal({ stops: 1 }).catch((error: unknown) => error);
-    assert.ok(failed instanceof CallFailureError);
-    assert.equal(failed.kind, "internal");
-    assert.deepEqual(await handle.invokeExternal({ stops: 1 }), { ok: true, value: { stops: 1, label: "1 stops" } });
-    assert.equal(failing.loads.count, 2);
-  } finally {
-    await session.dispose();
-  }
+for (const [name, options] of [
+  ["a module that fails", { failures: 1 }],
+  ["a module that gives no capability", { undefinedTimes: 1 }],
+] as const) {
+  test(`${name} is internal one time, then the next call loads again`, async () => {
+    const probe = lazyProbe(name.replaceAll(" ", "-"), options);
+    const session = await Handles.open(probe.app, Layer.empty, { target: "app" });
+    try {
+      const handle = session.handles.get("plan.generate")!;
+      const failed = await handle.invokeExternal({ stops: 1 }).catch((error: unknown) => error);
+      assert.ok(failed instanceof CallFailureError);
+      assert.equal(failed.kind, "internal");
+      assert.deepEqual(await handle.invokeExternal({ stops: 1 }), { ok: true, value: { stops: 1, label: "1 stops" } });
+      assert.equal(probe.loads.count, 2);
+    } finally {
+      await session.dispose();
+    }
+  });
+}
+
+test("a module whose metadata is not the declaration, or that has state, does not load", async () => {
+  const other = lazyProbe("other-description", { metadata: { description: "Something else." } });
+  const exit = await Effect.runPromiseExit(Capability.load(other.capability));
+  assert.ok(Exit.isFailure(exit) && /description of the module is not the description of the declaration/.test(String(exit.cause)));
+
+  const stateful = Capability.lazy({ id: "plan.status", description: "The status of the planner.", audience: ["app"] }, async () =>
+    ((await import(probeUrl("state"))) as Probe).withState as never,
+  );
+  const stateExit = await Effect.runPromiseExit(Capability.load(stateful));
+  assert.ok(Exit.isFailure(stateExit) && /has no state/.test(String(stateExit.cause)));
 });
 
 test("the catalog of a loaded lazy application is the catalog of the same capabilities declared at once", async () => {
-  const { app } = lazyProbe();
+  const { app, url } = lazyProbe("catalog");
   assert.throws(() => App.render(app), /App.load/);
   await Effect.runPromise(App.load(app));
-  const { generate } = await import("./lazy-probe.capability.ts");
-  const eager = App.make({ targets: { app: { bindings: ["typescript"] }, mcp: { bindings: ["mcp"] } }, capabilities: [generate] });
+  const { generate } = (await import(url)) as Probe;
+  const eager = App.make({ targets, capabilities: [generate] });
   const text = App.render(app);
   assert.equal(text, App.render(eager));
   assert.deepEqual(check(JSON.parse(text), text), { errors: [], warnings: [] });
 });
 
+test("the view of a target needs only the lazy capabilities of that target", async () => {
+  const { capability } = lazyProbe("view");
+  const appOnly = Capability.lazy({ id: "plan.hidden", description: "Hidden.", audience: ["app"] }, async () => {
+    throw new Error("This module is never loaded.");
+  });
+  const app = App.make({ targets, capabilities: [capability, appOnly] });
+  await Effect.runPromise(App.load(app, { target: "mcp" }));
+  assert.deepEqual(Object.keys(App.view(app, "mcp").capabilities), ["plan.generate"]);
+});
+
 test("MCP loads the lazy capabilities of its view to list them", async () => {
-  const { app, loads } = lazyProbe();
+  const { app, loads } = lazyProbe("mcp");
   const handler = Mcp.toWebHandler(app, Layer.empty, { name: "probe", version: "0.0.0", allowedOrigins: [] });
   const response = await handler(
     new Request("https://probe.local/mcp", {
@@ -102,4 +155,85 @@ test("MCP loads the lazy capabilities of its view to list them", async () => {
   const tools = ((await response.json()) as { result: { tools: { name: string; inputSchema: { required?: string[] } }[] } }).result.tools;
   assert.deepEqual(tools.map((tool) => [tool.name, tool.inputSchema.required]), [["plan.generate", ["stops"]]]);
   assert.equal(loads.count, 1);
+});
+
+test("WebMCP registers the capabilities that load, leaves out one that does not, and tries it again on the next update", async () => {
+  const good = lazyProbe("webmcp-good");
+  let attempts = 0;
+  const flaky = Capability.lazy({ id: "plan.list", description: "List the plans.", audience: ["app"], readOnly: true }, async () => {
+    attempts++;
+    if (attempts === 1) throw new Error("The module did not load.");
+    return ((await import(probeUrl("webmcp-flaky"))) as Probe).list;
+  });
+  const app = App.make({ targets: { app: { bindings: ["webmcp"] } }, capabilities: [good.capability, flaky] });
+  const tools = new Set<string>();
+  const host: WebMcp.ModelContext = { registerTool: (tool) => void tools.add(tool.name) };
+  const scope = Effect.runSync(Scope.make());
+  const installed = await Effect.runPromise(
+    Effect.gen(function* () {
+      const session = yield* Session.make(app, { target: "app" });
+      return Option.getOrThrow(yield* WebMcp.install(session, { host }));
+    }).pipe(Scope.provide(scope), Effect.provide(quiet)),
+  );
+  /** Wait for the next update that ends ready, after `after` updates. */
+  const updates = { ready: 0 };
+  const waiters: { readonly count: number; readonly resolve: () => void }[] = [];
+  installed.statusObservable.subscribe((value) => {
+    if (value.phase !== "ready") return;
+    updates.ready++;
+    for (const waiter of waiters) if (updates.ready >= waiter.count) waiter.resolve();
+  });
+  const readyCount = (count: number) =>
+    updates.ready >= count || installed.statusObservable.getSnapshot().phase === "ready" && count === 1
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => waiters.push({ count, resolve }));
+  try {
+    await readyCount(1);
+    assert.deepEqual([...tools], ["plan.generate"]);
+    await installed.retryPromise();
+    await readyCount(2);
+    assert.deepEqual([...tools].sort(), ["plan.generate", "plan.list"]);
+    assert.equal(attempts, 2);
+  } finally {
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+  }
+});
+
+test("the HTTP catalog answers internal with the status 500 when a capability of its target does not load", async () => {
+  const { app } = lazyProbe("http", { failures: 1 });
+  const handler = Http.toWebHandler(app, Layer.empty, { allowedOrigins: [], base: "/api" });
+  const response = await Effect.runPromise(Effect.promise(() => handler(new Request("https://probe.local/api/catalog"))).pipe(Effect.provide(quiet)));
+  assert.equal(response.status, 500);
+  assert.equal(((await response.json()) as { kind: string }).kind, "internal");
+  assert.equal((await handler(new Request("https://probe.local/api/catalog"))).status, 200);
+});
+
+test("the command line lists a lazy capability with its flags, and a capability that does not load is internal with exit code 5", async () => {
+  const { app } = lazyProbe("cli");
+  await Effect.runPromise(App.load(app));
+  const answers: string[] = [];
+  await Effect.runPromise(
+    Command.runWith(Cli.command(app, { name: "probe", version: "0.0.0" }), { version: "0.0.0" })(["list"]).pipe(
+      Effect.provide(NodeServices.layer),
+      Effect.provideService(Cli.Answers, { write: (text) => Effect.sync(() => void answers.push(text)) }),
+    ),
+  );
+  const listed = JSON.parse(answers.join("")) as { id: string; usage: string }[];
+  assert.deepEqual(listed.map((entry) => entry.usage), ["probe plan generate --stops <integer>"]);
+
+  const broken = lazyProbe("cli-broken", { failures: 1 });
+  const errors: string[] = [];
+  const exitCode = process.exitCode;
+  try {
+    await Effect.runPromise(
+      Cli.run(broken.app, { name: "probe", version: "0.0.0" }).pipe(
+        Effect.provide(Layer.merge(NodeServices.layer, quiet)),
+        Effect.provideService(Console.Console, { ...globalThis.console, error: (...parts: unknown[]) => void errors.push(parts.join(" ")) } as never),
+      ),
+    );
+    assert.equal(process.exitCode, 5);
+    assert.match(errors.join("\n"), /"kind":"internal"/);
+  } finally {
+    process.exitCode = exitCode;
+  }
 });

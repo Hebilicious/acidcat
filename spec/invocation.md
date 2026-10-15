@@ -68,6 +68,15 @@ A call ends when its work is complete. There is no polling and no time limit.
 
 A capability with `state` has a value that a client can read and follow. Examples are the status of a device, or the progress of long work. Each language binding tells how to read state and how to get its changes. A protocol binding MAY omit state.
 
+## Loading on first use
+
+A provider MAY load the schemas and the program of a capability when a client first needs them, and not when a session opens. The metadata of the capability (its id, description, audience, `readOnly` and availability) is known at once, so a session can list the capability and give its availability before it loads. The catalog does not change: it is the same as when the provider loads each capability at once.
+
+- A call to a capability that has not loaded loads it first. If the load fails, the call ends with the call failure `internal`.
+- A cancelled call does not stop a load that other calls wait for.
+- A load that fails is not kept: a later use loads again.
+- A binding that needs the schemas of the capabilities, for example to list tools with their input schemas or to give the view, loads them first. Each binding tells what it does when a load fails. The provider SHOULD record the error for operators.
+
 ## Design notes
 
 *This section is not normative.*

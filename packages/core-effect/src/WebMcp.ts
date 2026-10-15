@@ -2,7 +2,7 @@
  * The WebMCP binding (spec/bindings/webmcp.md): register capabilities as WebMCP tools in a web page.
  */
 import { callFailure, CallFailureError, isCallFailure } from "@acid-cat/spec-ts";
-import { Effect, Exit, Option, Queue, Scope, Stream, SubscriptionRef } from "effect";
+import { Cause, Effect, Exit, Option, Queue, Scope, Stream, SubscriptionRef } from "effect";
 
 import * as App from "./App.ts";
 import * as Capability from "./Capability.ts";
@@ -104,9 +104,13 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
       const wanted = new Set<string>();
       for (const [id, capability] of session.capabilities) {
         if (!(yield* session.availability(id)).available) continue;
-        // A lazy capability loads its schemas here. If it does not load, the update fails, and keeps the last tools.
+        // A lazy capability loads its schemas here. One that does not load is not a tool in this update, its error is
+        // logged, and the next update tries again, as the MCP binding does for tools/list.
         const loaded = yield* Effect.exit(Capability.load(capability));
-        if (Exit.isFailure(loaded)) return yield* Effect.fail(`The capability ${id} did not load.`);
+        if (Exit.isFailure(loaded)) {
+          yield* Effect.logError("A capability did not load", Cause.pretty(loaded.cause));
+          continue;
+        }
         wanted.add(id);
       }
       const added = new Map<string, AbortController>();

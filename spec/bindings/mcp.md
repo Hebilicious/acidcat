@@ -23,7 +23,7 @@ The server rejects requests as follows. Each rejection has the header `Cache-Con
 
 ## Tools
 
-- **Names and listing.** `tools/list` gives one tool for each available capability in the view. An unavailable capability is not listed. A call to it gets the same answer as a call to an unknown tool. The `name` of the tool is the id. Its `description` is the description of the capability. Its `inputSchema` is the [bundled](../catalog.md#bundling) input schema.
+- **Names and listing.** `tools/list` gives one tool for each available capability in the view. An unavailable capability is not listed. A call to it gets the same answer as a call to an unknown tool. The `name` of the tool is the id. Its `description` is the description of the capability. Its `inputSchema` is the [bundled](../catalog.md#bundling) input schema. A capability whose schemas do not [load](../invocation.md#loading-on-first-use) is not in that answer of `tools/list`; a later `tools/list` tries again.
 - **Output schema.** If the bundled output schema has `"type": "object"`, the tool gives it as `outputSchema`. If not, the tool has no `outputSchema`.
 - **Hints.** For a `readOnly` capability, `annotations.readOnlyHint` is `true`.
 - **Cancellation.** When the client closes or cancels the request, the call is cancelled. The server does not have to answer a cancelled call.

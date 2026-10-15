@@ -13,7 +13,7 @@ The binding MUST NOT use the return value of `registerTool`. To remove a tool, t
 ## Tools
 
 - **Names.** The `name` of a tool is the id. Its `description` is the description of the capability. Its `inputSchema` is the [bundled](../catalog.md#bundling) input schema. The page can include the schemas in its code, or load precomputed schemas when it first needs them.
-- **Listing.** A capability is registered while it is available. It is removed when it becomes unavailable. The binding does one update at a time. A change during an update causes one more update. If an update fails, the tools stay as they were before the update.
+- **Listing.** A capability is registered while it is available. It is removed when it becomes unavailable. The binding does one update at a time. A change during an update causes one more update. If an update fails, the tools stay as they were before the update. A capability whose schemas do not [load](../invocation.md#loading-on-first-use) is not registered in that update; the other tools are updated, and a later update tries again.
 - **Outcomes.** `execute` resolves with the result in its JSON form. A call failure rejects with an `Error` that has a `kind` property.
 - **Cancellation.** The signal that the host gives to `execute` cancels the call. When the binding closes, it cancels all calls in progress.
 
