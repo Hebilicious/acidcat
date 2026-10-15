@@ -133,7 +133,6 @@ const isLeaf = (value: unknown): value is Leaf<Capability.Any, unknown, unknown>
 const isCapability = (value: Capability.Any | CapabilityTree): value is Capability.Any =>
   typeof value.id === "string" && typeof value.run === "function";
 
-/** The leaves of a tree, in the order of the tree. */
 /** A capability or a leaf: a node of a tree that has a handle. */
 type Node = Capability.Any | Leaf<Capability.Any, unknown, unknown>;
 
@@ -156,6 +155,7 @@ function nodesOf(tree: CapabilityTree): Node[] {
   return nodes;
 }
 
+/** The leaves of a tree, in the order of the tree. */
 const leavesOf = (tree: CapabilityTree): Leaf<Capability.Any, unknown, unknown>[] => nodesOf(tree).filter(isLeaf);
 
 /** The capabilities of a tree, as a union of their types. */
