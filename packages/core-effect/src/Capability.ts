@@ -177,7 +177,8 @@ function disagreement(metadata: Metadata<unknown>, module: unknown): string | un
  * ```
  *
  * The capability that the module gives must have the same id, description, audience and `readOnly`, no availability
- * of its own and no state. The capability loads one time. A call that is cancelled while the module loads does not stop
+ * of its own and no state. The capability loads one time. Once it has loaded, a call runs its program in the step that
+ * admits the call, with no wait. A call that is cancelled while the module loads does not stop
  * the load for other calls. A load that fails, for any reason, is forgotten, so that the next call loads again.
  */
 export const lazy = <
@@ -217,14 +218,18 @@ export const lazy = <
   const state: LazyState = { load: loadOnce, loaded: () => loaded };
   const lazyCapability: Lazy<Input, Output, Failure, R> = {
     ...metadata,
-    run: (input) => Effect.flatMap(Effect.orDie(loadState(state)), (concrete) => concrete.run(input)),
+    run: (input) => (loaded === undefined ? Effect.flatMap(Effect.orDie(loadState(state)), (concrete) => concrete.run(input)) : loaded.run(input)),
     [lazyTypeId]: state,
   };
   return lazyCapability;
 };
 
+/** The loaded capability, at once when it has loaded, so that a call runs in the step that admits it. */
 const loadState = (state: LazyState) =>
-  Effect.tryPromise({ try: () => state.load(), catch: (cause) => cause as LoadFailed });
+  Effect.suspend(() => {
+    const loaded = state.loaded();
+    return loaded === undefined ? Effect.tryPromise({ try: () => state.load(), catch: (cause) => cause as LoadFailed }) : Effect.succeed(loaded);
+  });
 
 const lazyOf = (capability: Any): LazyState | undefined => (capability as { readonly [lazyTypeId]?: LazyState })[lazyTypeId];
 
