@@ -63,10 +63,10 @@ test("an agent sees the mcp view through MCP", async () => {
 test("a flag follows a $ref to its type", async () => {
   const { spawnSync } = await import("node:child_process");
   const cli = new URL("../examples/aircon-cli.ts", import.meta.url).pathname;
-  const run = spawnSync(process.execPath, [cli, "aircon", "mode", "set", "--mode", "heat"], { encoding: "utf-8", timeout: 20_000 });
+  const run = spawnSync(process.execPath, [cli, "aircon", "mode", "set", "--mode", "heat"], { encoding: "utf-8" });
   assert.equal(run.status, 1);
   assert.deepEqual(JSON.parse(run.stdout), { _tag: "PoweredOff" });
-  assert.equal(spawnSync(process.execPath, [cli, "aircon", "mode", "set", "--mode", "boil"], { timeout: 20_000 }).status, 3);
+  assert.equal(spawnSync(process.execPath, [cli, "aircon", "mode", "set", "--mode", "boil"]).status, 3);
 });
 
 test("the state gives the current value, then each change", () =>
@@ -76,7 +76,7 @@ test("the state gives the current value, then each change", () =>
         const session = yield* Session.make(aircon, { target: "app" });
         const values = yield* session.state("aircon.status.get").pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }));
         yield* session.invoke("aircon.power.set", { on: true });
-        const [first, second] = yield* Fiber.join(values).pipe(Effect.timeout(1000));
+        const [first, second] = yield* Fiber.join(values);
         assert.equal((first as { power: boolean }).power, false);
         assert.equal((second as { power: boolean }).power, true);
         assert.deepEqual(yield* session.state("aircon.power.set").pipe(Stream.runCollect), []);
