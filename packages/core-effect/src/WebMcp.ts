@@ -2,7 +2,7 @@
  * The WebMCP binding (spec/bindings/webmcp.md): register capabilities as WebMCP tools in a web page.
  */
 import { callFailure, CallFailureError, isCallFailure } from "@acid-cat/spec-ts";
-import { Effect, Option, Queue, Scope, Stream, SubscriptionRef } from "effect";
+import { Cause, Effect, Option, Queue, Scope, Stream, SubscriptionRef } from "effect";
 
 import * as App from "./App.ts";
 import type * as Capability from "./Capability.ts";
@@ -64,8 +64,24 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
     const status = yield* SubscriptionRef.make<Status>({ phase: "loading", message: null });
     // Code that does not use Effect hears each change of the status at once, in the fiber that makes it.
     const statusListeners = new Set<(value: Status) => void>();
+    // A listener that throws is a defect of the listener, not of the installation: it is logged, and the other
+    // listeners, the updates and the removal of the tools go on.
     const setStatus = (next: Status) =>
-      SubscriptionRef.set(status, next).pipe(Effect.andThen(Effect.sync(() => statusListeners.forEach((listener) => listener(next)))));
+      SubscriptionRef.set(status, next).pipe(
+        Effect.andThen(
+          Effect.suspend(() => {
+            const failures: unknown[] = [];
+            for (const listener of statusListeners) {
+              try {
+                listener(next);
+              } catch (cause) {
+                failures.push(cause);
+              }
+            }
+            return Effect.forEach(failures, (cause) => Effect.logError("A listener of the WebMCP status failed", Cause.die(cause)), { discard: true });
+          }),
+        ),
+      );
     const lifetime = new AbortController();
     const registered = new Map<string, AbortController>();
     const calls = new Set<Promise<unknown>>();

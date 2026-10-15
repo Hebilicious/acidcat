@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Effect, Exit, Layer, Option, Scope, Stream, SubscriptionRef } from "effect";
+import { Effect, Exit, Layer, Logger, Option, Scope, Stream, SubscriptionRef } from "effect";
 
 import { Session, WebMcp } from "../src/index.ts";
 import { fixture, Switch, fixtureLayer } from "./fixture.ts";
@@ -126,4 +126,32 @@ test("code that does not use Effect observes the status, at once, and retries a 
   await Effect.runPromise(Scope.close(scope, Exit.void));
   assert.deepEqual(phases.slice(-2), ["closing", "disposed"]);
   assert.equal(status.getSnapshot().phase, "disposed");
+});
+
+test("a status listener that throws does not stop the updates of the tools, or their removal", async () => {
+  const host = fakeHost();
+  const scope = Effect.runSync(Scope.make());
+  const installed = await Effect.runPromise(
+    Effect.gen(function* () {
+      const session = yield* Session.make(fixture, { target: "app" });
+      return Option.getOrThrow(yield* WebMcp.install(session, { host }));
+    }).pipe(Scope.provide(scope), Effect.provide(Layer.fresh(fixtureLayer)), Effect.provide(Logger.layer([]))),
+  );
+  installed.statusObservable.subscribe(() => {
+    throw new Error("The listener is broken.");
+  });
+  const phases: WebMcp.Phase[] = [];
+  const ready = new Promise<void>((resolve) =>
+    installed.statusObservable.subscribe((value) => {
+      phases.push(value.phase);
+      if (value.phase === "ready") resolve();
+    }),
+  );
+  await installed.retryPromise();
+  await ready;
+  assert.ok(host.tools.has("fixture.echo"));
+  const closed = await Effect.runPromiseExit(Scope.close(scope, Exit.void).pipe(Effect.provide(Logger.layer([]))));
+  assert.ok(Exit.isSuccess(closed));
+  assert.equal(host.tools.size, 0);
+  assert.deepEqual(phases.slice(-2), ["closing", "disposed"]);
 });
