@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Schema, Stream } from "effect";
 
 import { App, Capability, Handles } from "../src/index.ts";
 
@@ -92,6 +92,43 @@ test("treeWith reads the snapshots that need services, and capabilities lists th
     assert.equal(snapshot.getSnapshot().items.length, 1);
     // @ts-expect-error A snapshot that needs a service cannot go to `tree`, which has no services.
     void (() => Handles.tree(session.handles, capabilities));
+  } finally {
+    await session.dispose();
+  }
+});
+
+test("a capability with state, or outside the view, cannot have the snapshot of a leaf", async () => {
+  const stateful = Capability.make({
+    id: "probe.status.get",
+    description: "Read the status.",
+    audience: ["app"],
+    state: { schema: Schema.Finite, changes: Stream.make(1) },
+    run: () => Effect.succeed(null),
+  });
+  assert.throws(() => Handles.leaf(stateful, { snapshot: owner().snapshot }), /has state/);
+
+  const hidden = Capability.make({ id: "probe.hidden.read", description: "Hidden.", audience: ["cli"], run: () => Effect.succeed(null) });
+  const session = await Handles.open(app, Layer.succeed(Owner, owner()), { target: "app" });
+  try {
+    assert.throws(() => Handles.tree(session.handles, { hidden: Handles.leaf(hidden, { snapshot: owner().snapshot }) }), /outside the view/);
+  } finally {
+    await session.dispose();
+  }
+});
+
+test("a snapshot is data, and an Effect that waits gives it through treeWith only", async () => {
+  const withFunction = { getSnapshot: () => ({ count: 1, read: () => 1 }), subscribe: () => ({ unsubscribe() {} }) };
+  // @ts-expect-error A function is not data that a copy keeps.
+  void (() => Handles.leaf(inspect, { snapshot: withFunction }));
+
+  const workbench = owner();
+  const waiting = Handles.leaf(inspect, { snapshot: Effect.sleep(1).pipe(Effect.as(workbench.snapshot)) });
+  const session = await Handles.open(app, Layer.succeed(Owner, workbench), { target: "app" });
+  try {
+    // @ts-expect-error A snapshot that is an Effect goes to treeWith, which can wait for it.
+    void (() => Handles.tree(session.handles, { inspect: waiting }));
+    const handles = await Effect.runPromise(Handles.treeWith(session.handles, { inspect: waiting }));
+    assert.equal(handles.inspect.snapshot.getSnapshot().items.length, 1);
   } finally {
     await session.dispose();
   }

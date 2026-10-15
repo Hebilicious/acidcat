@@ -128,10 +128,36 @@ await aircon.power.set.execute({ on: true }); // Promise<Result<null, { readonly
 A handle can also have a snapshot that the application gives: a typed value of the provider, for example a large value that a user interface reads as it is. The TypeScript binding allows this for code in the same process when the catalog has no state (spec/bindings/typescript.md#handles). The `state` of a capability is a part of the catalog, so its handle gives it in its JSON form. Put the capability in a `Handles.leaf` with its snapshot. The handle gives each value as a copy, with the type of the snapshot. `Handles.treeWith` reads snapshots that the services give, and `Handles.capabilities(tree)` gives the capabilities of the tree for `App.make`:
 
 ```ts
-const tree = { workbench: { inspect: Handles.leaf(inspect, { snapshot: Owner.useSync((owner) => owner.snapshot) }), add } };
-const app = App.make({ targets, capabilities: Handles.capabilities(tree) });
-const handles = yield* Handles.treeWith(session.handles, tree); // handles.workbench.inspect.snapshot: Observable<Workbench>
+import { App, Capability, Handles, Session } from "@acid-cat/core-effect";
+import { Context, Effect, Schema } from "effect";
+
+interface Workbench {
+  readonly items: readonly string[];
+}
+
+// The owner of the workbench: its value, as code without Effect reads it.
+class Owner extends Context.Service<Owner, { readonly snapshot: Capability.Observable<Workbench> }>()("app/Owner") {}
+
+const inspect = Capability.make({
+  id: "workbench.inspect",
+  description: "Count the items of the workbench.",
+  audience: ["app"],
+  output: Schema.Finite,
+  run: () => Owner.use((owner) => Effect.succeed(owner.snapshot.getSnapshot().items.length)),
+});
+
+const tree = { workbench: { inspect: Handles.leaf(inspect, { snapshot: Owner.useSync((owner) => owner.snapshot) }) } };
+const app = App.make({ targets: { app: { bindings: ["typescript"] } }, capabilities: Handles.capabilities(tree) });
+
+const program = Effect.gen(function* () {
+  const session = yield* Session.make(app, { target: "app" });
+  const handles = yield* Handles.make(app, session);
+  const typed = yield* Handles.treeWith(handles, tree);
+  return typed.workbench.inspect.snapshot; // Observable<Workbench>, a copy of each value
+});
 ```
+
+A snapshot is data that `structuredClone` copies: a type with a function in it is a type error, and the copy of a class instance is a plain object. `Handles.tree` takes leaves with an observable; a leaf with an Effect goes to `treeWith`. A capability with `state`, or outside the view of the session, cannot be a leaf.
 
 `layer` gives the services that the capabilities need. A web handler is `(request: Request) => Promise<Response>`. It works in Node, Bun, Deno and Cloudflare Workers.
 
