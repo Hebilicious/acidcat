@@ -258,7 +258,10 @@ export const make = <S, E, R>(
           const current = SubscriptionRef.getUnsafe(state);
           if (current.phase !== "started") return idle(current);
           const selected = from(current.services);
-          return selected.getUnsafe === undefined ? Effect.runSync(selected.get) : selected.getUnsafe();
+          if (selected.getUnsafe !== undefined) return selected.getUnsafe();
+          // A value that only a read that waits can read has no value now.
+          const exit = Effect.runSyncExit(selected.get);
+          return Exit.isSuccess(exit) ? exit.value : undefined;
         },
         changes: SubscriptionRef.changes(state).pipe(
           Stream.changesWith((left, right) => left.phase === right.phase),

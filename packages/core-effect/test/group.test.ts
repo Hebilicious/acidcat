@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { AVAILABLE, CallFailureError, unavailable } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, Scope, SubscriptionRef } from "effect";
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, Scope, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability, Group, Handles, Session } from "../src/index.ts";
 
@@ -356,6 +356,23 @@ test("the availability of a group reads with no Effect", async () => {
         const writes = Context.get(yield* group.provide(Effect.context<Domain>()), Domain).writes;
         yield* SubscriptionRef.set(writes, unavailable("Read only."));
         assert.deepEqual(current.getUnsafe?.(), unavailable("Read only."));
+      }),
+    ).pipe(Effect.provide(layer)),
+  );
+});
+
+test("the availability of a group gives no value, and does not throw, when only a read that waits can read it", async () => {
+  const { layer } = domain();
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const group = yield* Domains;
+        const current = group.current(
+          () => ({ get: Effect.sleep(1).pipe(Effect.as(unavailable("Later."))), changes: Stream.make(unavailable("Later.")) }),
+          { dormant: AVAILABLE },
+        );
+        yield* group.start;
+        assert.equal(current.getUnsafe?.(), undefined);
       }),
     ).pipe(Effect.provide(layer)),
   );

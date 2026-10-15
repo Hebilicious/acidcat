@@ -62,9 +62,10 @@ export interface Current<A> {
   readonly changes: Stream.Stream<A>;
   /**
    * The value now, read with no Effect, for code that reads it often, such as a user interface that reads it on each
-   * render. It gives the value that `get` gives. The constructors of this module give it.
+   * render. It gives the value that `get` gives, or `undefined` when only a read that waits can read it. The
+   * constructors of this module give it.
    */
-  readonly getUnsafe?: (() => A) | undefined;
+  readonly getUnsafe?: (() => A | undefined) | undefined;
 }
 
 /** The value of a `SubscriptionRef`, as a `Current`. */
@@ -109,7 +110,15 @@ export const allAvailable = (...sources: readonly Current<Availability>[]): Curr
   return {
     get: Effect.map(Effect.all(sources.map((source) => source.get)), first),
     changes: Stream.zipLatestAll(...sources.map((source) => source.changes)).pipe(Stream.map(first)),
-    ...(unsafe ? { getUnsafe: () => first(sources.map((source) => source.getUnsafe!())) } : {}),
+    ...(unsafe
+      ? {
+          getUnsafe: () => {
+            const values = sources.map((source) => source.getUnsafe!());
+            // A source that has no value now gives the combination no value now.
+            return values.includes(undefined) ? undefined : first(values as Availability[]);
+          },
+        }
+      : {}),
   };
 };
 
