@@ -58,3 +58,9 @@ test("a command that the application changed keeps the exit codes", () => {
   assert.equal(cliWithFlag("--switch", "false", "nope").code, 2);
   assert.equal(cliWithFlag("--switch", "false", "fixture", "echo").code, 3);
 });
+
+test("an interrupt before the program first waits cancels the call with exit code 130", () => {
+  const run = program("./fixture-cli-interrupt.ts")("probe", "interrupt");
+  assert.equal(run.code, 130);
+  assert.equal(run.stdout, "");
+});
