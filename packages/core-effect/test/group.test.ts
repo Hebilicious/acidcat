@@ -1,0 +1,208 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { AVAILABLE, CallFailureError, unavailable } from "@acid-cat/spec-ts";
+import type { Availability } from "@acid-cat/spec-ts";
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, SubscriptionRef } from "effect";
+
+import { App, Capability, Group, Handles, Session } from "../src/index.ts";
+
+/** The runtime of a domain: a counter, and the availability of its writes. */
+class Domain extends Context.Service<
+  Domain,
+  { readonly count: SubscriptionRef.SubscriptionRef<number>; readonly writes: SubscriptionRef.SubscriptionRef<Availability> }
+>()("test/Domain") {}
+
+/** The group of the domain's capabilities, as a service of the application. */
+class Domains extends Context.Service<Domains, Group.Group<Domain>>()("test/Domains") {}
+
+/**
+ * A domain whose build the test controls: each build records that it started, and waits for `open`, if the test gives
+ * one. A build that `fail` names fails. The counts tell how many builds started, succeeded and were released.
+ */
+function domain() {
+  const counts = { started: 0, built: 0, released: 0, interrupted: 0 };
+  const controls: { open?: Deferred.Deferred<void>; fail?: boolean; started?: Deferred.Deferred<void> } = {};
+  const layer = Layer.effect(
+    Domain,
+    Effect.gen(function* () {
+      counts.started++;
+      if (controls.started !== undefined) yield* Deferred.succeed(controls.started, undefined);
+      if (controls.open !== undefined) yield* Deferred.await(controls.open).pipe(Effect.onInterrupt(() => Effect.sync(() => counts.interrupted++)));
+      if (controls.fail === true) return yield* Effect.fail("The domain is broken.");
+      return yield* Effect.acquireRelease(
+        Effect.gen(function* () {
+          counts.built++;
+          return { count: yield* SubscriptionRef.make(0), writes: yield* SubscriptionRef.make<Availability>(AVAILABLE) };
+        }),
+        () => Effect.sync(() => counts.released++),
+      );
+    }),
+  );
+  return { counts, controls, layer: Layer.effect(Domains, Group.make(Effect.succeed(layer))) };
+}
+
+const app = App.make({
+  targets: { app: { bindings: ["typescript"] } },
+  capabilities: [
+    Capability.make({
+      id: "domain.count.increment",
+      description: "Add one to the count.",
+      audience: ["app"],
+      output: Schema.Int,
+      availability: Domains.useSync((group) =>
+        group.current((services) => Capability.fromSubscriptionRef(Context.get(services, Domain).writes), {
+          dormant: AVAILABLE,
+          closed: unavailable("The domain is closed."),
+        }),
+      ),
+      run: () => Domains.use((group) => group.provide(Domain.use(({ count }) => SubscriptionRef.updateAndGet(count, (value) => value + 1)))),
+    }),
+  ],
+});
+
+const increment = (session: Session.Session) => session.invoke("domain.count.increment", {});
+
+test("the services start on the first call, and all calls share them", async () => {
+  const { counts, layer } = domain();
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make(app, { target: "app" });
+        const group = yield* Domains;
+        assert.equal(yield* group.phase.get, "dormant");
+        assert.deepEqual(yield* session.availability("domain.count.increment"), AVAILABLE);
+        assert.equal(counts.started, 0);
+
+        const outcomes = yield* Effect.all([increment(session), increment(session), increment(session)], { concurrency: "unbounded" });
+        assert.deepEqual(outcomes.map((outcome) => ("ok" in outcome && outcome.ok ? outcome.value : outcome)).sort(), [1, 2, 3]);
+        assert.equal(counts.started, 1);
+        assert.equal(yield* group.phase.get, "started");
+      }),
+    ).pipe(Effect.provide(layer)),
+  );
+  assert.deepEqual(counts, { started: 1, built: 1, released: 1, interrupted: 0 });
+});
+
+test("availability follows the services once they run, and a call is decided on it", () => {
+  const { layer } = domain();
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make(app, { target: "app" });
+        const group = yield* Domains;
+        yield* group.start;
+        const writes = Context.get(yield* group.provide(Effect.context<Domain>()), Domain).writes;
+        yield* SubscriptionRef.set(writes, unavailable("Read only."));
+        assert.deepEqual(yield* increment(session), { kind: "unavailable", message: "Read only." });
+      }),
+    ).pipe(Effect.provide(layer)),
+  );
+});
+
+test("when the last call that waits is cancelled, the build is interrupted, and the next call starts it again", async () => {
+  const { counts, controls, layer } = domain();
+  const scope = Effect.runSync(Scope.make());
+  try {
+    const handles = await Effect.runPromise(
+      Effect.gen(function* () {
+        const services = yield* Layer.buildWithScope(layer, scope);
+        const session = yield* Session.make(app, { target: "app" }).pipe(Effect.provideContext(services));
+        return yield* Handles.make(app, session);
+      }).pipe(Scope.provide(scope)),
+    );
+    const handle = handles.get("domain.count.increment")!;
+    controls.open = Effect.runSync(Deferred.make<void>());
+    controls.started = Effect.runSync(Deferred.make<void>());
+    const controller = new AbortController();
+    const cancelled = handle.execute({}, { signal: controller.signal }).then(
+      () => assert.fail("the call must be cancelled"),
+      (error: unknown) => error,
+    );
+    await Effect.runPromise(Deferred.await(controls.started));
+    controller.abort();
+    const error = await cancelled;
+    assert.ok(error instanceof CallFailureError);
+    assert.equal(error.kind, "cancelled");
+    assert.equal(counts.interrupted, 1);
+    assert.equal(counts.built, 0);
+
+    delete controls.open;
+    assert.deepEqual(await handle.execute({}), { ok: true, value: 1 });
+    assert.equal(counts.started, 2);
+  } finally {
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+  }
+});
+
+test("a cancelled call does not stop the build that another call waits for", () => {
+  const { counts, controls, layer } = domain();
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make(app, { target: "app" });
+        controls.open = yield* Deferred.make<void>();
+        controls.started = yield* Deferred.make<void>();
+        const first = yield* Effect.forkScoped(increment(session), { startImmediately: true });
+        const second = yield* Effect.forkScoped(increment(session), { startImmediately: true });
+        yield* Deferred.await(controls.started);
+        yield* Fiber.interrupt(first);
+        yield* Deferred.succeed(controls.open, undefined);
+        assert.deepEqual(yield* Fiber.join(second), { ok: true, value: 1 });
+        assert.equal(counts.interrupted, 0);
+        assert.equal(counts.started, 1);
+      }),
+    ).pipe(Effect.provide(layer)),
+  );
+});
+
+test("a build that fails is an internal call failure, and the next call tries again", () => {
+  const { counts, controls, layer } = domain();
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make(app, { target: "app" });
+        const group = yield* Domains;
+        controls.fail = true;
+        assert.deepEqual(yield* increment(session), { kind: "internal", message: "The capability failed." });
+        assert.equal(yield* group.phase.get, "dormant");
+        controls.fail = false;
+        assert.deepEqual(yield* increment(session), { ok: true, value: 1 });
+        assert.equal(counts.started, 2);
+      }),
+    ).pipe(Effect.provide(layer)),
+  );
+});
+
+test("closing the group releases the services, cancels the calls that wait, and makes it unavailable", async () => {
+  const { counts, controls, layer } = domain();
+  const groupScope = Effect.runSync(Scope.make());
+  const services = await Effect.runPromise(Layer.buildWithScope(layer, groupScope));
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make(app, { target: "app" });
+        controls.open = yield* Deferred.make<void>();
+        controls.started = yield* Deferred.make<void>();
+        const waiting = yield* Effect.forkScoped(increment(session), { startImmediately: true });
+        yield* Deferred.await(controls.started);
+        yield* Scope.close(groupScope, Exit.void);
+        assert.deepEqual(yield* Fiber.join(waiting), { kind: "cancelled", message: "The call was cancelled." });
+        assert.deepEqual(yield* session.availability("domain.count.increment"), unavailable("The domain is closed."));
+        assert.equal(yield* (yield* Domains).phase.get, "closed");
+      }),
+    ).pipe(Effect.provideContext(services)),
+  );
+  assert.equal(counts.built, 0);
+  assert.equal(counts.interrupted, 1);
+});
+
+test("services that ran are released when the group closes", async () => {
+  const { counts, layer } = domain();
+  const groupScope = Effect.runSync(Scope.make());
+  const services = await Effect.runPromise(Layer.buildWithScope(layer, groupScope));
+  await Effect.runPromise(Effect.scoped(Effect.flatMap(Session.make(app, { target: "app" }), increment)).pipe(Effect.provideContext(services)));
+  assert.equal(counts.released, 0);
+  await Effect.runPromise(Scope.close(groupScope, Exit.void));
+  assert.equal(counts.released, 1);
+});

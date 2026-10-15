@@ -45,6 +45,41 @@ export const aircon = App.make({
 - `state` is an optional `{ schema, changes }`: the schema of the [state](../../spec/invocation.md#state), and a `Stream` of its values. `session.state(id)` follows it.
 - Give a shared type an `identifier` annotation. It becomes a named type in `$defs`.
 
+### Services that start on the first call
+
+A `Group` holds services that a group of capabilities shares, and that start on the first call to one of them. For example, the runtime of one domain of an application, which a dynamic `import()` loads:
+
+```ts
+import { Capability, Group } from "@acid-cat/core-effect";
+import { AVAILABLE, unavailable } from "@acid-cat/spec-ts";
+import { Context, Effect, Layer } from "effect";
+
+class Bartering extends Context.Service<Bartering, Group.Group<BarteringOwner>>()("app/Bartering") {}
+
+const barteringLayer = Layer.effect(
+  Bartering,
+  Group.make(Effect.promise(() => import("./bartering-runtime.ts")).pipe(Effect.map((module) => module.ownerLayer))),
+);
+
+Capability.make({
+  id: "bartering.plan.generate",
+  // ...
+  availability: Bartering.useSync((group) =>
+    group.current((services) => Capability.fromObservable(Context.get(services, BarteringOwner).availability), {
+      dormant: AVAILABLE,
+      closed: unavailable("The bartering domain is closed."),
+    }),
+  ),
+  run: (input) => Bartering.use((group) => group.provide(BarteringOwner.use((owner) => owner.generate(input)))),
+});
+```
+
+- `group.provide(effect)` starts the services if they are dormant, waits for them, and runs the effect with them. All calls share one start.
+- When the last call that waits for the start is cancelled, the start is interrupted, and the group is dormant again.
+- When the start fails, each waiting call dies with `Group.StartFailed`, so a session gives the call failure `internal`. The next call starts the services again.
+- `group.current(select, { dormant, closed })` gives a `Capability.Current`, for an availability or a state, that comes from the services once they run. Reading it does not start them.
+- The services live in the scope of the group, here the scope of the layer, and are released when it closes. A call that waits when the group closes is cancelled.
+
 ## Write the catalog
 
 ```ts

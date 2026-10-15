@@ -28,6 +28,7 @@
     ".": "./src/index.ts",
     "./App": "./src/App.ts",
     "./Capability": "./src/Capability.ts",
+    "./Group": "./src/Group.ts",
     "./Session": "./src/Session.ts",
     "./Handles": "./src/Handles.ts",
     "./Mcp": "./src/Mcp.ts",
@@ -50,6 +51,10 @@
       "./Capability": {
         "types": "./dist/Capability.d.ts",
         "default": "./dist/Capability.js"
+      },
+      "./Group": {
+        "types": "./dist/Group.d.ts",
+        "default": "./dist/Group.js"
       },
       "./Session": {
         "types": "./dist/Session.d.ts",
