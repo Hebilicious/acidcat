@@ -43,18 +43,71 @@ export type HandleOf<C> =
     ? Handle<Input["Type"], Output["Type"], Failure["Type"]>
     : never;
 
-/** A tree of capabilities, in the shape that the application chooses. */
-export interface CapabilityTree {
-  readonly [key: string]: Capability.Any | CapabilityTree;
+const leafTypeId: unique symbol = Symbol.for("@acid-cat/core-effect/Handles/Leaf");
+
+/**
+ * A capability with a snapshot that the application gives to its handle. The TypeScript binding allows a handle to have
+ * a snapshot for code in the same process when the catalog has no state (spec/bindings/typescript.md#handles), for
+ * example a large typed value of the provider that a user interface reads as it is. The handle gives each value as a
+ * copy.
+ */
+export interface Leaf<C extends Capability.Any, State, R> {
+  readonly [leafTypeId]: true;
+  readonly capability: C;
+  readonly snapshot: Observable<State> | Effect.Effect<Observable<State>, never, R>;
 }
 
-/** The handles of a tree of capabilities, in the same shape, each with the types of its capability. */
+/** A capability with the snapshot of its handle. The snapshot can be an Effect that reads it from the services. */
+export function leaf<C extends Capability.Any, State>(capability: C, options: { readonly snapshot: Observable<State> }): Leaf<C, State, never>;
+export function leaf<C extends Capability.Any, State, R>(
+  capability: C,
+  options: { readonly snapshot: Effect.Effect<Observable<State>, never, R> },
+): Leaf<C, State, R>;
+export function leaf<C extends Capability.Any, State, R>(
+  capability: C,
+  options: { readonly snapshot: Observable<State> | Effect.Effect<Observable<State>, never, R> },
+): Leaf<C, State, R> {
+  return Object.freeze({ [leafTypeId]: true as const, capability, snapshot: options.snapshot });
+}
+
+/** A tree of capabilities and leaves, in the shape that the application chooses. */
+export interface CapabilityTree {
+  readonly [key: string]: Capability.Any | Leaf<Capability.Any, any, any> | CapabilityTree;
+}
+
+/** The handle of a leaf: the handle of its capability, with the snapshot of the leaf. */
+export type LeafHandle<C extends Capability.Any, State> = Omit<HandleOf<C>, "snapshot"> & { readonly snapshot: Observable<State> };
+
+/** The handles of a tree, in the same shape, each with the types of its capability, and of its snapshot for a leaf. */
 export type HandleTree<Tree> = {
-  readonly [Key in keyof Tree]: Tree[Key] extends Capability.Any ? HandleOf<Tree[Key]> : HandleTree<Tree[Key]>;
+  readonly [Key in keyof Tree]: Tree[Key] extends Leaf<infer C, infer State, any>
+    ? LeafHandle<C, State>
+    : Tree[Key] extends Capability.Any
+      ? HandleOf<Tree[Key]>
+      : HandleTree<Tree[Key]>;
 };
+
+/** The services that the snapshots of the leaves of a tree read. */
+export type ServicesOf<Tree> = {
+  readonly [Key in keyof Tree]: Tree[Key] extends Leaf<any, any, infer R>
+    ? R
+    : Tree[Key] extends Capability.Any
+      ? never
+      : ServicesOf<Tree[Key]>;
+}[keyof Tree];
+
+const isLeaf = (value: unknown): value is Leaf<Capability.Any, unknown, unknown> =>
+  typeof value === "object" && value !== null && leafTypeId in value;
 
 const isCapability = (value: Capability.Any | CapabilityTree): value is Capability.Any =>
   typeof value.id === "string" && typeof value.run === "function";
+
+/** The capabilities of a tree, in the order of the tree. Give them to `App.make`. */
+export function capabilities<const Tree extends CapabilityTree>(tree: Tree): Capability.Any[] {
+  return Object.values(tree).flatMap((value): Capability.Any[] =>
+    isLeaf(value) ? [value.capability] : isCapability(value as Capability.Any | CapabilityTree) ? [value as Capability.Any] : capabilities(value as CapabilityTree),
+  );
+}
 
 /**
  * The handle of a capability, with the types of its schemas. A capability outside the view of the session has a handle
@@ -64,17 +117,43 @@ export function get<C extends Capability.Any>(handles: ReadonlyMap<string, Handl
   return (handles.get(capability.id) ?? outsideView(capability)) as HandleOf<C>;
 }
 
-/**
- * The handles of a tree of capabilities, in the same shape. The application chooses the tree, and no name comes from
- * it (spec/bindings/typescript.md#handles). See `get` for a capability outside the view.
- */
-export function tree<const Tree extends CapabilityTree>(handles: ReadonlyMap<string, Handle>, capabilities: Tree): HandleTree<Tree> {
+/** Build the handles of a tree, with a function that gives the snapshot of each leaf. */
+function build(handles: ReadonlyMap<string, Handle>, tree: CapabilityTree, snapshotOf: (leaf: Leaf<Capability.Any, unknown, unknown>) => Observable<unknown>): object {
   return Object.freeze(
     Object.fromEntries(
-      Object.entries(capabilities).map(([key, value]) => [key, isCapability(value) ? get(handles, value) : tree(handles, value)]),
+      Object.entries(tree).map(([key, value]) => {
+        if (isLeaf(value)) return [key, Object.freeze({ ...get(handles, value.capability), snapshot: detached(snapshotOf(value)) })];
+        const branch = value as Capability.Any | CapabilityTree;
+        return [key, isCapability(branch) ? get(handles, branch) : build(handles, branch, snapshotOf)];
+      }),
     ),
+  );
+}
+
+/**
+ * The handles of a tree, in the same shape. The application chooses the tree, and no name comes from it
+ * (spec/bindings/typescript.md#handles). See `get` for a capability outside the view. The snapshots of the leaves must
+ * need no services: use `treeWith` for snapshots that the services give.
+ */
+export function tree<const Tree extends CapabilityTree>(
+  handles: ReadonlyMap<string, Handle>,
+  capabilities: Tree & ([ServicesOf<Tree>] extends [never] ? unknown : never),
+): HandleTree<Tree> {
+  return build(handles, capabilities, (each) =>
+    Effect.isEffect(each.snapshot) ? Effect.runSync(each.snapshot as Effect.Effect<Observable<unknown>>) : each.snapshot,
   ) as HandleTree<Tree>;
 }
+
+/** The handles of a tree, as `tree` gives them, with the snapshots that the services give. */
+export const treeWith = <const Tree extends CapabilityTree>(
+  handles: ReadonlyMap<string, Handle>,
+  capabilities: Tree,
+): Effect.Effect<HandleTree<Tree>, never, ServicesOf<Tree>> =>
+  Effect.map(Effect.context<ServicesOf<Tree>>(), (context) =>
+    build(handles, capabilities, (each) =>
+      Effect.isEffect(each.snapshot) ? Effect.runSyncWith(context)(each.snapshot as Effect.Effect<Observable<unknown>, never, ServicesOf<Tree>>) : each.snapshot,
+    ) as HandleTree<Tree>,
+  );
 
 function outsideView(capability: Capability.Any): Handle {
   const failure = callFailure("unknown-capability", `There is no capability ${capability.id}.`);

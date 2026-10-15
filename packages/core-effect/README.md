@@ -125,6 +125,14 @@ const aircon = Handles.tree(session.handles, { power: { set: powerSet } });
 await aircon.power.set.execute({ on: true }); // Promise<Result<null, { readonly _tag: "Offline" }>>
 ```
 
+A handle can also have a snapshot that the application gives: a typed value of the provider, for example a large value that a user interface reads as it is. The TypeScript binding allows this for code in the same process when the catalog has no state (spec/bindings/typescript.md#handles). The `state` of a capability is a part of the catalog, so its handle gives it in its JSON form. Put the capability in a `Handles.leaf` with its snapshot. The handle gives each value as a copy, with the type of the snapshot. `Handles.treeWith` reads snapshots that the services give, and `Handles.capabilities(tree)` gives the capabilities of the tree for `App.make`:
+
+```ts
+const tree = { workbench: { inspect: Handles.leaf(inspect, { snapshot: Owner.useSync((owner) => owner.snapshot) }), add } };
+const app = App.make({ targets, capabilities: Handles.capabilities(tree) });
+const handles = yield* Handles.treeWith(session.handles, tree); // handles.workbench.inspect.snapshot: Observable<Workbench>
+```
+
 `layer` gives the services that the capabilities need. A web handler is `(request: Request) => Promise<Response>`. It works in Node, Bun, Deno and Cloudflare Workers.
 
 ### Services for each request
