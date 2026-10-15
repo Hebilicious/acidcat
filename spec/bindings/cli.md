@@ -40,7 +40,7 @@ An application MAY add its own commands and flags. If two commands have the same
 
 All output is JSON. A result goes to standard output. A call failure goes to standard error as `{ "kind", "message" }`.
 
-Standard output carries the result and nothing else, so that a script can read it. The program MUST NOT write anything else to standard output: logs, messages for people, and the help that the program shows for a usage error go to standard error. Help and the version, when the user asks for them, are not outcomes, and go to standard output.
+Standard output carries the result and nothing else, so that a script can read it. While a command runs, the program MUST NOT write anything else to standard output: logs, messages for people, and the help that the program shows for a usage error go to standard error. The rule is for the whole program, including the libraries that it uses. Help and the version, when the user asks for them, are not outcomes, and go to standard output.
 
 | Outcome | Standard output | Exit code |
 | --- | --- | --- |
