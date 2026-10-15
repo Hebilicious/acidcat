@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { check } from "@acid-cat/cli";
 import { CallFailureError } from "@acid-cat/spec-ts";
-import { Console, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Schema, Scope } from "effect";
+import { Console, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Schema, Scope, Stdio } from "effect";
 import { Command } from "effect/cli";
 
 import { App, Capability, Cli, Handles, Http, Mcp, Session, WebMcp } from "../src/index.ts";
@@ -296,4 +296,62 @@ test("a lazy capability is not a capability with schemas, and its schemas are wr
   App.inputJsonSchema(counted);
   App.inputJsonSchema(App.withSchemas(counted));
   assert.equal(renders.count, 1);
+});
+
+/**
+ * Run the command line of `app` with `args` from the `Stdio` service, which is where `Command.run` reads them, and give
+ * the exit code and the answers.
+ */
+async function runCli(app: App.App<never>, args: readonly string[]) {
+  const answers: string[] = [];
+  const exitCode = process.exitCode;
+  try {
+    process.exitCode = undefined;
+    await Effect.runPromise(
+      Cli.run(app, { name: "probe", version: "0.0.0" }).pipe(
+        Effect.provideService(Cli.Answers, { write: (text) => Effect.sync(() => void answers.push(text)) }),
+        Effect.provide(Stdio.layerTest({ args: Effect.succeed(args) })),
+        Effect.provide(Layer.merge(NodeServices.layer, quiet)),
+        Effect.provideService(Console.Console, { ...globalThis.console, error: () => undefined, log: () => undefined } as never),
+      ),
+    );
+    return { code: process.exitCode ?? 0, answers };
+  } finally {
+    process.exitCode = exitCode;
+  }
+}
+
+/** A lazy capability whose module never loads, with a count of its loads. */
+function neverLoads(id: string) {
+  const loads = { count: 0 };
+  const capability = Capability.lazy({ ...declaration, id }, async () => {
+    loads.count++;
+    throw new Error("This module does not load.");
+  });
+  return { capability, loads };
+}
+
+test("the command line loads the capability of the command that follows the values of global flags", async () => {
+  const generate = lazyProbe("global-flag-values").capability;
+  const info = neverLoads("info.plan");
+  const app = App.make({ targets, capabilities: [info.capability, generate] });
+  for (const args of [
+    ["--log-level", "info", "plan", "generate", "--stops", "2"],
+    ["--log-level=info", "plan", "generate", "--stops", "2"],
+  ]) {
+    const { code, answers } = await runCli(app, args);
+    assert.equal(code, 0, args.join(" "));
+    assert.deepEqual(JSON.parse(answers.join("")), { stops: 2, label: "2 stops" });
+  }
+  assert.equal(info.loads.count, 0);
+});
+
+test("the command line loads for the arguments that Stdio gives, not for the arguments of the process", async () => {
+  const generate = lazyProbe("stdio-args").capability;
+  const broken = neverLoads("plan.list");
+  const app = App.make({ targets, capabilities: [generate, broken.capability] });
+  const { code, answers } = await runCli(app, ["plan", "generate", "--stops", "3"]);
+  assert.equal(code, 0);
+  assert.deepEqual(JSON.parse(answers.join("")), { stops: 3, label: "3 stops" });
+  assert.equal(broken.loads.count, 0);
 });

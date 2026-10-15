@@ -38,7 +38,7 @@ An application MAY add its own commands and flags. If two commands have the same
 
 ## Loading
 
-A program can [load](../invocation.md#loading-on-first-use) the schemas and the program of a capability on first use. It loads only what the command needs: the capability of the command, or of `call`; all the capabilities of the view for `list` and for help, which show the usage of each one; and none for the version. A command whose capability does not load ends with the call failure `internal`, and the next command loads again.
+A program can [load](../invocation.md#loading-on-first-use) the schemas and the program of a capability on first use. It loads only what the command needs: the capability of the command, or of `call`; all the capabilities of the view for `list` and for help, which show the usage of each one; and none for the version. It finds the command in the same arguments, and in the same way, as the parser of the command line: a value of a global flag, such as `info` in `--log-level info`, is not a word of the command. A command whose capability does not load ends with the call failure `internal`, and the next command loads again.
 
 ## Outcomes
 

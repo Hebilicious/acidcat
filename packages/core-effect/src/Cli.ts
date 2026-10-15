@@ -4,13 +4,13 @@
  */
 import { CLI_EXIT_CODES, cliExitCode, cliUsage, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
 import type { JsonObject, Outcome } from "@acid-cat/spec-ts";
-import { Cause, Console, Context, Effect, Layer, Option, Schema } from "effect";
+import { Cause, Console, Context, Effect, Layer, Option, Schema, Stdio } from "effect";
 import type { Terminal } from "effect";
-import { Argument, CliError, Command, Flag, GlobalFlag, Param } from "effect/cli";
+import { Argument, CliConfig, CliError, Command, Flag, GlobalFlag, Param } from "effect/cli";
 
 import * as App from "./App.ts";
 import * as Capability from "./Capability.ts";
-import { flagNames } from "./internal/flags.ts";
+import { flagNames, flagParams } from "./internal/flags.ts";
 import * as Session from "./Session.ts";
 import { logLoadFailure } from "./internal/load.ts";
 
@@ -37,10 +37,12 @@ export interface Options {
  * process, use `NodeCli.main` from `@acid-cat/core-effect/node`.
  */
 export const run = <R>(app: App.App<R>, options: Options) =>
-  Effect.suspend(() => {
+  Effect.gen(function* () {
     const target = options.target ?? "cli";
-    const needed = neededBy(App.capabilitiesOf(app, target), typeof process === "undefined" ? [] : process.argv.slice(2));
-    return Effect.matchCauseEffect(Effect.forEach(needed, Capability.load, { concurrency: "unbounded", discard: true }), {
+    const args = yield* (yield* Stdio.Stdio).args;
+    const { builtIns } = yield* CliConfig.CliConfig;
+    const needed = neededBy(App.capabilitiesOf(app, target), commandWords(args, builtIns));
+    return yield* Effect.matchCauseEffect(Effect.forEach(needed, Capability.load, { concurrency: "unbounded", discard: true }), {
       // A capability that does not load is the call failure `internal`, with its exit code (spec/bindings/cli.md#outcomes).
       onFailure: (cause) =>
         logLoadFailure(cause).pipe(Effect.andThen(print({ kind: "internal", message: "A capability did not load." }))),
@@ -48,21 +50,74 @@ export const run = <R>(app: App.App<R>, options: Options) =>
     });
   });
 
-/** The names of the built-in flag that asks for the version. */
-const versionFlags = new Set(flagNames(GlobalFlag.Version.flag).map((name) => (name.length === 1 ? `-${name}` : `--${name}`)));
+/**
+ * The words of the command line before `--`, in order, without its flags and without the values of the global flags.
+ * The command of `run` has no flags of its own above its capabilities, so this reads the arguments as `effect/cli` does:
+ * a global flag takes the next word as its value unless the flag is boolean, has its value after `=`, or is negated with
+ * `--no-`. A boolean flag takes the next word only when it is a boolean literal, such as `true` or `no`.
+ */
+function commandWords(args: readonly string[], globalFlags: readonly { readonly flag: Param.Param<"flag", any> }[]): CommandWords {
+  const flags = new Map<string, Param.Single<"flag", unknown>>();
+  for (const flag of globalFlags) {
+    for (const single of flagParams(flag.flag)) {
+      for (const name of [single.name, ...single.aliases]) flags.set(name, single);
+    }
+  }
+  const versionNames = new Set(flagNames(GlobalFlag.Version.flag));
+  const end = args.indexOf("--");
+  const tokens = (end === -1 ? args : args.slice(0, end)).flatMap(tokensOf);
+  const words: string[] = [];
+  let version = false;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]!;
+    if (token.flag === undefined) {
+      words.push(token.word);
+      continue;
+    }
+    const negated = token.flag.startsWith("no-") && flags.get(token.flag.slice(3))?.primitiveType._tag === "Boolean";
+    const flag = negated ? flags.get(token.flag.slice(3)) : flags.get(token.flag);
+    if (flag === undefined) continue;
+    if (versionNames.has(token.flag)) version = true;
+    if (token.value !== undefined) continue;
+    const next = tokens[index + 1];
+    if (next === undefined || next.flag !== undefined) continue;
+    if ((negated || flag.primitiveType._tag === "Boolean") && !booleanLiterals.has(next.word)) continue;
+    index++;
+  }
+  return { words, version };
+}
+
+/** The words that `effect/cli` reads as the value of a boolean flag. */
+const booleanLiterals = new Set(["true", "yes", "on", "1", "y", "false", "no", "off", "0", "n"]);
+
+interface CommandWords {
+  readonly words: readonly string[];
+  /** Whether a flag asks for the version. */
+  readonly version: boolean;
+}
+
+type Token = { readonly flag: string; readonly value: string | undefined } | { readonly flag?: undefined; readonly word: string };
+
+/** The tokens of one argument, as the lexer of `effect/cli` makes them. */
+function tokensOf(arg: string): Token[] {
+  if (!arg.startsWith("-") || arg === "-" || /^-(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(arg)) return [{ word: arg }];
+  const equal = arg.indexOf("=");
+  if (arg.startsWith("--")) return [{ flag: arg.slice(2, equal === -1 ? undefined : equal), value: equal === -1 ? undefined : arg.slice(equal + 1) }];
+  if (equal !== -1) return [{ flag: arg.slice(1, equal), value: arg.slice(equal + 1) }];
+  return [...arg.slice(1)].map((flag) => ({ flag, value: undefined }));
+}
 
 /**
- * The lazy capabilities that a command line needs to load for its arguments: the capability of the command, or the one
+ * The lazy capabilities that a command line needs to load for its words: the capability of the command, or the one
  * that `call` names. The version needs none. `list`, help, a group and a command that no capability has need all, for
  * the usage of each capability.
  */
-function neededBy(capabilities: readonly Capability.Any[], args: readonly string[]): readonly Capability.Any[] {
+function neededBy(capabilities: readonly Capability.Any[], { words, version }: CommandWords): readonly Capability.Any[] {
   const lazy = capabilities.filter((capability) => Capability.loadedNow(capability) === undefined);
-  const words = args.filter((arg) => !arg.startsWith("-"));
   if (words[0] === "call") return lazy.filter((capability) => capability.id === words[1]);
   const named = capabilities.find((capability) => commandPath(capability.id).every((word, index) => words[index] === word));
   if (named !== undefined) return lazy.filter((capability) => capability === named);
-  if (words.length === 0 && args.some((arg) => versionFlags.has(arg))) return [];
+  if (words.length === 0 && version) return [];
   return lazy;
 }
 
