@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Effect, Layer, Option, Scope, Stream, SubscriptionRef } from "effect";
+import { Effect, Exit, Layer, Option, Scope, Stream, SubscriptionRef } from "effect";
 
 import { Session, WebMcp } from "../src/index.ts";
 import { fixture, Switch, fixtureLayer } from "./fixture.ts";
@@ -95,3 +95,35 @@ test("with no host, the binding does nothing", () =>
       }),
     ).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
   ));
+
+test("code that does not use Effect observes the status, at once, and retries a failed update with a promise", async () => {
+  const host = fakeHost();
+  host.refuse.add("fixture.echo");
+  const scope = Effect.runSync(Scope.make());
+  const installed = await Effect.runPromise(
+    Effect.gen(function* () {
+      const session = yield* Session.make(fixture, { target: "app" });
+      return Option.getOrThrow(yield* WebMcp.install(session, { host }));
+    }).pipe(Scope.provide(scope), Effect.provide(Layer.fresh(fixtureLayer))),
+  );
+  const status = installed.statusObservable;
+  const phases: WebMcp.Phase[] = [];
+  const waiters: { readonly phase: WebMcp.Phase; readonly resolve: () => void }[] = [];
+  status.subscribe((value) => {
+    phases.push(value.phase);
+    for (const waiter of waiters) if (waiter.phase === value.phase) waiter.resolve();
+  });
+  const reached = (phase: WebMcp.Phase) =>
+    status.getSnapshot().phase === phase ? Promise.resolve() : new Promise<void>((resolve) => waiters.push({ phase, resolve }));
+
+  await reached("failed");
+  assert.match(status.getSnapshot().message ?? "", /refused fixture.echo/);
+  host.refuse.clear();
+  await installed.retryPromise();
+  await reached("ready");
+  assert.ok(host.tools.has("fixture.echo"));
+
+  await Effect.runPromise(Scope.close(scope, Exit.void));
+  assert.deepEqual(phases.slice(-2), ["closing", "disposed"]);
+  assert.equal(status.getSnapshot().phase, "disposed");
+});

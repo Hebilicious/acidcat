@@ -5,6 +5,7 @@ import { callFailure, CallFailureError, isCallFailure } from "@acid-cat/spec-ts"
 import { Effect, Option, Queue, Scope, Stream, SubscriptionRef } from "effect";
 
 import * as App from "./App.ts";
+import type * as Capability from "./Capability.ts";
 import type * as Session from "./Session.ts";
 
 /** A WebMCP tool, as `registerTool` receives it. */
@@ -29,6 +30,13 @@ export interface Status {
 
 export interface Installation {
   readonly status: SubscriptionRef.SubscriptionRef<Status>;
+  /**
+   * The status for code that does not use Effect, with the shape of the observables of the handles. Listeners hear
+   * each change at once, up to `disposed`.
+   */
+  readonly statusObservable: Capability.Observable<Status>;
+  /** `retry` for code that does not use Effect. The status tells the outcome of the new update. */
+  readonly retryPromise: () => Promise<void>;
   /** Try the last failed update again. */
   readonly retry: Effect.Effect<void>;
 }
@@ -54,6 +62,10 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
     const scope = yield* Effect.scope;
     const context = yield* Effect.context<never>();
     const status = yield* SubscriptionRef.make<Status>({ phase: "loading", message: null });
+    // Code that does not use Effect hears each change of the status at once, in the fiber that makes it.
+    const statusListeners = new Set<(value: Status) => void>();
+    const setStatus = (next: Status) =>
+      SubscriptionRef.set(status, next).pipe(Effect.andThen(Effect.sync(() => statusListeners.forEach((listener) => listener(next)))));
     const lifetime = new AbortController();
     const registered = new Map<string, AbortController>();
     const calls = new Set<Promise<unknown>>();
@@ -117,11 +129,11 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
     yield* Effect.forever(
       Effect.gen(function* () {
         yield* Queue.take(requests);
-        yield* SubscriptionRef.set(status, { phase: "reconciling", message: null });
+        yield* setStatus({ phase: "reconciling", message: null });
         const result = yield* Effect.result(pass);
         const next: Status =
           result._tag === "Success" ? { phase: "ready", message: null } : { phase: "failed", message: result.failure };
-        yield* SubscriptionRef.set(status, next);
+        yield* setStatus(next);
       }),
     ).pipe(Effect.forkIn(scope));
 
@@ -131,13 +143,25 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
     yield* Scope.addFinalizer(
       scope,
       Effect.gen(function* () {
-        yield* SubscriptionRef.set(status, { phase: "closing", message: null });
+        yield* setStatus({ phase: "closing", message: null });
         lifetime.abort();
         registered.clear();
         yield* Effect.promise(() => Promise.allSettled([...calls]));
-        yield* SubscriptionRef.set(status, { phase: "disposed", message: null });
+        yield* setStatus({ phase: "disposed", message: null });
       }),
     );
 
-    return Option.some<Installation>({ status, retry: Queue.offer(requests, undefined).pipe(Effect.asVoid) });
+    const retry = Queue.offer(requests, undefined).pipe(Effect.asVoid);
+    return Option.some<Installation>({
+      status,
+      retry,
+      statusObservable: {
+        getSnapshot: () => SubscriptionRef.getUnsafe(status),
+        subscribe(listener) {
+          statusListeners.add(listener);
+          return { unsubscribe: () => void statusListeners.delete(listener) };
+        },
+      },
+      retryPromise: () => Effect.runPromise(retry),
+    });
   });
