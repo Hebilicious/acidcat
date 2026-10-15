@@ -36,12 +36,28 @@ export interface Options {
  * The command line as an Effect. Exit codes follow spec/bindings/cli.md. To run it as the main program of a Node.js
  * process, use `NodeCli.main` from `@acid-cat/core-effect/node`.
  */
-export const run = <R>(app: App.App<R>, options: Options) =>
+export const run = <
+  R,
+  const Commands extends ReadonlyArray<AnyDeclared> = readonly [],
+  const GlobalFlags extends ReadonlyArray<GlobalFlag.GlobalFlag<any>> = readonly [],
+  LA = never,
+  LE = never,
+  LR = never,
+>(
+  app: App.App<R>,
+  options: CommandOptions<Commands, GlobalFlags, LA, LE, LR>,
+): Effect.Effect<
+  void | number,
+  LE | Command.Error<Commands[number]["command"]>,
+  CommandServices<R, Commands, GlobalFlags, LA, LR> | Command.Environment
+> =>
   Effect.gen(function* () {
     const target = options.target ?? "cli";
     const args = yield* (yield* Stdio.Stdio).args;
     const { builtIns } = yield* CliConfig.CliConfig;
-    const needed = neededBy(App.capabilitiesOf(app, target), commandWords(args, builtIns));
+    const words = commandWords(args, [...builtIns, ...(options.globalFlags ?? [])]);
+    const applicationCommands = new Set((options.commands ?? []).map((each) => each.shape.name));
+    const needed = neededBy(App.capabilitiesOf(app, target), words, applicationCommands);
     return yield* Effect.matchCauseEffect(Effect.forEach(needed, Capability.load, { concurrency: "unbounded", discard: true }), {
       // A capability that does not load is the call failure `internal`, with its exit code (spec/bindings/cli.md#outcomes).
       onFailure: (cause) =>
@@ -52,7 +68,8 @@ export const run = <R>(app: App.App<R>, options: Options) =>
 
 /**
  * The words of the command line before `--`, in order, without its flags and without the values of the global flags.
- * The command of `run` has no flags of its own above its capabilities, so this reads the arguments as `effect/cli` does:
+ * The root of the command of `run`, `call`, `list` and the groups of capabilities have no flags of their own, so up to
+ * the first command that has flags, this reads the arguments as `effect/cli` does:
  * a global flag takes the next word as its value unless the flag is boolean, has its value after `=`, or is negated with
  * `--no-`. A boolean flag takes the next word only when it is a boolean literal, such as `true` or `no`.
  */
@@ -109,11 +126,16 @@ function tokensOf(arg: string): Token[] {
 
 /**
  * The lazy capabilities that a command line needs to load for its words: the capability of the command, or the one
- * that `call` names. The version needs none. `list`, help, a group and a command that no capability has need all, for
+ * that `call` names. A command of the application and the version need none. `list`, help, a group and a command that no capability has need all, for
  * the usage of each capability.
  */
-function neededBy(capabilities: readonly Capability.Any[], { words, version }: CommandWords): readonly Capability.Any[] {
+function neededBy(
+  capabilities: readonly Capability.Any[],
+  { words, version }: CommandWords,
+  applicationCommands: ReadonlySet<string>,
+): readonly Capability.Any[] {
   const lazy = capabilities.filter((capability) => Capability.loadedNow(capability) === undefined);
+  if (words[0] !== undefined && applicationCommands.has(words[0])) return [];
   if (words[0] === "call") return lazy.filter((capability) => capability.id === words[1]);
   const named = capabilities.find((capability) => commandPath(capability.id).every((word, index) => words[index] === word));
   if (named !== undefined) return lazy.filter((capability) => capability === named);
@@ -157,6 +179,15 @@ export function exitCodeOf(error: CliError.CliError): number {
  * A command of the command line. Its handler needs `R`, the services of the capabilities. `Command.provide` gives them.
  */
 export type AppCommand<R> = Command.Command<string, {}, {}, never, R>;
+
+/**
+ * The services that the command of an application needs: those of its capabilities that `services` does not give, those
+ * that `services` needs, and those of its own commands, without the settings of its global flags.
+ */
+export type CommandServices<R, Commands extends ReadonlyArray<AnyDeclared>, GlobalFlags extends ReadonlyArray<GlobalFlag.GlobalFlag<any>>, LA, LR> = Exclude<
+  Exclude<R, LA> | LR | Command.Services<Commands[number]["command"]>,
+  SettingsOf<GlobalFlags>
+>;
 
 /** The services of the settings among some global flags. */
 type SettingsOf<Flags extends ReadonlyArray<GlobalFlag.GlobalFlag<any>>> = Flags[number] extends infer F
@@ -274,13 +305,7 @@ export function command<
 >(
   app: App.App<R>,
   options: CommandOptions<Commands, GlobalFlags, LA, LE, LR>,
-): Command.Command<
-  string,
-  {},
-  {},
-  LE | Command.Error<Commands[number]["command"]>,
-  Exclude<Exclude<R, LA> | LR | Command.Services<Commands[number]["command"]>, SettingsOf<GlobalFlags>>
-> {
+): Command.Command<string, {}, {}, LE | Command.Error<Commands[number]["command"]>, CommandServices<R, Commands, GlobalFlags, LA, LR>> {
   const target = options.target ?? "cli";
   const view = Session.make(app, { target });
   // The capabilities with their schemas: a lazy capability must have loaded (App.load), or, for `run`, is left out

@@ -12,8 +12,24 @@ import type * as App from "./App.ts";
 import * as Cli from "./Cli.ts";
 import { flagNames } from "./internal/flags.ts";
 
-/** Run the command line as the main program of the process. `layer` gives the services of the capabilities. */
-export function main<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Cli.Options): void {
+/**
+ * Run the command line as the main program of the process. `layer` gives the services that the command needs: those of
+ * the capabilities that `options.services` does not give, and those of the commands of the application. The options
+ * are the options of `Cli.command`.
+ */
+export function main<
+  R,
+  E,
+  const Commands extends ReadonlyArray<Cli.Declared<Command.Command<any, any, any, any, any>>> = readonly [],
+  const GlobalFlags extends ReadonlyArray<GlobalFlag.GlobalFlag<any>> = readonly [],
+  LA = never,
+  LE = never,
+  LR = never,
+>(
+  app: App.App<R>,
+  layer: Layer.Layer<Cli.CommandServices<R, Commands, GlobalFlags, LA, LR>, E>,
+  options: Cli.CommandOptions<Commands, GlobalFlags, LA, LE, LR>,
+): void {
   runMain(Cli.run(app, options).pipe(Effect.provide(Layer.merge(layer, NodeServices.layer))));
 }
 

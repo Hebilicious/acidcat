@@ -8,7 +8,7 @@ import { NodeServices } from "@effect/platform-node";
 import { check } from "@acid-cat/cli";
 import { CallFailureError } from "@acid-cat/spec-ts";
 import { Console, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Schema, Scope, Stdio } from "effect";
-import { Command } from "effect/cli";
+import { Command, Flag, GlobalFlag } from "effect/cli";
 
 import { App, Capability, Cli, Handles, Http, Mcp, Session, WebMcp } from "../src/index.ts";
 
@@ -302,13 +302,17 @@ test("a lazy capability is not a capability with schemas, and its schemas are wr
  * Run the command line of `app` with `args` from the `Stdio` service, which is where `Command.run` reads them, and give
  * the exit code and the answers.
  */
-async function runCli(app: App.App<never>, args: readonly string[]) {
+async function runCli(
+  app: App.App<never>,
+  args: readonly string[],
+  options: { readonly globalFlags?: readonly GlobalFlag.GlobalFlag<any>[]; readonly commands?: readonly Cli.Declared<Command.Command<any, any, any, never, any>>[] } = {},
+) {
   const answers: string[] = [];
   const exitCode = process.exitCode;
   try {
     process.exitCode = undefined;
     await Effect.runPromise(
-      Cli.run(app, { name: "probe", version: "0.0.0" }).pipe(
+      (Cli.run(app, { name: "probe", version: "0.0.0", ...options }) as Effect.Effect<void | number, never, Command.Environment>).pipe(
         Effect.provideService(Cli.Answers, { write: (text) => Effect.sync(() => void answers.push(text)) }),
         Effect.provide(Stdio.layerTest({ args: Effect.succeed(args) })),
         Effect.provide(Layer.merge(NodeServices.layer, quiet)),
@@ -354,4 +358,22 @@ test("the command line loads for the arguments that Stdio gives, not for the arg
   assert.equal(code, 0);
   assert.deepEqual(JSON.parse(answers.join("")), { stops: 3, label: "3 stops" });
   assert.equal(broken.loads.count, 0);
+});
+
+test("the command line skips the values of the global flags of the application, and loads nothing for a command of the application", async () => {
+  const generate = lazyProbe("application-options").capability;
+  const staging = neverLoads("staging.plan");
+  const app = App.make({ targets, capabilities: [staging.capability, generate] });
+  const profile = GlobalFlag.Setting("profile")({ flag: Flag.String("profile").pipe(Flag.withDefault("default")) });
+  const greeted: string[] = [];
+  const greet = Cli.declare("greet", {}, () => Effect.flatMap(profile, (name) => Effect.sync(() => void greeted.push(name))));
+  const options = { globalFlags: [profile], commands: [greet] };
+
+  const generated = await runCli(app, ["--profile", "staging", "plan", "generate", "--stops", "2"], options);
+  assert.equal(generated.code, 0);
+  assert.deepEqual(JSON.parse(generated.answers.join("")), { stops: 2, label: "2 stops" });
+
+  assert.equal((await runCli(app, ["--profile", "staging", "greet"], options)).code, 0);
+  assert.deepEqual(greeted, ["staging"]);
+  assert.equal(staging.loads.count, 0);
 });

@@ -130,7 +130,7 @@ const app = App.make({ targets: { app: { bindings: ["typescript"] }, mcp: { bind
 - It loads on its first call, when MCP lists its tools, when WebMCP registers it, when the HTTP binding gives the catalog, in `Cli.run` and `NodeCli.main`, and in `App.load(app)`. It loads one time ([spec/invocation.md#loading-on-first-use](../../spec/invocation.md#loading-on-first-use)).
 - A call that is cancelled while the module loads does not stop the load for other calls. A load that fails, for any reason, gives the call failure `internal`, and the next use loads again. MCP and WebMCP leave out a capability that does not load, and try again on the next listing or update. The HTTP catalog answers `internal` with the status 500, and the command line writes `internal` and exits with 5.
 - `App.document`, `App.render`, `App.view`, `session.view` and `Cli.command` need the schemas, and throw an error for a lazy capability that has not loaded: run `App.load(app)` first, or `App.load(app, { target })` for the capabilities of one target. The catalog is the same as the catalog of the same capabilities declared at once.
-- `Cli.run` and `NodeCli.main` load only what the command needs: its own capability, all of them for `list` and help, and none for `--version`. They read the command from the arguments that `Stdio` gives, as `Command.run` does, and skip the values of global flags ([spec/bindings/cli.md#loading](../../spec/bindings/cli.md#loading)).
+- `Cli.run` and `NodeCli.main` load only what the command needs: its own capability, all of them for `list` and help, and none for `--version`. They read the command from the arguments that `Stdio` gives, as `Command.run` does, and skip the values of the global flags of `effect/cli` and of the application. A command of the application loads none ([spec/bindings/cli.md#loading](../../spec/bindings/cli.md#loading)).
 - Two schemas with one `identifier` are an error. `App.make` cannot check this for a lazy capability, whose schemas it does not have yet. `App.view` checks the capabilities of its target, and `App.render` of the whole application checks all of them: write the catalog at build time, as the specification asks, so that the check runs.
 - A load that fails the same way as the load before it is not logged again.
 
@@ -253,7 +253,7 @@ The CLI binding allows an application to add its own commands and flags. `Cli.co
 - `services`: the layer of the services of the capabilities. Only the commands of the capabilities, `call` and `list` get it. It can depend on the global flags;
 - `description`: the description of the command line in the help of the root command. The default is the description of the application, then its title. `Cli.run` and `NodeCli.main` take it too.
 
-`Cli.command` throws an error when two commands have the same path, at any level, or when two flags in the scope of one command have the same name or alias, so the program stops when it starts. The scope of a command is its own flags and the global flags, of the application and of `effect/cli`. `Cli.print(outcome)` writes an outcome and sets its exit code, so a command of the application gives its outcomes as the commands of the capabilities do. Run the command with `Cli.runCommand`, or with `NodeCli.runCommand` from `@acid-cat/core-effect/node`. Both set the exit codes of the binding. `Cli.exitCodeOf(error)` gives the exit code of one usage error.
+`Cli.command` throws an error when two commands have the same path, at any level, or when two flags in the scope of one command have the same name or alias, so the program stops when it starts. The scope of a command is its own flags and the global flags, of the application and of `effect/cli`. `Cli.print(outcome)` writes an outcome and sets its exit code, so a command of the application gives its outcomes as the commands of the capabilities do. `Cli.run` and `NodeCli.main` take the same options. They also load only the lazy capabilities that the command needs, so prefer them when the application does not change the command. To change it, run the command with `Cli.runCommand`, or with `NodeCli.runCommand` from `@acid-cat/core-effect/node`, after `App.load(app, { target })`. All of them set the exit codes of the binding. `Cli.exitCodeOf(error)` gives the exit code of one usage error.
 
 ```ts
 import { Cli } from "@acid-cat/core-effect";
@@ -267,7 +267,7 @@ const report = Cli.declare("report", { day: Argument.String("day") }, ({ day }) 
   Effect.map(readReport(day), (value) => ({ ok: true, value })).pipe(Effect.flatMap(Cli.print)),
 );
 
-const command = Cli.command(app, {
+NodeCli.main(app, Layer.empty, {
   name: "aircon",
   version: "0.1.0",
   // The services depend on the flag.
@@ -275,8 +275,6 @@ const command = Cli.command(app, {
   globalFlags: [historyFile],
   commands: [report],
 });
-
-NodeCli.runCommand(command, { version: "0.1.0" });
 ```
 
 Standard output carries only the answers (spec/bindings/cli.md#outcomes). The command line writes them through `Cli.Answers`. While the command runs, `NodeCli` writes the answers to standard output, and replaces the global console with one that writes all its output to standard error: logs of Effect, the `Console` of Effect, each method of the global console that other runtimes of the program use, and the help that `effect/cli` shows for a usage error. When the command ends, the program has its own console again. `Cli.run` and `Cli.runCommand` alone do not change the console: they write the answers through `Cli.Answers`, and a program that runs them from its own main program must send its logs and the output of its libraries to standard error itself. The output of `--help`, `--version` and `--completions` goes to standard output.
