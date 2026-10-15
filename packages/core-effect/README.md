@@ -145,7 +145,8 @@ The CLI binding allows an application to add its own commands and flags. `Cli.co
 
 - `commands`: the commands of the application, beside the commands of the capabilities, `call` and `list`. Make each one with `Cli.declare(name, config, handler, { description, examples, subcommands })`, which takes the flags and arguments in the form that `Command.make` takes. `effect/cli` gives no way to read the flags of a command that it made, so the binding makes the command from these parts, and checks them;
 - `globalFlags`: the flags of the application, for all commands;
-- `services`: the layer of the services of the capabilities. Only the commands of the capabilities, `call` and `list` get it. It can depend on the global flags.
+- `services`: the layer of the services of the capabilities. Only the commands of the capabilities, `call` and `list` get it. It can depend on the global flags;
+- `description`: the description of the command line in the help of the root command. The default is the description of the application, then its title. `Cli.run` and `NodeCli.main` take it too.
 
 `Cli.command` throws an error when two commands have the same path, at any level, or when two flags in the scope of one command have the same name or alias, so the program stops when it starts. The scope of a command is its own flags and the global flags, of the application and of `effect/cli`. `Cli.print(outcome)` writes an outcome and sets its exit code, so a command of the application gives its outcomes as the commands of the capabilities do. Run the command with `Cli.runCommand`, or with `NodeCli.runCommand` from `@acid-cat/core-effect/node`. Both set the exit codes of the binding. `Cli.exitCodeOf(error)` gives the exit code of one usage error.
 

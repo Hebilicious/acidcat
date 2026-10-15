@@ -17,6 +17,8 @@ export interface Options {
   readonly version: string;
   /** The target that the command line serves. The default is `"cli"`. */
   readonly target?: string | undefined;
+  /** The description of the command line, in the help of its root command. The default is the description of the application, then its title. */
+  readonly description?: string | undefined;
 }
 
 /**
@@ -259,7 +261,7 @@ export function command<
   const bindingCommands = [call, list, ...group(leaves, [])].map(provided);
 
   const root = Command.make(options.name).pipe(
-    Command.withDescription(app.description ?? app.title ?? options.name),
+    Command.withDescription(options.description ?? app.description ?? app.title ?? options.name),
     Command.withSubcommands([...bindingCommands, ...applicationCommands.map((each) => each.command)]),
   );
   return (globalFlags.length === 0 ? root : root.pipe(Command.withGlobalFlags(globalFlags))) as never;

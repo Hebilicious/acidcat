@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Effect, Schema } from "effect";
-import { Flag, GlobalFlag } from "effect/cli";
+import { NodeServices } from "@effect/platform-node";
+import { Console, Effect, Schema } from "effect";
+import { Command, Flag, GlobalFlag } from "effect/cli";
 
 import { App, Capability, Cli } from "../src/index.ts";
 import { fixture } from "./fixture.ts";
@@ -61,4 +62,26 @@ test("two flags of one command, or two global flags, with one name stop the prog
 test("commands and flags with different names make a command line", () => {
   const solve = Cli.declare("solve", { json: Flag.Boolean("json") }, () => Effect.void, { subcommands: [Cli.declare("again", {})] });
   assert.equal(Cli.command(fixture, { ...options, commands: [solve] }).name, "fixture");
+});
+
+/** The help of the root command, as `--help` shows it. */
+async function rootHelp(app: App.App<never>, description?: string): Promise<string> {
+  const lines: string[] = [];
+  const console = { ...globalThis.console, log: (...parts: unknown[]) => void lines.push(parts.join(" ")) };
+  await Effect.runPromise(
+    Command.runWith(Cli.command(app, { ...options, ...(description === undefined ? {} : { description }) }), options)(["--help"]).pipe(
+      Effect.provide(NodeServices.layer),
+      Effect.provideService(Console.Console, console as never),
+    ),
+  );
+  return lines.join("\n");
+}
+
+test("the root help shows the description of the command line, then the description of the application, then its title", async () => {
+  const capabilities = [probe("probe.ask")];
+  const targets = { cli: { bindings: ["cli"] } };
+  const described = App.make({ title: "Probe", description: "An application that probes.", targets, capabilities });
+  assert.match(await rootHelp(described, "Probe from the terminal."), /Probe from the terminal\./);
+  assert.match(await rootHelp(described), /An application that probes\./);
+  assert.match(await rootHelp(App.make({ title: "Probe", targets, capabilities })), /Probe/);
 });
