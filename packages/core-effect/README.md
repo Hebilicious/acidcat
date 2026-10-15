@@ -104,9 +104,25 @@ A session opens from the declarations of the capabilities. It writes no JSON Sch
 `Handles.tree(handles, tree)` gives the handles in a tree that the application chooses, each typed by its capability: `execute` takes the input type and resolves with the value and failure types of its schemas. `Handles.get(handles, capability)` gives one typed handle. A capability outside the view has a handle that is always unavailable.
 
 ```ts
-const session = await Handles.open(app, layer, { target: "app" });
-const aircon = Handles.tree(session.handles, { power: { set: powerSet }, status: statusGet });
-await aircon.power.set.execute({ on: true }); // Promise<Result<null, Offline>>
+import { App, Capability, Handles } from "@acid-cat/core-effect";
+import { Effect, Layer, Schema } from "effect";
+
+const Offline = Schema.TaggedStruct("Offline", {});
+
+const powerSet = Capability.make({
+  id: "aircon.power.set",
+  description: "Turn the unit on or off.",
+  audience: ["app"],
+  input: Schema.Struct({ on: Schema.Boolean }),
+  failures: [Offline],
+  run: () => Effect.succeed(null),
+});
+
+const app = App.make({ targets: { app: { bindings: ["typescript"] } }, capabilities: [powerSet] });
+
+const session = await Handles.open(app, Layer.empty, { target: "app" });
+const aircon = Handles.tree(session.handles, { power: { set: powerSet } });
+await aircon.power.set.execute({ on: true }); // Promise<Result<null, { readonly _tag: "Offline" }>>
 ```
 
 `layer` gives the services that the capabilities need. A web handler is `(request: Request) => Promise<Response>`. It works in Node, Bun, Deno and Cloudflare Workers.
