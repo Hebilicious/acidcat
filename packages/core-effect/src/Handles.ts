@@ -6,7 +6,7 @@
  */
 import { CallFailureError, callFailure } from "@acid-cat/spec-ts";
 import type { Availability, Result } from "@acid-cat/spec-ts";
-import { Cause, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FiberSet, Layer, Scope, Stream } from "effect";
 
 import type * as App from "./App.ts";
 import type * as Capability from "./Capability.ts";
@@ -240,46 +240,56 @@ function observable<T>(initial: T) {
 /**
  * The availability of one capability as an observable. `getSnapshot` reads the session now, so code that does not use
  * Effect sees a change of a `Current` availability at once. It gives the same object while the value stays the same.
- * When the session announces a change, listeners hear the value that `getSnapshot` gives at that moment, and never the
- * same value two times in a row. Values that changed again before the listeners were told are skipped.
+ * Listeners hear each value that the session announces, in order, and never the same value two times in a row.
  */
-const followAvailability = (session: Session.Session, id: string, changes: boolean) =>
-  Effect.gen(function* () {
-    let snapshot = yield* session.availability(id);
-    let delivered = snapshot;
-    const listeners = new Set<(value: Availability) => void>();
-    const keep = (value: Availability) => {
-      if (!sameAvailability(snapshot, value)) snapshot = value;
-    };
-    /** The value now, or `otherwise` when the read waits. */
-    const readOr = (otherwise: Availability): Availability => {
-      const exit = Effect.runSyncExit(session.availability(id));
-      keep(Exit.isSuccess(exit) ? exit.value : otherwise);
-      return snapshot;
-    };
-    const read = (): Availability => readOr(snapshot);
-    if (changes) {
-      yield* session.availabilityChanges(id).pipe(
+const followAvailability = (
+  session: Session.Session,
+  id: string,
+  changes: boolean,
+  runFork: (effect: Effect.Effect<void>) => Fiber.Fiber<void>,
+): Observable<Availability> => {
+  let snapshot: Availability | undefined;
+  let delivered: Availability | undefined;
+  let following: Fiber.Fiber<void> | undefined;
+  const listeners = new Set<(value: Availability) => void>();
+  const read = (): Availability => {
+    const exit = Effect.runSyncExit(session.availability(id));
+    if (Exit.isSuccess(exit) && (snapshot === undefined || !sameAvailability(snapshot, exit.value))) snapshot = exit.value;
+    return snapshot!;
+  };
+  // The handle follows the availability only while a listener listens, so a handle that nobody observes costs nothing.
+  const follow = () =>
+    runFork(
+      session.availabilityChanges(id).pipe(
         Stream.runForEach((next) =>
           Effect.sync(() => {
-            // The announced value can be old by now: the listeners hear the value of the moment.
-            const current = readOr(next);
-            if (sameAvailability(delivered, current)) return;
-            delivered = current;
-            listeners.forEach((listener) => listener(current));
+            if (delivered !== undefined && sameAvailability(delivered, next)) return;
+            delivered = next;
+            listeners.forEach((listener) => listener(next));
           }),
         ),
-        Effect.forkScoped({ startImmediately: true }),
-      );
-    }
-    return {
-      getSnapshot: read,
-      subscribe(listener: (value: Availability) => void) {
-        listeners.add(listener);
-        return { unsubscribe: () => listeners.delete(listener) };
-      },
-    } satisfies Observable<Availability>;
-  });
+      ),
+    );
+  return {
+    getSnapshot: read,
+    subscribe(listener: (value: Availability) => void) {
+      listeners.add(listener);
+      if (changes && following === undefined) {
+        delivered = read();
+        following = follow();
+      }
+      return {
+        unsubscribe: () => {
+          listeners.delete(listener);
+          if (listeners.size > 0 || following === undefined) return;
+          const stopping = following;
+          following = undefined;
+          runFork(Fiber.interrupt(stopping).pipe(Effect.asVoid));
+        },
+      };
+    },
+  };
+};
 
 /** A copy of each value, so that a client cannot change the data of the provider. */
 const detached = <T>(source: Observable<T>): Observable<T> => ({
@@ -294,6 +304,8 @@ const detached = <T>(source: Observable<T>): Observable<T> => ({
 export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effect<ReadonlyMap<string, Handle>, never, Scope.Scope> =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope;
+    // The fibers that follow availability for listeners. They end with the scope.
+    const runFork = yield* FiberSet.makeRuntime<never, void, never>();
     const context = yield* Effect.context<never>();
     const lifetime = new AbortController();
     yield* Scope.addFinalizer(scope, Effect.sync(() => lifetime.abort()));
@@ -312,7 +324,7 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
     const handles = new Map<string, Handle>();
     for (const [id, capability] of session.capabilities) {
       // Each handle follows the availability of its own capability, so a change reaches one handle.
-      const availability = yield* followAvailability(session, id, capability.availability !== undefined);
+      const availability = followAvailability(session, id, capability.availability !== undefined, runFork);
 
       let snapshot: Observable<unknown> | undefined;
       if (capability.state !== undefined) {

@@ -172,3 +172,70 @@ test("allAvailable is available when each source is, and gives the reason of the
       assert.deepEqual(first, unavailable("Signed out."));
     }),
   ));
+
+/** An owner that counts the listeners that follow it. */
+function countedGate() {
+  const owner = gate();
+  const counts = { following: 0 };
+  let changed = () => undefined as void;
+  return {
+    owner,
+    counts,
+    nextChange: () => new Promise<void>((resolve) => (changed = resolve)),
+    source: {
+      getSnapshot: owner.getSnapshot,
+      subscribe(listener: (value: Availability) => void) {
+        counts.following++;
+        changed();
+        const subscription = owner.subscribe(listener);
+        return {
+          unsubscribe() {
+            counts.following--;
+            changed();
+            subscription.unsubscribe();
+          },
+        };
+      },
+    },
+  };
+}
+
+test("a session and its handles follow no availability until something listens, and decide calls on it all the same", async () => {
+  const gates = Array.from({ length: 99 }, () => countedGate());
+  const many = App.make({
+    targets: { app: { bindings: ["typescript"] } },
+    capabilities: gates.map((each, index) =>
+      Capability.make({
+        id: `probe.gate${index}.pass`,
+        description: `Pass gate ${index}.`,
+        audience: ["app"],
+        availability: Effect.succeed(Capability.fromObservable(each.source)),
+        run: () => Effect.succeed(null),
+      }),
+    ),
+  });
+  const following = () => gates.reduce((sum, each) => sum + each.counts.following, 0);
+  const session = await Handles.open(many, Layer.empty, { target: "app" });
+  // A stream subscribes in its own fiber, so let each fiber that open started run before counting.
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+  try {
+    await settled();
+    await settled();
+    assert.equal(following(), 0);
+    gates[3]!.owner.set(unavailable("Closed."));
+    const refused = await session.handles.get("probe.gate3.pass")!.execute({}).catch((error: unknown) => error);
+    assert.equal((refused as CallFailureError).kind, "unavailable");
+    assert.equal(following(), 0);
+
+    const followed = gates[3]!.nextChange();
+    const subscription = session.handles.get("probe.gate3.pass")!.availability.subscribe(() => undefined);
+    await followed;
+    assert.equal(following(), 1);
+    const left = gates[3]!.nextChange();
+    subscription.unsubscribe();
+    await left;
+    assert.equal(following(), 0);
+  } finally {
+    await session.dispose();
+  }
+});

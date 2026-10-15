@@ -63,27 +63,26 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
 
   const announcements = yield* PubSub.unbounded<void>();
   const served = new Map<string, Capability.Any<R>>();
-  // A capability with no availability is always available, and has no ref. The ref holds the last value that the
-  // session announced. `reads` holds how the session reads the availability when a call comes in.
+  // A capability with no availability is always available. A `Current` is read when a call comes in, and followed only
+  // while a reader of `availabilityChanges` or `changes` follows it. A `Stream` gives its values only to a reader, so the
+  // session follows it from the start, and keeps its last value in a ref.
   const availability = new Map<string, SubscriptionRef.SubscriptionRef<Availability>>();
+  const currents = new Map<string, Capability.Current<Availability>>();
   const reads = new Map<string, Effect.Effect<Availability>>();
   for (const capability of App.capabilitiesOf(app, options.target)) {
     if (served.has(capability.id)) throw new Error(`The capability ${capability.id} is declared two times.`);
     served.set(capability.id, capability);
     if (capability.availability === undefined) continue;
-    let values: Stream.Stream<Availability, never, R>;
-    let initial: Availability = AVAILABLE;
-    if (Stream.isStream(capability.availability)) {
-      values = capability.availability;
-    } else {
+    if (!Stream.isStream(capability.availability)) {
       const current = yield* capability.availability.pipe(Effect.provideContext(context));
-      initial = yield* current.get;
-      values = current.changes;
+      currents.set(capability.id, current);
       reads.set(capability.id, current.get);
+      continue;
     }
-    const ref = yield* SubscriptionRef.make<Availability>(initial);
+    const values: Stream.Stream<Availability, never, R> = capability.availability;
+    const ref = yield* SubscriptionRef.make<Availability>(AVAILABLE);
     availability.set(capability.id, ref);
-    reads.set(capability.id, reads.get(capability.id) ?? SubscriptionRef.get(ref));
+    reads.set(capability.id, SubscriptionRef.get(ref));
     yield* values.pipe(
       Stream.runForEach((value) =>
         Effect.gen(function* () {
@@ -136,6 +135,8 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
   const availabilityChanges = (id: string): Stream.Stream<Availability> => {
     const ref = availability.get(id);
     if (ref !== undefined) return SubscriptionRef.changes(ref);
+    const current = currents.get(id);
+    if (current !== undefined) return current.changes.pipe(Stream.changesWith(sameAvailability));
     return Stream.make(served.has(id) ? AVAILABLE : notServed(id));
   };
 
@@ -195,7 +196,28 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
       return outcome.value;
     }) as never;
 
-  const changes = Stream.fromPubSub(announcements);
+  // The announcements of the streams, and each change of each `Current`, which is followed while a reader follows this.
+  // The reader subscribes when it starts, and compares each `Current` with its value at that time, so that it misses no
+  // change that comes after it starts.
+  const changesOfCurrent = (current: Capability.Current<Availability>) =>
+    Stream.unwrap(
+      Effect.map(current.get, (first) => {
+        let last = first;
+        return current.changes.pipe(
+          Stream.filter((next) => {
+            const changed = !sameAvailability(last, next);
+            last = next;
+            return changed;
+          }),
+          Stream.as(undefined),
+        );
+      }),
+    );
+  const changes: Stream.Stream<void> = Stream.unwrap(
+    Effect.map(PubSub.subscribe(announcements), (subscription) =>
+      Stream.mergeAll([Stream.fromSubscription(subscription), ...[...currents.values()].map(changesOfCurrent)], { concurrency: "unbounded" }),
+    ),
+  );
 
   return {
     target: options.target,

@@ -127,12 +127,12 @@ test("a change of availability reaches only the handle of its capability, and re
         return { handles: yield* Handles.make(app, counted) };
       }).pipe(Scope.provide(scope)),
     );
-    const readsAtOpen = reads.length;
     const notified = new Map<string, Availability[]>();
     for (const [id, handle] of handles) {
       notified.set(id, []);
       handle.availability.subscribe((value) => notified.get(id)!.push(value));
     }
+    const readsAtOpen = reads.length;
 
     const target = "probe.item7.run";
     const reached = new Promise<void>((resolve) => handles.get(target)!.availability.subscribe(() => resolve()));
