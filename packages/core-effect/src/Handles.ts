@@ -258,13 +258,37 @@ const followAvailability = (
   // until its interruption, gives the listeners nothing.
   let generation = 0;
   const listeners = new Set<(value: Availability) => void>();
+  // Each value that the handle keeps has a version, so that a read that started before a newer value does not undo it.
+  let version = 0;
+  let refreshing = false;
   const keep = (value: Availability) => {
+    version++;
     if (!sameAvailability(snapshot, value)) snapshot = value;
   };
+  /** Read again in the background, one read at a time, for a `Current` whose read waits. */
+  const refresh = () => {
+    if (refreshing) return;
+    refreshing = true;
+    const from = version;
+    runFork(
+      Effect.map(session.availability(id), (value) => {
+        if (version === from) keep(value);
+      }).pipe(Effect.ensuring(Effect.sync(() => (refreshing = false)))),
+    );
+  };
+  // A read that waits starts the read, so once the handle knows that the availability waits, it reads only in the
+  // background.
+  let waits = false;
   const read = (): Availability => {
-    const exit = Effect.runSyncExit(session.availability(id));
-    if (Exit.isSuccess(exit)) keep(exit.value);
-    else runFork(Effect.map(session.availability(id), keep));
+    if (!waits) {
+      const exit = Effect.runSyncExit(session.availability(id));
+      if (Exit.isSuccess(exit)) {
+        keep(exit.value);
+        return snapshot;
+      }
+      waits = true;
+    }
+    refresh();
     return snapshot;
   };
   // The handle follows the availability only while a listener listens, so a handle that nobody observes costs nothing.
@@ -275,6 +299,7 @@ const followAvailability = (
           Effect.suspend(() => {
             if (mine !== generation || sameAvailability(delivered, next)) return Effect.void;
             delivered = next;
+            keep(next);
             return notify(listeners, next, "A listener of an availability failed");
           }),
         ),
