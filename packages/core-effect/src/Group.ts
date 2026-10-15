@@ -22,6 +22,7 @@ import { Cause, Context, Data, Deferred, Effect, Exit, Fiber, Layer, Scope, Sema
 import { CallFailureError, callFailure } from "@acid-cat/spec-ts";
 
 import type * as Capability from "./Capability.ts";
+import { notify } from "./internal/listeners.ts";
 
 export type Phase = "dormant" | "starting" | "started" | "stopping" | "closed";
 
@@ -94,24 +95,9 @@ export const make = <S, E, R>(
     const lock = yield* Semaphore.make(1);
     // Code that does not use Effect hears each change of the phase at once, in the fiber that makes it.
     const phaseListeners = new Set<() => void>();
-    // A listener that throws is a defect of the listener, not of the group: it is logged, and the other listeners and
-    // the group go on.
+    // A listener that throws does not stop the group: `notify` logs its error, and calls the other listeners.
     const setState = (next: State<S>) =>
-      SubscriptionRef.set(state, next).pipe(
-        Effect.andThen(
-          Effect.suspend(() => {
-            const failures: unknown[] = [];
-            for (const listener of phaseListeners) {
-              try {
-                listener();
-              } catch (cause) {
-                failures.push(cause);
-              }
-            }
-            return Effect.forEach(failures, (cause) => Effect.logError("A listener of a group failed", Cause.die(cause)), { discard: true });
-          }),
-        ),
-      );
+      SubscriptionRef.set(state, next).pipe(Effect.andThen(notify(phaseListeners, undefined, "A listener of a group failed")));
     const locked = lock.withPermits(1);
 
     /** Build the services in their own scope. If the build does not succeed, release what it built. */
