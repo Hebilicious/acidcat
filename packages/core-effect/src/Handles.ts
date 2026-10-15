@@ -11,6 +11,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, FiberSet, Layer, Scope, Stream } 
 import type * as App from "./App.ts";
 import type * as Capability from "./Capability.ts";
 import { sameAvailability } from "./internal/availability.ts";
+import { notify } from "./internal/listeners.ts";
 import * as Session from "./Session.ts";
 
 /** A value that changes, and that code without Effect can read and observe. */
@@ -225,7 +226,7 @@ function observable<T>(initial: T) {
   return {
     set(value: T) {
       current = value;
-      listeners.forEach((listener) => listener(value));
+      Effect.runSync(notify(listeners, value, "A listener of a snapshot failed"));
     },
     observable: {
       getSnapshot: () => current,
@@ -239,33 +240,42 @@ function observable<T>(initial: T) {
 
 /**
  * The availability of one capability as an observable. `getSnapshot` reads the session now, so code that does not use
- * Effect sees a change of a `Current` availability at once. It gives the same object while the value stays the same.
- * Listeners hear each value that the session announces, in order, and never the same value two times in a row.
+ * Effect sees a change of a `Current` availability at once. A `Current` whose read waits gives the last value that the
+ * handle read, and the handle reads it again in the background. It gives the same object while the value stays the
+ * same. Listeners hear each value that the session announces, in order, and never the same value two times in a row.
  */
 const followAvailability = (
   session: Session.Session,
   id: string,
   changes: boolean,
   runFork: (effect: Effect.Effect<void>) => Fiber.Fiber<void>,
+  initial: Availability,
 ): Observable<Availability> => {
-  let snapshot: Availability | undefined;
-  let delivered: Availability | undefined;
+  let snapshot = initial;
+  let delivered = initial;
   let following: Fiber.Fiber<void> | undefined;
+  // Each time that the handle starts to follow, it has a new generation. A fiber of an older generation, which may run
+  // until its interruption, gives the listeners nothing.
+  let generation = 0;
   const listeners = new Set<(value: Availability) => void>();
+  const keep = (value: Availability) => {
+    if (!sameAvailability(snapshot, value)) snapshot = value;
+  };
   const read = (): Availability => {
     const exit = Effect.runSyncExit(session.availability(id));
-    if (Exit.isSuccess(exit) && (snapshot === undefined || !sameAvailability(snapshot, exit.value))) snapshot = exit.value;
-    return snapshot!;
+    if (Exit.isSuccess(exit)) keep(exit.value);
+    else runFork(Effect.map(session.availability(id), keep));
+    return snapshot;
   };
   // The handle follows the availability only while a listener listens, so a handle that nobody observes costs nothing.
-  const follow = () =>
+  const follow = (mine: number) =>
     runFork(
       session.availabilityChanges(id).pipe(
         Stream.runForEach((next) =>
-          Effect.sync(() => {
-            if (delivered !== undefined && sameAvailability(delivered, next)) return;
+          Effect.suspend(() => {
+            if (mine !== generation || sameAvailability(delivered, next)) return Effect.void;
             delivered = next;
-            listeners.forEach((listener) => listener(next));
+            return notify(listeners, next, "A listener of an availability failed");
           }),
         ),
       ),
@@ -276,7 +286,7 @@ const followAvailability = (
       listeners.add(listener);
       if (changes && following === undefined) {
         delivered = read();
-        following = follow();
+        following = follow(++generation);
       }
       return {
         unsubscribe: () => {
@@ -284,6 +294,7 @@ const followAvailability = (
           if (listeners.size > 0 || following === undefined) return;
           const stopping = following;
           following = undefined;
+          generation++;
           runFork(Fiber.interrupt(stopping).pipe(Effect.asVoid));
         },
       };
@@ -324,7 +335,7 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
     const handles = new Map<string, Handle>();
     for (const [id, capability] of session.capabilities) {
       // Each handle follows the availability of its own capability, so a change reaches one handle.
-      const availability = followAvailability(session, id, capability.availability !== undefined, runFork);
+      const availability = followAvailability(session, id, capability.availability !== undefined, runFork, yield* session.availability(id));
 
       let snapshot: Observable<unknown> | undefined;
       if (capability.state !== undefined) {

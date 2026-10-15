@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { AVAILABLE, unavailable } from "@acid-cat/spec-ts";
+import type { Availability } from "@acid-cat/spec-ts";
 import { Effect, Exit, Layer, Logger, Option, Scope, Stream, SubscriptionRef } from "effect";
 
-import { Session, WebMcp } from "../src/index.ts";
+import { App, Capability, Session, WebMcp } from "../src/index.ts";
 import { fixture, Switch, fixtureLayer } from "./fixture.ts";
 
 /** A WebMCP host in memory. It can refuse a tool, to test a failed update, and waits until its tools agree with a condition. */
@@ -154,4 +156,39 @@ test("a status listener that throws does not stop the updates of the tools, or t
   assert.ok(Exit.isSuccess(closed));
   assert.equal(host.tools.size, 0);
   assert.deepEqual(phases.slice(-2), ["closing", "disposed"]);
+});
+
+test("a change while the first update registers the tools reaches the tools", async () => {
+  let current: Availability = AVAILABLE;
+  const listeners = new Set<(value: Availability) => void>();
+  const owner = {
+    getSnapshot: () => current,
+    subscribe(listener: (value: Availability) => void) {
+      listeners.add(listener);
+      return { unsubscribe: () => void listeners.delete(listener) };
+    },
+  };
+  const app = App.make({
+    targets: { app: { bindings: ["webmcp"] } },
+    capabilities: [Capability.make({ id: "probe.gate.pass", description: "Pass the gate.", audience: ["app"], availability: Effect.succeed(Capability.fromObservable(owner)), run: () => Effect.succeed(null) })],
+  });
+  let removed!: () => void;
+  const removal = new Promise<void>((resolve) => (removed = resolve));
+  const host: WebMcp.ModelContext = {
+    registerTool(_tool, options) {
+      // The gate closes while the update registers the tool, after the update has read the availability.
+      current = unavailable("Closed.");
+      listeners.forEach((listener) => listener(current));
+      options.signal.addEventListener("abort", () => removed());
+    },
+  };
+  const scope = Effect.runSync(Scope.make());
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const session = yield* Session.make(app, { target: "app" });
+      yield* WebMcp.install(session, { host });
+    }).pipe(Scope.provide(scope)),
+  );
+  await removal;
+  await Effect.runPromise(Scope.close(scope, Exit.void));
 });
