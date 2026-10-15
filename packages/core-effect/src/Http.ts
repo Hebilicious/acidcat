@@ -68,7 +68,7 @@ const respond = <R>(app: App.App<R>, request: Request, options: Options): Effect
 
     if (request.method === "GET" && path === "/capabilities") {
       const list = [];
-      for (const id of Object.keys(session.view.capabilities)) {
+      for (const id of session.capabilities.keys()) {
         list.push({ id, ...(yield* session.availability(id)) });
       }
       return json(200, list);

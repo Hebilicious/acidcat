@@ -2,8 +2,8 @@
  * The CLI binding (spec/bindings/cli.md): a command line made from the catalog, with `effect/cli`. This module works
  * in all runtimes. `NodeCli` in `@acid-cat/core-effect/node` runs it in Node.js.
  */
-import { bundle, CLI_EXIT_CODES, cliExitCode, cliUsage, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
-import type { CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec-ts";
+import { CLI_EXIT_CODES, cliExitCode, cliUsage, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
+import type { JsonObject, Outcome } from "@acid-cat/spec-ts";
 import { Console, Effect, Layer, Option, Schema } from "effect";
 import type { Terminal } from "effect";
 import { Argument, CliError, Command, Flag } from "effect/cli";
@@ -62,9 +62,7 @@ export type AppCommand<R> = Command.Command<string, {}, {}, never, R>;
 export function command<R>(app: App.App<R>, options: Options): AppCommand<R> {
   const target = options.target ?? "cli";
   const view = Session.make(app, { target });
-  const document = App.document(app);
-  const catalogView = { ...document, capabilities: Object.fromEntries(Object.entries(document.capabilities).filter(([, c]) => (c.audience ?? []).includes(target))) } as CatalogDocument;
-  const types = catalogView.$defs ?? {};
+  const served = App.capabilitiesOf(app, target);
 
   const invoke = (id: string, input: unknown) =>
     Effect.scoped(Effect.flatMap(view, (session) => session.invoke(id, input))).pipe(
@@ -72,8 +70,9 @@ export function command<R>(app: App.App<R>, options: Options): AppCommand<R> {
       Effect.onInterrupt(() => Effect.sync(() => (process.exitCode = CLI_EXIT_CODES.cancelled))),
     );
 
-  const leaves = Object.entries(catalogView.capabilities).map(([id, capability]) => {
-    const schema = bundle(capability.input ?? { type: "object" }, types);
+  const leaves = served.map((capability) => {
+    const id = capability.id;
+    const schema = App.inputJsonSchema(capability);
     const properties = (schema.properties ?? {}) as { readonly [name: string]: JsonObject };
     const required = new Set((schema.required ?? []) as readonly string[]);
     const definitions = (schema.$defs ?? {}) as { readonly [name: string]: JsonObject };
@@ -110,8 +109,9 @@ export function command<R>(app: App.App<R>, options: Options): AppCommand<R> {
       Effect.gen(function* () {
         const session = yield* view;
         const entries = [];
-        for (const [id, capability] of Object.entries(catalogView.capabilities)) {
-          const usage = cliUsage(options.name, id, capability.input === undefined ? undefined : bundle(capability.input, types));
+        for (const capability of served) {
+          const id = capability.id;
+          const usage = cliUsage(options.name, id, capability.input === undefined ? undefined : App.inputJsonSchema(capability));
           entries.push({ id, description: capability.description, ...(yield* session.availability(id)), usage });
         }
         yield* Console.log(JSON.stringify(entries, null, 2));

@@ -1,13 +1,13 @@
 /**
  * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP, built on `effect/ai/McpServer`.
  */
-import { bundle, MCP_REJECTIONS, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec-ts";
+import { MCP_REJECTIONS, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec-ts";
 import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
 import { Context, Effect, Layer, ManagedRuntime } from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
-import type * as App from "./App.ts";
+import * as App from "./App.ts";
 import * as Session from "./Session.ts";
 
 export interface Options {
@@ -107,20 +107,22 @@ const respond = <R>(app: App.App<R>, request: Request, options: Options) =>
     }),
   );
 
-/** Register one tool for each available capability in the view of the session. */
+/**
+ * Register one tool for each available capability in the view of the session. Each tool's schemas are written the first
+ * time that a server registers it, then kept.
+ */
 export const registerTools = (session: Session.Session) =>
   Effect.gen(function* () {
     const server = yield* McpServer.McpServer;
-    const types = session.view.$defs ?? {};
-    for (const [id, capability] of Object.entries(session.view.capabilities)) {
+    for (const [id, capability] of session.capabilities) {
       if (!(yield* session.availability(id)).available) continue;
-      const output = capability.output === undefined ? undefined : bundle(capability.output, types);
+      const output = App.outputJsonSchema(capability);
       const hasOutputSchema = output?.type === "object";
       yield* server.addTool({
         tool: new McpSchema.Tool({
           name: id,
           description: capability.description,
-          inputSchema: bundle(capability.input ?? { type: "object" }, types) as never,
+          inputSchema: App.inputJsonSchema(capability) as never,
           ...(hasOutputSchema ? { outputSchema: output as never } : {}),
           annotations: { readOnlyHint: capability.readOnly === true },
         }),

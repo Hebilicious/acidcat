@@ -3,7 +3,7 @@
  * source and the catalog is checked at build time. See spec/catalog.md#build-time-and-run-time.
  */
 import { canonicalText } from "@acid-cat/catalog";
-import { REFERENCE } from "@acid-cat/spec-ts";
+import { bundle, REFERENCE, viewOf } from "@acid-cat/spec-ts";
 import type { CatalogCapability, CatalogDocument, JsonObject } from "@acid-cat/spec-ts";
 import { Schema } from "effect";
 
@@ -89,6 +89,73 @@ export function document(app: App<any>): CatalogDocument {
 
 /** The catalog of an application, as text in canonical form. */
 export const render = (app: App<any>): string => canonicalText(document(app));
+
+const views = new WeakMap<App<any>, Map<string, CatalogDocument>>();
+
+/**
+ * The view of a target (spec/catalog.md#views). It is written from the whole catalog the first time that it is asked
+ * for, then kept for the application.
+ */
+export function view(app: App<any>, target: string): CatalogDocument {
+  let byTarget = views.get(app);
+  if (byTarget === undefined) {
+    byTarget = new Map();
+    views.set(app, byTarget);
+  }
+  let written = byTarget.get(target);
+  if (written === undefined) {
+    written = viewOf(document(app), target);
+    byTarget.set(target, written);
+  }
+  return written;
+}
+
+/** The capabilities of an application that a target can use, in the order of the application. */
+export const capabilitiesOf = <R>(app: App<R>, target: string): readonly Capability.Any<R>[] =>
+  app.capabilities.filter((capability) => capability.audience.includes(target));
+
+interface Rendered {
+  input?: JsonObject;
+  output?: JsonObject | undefined;
+}
+
+const rendered = new WeakMap<Capability.Any, Rendered>();
+
+const renderedOf = (capability: Capability.Any): Rendered => {
+  let entry = rendered.get(capability);
+  if (entry === undefined) {
+    entry = {};
+    rendered.set(capability, entry);
+  }
+  return entry;
+};
+
+/** A schema as JSON Schema, bundled with the types that it uses (spec/catalog.md#bundling). */
+function bundled(schema: Schema.Top, json: (schema: JsonObject) => JsonObject = (same) => same): JsonObject {
+  const { schema: written, definitions } = Schema.toJsonSchemaDocument(schema);
+  return bundle(json(written as JsonObject), definitions as { readonly [name: string]: JsonObject });
+}
+
+/**
+ * The input schema of a capability as bundled JSON Schema, as the view of a target has it. A capability with no input
+ * schema takes an empty object. The schema is written the first time that a binding asks for it, then kept.
+ */
+export function inputJsonSchema(capability: Capability.Any): JsonObject {
+  const entry = renderedOf(capability);
+  entry.input ??=
+    capability.input === undefined ? { type: "object" } : bundled(capability.input, (json) => inputSchema(capability.input!, json));
+  return entry.input;
+}
+
+/**
+ * The output schema of a capability as bundled JSON Schema, or `undefined` for a capability with no output schema. The
+ * schema is written the first time that a binding asks for it, then kept.
+ */
+export function outputJsonSchema(capability: Capability.Any): JsonObject | undefined {
+  const entry = renderedOf(capability);
+  if (!("output" in entry)) entry.output = capability.output === undefined ? undefined : bundled(capability.output);
+  return entry.output;
+}
 
 function tagOf(schema: JsonObject, types: { readonly [name: string]: JsonObject }): string | undefined {
   const name = typeof schema.$ref === "string" ? REFERENCE.exec(schema.$ref)?.[1] : undefined;

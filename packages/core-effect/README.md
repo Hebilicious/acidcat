@@ -60,6 +60,8 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 | `Cli` | [CLI](../../spec/bindings/cli.md) | `Cli.run(app, options)`, on `effect/cli`. `NodeCli.main(app, layer, options)` from `@acid-cat/core-effect/node` runs it as the main program of a Node.js process |
 | `WebMcp` | [WebMCP](../../spec/bindings/webmcp.md) | `WebMcp.install(session)` |
 
+A session opens from the declarations of the capabilities. It writes no JSON Schema when it opens. `session.capabilities` gives the capabilities of the view by id. A binding writes the schemas of a capability only when it needs them, with `App.inputJsonSchema(capability)` and `App.outputJsonSchema(capability)`, and the application keeps them for all later sessions. `session.view` writes the whole view the first time that it is read. A handle follows the availability of its own capability with `session.availabilityChanges(id)`, so a change reaches only that handle.
+
 `layer` gives the services that the capabilities need. A web handler is `(request: Request) => Promise<Response>`. It works in Node, Bun, Deno and Cloudflare Workers.
 
 ### Services for each request

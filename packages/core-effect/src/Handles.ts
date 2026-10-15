@@ -9,6 +9,7 @@ import type { Availability, Result } from "@acid-cat/spec-ts";
 import { Cause, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect";
 
 import type * as App from "./App.ts";
+import { sameAvailability } from "./internal/availability.ts";
 import * as Session from "./Session.ts";
 
 /** A value that changes, and that code without Effect can read and observe. */
@@ -82,25 +83,22 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
     };
 
     const handles = new Map<string, Handle>();
-    for (const capability of app.capabilities) {
-      const described = session.view.capabilities[capability.id];
-      if (described === undefined) continue;
-      const id = capability.id;
-
+    for (const [id, capability] of session.capabilities) {
+      // Each handle follows the availability of its own capability, so a change reaches one handle.
       const availability = observable(yield* session.availability(id));
-      yield* session.changes.pipe(
-        Stream.runForEach(() =>
-          session.availability(id).pipe(
-            Effect.map((next) => {
-              if (JSON.stringify(next) !== JSON.stringify(availability.observable.getSnapshot())) availability.set(next);
+      if (capability.availability !== undefined) {
+        yield* session.availabilityChanges(id).pipe(
+          Stream.runForEach((next) =>
+            Effect.sync(() => {
+              if (!sameAvailability(availability.observable.getSnapshot(), next)) availability.set(next);
             }),
           ),
-        ),
-        Effect.forkIn(scope, { startImmediately: true }),
-      );
+          Effect.forkIn(scope, { startImmediately: true }),
+        );
+      }
 
       let snapshot: Observable<unknown> | undefined;
-      if (described.state !== undefined) {
+      if (capability.state !== undefined) {
         // The stream gives the current value first. Wait for it, so that `getSnapshot` always has a value.
         const first = yield* Deferred.make<void>();
         const state = observable<unknown>(undefined);
@@ -114,8 +112,8 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
 
       handles.set(id, {
         id,
-        description: described.description,
-        audience: described.audience ?? [],
+        description: capability.description,
+        audience: [session.target],
         availability: availability.observable,
         ...(snapshot === undefined ? {} : { snapshot }),
         execute: (input, options) =>
@@ -169,7 +167,9 @@ export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, opti
   );
   return {
     target: session.target,
-    view: session.view,
+    get view() {
+      return session.view;
+    },
     handles,
     signal: lifetime.signal,
     async dispose() {

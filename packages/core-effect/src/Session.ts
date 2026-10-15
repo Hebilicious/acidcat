@@ -1,22 +1,33 @@
 /**
  * A session: the context of the calls of one client, for one target. See spec/invocation.md.
  */
-import { AVAILABLE, callFailure, viewOf } from "@acid-cat/spec-ts";
+import { AVAILABLE, callFailure } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CatalogDocument, Outcome } from "@acid-cat/spec-ts";
 import { Cause, Data, Deferred, Effect, Exit, Fiber, FiberSet, PubSub, Ref, Schema, SchemaIssue, Scope, Stream, SubscriptionRef } from "effect";
 
 import * as App from "./App.ts";
 import type * as Capability from "./Capability.ts";
+import { sameAvailability } from "./internal/availability.ts";
 
 /** A call failure in the error channel of `execute`. */
 export class CallFailed extends Data.TaggedError("CallFailed")<CallFailure> {}
 
 export interface Session {
   readonly target: string;
-  /** The view of the target (spec/catalog.md#views). Bindings take names, descriptions and schemas from it. */
+  /**
+   * The capabilities in the view of the target, by id, in the order of the application. Bindings take ids,
+   * descriptions, hints and schemas from them. `App.inputJsonSchema` and `App.outputJsonSchema` give their schemas.
+   */
+  readonly capabilities: ReadonlyMap<string, Capability.Any>;
+  /**
+   * The view of the target (spec/catalog.md#views), as a catalog. The session writes it the first time that it is
+   * read, so a session that only calls capabilities never writes JSON Schema.
+   */
   readonly view: CatalogDocument;
   /** The current availability of a capability in the view. */
   readonly availability: (id: string) => Effect.Effect<Availability>;
+  /** The availability of one capability: the current value, then each change. */
+  readonly availabilityChanges: (id: string) => Stream.Stream<Availability>;
   /** An event each time the availability of a capability changes. */
   readonly changes: Stream.Stream<void>;
   /**
@@ -41,7 +52,6 @@ const EmptyInput = Schema.Record(Schema.String, Schema.Unknown);
 /** Open a session for a target. The session closes with its scope. */
 export const make = <R>(app: App.App<R>, options: { readonly target: string }): Effect.Effect<Session, never, R | Scope.Scope> =>
   Effect.gen(function* () {
-  const view = viewOf(App.document(app), options.target);
   const context = yield* Effect.context<R>();
   const scope = yield* Effect.scope;
   const running = yield* FiberSet.make<unknown, unknown>();
@@ -50,20 +60,26 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
 
   const announcements = yield* PubSub.unbounded<void>();
   const served = new Map<string, Capability.Any<R>>();
+  // A capability with no availability stream is always available, and has no ref.
   const availability = new Map<string, SubscriptionRef.SubscriptionRef<Availability>>();
-  for (const capability of app.capabilities) {
-    if (!(capability.id in view.capabilities)) continue;
+  for (const capability of App.capabilitiesOf(app, options.target)) {
+    if (served.has(capability.id)) throw new Error(`The capability ${capability.id} is declared two times.`);
     served.set(capability.id, capability);
+    if (capability.availability === undefined) continue;
     const ref = yield* SubscriptionRef.make<Availability>(AVAILABLE);
     availability.set(capability.id, ref);
-    if (capability.availability !== undefined) {
-      yield* capability.availability.pipe(
-        Stream.runForEach((value) => SubscriptionRef.set(ref, value).pipe(Effect.andThen(PubSub.publish(announcements, undefined)))),
-        Effect.provideContext(context),
-        // Start at once, so that the stream follows its source before the session is returned.
-        Effect.forkIn(scope, { startImmediately: true }),
-      );
-    }
+    yield* capability.availability.pipe(
+      Stream.runForEach((value) =>
+        Effect.gen(function* () {
+          if (sameAvailability(yield* SubscriptionRef.get(ref), value)) return;
+          yield* SubscriptionRef.set(ref, value);
+          yield* PubSub.publish(announcements, undefined);
+        }),
+      ),
+      Effect.provideContext(context),
+      // Start at once, so that the stream follows its source before the session is returned.
+      Effect.forkIn(scope, { startImmediately: true }),
+    );
   }
 
   // Each state is a ref, made when its stream gives its first value. A reader waits for that value.
@@ -96,9 +112,18 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
 
   const unknown = (id: string) => callFailure("unknown-capability", `There is no capability ${id}.`);
 
+  const notServed = (id: string): Availability => ({ available: false, reason: unknown(id).message });
+
   const availabilityOf = (id: string): Effect.Effect<Availability> => {
     const ref = availability.get(id);
-    return ref === undefined ? Effect.succeed({ available: false, reason: unknown(id).message }) : SubscriptionRef.get(ref);
+    if (ref !== undefined) return SubscriptionRef.get(ref);
+    return Effect.succeed(served.has(id) ? AVAILABLE : notServed(id));
+  };
+
+  const availabilityChanges = (id: string): Stream.Stream<Availability> => {
+    const ref = availability.get(id);
+    if (ref !== undefined) return SubscriptionRef.changes(ref);
+    return Stream.make(served.has(id) ? AVAILABLE : notServed(id));
   };
 
   /** Admit, validate and run a call. The program fails with a call failure, or with a failure of the capability. */
@@ -160,7 +185,19 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
 
   const changes = Stream.fromPubSub(announcements);
 
-  return { target: options.target, view, availability: availabilityOf, changes, state: stateOf, invoke, execute } satisfies Session;
+  return {
+    target: options.target,
+    capabilities: served,
+    get view() {
+      return App.view(app, options.target);
+    },
+    availability: availabilityOf,
+    availabilityChanges,
+    changes,
+    state: stateOf,
+    invoke,
+    execute,
+  } satisfies Session;
   });
 
 /** Encode a value with its schema. `undefined` if the value does not agree with the schema. */

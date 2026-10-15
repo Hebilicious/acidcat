@@ -1,9 +1,10 @@
 /**
  * The WebMCP binding (spec/bindings/webmcp.md): register capabilities as WebMCP tools in a web page.
  */
-import { bundle, callFailure, CallFailureError, isCallFailure } from "@acid-cat/spec-ts";
+import { callFailure, CallFailureError, isCallFailure } from "@acid-cat/spec-ts";
 import { Effect, Option, Queue, Scope, Stream, SubscriptionRef } from "effect";
 
+import * as App from "./App.ts";
 import type * as Session from "./Session.ts";
 
 /** A WebMCP tool, as `registerTool` receives it. */
@@ -57,14 +58,13 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
     const registered = new Map<string, AbortController>();
     const calls = new Set<Promise<unknown>>();
     const requests = yield* Queue.sliding<void>(1);
-    const types = session.view.$defs ?? {};
 
     const toolFor = (id: string): ModelContextTool => {
-      const capability = session.view.capabilities[id]!;
+      const capability = session.capabilities.get(id)!;
       return {
         name: id,
         description: capability.description,
-        inputSchema: bundle(capability.input ?? { type: "object" }, types),
+        inputSchema: App.inputJsonSchema(capability),
         execute: (input, callOptions) => {
           const signal = AbortSignal.any([lifetime.signal, ...(callOptions?.signal ? [callOptions.signal] : [])]);
           const call = Effect.runPromiseWith(context)(session.invoke(id, input), { signal }).then(
@@ -88,7 +88,7 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
     /** One update. If it fails, the tools stay as they were before the update. */
     const pass = Effect.gen(function* () {
       const wanted = new Set<string>();
-      for (const id of Object.keys(session.view.capabilities)) {
+      for (const id of session.capabilities.keys()) {
         if ((yield* session.availability(id)).available) wanted.add(id);
       }
       const added = new Map<string, AbortController>();
