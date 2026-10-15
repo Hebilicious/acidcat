@@ -31,7 +31,7 @@ test("Cli.command needs the services of the application", () => {
 
 test("Cli.command gives the services to the commands of the capabilities, and keeps the needs of the commands of the application", () => {
   const withServices: Command.Command<string, {}, {}, never, never> = Cli.command(fixture, { ...options, services: switchLayer });
-  const greet = Command.make("greet", {}, () => Switch.use(() => Effect.void));
+  const greet = Cli.declare("greet", {}, () => Switch.use(() => Effect.void));
   const needsSwitch: Command.Command<string, {}, {}, never, Switch> = Cli.command(fixture, { ...options, services: switchLayer, commands: [greet] });
   // @ts-expect-error The command of the application needs the switch.
   const missing: Command.Command<string, {}, {}, never, never> = Cli.command(fixture, { ...options, services: switchLayer, commands: [greet] });

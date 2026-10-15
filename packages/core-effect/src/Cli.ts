@@ -7,7 +7,7 @@ import type { JsonObject, Outcome } from "@acid-cat/spec-ts";
 import { Console, Effect, Layer, Option, Schema } from "effect";
 import type { Terminal } from "effect";
 import { Argument, CliError, Command, Flag, GlobalFlag } from "effect/cli";
-import type { Param } from "effect/cli";
+import { Param } from "effect/cli";
 
 import * as App from "./App.ts";
 import * as Session from "./Session.ts";
@@ -66,14 +66,88 @@ type SettingsOf<Flags extends ReadonlyArray<GlobalFlag.GlobalFlag<any>>> = Flags
     : never
   : never;
 
+/**
+ * The parts of a command that the checks of `Cli.command` read: its name, the names and the aliases of its own flags,
+ * and its subcommands.
+ */
+interface Shape {
+  readonly name: string;
+  /** Where the flags come from, in the messages of the checks: an id, or the path of a command. */
+  readonly owner: string;
+  readonly flags: readonly string[];
+  readonly subcommands: readonly Shape[];
+}
+
+/**
+ * A command of the application, made by `Cli.declare` from parts that the binding can read. `effect/cli` gives no way
+ * to read the flags of a command that it made, so the binding makes the command from its parts, and checks them.
+ */
+export interface Declared<C extends Command.Command<any, any, any, any, any>> {
+  readonly command: C;
+  readonly shape: Shape;
+}
+
+type AnyDeclared = Declared<Command.Command<any, any, any, any, any>>;
+
+/**
+ * Declare a command of the application: its name, its flags and arguments in the form that `Command.make` takes, its
+ * handler, and its subcommands. `Cli.command` adds it beside the commands of the capabilities, and checks its names.
+ */
+export function declare<
+  const Name extends string,
+  const Config extends Command.Command.Config,
+  E = never,
+  R = never,
+  const Subcommands extends ReadonlyArray<AnyDeclared> = readonly [],
+>(
+  name: Name,
+  config: Config,
+  handler?: (input: Command.Command.Config.Infer<Config>) => Effect.Effect<void, E, R>,
+  options: {
+    readonly description?: string | undefined;
+    readonly examples?: ReadonlyArray<Command.Command.Example> | undefined;
+    readonly subcommands?: Subcommands | undefined;
+  } = {},
+): Declared<
+  Command.Command<
+    Name,
+    Command.Command.Config.Infer<Config>,
+    {},
+    E | Command.Error<Subcommands[number]["command"]>,
+    R | Command.Services<Subcommands[number]["command"]>
+  >
+> {
+  const subcommands = options.subcommands ?? [];
+  let made: Command.Command<any, any, any, any, any> = handler === undefined ? Command.make(name, config) : Command.make(name, config, handler);
+  if (options.description !== undefined) made = made.pipe(Command.withDescription(options.description));
+  if (options.examples !== undefined) made = made.pipe(Command.withExamples(options.examples));
+  if (subcommands.length > 0) made = made.pipe(Command.withSubcommands(subcommands.map((each) => each.command) as never));
+  return {
+    command: made as never,
+    shape: { name, owner: `the command ${name}`, flags: flagsOfConfig(config), subcommands: subcommands.map((each) => each.shape) },
+  };
+}
+
+/** The names and the aliases of the flags in the config of a command. */
+function flagsOfConfig(config: Command.Command.Config | ReadonlyArray<unknown>): string[] {
+  return Object.values(config).flatMap((value: unknown): string[] => {
+    if (Param.isParam(value)) return value.kind === "flag" ? flagNames(value as Param.Param<"flag", unknown>) : [];
+    if (Array.isArray(value)) return flagsOfConfig(value);
+    return typeof value === "object" && value !== null ? flagsOfConfig(value as Command.Command.Config) : [];
+  });
+}
+
 export interface CommandOptions<
-  Commands extends ReadonlyArray<Command.Command<any, any, any, any, any>>,
+  Commands extends ReadonlyArray<AnyDeclared>,
   GlobalFlags extends ReadonlyArray<GlobalFlag.GlobalFlag<any>>,
   LA,
   LE,
   LR,
 > extends Options {
-  /** The commands of the application, beside the commands of the capabilities (spec/bindings/cli.md#commands). */
+  /**
+   * The commands of the application, beside the commands of the capabilities (spec/bindings/cli.md#commands). Make each
+   * one with `Cli.declare`, so that the binding can check its names.
+   */
   readonly commands?: Commands | undefined;
   /** The flags of the application, for all commands. The services of the capabilities can depend on them. */
   readonly globalFlags?: GlobalFlags | undefined;
@@ -86,12 +160,13 @@ export interface CommandOptions<
 
 /**
  * The root command: one command for each capability in the view, `call` and `list`, and the commands of the
- * application. The program stops with an error when two commands have the same path, or when the flag of a capability
- * has the name of a global flag (spec/bindings/cli.md#commands). `Cli.command` checks this when it makes the command.
+ * application. The program stops with an error when two commands have the same path, or when two flags in the scope
+ * of a command have the same name or alias (spec/bindings/cli.md#commands). The scope of a command is its own flags and
+ * the global flags, of the application and of `effect/cli`. `Cli.command` checks this when it makes the command.
  */
 export function command<
   R,
-  const Commands extends ReadonlyArray<Command.Command<any, any, any, any, any>> = readonly [],
+  const Commands extends ReadonlyArray<AnyDeclared> = readonly [],
   const GlobalFlags extends ReadonlyArray<GlobalFlag.GlobalFlag<any>> = readonly [],
   LA = never,
   LE = never,
@@ -103,8 +178,8 @@ export function command<
   string,
   {},
   {},
-  LE | Command.Error<Commands[number]>,
-  Exclude<Exclude<R, LA> | LR | Command.Services<Commands[number]>, SettingsOf<GlobalFlags>>
+  LE | Command.Error<Commands[number]["command"]>,
+  Exclude<Exclude<R, LA> | LR | Command.Services<Commands[number]["command"]>, SettingsOf<GlobalFlags>>
 > {
   const target = options.target ?? "cli";
   const view = Session.make(app, { target });
@@ -166,30 +241,77 @@ export function command<
   ).pipe(Command.withDescription("List the capabilities, with their availability."));
 
   const globalFlags = options.globalFlags ?? [];
-  const globalNames = new Set([...GlobalFlag.BuiltIns, ...globalFlags].flatMap((flag) => flagNames(flag.flag)));
-  for (const { id, flags } of leaves) {
-    for (const name of Object.keys(flags)) {
-      if (globalNames.has(name)) throw new Error(`The flag --${name} of ${id} has the same name as a global flag of the command line.`);
-    }
-  }
+  const applicationCommands = options.commands ?? [];
+  check(
+    options.name,
+    [...GlobalFlag.BuiltIns, ...globalFlags].flatMap((flag) => flagNames(flag.flag)),
+    [
+      { name: "call", owner: "the command call", flags: [], subcommands: [] },
+      { name: "list", owner: "the command list", flags: [], subcommands: [] },
+      ...shapesOf(leaves.map(({ id, path, flags }) => ({ id, path, flags: Object.keys(flags) }))),
+      ...applicationCommands.map((each) => each.shape),
+    ],
+  );
 
   const services = options.services;
   const provided = (each: Command.Command<string, any, {}, never, R>): Command.Command<string, any, {}, LE, Exclude<R, LA> | LR> =>
     services === undefined ? (each as never) : each.pipe(Command.provide(services));
   const bindingCommands = [call, list, ...group(leaves, [])].map(provided);
-  const applicationCommands = options.commands ?? [];
-
-  const taken = new Set<string>();
-  for (const each of [...bindingCommands, ...applicationCommands]) {
-    if (taken.has(each.name)) throw new Error(`Two commands of the command line have the path ${options.name} ${each.name}.`);
-    taken.add(each.name);
-  }
 
   const root = Command.make(options.name).pipe(
     Command.withDescription(app.description ?? app.title ?? options.name),
-    Command.withSubcommands([...bindingCommands, ...applicationCommands]),
+    Command.withSubcommands([...bindingCommands, ...applicationCommands.map((each) => each.command)]),
   );
   return (globalFlags.length === 0 ? root : root.pipe(Command.withGlobalFlags(globalFlags))) as never;
+}
+
+/** The first value that a list has two times. */
+function repeated(values: readonly string[]): string | undefined {
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) return value;
+    seen.add(value);
+  }
+  return undefined;
+}
+
+/**
+ * Check the names of a command line: no two global flags with one name or alias, no two sibling commands with one name
+ * at any level, and no two flags with one name or alias in the scope of a command.
+ */
+function check(program: string, globalNames: readonly string[], commands: readonly Shape[]): void {
+  const global = repeated(globalNames);
+  if (global !== undefined) throw new Error(`Two global flags of the command line have the name ${global}.`);
+  const globals = new Set(globalNames);
+  const walk = (path: readonly string[], siblings: readonly Shape[]) => {
+    const sibling = repeated(siblings.map((each) => each.name));
+    if (sibling !== undefined) throw new Error(`Two commands of the command line have the path ${[...path, sibling].join(" ")}.`);
+    for (const each of siblings) {
+      const own = repeated(each.flags);
+      if (own !== undefined) throw new Error(`Two flags of ${each.owner} have the name ${own}.`);
+      const hidden = each.flags.find((name) => globals.has(name));
+      if (hidden !== undefined) throw new Error(`The flag --${hidden} of ${each.owner} has the same name as a global flag of the command line.`);
+      walk([...path, each.name], each.subcommands);
+    }
+  };
+  walk([program], commands);
+}
+
+/** The shapes of the commands of the capabilities: the commands of the ids, in the groups of their shared prefixes. */
+function shapesOf(leaves: readonly { readonly id: string; readonly path: readonly string[]; readonly flags: readonly string[] }[]): Shape[] {
+  const shapes: Shape[] = [];
+  const byWord = new Map<string, { readonly id: string; readonly path: readonly string[]; readonly flags: readonly string[] }[]>();
+  for (const leaf of leaves) {
+    if (leaf.path.length === 1) {
+      shapes.push({ name: leaf.path[0]!, owner: leaf.id, flags: leaf.flags, subcommands: [] });
+      continue;
+    }
+    const children = byWord.get(leaf.path[0]!) ?? [];
+    children.push({ ...leaf, path: leaf.path.slice(1) });
+    byWord.set(leaf.path[0]!, children);
+  }
+  for (const [word, children] of byWord) shapes.push({ name: word, owner: `the group ${word}`, flags: [], subcommands: shapesOf(children) });
+  return shapes;
 }
 
 /** The names and the aliases of a flag. */

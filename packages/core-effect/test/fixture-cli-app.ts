@@ -4,7 +4,7 @@
  * its outcome as the commands of the capabilities do, and it does not get their services.
  */
 import { Effect, Layer, SubscriptionRef } from "effect";
-import { Argument, Command, Flag, GlobalFlag } from "effect/cli";
+import { Argument, Flag, GlobalFlag } from "effect/cli";
 
 import { Cli } from "../src/index.ts";
 import { NodeCli } from "../src/node.ts";
@@ -14,9 +14,12 @@ const switchFlag = GlobalFlag.Setting("switch")({
   flag: Flag.Boolean("switch").pipe(Flag.withDescription("The first position of the switch."), Flag.withDefault(true)),
 });
 
-const greet = Command.make("greet", { name: Argument.String("name") }, ({ name }) =>
-  name === "nobody" ? Cli.print({ ok: false, error: { _tag: "NoOne" } }) : Cli.print({ ok: true, value: `Hello, ${name}.` }),
-).pipe(Command.withDescription("Greet someone."));
+const greet = Cli.declare(
+  "greet",
+  { name: Argument.String("name") },
+  ({ name }) => (name === "nobody" ? Cli.print({ ok: false, error: { _tag: "NoOne" } }) : Cli.print({ ok: true, value: `Hello, ${name}.` })),
+  { description: "Greet someone." },
+);
 
 const command = Cli.command(fixture, {
   name: "fixture",
