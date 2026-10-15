@@ -3,11 +3,12 @@
  */
 import { MCP_REJECTIONS, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec-ts";
 import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer, ManagedRuntime } from "effect";
+import { Cause, Context, Effect, Exit, Layer, ManagedRuntime } from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
 import * as App from "./App.ts";
+import * as Capability from "./Capability.ts";
 import { answer } from "./internal/answer.ts";
 import * as Session from "./Session.ts";
 
@@ -144,6 +145,12 @@ export const registerTools = (session: Session.Session) =>
     const server = yield* McpServer.McpServer;
     for (const [id, capability] of session.capabilities) {
       if (!(yield* session.availability(id)).available) continue;
+      // A lazy capability loads its schemas here. One that does not load is not listed, and its error is logged.
+      const loaded = yield* Effect.exit(Capability.load(capability));
+      if (Exit.isFailure(loaded)) {
+        yield* Effect.logError("A capability did not load", Cause.pretty(loaded.cause));
+        continue;
+      }
       const output = App.outputJsonSchema(capability);
       const hasOutputSchema = output?.type === "object";
       yield* server.addTool({

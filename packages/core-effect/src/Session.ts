@@ -6,7 +6,7 @@ import type { Availability, CallFailure, CatalogDocument, Outcome } from "@acid-
 import { Cause, Data, Deferred, Effect, Exit, Fiber, FiberSet, PubSub, Ref, Schema, SchemaIssue, Scope, Stream, SubscriptionRef } from "effect";
 
 import * as App from "./App.ts";
-import type * as Capability from "./Capability.ts";
+import * as Capability from "./Capability.ts";
 import { sameAvailability } from "./internal/availability.ts";
 
 /** A call failure in the error channel of `execute`. */
@@ -167,7 +167,15 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
     Effect.gen(function* () {
       const admitted = yield* admit(id);
       if ("kind" in admitted) return admitted;
-      const capability = admitted;
+      // A lazy capability loads its schemas and program here. A load that fails is `internal`; a cancelled one is
+      // `cancelled`, as an interrupted call is.
+      const loaded = yield* Effect.exit(Capability.load(admitted));
+      if (Exit.isFailure(loaded)) {
+        if (Cause.hasInterruptsOnly(loaded.cause)) return yield* Effect.interrupt;
+        yield* Effect.logError("A capability did not load", Cause.pretty(loaded.cause));
+        return callFailure("internal", "The capability failed.");
+      }
+      const capability = loaded.value;
       const decoded = yield* Schema.decodeUnknownEffect((capability.input ?? EmptyInput) as Schema.Codec<unknown, unknown>)(input).pipe(
         Effect.result,
       );

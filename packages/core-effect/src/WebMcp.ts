@@ -2,10 +2,10 @@
  * The WebMCP binding (spec/bindings/webmcp.md): register capabilities as WebMCP tools in a web page.
  */
 import { callFailure, CallFailureError, isCallFailure } from "@acid-cat/spec-ts";
-import { Effect, Option, Queue, Scope, Stream, SubscriptionRef } from "effect";
+import { Effect, Exit, Option, Queue, Scope, Stream, SubscriptionRef } from "effect";
 
 import * as App from "./App.ts";
-import type * as Capability from "./Capability.ts";
+import * as Capability from "./Capability.ts";
 import { notify } from "./internal/listeners.ts";
 import type * as Session from "./Session.ts";
 
@@ -102,8 +102,12 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
     /** One update. If it fails, the tools stay as they were before the update. */
     const pass = Effect.gen(function* () {
       const wanted = new Set<string>();
-      for (const id of session.capabilities.keys()) {
-        if ((yield* session.availability(id)).available) wanted.add(id);
+      for (const [id, capability] of session.capabilities) {
+        if (!(yield* session.availability(id)).available) continue;
+        // A lazy capability loads its schemas here. If it does not load, the update fails, and keeps the last tools.
+        const loaded = yield* Effect.exit(Capability.load(capability));
+        if (Exit.isFailure(loaded)) return yield* Effect.fail(`The capability ${id} did not load.`);
+        wanted.add(id);
       }
       const added = new Map<string, AbortController>();
       const registrations = [...wanted].filter((id) => !registered.has(id));

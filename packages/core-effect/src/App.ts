@@ -5,9 +5,9 @@
 import { canonicalText } from "@acid-cat/catalog";
 import { bundle, REFERENCE, viewOf } from "@acid-cat/spec-ts";
 import type { CatalogCapability, CatalogDocument, JsonObject } from "@acid-cat/spec-ts";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
-import type * as Capability from "./Capability.ts";
+import * as Capability from "./Capability.ts";
 
 export interface Target {
   /** The bindings that serve the target, for example `["mcp"]`. */
@@ -31,7 +31,23 @@ export const make = <const Capabilities extends readonly Capability.Any[]>(app: 
   readonly capabilities: Capabilities;
 }): App<Capability.Services<Capabilities[number]>> => app;
 
-/** The catalog of an application, as a JSON document. */
+/**
+ * The capability with its schemas. A lazy capability must have loaded: `load` loads the lazy capabilities of an
+ * application.
+ */
+function withSchemas(capability: Capability.Any): Capability.Any {
+  const loaded = Capability.loadedNow(capability);
+  if (loaded === undefined) {
+    throw new Error(`The capability ${capability.id} is lazy, and has not loaded. Load the lazy capabilities with App.load(app) first.`);
+  }
+  return loaded;
+}
+
+/** Load the lazy capabilities of an application, so that `document`, `render` and `Cli.command` can write their schemas. */
+export const load = (app: App<any>): Effect.Effect<void> =>
+  Effect.forEach(app.capabilities, Capability.load, { concurrency: "unbounded", discard: true });
+
+/** The catalog of an application, as a JSON document. A lazy capability must have loaded (see `load`). */
 export function document(app: App<any>): CatalogDocument {
   const types: Record<string, JsonObject> = {};
 
@@ -48,7 +64,7 @@ export function document(app: App<any>): CatalogDocument {
   };
 
   const capabilities: Record<string, CatalogCapability> = {};
-  for (const capability of app.capabilities) {
+  for (const capability of app.capabilities.map(withSchemas)) {
     if (capability.id in capabilities) throw new Error(`The capability ${capability.id} is declared two times.`);
     const failures: Record<string, JsonObject> = {};
     for (const failure of capability.failures ?? []) {
@@ -140,8 +156,9 @@ function bundled(schema: Schema.Top, json: (schema: JsonObject) => JsonObject = 
  * The input schema of a capability as bundled JSON Schema, as the view of a target has it. A capability with no input
  * schema takes an empty object. The schema is written the first time that a binding asks for it, then kept.
  */
-export function inputJsonSchema(capability: Capability.Any): JsonObject {
-  const entry = renderedOf(capability);
+export function inputJsonSchema(declared: Capability.Any): JsonObject {
+  const entry = renderedOf(declared);
+  const capability = entry.input === undefined ? withSchemas(declared) : declared;
   entry.input ??=
     capability.input === undefined ? { type: "object" } : bundled(capability.input, (json) => inputSchema(capability.input!, json));
   return entry.input;
@@ -151,8 +168,9 @@ export function inputJsonSchema(capability: Capability.Any): JsonObject {
  * The output schema of a capability as bundled JSON Schema, or `undefined` for a capability with no output schema. The
  * schema is written the first time that a binding asks for it, then kept.
  */
-export function outputJsonSchema(capability: Capability.Any): JsonObject | undefined {
-  const entry = renderedOf(capability);
+export function outputJsonSchema(declared: Capability.Any): JsonObject | undefined {
+  const entry = renderedOf(declared);
+  const capability = "output" in entry ? declared : withSchemas(declared);
   if (!("output" in entry)) entry.output = capability.output === undefined ? undefined : bundled(capability.output);
   return entry.output;
 }

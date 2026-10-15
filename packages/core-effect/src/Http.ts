@@ -5,7 +5,7 @@ import { callFailure, httpStatus, isCallFailure, readBounded, screenRequest } fr
 import type { Rejection } from "@acid-cat/spec-ts";
 import { Effect, Layer, ManagedRuntime } from "effect";
 
-import type * as App from "./App.ts";
+import * as App from "./App.ts";
 import { answer } from "./internal/answer.ts";
 import * as Session from "./Session.ts";
 
@@ -125,6 +125,7 @@ const respond = <R>(app: App.App<R>, routed: Route, options: Options): Effect.Ef
         return json(200, list);
       }
       case "catalog":
+        yield* App.load(app);
         return json(200, session.view);
       case "call": {
         const outcome = yield* session.invoke(routed.id, routed.input);

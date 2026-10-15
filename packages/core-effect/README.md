@@ -111,6 +111,27 @@ async function showPlanner(planning: Group.Group<Planner>, signal: AbortSignal) 
 }
 ```
 
+### Capabilities that load when they are needed
+
+`Capability.lazy(metadata, load)` declares a capability whose schemas and program are in a module that loads when they are needed. The metadata (id, description, audience, `readOnly`, availability) is declared at once, so that a session and its handles open without the module:
+
+```ts
+import { App, Capability } from "@acid-cat/core-effect";
+
+const generate = Capability.lazy(
+  { id: "plan.generate", description: "Make a plan with some stops.", audience: ["app", "mcp"], readOnly: true },
+  () => import("./plan.capability.ts").then((module) => module.generate),
+);
+
+const app = App.make({ targets: { app: { bindings: ["typescript"] }, mcp: { bindings: ["mcp"] } }, capabilities: [generate] });
+```
+
+- The capability has the types of the capability that `load` gives, so its handle is typed.
+- It loads on its first call, when MCP lists its tools, when WebMCP registers it, and in `App.load(app)`. It loads one time.
+- A call that is cancelled while the module loads does not stop the load for other calls. A load that fails gives the call failure `internal`, and the next call loads again.
+- `App.document`, `App.render` and `Cli.command` need the schemas: run `App.load(app)` first. `Cli.run` and `NodeCli.main` do this. The catalog is the same as the catalog of the same capabilities declared at once.
+- A lazy capability has no state.
+
 ## Write the catalog
 
 ```ts

@@ -34,7 +34,11 @@ export interface Options {
  * The command line as an Effect. Exit codes follow spec/bindings/cli.md. To run it as the main program of a Node.js
  * process, use `NodeCli.main` from `@acid-cat/core-effect/node`.
  */
-export const run = <R>(app: App.App<R>, options: Options) => runCommand(command(app, options), options);
+export const run = <R>(app: App.App<R>, options: Options) =>
+  Effect.andThen(
+    App.load(app),
+    Effect.suspend(() => runCommand(command(app, options), options)),
+  );
 
 /**
  * Run a command that `command` made, after the application changed it: for example with its own flags
