@@ -60,7 +60,7 @@ export function document(app: App<any>): CatalogDocument {
     capabilities[capability.id] = {
       description: capability.description,
       audience: capability.audience,
-      ...(capability.input === undefined ? {} : { input: objectSchema(toJson(capability.input, capability.id)) }),
+      ...(capability.input === undefined ? {} : { input: inputSchema(capability.input, toJson(capability.input, capability.id)) }),
       ...(capability.output === undefined ? {} : { output: toJson(capability.output, capability.id) }),
       ...(Object.keys(failures).length === 0 ? {} : { failures }),
       ...(capability.readOnly === true ? { readOnly: true } : {}),
@@ -102,9 +102,13 @@ function tagOf(schema: JsonObject, types: { readonly [name: string]: JsonObject 
 
 /**
  * Effect writes an empty `Schema.Struct({})` as "not null", because an empty TypeScript object type accepts almost
- * any value. A catalog input is always an object, so write it as one.
+ * any value. A catalog input is always an object, so write it as one. An empty struct is an input with no properties,
+ * so it gets an empty `properties` (spec/catalog.md#capabilities). Other schemas that Effect writes as "not null"
+ * take any object.
  */
-function objectSchema(schema: JsonObject): JsonObject {
-  const notNull = Object.keys(schema).length === 1 && JSON.stringify(schema.not) === JSON.stringify({ type: "null" });
-  return notNull ? { type: "object" } : schema;
+function inputSchema(input: Schema.Top, json: JsonObject): JsonObject {
+  const notNull = Object.keys(json).length === 1 && JSON.stringify(json.not) === JSON.stringify({ type: "null" });
+  if (!notNull) return json;
+  const fields = "fields" in input ? (input.fields as object) : undefined;
+  return fields !== undefined && Object.keys(fields).length === 0 ? { type: "object", properties: {} } : { type: "object" };
 }

@@ -213,7 +213,11 @@
         "mcp",
         "cli",
         "api"
-      ]
+      ],
+      "input": {
+        "properties": {},
+        "type": "object"
+      }
     }
   }
 }

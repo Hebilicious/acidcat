@@ -85,6 +85,7 @@ export const fixture = App.make({
       id: "fixture.toggle",
       description: "Available only while the switch is on.",
       audience: everywhere,
+      input: Schema.Struct({}),
       availability: Stream.unwrap(
         Effect.gen(function* () {
           const ref = yield* Switch;

@@ -75,6 +75,10 @@ capabilities {
   ["fixture.toggle"] {
     description = "Available only while the switch is on."
     audience = allTargets
+    input {
+      type = "object"
+      properties {}
+    }
   }
   ["fixture.switch.set"] {
     description = "Turn the switch on or off. The switch controls the availability of fixture.toggle."

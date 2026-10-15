@@ -39,7 +39,7 @@ A provider and its bindings conform for a target if, through each binding of the
 | `fixture.crash` | Fails with a defect |
 | `fixture.slow` | Waits, then returns `null`. The tests cancel it |
 | `fixture.hidden` | Only the `app` target can use it |
-| `fixture.toggle` | Available only while the switch is on |
+| `fixture.toggle` | Available only while the switch is on. Its input schema has no properties |
 | `fixture.switch.set` | Turns the switch on or off |
 | `fixture.flags` | Returns its input. The input has one property for each kind of command-line flag. Only the `cli` target can use it |
 

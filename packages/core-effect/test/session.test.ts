@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
-import { Effect, Fiber, Layer, Scope, Stream, SubscriptionRef } from "effect";
+import { Effect, Fiber, Layer, Schema, Scope, Stream, SubscriptionRef } from "effect";
 
-import { App, Session } from "../src/index.ts";
+import { App, Capability, Session } from "../src/index.ts";
 import { fixture, Switch, switchLayer } from "./fixture.ts";
 
 /** Run a test with a session for a target, and the fixture's services. */
@@ -19,6 +19,15 @@ test("the application writes a catalog that conforms", () => {
   const document = App.document(fixture);
   assert.deepEqual(Object.keys(document.capabilities["fixture.refuse"]!.failures ?? {}), ["Refused"]);
   assert.equal(document.capabilities["fixture.echo"]!.readOnly, true);
+});
+
+test("an empty struct is an input with no properties, and a record is an input that takes any object", () => {
+  const capability = (input: Schema.Codec<any, any>) =>
+    Capability.make({ id: "probe.run", description: "Probe.", audience: ["cli"], input, run: () => Effect.succeed(null) });
+  const inputOf = (input: Schema.Codec<any, any>) =>
+    App.document(App.make({ targets: { cli: { bindings: ["cli"] } }, capabilities: [capability(input)] })).capabilities["probe.run"]!.input;
+  assert.deepEqual(inputOf(Schema.Struct({})), { type: "object", properties: {} });
+  assert.deepEqual(inputOf(Schema.Record(Schema.String, Schema.Json)), { type: "object" });
 });
 
 test("a call gives a value, a failure or a call failure", () =>
