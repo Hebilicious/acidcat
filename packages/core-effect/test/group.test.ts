@@ -206,3 +206,48 @@ test("services that ran are released when the group closes", async () => {
   await Effect.runPromise(Scope.close(groupScope, Exit.void));
   assert.equal(counts.released, 1);
 });
+
+test("a new build waits until the build that the last cancelled call stopped has released its services", async () => {
+  const active = { now: 0, most: 0 };
+  const acquired = Effect.runSync(Deferred.make<void>());
+  const releasing = Effect.runSync(Deferred.make<void>());
+  const releaseGate = Effect.runSync(Deferred.make<void>());
+  let first = true;
+  const exclusive = Layer.effect(
+    Domain,
+    Effect.gen(function* () {
+      const services = yield* Effect.acquireRelease(
+        Effect.gen(function* () {
+          active.now++;
+          active.most = Math.max(active.most, active.now);
+          return { count: yield* SubscriptionRef.make(0), writes: yield* SubscriptionRef.make<Availability>(AVAILABLE) };
+        }),
+        () => Deferred.succeed(releasing, undefined).pipe(Effect.andThen(Deferred.await(releaseGate)), Effect.andThen(Effect.sync(() => active.now--))),
+      );
+      if (first) {
+        first = false;
+        yield* Deferred.succeed(acquired, undefined);
+        yield* Effect.never;
+      }
+      return services;
+    }),
+  );
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make(app, { target: "app" });
+        const group = yield* Domains;
+        const cancelled = yield* Effect.forkScoped(increment(session), { startImmediately: true });
+        yield* Deferred.await(acquired);
+        yield* Effect.forkScoped(Fiber.interrupt(cancelled), { startImmediately: true });
+        yield* Deferred.await(releasing);
+        const next = yield* Effect.forkScoped(increment(session), { startImmediately: true });
+        assert.equal(yield* group.phase.get, "stopping");
+        assert.equal(active.now, 1);
+        yield* Deferred.succeed(releaseGate, undefined);
+        assert.deepEqual(yield* Fiber.join(next), { ok: true, value: 1 });
+        assert.equal(active.most, 1);
+      }).pipe(Effect.ensuring(Deferred.succeed(releaseGate, undefined))),
+    ).pipe(Effect.provide(Layer.effect(Domains, Group.make(Effect.succeed(exclusive))))),
+  );
+});

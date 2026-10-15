@@ -75,7 +75,7 @@ Capability.make({
 ```
 
 - `group.provide(effect)` starts the services if they are dormant, waits for them, and runs the effect with them. All calls share one start.
-- When the last call that waits for the start is cancelled, the start is interrupted, and the group is dormant again.
+- When the last call that waits for the start is cancelled, the start is interrupted. The group is `stopping` until the start has released what it built, and a new call waits until then, so two starts never run at the same time. Then the group is dormant again.
 - When the start fails, each waiting call dies with `Group.StartFailed`, so a session gives the call failure `internal`. The next call starts the services again.
 - `group.current(select, { dormant, closed })` gives a `Capability.Current`, for an availability or a state, that comes from the services once they run. Reading it does not start them.
 - The services live in the scope of the group, here the scope of the layer, and are released when it closes. A call that waits when the group closes is cancelled.

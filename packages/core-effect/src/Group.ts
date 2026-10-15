@@ -9,17 +9,19 @@
  * | `dormant` | No services. The first call starts them |
  * | `starting` | One fiber builds the services. Each call waits for it |
  * | `started` | All calls share the services, until the scope of the group closes |
+ * | `stopping` | The last call that waited was cancelled. The group interrupts the build and waits until it has released what it built. A new call waits too |
  * | `closed` | The scope of the group closed. Calls are interrupted |
  *
- * When the last call that waits for the services is interrupted, the group interrupts the build and becomes dormant
- * again: a cancelled call reaches the build. When the build fails, the waiting calls die, so a session reports an
+ * When the last call that waits for the services is interrupted, the group interrupts the build, and becomes dormant
+ * again when the build has released what it built: a cancelled call reaches the build, and two builds never run at the
+ * same time. When the build fails, the waiting calls die, so a session reports an
  * `internal` call failure, not `cancelled`, and the group becomes dormant again: the next call tries again.
  */
 import { Cause, Context, Data, Deferred, Effect, Exit, Fiber, Layer, Scope, Semaphore, Stream, SubscriptionRef } from "effect";
 
 import type * as Capability from "./Capability.ts";
 
-export type Phase = "dormant" | "starting" | "started" | "closed";
+export type Phase = "dormant" | "starting" | "started" | "stopping" | "closed";
 
 /** The services of a group did not start. A call that needs them dies with this error. */
 export class StartFailed extends Data.TaggedError("StartFailed")<{ readonly cause: Cause.Cause<unknown> }> {
@@ -55,6 +57,7 @@ type State<S> =
       readonly waiting: number;
     }
   | { readonly phase: "started"; readonly services: Context.Context<S> }
+  | { readonly phase: "stopping"; readonly stopped: Deferred.Deferred<void> }
   | { readonly phase: "closed" };
 
 /**
@@ -96,6 +99,7 @@ export const make = <S, E, R>(
         const current = yield* SubscriptionRef.get(state);
         switch (current.phase) {
           case "started":
+          case "stopping":
           case "closed":
             return current;
           case "starting": {
@@ -119,7 +123,10 @@ export const make = <S, E, R>(
       }),
     );
 
-    /** A call that waited for the build was interrupted. The last one interrupts the build. */
+    /**
+     * A call that waited for the build was interrupted. The last one interrupts the build. The group stays `stopping`
+     * until the build has released what it built, so that no new build starts before that.
+     */
     const leave = (done: Deferred.Deferred<Exit.Exit<Context.Context<S>, unknown>>) =>
       locked(
         Effect.gen(function* () {
@@ -129,14 +136,35 @@ export const make = <S, E, R>(
             yield* SubscriptionRef.set(state, { ...current, waiting: current.waiting - 1 });
             return undefined;
           }
-          yield* SubscriptionRef.set(state, { phase: "dormant" });
-          return current.build;
+          const stopped = yield* Deferred.make<void>();
+          yield* SubscriptionRef.set(state, { phase: "stopping", stopped });
+          return { build: current.build, stopped };
         }),
-      ).pipe(Effect.flatMap((build) => (build === undefined ? Effect.void : Fiber.interrupt(build))));
+      ).pipe(
+        Effect.flatMap((stopping) =>
+          stopping === undefined
+            ? Effect.void
+            : Fiber.interrupt(stopping.build).pipe(
+                Effect.andThen(
+                  locked(
+                    Effect.gen(function* () {
+                      const current = yield* SubscriptionRef.get(state);
+                      if (current.phase === "stopping" && current.stopped === stopping.stopped) yield* SubscriptionRef.set(state, { phase: "dormant" });
+                    }),
+                  ),
+                ),
+                Effect.andThen(Deferred.succeed(stopping.stopped, undefined)),
+              ),
+        ),
+      );
 
     const acquire: Effect.Effect<Context.Context<S>> = Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
-        const joined = yield* join;
+        let joined = yield* join;
+        while (joined.phase === "stopping") {
+          yield* restore(Deferred.await(joined.stopped));
+          joined = yield* join;
+        }
         if (joined.phase === "started") return joined.services;
         if (joined.phase === "closed") return yield* Effect.interrupt;
         const waited = yield* restore(Deferred.await(joined.done)).pipe(Effect.exit);
@@ -162,11 +190,11 @@ export const make = <S, E, R>(
           return current;
         }),
       ).pipe(
-        Effect.flatMap((last) =>
-          last.phase === "starting"
-            ? Fiber.interrupt(last.build).pipe(Effect.andThen(Deferred.succeed(last.done, Exit.interrupt())))
-            : Effect.void,
-        ),
+        Effect.flatMap((last) => {
+          if (last.phase === "starting") return Fiber.interrupt(last.build).pipe(Effect.andThen(Deferred.succeed(last.done, Exit.interrupt())));
+          if (last.phase === "stopping") return Deferred.await(last.stopped);
+          return Effect.void;
+        }),
       ),
     );
 
