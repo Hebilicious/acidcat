@@ -84,7 +84,7 @@ function whenCreated(path: string, child: ChildProcess, then: () => void): void 
 }
 
 export async function checkCli(command: readonly string[], guard = GUARD): Promise<Checks> {
-  const checks = new Checks("cli");
+  const checks = new Checks("cli", guard);
   const cli = async (...args: string[]) => {
     const result = await run(command, args, guard);
     expect(!result.guarded, `the command line with ${args.join(" ")} did not exit within ${guard} ms, the guard of acid-cat conform`);

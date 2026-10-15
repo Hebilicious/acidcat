@@ -46,20 +46,29 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
   const guard = options.guard ?? GUARD;
   const results: Check[] = [];
   if (options.mcp !== undefined) {
-    results.push(...(await checkMcp(options.mcp, { maximumBytes })).results);
-    const mcp = await mcpInvoke(options.mcp).catch(() => undefined);
+    results.push(...(await checkMcp(options.mcp, { maximumBytes, guard })).results);
+    const mcp = await within(mcpInvoke(options.mcp, AbortSignal.timeout(guard)), guard, "the connection of the MCP client").catch(() => undefined);
     if (mcp !== undefined) {
       results.push(...(await checkProperties("mcp", mcp.invoke, guard)).results);
       await within(mcp.close(), guard, "the close of the MCP client").catch(() => undefined);
     }
   }
   if (options.http !== undefined) {
-    results.push(...(await checkHttp(options.http, { maximumBytes })).results);
+    results.push(...(await checkHttp(options.http, { maximumBytes, guard })).results);
     results.push(...(await checkProperties("http", httpInvoke(options.http), guard)).results);
   }
   if (options.cli !== undefined) results.push(...(await checkCli(options.cli, guard)).results);
   if (options.webmcp !== undefined) {
-    const driver = typeof options.webmcp === "string" ? await browserDriver(options.webmcp) : await processDriver(options.webmcp);
+    const opened = await within(
+      typeof options.webmcp === "string" ? browserDriver(options.webmcp, guard) : processDriver(options.webmcp),
+      guard,
+      "the installation of the WebMCP tools",
+    ).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
+    if (typeof opened === "string") {
+      results.push({ binding: "webmcp", name: "the implementation installs its tools", rule: "spec/bindings/webmcp.md", passed: false, detail: opened });
+      return results;
+    }
+    const driver = opened;
     try {
       results.push(...(await checkWebMcp(driver, guard)).results);
     } finally {

@@ -12,3 +12,11 @@ export const fixtureIgnoringCancellation: App.App<Holds | Switch> = {
       capability.id === "fixture.hold" ? { ...capability, run: (input) => Effect.uninterruptible(capability.run(input)) } : capability,
   ),
 };
+
+/** The fixture, except that `fixture.echo` never answers. */
+export const fixtureNeverAnswering: App.App<Holds | Switch> = {
+  ...fixture,
+  capabilities: fixture.capabilities.map(
+    (capability): Capability.Any<Holds | Switch> => (capability.id === "fixture.echo" ? { ...capability, run: () => Effect.never } : capability),
+  ),
+};

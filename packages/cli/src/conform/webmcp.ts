@@ -8,7 +8,7 @@
 import { REFERENCE, visitObjects } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
-import { Checks, expect, expectEqual, fixture, GUARD, idsOf, sorted, until, within } from "./check.ts";
+import { Checks, Deadline, expect, expectEqual, fixture, GUARD, idsOf, sorted } from "./check.ts";
 
 const RULE = "spec/bindings/webmcp.md";
 
@@ -150,7 +150,7 @@ export async function processDriver(install: WebMcpInstall): Promise<WebMcpDrive
 }
 
 /** A driver for a page in Chromium, through Playwright. The page loads with the test host as its `modelContext`. */
-export async function browserDriver(url: string): Promise<WebMcpDriver> {
+export async function browserDriver(url: string, guard: number = GUARD): Promise<WebMcpDriver> {
   let playwright: typeof import("playwright");
   try {
     playwright = await import("playwright");
@@ -169,7 +169,10 @@ export async function browserDriver(url: string): Promise<WebMcpDriver> {
       Object.defineProperty(scope, "modelContext", { value: window.__acidCatConform.modelContext, configurable: true });
     }
   `);
-  await page.goto(url);
+  await page.goto(url, { timeout: guard }).catch(async (error: unknown) => {
+    await browser.close();
+    throw error;
+  });
   type Window = { __acidCatConform: TestHost };
   return {
     tools: async () => {
@@ -189,27 +192,41 @@ export async function browserDriver(url: string): Promise<WebMcpDriver> {
 }
 
 /**
- * Wait until the tools of the page agree with `condition`. The check reads the tools after each change of them. The
- * guard ends a wait for a change that does not come.
+ * Wait until the tools of the page agree with `condition`. The check reads the tools after each change of them, until
+ * one deadline for the whole wait: changes of the tools do not start it again.
  */
-async function untilTools(driver: WebMcpDriver, condition: (tools: readonly RecordedTool[]) => boolean, guard: number, what: string): Promise<void> {
+async function untilTools(driver: WebMcpDriver, deadline: Deadline, condition: (tools: readonly RecordedTool[]) => boolean, what: string): Promise<void> {
   for (;;) {
-    const version = await within(driver.version(), guard, "the version of the tools");
-    if (condition(await within(driver.tools(), guard, "the tools"))) return;
-    await within(driver.changed(version), guard, `a change of the tools: ${what}`);
+    const version = await deadline.within(driver.version(), `the tools: ${what}`);
+    if (condition(await deadline.within(driver.tools(), `the tools: ${what}`))) return;
+    await deadline.within(driver.changed(version), `the tools: ${what}`);
+  }
+}
+
+/**
+ * Call a tool until the deadline. If the deadline comes first, cancel the call, so that it does not run on in the
+ * page.
+ */
+async function callTool(driver: WebMcpDriver, deadline: Deadline, name: string, input: unknown): Promise<ToolCall> {
+  const started = await deadline.within(driver.start(name, input), `the call to ${name}`);
+  try {
+    return await deadline.within(driver.result(started), `the call to ${name}`);
+  } catch (error) {
+    await driver.cancel(started).catch(() => undefined);
+    throw error;
   }
 }
 
 /** The keys that fixture.held gives through a tool. */
-async function heldKeys(driver: WebMcpDriver): Promise<readonly string[]> {
-  const call = await driver.call("fixture.held", {});
+async function heldKeys(driver: WebMcpDriver, deadline: Deadline): Promise<readonly string[]> {
+  const call = await callTool(driver, deadline, "fixture.held", {});
   expect("resolved" in call, `fixture.held gave ${JSON.stringify(call)}`);
   return ((call.resolved as { value?: { keys?: readonly string[] } }).value?.keys ?? []) as readonly string[];
 }
 
-/** Call fixture.held until `condition` is true, within the guard. */
-const untilHeld = (driver: WebMcpDriver, condition: (held: readonly string[]) => boolean, guard: number, what: string) =>
-  until(() => heldKeys(driver), condition, guard, what);
+/** Call fixture.held until `condition` is true, until the deadline. */
+const untilHeld = (driver: WebMcpDriver, deadline: Deadline, condition: (held: readonly string[]) => boolean, what: string) =>
+  deadline.until(() => heldKeys(driver, deadline), condition, what);
 
 /** True if each `$ref` of a schema refers to a type in its own `$defs` (spec/catalog.md#bundling). */
 function isBundled(schema: JsonObject): boolean {
@@ -225,15 +242,15 @@ function isBundled(schema: JsonObject): boolean {
 
 
 export async function checkWebMcp(driver: WebMcpDriver, guard = GUARD): Promise<Checks> {
-  const checks = new Checks("webmcp");
+  const checks = new Checks("webmcp", guard);
   const view = fixture.capabilities;
   const expected = idsOf(TARGET);
 
-  await checks.run("each available capability of the view is a tool", `${RULE}#tools`, async () => {
-    await untilTools(driver, (tools) => JSON.stringify(sorted(tools.map((tool) => tool.name))) === JSON.stringify(expected), guard, `the tools ${expected.join(", ")}`);
+  await checks.run("each available capability of the view is a tool", `${RULE}#tools`, async (deadline) => {
+    await untilTools(driver, deadline, (tools) => JSON.stringify(sorted(tools.map((tool) => tool.name))) === JSON.stringify(expected), `the tools ${expected.join(", ")}`);
   });
-  await checks.run("a tool has the description and the bundled input schema of its capability", `${RULE}#tools`, async () => {
-    for (const tool of await driver.tools()) {
+  await checks.run("a tool has the description and the bundled input schema of its capability", `${RULE}#tools`, async (deadline) => {
+    for (const tool of await deadline.within(driver.tools(), "the tools")) {
       expectEqual(tool.description, view[tool.name]?.description, `description of ${tool.name}`);
       // Each implementation writes its schemas from its own code. Compare what the fixture fixes: an object, its
       // properties and its required properties, with no reference outside the schema.
@@ -245,11 +262,11 @@ export async function checkWebMcp(driver: WebMcpDriver, guard = GUARD): Promise<
       expect(isBundled(schema), `the input schema of ${tool.name} must be bundled`);
     }
   });
-  await checks.run("a value resolves as a result", `${RULE}#tools`, async () => {
-    expectEqual(await driver.call("fixture.echo", { text: "hello" }), { resolved: { ok: true, value: { text: "hello" } } }, "outcome");
+  await checks.run("a value resolves as a result", `${RULE}#tools`, async (deadline) => {
+    expectEqual(await callTool(driver, deadline, "fixture.echo", { text: "hello" }), { resolved: { ok: true, value: { text: "hello" } } }, "outcome");
   });
-  await checks.run("a failure resolves as a result", `${RULE}#tools`, async () => {
-    const call = await driver.call("fixture.refuse", {});
+  await checks.run("a failure resolves as a result", `${RULE}#tools`, async (deadline) => {
+    const call = await callTool(driver, deadline, "fixture.refuse", {});
     expect("resolved" in call, `the call must resolve, got ${JSON.stringify(call)}`);
     expectEqual((call.resolved as { error?: { _tag?: string } }).error?._tag, "Refused", "_tag");
   });
@@ -257,35 +274,38 @@ export async function checkWebMcp(driver: WebMcpDriver, guard = GUARD): Promise<
     ["a defect rejects with the kind internal", "fixture.crash", {}, "internal", undefined],
     ["invalid input rejects with the kind invalid-input, as a TypeError", "fixture.echo", { text: 1 }, "invalid-input", "TypeError"],
   ] as const) {
-    await checks.run(name, `${RULE}#tools`, async () => {
-      const call = await driver.call(capability, input);
+    await checks.run(name, `${RULE}#tools`, async (deadline) => {
+      const call = await callTool(driver, deadline, capability, input);
       expect("rejected" in call, `the call must reject, got ${JSON.stringify(call)}`);
       expectEqual(call.rejected.kind, kind, "kind");
       if (errorName !== undefined) expectEqual(call.rejected.name, errorName, "name");
     });
   }
-  await checks.run("the signal of the host cancels a call, as an AbortError", `${RULE}#tools`, async () => {
+  await checks.run("the signal of the host cancels a call, as an AbortError", `${RULE}#tools`, async (deadline) => {
     const key = `webmcp-cancel-${crypto.randomUUID()}`;
-    const started = await driver.start("fixture.hold", { key });
+    const started = await deadline.within(driver.start("fixture.hold", { key }), "the call to fixture.hold");
     try {
-      await untilHeld(driver, (held) => held.includes(key), guard, `the call that holds ${key}`);
-      await driver.cancel(started);
-      const call = await within(driver.result(started), guard, `the cancelled call that held ${key}`);
+      await untilHeld(driver, deadline, (held) => held.includes(key), `the call that holds ${key}`);
+      await deadline.within(driver.cancel(started), `the cancellation of the call that holds ${key}`);
+      const call = await deadline.within(driver.result(started), `the cancelled call that held ${key}`);
       expect("rejected" in call, `the call must reject, got ${JSON.stringify(call)}`);
       expectEqual(call.rejected.kind, "cancelled", "kind");
       expectEqual(call.rejected.name, "AbortError", "name");
-      await untilHeld(driver, (held) => !held.includes(key), guard, `the stop of the cancelled call that held ${key}`);
+      await untilHeld(driver, deadline, (held) => !held.includes(key), `the stop of the cancelled call that held ${key}`);
     } finally {
-      // A call that the implementation did not stop would hold forever. Release it, so that the checks can end.
-      await within(driver.call("fixture.release", { key }), guard, `the release of ${key}`).catch(() => undefined);
+      // A call that the implementation did not stop would hold forever. Release it, so that the checks can end. The
+      // release has its own deadline, because the deadline of the check can be over.
+      const cleanup = new Deadline(guard);
+      await callTool(driver, cleanup, "fixture.release", { key }).catch(() => undefined);
+      cleanup.end();
     }
   });
-  await checks.run("a tool is removed while its capability is unavailable, and registered again after", `${RULE}#tools`, async () => {
+  await checks.run("a tool is removed while its capability is unavailable, and registered again after", `${RULE}#tools`, async (deadline) => {
     const toggle = (tools: readonly RecordedTool[]) => tools.some((tool) => tool.name === "fixture.toggle");
-    await driver.call("fixture.switch.set", { on: false });
-    await untilTools(driver, (tools) => !toggle(tools), guard, "the removal of fixture.toggle");
-    await driver.call("fixture.switch.set", { on: true });
-    await untilTools(driver, toggle, guard, "the registration of fixture.toggle");
+    await callTool(driver, deadline, "fixture.switch.set", { on: false });
+    await untilTools(driver, deadline, (tools) => !toggle(tools), "the removal of fixture.toggle");
+    await callTool(driver, deadline, "fixture.switch.set", { on: true });
+    await untilTools(driver, deadline, toggle, "the registration of fixture.toggle");
   });
 
   return checks;

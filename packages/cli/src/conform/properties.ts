@@ -5,7 +5,7 @@
 import type { Outcome } from "@acid-cat/spec-ts";
 import fc from "fast-check";
 
-import { Checks, expect, expectEqual, GUARD, until, within } from "./check.ts";
+import { Checks, Deadline, expect, expectEqual, GUARD } from "./check.ts";
 import { mcpClient } from "./mcp.ts";
 
 const RULE = "spec/invocation.md#cancellation-and-concurrency";
@@ -25,8 +25,8 @@ export function httpInvoke(base: string): Invoke {
   };
 }
 
-export async function mcpInvoke(url: string): Promise<{ readonly invoke: Invoke; close(): Promise<void> }> {
-  const client = await mcpClient(url);
+export async function mcpInvoke(url: string, signal?: AbortSignal): Promise<{ readonly invoke: Invoke; close(): Promise<void> }> {
+  const client = await mcpClient(url, signal);
   return {
     invoke: async (id, input, signal) => {
       try {
@@ -74,16 +74,16 @@ function agrees(operation: Operation, outcome: Outcome<unknown, unknown>): boole
   }
 }
 
-const callFor = (invoke: Invoke, operation: Operation) => {
+const callFor = (invoke: Invoke, operation: Operation, signal: AbortSignal) => {
   switch (operation.kind) {
     case "echo":
-      return invoke("fixture.echo", { text: operation.text });
+      return invoke("fixture.echo", { text: operation.text }, signal);
     case "refuse":
-      return invoke("fixture.refuse", {});
+      return invoke("fixture.refuse", {}, signal);
     case "crash":
-      return invoke("fixture.crash", {});
+      return invoke("fixture.crash", {}, signal);
     case "invalid":
-      return invoke("fixture.echo", { text: 0 });
+      return invoke("fixture.echo", { text: 0 }, signal);
   }
 };
 
@@ -110,15 +110,23 @@ let keys = 0;
 const nextKey = () => `conform-${process.pid}-${++keys}`;
 
 /** The keys of the calls to fixture.hold that hold now, as fixture.held gives them through the binding. */
-async function heldKeys(invoke: Invoke): Promise<readonly string[]> {
-  const outcome = await invoke("fixture.held", {});
+async function heldKeys(invoke: Invoke, signal: AbortSignal): Promise<readonly string[]> {
+  const outcome = await invoke("fixture.held", {}, signal);
   expect("ok" in outcome && outcome.ok, `fixture.held gave ${JSON.stringify(outcome)}`);
   return (outcome.value as { readonly keys: readonly string[] }).keys;
 }
 
-/** Read fixture.held through the binding until `condition` is true, within the guard. */
-const untilHeld = (invoke: Invoke, condition: (held: readonly string[]) => boolean, guard: number, what: string) =>
-  until(() => heldKeys(invoke), condition, guard, what);
+/** Read fixture.held through the binding until `condition` is true, until the deadline. */
+const untilHeld = (invoke: Invoke, deadline: Deadline, condition: (held: readonly string[]) => boolean, what: string) =>
+  deadline.until((signal) => heldKeys(invoke, signal), condition, what);
+
+/**
+ * Which calls of one run of the property are cancelled. Each run cancels at least one call and keeps at least one, so
+ * that each run tests both sides of the guarantee.
+ */
+export const cancellations: fc.Arbitrary<readonly boolean[]> = fc
+  .array(fc.boolean(), { minLength: 0, maxLength: 3 })
+  .chain((others) => fc.shuffledSubarray([true, false, ...others], { minLength: others.length + 2 }));
 
 interface HoldingCall {
   readonly key: string;
@@ -132,30 +140,30 @@ interface HoldingCall {
  * Wait until each call holds, cancel the calls that `cancelled` marks, and check that only they stop: each one ends as
  * cancelled and stops holding, and each other call still holds, then gives its own key when it is released.
  */
-async function cancelSome(invoke: Invoke, calls: readonly HoldingCall[], guard: number): Promise<void> {
+async function cancelSome(invoke: Invoke, calls: readonly HoldingCall[], deadline: Deadline): Promise<void> {
   const keys = calls.map((call) => call.key);
-  await untilHeld(invoke, (held) => keys.every((key) => held.includes(key)), guard, `the calls that hold ${keys.join(", ")}`);
+  await untilHeld(invoke, deadline, (held) => keys.every((key) => held.includes(key)), `the calls that hold ${keys.join(", ")}`);
 
   const cancelled = calls.filter((call) => call.cancelled);
   const kept = calls.filter((call) => !call.cancelled);
   for (const call of cancelled) call.controller.abort(call.reason);
   for (const call of cancelled) {
-    const settled = await within(call.settled, guard, `the cancelled call that held ${call.key}`);
+    const settled = await deadline.within(call.settled, `the cancelled call that held ${call.key}`);
     expect(isCancellation(settled, call.reason), `a cancelled call gave ${describe(settled)}`);
   }
   await untilHeld(
     invoke,
+    deadline,
     (held) => cancelled.every((call) => !held.includes(call.key)),
-    guard,
     `the stop of the cancelled calls that held ${cancelled.map((call) => call.key).join(", ")}`,
   );
-  const held = await within(heldKeys(invoke), guard, "fixture.held");
+  const held = await deadline.within(heldKeys(invoke, deadline.signal), "fixture.held");
   for (const call of kept) expect(held.includes(call.key), `the call that holds ${call.key} was not cancelled, but it stopped`);
 
   for (const call of kept) {
-    const released = await within(invoke("fixture.release", { key: call.key }), guard, `the release of ${call.key}`);
+    const released = await deadline.within(invoke("fixture.release", { key: call.key }, deadline.signal), `the release of ${call.key}`);
     expectEqual(released, { ok: true, value: { released: 1 } }, `the release of ${call.key}`);
-    const settled = await within(call.settled, guard, `the call that held ${call.key}, after its release`);
+    const settled = await deadline.within(call.settled, `the call that held ${call.key}, after its release`);
     expect("outcome" in settled, `a call that was not cancelled gave ${describe(settled)}`);
     expectEqual(settled.outcome, { ok: true, value: { key: call.key } }, `the outcome of the call that held ${call.key}`);
   }
@@ -173,39 +181,42 @@ async function holds<T>(property: fc.IAsyncProperty<T>, options: { readonly numR
 }
 
 export async function checkProperties(binding: string, invoke: Invoke, guard = GUARD): Promise<Checks> {
-  const checks = new Checks(`${binding} properties`);
+  const checks = new Checks(`${binding} properties`, guard);
 
-  await checks.run("concurrent calls each get exactly their own outcome", RULE, async () => {
+  await checks.run("concurrent calls each get exactly their own outcome", RULE, async (deadline) => {
     await holds(
       fc.asyncProperty(fc.array(operation, { minLength: 1, maxLength: 12 }), async (operations) => {
-        const outcomes = await within(Promise.all(operations.map((op) => callFor(invoke, op))), guard, "the concurrent calls");
+        const outcomes = await deadline.within(Promise.all(operations.map((op) => callFor(invoke, op, deadline.signal))), "the concurrent calls");
         operations.forEach((op, index) => expect(agrees(op, outcomes[index]!), `${op.kind} gave ${JSON.stringify(outcomes[index])}`));
       }),
       { numRuns: 25 },
     );
   });
 
-  await checks.run("cancelling a call affects only that call", RULE, async () => {
+  await checks.run("cancelling a call affects only that call", RULE, async (deadline) => {
     await holds(
-      fc.asyncProperty(fc.array(fc.boolean(), { minLength: 2, maxLength: 5 }), async (cancel) => {
+      fc.asyncProperty(cancellations, async (cancel) => {
         const calls = cancel.map((cancelled) => {
           const key = nextKey();
           const controller = new AbortController();
           const reason = new Error(`acid-cat conform cancelled the call that holds ${key}`);
-          const settled: Promise<Settled> = invoke("fixture.hold", { key }, controller.signal).then(
+          const settled: Promise<Settled> = invoke("fixture.hold", { key }, AbortSignal.any([controller.signal, deadline.signal])).then(
             (outcome) => ({ outcome }),
             (error: unknown) => ({ rejected: error }),
           );
           return { key, cancelled, controller, reason, settled };
         });
         try {
-          await cancelSome(invoke, calls, guard);
+          await cancelSome(invoke, calls, deadline);
         } finally {
           // A call that an implementation did not stop would hold forever. Release each call, then stop waiting for
-          // the calls on the side of the client, so that the checks end. Each step has the guard.
-          await Promise.allSettled(calls.map((call) => within(invoke("fixture.release", { key: call.key }), guard, `the release of ${call.key}`)));
+          // the calls on the side of the client, so that the checks end. The cleanup has its own deadline, because
+          // the deadline of the check can be over.
+          const cleanup = new Deadline(guard);
+          await Promise.allSettled(calls.map((call) => cleanup.within(invoke("fixture.release", { key: call.key }, cleanup.signal), `the release of ${call.key}`)));
           for (const call of calls) call.controller.abort(call.reason);
-          await Promise.allSettled(calls.map((call) => within(call.settled, guard, `the call that held ${call.key}`)));
+          await Promise.allSettled(calls.map((call) => cleanup.within(call.settled, `the call that held ${call.key}`)));
+          cleanup.end();
         }
       }),
       { numRuns: 5 },

@@ -154,7 +154,7 @@ function stalled(path: string, signal: AbortSignal) {
 
 for (const services of ["shared", "per-request"] as const) {
   test(`with ${services} services, an aborted request whose body never ends rejects with the reason of its signal`, async () => {
-    const { counts, layer } = countedSwitchLayer();
+    const { counts, layer } = countedFixtureLayer();
     const handlers = {
       "/mcp": Mcp.toWebHandler(fixture, layer, { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN], services }),
       "/api/capabilities/fixture.echo": Http.toWebHandler(fixture, layer, { allowedOrigins: [ORIGIN], base: "/api", services }),
