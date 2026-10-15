@@ -18,7 +18,7 @@
  * `internal` call failure, not `cancelled`, and the group becomes dormant again: the next call tries again.
  */
 import { CallFailureError, callFailure } from "@acid-cat/spec-ts";
-import { Cause, Context, Data, Deferred, Effect, Exit, Fiber, FiberSet, Layer, Scope, Semaphore, Stream, SubscriptionRef } from "effect";
+import { Cause, Context, Data, Deferred, Effect, Exit, Fiber, FiberSet, Layer, Schema, Scope, Semaphore, Stream, SubscriptionRef } from "effect";
 
 import type * as Capability from "./Capability.ts";
 import { notify } from "./internal/listeners.ts";
@@ -343,3 +343,26 @@ export const make = <S, E, R>(
       peek,
     } satisfies Group<S>;
   });
+
+/**
+ * A capability that runs inside a group. `run` can use the services of the group: each call starts the group if it is
+ * dormant, as a part of the call, and runs in the lifetime of the group, as `group.provide` does. The capability needs
+ * the service of the group, not the services in it. Its availability and state can come from the group with
+ * `group.current`.
+ */
+export const capability = <
+  Self,
+  S,
+  Input extends Capability.AnySchema = Schema.Struct<{}>,
+  R = never,
+  Output extends Capability.AnySchema = typeof Schema.Null,
+  Failure extends Capability.AnySchema = typeof Schema.Never,
+>(
+  group: Context.Key<Self, Group<S>>,
+  definition: Omit<Capability.Capability<Input, Output, Failure, R>, "run"> & {
+    readonly run: (input: Input["Type"]) => Effect.Effect<Output["Type"], Failure["Type"], R | S>;
+  },
+): Capability.Capability<Input, Output, Failure, Exclude<R, S> | Self> => ({
+  ...(definition as Omit<Capability.Capability<Input, Output, Failure, Exclude<R, S> | Self>, "run">),
+  run: (input) => Effect.flatMap(group, (running) => running.provide(definition.run(input))) as Effect.Effect<Output["Type"], Failure["Type"], Exclude<R, S> | Self>,
+});

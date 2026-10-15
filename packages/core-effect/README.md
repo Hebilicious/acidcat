@@ -88,6 +88,7 @@ const generate = Capability.make({
 });
 ```
 
+- `Group.capability(Planning, definition)` is a capability whose `run` runs inside the group, as `run: ({ stops }) => Planner.use((planner) => planner.generate(stops))`. Each call starts the group if it is dormant, as a part of the call, and runs in the lifetime of the group. The capability needs `Planning`, not `Planner`.
 - `group.provide(effect)` starts the services if they are dormant, waits for them, and runs the effect with them. All calls share one start. The effect runs in the lifetime of the group: when the group closes, it is interrupted before the services are released, and the call is cancelled.
 - When the last call that waits for the start is cancelled, the start is interrupted. The group is `stopping` until the start has released what it built, and a new call waits until then, so two starts never run at the same time. Then the group is dormant again.
 - When the start fails, each waiting call dies with `Group.StartFailed`, so a session gives the call failure `internal`. The next call starts the services again.
