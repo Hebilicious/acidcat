@@ -140,8 +140,21 @@ function leavesOf(tree: CapabilityTree): Leaf<Capability.Any, unknown, unknown>[
   );
 }
 
-/** The capabilities of a tree, in the order of the tree. Give them to `App.make`. */
-export function capabilities<const Tree extends CapabilityTree>(tree: Tree): Capability.Any[] {
+/** The capabilities of a tree, as a union of their types. */
+export type CapabilitiesOf<Tree> = {
+  readonly [Key in keyof Tree]: Tree[Key] extends Leaf<infer C, any, any>
+    ? C
+    : Tree[Key] extends Capability.Any
+      ? Tree[Key]
+      : CapabilitiesOf<Tree[Key]>;
+}[keyof Tree];
+
+/**
+ * The capabilities of a tree, in the order of the tree. Give them to `App.make`: they keep their types, so the
+ * application has the services that they need.
+ */
+export function capabilities<const Tree extends CapabilityTree>(tree: Tree): CapabilitiesOf<Tree>[];
+export function capabilities(tree: CapabilityTree): Capability.Any[] {
   return Object.values(tree).flatMap((value): Capability.Any[] =>
     isLeaf(value) ? [value.capability] : isCapability(value as Capability.Any | CapabilityTree) ? [value as Capability.Any] : capabilities(value as CapabilityTree),
   );

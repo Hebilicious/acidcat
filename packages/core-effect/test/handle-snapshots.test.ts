@@ -154,3 +154,12 @@ test("a generic helper can make a leaf, and its callers get the check of the dat
   // @ts-expect-error A caller of the helper still gets the check: a function is not data.
   void (() => withSnapshot(inspect, { snapshot: withFunction }));
 });
+
+test("the capabilities of a tree keep their services, so App.make infers them", () => {
+  const typedApp = App.make({ targets: { app: { bindings: ["typescript"] } }, capabilities: Handles.capabilities({ workbench: { inspect: Handles.leaf(inspect, { snapshot: owner().snapshot }), add } }) });
+  type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+  type ServicesOfApp<T> = T extends App.App<infer R> ? R : never;
+  const exact: Equals<ServicesOfApp<typeof typedApp>, Owner> = true;
+  void exact;
+  assert.deepEqual(typedApp.capabilities.map((capability) => capability.id), ["probe.workbench.inspect", "probe.workbench.add"]);
+});
