@@ -16,11 +16,20 @@ const app = App.make({
         Effect.gen(function* () {
           yield* Effect.logInfo("a log of Effect");
           yield* Console.log("a line of the console service");
-          yield* Effect.sync(() => console.log("a line of the global console"));
+          yield* Effect.sync(() => {
+            console.log("a line of the global console");
+            console.table([{ "a table of the global console": 1 }]);
+            console.dir({ "an object of the global console": 1 });
+          });
           return "the answer";
         }),
     }),
   ],
+});
+
+// After a run that succeeds, the program has its own console again.
+process.once("beforeExit", () => {
+  if ((process.exitCode ?? 0) === 0) console.log("after the run");
 });
 
 NodeCli.main(app, Layer.empty, { name: "probe", version: "0.0.0" });

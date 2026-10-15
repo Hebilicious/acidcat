@@ -1,7 +1,7 @@
 /**
  * Run the CLI binding as the main program of a Node.js process.
  */
-import { inspect } from "node:util";
+import { Console as NodeConsole } from "node:console";
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
@@ -37,12 +37,12 @@ export function runCommand<Name extends string, Input, ContextInput, E>(
  * the listener of `runMain` is there.
  */
 function runMain<E>(program: Effect.Effect<unknown, E>): void {
-  if (!requestsBuiltIn(process.argv.slice(2))) sendConsoleToStandardError();
+  const restore = requestsBuiltIn(process.argv.slice(2)) ? () => undefined : sendConsoleToStandardError();
   const answers = Layer.succeed(Cli.Answers, { write: (text: string) => Effect.sync(() => void process.stdout.write(`${text}\n`)) });
   const keep = () => undefined;
   process.on("SIGINT", keep);
   try {
-    NodeRuntime.runMain(program.pipe(Effect.provide(answers)));
+    NodeRuntime.runMain(program.pipe(Effect.provide(answers), Effect.ensuring(Effect.sync(restore))));
   } finally {
     process.removeListener("SIGINT", keep);
   }
@@ -59,16 +59,16 @@ const builtInOutputs = new Set(
 const requestsBuiltIn = (args: readonly string[]) => args.some((arg) => builtInOutputs.has(arg.split("=")[0]!));
 
 /**
- * Send the output of the console to standard error: logs of Effect, the `Console` of Effect, and the global console
- * that other runtimes of the program write to. Standard output carries only the answers, which `Cli.Answers` writes
- * (spec/bindings/cli.md#outcomes). The help that `effect/cli` shows for a usage error is output of the console, so it
- * goes to standard error too.
+ * While the command runs, send all output of the console to standard error: logs of Effect, the `Console` of Effect,
+ * and the global console that other runtimes of the program write to, with each of its methods. Standard output carries
+ * only the answers, which `Cli.Answers` writes (spec/bindings/cli.md#outcomes). The help that `effect/cli` shows for a
+ * usage error is output of the console, so it goes to standard error too. The result gives the program its own console
+ * again.
  */
-function sendConsoleToStandardError(): void {
-  const diagnostics = (...parts: ReadonlyArray<unknown>): void => {
-    process.stderr.write(`${parts.map((part) => (typeof part === "string" ? part : inspect(part))).join(" ")}\n`);
+function sendConsoleToStandardError(): () => void {
+  const own = globalThis.console;
+  globalThis.console = new NodeConsole({ stdout: process.stderr, stderr: process.stderr });
+  return () => {
+    globalThis.console = own;
   };
-  console.log = diagnostics;
-  console.info = diagnostics;
-  console.debug = diagnostics;
 }

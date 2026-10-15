@@ -238,7 +238,7 @@ const command = Cli.command(app, {
 NodeCli.runCommand(command, { version: "0.1.0" });
 ```
 
-Standard output carries only the answers (spec/bindings/cli.md#outcomes). The command line writes them through `Cli.Answers`. `NodeCli` writes them to standard output, and sends all other output of the console to standard error: logs of Effect, the `Console` of Effect, the global console that other runtimes of the program use, and the help that `effect/cli` shows for a usage error. The output of `--help`, `--version` and `--completions` goes to standard output.
+Standard output carries only the answers (spec/bindings/cli.md#outcomes). The command line writes them through `Cli.Answers`. While the command runs, `NodeCli` writes the answers to standard output, and replaces the global console with one that writes all its output to standard error: logs of Effect, the `Console` of Effect, each method of the global console that other runtimes of the program use, and the help that `effect/cli` shows for a usage error. When the command ends, the program has its own console again. The output of `--help`, `--version` and `--completions` goes to standard output.
 
 `@acid-cat/core-effect` works in all runtimes, including browsers. Only `@acid-cat/core-effect/node` needs Node.js.
 

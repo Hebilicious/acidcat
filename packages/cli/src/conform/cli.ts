@@ -107,7 +107,9 @@ export async function checkCli(command: readonly string[], guard: Guard = GUARD)
     ["invalid input through call has exit code 3", ["call", "fixture.echo", '{"text":1}'], 3],
   ] as const) {
     await checks.run(name, `${RULE}#outcomes`, async (deadline) => {
-      expectEqual((await cli(deadline, ...args)).code, code, "exit code");
+      const result = await cli(deadline, ...args);
+      expectEqual(result.code, code, "exit code");
+      expectEqual(result.stdout, "", "standard output");
     });
   }
   await checks.run("an interrupt cancels the call with exit code 130", `${RULE}#commands`, async (deadline) => {

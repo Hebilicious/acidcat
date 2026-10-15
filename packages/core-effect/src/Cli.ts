@@ -325,7 +325,6 @@ function shapesOf(leaves: readonly { readonly id: string; readonly path: readonl
   return shapes;
 }
 
-
 interface Leaf<R> {
   readonly path: readonly string[];
   readonly leaf: AppCommand<R>;

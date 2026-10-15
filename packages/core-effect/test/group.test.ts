@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { AVAILABLE, CallFailureError, unavailable } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, SubscriptionRef } from "effect";
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, Scope, SubscriptionRef } from "effect";
 
 import { App, Capability, Group, Handles, Session } from "../src/index.ts";
 
@@ -279,5 +279,64 @@ test("closing the group cancels the calls that use its services, before it relea
   await Effect.runPromise(Scope.close(groupScope, Exit.void));
   const exit = await Effect.runPromise(Fiber.await(call));
   assert.ok(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause));
+  assert.deepEqual(order, ["call cancelled", "released"]);
+});
+
+test("a call that gets the services as the group closes is cancelled, and never runs on released services", async () => {
+  const order: string[] = [];
+  const open = Effect.runSync(Deferred.make<void>());
+  const groupScope = Effect.runSync(Scope.make());
+  const layer = Layer.effect(
+    Domain,
+    Effect.gen(function* () {
+      yield* Deferred.await(open);
+      return yield* Effect.acquireRelease(
+        Effect.gen(function* () {
+          return { count: yield* SubscriptionRef.make(0), writes: yield* SubscriptionRef.make<Availability>(AVAILABLE) };
+        }),
+        () => Effect.sync(() => order.push("released")),
+      );
+    }),
+  );
+  const domains = await Effect.runPromise(Layer.buildWithScope(Layer.effect(Domains, Group.make(layer)), groupScope));
+  const group = Context.get(domains, Domains);
+  // When the services start, close the group at once: the close comes before the call that waits gets the services.
+  let closing: Promise<void> | undefined;
+  group.observe(() => ({ getSnapshot: () => 0, subscribe: () => ({ unsubscribe() {} }) }), { dormant: 0 }).subscribe(() => {
+    closing ??= Effect.runPromise(Scope.close(groupScope, Exit.void));
+  });
+  const call = Effect.runFork(group.provide(Effect.sync(() => order.push("call ran"))));
+  await Effect.runPromise(Deferred.succeed(open, undefined));
+  const exit = await Effect.runPromise(Fiber.await(call));
+  await closing;
+  assert.ok(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause), JSON.stringify(order));
+  assert.deepEqual(order, ["released"]);
+});
+
+test("closing a group cancels its calls before it releases its services, also when a listener throws", async () => {
+  const order: string[] = [];
+  const running = Effect.runSync(Deferred.make<void>());
+  const groupScope = Effect.runSync(Scope.make());
+  const layer = Layer.effect(
+    Domain,
+    Effect.acquireRelease(
+      Effect.gen(function* () {
+        return { count: yield* SubscriptionRef.make(0), writes: yield* SubscriptionRef.make<Availability>(AVAILABLE) };
+      }),
+      () => Effect.sync(() => order.push("released")),
+    ),
+  );
+  const domains = await Effect.runPromise(Layer.buildWithScope(Layer.effect(Domains, Group.make(layer)), groupScope));
+  const group = Context.get(domains, Domains);
+  group.observe(() => ({ getSnapshot: () => 0, subscribe: () => ({ unsubscribe() {} }) }), { dormant: 0, closed: -1 }).subscribe(() => {
+    throw new Error("The listener is broken.");
+  });
+  const call = Effect.runFork(
+    group.provide(Deferred.succeed(running, undefined).pipe(Effect.andThen(Effect.never), Effect.onInterrupt(() => Effect.sync(() => order.push("call cancelled"))))),
+  );
+  await Effect.runPromise(Deferred.await(running));
+  const closed = await Effect.runPromiseExit(Scope.close(groupScope, Exit.void).pipe(Effect.provide(Logger.layer([]))));
+  assert.ok(Exit.isSuccess(closed));
+  await Effect.runPromise(Fiber.await(call));
   assert.deepEqual(order, ["call cancelled", "released"]);
 });

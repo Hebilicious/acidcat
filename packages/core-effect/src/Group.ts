@@ -219,10 +219,11 @@ export const make = <S, E, R>(
         Effect.gen(function* () {
           const current = yield* SubscriptionRef.get(state);
           yield* setState({ phase: "closed" });
-          yield* FiberSet.clear(calls);
           return current;
         }),
       ).pipe(
+        // A call that waits for the build leaves under the lock, so the calls are cancelled after the lock is free.
+        Effect.tap(() => FiberSet.clear(calls)),
         Effect.flatMap((last) => {
           if (last.phase === "starting") return Fiber.interrupt(last.build).pipe(Effect.andThen(Deferred.succeed(last.done, Exit.interrupt())));
           if (last.phase === "stopping") return Deferred.await(last.stopped);
@@ -328,12 +329,12 @@ export const make = <S, E, R>(
     };
 
     return {
+      // The call is a fiber of the group before it asks for the services, so a close at any time cancels it.
       provide: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        Effect.flatMap(acquire, (services) =>
-          FiberSet.run(calls, Effect.provideContext(effect, services)).pipe(
-            Effect.flatMap((fiber) => Fiber.join(fiber).pipe(Effect.onInterrupt(() => Fiber.interrupt(fiber)))),
-          ),
-        ) as Effect.Effect<A, E, Exclude<R, S>>,
+        FiberSet.run(
+          calls,
+          Effect.flatMap(acquire, (services) => Effect.provideContext(effect, services)),
+        ).pipe(Effect.flatMap((fiber) => Fiber.join(fiber).pipe(Effect.onInterrupt(() => Fiber.interrupt(fiber))))) as Effect.Effect<A, E, Exclude<R, S>>,
       start: Effect.asVoid(acquire),
       startPromise,
       phase,
