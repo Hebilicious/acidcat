@@ -6,7 +6,8 @@ import { CLI_EXIT_CODES, cliExitCode, cliUsage, commandPath, isCallFailure, REFE
 import type { JsonObject, Outcome } from "@acid-cat/spec-ts";
 import { Console, Effect, Layer, Option, Schema } from "effect";
 import type { Terminal } from "effect";
-import { Argument, CliError, Command, Flag } from "effect/cli";
+import { Argument, CliError, Command, Flag, GlobalFlag } from "effect/cli";
+import type { Param } from "effect/cli";
 
 import * as App from "./App.ts";
 import * as Session from "./Session.ts";
@@ -58,8 +59,53 @@ export function exitCodeOf(error: CliError.CliError): number {
  */
 export type AppCommand<R> = Command.Command<string, {}, {}, never, R>;
 
-/** The root command: one command for each capability in the view, plus `call` and `list`. */
-export function command<R>(app: App.App<R>, options: Options): AppCommand<R> {
+/** The services of the settings among some global flags. */
+type SettingsOf<Flags extends ReadonlyArray<GlobalFlag.GlobalFlag<any>>> = Flags[number] extends infer F
+  ? F extends GlobalFlag.Setting<infer Id, any>
+    ? GlobalFlag.Setting.Identifier<Id>
+    : never
+  : never;
+
+export interface CommandOptions<
+  Commands extends ReadonlyArray<Command.Command<any, any, any, any, any>>,
+  GlobalFlags extends ReadonlyArray<GlobalFlag.GlobalFlag<any>>,
+  LA,
+  LE,
+  LR,
+> extends Options {
+  /** The commands of the application, beside the commands of the capabilities (spec/bindings/cli.md#commands). */
+  readonly commands?: Commands | undefined;
+  /** The flags of the application, for all commands. The services of the capabilities can depend on them. */
+  readonly globalFlags?: GlobalFlags | undefined;
+  /**
+   * The services of the capabilities, for the commands of the capabilities, `call` and `list`. The commands of the
+   * application do not get them.
+   */
+  readonly services?: Layer.Layer<LA, LE, LR> | undefined;
+}
+
+/**
+ * The root command: one command for each capability in the view, `call` and `list`, and the commands of the
+ * application. The program stops with an error when two commands have the same path, or when the flag of a capability
+ * has the name of a global flag (spec/bindings/cli.md#commands). `Cli.command` checks this when it makes the command.
+ */
+export function command<
+  R,
+  const Commands extends ReadonlyArray<Command.Command<any, any, any, any, any>> = readonly [],
+  const GlobalFlags extends ReadonlyArray<GlobalFlag.GlobalFlag<any>> = readonly [],
+  LA = never,
+  LE = never,
+  LR = never,
+>(
+  app: App.App<R>,
+  options: CommandOptions<Commands, GlobalFlags, LA, LE, LR>,
+): Command.Command<
+  string,
+  {},
+  {},
+  LE | Command.Error<Commands[number]>,
+  Exclude<Exclude<R, LA> | LR | Command.Services<Commands[number]>, SettingsOf<GlobalFlags>>
+> {
   const target = options.target ?? "cli";
   const view = Session.make(app, { target });
   const served = App.capabilitiesOf(app, target);
@@ -83,11 +129,11 @@ export function command<R>(app: App.App<R>, options: Options): AppCommand<R> {
     const leaf: AppCommand<R> = Command.make(path.at(-1)!, flags, (parsed: Record<string, unknown>) => invoke(id, inputFrom(parsed))).pipe(
       Command.withDescription(capability.description),
     );
-    return { path, leaf };
+    return { id, flags, path, leaf };
   });
 
   const call = Command.make(
-    "call",
+    "call" as string,
     {
       id: Argument.String("id").pipe(Argument.withDescription("The id of the capability")),
       input: Argument.String("input").pipe(Argument.withDescription("The input as JSON"), Argument.withDefault("{}")),
@@ -104,7 +150,7 @@ export function command<R>(app: App.App<R>, options: Options): AppCommand<R> {
       }),
   ).pipe(Command.withDescription("Call a capability by its id, with its input as JSON."));
 
-  const list = Command.make("list", {}, () =>
+  const list = Command.make("list" as string, {}, () =>
     Effect.scoped(
       Effect.gen(function* () {
         const session = yield* view;
@@ -119,15 +165,46 @@ export function command<R>(app: App.App<R>, options: Options): AppCommand<R> {
     ),
   ).pipe(Command.withDescription("List the capabilities, with their availability."));
 
-  const reserved = new Set(["call", "list"]);
-  for (const { path } of leaves) {
-    if (reserved.has(path[0]!)) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
+  const globalFlags = options.globalFlags ?? [];
+  const globalNames = new Set([...GlobalFlag.BuiltIns, ...globalFlags].flatMap((flag) => flagNames(flag.flag)));
+  for (const { id, flags } of leaves) {
+    for (const name of Object.keys(flags)) {
+      if (globalNames.has(name)) throw new Error(`The flag --${name} of ${id} has the same name as a global flag of the command line.`);
+    }
   }
 
-  return Command.make(options.name).pipe(
+  const services = options.services;
+  const provided = (each: Command.Command<string, any, {}, never, R>): Command.Command<string, any, {}, LE, Exclude<R, LA> | LR> =>
+    services === undefined ? (each as never) : each.pipe(Command.provide(services));
+  const bindingCommands = [call, list, ...group(leaves, [])].map(provided);
+  const applicationCommands = options.commands ?? [];
+
+  const taken = new Set<string>();
+  for (const each of [...bindingCommands, ...applicationCommands]) {
+    if (taken.has(each.name)) throw new Error(`Two commands of the command line have the path ${options.name} ${each.name}.`);
+    taken.add(each.name);
+  }
+
+  const root = Command.make(options.name).pipe(
     Command.withDescription(app.description ?? app.title ?? options.name),
-    Command.withSubcommands([call, list, ...group(leaves, [])]),
+    Command.withSubcommands([...bindingCommands, ...applicationCommands]),
   );
+  return (globalFlags.length === 0 ? root : root.pipe(Command.withGlobalFlags(globalFlags))) as never;
+}
+
+/** The names and the aliases of a flag. */
+function flagNames(flag: Param.Param<"flag", unknown>): string[] {
+  const node = flag as Param.Single<"flag", unknown> | Param.Map<"flag", unknown, unknown> | Param.Transform<"flag", unknown, unknown> | Param.Optional<"flag", unknown> | Param.Variadic<"flag", unknown>;
+  switch (node._tag) {
+    case "Single":
+      return [node.name, ...node.aliases];
+    case "Transform":
+      return [...flagNames(node.param), ...node.alternatives.flatMap((alternative) => flagNames(alternative() as Param.Param<"flag", unknown>))];
+    case "Map":
+    case "Optional":
+    case "Variadic":
+      return flagNames(node.param);
+  }
 }
 
 interface Leaf<R> {
@@ -198,8 +275,12 @@ function inputFrom(parsed: Record<string, unknown>): Record<string, unknown> {
   return input;
 }
 
-/** Write an outcome and set the exit code (spec/bindings/cli.md#outcomes). */
-const print = (outcome: Outcome<unknown, unknown>) =>
+/**
+ * Write an outcome and set the exit code (spec/bindings/cli.md#outcomes): a value or a failure as JSON on standard
+ * output, a call failure as `{ "kind", "message" }` on standard error. A command of the application uses it to give its
+ * outcomes as the commands of the capabilities do.
+ */
+export const print = (outcome: Outcome<unknown, unknown>): Effect.Effect<void> =>
   Effect.gen(function* () {
     if (isCallFailure(outcome)) {
       yield* Console.error(JSON.stringify({ kind: outcome.kind, message: outcome.message }));

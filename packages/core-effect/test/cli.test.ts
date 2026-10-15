@@ -56,6 +56,20 @@ test("a command that the application changed keeps the exit codes", () => {
   assert.equal(cliWithFlag("--switch", "false", "fixture", "echo").code, 3);
 });
 
+const cliWithCommand = program("./fixture-cli-app.ts");
+
+test("a command of the application runs beside the commands of the capabilities, and writes outcomes in the same way", () => {
+  const greeted = cliWithCommand("greet", "Ada");
+  assert.equal(greeted.code, 0);
+  assert.equal(JSON.parse(greeted.stdout), "Hello, Ada.");
+  const refused = cliWithCommand("greet", "nobody");
+  assert.equal(refused.code, 1);
+  assert.deepEqual(JSON.parse(refused.stdout), { _tag: "NoOne" });
+  assert.equal(cliWithCommand("fixture", "echo", "--text", "hi").code, 0);
+  assert.equal(toggle(cliWithCommand("--switch", "false", "list").stdout)?.available, false);
+  assert.equal(cliWithCommand("nope").code, 2);
+});
+
 test("an interrupt before the program first waits cancels the call with exit code 130", () => {
   const run = program("./fixture-cli-interrupt.ts")("probe", "interrupt");
   assert.equal(run.code, 130);

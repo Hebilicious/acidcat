@@ -139,25 +139,36 @@ Both handlers screen a request, and read its body, before they build services or
 
 `Mcp.handle(app, request, options, layer)` and `Http.handle(app, request, options, layer)` screen one request and answer it, with services that they build from `layer` for this request only after the screening. With no `layer`, a host that builds the services itself provides them to this Effect.
 
-### Flags of the application
+### Commands and flags of the application
 
-The CLI binding allows an application to add its own flags. `Cli.command(app, options)` gives the command. Change it with `effect/cli`, then run it with `Cli.runCommand`, or with `NodeCli.runCommand` from `@acid-cat/core-effect/node`. Both set the exit codes of the binding. `Cli.exitCodeOf(error)` gives the exit code of one usage error.
+The CLI binding allows an application to add its own commands and flags. `Cli.command(app, options)` gives the root command. Its options take:
+
+- `commands`: the commands of the application, beside the commands of the capabilities, `call` and `list`;
+- `globalFlags`: the flags of the application, for all commands;
+- `services`: the layer of the services of the capabilities. Only the commands of the capabilities, `call` and `list` get it. It can depend on the global flags.
+
+`Cli.command` throws an error when two commands have the same path, or when the flag of a capability has the name of a global flag of the application or of `effect/cli`, so the program stops when it starts. `Cli.print(outcome)` writes an outcome and sets its exit code, so a command of the application gives its outcomes as the commands of the capabilities do. Run the command with `Cli.runCommand`, or with `NodeCli.runCommand` from `@acid-cat/core-effect/node`. Both set the exit codes of the binding. `Cli.exitCodeOf(error)` gives the exit code of one usage error.
 
 ```ts
 import { Cli } from "@acid-cat/core-effect";
 import { NodeCli } from "@acid-cat/core-effect/node";
 import { Effect, Layer } from "effect";
-import { Command, Flag, GlobalFlag } from "effect/cli";
+import { Argument, Command, Flag, GlobalFlag } from "effect/cli";
 
 const historyFile = GlobalFlag.Setting("history-file")({ flag: Flag.String("history-file") });
 
-// The services depend on the flag.
-const services = Layer.unwrap(Effect.map(historyFile, (path) => historyLayer(path)));
-
-const command = Cli.command(app, { name: "aircon", version: "0.1.0" }).pipe(
-  Command.provide(services),
-  Command.withGlobalFlags([historyFile]),
+const report = Command.make("report", { day: Argument.String("day") }, ({ day }) =>
+  Effect.map(readReport(day), (value) => ({ ok: true, value })).pipe(Effect.flatMap(Cli.print)),
 );
+
+const command = Cli.command(app, {
+  name: "aircon",
+  version: "0.1.0",
+  // The services depend on the flag.
+  services: Layer.unwrap(Effect.map(historyFile, (path) => historyLayer(path))),
+  globalFlags: [historyFile],
+  commands: [report],
+});
 
 NodeCli.runCommand(command, { version: "0.1.0" });
 ```

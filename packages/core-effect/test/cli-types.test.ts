@@ -7,7 +7,7 @@ import { Effect } from "effect";
 import { Command } from "effect/cli";
 
 import { Cli } from "../src/index.ts";
-import { fixture, switchLayer } from "./fixture.ts";
+import { fixture, Switch, switchLayer } from "./fixture.ts";
 
 const options = { name: "fixture", version: "0.0.0" };
 
@@ -27,4 +27,13 @@ test("Cli.command needs the services of the application", () => {
   // @ts-expect-error The layer of the application is missing.
   const missing: Command.Command<string, {}, {}, never, never> = Cli.command(fixture, options);
   void [provided, missing];
+});
+
+test("Cli.command gives the services to the commands of the capabilities, and keeps the needs of the commands of the application", () => {
+  const withServices: Command.Command<string, {}, {}, never, never> = Cli.command(fixture, { ...options, services: switchLayer });
+  const greet = Command.make("greet", {}, () => Switch.use(() => Effect.void));
+  const needsSwitch: Command.Command<string, {}, {}, never, Switch> = Cli.command(fixture, { ...options, services: switchLayer, commands: [greet] });
+  // @ts-expect-error The command of the application needs the switch.
+  const missing: Command.Command<string, {}, {}, never, never> = Cli.command(fixture, { ...options, services: switchLayer, commands: [greet] });
+  void [withServices, needsSwitch, missing];
 });
