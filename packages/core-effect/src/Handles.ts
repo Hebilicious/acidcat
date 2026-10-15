@@ -52,8 +52,12 @@ const leafTypeId: unique symbol = Symbol.for("@acid-cat/core-effect/Handles/Leaf
  */
 export type Detachable<T> = T extends (...args: never[]) => unknown ? never : T extends object ? { readonly [K in keyof T]: Detachable<T[K]> } : T;
 
-/** No condition when `State` is `Detachable`, and a member that no value has when it is not. */
-type OnlyData<State> = [State] extends [Detachable<State>] ? unknown : { readonly "a snapshot is data that structuredClone copies, with no functions": never };
+/**
+ * The check of `Handles.leaf` that a snapshot is data: no condition when `State` is `Detachable`, and a member that no
+ * value has when it is not. A helper that is generic over the snapshot puts it on its own parameter, so that its
+ * callers get the check, and it calls `leaf` with no cast.
+ */
+export type OnlyData<State> = [State] extends [Detachable<State>] ? unknown : { readonly "a snapshot is data that structuredClone copies, with no functions": never };
 
 /** The mark of a leaf whose snapshot is an Effect, which only `treeWith` can read. */
 declare const readsServices: unique symbol;

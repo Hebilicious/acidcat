@@ -157,7 +157,7 @@ const program = Effect.gen(function* () {
 });
 ```
 
-A snapshot is data that `structuredClone` copies: a type with a function in it is a type error, and the copy of a class instance is a plain object. `Handles.tree` takes leaves with an observable; a leaf with an Effect goes to `treeWith`. A capability with `state`, or outside the view of the session, cannot be a leaf.
+A snapshot is data that `structuredClone` copies: a type with a function in it is a type error, and the copy of a class instance is a plain object. A helper that is generic over the snapshot puts `Handles.OnlyData<State>` on its own parameter, as `options: { snapshot: Observable<State> } & Handles.OnlyData<State>`, so that it calls `Handles.leaf` with no cast, and its callers get the check. `Handles.tree` takes leaves with an observable; a leaf with an Effect goes to `treeWith`. A capability with `state`, or outside the view of the session, cannot be a leaf.
 
 `layer` gives the services that the capabilities need. A web handler is `(request: Request) => Promise<Response>`. It works in Node, Bun, Deno and Cloudflare Workers.
 

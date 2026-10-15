@@ -133,3 +133,24 @@ test("a snapshot is data, and an Effect that waits gives it through treeWith onl
     await session.dispose();
   }
 });
+
+test("a generic helper can make a leaf, and its callers get the check of the data", async () => {
+  /** A helper of an application, generic over the snapshot, that makes a leaf with no cast. */
+  const withSnapshot = <C extends Capability.Any, State>(
+    capability: C,
+    options: { readonly snapshot: Capability.Observable<State> } & Handles.OnlyData<State>,
+  ) => Handles.leaf(capability, options);
+
+  const workbench = owner();
+  const typed = withSnapshot(inspect, { snapshot: workbench.snapshot });
+  const session = await Handles.open(app, Layer.succeed(Owner, workbench), { target: "app" });
+  try {
+    const snapshot: Capability.Observable<Workbench> = Handles.tree(session.handles, { inspect: typed }).inspect.snapshot;
+    assert.equal(snapshot.getSnapshot().items.length, 1);
+  } finally {
+    await session.dispose();
+  }
+  const withFunction = { getSnapshot: () => ({ read: () => 1 }), subscribe: () => ({ unsubscribe() {} }) };
+  // @ts-expect-error A caller of the helper still gets the check: a function is not data.
+  void (() => withSnapshot(inspect, { snapshot: withFunction }));
+});
