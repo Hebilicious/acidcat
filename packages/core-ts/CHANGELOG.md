@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.3.0...@acid-cat/core-ts@0.3.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **core-effect:** write an empty Schema.Struct input as an object with no properties ([#30](https://github.com/Hebilicious/acidcat/issues/30)) ([f2f37c2](https://github.com/Hebilicious/acidcat/commit/f2f37c2187e09d876b74f004bb8e852e894ecab7))
+
 ## [0.3.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.2.0...@acid-cat/core-ts@0.3.0) (2026-10-14)
 
 
