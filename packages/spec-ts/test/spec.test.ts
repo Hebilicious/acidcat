@@ -11,6 +11,7 @@ import {
   httpStatus,
   isId,
   mcpToolResult,
+  objectInput,
   ok,
   readBounded,
   screenRequest,
@@ -97,4 +98,19 @@ test("views keep one target, and bundles keep the types they use", () => {
   const bundled = bundle({ $ref: "#/$defs/Status" }, catalog.$defs!);
   assert.equal(bundled.type, "object");
   assert.deepEqual(Object.keys(bundled.$defs as object), ["Mode"]);
+});
+
+test("an input that is a union of objects becomes an object schema", () => {
+  const types = { ById: { type: "object", properties: { id: { type: "integer" } } }, Name: { type: "string" } };
+  const union = { anyOf: [{ type: "object", properties: { name: { type: "string" } } }, { $ref: "#/$defs/ById" }] };
+  assert.deepEqual(objectInput(union, types), { type: "object", ...union });
+  assert.deepEqual(objectInput({ oneOf: union.anyOf }, types), { type: "object", oneOf: union.anyOf });
+  assert.deepEqual(objectInput({ $ref: "#/$defs/Lookup" }, { ...types, Lookup: union }), { type: "object", $ref: "#/$defs/Lookup" });
+
+  const notObjects = { anyOf: [{ $ref: "#/$defs/ById" }, { $ref: "#/$defs/Name" }] };
+  assert.equal(objectInput(notObjects, types), notObjects);
+  const object = { type: "object" };
+  assert.equal(objectInput(object, types), object);
+  const reference = { $ref: "#/$defs/ById" };
+  assert.equal(objectInput(reference, types), reference);
 });

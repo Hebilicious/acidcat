@@ -31,6 +31,26 @@ test("an empty struct is an input with no properties, and a record is an input t
   assert.deepEqual(inputOf(Schema.Record(Schema.String, Schema.Json)), { type: "object" });
 });
 
+test("an input that is a union of objects is an object schema, and the catalog conforms", () => {
+  const ByName = Schema.Struct({ name: Schema.String });
+  const ById = Schema.Struct({ id: Schema.Int }).annotate({ identifier: "ById" });
+  const app = App.make({
+    targets: { mcp: { bindings: ["mcp"] } },
+    capabilities: [
+      Capability.make({
+        id: "probe.find",
+        description: "Find a record by name or by id.",
+        audience: ["mcp"],
+        input: Schema.Union([ByName, ById]),
+        run: () => Effect.succeed(null),
+      }),
+    ],
+  });
+  const text = App.render(app);
+  assert.deepEqual(check(JSON.parse(text), text), { errors: [], warnings: [] });
+  assert.equal(App.document(app).capabilities["probe.find"]!.input!.type, "object");
+});
+
 test("a call gives a value, a failure or a call failure", () =>
   withSession("mcp", (session) =>
     Effect.gen(function* () {

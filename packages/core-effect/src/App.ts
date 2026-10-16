@@ -3,7 +3,7 @@
  * source and the catalog is checked at build time. See spec/catalog.md#build-time-and-run-time.
  */
 import { canonicalText } from "@acid-cat/catalog";
-import { REFERENCE } from "@acid-cat/spec-ts";
+import { objectInput, REFERENCE } from "@acid-cat/spec-ts";
 import type { CatalogCapability, CatalogDocument, JsonObject } from "@acid-cat/spec-ts";
 import { Schema } from "effect";
 
@@ -74,7 +74,9 @@ function write(app: App<any>): CatalogDocument {
     capabilities[capability.id] = {
       description: capability.description,
       audience: capability.audience,
-      ...(capability.input === undefined ? {} : { input: inputSchema(capability.input, toJson(capability.input, capability.id)) }),
+      ...(capability.input === undefined
+        ? {}
+        : { input: objectInput(inputSchema(capability.input, toJson(capability.input, capability.id)), types) }),
       ...(capability.output === undefined ? {} : { output: toJson(capability.output, capability.id) }),
       ...(Object.keys(failures).length === 0 ? {} : { failures }),
       ...(capability.readOnly === true ? { readOnly: true } : {}),

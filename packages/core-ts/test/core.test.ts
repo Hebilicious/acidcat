@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
+import { z } from "zod";
 
-import { CallFailureError, createSession, httpHandler, installWebMcp, mcpHandler, renderCatalog, runCli } from "../src/index.ts";
+import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, httpHandler, installWebMcp, mcpHandler, ok, renderCatalog, runCli } from "../src/index.ts";
 import type { App, CliCommand, CliOptions, ModelContextTool } from "../src/index.ts";
 import { fixture, heldApp, Holds, options, Switch, toJsonSchema } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
@@ -11,6 +12,25 @@ import type { Context } from "./fixture.ts";
 test("the application writes a catalog that conforms", () => {
   const text = renderCatalog(fixture, { toJsonSchema });
   assert.deepEqual(check(JSON.parse(text), text), { errors: [], warnings: [] });
+});
+
+test("an input that is a union of objects is an object schema, and the catalog conforms", () => {
+  const ById = z.object({ id: z.number().int() }).meta({ id: "ById" });
+  const app = defineApp({
+    targets: { mcp: { bindings: ["mcp"] } },
+    capabilities: [
+      defineCapability({
+        id: "probe.find",
+        description: "Find a record by name or by id.",
+        audience: ["mcp"],
+        input: z.union([z.object({ name: z.string() }), ById]),
+        run: () => ok(null),
+      }),
+    ],
+  });
+  const text = renderCatalog(app, { toJsonSchema });
+  assert.deepEqual(check(JSON.parse(text), text), { errors: [], warnings: [] });
+  assert.equal(catalogOf(app, { toJsonSchema }).capabilities["probe.find"]!.input!.type, "object");
 });
 
 test("a call gives a value, a failure or a call failure", async () => {
