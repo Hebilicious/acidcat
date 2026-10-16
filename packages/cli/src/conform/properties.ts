@@ -2,15 +2,18 @@
  * Property-based checks for the guarantees of spec/invocation.md#cancellation-and-concurrency, through each remote
  * binding. fast-check makes random sets of concurrent calls and cancellations.
  */
+import { randomUUID } from "node:crypto";
+
 import type { Outcome } from "@acid-cat/spec-ts";
+import { SdkError } from "@modelcontextprotocol/client";
 import fc from "fast-check";
 
-import { Checks, expect } from "./check.ts";
+import { Checks, expect, until } from "./check.ts";
 import { mcpClient } from "./mcp.ts";
 
 const RULE = "spec/invocation.md#cancellation-and-concurrency";
 
-/** A call through one binding. A cancelled call can reject. */
+/** A call through one binding. When the signal aborts, the client stops the call and rejects with the reason of the signal. */
 export type Invoke = (id: string, input: object, signal?: AbortSignal) => Promise<Outcome<unknown, unknown>>;
 
 export function httpInvoke(base: string): Invoke {
@@ -25,8 +28,8 @@ export function httpInvoke(base: string): Invoke {
   };
 }
 
-export async function mcpInvoke(url: string): Promise<{ readonly invoke: Invoke; close(): Promise<void> }> {
-  const client = await mcpClient(url);
+export async function mcpInvoke(url: string, signal: AbortSignal): Promise<{ readonly invoke: Invoke; close(): Promise<void> }> {
+  const client = await mcpClient(url, signal);
   return {
     invoke: async (id, input, signal) => {
       try {
@@ -39,6 +42,8 @@ export async function mcpInvoke(url: string): Promise<{ readonly invoke: Invoke;
         if (result.isError !== true) return { ok: true, value: result.structuredContent ?? body };
         return body as Outcome<unknown, unknown>;
       } catch (error) {
+        // The MCP client rejects a call that its signal aborts with an SdkError that has the reason as its message.
+        if (signal?.aborted && error instanceof SdkError && error.message === String(signal.reason)) throw signal.reason;
         if ((error as { code?: number }).code === -32602) return { kind: "unknown-capability", message: String(error) };
         throw error;
       }
@@ -74,48 +79,106 @@ function agrees(operation: Operation, outcome: Outcome<unknown, unknown>): boole
   }
 }
 
-const callFor = (invoke: Invoke, operation: Operation) => {
+const callFor = (invoke: Invoke, operation: Operation, signal: AbortSignal) => {
   switch (operation.kind) {
     case "echo":
-      return invoke("fixture.echo", { text: operation.text });
+      return invoke("fixture.echo", { text: operation.text }, signal);
     case "refuse":
-      return invoke("fixture.refuse", {});
+      return invoke("fixture.refuse", {}, signal);
     case "crash":
-      return invoke("fixture.crash", {});
+      return invoke("fixture.crash", {}, signal);
     case "invalid":
-      return invoke("fixture.echo", { text: 0 });
+      return invoke("fixture.echo", { text: 0 }, signal);
   }
 };
 
-export async function checkProperties(binding: string, invoke: Invoke): Promise<Checks> {
-  const checks = new Checks(`${binding} properties`);
+/** How a call through a binding ended: with an outcome, or with a rejection. */
+type Settled = { readonly outcome: Outcome<unknown, unknown> } | { readonly rejected: unknown };
 
-  await checks.run("concurrent calls each get exactly their own outcome", RULE, async () => {
+const settle = (call: Promise<Outcome<unknown, unknown>>): Promise<Settled> =>
+  call.then(
+    (outcome) => ({ outcome }),
+    (rejected: unknown) => ({ rejected }),
+  );
+
+const describe = (settled: Settled): string => ("outcome" in settled ? JSON.stringify(settled.outcome) : `the rejection ${String(settled.rejected)}`);
+
+/**
+ * True if a call ended as a cancellation: with the call failure `cancelled`, or with the rejection that the client gives
+ * when it aborts the call, which is the reason of its signal. Any other rejection is not a cancellation.
+ */
+const isCancellation = (settled: Settled, reason: unknown): boolean =>
+  "outcome" in settled ? "kind" in settled.outcome && settled.outcome.kind === "cancelled" : settled.rejected === reason;
+
+/** The keys of the calls that hold now, as fixture.held gives them through the binding. */
+async function heldKeys(invoke: Invoke, signal: AbortSignal): Promise<readonly string[]> {
+  const outcome = await invoke("fixture.held", {}, signal);
+  expect("ok" in outcome && outcome.ok, `fixture.held gave ${JSON.stringify(outcome)}`);
+  return (outcome.value as { readonly keys: readonly string[] }).keys;
+}
+
+/**
+ * Start one call to fixture.hold for each flag, and wait until each call holds. Then cancel each call whose flag is
+ * true, and release the others. Each cancelled call must end as a cancellation and stop holding. Each other call must
+ * hold until it is released, and then give its own key. At the end, the cleanup releases every key, with a signal that
+ * aborts `deadline` milliseconds later.
+ */
+async function cancelSome(invoke: Invoke, flags: readonly boolean[], signal: AbortSignal, deadline: number): Promise<void> {
+  const calls = flags.map((cancelled) => {
+    const key = randomUUID();
+    const controller = new AbortController();
+    const reason = new Error(`acid-cat conform cancels the call that holds ${key}`);
+    const settled = settle(invoke("fixture.hold", { key }, AbortSignal.any([controller.signal, signal])));
+    return { key, cancelled, cancel: () => controller.abort(reason), reason, settled };
+  });
+  const cancelled = calls.filter((call) => call.cancelled);
+  const kept = calls.filter((call) => !call.cancelled);
+  const read = () => heldKeys(invoke, signal);
+  try {
+    await until("fixture.held gives the key of each call", read, (held) => calls.every((call) => held.includes(call.key)), signal);
+    for (const call of cancelled) call.cancel();
+    for (const call of cancelled) {
+      const settled = await call.settled;
+      expect(isCancellation(settled, call.reason), `a cancelled call gave ${describe(settled)}`);
+    }
+    const held = await until("the cancelled calls stop holding", read, (held) => cancelled.every((call) => !held.includes(call.key)), signal);
+    expect(kept.every((call) => held.includes(call.key)), "a call that was not cancelled stopped holding");
+    for (const call of kept) {
+      await invoke("fixture.release", { key: call.key }, signal);
+      const settled = await call.settled;
+      const own = { ok: true, value: { key: call.key } };
+      expect("outcome" in settled && JSON.stringify(settled.outcome) === JSON.stringify(own), `a call that was not cancelled gave ${describe(settled)}`);
+    }
+  } finally {
+    const cleanup = AbortSignal.timeout(deadline);
+    await Promise.all(calls.map((call) => invoke("fixture.release", { key: call.key }, cleanup).catch(() => undefined)));
+  }
+}
+
+/** Two calls or more, at least one of them cancelled and at least one not. */
+const cancellations = fc.array(fc.boolean(), { minLength: 2, maxLength: 5 }).filter((flags) => flags.includes(true) && flags.includes(false));
+
+export async function checkProperties(binding: string, invoke: Invoke, deadline: number): Promise<Checks> {
+  const checks = new Checks(`${binding} properties`, deadline);
+
+  await checks.run("concurrent calls each get exactly their own outcome", RULE, async (signal) => {
     await fc.assert(
       fc.asyncProperty(fc.array(operation, { minLength: 1, maxLength: 12 }), async (operations) => {
-        const outcomes = await Promise.all(operations.map((op) => callFor(invoke, op)));
+        fc.pre(!signal.aborted);
+        const outcomes = await Promise.all(operations.map((op) => callFor(invoke, op, signal)));
         operations.forEach((op, index) => expect(agrees(op, outcomes[index]!), `${op.kind} gave ${JSON.stringify(outcomes[index])}`));
       }),
-      { numRuns: 25 },
+      { numRuns: 25, includeErrorInReport: true },
     );
   });
 
-  await checks.run("cancelling a call affects only that call", RULE, async () => {
+  await checks.run("cancelling a call affects only that call", RULE, async (signal) => {
     await fc.assert(
-      fc.asyncProperty(fc.array(fc.boolean(), { minLength: 2, maxLength: 5 }), async (cancel) => {
-        const calls = cancel.map((cancelled) => {
-          const controller = new AbortController();
-          const outcome = invoke("fixture.slow", { milliseconds: 200 }, controller.signal).catch(() => "aborted" as const);
-          if (cancelled) setTimeout(() => controller.abort(), 20);
-          return { cancelled, outcome };
-        });
-        for (const call of calls) {
-          const outcome = await call.outcome;
-          if (!call.cancelled) expect(outcome !== "aborted" && "ok" in outcome && outcome.ok, `a call that was not cancelled gave ${JSON.stringify(outcome)}`);
-          else expect(outcome === "aborted" || ("kind" in outcome && outcome.kind === "cancelled"), `a cancelled call gave ${JSON.stringify(outcome)}`);
-        }
+      fc.asyncProperty(cancellations, (flags) => {
+        fc.pre(!signal.aborted);
+        return cancelSome(invoke, flags, signal, deadline);
       }),
-      { numRuns: 5 },
+      { numRuns: 5, includeErrorInReport: true },
     );
   });
 

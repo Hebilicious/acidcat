@@ -13,7 +13,7 @@ tasks:
     description: "Bundle the package and write its declarations into dist/, for npm."
     command: "node"
     args: ["../../scripts/build-package.ts"]
-    inputs: ["src/**/*", "package.json", "tsconfig.json", "tsconfig.build.json", "/tsconfig.base.json", "/scripts/build-package.ts", "/schemas/catalog.schema.json"]
+    inputs: ["src/**/*", "conformance/*.acidcat.json", "package.json", "tsconfig.json", "tsconfig.build.json", "/tsconfig.base.json", "/scripts/build-package.ts", "/schemas/catalog.schema.json"]
     outputs: ["dist/**/*"]
 
   test:

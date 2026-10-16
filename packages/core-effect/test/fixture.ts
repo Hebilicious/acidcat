@@ -9,20 +9,60 @@ export class Switch extends Context.Service<Switch, SubscriptionRef.Subscription
 
 export const switchLayer = Layer.effect(Switch, SubscriptionRef.make(true));
 
-/** A switch layer that counts how many times it is built and released, to test when a host builds the services. */
-export function countedSwitchLayer() {
+/** The calls to `fixture.hold` that hold now, for all the sessions of one provider. */
+export class Holds extends Context.Service<
+  Holds,
+  {
+    /** Hold until `release` releases the key. An interruption stops the hold. */
+    readonly hold: (key: string, marker: string | undefined) => Effect.Effect<void>;
+    readonly held: Effect.Effect<ReadonlyArray<string>>;
+    readonly release: (key: string) => Effect.Effect<void>;
+  }
+>()("fixture/Holds") {}
+
+/** The holds of one provider. `mark` writes the file of a marker. A page cannot write files, so only the command line of the fixture gives it. */
+export const holdsLayer = (mark?: (path: string) => Effect.Effect<void>) =>
+  Layer.sync(Holds, () => {
+    const holding = new Set<{ readonly key: string; readonly released: Deferred.Deferred<void> }>();
+    return {
+      hold: (key, marker) =>
+        Effect.acquireUseRelease(
+          Effect.map(Deferred.make<void>(), (released) => {
+            const entry = { key, released };
+            holding.add(entry);
+            return entry;
+          }),
+          (entry) => Effect.andThen(marker === undefined || mark === undefined ? Effect.void : mark(marker), Deferred.await(entry.released)),
+          (entry) => Effect.sync(() => holding.delete(entry)),
+        ),
+      held: Effect.sync(() => [...holding].map((entry) => entry.key)),
+      release: (key) =>
+        Effect.forEach(
+          [...holding].filter((entry) => entry.key === key),
+          (entry) => Deferred.succeed(entry.released, undefined),
+          { discard: true },
+        ),
+    };
+  });
+
+/** The services of the fixture: the switch, which is on, and the holds. */
+export const fixtureLayer = Layer.merge(switchLayer, holdsLayer());
+
+/** The services of the fixture, which count how many times the switch is built and released, to test when a host builds the services. */
+export function countedFixtureLayer() {
   const counts = { built: 0, released: 0 };
-  const layer = Layer.effect(
+  const counted = Layer.effect(
     Switch,
     Effect.acquireRelease(
       Effect.sync(() => counts.built++).pipe(Effect.andThen(SubscriptionRef.make(true))),
       () => Effect.sync(() => counts.released++),
     ),
   );
-  return { counts, layer };
+  return { counts, layer: Layer.merge(counted, holdsLayer()) };
 }
 
 const Text = Schema.Struct({ text: Schema.String });
+const Key = Schema.Struct({ key: Schema.String });
 const Refused = Schema.TaggedStruct("Refused", { reason: Schema.String });
 
 const Flags = Schema.Struct({
@@ -69,11 +109,28 @@ export const fixture = App.make({
       run: () => Effect.die(new Error("secret internal detail")),
     }),
     Capability.make({
-      id: "fixture.slow",
-      description: "Wait for some milliseconds, then return null.",
+      id: "fixture.hold",
+      description:
+        "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held gives the key. With a marker, the call writes a file at that path when it starts to hold.",
       audience: everywhere,
-      input: Schema.Struct({ milliseconds: Schema.Finite }),
-      run: ({ milliseconds }) => Effect.sleep(milliseconds).pipe(Effect.as(null)),
+      input: Schema.Struct({ key: Schema.String, marker: Schema.optionalKey(Schema.String) }),
+      output: Key,
+      run: ({ key, marker }) => Holds.use((holds) => holds.hold(key, marker)).pipe(Effect.as({ key })),
+    }),
+    Capability.make({
+      id: "fixture.held",
+      description: "Return the keys of the calls to fixture.hold that hold now.",
+      audience: everywhere,
+      readOnly: true,
+      output: Schema.Struct({ keys: Schema.Array(Schema.String) }),
+      run: () => Holds.use((holds) => Effect.map(holds.held, (keys) => ({ keys }))),
+    }),
+    Capability.make({
+      id: "fixture.release",
+      description: "Release the calls to fixture.hold that hold the key.",
+      audience: everywhere,
+      input: Key,
+      run: ({ key }) => Holds.use((holds) => holds.release(key)).pipe(Effect.as(null)),
     }),
     Capability.make({
       id: "fixture.hidden",

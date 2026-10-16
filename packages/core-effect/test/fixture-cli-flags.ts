@@ -7,7 +7,7 @@ import { Command, Flag, GlobalFlag } from "effect/cli";
 
 import { Cli } from "../src/index.ts";
 import { NodeCli } from "../src/node.ts";
-import { fixture, Switch } from "./fixture.ts";
+import { fixture, holdsLayer, Switch } from "./fixture.ts";
 
 const switchFlag = GlobalFlag.Setting("switch")({
   flag: Flag.Boolean("switch").pipe(Flag.withDescription("The first position of the switch."), Flag.withDefault(true)),
@@ -16,7 +16,7 @@ const switchFlag = GlobalFlag.Setting("switch")({
 const switchLayer = Layer.effect(Switch, Effect.flatMap(switchFlag, SubscriptionRef.make));
 
 const command = Cli.command(fixture, { name: "fixture", version: "0.0.0" }).pipe(
-  Command.provide(switchLayer),
+  Command.provide(Layer.merge(switchLayer, holdsLayer())),
   Command.withGlobalFlags([switchFlag]),
 );
 

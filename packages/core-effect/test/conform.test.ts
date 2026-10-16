@@ -5,10 +5,10 @@ import { conform, serve } from "@acid-cat/cli";
 import { Effect, Exit, Layer, Scope } from "effect";
 
 import { Http, Mcp, Session, WebMcp } from "../src/index.ts";
-import { fixture, switchLayer } from "./fixture.ts";
+import { fixture, fixtureLayer } from "./fixture.ts";
 
 test("the Effect core passes acid-cat conform through all its bindings", async () => {
-  const services = Layer.fresh(switchLayer);
+  const services = Layer.fresh(fixtureLayer);
   const served = await serve({
     "/mcp": Mcp.toWebHandler(fixture, services, { name: "fixture", version: "0.0.0", allowedOrigins: [] }),
     "/api": Http.toWebHandler(fixture, services, { allowedOrigins: [], base: "/api" }),
@@ -24,7 +24,7 @@ test("the Effect core passes acid-cat conform through all its bindings", async (
           Effect.gen(function* () {
             const session = yield* Session.make(fixture, { target: "app" });
             yield* WebMcp.install(session, { host: modelContext });
-          }).pipe(Scope.provide(scope), Effect.provide(Layer.fresh(switchLayer))),
+          }).pipe(Scope.provide(scope), Effect.provide(Layer.fresh(fixtureLayer))),
         );
         return () => Effect.runPromise(Scope.close(scope, Exit.void));
       },

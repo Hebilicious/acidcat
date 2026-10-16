@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { Effect, Layer, Option, Scope, SubscriptionRef } from "effect";
 
 import { Session, WebMcp } from "../src/index.ts";
-import { fixture, Switch, switchLayer } from "./fixture.ts";
+import { fixture, Switch, fixtureLayer } from "./fixture.ts";
 
 /** A WebMCP host in memory. It can refuse a tool, to test a failed update. */
 function fakeHost() {
@@ -61,7 +61,7 @@ test("tools follow availability, a failed update keeps the last tools, and closi
       yield* Scope.close(scope, { _tag: "Success", value: undefined } as never);
       assert.equal(host.tools.size, 0);
       assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "disposed");
-    }).pipe(Effect.provide(Layer.fresh(switchLayer))),
+    }).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
   ));
 
 test("with no host, the binding does nothing", () =>
@@ -71,5 +71,5 @@ test("with no host, the binding does nothing", () =>
         const session = yield* Session.make(fixture, { target: "app" });
         assert.ok(Option.isNone(yield* WebMcp.install(session)));
       }),
-    ).pipe(Effect.provide(Layer.fresh(switchLayer))),
+    ).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
   ));

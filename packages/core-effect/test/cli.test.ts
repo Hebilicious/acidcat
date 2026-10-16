@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, watch } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 const program = (file: string) => (...args: string[]) => {
@@ -57,4 +60,22 @@ test("a command that the application changed keeps the exit codes", () => {
   assert.equal(cliWithFlag("--switch", "false", "fixture", "echo", "--text", "hi").code, 0);
   assert.equal(cliWithFlag("--switch", "false", "nope").code, 2);
   assert.equal(cliWithFlag("--switch", "false", "fixture", "echo").code, 3);
+});
+
+test("an interrupt as soon as a call holds cancels the call with exit code 130", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "core-effect-cli-"));
+  try {
+    for (let run = 0; run < 10; run++) {
+      const marker = join(directory, `held-${run}`);
+      const child = spawn(process.execPath, [new URL("./fixture-cli.ts", import.meta.url).pathname, "fixture", "hold", "--key", "k", "--marker", marker]);
+      const watcher = watch(directory, (_, name) => {
+        if (name === `held-${run}`) child.kill("SIGINT");
+      });
+      const [code, signal] = await new Promise<[number | null, NodeJS.Signals | null]>((resolve) => child.on("close", (...exit) => resolve(exit)));
+      watcher.close();
+      assert.deepEqual({ code, signal }, { code: 130, signal: null });
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
