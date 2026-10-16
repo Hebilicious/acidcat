@@ -78,8 +78,9 @@ const respond = <R>(app: App.App<R>, request: Request, body: string, options: Op
 
     if (request.method === "GET" && path === "/capabilities") {
       const list = [];
-      for (const id of Object.keys(session.view.capabilities)) {
-        list.push({ id, ...(yield* session.availability(id)) });
+      for (const capability of app.capabilities) {
+        if (!capability.audience.includes(session.target)) continue;
+        list.push({ id: capability.id, ...(yield* session.availability(capability.id)) });
       }
       return json(200, list);
     }

@@ -56,7 +56,7 @@ test("a session and its handles open without writing JSON Schema, and the view i
   );
 });
 
-test("an HTTP call writes no JSON Schema, and GET /catalog writes the view", async () => {
+test("an HTTP call and GET /capabilities write no JSON Schema, and GET /catalog writes the view", async () => {
   const { counts, app } = countedApp();
   const handler = Http.toWebHandler(app, Layer.empty, { allowedOrigins: [] });
   const call = await handler(
@@ -67,6 +67,8 @@ test("an HTTP call writes no JSON Schema, and GET /catalog writes the view", asy
     }),
   );
   assert.equal(call.status, 200);
+  const list = (await (await handler(new Request("https://probe.example/capabilities"))).json()) as { id: string; available: boolean }[];
+  assert.deepEqual(list, [{ id: "probe.echo", available: true }]);
   assert.equal(counts.writes, 0);
 
   for (let request = 0; request < 2; request++) {

@@ -34,7 +34,7 @@ test("a session and its handles open without writing JSON Schema, and the view i
   await Promise.all([session.dispose(), other.dispose()]);
 });
 
-test("an HTTP call writes no JSON Schema, and GET /catalog writes the view", async () => {
+test("an HTTP call and GET /capabilities write no JSON Schema, and GET /catalog writes the view", async () => {
   const { counts, toJsonSchema } = countedToJsonSchema();
   const handler = httpHandler(fixture, { allowedOrigins: [], ...options(), toJsonSchema });
   const call = await handler(
