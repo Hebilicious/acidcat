@@ -27,8 +27,9 @@ export interface Capability<
   OutputSchema extends StandardSchemaV1 | undefined = StandardSchemaV1 | undefined,
   Failures extends { readonly [tag: string]: StandardSchemaV1 } = { readonly [tag: string]: StandardSchemaV1 },
   StateSchema extends StandardSchemaV1 = StandardSchemaV1,
+  Id extends string = string,
 > {
-  readonly id: string;
+  readonly id: Id;
   readonly description: string;
   /** The targets that can use the capability. With no audience, no target can use it. */
   readonly audience: readonly string[];
@@ -56,16 +57,17 @@ export interface Capability<
 
 export type AnyCapability<Context = any> = Capability<Context, any, any, any, any>;
 
-/** Declare a capability. `Context` is the type of the services that `run` receives. */
+/** Declare a capability. `Context` is the type of the services that `run` receives. The id keeps its literal type. */
 export const defineCapability = <
   Context = unknown,
   Input extends StandardSchemaV1 | undefined = undefined,
   OutputSchema extends StandardSchemaV1 | undefined = undefined,
   Failures extends { readonly [tag: string]: StandardSchemaV1 } = {},
   StateSchema extends StandardSchemaV1 = never,
+  const Id extends string = string,
 >(
-  capability: Capability<Context, Input, OutputSchema, Failures, StateSchema>,
-): Capability<Context, Input, OutputSchema, Failures, StateSchema> => capability;
+  capability: Capability<Context, Input, OutputSchema, Failures, StateSchema, Id>,
+): Capability<Context, Input, OutputSchema, Failures, StateSchema, Id> => capability;
 
 /**
  * Declare capabilities for one context type. The other types come from the schemas:
@@ -82,9 +84,10 @@ export const capabilitiesFor =
     OutputSchema extends StandardSchemaV1 | undefined = undefined,
     Failures extends { readonly [tag: string]: StandardSchemaV1 } = {},
     StateSchema extends StandardSchemaV1 = never,
+    const Id extends string = string,
   >(
-    capability: Capability<Context, Input, OutputSchema, Failures, StateSchema>,
-  ): Capability<Context, Input, OutputSchema, Failures, StateSchema> =>
+    capability: Capability<Context, Input, OutputSchema, Failures, StateSchema, Id>,
+  ): Capability<Context, Input, OutputSchema, Failures, StateSchema, Id> =>
     capability;
 
 export interface Target {
