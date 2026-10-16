@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.4.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.3.1...@acid-cat/core-ts@0.4.0) (2026-10-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core-effect:** read availability and state when they are needed ([#54](https://github.com/Hebilicious/acidcat/issues/54))
+* **cli:** the conformance fixture has `fixture.hold`, `fixture.held` and `fixture.release` in place of `fixture.slow`. An implementation must serve them to pass `acid-cat conform`. `TestHost.call` takes an `id` in place of `cancelAfter`.
+
+### Features
+
+* **cli:** add the commands of the application to the command line ([#52](https://github.com/Hebilicious/acidcat/issues/52)) ([11981b9](https://github.com/Hebilicious/acidcat/commit/11981b97ec018ec1b61f8be8f0d787b71e2b0480))
+* **core-effect:** read availability and state when they are needed ([#54](https://github.com/Hebilicious/acidcat/issues/54)) ([823a0ab](https://github.com/Hebilicious/acidcat/commit/823a0ab284106434de088fc5bffc52b38849d75c))
+* **cores:** give handles the types of their capability ([#55](https://github.com/Hebilicious/acidcat/issues/55)) ([e7f5aa2](https://github.com/Hebilicious/acidcat/commit/e7f5aa2c1d05d71d629ebf647010e967f5846029))
+* **cores:** keep the literal id of a capability, and infer its services from all its parts ([#59](https://github.com/Hebilicious/acidcat/issues/59)) ([23d82c4](https://github.com/Hebilicious/acidcat/commit/23d82c4893c9801a42719137176898f7ea0c763f))
+
+
+### Bug Fixes
+
+* **cli:** make conform wait for observable state, not for time, before it cancels a call ([#57](https://github.com/Hebilicious/acidcat/issues/57)) ([3bf6bee](https://github.com/Hebilicious/acidcat/commit/3bf6bee3d496a4f11279bcbdf2e48d410be9871c))
+* **core-effect:** cancel the call when its request is aborted ([#51](https://github.com/Hebilicious/acidcat/issues/51)) ([9ed4686](https://github.com/Hebilicious/acidcat/commit/9ed4686379b6e804ca9923d63eb19f1c37efb09f))
+* **cores:** write an input that is a union of objects as an object schema ([#58](https://github.com/Hebilicious/acidcat/issues/58)) ([ab58953](https://github.com/Hebilicious/acidcat/commit/ab58953d051936d7c687b3964c483db95b5a7388))
+
+
+### Performance Improvements
+
+* **cores:** open a session without writing JSON Schema ([#53](https://github.com/Hebilicious/acidcat/issues/53)) ([ff6a223](https://github.com/Hebilicious/acidcat/commit/ff6a223e2ae2e1d0869198192e28b95d6f65ea07))
+
 ## [0.3.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.3.0...@acid-cat/core-ts@0.3.1) (2026-10-15)
 
 

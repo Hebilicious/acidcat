@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/cli@0.3.1...@acid-cat/cli@0.4.0) (2026-10-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** the conformance fixture has `fixture.hold`, `fixture.held` and `fixture.release` in place of `fixture.slow`. An implementation must serve them to pass `acid-cat conform`. `TestHost.call` takes an `id` in place of `cancelAfter`.
+
+### Bug Fixes
+
+* **cli:** make conform wait for observable state, not for time, before it cancels a call ([#57](https://github.com/Hebilicious/acidcat/issues/57)) ([3bf6bee](https://github.com/Hebilicious/acidcat/commit/3bf6bee3d496a4f11279bcbdf2e48d410be9871c))
+
 ## [0.3.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/cli@0.3.0...@acid-cat/cli@0.3.1) (2026-10-15)
 
 
