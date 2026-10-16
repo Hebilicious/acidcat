@@ -12,8 +12,8 @@ tasks:
   examples:
     description: "Render every example catalog from Pkl, and put it in canonical form."
     script: "pkl eval examples/*.pkl packages/cli/conformance/*.pkl --output-path '%{moduleDir}/%{moduleName}.acidcat.json' && node packages/cli/src/main.ts format --write examples/*.acidcat.json packages/cli/conformance/*.acidcat.json"
-    inputs: ["examples/*.pkl", "packages/catalog/pkl/**/*.pkl", "packages/cli/src/**/*.ts", "packages/catalog/typescript/src/**/*.ts"]
-    outputs: ["examples/*.acidcat.json"]
+    inputs: ["examples/*.pkl", "packages/cli/conformance/*.pkl", "packages/catalog/pkl/**/*.pkl", "packages/cli/src/**/*.ts", "packages/catalog/typescript/src/**/*.ts"]
+    outputs: ["examples/*.acidcat.json", "packages/cli/conformance/*.acidcat.json"]
     toolchains: ["system"]
     options:
       runInCI: false
