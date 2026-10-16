@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { Effect, Layer, Option, Scope, SubscriptionRef } from "effect";
 
 import { Session, WebMcp } from "../src/index.ts";
-import { fixture, Switch, fixtureLayer } from "./fixture.ts";
+import { fixture, fixtureLayer, position, Switch } from "./fixture.ts";
 
 /** A WebMCP host in memory. It can refuse a tool, to test a failed update. */
 function fakeHost() {
@@ -41,12 +41,12 @@ test("tools follow availability, a failed update keeps the last tools, and closi
       const crash = yield* Effect.promise(() => host.tools.get("fixture.crash")!.execute({}).catch((error) => error));
       assert.equal((crash as { kind: string }).kind, "internal");
 
-      yield* SubscriptionRef.set(yield* Switch, false);
+      yield* SubscriptionRef.set(yield* Switch, position(false));
       yield* settle;
       assert.ok(!host.tools.has("fixture.toggle"));
 
       host.refuse.add("fixture.toggle");
-      yield* SubscriptionRef.set(yield* Switch, true);
+      yield* SubscriptionRef.set(yield* Switch, position(true));
       yield* settle;
       const failed = yield* SubscriptionRef.get(installed.status);
       assert.equal(failed.phase, "failed");

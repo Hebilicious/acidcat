@@ -37,7 +37,7 @@ Each core is complete in its own style. Neither core wraps the other. Both cores
 | Cancellation | Fiber interruption | `AbortSignal` |
 | MCP server | `effect/ai/McpServer` | Built in |
 | Command line | `effect/cli` | Built in |
-| State | A `Stream` of values | An observable source |
+| Availability and state | A `SubscriptionRef` | An observable source |
 | Handles for code without Effect | `Handles.make`, `Handles.open` | `createSession` |
 
 

@@ -125,7 +125,11 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
       }),
     ).pipe(Effect.forkIn(scope));
 
-    yield* session.changes.pipe(Stream.runForEach(() => Queue.offer(requests, undefined)), Effect.forkIn(scope));
+    // Start to follow the changes before the first update reads the availability, so that no change comes between them.
+    yield* session.changes.pipe(
+      Stream.runForEach(() => Queue.offer(requests, undefined)),
+      Effect.forkIn(scope, { startImmediately: true }),
+    );
     yield* Queue.offer(requests, undefined);
 
     yield* Scope.addFinalizer(
