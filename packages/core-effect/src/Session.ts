@@ -8,6 +8,7 @@ import { Cause, Data, Effect, Exit, Fiber, FiberSet, Ref, Schema, SchemaIssue, S
 import * as App from "./App.ts";
 import type * as Capability from "./Capability.ts";
 import { changesAfter } from "./internal/changes.ts";
+import { register } from "./internal/served.ts";
 
 /** A call failure in the error channel of `execute`. */
 export class CallFailed extends Data.TaggedError("CallFailed")<CallFailure> {}
@@ -32,16 +33,6 @@ export interface Session {
    * view.
    */
   readonly state: (id: string) => Stream.Stream<unknown>;
-  /**
-   * The ref that the provider gave for the availability of a capability in the view. `undefined` when the capability
-   * is always available, or outside the view.
-   */
-  readonly availabilityRef: (id: string) => SubscriptionRef.SubscriptionRef<Availability> | undefined;
-  /**
-   * The ref that the provider gave for the state of a capability in the view, with values that are not encoded.
-   * `undefined` when the capability has no state, or is outside the view.
-   */
-  readonly stateRef: (id: string) => SubscriptionRef.SubscriptionRef<unknown> | undefined;
   /** A call with an input that is not trusted. The outcome is in its JSON form. This effect never fails. */
   readonly invoke: (id: string, input: unknown) => Effect.Effect<Outcome<unknown, unknown>>;
   /** A typed call from Effect code. Failures and call failures are in the error channel. */
@@ -165,7 +156,7 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
 
   let view: CatalogDocument | undefined;
 
-  return {
+  const session: Session = {
     target: options.target,
     get view() {
       return (view ??= viewOf(App.document(app), options.target));
@@ -173,11 +164,11 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
     availability: availabilityOf,
     changes,
     state: stateOf,
-    availabilityRef: (id) => served.get(id)?.availability,
-    stateRef: (id) => served.get(id)?.state?.ref,
     invoke,
     execute,
-  } satisfies Session;
+  };
+  register(session, { availability: (id) => served.get(id)?.availability, state: (id) => served.get(id)?.state?.ref });
+  return session;
   });
 
 /** Encode a value with its schema. `undefined` if the value does not agree with the schema. */

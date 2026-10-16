@@ -10,6 +10,7 @@ import { Cause, Effect, Exit, Fiber, FiberSet, Layer, Schema, Scope, Stream, Sub
 
 import type * as App from "./App.ts";
 import { changesAfter } from "./internal/changes.ts";
+import { refsOf } from "./internal/served.ts";
 import * as Session from "./Session.ts";
 
 /** A value that changes, and that code without Effect can read and observe. */
@@ -83,7 +84,8 @@ const detached = <T>(source: Observable<T>): Observable<T> => ({
 
 /**
  * The handles of a session, by id. The handles work while the scope is open. When it closes, the observables stop
- * and the calls in progress are cancelled. The handles start no fiber until a listener subscribes.
+ * and the calls in progress are cancelled. The handles start no fiber until a listener subscribes. The session must
+ * come from `Session.make`.
  */
 export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effect<ReadonlyMap<string, Handle>, never, Scope.Scope> =>
   Effect.gen(function* () {
@@ -92,6 +94,7 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
     const lifetime = new AbortController();
     yield* Scope.addFinalizer(scope, Effect.sync(() => lifetime.abort()));
     const follow = yield* FiberSet.runtime(yield* FiberSet.make<void>())();
+    const refs = refsOf(session);
 
     /** Run a call as a promise. The signal of the call and the scope interrupt it, as `cancelled`. */
     const run = <A>(effect: Effect.Effect<A, unknown>, options: CallOptions | undefined): Promise<A> => {
@@ -109,10 +112,10 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
       if (!capability.audience.includes(session.target)) continue;
       const id = capability.id;
 
-      const availabilityRef = session.availabilityRef(id);
+      const availabilityRef = refs.availability(id);
       const availability = availabilityRef === undefined ? constant(AVAILABLE) : observe(availabilityRef, (value) => value, follow);
 
-      const stateRef = session.stateRef(id);
+      const stateRef = refs.state(id);
       const snapshot =
         stateRef === undefined || capability.state === undefined
           ? undefined
