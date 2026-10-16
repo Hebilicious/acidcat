@@ -4,9 +4,11 @@ import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
 import type { CatalogDocument } from "@acid-cat/spec-ts";
+import type { z } from "zod";
 
-import { aircon, toJsonSchema, Unit } from "../examples/aircon.ts";
-import { catalogOf, createSession, renderCatalog, runCli } from "../src/index.ts";
+import { aircon, firmwareUpdate, modeSet, Offline, PoweredOff, powerSet, Status, statusGet, toJsonSchema, Unit } from "../examples/aircon.ts";
+import { CallFailureError, catalogOf, createSession, getHandle, renderCatalog, runCli } from "../src/index.ts";
+import type { Result } from "../src/index.ts";
 
 const written = JSON.parse(readFileSync(new URL("../../../examples/aircon.acidcat.json", import.meta.url), "utf-8")) as CatalogDocument;
 
@@ -56,5 +58,48 @@ test("a handle gives the state as copies, and each change", async () => {
   (snapshot.getSnapshot() as { power: boolean }).power = false;
   assert.equal(unit.state.power, true);
   assert.equal(session.handles.get("aircon.power.set")!.snapshot, undefined);
+  await session.dispose();
+});
+
+test("getHandle gives a handle with the types of its capability", async () => {
+  const session = createSession(aircon, { target: "app", context: { unit: new Unit() }, toJsonSchema });
+  const power = getHandle(session.handles, powerSet);
+  const powered: Result<null, z.infer<typeof Offline>> = await power.execute({ on: true });
+  assert.deepEqual(powered, { ok: true, value: null });
+
+  const mode = getHandle(session.handles, modeSet);
+  const moded: Result<null, z.infer<typeof Offline> | z.infer<typeof PoweredOff>> = await mode.execute({ mode: "heat" });
+  assert.deepEqual(moded, { ok: true, value: null });
+
+  const status = getHandle(session.handles, statusGet);
+  const value: Result<z.infer<typeof Status>, z.infer<typeof Offline>> = await status.execute({});
+  const snapshot: z.infer<typeof Status> | undefined = status.snapshot?.getSnapshot();
+  assert.deepEqual(value, { ok: true, value: snapshot });
+
+  // These calls do not run. `moon run core-ts:typecheck` checks that each one is an error.
+  const wrongCalls = () => [
+    // @ts-expect-error The input of aircon.power.set has `on`, a boolean.
+    power.execute({ on: "yes" }),
+    // @ts-expect-error The mode is one of the values of `Mode`.
+    mode.execute({ mode: "boil" }),
+    // @ts-expect-error The status has no `humidity`.
+    status.snapshot?.getSnapshot().humidity,
+  ];
+  void wrongCalls;
+  await session.dispose();
+});
+
+test("getHandle gives an always unavailable handle for a capability outside the view", async () => {
+  const session = createSession(aircon, { target: "taskbar", context: { unit: new Unit() }, toJsonSchema });
+  const firmware = getHandle(session.handles, firmwareUpdate);
+  assert.equal(session.handles.has(firmwareUpdate.id), false);
+  assert.equal(firmware.id, "aircon.firmware.update");
+  assert.deepEqual(firmware.availability.getSnapshot(), { available: false, reason: "There is no capability aircon.firmware.update." });
+  assert.equal(firmware.snapshot, undefined);
+  for (const call of [firmware.execute({}), firmware.invokeExternal({})]) {
+    const error = await call.catch((caught: unknown) => caught);
+    assert.ok(error instanceof CallFailureError);
+    assert.equal(error.kind, "unknown-capability");
+  }
   await session.dispose();
 });

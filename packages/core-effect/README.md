@@ -94,6 +94,18 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 
 `layer` gives the services that the capabilities need. A web handler is `(request: Request) => Promise<Response>`. It works in Node, Bun, Deno and Cloudflare Workers. When the signal of a request aborts, the handler cancels the call of the request.
 
+### Typed handles
+
+`Handles.get(handles, capability)` gives the handle of a capability with the types of its schemas: `execute` takes the decoded input, and gives the decoded value or failure. `snapshot` gives the state in its JSON form. For a capability outside the view, the handle is always unavailable, and each call rejects as `unknown-capability`.
+
+```ts
+import { Handles } from "@acid-cat/core-effect";
+
+const session = await Handles.open(aircon, unitLayer, { target: "app" });
+const power = Handles.get(session.handles, powerSet); // Handles.HandleOf<typeof powerSet>
+const result = await power.execute({ on: true }); // Result<null, typeof Offline.Type>
+```
+
 ### Services for each request
 
 By default, a web handler builds the services from `layer` once, for the first request that passes the screening, and all requests use them. With the option `services: "per-request"`, the handler builds them for each request that passes the screening, and releases them after the response. Use it when a request must not use objects that an earlier request made, for example on Cloudflare Workers, or when a stateful service must not be shared between callers:

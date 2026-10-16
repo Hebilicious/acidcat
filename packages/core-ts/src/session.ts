@@ -5,20 +5,52 @@ import { AVAILABLE, CallFailureError, callFailure, isCallFailure, viewOf } from 
 import type { Availability, CallFailure, CatalogDocument, Outcome, Result } from "@acid-cat/spec-ts";
 
 import { catalogOf } from "./app.ts";
-import type { AnyCapability, App, Observable, ToJsonSchema } from "./app.ts";
+import type { AnyCapability, App, Capability, FailureOf, InputOf, Observable, Output, ToJsonSchema } from "./app.ts";
 import type { StandardSchemaV1 } from "./standard-schema.ts";
 
-export interface Handle {
+/**
+ * The handle of a capability (spec/bindings/typescript.md#handles). `Input`, `Value`, `Failure` and `State` are the
+ * types of the schemas of the capability. `getHandle` gives a handle with these types.
+ */
+export interface Handle<Input = unknown, Value = unknown, Failure = unknown, State = unknown> {
   readonly id: string;
   readonly description: string;
   readonly audience: readonly string[];
   readonly availability: Observable<Availability>;
   /** The state of the capability, if it has one. Each value is a copy. */
-  readonly snapshot?: Observable<unknown>;
+  readonly snapshot?: Observable<State>;
   /** A call with an input that is already valid. A call failure rejects with a `CallFailureError`. */
-  execute(input: unknown, options?: { readonly signal?: AbortSignal | undefined }): Promise<Result<unknown, unknown>>;
+  execute(input: Input, options?: { readonly signal?: AbortSignal | undefined }): Promise<Result<Value, Failure>>;
   /** A call with an input that is not trusted. A call failure rejects with a `CallFailureError`. */
   invokeExternal(input: unknown, options?: { readonly signal?: AbortSignal | undefined }): Promise<Result<unknown, unknown>>;
+}
+
+/** The handle of a capability, with the types of its schemas. */
+export type HandleOf<C> =
+  C extends Capability<any, infer Input, infer OutputSchema, infer Failures, infer StateSchema>
+    ? Handle<InputOf<Input>, Output<OutputSchema>, FailureOf<Failures>, StandardSchemaV1.InferOutput<StateSchema>>
+    : never;
+
+/**
+ * The handle of a capability in `handles`, with the types of the capability. For a capability outside the view, the
+ * handle is always unavailable, and each call rejects as `unknown-capability`.
+ */
+export function getHandle<C extends AnyCapability>(handles: ReadonlyMap<string, Handle>, capability: C): HandleOf<C> {
+  return (handles.get(capability.id) ?? outsideView(capability)) as HandleOf<C>;
+}
+
+function outsideView(capability: AnyCapability): Handle {
+  const failure = callFailure("unknown-capability", `There is no capability ${capability.id}.`);
+  const unavailable: Availability = { available: false, reason: failure.message };
+  const reject = () => Promise.reject(new CallFailureError(failure));
+  return {
+    id: capability.id,
+    description: capability.description,
+    audience: [],
+    availability: { getSnapshot: () => unavailable, subscribe: () => ({ unsubscribe() {} }) },
+    execute: reject,
+    invokeExternal: reject,
+  };
 }
 
 export interface Session {
