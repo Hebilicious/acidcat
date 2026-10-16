@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Effect, Layer } from "effect";
+import { Deferred, Effect, Layer } from "effect";
 
 import { Mcp } from "../src/index.ts";
-import { countedSwitchLayer, fixture, switchLayer } from "./fixture.ts";
+import { countedSwitchLayer, fixture, heldApp, switchLayer } from "./fixture.ts";
 
 const ORIGIN = "https://fixture.example";
 const handler = Mcp.toWebHandler(fixture, Layer.fresh(switchLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] });
@@ -114,3 +114,32 @@ test("Mcp.handle screens the request", async () => {
   assert.equal((await answer(foreign)).status, 403);
   assert.equal((await answer(mcpRequest("tools/list"))).status, 200);
 });
+
+for (const services of ["shared", "per-request"] as const) {
+  test(`with ${services} services, a refused request builds no services`, async () => {
+    const { counts, layer } = countedSwitchLayer();
+    const handler = Mcp.toWebHandler(fixture, layer, { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN], maximumBytes: 16, services });
+    const post = (headers: HeadersInit, body: string) => handler(new Request(`${ORIGIN}/mcp`, { method: "POST", headers, body }));
+
+    assert.equal((await handler(new Request(`${ORIGIN}/mcp`))).status, 405);
+    assert.equal((await post({ "Content-Type": "application/json", Origin: "https://evil.example" }, "{}")).status, 403);
+    assert.equal((await post({ "Content-Type": "text/plain" }, "{}")).status, 415);
+    assert.equal((await post({ "Content-Type": "application/json" }, JSON.stringify({ jsonrpc: "2.0", id: 1 }))).status, 413);
+    assert.equal((await post({ "Content-Type": "application/json" }, "{")).status, 400);
+    assert.deepEqual(counts, { built: 0, released: 0 });
+  });
+
+  test(`with ${services} services, the abort of a request cancels its call`, async () => {
+    const { app, started, interrupted } = heldApp();
+    const handler = Mcp.toWebHandler(app, Layer.empty, { name: "held", version: "0.0.0", allowedOrigins: [ORIGIN], services });
+    const controller = new AbortController();
+    const answer = handler(new Request(mcpRequest("tools/call", { name: "held.wait", arguments: {} }, "held.wait"), { signal: controller.signal }));
+
+    await Effect.runPromise(Deferred.await(started));
+    controller.abort();
+    const { result } = (await (await answer).json()) as { result: { isError: boolean; content: { text: string }[] } };
+    assert.equal(result.isError, true);
+    assert.deepEqual(JSON.parse(result.content[0]!.text), { kind: "cancelled", message: "The call was cancelled." });
+    assert.equal(Deferred.isDoneUnsafe(interrupted), true);
+  });
+}

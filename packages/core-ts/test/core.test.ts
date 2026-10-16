@@ -5,7 +5,7 @@ import { check } from "@acid-cat/cli";
 
 import { CallFailureError, createSession, httpHandler, installWebMcp, mcpHandler, renderCatalog, runCli } from "../src/index.ts";
 import type { ModelContextTool } from "../src/index.ts";
-import { fixture, options, Switch, toJsonSchema } from "./fixture.ts";
+import { fixture, heldApp, options, Switch, toJsonSchema } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
 
 test("the application writes a catalog that conforms", () => {
@@ -133,6 +133,8 @@ test("with createContext, each MCP request that passes the screening has its own
   assert.deepEqual(counts, { created: 2, released: 2 });
 
   assert.equal((await handler(new Request("https://fixture.example/mcp"))).status, 405);
+  const tooLarge = new Request("https://fixture.example/mcp", { method: "POST", headers: { "Content-Type": "application/json" }, body: "x".repeat(1_048_577) });
+  assert.equal((await handler(tooLarge)).status, 413);
   assert.deepEqual(counts, { created: 2, released: 2 });
 });
 
@@ -148,7 +150,55 @@ test("with createContext, each HTTP request that passes the screening has its ow
   assert.deepEqual(counts, { created: 2, released: 2 });
 
   assert.equal((await handler(new Request("https://fixture.example/api/capabilities", { method: "PUT" }))).status, 405);
+  const tooLarge = new Request("https://fixture.example/api/capabilities/fixture.echo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "x".repeat(1_048_577),
+  });
+  assert.equal((await handler(tooLarge)).status, 413);
   assert.deepEqual(counts, { created: 2, released: 2 });
+});
+
+test("the abort of an HTTP request cancels its call", async () => {
+  const { app, started, seen } = heldApp();
+  const handler = httpHandler(app, { allowedOrigins: [], toJsonSchema, context: undefined });
+  const controller = new AbortController();
+  const answer = handler(
+    new Request("https://fixture.example/capabilities/held.wait", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: controller.signal }),
+  );
+
+  await started;
+  controller.abort();
+  const response = await answer;
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { kind: "cancelled", message: "The call was cancelled." });
+  assert.equal(seen.aborted, true);
+});
+
+test("the abort of an MCP request cancels its call", async () => {
+  const { app, started, seen } = heldApp();
+  const handler = mcpHandler(app, { name: "held", version: "0.0.0", allowedOrigins: [], toJsonSchema, context: undefined });
+  const controller = new AbortController();
+  const answer = handler(
+    new Request("https://fixture.example/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "mcp-method": "tools/call", "mcp-protocol-version": "2026-07-28" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "held.wait", arguments: {}, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } },
+      }),
+      signal: controller.signal,
+    }),
+  );
+
+  await started;
+  controller.abort();
+  const { result } = (await (await answer).json()) as { result: { isError: boolean; content: { text: string }[] } };
+  assert.equal(result.isError, true);
+  assert.deepEqual(JSON.parse(result.content[0]!.text), { kind: "cancelled", message: "The call was cancelled." });
+  assert.equal(seen.aborted, true);
 });
 
 test("the command line gives each outcome its exit code", async () => {

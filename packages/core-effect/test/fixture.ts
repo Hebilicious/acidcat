@@ -1,6 +1,6 @@
 /** A test application with one capability for each behavior that the tests examine. */
 import { unavailable, AVAILABLE } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer, Schema, Stream, SubscriptionRef } from "effect";
+import { Context, Deferred, Effect, Layer, Schema, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability } from "../src/index.ts";
 
@@ -115,3 +115,28 @@ export const fixture = App.make({
     }),
   ],
 });
+
+/**
+ * An application with one capability, `held.wait`, that runs until it is interrupted. `started` completes when the
+ * call starts, and `interrupted` when the call is interrupted.
+ */
+export function heldApp() {
+  const started = Deferred.makeUnsafe<void>();
+  const interrupted = Deferred.makeUnsafe<void>();
+  const app = App.make({
+    targets: { mcp: { bindings: ["mcp"] }, api: { bindings: ["http"] } },
+    capabilities: [
+      Capability.make({
+        id: "held.wait",
+        description: "Wait until the call is cancelled.",
+        audience: ["mcp", "api"],
+        run: () =>
+          Deferred.succeed(started, undefined).pipe(
+            Effect.andThen(Effect.never),
+            Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
+          ),
+      }),
+    ],
+  });
+  return { app, started, interrupted };
+}
