@@ -8,6 +8,7 @@ import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
 import type * as App from "./App.ts";
+import { cancelOnAbort } from "./internal/cancel.ts";
 import * as Session from "./Session.ts";
 
 export interface Options {
@@ -28,10 +29,11 @@ export interface Options {
   /** The maximum size of a request body, in bytes. The default is 1 MiB. */
   readonly maximumBytes?: number | undefined;
   /**
-   * When `toWebHandler` builds the services from `layer`. With `"shared"`, the default, it builds them once, and all
-   * requests use them. With `"per-request"`, it builds them for each request that passes the screening, and releases
-   * them when the response is complete. Use `"per-request"` when a request must not use objects that an earlier request
-   * made, for example on Cloudflare Workers, or when a stateful service must not be shared between callers.
+   * When `toWebHandler` builds the services from `layer`. With `"shared"`, the default, it builds them once, for the
+   * first request that passes the screening, and all requests use them. With `"per-request"`, it builds them for each
+   * request that passes the screening, and releases them when the response is complete. Use `"per-request"` when a
+   * request must not use objects that an earlier request made, for example on Cloudflare Workers, or when a stateful
+   * service must not be shared between callers.
    */
   readonly services?: "shared" | "per-request" | undefined;
 }
@@ -41,15 +43,13 @@ export interface Options {
  * `layer` gives the services that the capabilities need. `options.services` tells when the handler builds them.
  */
 export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Options) {
-  if (options.services === "per-request") {
-    return async (request: Request): Promise<Response> => {
-      const admitted = await admit(request, options);
-      if (admitted instanceof Response) return admitted;
-      return Effect.runPromise(respond(app, admitted, options).pipe(Effect.provide(layer)));
-    };
-  }
-  const runtime = ManagedRuntime.make(layer);
-  return (request: Request): Promise<Response> => runtime.runPromise(handle(app, request, options));
+  const runtime = options.services === "per-request" ? undefined : ManagedRuntime.make(layer);
+  return async (request: Request): Promise<Response> => {
+    const admitted = await admit(request, options);
+    if (admitted instanceof Response) return admitted;
+    const answer = respond(app, admitted, options);
+    return runtime === undefined ? Effect.runPromise(Effect.provide(answer, layer)) : runtime.runPromise(answer);
+  };
 }
 
 /**
@@ -64,7 +64,7 @@ export const handle = <R>(app: App.App<R>, request: Request, options: Options) =
 
 /**
  * Screen a request and read its body (spec/bindings/mcp.md). The result is the rejection, or the request with the body
- * that was read.
+ * that was read and the signal of the request.
  */
 async function admit(request: Request, options: Options): Promise<Request | Response> {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
@@ -82,7 +82,7 @@ async function admit(request: Request, options: Options): Promise<Request | Resp
   } catch {
     return rejection("not-utf8");
   }
-  return new Request(request.url, { body: body.text, headers: request.headers, method: "POST" });
+  return new Request(request.url, { body: body.text, headers: request.headers, method: "POST", signal: request.signal });
 }
 
 /** Answer one MCP request that passed the screening, with a new session. */
@@ -98,7 +98,7 @@ const respond = <R>(app: App.App<R>, request: Request, options: Options) =>
         protocols: [McpProtocol.v2026_07_28],
         allowedOrigins: [...options.allowedOrigins],
       });
-      const routes = Layer.effectDiscard(registerTools(session)).pipe(Layer.provideMerge(server));
+      const routes = Layer.effectDiscard(registerTools(session, request.signal)).pipe(Layer.provideMerge(server));
       const respond = yield* HttpRouter.toHttpEffect(routes);
       const response = yield* respond.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, HttpServerRequest.fromWeb(request)),
@@ -107,8 +107,11 @@ const respond = <R>(app: App.App<R>, request: Request, options: Options) =>
     }),
   );
 
-/** Register one tool for each available capability in the view of the session. */
-export const registerTools = (session: Session.Session) =>
+/**
+ * Register one tool for each available capability in the view of the session. The abort of `signal` cancels the calls
+ * of the tools.
+ */
+export const registerTools = (session: Session.Session, signal: AbortSignal = new AbortController().signal) =>
   Effect.gen(function* () {
     const server = yield* McpServer.McpServer;
     const types = session.view.$defs ?? {};
@@ -128,7 +131,10 @@ export const registerTools = (session: Session.Session) =>
         handle: (payload: unknown) =>
           session
             .invoke(id, payload ?? {})
-            .pipe(Effect.map((outcome) => new McpSchema.CallToolResult(mcpToolResult(outcome, hasOutputSchema) as never))),
+            .pipe(
+              cancelOnAbort(signal),
+              Effect.map((outcome) => new McpSchema.CallToolResult(mcpToolResult(outcome, hasOutputSchema) as never)),
+            ),
       });
     }
   });

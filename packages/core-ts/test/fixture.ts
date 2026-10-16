@@ -125,3 +125,32 @@ export const fixture = defineApp<Context>({
 });
 
 export const options = () => ({ context: { switch: new Switch() }, toJsonSchema, onDefect: () => undefined });
+
+/**
+ * An application with one capability, `held.wait`, that runs until its signal aborts. `started` resolves when the call
+ * starts, and `seen.aborted` tells if the call saw the abort.
+ */
+export function heldApp() {
+  const started = Promise.withResolvers<void>();
+  const seen = { aborted: false };
+  const app = defineApp({
+    targets: { mcp: { bindings: ["mcp"] }, api: { bindings: ["http"] } },
+    capabilities: [
+      defineCapability({
+        id: "held.wait",
+        description: "Wait until the call is cancelled.",
+        audience: ["mcp", "api"],
+        run: (_input, { signal }) => {
+          started.resolve();
+          return new Promise((resolve) =>
+            signal.addEventListener("abort", () => {
+              seen.aborted = true;
+              resolve(ok(null));
+            }),
+          );
+        },
+      }),
+    ],
+  });
+  return { app, started: started.promise, seen };
+}

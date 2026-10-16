@@ -37,6 +37,8 @@ export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Con
       maximumBytes,
     });
     if (screened !== undefined) return rejection(screened);
+    const body = await readBounded(request, maximumBytes);
+    if ("rejection" in body) return rejection(body.rejection);
 
     const path = new URL(request.url).pathname.slice((options.base ?? "").length);
     return withContext<Context, Response>(options, request, async (context) => {
@@ -52,8 +54,6 @@ export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Con
         const id = request.method === "POST" && path.startsWith("/capabilities/") ? path.slice("/capabilities/".length) : undefined;
         if (id === undefined) return json(404, callFailure("unknown-capability", "There is no such route."));
 
-        const body = await readBounded(request, maximumBytes);
-        if ("rejection" in body) return rejection(body.rejection);
         let input: unknown;
         try {
           input = body.text === "" ? {} : JSON.parse(body.text);
