@@ -180,11 +180,14 @@ export interface PromiseSession {
   dispose(): Promise<void>;
 }
 
-/** Open a session and its handles from code that does not use Effect. `layer` gives the services of the capabilities. */
+/**
+ * Open a session and its handles from code that does not use Effect. `layer` gives the services of the capabilities.
+ * If the session or its handles cannot open, the services are released, and the promise rejects.
+ */
 export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: { readonly target: string }): Promise<PromiseSession> {
   const scope = Effect.runSync(Scope.make());
   const lifetime = new AbortController();
-  const { session, handles } = await Effect.runPromise(
+  const opened = await Effect.runPromiseExit(
     Effect.gen(function* () {
       // The services live as long as the session.
       const services = yield* Layer.buildWithScope(layer, scope);
@@ -192,6 +195,11 @@ export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, opti
       return { session, handles: yield* make(app, session) };
     }).pipe(Scope.provide(scope)),
   );
+  if (Exit.isFailure(opened)) {
+    await Effect.runPromise(Scope.close(scope, opened));
+    throw Cause.squash(opened.cause);
+  }
+  const { session, handles } = opened.value;
   return {
     target: session.target,
     get view() {

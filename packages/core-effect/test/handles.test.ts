@@ -103,13 +103,20 @@ test("a handle gives the state as copies, and follows it only while it has liste
   }
 });
 
-test("handles need a state schema that encodes synchronously, and a session does not", async () => {
+test("handles need a state schema that encodes synchronously, a failed open releases the services, and a session does not need it", async () => {
   const encodeLater = SchemaGetter.transformOptionalEffect((value: Option.Option<string>) => Effect.promise(async () => value));
   const Suspending = Schema.String.pipe(
     Schema.decodeTo(Schema.String, SchemaTransformation.makeTransformation({ decode: SchemaGetter.passthrough(), encode: encodeLater })),
   );
   class Label extends Context.Service<Label, SubscriptionRef.SubscriptionRef<string>>()("probe/Label") {}
-  const labelLayer = Layer.effect(Label, SubscriptionRef.make("first"));
+  const counts = { built: 0, released: 0 };
+  const labelLayer = Layer.effect(
+    Label,
+    Effect.acquireRelease(
+      Effect.sync(() => counts.built++).pipe(Effect.andThen(SubscriptionRef.make("first"))),
+      () => Effect.sync(() => counts.released++),
+    ),
+  );
   const app = App.make({
     targets: { app: { bindings: ["typescript"] } },
     capabilities: [
@@ -126,6 +133,7 @@ test("handles need a state schema that encodes synchronously, and a session does
   const error = await rejection(Handles.open(app, labelLayer, { target: "app" }));
   assert.ok(error instanceof Error);
   assert.equal(error.message, "The state schema of probe.label.get does not encode synchronously. A handle needs a state schema that encodes synchronously.");
+  assert.deepEqual(counts, { built: 1, released: 1 });
 
   const [state] = await Effect.runPromise(
     Effect.scoped(Effect.flatMap(Session.make(app, { target: "app" }), (session) => session.state("probe.label.get").pipe(Stream.take(1), Stream.runCollect))).pipe(
