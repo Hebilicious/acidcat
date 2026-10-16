@@ -252,7 +252,7 @@ export async function checkWebMcp(driver: WebMcpDriver, options: { readonly dead
       expectEqual(result.rejected.name, "AbortError", "name");
       await until("the cancelled call stops holding", read, (held) => !held.includes(key), signal);
     } finally {
-      await driver.call("fixture.release", { key }).catch(() => undefined);
+      await driver.call("fixture.release", { key }, { signal: AbortSignal.timeout(options.deadline) }).catch(() => undefined);
     }
   });
   await checks.run("a tool is removed while its capability is unavailable, and registered again after", `${RULE}#tools`, async (signal) => {

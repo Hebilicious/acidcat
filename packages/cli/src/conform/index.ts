@@ -46,7 +46,7 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
   const results: Check[] = [];
   if (options.mcp !== undefined) {
     results.push(...(await checkMcp(options.mcp, { maximumBytes, deadline })).results);
-    const mcp = await mcpInvoke(options.mcp).catch(() => undefined);
+    const mcp = await mcpInvoke(options.mcp, AbortSignal.timeout(deadline)).catch(() => undefined);
     if (mcp !== undefined) {
       results.push(...(await checkProperties("mcp", mcp.invoke, deadline)).results);
       await mcp.close();

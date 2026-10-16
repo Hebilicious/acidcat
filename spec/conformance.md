@@ -65,6 +65,6 @@ The tests wait for states that they can observe, not for times. Before a test ca
 
 Through MCP, HTTP and WebMCP, the key of the cancelled call must then leave `fixture.held`. Each call that a test does not cancel must hold until the test releases it, then return its own key.
 
-Each test has one deadline: `--deadline`, in milliseconds, 30 seconds by default. A test that does not settle before its deadline fails with "did not settle". The test then stops its calls, kills the command line that it started, and releases each key that it used. The deadline never makes a test pass.
+Each test has one deadline: `--deadline`, in milliseconds, 30 seconds by default. A test that does not settle before its deadline fails with "did not settle". The test then stops its calls, kills the command line that it started, and releases each key that it used. This cleanup has a deadline of the same length, so `acid-cat conform` always ends. The deadline never makes a test pass.
 
 A test that a SHOULD rule fails gives a warning, not an error. Tests that need access to the code, for example of internal logs, are not part of conformance.

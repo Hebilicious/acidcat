@@ -32,8 +32,8 @@ export async function checkMcp(url: string, options: { readonly maximumBytes: nu
   });
   if (client === undefined) return checks;
   const mcp = client;
-  const call = (signal: AbortSignal | undefined, name: string, args: Record<string, unknown>) =>
-    mcp.callTool({ name, arguments: args }, signal ? { signal } : undefined) as Promise<ToolResult>;
+  const call = (signal: AbortSignal, name: string, args: Record<string, unknown>) =>
+    mcp.callTool({ name, arguments: args }, { signal }) as Promise<ToolResult>;
 
   await checks.run("server/discover gives the description of the catalog as instructions", `${RULE}#server`, () => {
     expectEqual(mcp.getInstructions(), fixture.description, "instructions");
@@ -95,7 +95,7 @@ export async function checkMcp(url: string, options: { readonly maximumBytes: nu
       const { tools } = await mcp.listTools(undefined, { signal });
       expect(!tools.some((tool) => tool.name === "fixture.toggle"), "fixture.toggle must not be listed while it is unavailable");
     } finally {
-      await call(undefined, "fixture.switch.set", { on: true });
+      await call(AbortSignal.timeout(options.deadline), "fixture.switch.set", { on: true });
     }
   });
 

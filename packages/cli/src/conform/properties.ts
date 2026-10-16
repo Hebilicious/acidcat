@@ -28,8 +28,8 @@ export function httpInvoke(base: string): Invoke {
   };
 }
 
-export async function mcpInvoke(url: string): Promise<{ readonly invoke: Invoke; close(): Promise<void> }> {
-  const client = await mcpClient(url);
+export async function mcpInvoke(url: string, signal: AbortSignal): Promise<{ readonly invoke: Invoke; close(): Promise<void> }> {
+  const client = await mcpClient(url, signal);
   return {
     invoke: async (id, input, signal) => {
       try {
@@ -120,9 +120,10 @@ async function heldKeys(invoke: Invoke, signal: AbortSignal): Promise<readonly s
 /**
  * Start one call to fixture.hold for each flag, and wait until each call holds. Then cancel each call whose flag is
  * true, and release the others. Each cancelled call must end as a cancellation and stop holding. Each other call must
- * hold until it is released, and then give its own key.
+ * hold until it is released, and then give its own key. At the end, the cleanup releases every key, with a signal that
+ * aborts `deadline` milliseconds later.
  */
-async function cancelSome(invoke: Invoke, flags: readonly boolean[], signal: AbortSignal): Promise<void> {
+async function cancelSome(invoke: Invoke, flags: readonly boolean[], signal: AbortSignal, deadline: number): Promise<void> {
   const calls = flags.map((cancelled) => {
     const key = randomUUID();
     const controller = new AbortController();
@@ -149,7 +150,8 @@ async function cancelSome(invoke: Invoke, flags: readonly boolean[], signal: Abo
       expect("outcome" in settled && JSON.stringify(settled.outcome) === JSON.stringify(own), `a call that was not cancelled gave ${describe(settled)}`);
     }
   } finally {
-    await Promise.all(calls.map((call) => invoke("fixture.release", { key: call.key }).catch(() => undefined)));
+    const cleanup = AbortSignal.timeout(deadline);
+    await Promise.all(calls.map((call) => invoke("fixture.release", { key: call.key }, cleanup).catch(() => undefined)));
   }
 }
 
@@ -174,7 +176,7 @@ export async function checkProperties(binding: string, invoke: Invoke, deadline:
     await fc.assert(
       fc.asyncProperty(cancellations, (flags) => {
         fc.pre(!signal.aborted);
-        return cancelSome(invoke, flags, signal);
+        return cancelSome(invoke, flags, signal, deadline);
       }),
       { numRuns: 5, includeErrorInReport: true },
     );

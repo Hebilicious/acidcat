@@ -5,7 +5,7 @@ const RULE = "spec/bindings/http.md";
 
 export async function checkHttp(base: string, options: { readonly maximumBytes: number; readonly deadline: number }): Promise<Checks> {
   const checks = new Checks("http", options.deadline);
-  const post = (signal: AbortSignal | null, id: string, body: unknown, headers: Record<string, string> = {}) =>
+  const post = (signal: AbortSignal, id: string, body: unknown, headers: Record<string, string> = {}) =>
     fetch(`${base}/capabilities/${id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
@@ -51,7 +51,7 @@ export async function checkHttp(base: string, options: { readonly maximumBytes: 
       expectEqual(response.status, 503, "status");
       expectEqual((await json(response)).kind, "unavailable", "kind");
     } finally {
-      await post(null, "fixture.switch.set", { on: true });
+      await post(AbortSignal.timeout(options.deadline), "fixture.switch.set", { on: true });
     }
   });
 

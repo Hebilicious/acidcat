@@ -26,7 +26,8 @@ export const DEADLINE = 30_000;
 /**
  * Collects checks for one binding. Each check has one deadline. The check gives its signal to each operation, and the
  * signal aborts at the deadline. Then each operation stops, and the check fails with "did not settle". The deadline
- * never makes a check pass.
+ * never makes a check pass. The cleanup of a check, which releases what the check holds, gets its own signal with the
+ * same time, so that `conform` always returns.
  */
 export class Checks {
   readonly results: Check[] = [];
