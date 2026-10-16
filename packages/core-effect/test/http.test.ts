@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { Deferred, Effect, Layer } from "effect";
 
 import { Http } from "../src/index.ts";
-import { countedSwitchLayer, fixture, heldApp, switchLayer } from "./fixture.ts";
+import { countedSwitchLayer, fixture, heldApp, recordingApp, switchLayer } from "./fixture.ts";
 
 const ORIGIN = "https://fixture.example";
 const handler = Http.toWebHandler(fixture, Layer.fresh(switchLayer), { allowedOrigins: [ORIGIN], base: "/api" });
@@ -107,5 +107,22 @@ for (const services of ["shared", "per-request"] as const) {
     assert.equal(response.status, 409);
     assert.deepEqual(await response.json(), { kind: "cancelled", message: "The call was cancelled." });
     assert.equal(Deferred.isDoneUnsafe(interrupted), true);
+  });
+
+  test(`with ${services} services, a request that is already aborted does not start its call`, async () => {
+    const { app, record } = recordingApp();
+    const handler = Http.toWebHandler(app, Layer.empty, { allowedOrigins: [ORIGIN], services });
+    const response = await handler(
+      new Request(`${ORIGIN}/capabilities/recorded.run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        signal: AbortSignal.abort(),
+      }),
+    );
+
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { kind: "cancelled", message: "The call was cancelled." });
+    assert.equal(record.ran, false);
   });
 }

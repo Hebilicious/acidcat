@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { Deferred, Effect, Layer } from "effect";
 
 import { Mcp } from "../src/index.ts";
-import { countedSwitchLayer, fixture, heldApp, switchLayer } from "./fixture.ts";
+import { countedSwitchLayer, fixture, heldApp, recordingApp, switchLayer } from "./fixture.ts";
 
 const ORIGIN = "https://fixture.example";
 const handler = Mcp.toWebHandler(fixture, Layer.fresh(switchLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] });
@@ -141,5 +141,18 @@ for (const services of ["shared", "per-request"] as const) {
     assert.equal(result.isError, true);
     assert.deepEqual(JSON.parse(result.content[0]!.text), { kind: "cancelled", message: "The call was cancelled." });
     assert.equal(Deferred.isDoneUnsafe(interrupted), true);
+  });
+
+  test(`with ${services} services, a request that is already aborted does not start its call`, async () => {
+    const { app, record } = recordingApp();
+    const handler = Mcp.toWebHandler(app, Layer.empty, { name: "recorded", version: "0.0.0", allowedOrigins: [ORIGIN], services });
+    const request = mcpRequest("tools/call", { name: "recorded.run", arguments: {} }, "recorded.run");
+    const { result } = (await (await handler(new Request(request, { signal: AbortSignal.abort() }))).json()) as {
+      result: { isError: boolean; content: { text: string }[] };
+    };
+
+    assert.equal(result.isError, true);
+    assert.deepEqual(JSON.parse(result.content[0]!.text), { kind: "cancelled", message: "The call was cancelled." });
+    assert.equal(record.ran, false);
   });
 }

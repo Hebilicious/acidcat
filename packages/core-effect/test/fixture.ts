@@ -140,3 +140,20 @@ export function heldApp() {
   });
   return { app, started, interrupted };
 }
+
+/** An application with one capability, `recorded.run`. `record.ran` tells if a call ran it. */
+export function recordingApp() {
+  const record = { ran: false };
+  const app = App.make({
+    targets: { mcp: { bindings: ["mcp"] }, api: { bindings: ["http"] } },
+    capabilities: [
+      Capability.make({
+        id: "recorded.run",
+        description: "Record that a call ran the capability.",
+        audience: ["mcp", "api"],
+        run: () => Effect.sync(() => void (record.ran = true)).pipe(Effect.as(null)),
+      }),
+    ],
+  });
+  return { app, record };
+}
