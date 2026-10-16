@@ -24,13 +24,69 @@ export class Switch implements Observable<Availability> {
   }
 }
 
+/**
+ * The calls to `fixture.hold` that hold now, for all the sessions of one provider. `mark` writes the file of a marker. A
+ * page cannot write files, so only the command line of the fixture gives it.
+ */
+export class Holds {
+  readonly #holding = new Set<{ readonly key: string; readonly stop: () => void }>();
+  readonly #mark: ((path: string) => Promise<void>) | undefined;
+
+  constructor(mark?: (path: string) => Promise<void>) {
+    this.#mark = mark;
+  }
+
+  /** Hold until `release` releases the key, or until the signal aborts. */
+  async hold(key: string, marker: string | undefined, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) return;
+    const { promise: stopped, resolve } = Promise.withResolvers<void>();
+    const entry = {
+      key,
+      stop: () => {
+        this.#holding.delete(entry);
+        resolve();
+      },
+    };
+    this.#holding.add(entry);
+    signal.addEventListener("abort", entry.stop, { once: true });
+    // A promise alone does not keep a Node.js process running. The timer keeps the command line running while the call holds.
+    const running = setInterval(() => undefined, 2 ** 30);
+    try {
+      if (marker !== undefined) await this.#mark?.(marker);
+      await stopped;
+    } finally {
+      clearInterval(running);
+      signal.removeEventListener("abort", entry.stop);
+    }
+  }
+
+  held(): string[] {
+    return [...this.#holding].map((entry) => entry.key);
+  }
+
+  release(key: string): void {
+    for (const entry of this.#holding) if (entry.key === key) entry.stop();
+  }
+}
+
+/** Holds whose calls ignore cancellation: a call holds until it is released. The tests use them to see conform fail. */
+export class HoldsThatIgnoreCancellation extends Holds {
+  override hold(key: string, marker: string | undefined): Promise<void> {
+    return super.hold(key, marker, new AbortController().signal);
+  }
+}
+
 export interface Context {
   readonly switch: Switch;
+  readonly holds: Holds;
 }
 
 export const toJsonSchema = (schema: unknown) => z.toJSONSchema(schema as z.ZodType, { target: "draft-2020-12" });
 
 const Text = z.object({ text: z.string() });
+const Key = z.object({ key: z.string() });
+const Hold = z.object({ key: z.string(), marker: z.string().optional() });
+const Keys = z.object({ keys: z.array(z.string()) });
 const Flags = z.object({
   mode: z.enum(["fast", "slow"]),
   count: z.number().int().optional(),
@@ -76,16 +132,33 @@ export const fixture = defineApp<Context>({
         throw new Error("secret internal detail");
       },
     }),
-    defineCapability({
-      id: "fixture.slow",
-      description: "Wait for some milliseconds, then return null.",
+    defineCapability<Context, typeof Hold, typeof Key>({
+      id: "fixture.hold",
+      description:
+        "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held gives the key. With a marker, the call writes a file at that path when it starts to hold.",
       audience: everywhere,
-      input: z.object({ milliseconds: z.number() }),
-      run: async ({ milliseconds }, { signal }) => {
-        await new Promise((resolve) => {
-          const timer = setTimeout(resolve, milliseconds);
-          signal.addEventListener("abort", () => clearTimeout(timer));
-        });
+      input: Hold,
+      output: Key,
+      run: async ({ key, marker }, { signal, context }) => {
+        await context.holds.hold(key, marker, signal);
+        return ok({ key });
+      },
+    }),
+    defineCapability<Context, undefined, typeof Keys>({
+      id: "fixture.held",
+      description: "Return the keys of the calls to fixture.hold that hold now.",
+      audience: everywhere,
+      readOnly: true,
+      output: Keys,
+      run: (_, { context }) => ok({ keys: context.holds.held() }),
+    }),
+    defineCapability<Context, typeof Key>({
+      id: "fixture.release",
+      description: "Release the calls to fixture.hold that hold the key.",
+      audience: everywhere,
+      input: Key,
+      run: ({ key }, { context }) => {
+        context.holds.release(key);
         return ok(null);
       },
     }),
@@ -124,7 +197,8 @@ export const fixture = defineApp<Context>({
   ],
 });
 
-export const options = () => ({ context: { switch: new Switch() }, toJsonSchema, onDefect: () => undefined });
+/** The options of a session or a binding of the fixture. */
+export const options = (holds = new Holds()) => ({ context: { switch: new Switch(), holds }, toJsonSchema, onDefect: () => undefined });
 
 /**
  * An application with one capability, `held.wait`, that runs until its signal aborts. `started` resolves when the call

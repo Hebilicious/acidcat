@@ -4,10 +4,10 @@ import { test } from "node:test";
 import { Deferred, Effect, Layer } from "effect";
 
 import { Http } from "../src/index.ts";
-import { countedSwitchLayer, fixture, heldApp, recordingApp, switchLayer } from "./fixture.ts";
+import { countedFixtureLayer, fixture, fixtureLayer, heldApp, recordingApp } from "./fixture.ts";
 
 const ORIGIN = "https://fixture.example";
-const handler = Http.toWebHandler(fixture, Layer.fresh(switchLayer), { allowedOrigins: [ORIGIN], base: "/api" });
+const handler = Http.toWebHandler(fixture, Layer.fresh(fixtureLayer), { allowedOrigins: [ORIGIN], base: "/api" });
 
 const post = (id: string, body: unknown, headers: HeadersInit = { "Content-Type": "application/json" }) =>
   handler(new Request(`${ORIGIN}/api/capabilities/${id}`, { method: "POST", headers, body: JSON.stringify(body) }));
@@ -46,7 +46,7 @@ test("requests are rejected before the body is read", async () => {
 });
 
 test("with per-request services, each request that passes the screening has its own services", async () => {
-  const { counts, layer } = countedSwitchLayer();
+  const { counts, layer } = countedFixtureLayer();
   const perRequest = Http.toWebHandler(fixture, layer, { allowedOrigins: [ORIGIN], base: "/api", services: "per-request" });
   const toggle = async () => {
     const list = (await (await perRequest(new Request(`${ORIGIN}/api/capabilities`))).json()) as { id: string; available: boolean }[];
@@ -67,7 +67,7 @@ test("with per-request services, each request that passes the screening has its 
 });
 
 test("with shared services, all requests use the same services", async () => {
-  const { counts, layer } = countedSwitchLayer();
+  const { counts, layer } = countedFixtureLayer();
   const shared = Http.toWebHandler(fixture, layer, { allowedOrigins: [ORIGIN], base: "/api" });
   await shared(new Request(`${ORIGIN}/api/capabilities`));
   await shared(new Request(`${ORIGIN}/api/capabilities`));
@@ -76,7 +76,7 @@ test("with shared services, all requests use the same services", async () => {
 
 for (const services of ["shared", "per-request"] as const) {
   test(`with ${services} services, a refused request builds no services`, async () => {
-    const { counts, layer } = countedSwitchLayer();
+    const { counts, layer } = countedFixtureLayer();
     const handler = Http.toWebHandler(fixture, layer, { allowedOrigins: [ORIGIN], base: "/api", maximumBytes: 16, services });
     const post = (headers: HeadersInit, body: string) =>
       handler(new Request(`${ORIGIN}/api/capabilities/fixture.echo`, { method: "POST", headers, body }));

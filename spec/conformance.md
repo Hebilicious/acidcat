@@ -37,11 +37,15 @@ A provider and its bindings conform for a target if, through each binding of the
 | `fixture.echo` | Returns its input. It is read-only |
 | `fixture.refuse` | Returns the failure `Refused` |
 | `fixture.crash` | Fails with a defect |
-| `fixture.slow` | Waits, then returns `null`. The tests cancel it |
+| `fixture.hold` | Holds until `fixture.release` releases its `key`, then returns `{ "key": <key> }`. With a `marker`, it writes a file at that path when it starts to hold. The tests cancel it |
+| `fixture.held` | Returns `{ "keys": [...] }`: the keys of the calls to `fixture.hold` that hold now. It is read-only |
+| `fixture.release` | Releases the calls to `fixture.hold` that hold a `key` |
 | `fixture.hidden` | Only the `app` target can use it |
 | `fixture.toggle` | Available only while the switch is on. Its input schema has no properties |
 | `fixture.switch.set` | Turns the switch on or off |
 | `fixture.flags` | Returns its input. The input has one property for each kind of command-line flag. Only the `cli` target can use it |
+
+All the sessions of one provider share the calls that hold, so `fixture.held` through one request gives the keys of the calls of other requests. A provider that serves the CLI binding MUST write the file of a `marker`. Other providers MAY ignore `marker`.
 
 The switch MUST be on when the tests start. The implementation gives no MCP instructions of its own, so its MCP instructions are the `description` of the fixture.
 
@@ -52,5 +56,15 @@ acid-cat conform --mcp <url> --http <base url> --cli "<command>" --webmcp <page 
 ```
 
 Give one or more bindings. For each binding, `acid-cat conform` tests the rules above. It uses the official MCP client for MCP, and sends requests that a client never sends to test rejections. For WebMCP, it opens the page in a browser, gives the page a test host as `modelContext`, and calls the tools that the page registers. For the CLI, it interrupts a call and examines the exit code. Through each remote binding, property-based tests examine two guarantees of [Invocation](invocation.md#cancellation-and-concurrency) with random sets of calls: each call gets exactly its own outcome, and the cancellation of one call does not change other calls.
+
+The tests wait for states that they can observe, not for times. Before a test cancels a call to `fixture.hold`, it waits until `fixture.held` gives the key of the call. For the CLI, it waits until the marker file exists, then it sends the interrupt. A cancelled call passes only if it ends with the cancellation of its binding:
+
+- through MCP or HTTP: the call failure `cancelled`, or the client stops the call itself;
+- through WebMCP: a rejection with the name `AbortError` and the kind `cancelled`;
+- through the CLI: the process exits with the code 130.
+
+Through MCP, HTTP and WebMCP, the key of the cancelled call must then leave `fixture.held`. Each call that a test does not cancel must hold until the test releases it, then return its own key.
+
+Each test has one deadline: `--deadline`, in milliseconds, 30 seconds by default. A test that does not settle before its deadline fails with "did not settle". The test then stops its calls, kills the command line that it started, and releases each key that it used. The deadline never makes a test pass.
 
 A test that a SHOULD rule fails gives a warning, not an error. Tests that need access to the code, for example of internal logs, are not part of conformance.

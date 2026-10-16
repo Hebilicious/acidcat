@@ -6,7 +6,7 @@ The AcidCat command line. npm package: `@acid-cat/cli`. It gives the `acid-cat` 
 acid-cat check [--strict] <catalog.json ...>  # check catalogs
 acid-cat format [--write] <catalog.json ...>  # write catalogs in canonical form
 acid-cat view <catalog.json> <target>         # write the view of one target
-acid-cat conform --mcp <url> --http <url> --cli "<command>" --webmcp <url>  # test an implementation
+acid-cat conform --mcp <url> --http <url> --cli "<command>" --webmcp <url> [--deadline <ms>]  # test an implementation
 ```
 
 Install it as a development dependency, and run it with `pnpm exec acid-cat …`:
@@ -35,9 +35,11 @@ The exit code is 0 if there are no errors. It is 1 if there are errors. With `--
 `conform` tests a running implementation of the [conformance fixture](conformance/fixture.pkl) through its bindings (see [Conformance](../../spec/conformance.md#acid-cat-conform)):
 
 - **MCP:** the official MCP client, with revision `2026-07-28`, for tools and outcomes; raw requests for rejections.
-- **HTTP** and **CLI:** each outcome, each kind of call failure, availability, and rejections. For the CLI, an interrupt (`SIGINT`) during a call gives exit code 130.
+- **HTTP** and **CLI:** each outcome, each kind of call failure, availability, and rejections. For the CLI, an interrupt (`SIGINT`) during a call that holds gives exit code 130.
 - **WebMCP:** the checks act as the WebMCP host. `--webmcp <url>` opens a page that serves the `app` target in Chromium, through [Playwright](https://playwright.dev), with a test `modelContext`. Install Playwright to use it: `pnpm add -D playwright`, then `pnpm exec playwright install chromium`. In code, `webmcp` can also be a function that installs the implementation on a host in the same process.
 - **Properties:** with fast-check, through each remote binding: concurrent calls each get exactly their own outcome, and a cancellation changes only its own call.
+
+The checks wait for states that they can observe, not for times. Before a check cancels a call to `fixture.hold`, it waits until `fixture.held` gives the key of the call, or, for the CLI, until the marker file of the call exists. Each check has one deadline: `--deadline`, or `deadline` in code, in milliseconds. The default is 30 000. A check that does not settle before its deadline fails with "did not settle", and the check stops what it started. The deadline never makes a check pass.
 
 The exit code is 1 if a check fails. Both AcidCat cores run `conform` in their tests. In code, use `conform()` and `serve()` from `@acid-cat/cli`. `createTestHost()` gives the WebMCP host of the checks.
 

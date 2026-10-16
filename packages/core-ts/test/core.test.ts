@@ -5,7 +5,7 @@ import { check } from "@acid-cat/cli";
 
 import { CallFailureError, createSession, httpHandler, installWebMcp, mcpHandler, renderCatalog, runCli } from "../src/index.ts";
 import type { ModelContextTool } from "../src/index.ts";
-import { fixture, heldApp, options, Switch, toJsonSchema } from "./fixture.ts";
+import { fixture, heldApp, Holds, options, Switch, toJsonSchema } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
 
 test("the application writes a catalog that conforms", () => {
@@ -44,11 +44,11 @@ test("availability, cancellation and closing", async () => {
   assert.deepEqual(await session.invoke("fixture.toggle", {}), { kind: "unavailable", message: "The switch is off." });
 
   const controller = new AbortController();
-  const slow = session.invoke("fixture.slow", { milliseconds: 60_000 }, { signal: controller.signal });
+  const held = session.invoke("fixture.hold", { key: "cancelled" }, { signal: controller.signal });
   controller.abort();
-  assert.equal(((await slow) as { kind: string }).kind, "cancelled");
+  assert.equal(((await held) as { kind: string }).kind, "cancelled");
 
-  const pending = session.invoke("fixture.slow", { milliseconds: 60_000 });
+  const pending = session.invoke("fixture.hold", { key: "pending" });
   await session.dispose();
   assert.equal(((await pending) as { kind: string }).kind, "cancelled");
   assert.equal(((await session.invoke("fixture.echo", { text: "x" })) as { kind: string }).kind, "cancelled");
@@ -67,7 +67,7 @@ test("MCP gives the view and each outcome", async () => {
       )
     ).json()) as { result?: any; error?: { code: number } };
   const tools = (await rpc("tools/list")).result.tools as { name: string; annotations: { readOnlyHint: boolean }; outputSchema?: object }[];
-  assert.deepEqual(tools.map((tool) => tool.name).sort(), ["fixture.crash", "fixture.echo", "fixture.refuse", "fixture.slow", "fixture.switch.set", "fixture.toggle"]);
+  assert.deepEqual(tools.map((tool) => tool.name).sort(), ["fixture.crash", "fixture.echo", "fixture.held", "fixture.hold", "fixture.refuse", "fixture.release", "fixture.switch.set", "fixture.toggle"]);
   assert.equal(tools.find((tool) => tool.name === "fixture.echo")!.annotations.readOnlyHint, true);
   const value = await rpc("tools/call", { name: "fixture.echo", arguments: { text: "hi" } });
   assert.deepEqual(value.result.structuredContent, { text: "hi" });
@@ -111,7 +111,7 @@ function countedContexts() {
   const counts = { created: 0, released: 0 };
   const createContext = (): Context & AsyncDisposable => {
     counts.created += 1;
-    return { switch: new Switch(), [Symbol.asyncDispose]: async () => void (counts.released += 1) };
+    return { switch: new Switch(), holds: new Holds(), [Symbol.asyncDispose]: async () => void (counts.released += 1) };
   };
   return { counts, createContext };
 }
@@ -215,7 +215,7 @@ test("the command line gives each outcome its exit code", async () => {
   assert.equal((await run("nope")).code, 2);
   assert.equal((await run("call", "fixture.hidden")).code, 2);
   assert.equal((await run("fixture", "echo")).code, 3);
-  assert.equal((await run("fixture", "slow", "--milliseconds", "soon")).code, 3);
+  assert.equal((await run("fixture", "flags", "--mode", "fast", "--ratio", "soon")).code, 3);
   assert.equal((await run("fixture", "crash")).code, 5);
   assert.equal((await run("--help")).code, 0);
 });

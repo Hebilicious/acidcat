@@ -11,7 +11,7 @@ import { Argument, Command, Flag } from "effect/cli";
 
 import packageJson from "../package.json" with { type: "json" };
 import { check, viewOf, type Catalog } from "./catalog.ts";
-import { conform } from "./conform/index.ts";
+import { conform, DEADLINE } from "./conform/index.ts";
 
 const readCatalog = Effect.fn("readCatalog")(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -93,6 +93,10 @@ const conformCommand = Command.make(
     cli: url("cli", "The command that starts the command line, for example \"node fixture-cli.ts\""),
     webmcp: url("webmcp", "The URL of a web page that serves the app target. It runs in Chromium, through Playwright"),
     maximumBytes: Flag.Int("max-bytes").pipe(Flag.withDescription("The body limit of the remote bindings"), Flag.withDefault(1_048_576)),
+    deadline: Flag.Int("deadline").pipe(
+      Flag.withDescription("The time, in milliseconds, that each check has to settle. A check that does not settle in this time fails"),
+      Flag.withDefault(DEADLINE),
+    ),
   },
   Effect.fn(function* (options) {
     const value = (option: Option.Option<string>) => (Option.isSome(option) ? option.value : undefined);
@@ -104,6 +108,7 @@ const conformCommand = Command.make(
         cli: command,
         webmcp: value(options.webmcp),
         maximumBytes: options.maximumBytes,
+        deadline: options.deadline,
       }),
     );
     if (results.length === 0) {
