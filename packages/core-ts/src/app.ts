@@ -93,12 +93,31 @@ export const defineApp = <Context = unknown>(app: App<Context>): App<Context> =>
 /** Converts a schema to JSON Schema 2020-12, for example `(schema) => z.toJSONSchema(schema)` with Zod. */
 export type ToJsonSchema = (schema: StandardSchemaV1) => JsonObject;
 
-/** The catalog of an application, as a JSON document. */
+const catalogs = new WeakMap<App<any>, WeakMap<ToJsonSchema, CatalogDocument>>();
+
+/**
+ * The catalog of an application, as a JSON document. The catalog is written one time for each application and
+ * `toJsonSchema`. Later calls with the same two give the same document.
+ */
 export function catalogOf(app: App<any>, options: { readonly toJsonSchema: ToJsonSchema }): CatalogDocument {
+  let byConverter = catalogs.get(app);
+  if (byConverter === undefined) {
+    byConverter = new WeakMap();
+    catalogs.set(app, byConverter);
+  }
+  let written = byConverter.get(options.toJsonSchema);
+  if (written === undefined) {
+    written = write(app, options.toJsonSchema);
+    byConverter.set(options.toJsonSchema, written);
+  }
+  return written;
+}
+
+function write(app: App<any>, toJsonSchema: ToJsonSchema): CatalogDocument {
   const types: Record<string, JsonObject> = {};
 
   const toJson = (schema: StandardSchemaV1, where: string): JsonObject => {
-    const { $schema: _, $defs, ...json } = options.toJsonSchema(schema) as JsonObject & { $defs?: Record<string, JsonObject> };
+    const { $schema: _, $defs, ...json } = toJsonSchema(schema) as JsonObject & { $defs?: Record<string, JsonObject> };
     for (const [name, definition] of Object.entries($defs ?? {})) {
       const existing = types[name];
       if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(definition)) {

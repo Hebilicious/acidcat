@@ -23,7 +23,10 @@ export interface Handle {
 
 export interface Session {
   readonly target: string;
-  /** The view of the target. Bindings take names, descriptions and schemas from it. */
+  /**
+   * The view of the target. Bindings take names, descriptions and schemas from it. The session writes the view when it
+   * is first read.
+   */
   readonly view: CatalogDocument;
   /** The handles of the capabilities in the view, by id. */
   readonly handles: ReadonlyMap<string, Handle>;
@@ -50,7 +53,6 @@ const always: Observable<Availability> = { getSnapshot: () => AVAILABLE, subscri
 
 /** Open a session for a target. */
 export function createSession<Context>(app: App<Context>, options: SessionOptions<Context>): Session {
-  const view = viewOf(catalogOf(app, { toJsonSchema: options.toJsonSchema }), options.target);
   const lifetime = new AbortController();
   const running = new Set<Promise<unknown>>();
   const listeners = new Set<() => void>();
@@ -59,7 +61,8 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
 
   const served = new Map<string, { readonly capability: AnyCapability<Context>; readonly availability: Observable<Availability> }>();
   for (const capability of app.capabilities) {
-    if (!(capability.id in view.capabilities)) continue;
+    if (!capability.audience.includes(options.target)) continue;
+    if (served.has(capability.id)) throw new Error(`The capability ${capability.id} is declared two times.`);
     const availability = capability.availability?.(options.context) ?? always;
     subscriptions.push(availability.subscribe(() => listeners.forEach((listener) => listener())));
     served.set(capability.id, { capability, availability });
@@ -133,9 +136,13 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     });
   }
 
+  let view: CatalogDocument | undefined;
+
   return {
     target: options.target,
-    view,
+    get view() {
+      return (view ??= viewOf(catalogOf(app, { toJsonSchema: options.toJsonSchema }), options.target));
+    },
     handles,
     signal: lifetime.signal,
     invoke: (id, input, callOptions) => call(id, input, false, callOptions?.signal),

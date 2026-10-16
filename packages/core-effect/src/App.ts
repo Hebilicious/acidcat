@@ -31,8 +31,22 @@ export const make = <const Capabilities extends readonly Capability.Any[]>(app: 
   readonly capabilities: Capabilities;
 }): App<Capability.Services<Capabilities[number]>> => app;
 
-/** The catalog of an application, as a JSON document. */
+const documents = new WeakMap<App<any>, CatalogDocument>();
+
+/**
+ * The catalog of an application, as a JSON document. The document is written one time for each application. Later
+ * calls give the same document.
+ */
 export function document(app: App<any>): CatalogDocument {
+  let written = documents.get(app);
+  if (written === undefined) {
+    written = write(app);
+    documents.set(app, written);
+  }
+  return written;
+}
+
+function write(app: App<any>): CatalogDocument {
   const types: Record<string, JsonObject> = {};
 
   const toJson = (schema: Schema.Top, where: string): JsonObject => {
