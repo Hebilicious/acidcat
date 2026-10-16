@@ -300,6 +300,25 @@ export function typesUsedBy(schema: unknown, types: { readonly [name: string]: J
   return used;
 }
 
+/**
+ * An input schema that is a union of object schemas, with `"type": "object"`, so that it is an object schema
+ * (spec/catalog.md#capabilities). A union is `anyOf` or `oneOf`, directly or in the type that a `$ref` names. Each of
+ * its schemas is an object, or a `$ref` to a type that is an object. Other schemas do not change.
+ */
+export function objectInput(schema: JsonObject, types: { readonly [name: string]: JsonObject }): JsonObject {
+  const resolve = (node: unknown): JsonObject | undefined => {
+    if (node === null || typeof node !== "object" || Array.isArray(node)) return undefined;
+    const object = node as JsonObject;
+    const name = typeof object.$ref === "string" ? REFERENCE.exec(object.$ref)?.[1] : undefined;
+    return name === undefined ? object : types[name];
+  };
+  const target = resolve(schema);
+  if (schema.type !== undefined || target === undefined || target.type !== undefined) return schema;
+  const union = target.anyOf ?? target.oneOf;
+  if (!Array.isArray(union) || union.length === 0) return schema;
+  return union.every((member) => resolve(member)?.type === "object") ? { type: "object", ...schema } : schema;
+}
+
 /** Bundle a schema (spec/catalog.md#bundling). */
 export function bundle(schema: JsonObject, types: { readonly [name: string]: JsonObject }): JsonObject {
   const only = Object.keys(schema).length === 1 ? REFERENCE.exec(String(schema.$ref))?.[1] : undefined;

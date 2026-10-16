@@ -3,6 +3,7 @@
  * See spec/catalog.md.
  */
 import { canonicalText } from "@acid-cat/catalog";
+import { objectInput } from "@acid-cat/spec-ts";
 import type { Availability, CatalogCapability, CatalogDocument, JsonObject, Result } from "@acid-cat/spec-ts";
 
 import type { StandardSchemaV1 } from "./standard-schema.ts";
@@ -32,7 +33,10 @@ export interface Capability<
   /** The targets that can use the capability. With no audience, no target can use it. */
   readonly audience: readonly string[];
   readonly readOnly?: boolean | undefined;
-  /** The input: an object schema. With no input schema, the input is an empty object. */
+  /**
+   * The input: an object schema, or a union of object schemas. The catalog writes a union with `"type": "object"`. With
+   * no input schema, the input is an empty object.
+   */
   readonly input?: Input;
   /** The value of a successful call. With no output schema, the value is `null`. */
   readonly output?: OutputSchema;
@@ -146,7 +150,7 @@ function write(app: App<any>, toJsonSchema: ToJsonSchema): CatalogDocument {
     capabilities[capability.id] = {
       description: capability.description,
       audience: capability.audience,
-      ...(capability.input === undefined ? {} : { input: toJson(capability.input, capability.id) }),
+      ...(capability.input === undefined ? {} : { input: objectInput(toJson(capability.input, capability.id), types) }),
       ...(capability.output === undefined ? {} : { output: toJson(capability.output, capability.id) }),
       ...(Object.keys(failures).length === 0 ? {} : { failures }),
       ...(capability.readOnly === true ? { readOnly: true } : {}),

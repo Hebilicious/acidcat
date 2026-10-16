@@ -20,7 +20,9 @@ export interface Capability<
   /** The targets that can use the capability. With no audience, no target can use it. */
   readonly audience: readonly string[];
   readonly readOnly?: boolean | undefined;
-  /** The input, a `Schema.Struct`. With no input schema, the input is an empty object. */
+  /**
+   * The input, a `Schema.Struct`, or a `Schema.Union` of structs. With no input schema, the input is an empty object.
+   */
   readonly input?: Input | undefined;
   /** The value of a successful call. With no output schema, the value is `null`. */
   readonly output?: Output | undefined;
