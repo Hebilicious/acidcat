@@ -3,9 +3,9 @@ import { test } from "node:test";
 
 import { CallFailureError } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer, SubscriptionRef } from "effect";
+import { Context, Effect, Layer, Option, Schema, SchemaGetter, SchemaTransformation, Stream, SubscriptionRef } from "effect";
 
-import { Handles } from "../src/index.ts";
+import { App, Capability, Handles, Session } from "../src/index.ts";
 import { aircon, Unit, unitLayer } from "../examples/aircon.ts";
 import { fixture, fixtureLayer, holdsLayer, position, Switch } from "./fixture.ts";
 
@@ -101,4 +101,36 @@ test("a handle gives the state as copies, and follows it only while it has liste
   } finally {
     await session.dispose();
   }
+});
+
+test("handles need a state schema that encodes synchronously, and a session does not", async () => {
+  const encodeLater = SchemaGetter.transformOptionalEffect((value: Option.Option<string>) => Effect.promise(async () => value));
+  const Suspending = Schema.String.pipe(
+    Schema.decodeTo(Schema.String, SchemaTransformation.makeTransformation({ decode: SchemaGetter.passthrough(), encode: encodeLater })),
+  );
+  class Label extends Context.Service<Label, SubscriptionRef.SubscriptionRef<string>>()("probe/Label") {}
+  const labelLayer = Layer.effect(Label, SubscriptionRef.make("first"));
+  const app = App.make({
+    targets: { app: { bindings: ["typescript"] } },
+    capabilities: [
+      Capability.make({
+        id: "probe.label.get",
+        description: "Read the label.",
+        audience: ["app"],
+        state: { schema: Suspending, value: Label },
+        run: () => Effect.succeed(null),
+      }),
+    ],
+  });
+
+  const error = await rejection(Handles.open(app, labelLayer, { target: "app" }));
+  assert.ok(error instanceof Error);
+  assert.equal(error.message, "The state schema of probe.label.get does not encode synchronously. A handle needs a state schema that encodes synchronously.");
+
+  const [state] = await Effect.runPromise(
+    Effect.scoped(Effect.flatMap(Session.make(app, { target: "app" }), (session) => session.state("probe.label.get").pipe(Stream.take(1), Stream.runCollect))).pipe(
+      Effect.provide(labelLayer),
+    ),
+  );
+  assert.equal(state, "first");
 });

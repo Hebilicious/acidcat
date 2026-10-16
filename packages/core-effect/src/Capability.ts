@@ -28,7 +28,8 @@ export interface Capability<
   readonly failures?: readonly Failure[] | undefined;
   /**
    * A value that clients can observe (spec/invocation.md#state): its schema, and the ref that holds it. A session gets
-   * the ref one time, when it opens.
+   * the ref one time, when it opens. Handles need a state schema that encodes synchronously, because `getSnapshot` is
+   * synchronous. `Handles.make` checks this when it opens.
    */
   readonly state?:
     | { readonly schema: State; readonly value: Effect.Effect<SubscriptionRef.SubscriptionRef<State["Type"]>, never, R> }

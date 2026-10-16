@@ -9,6 +9,7 @@ import type { Availability, Result } from "@acid-cat/spec-ts";
 import { Cause, Effect, Exit, Fiber, FiberSet, Layer, Schema, Scope, Stream, SubscriptionRef } from "effect";
 
 import type * as App from "./App.ts";
+import type * as Capability from "./Capability.ts";
 import { changesAfter } from "./internal/changes.ts";
 import { refsOf } from "./internal/served.ts";
 import * as Session from "./Session.ts";
@@ -76,6 +77,21 @@ function observe<A, T>(
   };
 }
 
+/**
+ * The synchronous encoder of a state schema. `getSnapshot` is synchronous, so a handle needs a state schema that
+ * encodes synchronously. Encode the current value one time to check this.
+ */
+function synchronousEncoder(id: string, schema: Capability.AnySchema, current: unknown): (value: unknown) => unknown {
+  const encode = Schema.encodeUnknownSync(schema as Schema.Codec<unknown, unknown>);
+  try {
+    encode(current);
+  } catch (cause) {
+    if (Schema.isSchemaError(cause)) throw cause;
+    throw new Error(`The state schema of ${id} does not encode synchronously. A handle needs a state schema that encodes synchronously.`, { cause });
+  }
+  return encode;
+}
+
 /** A copy of each value, so that a client cannot change the data of the provider. */
 const detached = <T>(source: Observable<T>): Observable<T> => ({
   getSnapshot: () => structuredClone(source.getSnapshot()),
@@ -119,7 +135,7 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
       const snapshot =
         stateRef === undefined || capability.state === undefined
           ? undefined
-          : detached(observe(stateRef, Schema.encodeUnknownSync(capability.state.schema as Schema.Codec<unknown, unknown>), follow));
+          : detached(observe(stateRef, synchronousEncoder(id, capability.state.schema, SubscriptionRef.getUnsafe(stateRef)), follow));
 
       handles.set(id, {
         id,
