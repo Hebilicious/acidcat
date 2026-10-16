@@ -29,7 +29,11 @@ interface Run {
   readonly stderr: string;
 }
 
-/** Start the command line. When the signal aborts, the process is killed, and its run rejects. */
+/**
+ * Start the command line. When the signal aborts, the process is killed, and its run rejects. The rejection is observed
+ * here too, so that a check that stops waiting first, for example at the deadline, records a failure and does not end
+ * the process with an unhandled rejection.
+ */
 function start(command: readonly string[], args: readonly string[], signal: AbortSignal) {
   const child = spawn(command[0]!, [...command.slice(1), ...args], { stdio: ["ignore", "pipe", "pipe"], signal, killSignal: "SIGKILL" });
   const run = new Promise<Run>((resolve, reject) => {
@@ -40,6 +44,7 @@ function start(command: readonly string[], args: readonly string[], signal: Abor
     child.on("error", (error) => reject(signal.aborted ? new Error(`waiting until the command line exits: ${args.join(" ")}`) : error));
     child.on("close", (code, exitSignal) => resolve({ code, signal: exitSignal, stdout, stderr }));
   });
+  run.catch(() => undefined);
   return { child, run };
 }
 

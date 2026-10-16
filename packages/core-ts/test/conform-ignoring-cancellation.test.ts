@@ -45,3 +45,16 @@ test("acid-cat conform fails only the cancellation checks of an implementation t
     await served.close();
   }
 });
+
+test("acid-cat conform fails the interrupt check of a command line that never writes its marker, and goes on", async () => {
+  const results = await conform({ cli: [process.execPath, new URL("./fixture-cli-without-marker.ts", import.meta.url).pathname], deadline });
+  const interrupt = results.find((result) => result.name === "an interrupt cancels the call with exit code 130");
+  assert.equal(interrupt?.passed, false);
+  assert.match(interrupt.detail ?? "", /^did not settle within 10000 ms: waiting until the call writes its marker file/);
+  const after = results.slice(results.indexOf(interrupt) + 1);
+  assert.deepEqual(
+    after.map((result) => `${result.passed ? "passed" : "failed"}: ${result.name}`),
+    ["passed: call gives the value of a capability", "passed: list gives the view", "passed: list gives the usage of each capability, with its flags"],
+  );
+  assert.deepEqual(results.filter((result) => !result.passed), [interrupt]);
+});
