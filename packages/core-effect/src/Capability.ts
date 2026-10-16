@@ -14,8 +14,9 @@ export interface Capability<
   Failure extends AnySchema = AnySchema,
   R = never,
   State extends AnySchema = AnySchema,
+  Id extends string = string,
 > {
-  readonly id: string;
+  readonly id: Id;
   readonly description: string;
   /** The targets that can use the capability. With no audience, no target can use it. */
   readonly audience: readonly string[];
@@ -49,13 +50,26 @@ export type Any<R = any> = Capability<any, any, any, R, any>;
 /** The services that a capability needs. */
 export type Services<C> = C extends Capability<any, any, any, infer R, any> ? R : never;
 
-/** Declare a capability. */
+/**
+ * Declare a capability. The id keeps its literal type. The capability needs the services that `run`, `availability`
+ * and `state` need.
+ */
 export const make = <
   Input extends AnySchema = Schema.Struct<{}>,
   R = never,
   Output extends AnySchema = typeof Schema.Null,
   Failure extends AnySchema = typeof Schema.Never,
   State extends AnySchema = typeof Schema.Never,
+  const Id extends string = string,
+  RAvailability = never,
+  RState = never,
 >(
-  capability: Capability<Input, Output, Failure, R, State>,
-): Capability<Input, Output, Failure, R, State> => capability;
+  capability: Omit<Capability<Input, Output, Failure, R, State, Id>, "availability" | "state"> & {
+    /** See `Capability.availability`. */
+    readonly availability?: Effect.Effect<SubscriptionRef.SubscriptionRef<Availability>, never, RAvailability> | undefined;
+    /** See `Capability.state`. */
+    readonly state?:
+      | { readonly schema: State; readonly value: Effect.Effect<SubscriptionRef.SubscriptionRef<State["Type"]>, never, RState> }
+      | undefined;
+  },
+): Capability<Input, Output, Failure, NoInfer<R | RAvailability | RState>, State, Id> => capability;

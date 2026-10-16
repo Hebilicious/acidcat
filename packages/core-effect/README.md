@@ -40,6 +40,7 @@ export const aircon = App.make({
 - `availability` is an optional Effect that gives a `SubscriptionRef` of availability values. With no `availability`, the capability is always available.
 - `state` is an optional `{ schema, value }`: the schema of the [state](../../spec/invocation.md#state), and an Effect that gives a `SubscriptionRef` of its values. Handles need a state schema that encodes synchronously, because `getSnapshot` is synchronous. `Handles.make` fails with an error that names the capability if the schema does not.
 - Give a shared type an `identifier` annotation. It becomes a named type in `$defs`.
+- `Capability.make` keeps the literal type of `id`, so that an application can type its ids, for example `typeof powerSet.id`. The capability needs the services that `run`, `availability` and `state` need.
 
 ### Availability and state
 
