@@ -15,8 +15,11 @@ import * as Cli from "./Cli.ts";
  */
 const afterInterruptHandlers = <A, E, R>(program: Effect.Effect<A, E, R>) => Effect.andThen(Effect.yieldNow, program);
 
-/** Run the command line as the main program of the process. `layer` gives the services of the capabilities. */
-export function main<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Cli.Options): void {
+/**
+ * Run the command line as the main program of the process. `layer` gives the services of the capabilities, and of the
+ * commands of the application.
+ */
+export function main<R, E, CE = never, CR = never>(app: App.App<R>, layer: Layer.Layer<R | CR, E>, options: Cli.Options<CE, CR>): void {
   Cli.run(app, options).pipe(Effect.provide(Layer.merge(layer, NodeServices.layer)), afterInterruptHandlers, NodeRuntime.runMain);
 }
 
