@@ -37,9 +37,41 @@ export const aircon = App.make({
 
 - `input` is a `Schema.Struct`. With no `input`, the input is an empty object. Use `Schema.Finite` or `Schema.Int` for numbers: `Schema.Number` also accepts `Infinity` and `NaN`, which JSON cannot hold.
 - Each failure is a `Schema.TaggedStruct`. Its tag is the tag in the catalog.
-- `availability` is an optional `Stream` of availability values.
-- `state` is an optional `{ schema, changes }`: the schema of the [state](../../spec/invocation.md#state), and a `Stream` of its values. `session.state(id)` follows it.
+- `availability` is an optional Effect that gives a `SubscriptionRef` of availability values. With no `availability`, the capability is always available.
+- `state` is an optional `{ schema, value }`: the schema of the [state](../../spec/invocation.md#state), and an Effect that gives a `SubscriptionRef` of its values.
 - Give a shared type an `identifier` annotation. It becomes a named type in `$defs`.
+
+### Availability and state
+
+A session gets the ref of each availability and each state one time, when it opens. It starts no fiber. It reads the availability ref when a call comes in, so a call that comes after `SubscriptionRef.set` is decided on the new value. `session.changes` and `session.state(id)` follow the refs only while they run, and a handle follows its refs only while it has listeners.
+
+Make each ref in a layer, so that all sessions share it. If the source of an availability or a state is a `Stream`, follow the stream one time in that layer:
+
+```ts
+import { AVAILABLE } from "@acid-cat/spec-ts";
+import type { Availability } from "@acid-cat/spec-ts";
+import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
+
+class Connection extends Context.Service<Connection, SubscriptionRef.SubscriptionRef<Availability>>()("app/Connection") {}
+
+const connectionLayer = Layer.effect(
+  Connection,
+  Effect.gen(function* () {
+    const ref = yield* SubscriptionRef.make<Availability>(AVAILABLE);
+    // `connectionChanges` is a Stream<Availability>. The fiber stops when the layer is released.
+    yield* connectionChanges.pipe(Stream.runForEach((value) => SubscriptionRef.set(ref, value)), Effect.forkScoped);
+    return ref;
+  }),
+);
+
+export const firmwareUpdate = Capability.make({
+  id: "aircon.firmware.update",
+  description: "Install the latest firmware.",
+  audience: ["app"],
+  availability: Connection,
+  run: () => Effect.succeed(null),
+});
+```
 
 ## Write the catalog
 

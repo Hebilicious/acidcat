@@ -38,7 +38,7 @@ In a session, each capability in the view is available or unavailable:
 - `{ "available": true }`
 - `{ "available": false, "reason": <text> }`
 
-Availability can change at any time. A binding that lists capabilities lists only the available capabilities, or it shows the availability of each one.
+Availability can change at any time. A session MUST decide each call on the availability at the moment that the call comes in. A binding that lists capabilities lists only the available capabilities, or it shows the availability of each one.
 
 ## Sessions
 

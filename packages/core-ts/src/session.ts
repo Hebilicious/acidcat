@@ -32,7 +32,10 @@ export interface Session {
   readonly handles: ReadonlyMap<string, Handle>;
   /** A call with an input that is not trusted. The outcome is in its JSON form. The promise never rejects. */
   invoke(id: string, input: unknown, options?: { readonly signal?: AbortSignal | undefined }): Promise<Outcome<unknown, unknown>>;
-  /** An event each time the availability of a capability changes. */
+  /**
+   * An event each time the availability of a capability changes. The session subscribes to the availabilities when the
+   * first listener subscribes, and unsubscribes after the last listener unsubscribes.
+   */
   onChange(listener: () => void): { unsubscribe(): void };
   /** The signal of the session. It aborts when the session closes. */
   readonly signal: AbortSignal;
@@ -56,7 +59,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
   const lifetime = new AbortController();
   const running = new Set<Promise<unknown>>();
   const listeners = new Set<() => void>();
-  const subscriptions: { unsubscribe(): void }[] = [];
+  let subscriptions: { unsubscribe(): void }[] = [];
   const onDefect = options.onDefect ?? ((id, cause) => console.error(`A capability failed with a defect: ${id}`, cause));
 
   const served = new Map<string, { readonly capability: AnyCapability<Context>; readonly availability: Observable<Availability> }>();
@@ -64,7 +67,6 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     if (!capability.audience.includes(options.target)) continue;
     if (served.has(capability.id)) throw new Error(`The capability ${capability.id} is declared two times.`);
     const availability = capability.availability?.(options.context) ?? always;
-    subscriptions.push(availability.subscribe(() => listeners.forEach((listener) => listener())));
     served.set(capability.id, { capability, availability });
   }
 
@@ -136,6 +138,11 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     });
   }
 
+  const unsubscribeAll = () => {
+    subscriptions.forEach((subscription) => subscription.unsubscribe());
+    subscriptions = [];
+  };
+
   let view: CatalogDocument | undefined;
 
   return {
@@ -147,12 +154,22 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     signal: lifetime.signal,
     invoke: (id, input, callOptions) => call(id, input, false, callOptions?.signal),
     onChange(listener) {
+      if (lifetime.signal.aborted) return { unsubscribe() {} };
+      if (listeners.size === 0) {
+        const announce = () => listeners.forEach((each) => each());
+        subscriptions = [...served.values()].map(({ availability }) => availability.subscribe(announce));
+      }
       listeners.add(listener);
-      return { unsubscribe: () => listeners.delete(listener) };
+      return {
+        unsubscribe() {
+          if (listeners.delete(listener) && listeners.size === 0) unsubscribeAll();
+        },
+      };
     },
     async dispose() {
       lifetime.abort();
-      subscriptions.forEach((subscription) => subscription.unsubscribe());
+      listeners.clear();
+      unsubscribeAll();
       await Promise.allSettled([...running]);
     },
   };

@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
-import { Effect, Fiber, Layer, Schema, Scope, Stream, SubscriptionRef } from "effect";
+import type { Availability } from "@acid-cat/spec-ts";
+import { Effect, Fiber, Layer, Queue, Schema, Scope, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability, Session } from "../src/index.ts";
-import { fixture, Switch, fixtureLayer } from "./fixture.ts";
+import { fixture, fixtureLayer, position, Switch } from "./fixture.ts";
 
 /** Run a test with a session for a target, and the fixture's services. */
 const withSession = <A, E>(target: string, body: (session: Session.Session) => Effect.Effect<A, E, Switch | Scope.Scope>) =>
@@ -52,17 +53,40 @@ test("a capability outside the view is the same as an unknown id", () =>
     }),
   ));
 
-test("availability follows its stream, and changes are announced", () =>
+test("a call is decided on the availability at the moment that it comes in", () =>
   withSession("mcp", (session) =>
     Effect.gen(function* () {
-      const announced = yield* session.changes.pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }));
-      yield* SubscriptionRef.set(yield* Switch, false);
-      yield* Fiber.join(announced).pipe(Effect.timeout(1000));
+      const switchRef = yield* Switch;
+      yield* SubscriptionRef.set(switchRef, position(false));
       assert.deepEqual(yield* session.availability("fixture.toggle"), { available: false, reason: "The switch is off." });
       assert.deepEqual(yield* session.invoke("fixture.toggle", {}), { kind: "unavailable", message: "The switch is off." });
-      yield* SubscriptionRef.set(yield* Switch, true);
-      yield* Effect.sleep(10);
+      yield* SubscriptionRef.set(switchRef, position(true));
       assert.deepEqual(yield* session.invoke("fixture.toggle", {}), { ok: true, value: null });
+    }),
+  ));
+
+test("changes announce each change after they start, and follow the availability only while they run", () =>
+  withSession("mcp", (session) =>
+    Effect.gen(function* () {
+      const switchRef = yield* Switch;
+      assert.equal(switchRef.pubsub.subscribers.size, 0);
+
+      const announced = yield* Queue.unbounded<Availability>();
+      const follower = yield* session.changes.pipe(
+        Stream.runForEach(() => Effect.flatMap(session.availability("fixture.toggle"), (value) => Queue.offer(announced, value))),
+        Effect.forkScoped({ startImmediately: true }),
+      );
+      yield* SubscriptionRef.set(switchRef, position(false));
+      assert.deepEqual(yield* Queue.take(announced), position(false));
+      assert.equal(switchRef.pubsub.subscribers.size, 1);
+
+      yield* SubscriptionRef.set(switchRef, position(false));
+      yield* SubscriptionRef.set(switchRef, position(true));
+      assert.deepEqual(yield* Queue.take(announced), position(true));
+      assert.equal(yield* Queue.size(announced), 0);
+
+      yield* Fiber.interrupt(follower);
+      assert.equal(switchRef.pubsub.subscribers.size, 0);
     }),
   ));
 

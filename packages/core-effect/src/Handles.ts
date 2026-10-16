@@ -4,11 +4,12 @@
  *
  * The handles use a session of Effect. The program that opens the session keeps its services and its scope.
  */
-import { CallFailureError, callFailure } from "@acid-cat/spec-ts";
+import { AVAILABLE, CallFailureError, callFailure } from "@acid-cat/spec-ts";
 import type { Availability, Result } from "@acid-cat/spec-ts";
-import { Cause, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect";
+import { Cause, Effect, Exit, Fiber, FiberSet, Layer, Schema, Scope, Stream, SubscriptionRef } from "effect";
 
 import type * as App from "./App.ts";
+import { changesAfter } from "./internal/changes.ts";
 import * as Session from "./Session.ts";
 
 /** A value that changes, and that code without Effect can read and observe. */
@@ -34,22 +35,43 @@ export interface Handle {
   invokeExternal(input: unknown, options?: CallOptions): Promise<Result<unknown, unknown>>;
 }
 
-/** A source of values with listeners. */
-function observable<T>(initial: T) {
-  let current = initial;
+/** A value that never changes. */
+const constant = <T>(value: T): Observable<T> => ({ getSnapshot: () => value, subscribe: () => ({ unsubscribe() {} }) });
+
+/**
+ * An observable of a ref. `getSnapshot` reads the ref. The observable follows the ref only while it has listeners: one
+ * follower starts with the first listener, and stops after the last listener unsubscribes. A listener gets the value
+ * of the ref at the moment that it is delivered, and never the same value two times in sequence.
+ */
+function observe<A, T>(
+  ref: SubscriptionRef.SubscriptionRef<A>,
+  read: (value: A) => T,
+  follow: (effect: Effect.Effect<void>) => Fiber.Fiber<void>,
+): Observable<T> {
   const listeners = new Set<(value: T) => void>();
+  let follower: Fiber.Fiber<void> | undefined;
   return {
-    set(value: T) {
-      current = value;
-      listeners.forEach((listener) => listener(value));
+    getSnapshot: () => read(SubscriptionRef.getUnsafe(ref)),
+    subscribe(listener) {
+      listeners.add(listener);
+      follower ??= follow(
+        changesAfter(ref, SubscriptionRef.getUnsafe(ref)).pipe(
+          Stream.runForEach((value) =>
+            Effect.sync(() => {
+              const delivered = read(value);
+              listeners.forEach((each) => each(delivered));
+            }),
+          ),
+        ),
+      );
+      return {
+        unsubscribe() {
+          if (!listeners.delete(listener) || listeners.size > 0) return;
+          follower?.interruptUnsafe();
+          follower = undefined;
+        },
+      };
     },
-    observable: {
-      getSnapshot: () => current,
-      subscribe(listener: (value: T) => void) {
-        listeners.add(listener);
-        return { unsubscribe: () => listeners.delete(listener) };
-      },
-    } satisfies Observable<T>,
   };
 }
 
@@ -61,7 +83,7 @@ const detached = <T>(source: Observable<T>): Observable<T> => ({
 
 /**
  * The handles of a session, by id. The handles work while the scope is open. When it closes, the observables stop
- * and the calls in progress are cancelled.
+ * and the calls in progress are cancelled. The handles start no fiber until a listener subscribes.
  */
 export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effect<ReadonlyMap<string, Handle>, never, Scope.Scope> =>
   Effect.gen(function* () {
@@ -69,6 +91,7 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
     const context = yield* Effect.context<never>();
     const lifetime = new AbortController();
     yield* Scope.addFinalizer(scope, Effect.sync(() => lifetime.abort()));
+    const follow = yield* FiberSet.runtime(yield* FiberSet.make<void>())();
 
     /** Run a call as a promise. The signal of the call and the scope interrupt it, as `cancelled`. */
     const run = <A>(effect: Effect.Effect<A, unknown>, options: CallOptions | undefined): Promise<A> => {
@@ -86,36 +109,20 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
       if (!capability.audience.includes(session.target)) continue;
       const id = capability.id;
 
-      const availability = observable(yield* session.availability(id));
-      yield* session.changes.pipe(
-        Stream.runForEach(() =>
-          session.availability(id).pipe(
-            Effect.map((next) => {
-              if (JSON.stringify(next) !== JSON.stringify(availability.observable.getSnapshot())) availability.set(next);
-            }),
-          ),
-        ),
-        Effect.forkIn(scope, { startImmediately: true }),
-      );
+      const availabilityRef = session.availabilityRef(id);
+      const availability = availabilityRef === undefined ? constant(AVAILABLE) : observe(availabilityRef, (value) => value, follow);
 
-      let snapshot: Observable<unknown> | undefined;
-      if (capability.state !== undefined) {
-        // The stream gives the current value first. Wait for it, so that `getSnapshot` always has a value.
-        const first = yield* Deferred.make<void>();
-        const state = observable<unknown>(undefined);
-        yield* session.state(id).pipe(
-          Stream.runForEach((value) => Effect.sync(() => state.set(value)).pipe(Effect.andThen(Deferred.succeed(first, undefined)))),
-          Effect.forkIn(scope, { startImmediately: true }),
-        );
-        yield* Deferred.await(first);
-        snapshot = detached(state.observable);
-      }
+      const stateRef = session.stateRef(id);
+      const snapshot =
+        stateRef === undefined || capability.state === undefined
+          ? undefined
+          : detached(observe(stateRef, Schema.encodeUnknownSync(capability.state.schema as Schema.Codec<unknown, unknown>), follow));
 
       handles.set(id, {
         id,
         description: capability.description,
         audience: [session.target],
-        availability: availability.observable,
+        availability,
         ...(snapshot === undefined ? {} : { snapshot }),
         execute: (input, options) =>
           run(

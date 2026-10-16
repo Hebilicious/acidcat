@@ -35,7 +35,7 @@ export const aircon = defineApp<{ unit: Unit }>({
 
 - `run` gets the input, an `AbortSignal` and the context. It returns `ok(value)` or `fail(tag, data)`. If it throws, the call fails as `internal`.
 - A failure schema describes the whole failure object, with its `_tag`.
-- `availability` is an optional function that returns an observable availability.
+- `availability` is an optional function that returns an observable availability. A session reads it with `getSnapshot` when a call comes in. It subscribes to it only while `onChange` or the handle has listeners.
 - `state` is an optional `{ schema, source }`: the schema of the [state](../../spec/invocation.md#state), and a function that returns an observable. The handle gives it as `snapshot`.
 - `capabilitiesFor<Context>()` sets the context type one time. The other types come from the schemas.
 

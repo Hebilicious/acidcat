@@ -1,13 +1,17 @@
 /** A test application with one capability for each behavior that the tests examine. */
 import { unavailable, AVAILABLE } from "@acid-cat/spec-ts";
-import { Context, Deferred, Effect, Layer, Schema, Stream, SubscriptionRef } from "effect";
+import type { Availability } from "@acid-cat/spec-ts";
+import { Context, Deferred, Effect, Layer, Schema, SubscriptionRef } from "effect";
 
 import { App, Capability } from "../src/index.ts";
 
-/** A switch that the tests turn on and off, to change the availability of `fixture.toggle`. */
-export class Switch extends Context.Service<Switch, SubscriptionRef.SubscriptionRef<boolean>>()("fixture/Switch") {}
+/** A switch that the tests turn on and off. It holds the availability of `fixture.toggle`. */
+export class Switch extends Context.Service<Switch, SubscriptionRef.SubscriptionRef<Availability>>()("fixture/Switch") {}
 
-export const switchLayer = Layer.effect(Switch, SubscriptionRef.make(true));
+/** The availability of `fixture.toggle` when the switch is on or off. */
+export const position = (on: boolean): Availability => (on ? AVAILABLE : unavailable("The switch is off."));
+
+export const switchLayer = Layer.effect(Switch, SubscriptionRef.make(position(true)));
 
 /** The calls to `fixture.hold` that hold now, for all the sessions of one provider. */
 export class Holds extends Context.Service<
@@ -54,7 +58,7 @@ export function countedFixtureLayer() {
   const counted = Layer.effect(
     Switch,
     Effect.acquireRelease(
-      Effect.sync(() => counts.built++).pipe(Effect.andThen(SubscriptionRef.make(true))),
+      Effect.sync(() => counts.built++).pipe(Effect.andThen(SubscriptionRef.make(position(true)))),
       () => Effect.sync(() => counts.released++),
     ),
   );
@@ -143,12 +147,7 @@ export const fixture = App.make({
       description: "Available only while the switch is on.",
       audience: everywhere,
       input: Schema.Struct({}),
-      availability: Stream.unwrap(
-        Effect.gen(function* () {
-          const ref = yield* Switch;
-          return SubscriptionRef.changes(ref).pipe(Stream.map((on) => (on ? AVAILABLE : unavailable("The switch is off."))));
-        }),
-      ),
+      availability: Switch,
       run: () => Effect.succeed(null),
     }),
     Capability.make({
@@ -158,7 +157,7 @@ export const fixture = App.make({
       input: Schema.Struct({ on: Schema.Boolean }),
       run: ({ on }) =>
         Effect.gen(function* () {
-          yield* SubscriptionRef.set(yield* Switch, on);
+          yield* SubscriptionRef.set(yield* Switch, position(on));
           return null;
         }),
     }),

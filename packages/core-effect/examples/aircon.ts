@@ -1,8 +1,9 @@
 /**
  * The air conditioner of examples/aircon.pkl, written with @acid-cat/core-effect. The unit is simulated in memory.
  */
-import { AVAILABLE, unavailable } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer, Schema, Stream, SubscriptionRef } from "effect";
+import { AVAILABLE } from "@acid-cat/spec-ts";
+import type { Availability } from "@acid-cat/spec-ts";
+import { Context, Effect, Layer, Schema, SubscriptionRef } from "effect";
 
 import { App, Capability } from "../src/index.ts";
 
@@ -28,31 +29,39 @@ const UpToDate = Schema.TaggedStruct("UpToDate", { version: Schema.String });
 
 // --- The unit ----------------------------------------------------------------------------------------------------
 
-type State = typeof Status.Type & { readonly online: boolean; readonly firmware: string };
-
-/** The simulated unit. */
-export class Unit extends Context.Service<Unit, SubscriptionRef.SubscriptionRef<State>>()("aircon/Unit") {}
+/** The simulated unit. Its refs are the state and the availability that the capabilities give to clients. */
+export class Unit extends Context.Service<
+  Unit,
+  {
+    readonly status: SubscriptionRef.SubscriptionRef<typeof Status.Type>;
+    /** Available while the unit is online, and `unavailable("The unit is offline.")` while it is not. */
+    readonly connection: SubscriptionRef.SubscriptionRef<Availability>;
+    readonly firmware: string;
+  }
+>()("aircon/Unit") {}
 
 export const unitLayer = Layer.effect(
   Unit,
-  SubscriptionRef.make<State>({
-    power: false,
-    mode: "cool",
-    fan: "auto",
-    targetCelsius: 22,
-    roomCelsius: 25,
-    online: true,
-    firmware: "1.0.0",
+  Effect.gen(function* () {
+    return {
+      status: yield* SubscriptionRef.make<typeof Status.Type>({ power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 }),
+      connection: yield* SubscriptionRef.make<Availability>(AVAILABLE),
+      firmware: "1.0.0",
+    };
   }),
 );
 
+/** The ref of the status of the unit, if the unit is online. */
+const onlineStatus = Effect.gen(function* () {
+  const unit = yield* Unit;
+  if (!(yield* SubscriptionRef.get(unit.connection)).available) return yield* Effect.fail(Offline.make({}));
+  return unit.status;
+});
+
 /** Change the unit if it is online. */
-const change = (update: (state: State) => State) =>
+const change = (update: (status: typeof Status.Type) => typeof Status.Type) =>
   Effect.gen(function* () {
-    const unit = yield* Unit;
-    const state = yield* SubscriptionRef.get(unit);
-    if (!state.online) return yield* Effect.fail(Offline.make({}));
-    yield* SubscriptionRef.set(unit, update(state));
+    yield* SubscriptionRef.update(yield* onlineStatus, update);
     return null;
   });
 
@@ -68,21 +77,8 @@ export const statusGet = Capability.make({
   readOnly: true,
   output: Status,
   failures: [Offline],
-  state: {
-    schema: Status,
-    changes: Stream.unwrap(
-      Effect.gen(function* () {
-        const unit = yield* Unit;
-        return SubscriptionRef.changes(unit).pipe(Stream.map(({ online: _, firmware: __, ...status }) => status));
-      }),
-    ),
-  },
-  run: () =>
-    Effect.gen(function* () {
-      const { online, firmware: _, ...status } = yield* SubscriptionRef.get(yield* Unit);
-      if (!online) return yield* Effect.fail(Offline.make({}));
-      return status;
-    }),
+  state: { schema: Status, value: Unit.useSync((unit) => unit.status) },
+  run: () => Effect.flatMap(onlineStatus, SubscriptionRef.get),
 });
 
 export const powerSet = Capability.make({
@@ -102,7 +98,7 @@ export const modeSet = Capability.make({
   failures: [Offline, PoweredOff],
   run: ({ mode }) =>
     Effect.gen(function* () {
-      if (!(yield* SubscriptionRef.get(yield* Unit)).power) return yield* Effect.fail(PoweredOff.make({}));
+      if (!(yield* SubscriptionRef.get((yield* Unit).status)).power) return yield* Effect.fail(PoweredOff.make({}));
       return yield* change((state) => ({ ...state, mode }));
     }),
 });
@@ -130,19 +126,8 @@ export const firmwareUpdate = Capability.make({
   description: "Install the latest firmware. The unit restarts and is offline for about a minute.",
   audience: ["app"],
   failures: [Offline, UpToDate],
-  availability: Stream.unwrap(
-    Effect.gen(function* () {
-      const unit = yield* Unit;
-      return SubscriptionRef.changes(unit).pipe(
-        Stream.map((state) => (state.online ? AVAILABLE : unavailable("The unit is offline."))),
-      );
-    }),
-  ),
-  run: () =>
-    Effect.gen(function* () {
-      const { firmware } = yield* SubscriptionRef.get(yield* Unit);
-      return yield* Effect.fail(UpToDate.make({ version: firmware }));
-    }),
+  availability: Unit.useSync((unit) => unit.connection),
+  run: () => Effect.flatMap(Unit, (unit) => Effect.fail(UpToDate.make({ version: unit.firmware }))),
 });
 
 // --- The application ---------------------------------------------------------------------------------------------

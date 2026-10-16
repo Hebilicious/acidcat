@@ -54,6 +54,36 @@ test("availability, cancellation and closing", async () => {
   assert.equal(((await session.invoke("fixture.echo", { text: "x" })) as { kind: string }).kind, "cancelled");
 });
 
+test("a session subscribes to the availabilities only while it has listeners", async () => {
+  const context = options();
+  const switcher = context.context.switch;
+  const session = createSession(fixture, { target: "app", ...context });
+  assert.equal(switcher.subscribers, 0);
+
+  let changes = 0;
+  const first = session.onChange(() => (changes += 1));
+  const second = session.onChange(() => undefined);
+  assert.equal(switcher.subscribers, 1);
+  switcher.set(false);
+  assert.equal(changes, 1);
+  first.unsubscribe();
+  assert.equal(switcher.subscribers, 1);
+  second.unsubscribe();
+  assert.equal(switcher.subscribers, 0);
+
+  const handle = session.handles.get("fixture.toggle")!.availability.subscribe(() => undefined);
+  assert.equal(switcher.subscribers, 1);
+  handle.unsubscribe();
+  assert.equal(switcher.subscribers, 0);
+
+  session.onChange(() => undefined);
+  assert.equal(switcher.subscribers, 1);
+  await session.dispose();
+  assert.equal(switcher.subscribers, 0);
+  session.onChange(() => undefined);
+  assert.equal(switcher.subscribers, 0);
+});
+
 test("MCP gives the view and each outcome", async () => {
   const handler = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...options() });
   const rpc = async (method: string, params: object = {}) =>

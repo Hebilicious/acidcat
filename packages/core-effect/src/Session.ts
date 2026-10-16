@@ -3,10 +3,11 @@
  */
 import { AVAILABLE, callFailure, viewOf } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CatalogDocument, Outcome } from "@acid-cat/spec-ts";
-import { Cause, Data, Deferred, Effect, Exit, Fiber, FiberSet, PubSub, Ref, Schema, SchemaIssue, Scope, Stream, SubscriptionRef } from "effect";
+import { Cause, Data, Effect, Exit, Fiber, FiberSet, Ref, Schema, SchemaIssue, Scope, Stream, SubscriptionRef } from "effect";
 
 import * as App from "./App.ts";
 import type * as Capability from "./Capability.ts";
+import { changesAfter } from "./internal/changes.ts";
 
 /** A call failure in the error channel of `execute`. */
 export class CallFailed extends Data.TaggedError("CallFailed")<CallFailure> {}
@@ -20,13 +21,27 @@ export interface Session {
   readonly view: CatalogDocument;
   /** The current availability of a capability in the view. */
   readonly availability: (id: string) => Effect.Effect<Availability>;
-  /** An event each time the availability of a capability changes. */
+  /**
+   * An event each time the availability of a capability changes, after the stream starts. The stream follows the
+   * availability refs only while it runs.
+   */
   readonly changes: Stream.Stream<void>;
   /**
    * The state of a capability (spec/invocation.md#state), in its JSON form: the current value, then each change.
-   * The stream is empty for a capability with no state, or outside the view.
+   * The stream follows the state ref only while it runs. It is empty for a capability with no state, or outside the
+   * view.
    */
   readonly state: (id: string) => Stream.Stream<unknown>;
+  /**
+   * The ref that the provider gave for the availability of a capability in the view. `undefined` when the capability
+   * is always available, or outside the view.
+   */
+  readonly availabilityRef: (id: string) => SubscriptionRef.SubscriptionRef<Availability> | undefined;
+  /**
+   * The ref that the provider gave for the state of a capability in the view, with values that are not encoded.
+   * `undefined` when the capability has no state, or is outside the view.
+   */
+  readonly stateRef: (id: string) => SubscriptionRef.SubscriptionRef<unknown> | undefined;
   /** A call with an input that is not trusted. The outcome is in its JSON form. This effect never fails. */
   readonly invoke: (id: string, input: unknown) => Effect.Effect<Outcome<unknown, unknown>>;
   /** A typed call from Effect code. Failures and call failures are in the error channel. */
@@ -41,7 +56,16 @@ const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
 /** The input of a capability with no input schema: an empty object. */
 const EmptyInput = Schema.Record(Schema.String, Schema.Unknown);
 
-/** Open a session for a target. The session closes with its scope. */
+interface Served<R> {
+  readonly capability: Capability.Any<R>;
+  readonly availability: SubscriptionRef.SubscriptionRef<Availability> | undefined;
+  readonly state: { readonly ref: SubscriptionRef.SubscriptionRef<unknown>; readonly schema: Capability.AnySchema } | undefined;
+}
+
+/**
+ * Open a session for a target. The session gets the availability and state refs of the capabilities in the view one
+ * time, and starts no fiber. The session closes with its scope.
+ */
 export const make = <R>(app: App.App<R>, options: { readonly target: string }): Effect.Effect<Session, never, R | Scope.Scope> =>
   Effect.gen(function* () {
   const context = yield* Effect.context<R>();
@@ -50,58 +74,28 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
   const closed = yield* Ref.make(false);
   yield* Scope.addFinalizer(scope, Ref.set(closed, true));
 
-  const announcements = yield* PubSub.unbounded<void>();
-  const served = new Map<string, Capability.Any<R>>();
-  const availability = new Map<string, SubscriptionRef.SubscriptionRef<Availability>>();
+  const served = new Map<string, Served<R>>();
   for (const capability of app.capabilities) {
     if (!capability.audience.includes(options.target)) continue;
     if (served.has(capability.id)) throw new Error(`The capability ${capability.id} is declared two times.`);
-    served.set(capability.id, capability);
-    const ref = yield* SubscriptionRef.make<Availability>(AVAILABLE);
-    availability.set(capability.id, ref);
-    if (capability.availability !== undefined) {
-      yield* capability.availability.pipe(
-        Stream.runForEach((value) => SubscriptionRef.set(ref, value).pipe(Effect.andThen(PubSub.publish(announcements, undefined)))),
-        Effect.provideContext(context),
-        // Start at once, so that the stream follows its source before the session is returned.
-        Effect.forkIn(scope, { startImmediately: true }),
-      );
-    }
-  }
-
-  // Each state is a ref, made when its stream gives its first value. A reader waits for that value.
-  const states = new Map<string, Deferred.Deferred<SubscriptionRef.SubscriptionRef<unknown>>>();
-  for (const capability of served.values()) {
-    if (capability.state === undefined) continue;
-    const encodeState = Schema.encodeUnknownEffect(capability.state.schema as Schema.Codec<unknown, unknown>);
-    const ready = yield* Deferred.make<SubscriptionRef.SubscriptionRef<unknown>>();
-    states.set(capability.id, ready);
-    yield* capability.state.changes.pipe(
-      Stream.mapEffect((value) => encodeState(value).pipe(Effect.orDie)),
-      Stream.runForEach((value) =>
-        Deferred.isDone(ready).pipe(
-          Effect.flatMap((done) =>
-            done
-              ? Effect.flatMap(Deferred.await(ready), (ref) => SubscriptionRef.set(ref, value))
-              : Effect.flatMap(SubscriptionRef.make(value), (ref) => Deferred.succeed(ready, ref)),
-          ),
-        ),
-      ),
-      Effect.provideContext(context),
-      Effect.forkIn(scope, { startImmediately: true }),
-    );
+    const availability = capability.availability === undefined ? undefined : yield* capability.availability;
+    const state = capability.state === undefined ? undefined : { ref: yield* capability.state.value, schema: capability.state.schema };
+    served.set(capability.id, { capability, availability, state });
   }
 
   const stateOf = (id: string): Stream.Stream<unknown> => {
-    const ready = states.get(id);
-    return ready === undefined ? Stream.empty : Stream.unwrap(Effect.map(Deferred.await(ready), SubscriptionRef.changes));
+    const state = served.get(id)?.state;
+    if (state === undefined) return Stream.empty;
+    const encodeState = Schema.encodeUnknownEffect(state.schema as Schema.Codec<unknown, unknown>);
+    return SubscriptionRef.changes(state.ref).pipe(Stream.mapEffect((value) => Effect.orDie(encodeState(value))));
   };
 
   const unknown = (id: string) => callFailure("unknown-capability", `There is no capability ${id}.`);
 
   const availabilityOf = (id: string): Effect.Effect<Availability> => {
-    const ref = availability.get(id);
-    return ref === undefined ? Effect.succeed({ available: false, reason: unknown(id).message }) : SubscriptionRef.get(ref);
+    const entry = served.get(id);
+    if (entry === undefined) return Effect.succeed({ available: false, reason: unknown(id).message });
+    return entry.availability === undefined ? Effect.succeed(AVAILABLE) : SubscriptionRef.get(entry.availability);
   };
 
   /** Admit, validate and run a call. The program fails with a call failure, or with a failure of the capability. */
@@ -120,11 +114,11 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
   const admit = (id: string) =>
     Effect.gen(function* () {
       if (yield* Ref.get(closed)) return callFailure("cancelled", "The session is closed.");
-      const capability = served.get(id);
-      if (capability === undefined) return unknown(id);
+      const entry = served.get(id);
+      if (entry === undefined) return unknown(id);
       const current = yield* availabilityOf(id);
       if (!current.available) return callFailure("unavailable", current.reason);
-      return capability;
+      return entry.capability;
     });
 
   const invoke = (id: string, input: unknown): Effect.Effect<Outcome<unknown, unknown>> =>
@@ -161,7 +155,13 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
       return outcome.value;
     }) as never;
 
-  const changes = Stream.fromPubSub(announcements);
+  const availabilityRefs = [...served.values()].flatMap(({ availability }) => (availability === undefined ? [] : [availability]));
+  const changes = Stream.suspend(() =>
+    Stream.mergeAll(
+      availabilityRefs.map((ref) => changesAfter(ref, SubscriptionRef.getUnsafe(ref))),
+      { concurrency: "unbounded" },
+    ),
+  ).pipe(Stream.as(undefined));
 
   let view: CatalogDocument | undefined;
 
@@ -173,6 +173,8 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
     availability: availabilityOf,
     changes,
     state: stateOf,
+    availabilityRef: (id) => served.get(id)?.availability,
+    stateRef: (id) => served.get(id)?.state?.ref,
     invoke,
     execute,
   } satisfies Session;

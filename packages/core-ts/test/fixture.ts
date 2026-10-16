@@ -22,6 +22,11 @@ export class Switch implements Observable<Availability> {
     this.#listeners.add(listener);
     return { unsubscribe: () => this.#listeners.delete(listener) };
   }
+
+  /** The number of listeners, to test when a session subscribes. */
+  get subscribers(): number {
+    return this.#listeners.size;
+  }
 }
 
 /**
