@@ -13,7 +13,10 @@ export class CallFailed extends Data.TaggedError("CallFailed")<CallFailure> {}
 
 export interface Session {
   readonly target: string;
-  /** The view of the target (spec/catalog.md#views). Bindings take names, descriptions and schemas from it. */
+  /**
+   * The view of the target (spec/catalog.md#views). Bindings take names, descriptions and schemas from it. The
+   * session writes the view when it is first read.
+   */
   readonly view: CatalogDocument;
   /** The current availability of a capability in the view. */
   readonly availability: (id: string) => Effect.Effect<Availability>;
@@ -41,7 +44,6 @@ const EmptyInput = Schema.Record(Schema.String, Schema.Unknown);
 /** Open a session for a target. The session closes with its scope. */
 export const make = <R>(app: App.App<R>, options: { readonly target: string }): Effect.Effect<Session, never, R | Scope.Scope> =>
   Effect.gen(function* () {
-  const view = viewOf(App.document(app), options.target);
   const context = yield* Effect.context<R>();
   const scope = yield* Effect.scope;
   const running = yield* FiberSet.make<unknown, unknown>();
@@ -52,7 +54,8 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
   const served = new Map<string, Capability.Any<R>>();
   const availability = new Map<string, SubscriptionRef.SubscriptionRef<Availability>>();
   for (const capability of app.capabilities) {
-    if (!(capability.id in view.capabilities)) continue;
+    if (!capability.audience.includes(options.target)) continue;
+    if (served.has(capability.id)) throw new Error(`The capability ${capability.id} is declared two times.`);
     served.set(capability.id, capability);
     const ref = yield* SubscriptionRef.make<Availability>(AVAILABLE);
     availability.set(capability.id, ref);
@@ -160,7 +163,19 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
 
   const changes = Stream.fromPubSub(announcements);
 
-  return { target: options.target, view, availability: availabilityOf, changes, state: stateOf, invoke, execute } satisfies Session;
+  let view: CatalogDocument | undefined;
+
+  return {
+    target: options.target,
+    get view() {
+      return (view ??= viewOf(App.document(app), options.target));
+    },
+    availability: availabilityOf,
+    changes,
+    state: stateOf,
+    invoke,
+    execute,
+  } satisfies Session;
   });
 
 /** Encode a value with its schema. `undefined` if the value does not agree with the schema. */

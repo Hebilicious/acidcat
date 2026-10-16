@@ -83,8 +83,7 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
 
     const handles = new Map<string, Handle>();
     for (const capability of app.capabilities) {
-      const described = session.view.capabilities[capability.id];
-      if (described === undefined) continue;
+      if (!capability.audience.includes(session.target)) continue;
       const id = capability.id;
 
       const availability = observable(yield* session.availability(id));
@@ -100,7 +99,7 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
       );
 
       let snapshot: Observable<unknown> | undefined;
-      if (described.state !== undefined) {
+      if (capability.state !== undefined) {
         // The stream gives the current value first. Wait for it, so that `getSnapshot` always has a value.
         const first = yield* Deferred.make<void>();
         const state = observable<unknown>(undefined);
@@ -114,8 +113,8 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
 
       handles.set(id, {
         id,
-        description: described.description,
-        audience: described.audience ?? [],
+        description: capability.description,
+        audience: [session.target],
         availability: availability.observable,
         ...(snapshot === undefined ? {} : { snapshot }),
         execute: (input, options) =>
@@ -169,7 +168,9 @@ export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, opti
   );
   return {
     target: session.target,
-    view: session.view,
+    get view() {
+      return session.view;
+    },
     handles,
     signal: lifetime.signal,
     async dispose() {
