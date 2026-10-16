@@ -14,12 +14,31 @@ export interface CliOptions<Context> {
   readonly toJsonSchema: ToJsonSchema;
   /** The target that the command line serves. The default is `"cli"`. */
   readonly target?: string | undefined;
+  /**
+   * The text at the top of the help. The default is the description of the application, then its title, then `name`.
+   */
+  readonly description?: string | undefined;
+  /**
+   * The commands of the application, beside the commands of the capabilities, `call` and `list`. The name of each one
+   * must not be `call`, `list`, the name of another command of the application, or the first word of the command of a
+   * capability (spec/bindings/cli.md#commands).
+   */
+  readonly commands?: readonly CliCommand<Context>[] | undefined;
 }
 
 export interface CliIo {
   readonly stdout: (text: string) => void;
   readonly stderr: (text: string) => void;
   readonly signal?: AbortSignal | undefined;
+}
+
+/** A command that the application adds to the command line. */
+export interface CliCommand<Context> {
+  readonly name: string;
+  /** The text that the help gives for the command. */
+  readonly description: string;
+  /** Run the command with the arguments that come after its name. The result is the exit code. */
+  run(args: readonly string[], io: CliIo & { readonly context: Context }): number | Promise<number>;
 }
 
 class UsageError extends Error {
@@ -52,6 +71,12 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   for (const { path } of commands) {
     if (path[0] === "call" || path[0] === "list") throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
   }
+  const added = options.commands ?? [];
+  const taken = new Set(["call", "list", ...commands.map(({ path }) => path[0]!)]);
+  for (const command of added) {
+    if (taken.has(command.name)) throw new Error(`The command ${command.name} of the application has the same name as another command.`);
+    taken.add(command.name);
+  }
 
   const print = (outcome: Outcome<unknown, unknown>): number => {
     if (isCallFailure(outcome)) io.stderr(JSON.stringify({ kind: outcome.kind, message: outcome.message }));
@@ -62,7 +87,8 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   try {
     const [first, ...rest] = args;
     if (first === undefined || first === "--help" || first === "-h") {
-      io.stdout(help(options.name, commands.map(({ path }) => path.join(" "))));
+      const description = options.description ?? app.description ?? app.title ?? options.name;
+      io.stdout(help(options.name, description, commands.map(({ path }) => path.join(" ")), added));
       return CLI_EXIT_CODES.value;
     }
     if (first === "--version" || first === "-v") {
@@ -98,6 +124,8 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       }
       return print(await session.invoke(id, input, { signal: io.signal }));
     }
+    const command = added.find(({ name }) => name === first);
+    if (command !== undefined) return await command.run(rest, { ...io, context: options.context });
 
     const match = commands
       .filter(({ path }) => path.every((word, index) => args[index] === word))
@@ -172,14 +200,17 @@ function resolve(property: JsonObject, definitions: { readonly [name: string]: J
   return name === undefined ? property : (definitions[name] ?? property);
 }
 
-function help(name: string, paths: readonly string[]): string {
+function help(name: string, description: string, paths: readonly string[], added: readonly CliCommand<unknown>[]): string {
   return [
+    description,
+    "",
     `Usage: ${name} <command> [flags]`,
     "",
     "Commands:",
     ...paths.map((path) => `  ${path}`),
     "  call <id> [input]",
     "  list",
+    ...added.map((command) => `  ${command.name}  ${command.description}`),
   ].join("\n");
 }
 

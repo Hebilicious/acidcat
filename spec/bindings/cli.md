@@ -34,7 +34,7 @@ A protocol binding that serves a view as a command line. The commands come from 
   If a property schema is a `$ref`, use the type that it refers to. A capability with no input schema, or with `"properties": {}`, has no flags. For example, with the program name `aircon`: `aircon power set --on`, `aircon fan set --speed <auto|low|medium|high>` and `aircon status get`.
 - **Cancellation.** An interrupt (`SIGINT`) cancels the call.
 
-An application MAY add its own commands and flags. If two commands have the same path, or two flags have the same name, the program MUST stop with an error when it starts.
+An application MAY add its own commands and flags. The name of a command of the application is one word. This name MUST NOT be `call`, `list`, the name of a different command of the application, or the first word of the path of a capability. If a name breaks this rule, if two commands have the same path, or if two flags have the same name, the program MUST stop with an error when it starts.
 
 ## Outcomes
 

@@ -11,18 +11,33 @@ import { Argument, CliError, Command, Flag } from "effect/cli";
 import * as App from "./App.ts";
 import * as Session from "./Session.ts";
 
-export interface Options {
+/**
+ * The options of the command line. `E` and `R` are the errors and the services of the commands of the application.
+ */
+export interface Options<E = never, R = never> {
   readonly name: string;
   readonly version: string;
   /** The target that the command line serves. The default is `"cli"`. */
   readonly target?: string | undefined;
+  /**
+   * The help text of the root command. The default is the description of the application, then its title, then
+   * `name`.
+   */
+  readonly description?: string | undefined;
+  /**
+   * The commands of the application, beside the commands of the capabilities, `call` and `list`. The name of each one
+   * must not be `call`, `list`, the name of another command of the application, or the first word of the command of a
+   * capability (spec/bindings/cli.md#commands).
+   */
+  readonly commands?: ReadonlyArray<Command.Command<any, any, any, E, R>> | undefined;
 }
 
 /**
  * The command line as an Effect. Exit codes follow spec/bindings/cli.md. To run it as the main program of a Node.js
  * process, use `NodeCli.main` from `@acid-cat/core-effect/node`.
  */
-export const run = <R>(app: App.App<R>, options: Options) => runCommand(command(app, options), options);
+export const run = <R, E = never, CR = never>(app: App.App<R>, options: Options<E, CR>) =>
+  runCommand(command(app, options), options);
 
 /**
  * Run a command that `command` made, after the application changed it: for example with its own flags
@@ -54,12 +69,16 @@ export function exitCodeOf(error: CliError.CliError): number {
 }
 
 /**
- * A command of the command line. Its handler needs `R`, the services of the capabilities. `Command.provide` gives them.
+ * A command of the command line. Its handler needs `R`, the services of the capabilities and of the commands of the
+ * application. `Command.provide` gives them. `E` is the errors of the commands of the application.
  */
-export type AppCommand<R> = Command.Command<string, {}, {}, never, R>;
+export type AppCommand<R, E = never> = Command.Command<string, {}, {}, E, R>;
 
-/** The root command: one command for each capability in the view, plus `call` and `list`. */
-export function command<R>(app: App.App<R>, options: Options): AppCommand<R> {
+/**
+ * The root command: one command for each capability in the view, `call`, `list`, and the commands of the application.
+ * It throws if the name of a command of the application is not allowed (see `Options.commands`).
+ */
+export function command<R, E = never, CR = never>(app: App.App<R>, options: Options<E, CR>): AppCommand<R | CR, E> {
   const target = options.target ?? "cli";
   const view = Session.make(app, { target });
   const document = App.document(app);
@@ -123,10 +142,15 @@ export function command<R>(app: App.App<R>, options: Options): AppCommand<R> {
   for (const { path } of leaves) {
     if (reserved.has(path[0]!)) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
   }
+  const taken = new Set([...reserved, ...leaves.map(({ path }) => path[0]!)]);
+  for (const added of options.commands ?? []) {
+    if (taken.has(added.name)) throw new Error(`The command ${added.name} of the application has the same name as another command.`);
+    taken.add(added.name);
+  }
 
   return Command.make(options.name).pipe(
-    Command.withDescription(app.description ?? app.title ?? options.name),
-    Command.withSubcommands([call, list, ...group(leaves, [])]),
+    Command.withDescription(options.description ?? app.description ?? app.title ?? options.name),
+    Command.withSubcommands([call, list, ...group(leaves, []), ...(options.commands ?? [])]),
   );
 }
 

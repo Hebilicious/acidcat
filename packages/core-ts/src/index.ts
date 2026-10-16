@@ -8,7 +8,7 @@ export { httpHandler } from "./http.ts";
 export type { HttpOptions, HttpSettings } from "./http.ts";
 export type { ContextOption } from "./context.ts";
 export { main as cliMain, runCli } from "./cli.ts";
-export type { CliIo, CliOptions } from "./cli.ts";
+export type { CliCommand, CliIo, CliOptions } from "./cli.ts";
 export { findHost, installWebMcp } from "./webmcp.ts";
 export type { Installation, ModelContext, ModelContextTool, Phase, Status } from "./webmcp.ts";
 export type { StandardSchemaV1 } from "./standard-schema.ts";

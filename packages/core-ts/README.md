@@ -86,6 +86,26 @@ const handler = httpHandler(aircon, {
 });
 ```
 
+### Commands of the application
+
+The option `commands` of `cliMain` and `runCli` adds commands of the application beside the commands of the capabilities, `call` and `list`. A command has a `name`, a `description` for the help, and `run(args, io)`. `run` gets the arguments after the name of the command, and `io` with `stdout`, `stderr`, `signal` and the `context`. It returns the exit code. The name must not be `call`, `list`, the name of another command of the application, or the first word of the command of a capability. If it is, `runCli` throws. The option `description` gives the text at the top of the help. The default is the description of the application, then its title, then the name of the program.
+
+```ts
+import { cliMain } from "@acid-cat/core-ts";
+import type { CliCommand } from "@acid-cat/core-ts";
+
+const report: CliCommand<{ unit: Unit }> = {
+  name: "report",
+  description: "Write the temperature of the room.",
+  run: (_args, { context, stdout }) => {
+    stdout(`The room is at ${context.unit.state.roomCelsius} °C.`);
+    return 0;
+  },
+};
+
+cliMain(aircon, { name: "aircon", version: "0.1.0", context: { unit }, toJsonSchema, description: "Control the air conditioner.", commands: [report] });
+```
+
 ## Examples and tests
 
 - [`examples/aircon.ts`](examples/aircon.ts) is the air conditioner of [`examples/aircon.pkl`](../../examples/aircon.pkl), with a simulated unit. Its catalog agrees with the Pkl catalog.

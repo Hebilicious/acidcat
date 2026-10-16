@@ -95,6 +95,26 @@ const command = Cli.command(app, { name: "aircon", version: "0.1.0" }).pipe(
 NodeCli.runCommand(command, { version: "0.1.0" });
 ```
 
+### Commands of the application
+
+The option `commands` adds commands of the application beside the commands of the capabilities, `call` and `list`. Each one is an `effect/cli` command. Its name must not be `call`, `list`, the name of another command of the application, or the first word of the command of a capability. If it is, `Cli.command` throws. The option `description` gives the text at the top of the help. The default is the description of the application, then its title, then the name of the program.
+
+```ts
+import { NodeCli } from "@acid-cat/core-effect/node";
+import { Console, Effect, SubscriptionRef } from "effect";
+import { Command } from "effect/cli";
+
+const report = Command.make("report", {}, () =>
+  Effect.gen(function* () {
+    const state = yield* SubscriptionRef.get(yield* Unit);
+    yield* Console.log(`The room is at ${state.roomCelsius} °C.`);
+  }),
+).pipe(Command.withDescription("Write the temperature of the room."));
+
+// The layer gives the services of the capabilities and of the commands of the application.
+NodeCli.main(aircon, unitLayer, { name: "aircon", version: "0.1.0", description: "Control the air conditioner.", commands: [report] });
+```
+
 `@acid-cat/core-effect` works in all runtimes, including browsers. Only `@acid-cat/core-effect/node` needs Node.js.
 
 Each module also has its own entry point, for example `@acid-cat/core-effect/Session`. The package has no side effects, so a bundler keeps only the modules that a program imports, from either entry point. A web page that imports `Session`, `Handles` and `WebMcp` does not contain `Cli` or `Mcp`, or the `effect/cli` and `effect/ai` modules that they use.

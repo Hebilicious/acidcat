@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { check } from "@acid-cat/cli";
 
 import { CallFailureError, createSession, httpHandler, installWebMcp, mcpHandler, renderCatalog, runCli } from "../src/index.ts";
-import type { ModelContextTool } from "../src/index.ts";
+import type { App, CliCommand, CliOptions, ModelContextTool } from "../src/index.ts";
 import { fixture, heldApp, Holds, options, Switch, toJsonSchema } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
 
@@ -201,13 +201,16 @@ test("the abort of an MCP request cancels its call", async () => {
   assert.equal(seen.aborted, true);
 });
 
+/** Run the command line of an application with arguments, and keep what it writes. */
+async function commandLine(app: App<Context>, cliOptions: CliOptions<Context>, ...args: string[]) {
+  const out: string[] = [];
+  const err: string[] = [];
+  const code = await runCli(app, cliOptions, args, { stdout: (text) => out.push(text), stderr: (text) => err.push(text) });
+  return { code, stdout: out.join("\n"), stderr: err.join("\n") };
+}
+
 test("the command line gives each outcome its exit code", async () => {
-  const run = async (...args: string[]) => {
-    const out: string[] = [];
-    const err: string[] = [];
-    const code = await runCli(fixture, { name: "fixture", version: "0.0.0", ...options() }, args, { stdout: (text) => out.push(text), stderr: (text) => err.push(text) });
-    return { code, stdout: out.join("\n"), stderr: err.join("\n") };
-  };
+  const run = (...args: string[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options() }, ...args);
   const echo = await run("fixture", "echo", "--text", "hi");
   assert.equal(echo.code, 0);
   assert.deepEqual(JSON.parse(echo.stdout), { text: "hi" });
@@ -218,6 +221,40 @@ test("the command line gives each outcome its exit code", async () => {
   assert.equal((await run("fixture", "flags", "--mode", "fast", "--ratio", "soon")).code, 3);
   assert.equal((await run("fixture", "crash")).code, 5);
   assert.equal((await run("--help")).code, 0);
+});
+
+/** A command of the application. It uses the context, and writes its first argument. */
+const position: CliCommand<Context> = {
+  name: "position",
+  description: "Write the position of the switch.",
+  run: (args, { context, stdout }) => {
+    stdout(`${args[0]}: ${context.switch.getSnapshot().available ? "on" : "off"}`);
+    return 0;
+  },
+};
+
+test("a command of the application runs beside the commands of the capabilities, and the help lists it", async () => {
+  const run = (...args: string[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options(), commands: [position] }, ...args);
+  assert.deepEqual(await run("position", "switch"), { code: 0, stdout: "switch: on", stderr: "" });
+  assert.equal((await run("fixture", "echo", "--text", "hi")).code, 0);
+  assert.match((await run("--help")).stdout, /\n {2}list\n {2}position {2}Write the position of the switch\.$/);
+});
+
+test("the help gives the description of the options, else the description of the application, else its title", async () => {
+  const firstLine = async (app: App<Context>, description?: string) =>
+    (await commandLine(app, { name: "fixture", version: "0.0.0", ...options(), description }, "--help")).stdout.split("\n")[0];
+  assert.equal(await firstLine(fixture, "Own."), "Own.");
+  assert.equal(await firstLine(fixture), fixture.description);
+  assert.equal(await firstLine({ ...fixture, description: undefined }), fixture.title);
+});
+
+test("a command of the application must not have the name of another command", async () => {
+  const named = (name: string): CliCommand<Context> => ({ name, description: "A command.", run: () => 0 });
+  const run = (commands: CliCommand<Context>[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options(), commands }, "list");
+  for (const name of ["call", "list", "fixture"]) {
+    await assert.rejects(run([named(name)]), new RegExp(`The command ${name} of the application`));
+  }
+  await assert.rejects(run([named("report"), named("report")]), /The command report of the application/);
 });
 
 test("WebMCP tools follow availability, and a failed update keeps the last tools", async () => {
