@@ -24,17 +24,47 @@ export interface CallOptions {
   readonly signal?: AbortSignal | undefined;
 }
 
-export interface Handle {
+/**
+ * The handle of a capability (spec/bindings/typescript.md#handles). `Input`, `Value` and `Failure` are the types of
+ * the schemas of the capability, and `State` is the JSON form of its state. `get` gives a handle with these types.
+ */
+export interface Handle<Input = unknown, Value = unknown, Failure = unknown, State = unknown> {
   readonly id: string;
   readonly description: string;
   readonly audience: readonly string[];
   readonly availability: Observable<Availability>;
   /** The state of the capability, if it has one, in its JSON form. Each value is a copy. */
-  readonly snapshot?: Observable<unknown>;
+  readonly snapshot?: Observable<State>;
   /** A call with an input that is already decoded. A call failure rejects with a `CallFailureError`. */
-  execute(input: unknown, options?: CallOptions): Promise<Result<unknown, unknown>>;
+  execute(input: Input, options?: CallOptions): Promise<Result<Value, Failure>>;
   /** A call with an input that is not trusted. The result is in its JSON form. */
   invokeExternal(input: unknown, options?: CallOptions): Promise<Result<unknown, unknown>>;
+}
+
+/** The handle of a capability, with the types of its schemas. */
+export type HandleOf<C> =
+  C extends Capability.Capability<infer Input, infer Output, infer Failure, any, infer State>
+    ? Handle<Input["Type"], Output["Type"], Failure["Type"], State["Encoded"]>
+    : never;
+
+/**
+ * The handle of a capability in `handles`, with the types of the capability. For a capability outside the view, the
+ * handle is always unavailable, and each call rejects as `unknown-capability`.
+ */
+export const get = <C extends Capability.Any>(handles: ReadonlyMap<string, Handle>, capability: C): HandleOf<C> =>
+  (handles.get(capability.id) ?? outsideView(capability)) as HandleOf<C>;
+
+function outsideView(capability: Capability.Any): Handle {
+  const failure = callFailure("unknown-capability", `There is no capability ${capability.id}.`);
+  const reject = () => Promise.reject(new CallFailureError(failure));
+  return {
+    id: capability.id,
+    description: capability.description,
+    audience: [],
+    availability: constant({ available: false, reason: failure.message }),
+    execute: reject,
+    invokeExternal: reject,
+  };
 }
 
 /** A value that never changes. */

@@ -62,6 +62,18 @@ Standard Schema does not convert to JSON Schema. Give the converter of your sche
 
 When the signal of a request aborts, `mcpHandler` and `httpHandler` cancel the call of the request.
 
+### Typed handles
+
+`getHandle(session.handles, capability)` gives the handle of a capability with the types of its schemas. For a capability outside the view, the handle is always unavailable, and each call rejects as `unknown-capability`.
+
+```ts
+import { createSession, getHandle } from "@acid-cat/core-ts";
+
+const session = createSession(aircon, { target: "app", context: { unit }, toJsonSchema });
+const power = getHandle(session.handles, powerSet); // HandleOf<typeof powerSet>
+const result = await power.execute({ on: true }); // Result<null, { _tag: "Offline"; since?: string }>
+```
+
 ### Context for each request
 
 `mcpHandler` and `httpHandler` take `context` or `createContext`. With `context`, all requests share one context. With `createContext(request)`, the handler makes a new context for each request that passes the screening. Use it when a request must not use objects that an earlier request made, for example on Cloudflare Workers, or when a stateful service must not be shared between callers. When the context has `Symbol.asyncDispose` or `Symbol.dispose`, the handler calls it after the response:

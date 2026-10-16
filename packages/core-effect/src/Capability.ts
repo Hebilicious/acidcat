@@ -53,7 +53,7 @@ export const make = <
   R = never,
   Output extends AnySchema = typeof Schema.Null,
   Failure extends AnySchema = typeof Schema.Never,
-  State extends AnySchema = AnySchema,
+  State extends AnySchema = typeof Schema.Never,
 >(
   capability: Capability<Input, Output, Failure, R, State>,
 ): Capability<Input, Output, Failure, R, State> => capability;

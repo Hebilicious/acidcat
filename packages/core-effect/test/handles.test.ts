@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CallFailureError } from "@acid-cat/spec-ts";
-import type { Availability } from "@acid-cat/spec-ts";
+import type { Availability, Result } from "@acid-cat/spec-ts";
 import { Context, Effect, Layer, Option, Schema, SchemaGetter, SchemaTransformation, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability, Handles, Session } from "../src/index.ts";
-import { aircon, Unit, unitLayer } from "../examples/aircon.ts";
+import { aircon, firmwareUpdate, modeSet, Offline, PoweredOff, powerSet, Status, statusGet, Unit, unitLayer } from "../examples/aircon.ts";
 import { fixture, fixtureLayer, holdsLayer, position, Switch } from "./fixture.ts";
 
 const rejection = (promise: Promise<unknown>) => promise.then(() => assert.fail("the call must reject"), (error: unknown) => error);
@@ -141,4 +141,53 @@ test("handles need a state schema that encodes synchronously, a failed open rele
     ),
   );
   assert.equal(state, "first");
+});
+
+test("Handles.get gives a handle with the types of its capability", async () => {
+  const session = await Handles.open(aircon, unitLayer, { target: "app" });
+  try {
+    const power = Handles.get(session.handles, powerSet);
+    const powered: Result<null, typeof Offline.Type> = await power.execute({ on: true });
+    assert.deepEqual(powered, { ok: true, value: null });
+
+    const mode = Handles.get(session.handles, modeSet);
+    const moded: Result<null, typeof Offline.Type | typeof PoweredOff.Type> = await mode.execute({ mode: "heat" });
+    assert.deepEqual(moded, { ok: true, value: null });
+
+    const status = Handles.get(session.handles, statusGet);
+    const value: Result<typeof Status.Type, typeof Offline.Type> = await status.execute({});
+    const snapshot: typeof Status.Encoded | undefined = status.snapshot?.getSnapshot();
+    assert.deepEqual(value, { ok: true, value: snapshot });
+
+    // These calls do not run. `moon run core-effect:typecheck` checks that each one is an error.
+    const wrongCalls = () => [
+      // @ts-expect-error The input of aircon.power.set has `on`, a boolean.
+      power.execute({ on: "yes" }),
+      // @ts-expect-error The mode is one of the literals of `Mode`.
+      mode.execute({ mode: "boil" }),
+      // @ts-expect-error The status has no `humidity`.
+      status.snapshot?.getSnapshot().humidity,
+    ];
+    void wrongCalls;
+  } finally {
+    await session.dispose();
+  }
+});
+
+test("Handles.get gives an always unavailable handle for a capability outside the view", async () => {
+  const session = await Handles.open(aircon, unitLayer, { target: "taskbar" });
+  try {
+    const firmware = Handles.get(session.handles, firmwareUpdate);
+    assert.equal(session.handles.has(firmwareUpdate.id), false);
+    assert.equal(firmware.id, "aircon.firmware.update");
+    assert.deepEqual(firmware.availability.getSnapshot(), { available: false, reason: "There is no capability aircon.firmware.update." });
+    assert.equal(firmware.snapshot, undefined);
+    for (const call of [firmware.execute({}), firmware.invokeExternal({})]) {
+      const error = await rejection(call);
+      assert.ok(error instanceof CallFailureError);
+      assert.equal(error.kind, "unknown-capability");
+    }
+  } finally {
+    await session.dispose();
+  }
 });

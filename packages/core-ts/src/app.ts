@@ -13,14 +13,19 @@ export interface Observable<T> {
   subscribe(listener: (value: T) => void): { unsubscribe(): void };
 }
 
-type Output<S> = S extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<S> : null;
-type FailureOf<F> = { [Tag in keyof F]: { readonly _tag: Tag } & (F[Tag] extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<F[Tag]> : object) }[keyof F];
+/** The input that `run` receives: the output of the input schema, or an empty object. */
+export type InputOf<S> = S extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<S> : Record<string, never>;
+/** The value of a successful call: the output of the output schema, or `null`. */
+export type Output<S> = S extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<S> : null;
+/** The failures, each with its `_tag`. */
+export type FailureOf<F> = { [Tag in keyof F]: { readonly _tag: Tag } & (F[Tag] extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<F[Tag]> : object) }[keyof F];
 
 export interface Capability<
   Context = unknown,
   Input extends StandardSchemaV1 | undefined = StandardSchemaV1 | undefined,
   OutputSchema extends StandardSchemaV1 | undefined = StandardSchemaV1 | undefined,
   Failures extends { readonly [tag: string]: StandardSchemaV1 } = { readonly [tag: string]: StandardSchemaV1 },
+  StateSchema extends StandardSchemaV1 = StandardSchemaV1,
 > {
   readonly id: string;
   readonly description: string;
@@ -34,16 +39,18 @@ export interface Capability<
   /** The failures, by tag. The schema of a failure describes the object, without or with its `_tag`. */
   readonly failures?: Failures;
   /** A value that clients can observe (spec/invocation.md#state): its schema, and its source. */
-  readonly state?: { readonly schema: StandardSchemaV1; readonly source: (context: Context) => Observable<unknown> } | undefined;
+  readonly state?:
+    | { readonly schema: StateSchema; readonly source: (context: Context) => Observable<StandardSchemaV1.InferOutput<StateSchema>> }
+    | undefined;
   /** The availability of the capability. With none, the capability is always available. */
   readonly availability?: ((context: Context) => Observable<Availability>) | undefined;
   readonly run: (
-    input: Input extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<Input> : Record<string, never>,
+    input: InputOf<Input>,
     call: { readonly signal: AbortSignal; readonly context: Context },
   ) => Promise<Result<Output<OutputSchema>, FailureOf<Failures>>> | Result<Output<OutputSchema>, FailureOf<Failures>>;
 }
 
-export type AnyCapability<Context = any> = Capability<Context, any, any, any>;
+export type AnyCapability<Context = any> = Capability<Context, any, any, any, any>;
 
 /** Declare a capability. `Context` is the type of the services that `run` receives. */
 export const defineCapability = <
@@ -51,9 +58,10 @@ export const defineCapability = <
   Input extends StandardSchemaV1 | undefined = undefined,
   OutputSchema extends StandardSchemaV1 | undefined = undefined,
   Failures extends { readonly [tag: string]: StandardSchemaV1 } = {},
+  StateSchema extends StandardSchemaV1 = never,
 >(
-  capability: Capability<Context, Input, OutputSchema, Failures>,
-): Capability<Context, Input, OutputSchema, Failures> => capability;
+  capability: Capability<Context, Input, OutputSchema, Failures, StateSchema>,
+): Capability<Context, Input, OutputSchema, Failures, StateSchema> => capability;
 
 /**
  * Declare capabilities for one context type. The other types come from the schemas:
@@ -69,9 +77,10 @@ export const capabilitiesFor =
     Input extends StandardSchemaV1 | undefined = undefined,
     OutputSchema extends StandardSchemaV1 | undefined = undefined,
     Failures extends { readonly [tag: string]: StandardSchemaV1 } = {},
+    StateSchema extends StandardSchemaV1 = never,
   >(
-    capability: Capability<Context, Input, OutputSchema, Failures>,
-  ): Capability<Context, Input, OutputSchema, Failures> =>
+    capability: Capability<Context, Input, OutputSchema, Failures, StateSchema>,
+  ): Capability<Context, Input, OutputSchema, Failures, StateSchema> =>
     capability;
 
 export interface Target {

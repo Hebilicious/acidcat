@@ -13,8 +13,8 @@ export const FanSpeed = z.enum(["auto", "low", "medium", "high"]).meta({ id: "Fa
 export const Status = z
   .object({ power: z.boolean(), mode: Mode, fan: FanSpeed, targetCelsius: z.number(), roomCelsius: z.number() })
   .meta({ id: "Status" });
-const Offline = z.object({ _tag: z.literal("Offline"), since: z.string().optional() }).meta({ id: "Offline" });
-const PoweredOff = z.object({ _tag: z.literal("PoweredOff") });
+export const Offline = z.object({ _tag: z.literal("Offline"), since: z.string().optional() }).meta({ id: "Offline" });
+export const PoweredOff = z.object({ _tag: z.literal("PoweredOff") });
 const UpToDate = z.object({ _tag: z.literal("UpToDate"), version: z.string() });
 
 // --- The unit ----------------------------------------------------------------------------------------------------
@@ -69,10 +69,72 @@ const change = (unit: Unit, update: Partial<State>) => {
   return ok(null);
 };
 
-// --- The application ---------------------------------------------------------------------------------------------
+// --- The capabilities --------------------------------------------------------------------------------------------
 
 const everywhere = ["app", "taskbar", "cli", "mcp", "api"];
 const controls = ["app", "cli", "mcp", "api"];
+
+export const statusGet = capability({
+  id: "aircon.status.get",
+  description: "Read the unit's power, mode, fan speed, target temperature and room temperature.",
+  audience: everywhere,
+  readOnly: true,
+  output: Status,
+  failures: { Offline },
+  state: { schema: Status, source: (context) => context.unit.status },
+  run: (_, { context }) => {
+    const { online, firmware: _firmware, ...status } = context.unit.state;
+    return online ? ok(status) : fail("Offline");
+  },
+});
+
+export const powerSet = capability({
+  id: "aircon.power.set",
+  description: "Turn the unit on or off.",
+  audience: everywhere,
+  input: z.object({ on: z.boolean() }),
+  failures: { Offline },
+  run: ({ on }, { context }) => change(context.unit, { power: on }),
+});
+
+export const modeSet = capability({
+  id: "aircon.mode.set",
+  description: "Choose how the unit runs.",
+  audience: controls,
+  input: z.object({ mode: Mode }),
+  failures: { Offline, PoweredOff },
+  run: ({ mode }, { context }) =>
+    context.unit.state.power ? change(context.unit, { mode }) : fail("PoweredOff"),
+});
+
+export const temperatureSet = capability({
+  id: "aircon.temperature.set",
+  description: "Set the target temperature in degrees Celsius.",
+  audience: controls,
+  input: z.object({ celsius: z.number().min(16).max(31) }),
+  failures: { Offline },
+  run: ({ celsius }, { context }) => change(context.unit, { targetCelsius: celsius }),
+});
+
+export const fanSet = capability({
+  id: "aircon.fan.set",
+  description: "Set the fan speed.",
+  audience: controls,
+  input: z.object({ speed: FanSpeed }),
+  failures: { Offline },
+  run: ({ speed }, { context }) => change(context.unit, { fan: speed }),
+});
+
+export const firmwareUpdate = capability({
+  id: "aircon.firmware.update",
+  description: "Install the latest firmware. The unit restarts and is offline for about a minute.",
+  audience: ["app"],
+  failures: { Offline, UpToDate },
+  availability: (context) => context.unit.online,
+  run: (_, { context }) => fail("UpToDate", { version: context.unit.state.firmware }),
+});
+
+// --- The application ---------------------------------------------------------------------------------------------
 
 export const aircon = defineApp<Context>({
   title: "Living-room air conditioner",
@@ -84,62 +146,7 @@ export const aircon = defineApp<Context>({
     mcp: { description: "Agents, through an MCP server.", bindings: ["mcp"] },
     api: { description: "Home-automation systems and scripts.", bindings: ["http"] },
   },
-  capabilities: [
-    capability({
-      id: "aircon.status.get",
-      description: "Read the unit's power, mode, fan speed, target temperature and room temperature.",
-      audience: everywhere,
-      readOnly: true,
-      output: Status,
-      failures: { Offline },
-      state: { schema: Status, source: (context) => context.unit.status },
-      run: (_, { context }) => {
-        const { online, firmware: _firmware, ...status } = context.unit.state;
-        return online ? ok(status) : fail("Offline");
-      },
-    }),
-    capability({
-      id: "aircon.power.set",
-      description: "Turn the unit on or off.",
-      audience: everywhere,
-      input: z.object({ on: z.boolean() }),
-      failures: { Offline },
-      run: ({ on }, { context }) => change(context.unit, { power: on }),
-    }),
-    capability({
-      id: "aircon.mode.set",
-      description: "Choose how the unit runs.",
-      audience: controls,
-      input: z.object({ mode: Mode }),
-      failures: { Offline, PoweredOff },
-      run: ({ mode }, { context }) =>
-        context.unit.state.power ? change(context.unit, { mode }) : fail("PoweredOff"),
-    }),
-    capability({
-      id: "aircon.temperature.set",
-      description: "Set the target temperature in degrees Celsius.",
-      audience: controls,
-      input: z.object({ celsius: z.number().min(16).max(31) }),
-      failures: { Offline },
-      run: ({ celsius }, { context }) => change(context.unit, { targetCelsius: celsius }),
-    }),
-    capability({
-      id: "aircon.fan.set",
-      description: "Set the fan speed.",
-      audience: controls,
-      input: z.object({ speed: FanSpeed }),
-      failures: { Offline },
-      run: ({ speed }, { context }) => change(context.unit, { fan: speed }),
-    }),
-    capability({
-      id: "aircon.firmware.update",
-      description: "Install the latest firmware. The unit restarts and is offline for about a minute.",
-      audience: ["app"],
-      failures: { Offline, UpToDate },
-      availability: (context) => context.unit.online,
-      run: (_, { context }) => fail("UpToDate", { version: context.unit.state.firmware }),
-    }),
-  ],
+  capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, firmwareUpdate],
 });
 
 /** Converts a Zod schema to JSON Schema, for the catalog. */
