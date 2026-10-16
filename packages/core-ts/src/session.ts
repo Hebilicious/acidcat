@@ -128,7 +128,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     handles.set(id, {
       id,
       description: capability.description,
-      audience: capability.audience,
+      audience: [options.target],
       availability,
       ...(state === undefined ? {} : { snapshot: detached(state) }),
       execute: (input, callOptions) => reject(call(id, input, true, callOptions?.signal)),

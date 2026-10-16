@@ -19,6 +19,7 @@ test("a session and its handles open without writing JSON Schema, and the view i
   const { counts, toJsonSchema } = countedToJsonSchema();
   const session = createSession(fixture, { target: "app", ...options(), toJsonSchema });
   assert.equal(session.handles.get("fixture.echo")?.description, "Return the input text.");
+  assert.deepEqual(session.handles.get("fixture.echo")?.audience, ["app"]);
   assert.deepEqual(await session.invoke("fixture.echo", { text: "hi" }), { ok: true, value: { text: "hi" } });
   assert.equal(counts.writes, 0);
 
