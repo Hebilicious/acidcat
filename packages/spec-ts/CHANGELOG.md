@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/spec-ts@0.3.1...@acid-cat/spec-ts@0.4.0) (2026-10-16)
+
+
+### Bug Fixes
+
+* **cores:** write an input that is a union of objects as an object schema ([#58](https://github.com/Hebilicious/acidcat/issues/58)) ([ab58953](https://github.com/Hebilicious/acidcat/commit/ab58953d051936d7c687b3964c483db95b5a7388))
+
 ## [0.3.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/spec-ts@0.3.0...@acid-cat/spec-ts@0.3.1) (2026-10-15)
 
 
