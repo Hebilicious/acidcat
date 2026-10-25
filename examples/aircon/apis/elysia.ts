@@ -13,7 +13,7 @@ import { Elysia } from "elysia";
 import { z } from "zod";
 
 import { fanSet, FanSpeed, Mode, modeSet, powerSet, statusGet, temperatureSet } from "../core-ts/aircon.ts";
-import type { Context } from "../core-ts/aircon.ts";
+import type { Context, Offline, PoweredOff } from "../core-ts/aircon.ts";
 import { forbidden, foreignOrigin, httpBinding, openSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
 
@@ -25,33 +25,21 @@ const Settings = z.object({
   targetCelsius: z.number().optional(),
 });
 
-/** A call that changes one setting. */
-type Change<Failure> = () => Promise<Result<null, Failure>>;
-
-/** A case: the change of a setting when the body gives the setting, or nothing when it does not. */
-const when = <Value, Failure>(value: Value | undefined, change: (value: Value) => Promise<Result<null, Failure>>): Change<Failure> | undefined =>
-  value === undefined ? undefined : () => change(value);
+/** A failure that stops a change of the settings. */
+type ChangeFailure = z.infer<typeof Offline> | z.infer<typeof PoweredOff>;
 
 /**
- * Make the change of each case that applies, in order, until one fails. The failure is the result. The changes before
- * it stay.
+ * Change each setting that the body gives, in order. Each change runs only if the change before it succeeded, so the
+ * first failure stops the change. The settings before it stay changed.
  */
-async function untilFailure<Failure>(changes: readonly (Change<Failure> | undefined)[]): Promise<Result<null, Failure>> {
-  for (const change of changes) {
-    const result = await change?.();
-    if (result?.ok === false) return result;
-  }
-  return ok(null);
+async function change(session: Session<Context>, { power, mode, fan, targetCelsius }: z.infer<typeof Settings>) {
+  let result: Result<null, ChangeFailure> = ok(null);
+  if (result.ok && power !== undefined) result = await session.call(powerSet, { on: power });
+  if (result.ok && mode !== undefined) result = await session.call(modeSet, { mode });
+  if (result.ok && fan !== undefined) result = await session.call(fanSet, { speed: fan });
+  if (result.ok && targetCelsius !== undefined) result = await session.call(temperatureSet, { celsius: targetCelsius });
+  return result;
 }
-
-/** Change each setting that the body gives, in order. */
-const change = (session: Session<Context>, { power, mode, fan, targetCelsius }: z.infer<typeof Settings>) =>
-  untilFailure([
-    when(power, (on) => session.call(powerSet, { on })),
-    when(mode, (mode) => session.call(modeSet, { mode })),
-    when(fan, (speed) => session.call(fanSet, { speed })),
-    when(targetCelsius, (celsius) => session.call(temperatureSet, { celsius })),
-  ]);
 
 export function elysiaApi(options: ApiOptions) {
   return new Elysia()
