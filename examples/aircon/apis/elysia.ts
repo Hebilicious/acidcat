@@ -6,14 +6,14 @@
  * each setting with the input schema of its capability. The application chooses the status codes: a failure gives
  * `409` with the failure in the body, and a call failure gives the status code of its kind.
  */
-import { CallFailureError } from "@acid-cat/core-ts";
-import type { Session } from "@acid-cat/core-ts";
+import { CallFailureError, ok } from "@acid-cat/core-ts";
+import type { Result, Session } from "@acid-cat/core-ts";
 import { HTTP_STATUS } from "@acid-cat/spec-ts";
 import { Elysia } from "elysia";
 import { z } from "zod";
 
 import { fanSet, FanSpeed, Mode, modeSet, powerSet, statusGet, temperatureSet } from "../core-ts/aircon.ts";
-import type { Context } from "../core-ts/aircon.ts";
+import type { Context, Offline, PoweredOff } from "../core-ts/aircon.ts";
 import { forbidden, foreignOrigin, httpBinding, openSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
 
@@ -25,28 +25,20 @@ const Settings = z.object({
   targetCelsius: z.number().optional(),
 });
 
+/** A failure that stops a change of the settings. */
+type ChangeFailure = z.infer<typeof Offline> | z.infer<typeof PoweredOff>;
+
 /**
- * Change each setting that the body gives, in order. The first failure stops the change and is the result. The settings
- * before it stay changed.
+ * Change each setting that the body gives, in order. Each change runs only if the change before it succeeded, so the
+ * first failure stops the change. The settings before it stay changed.
  */
 async function change(session: Session<Context>, { power, mode, fan, targetCelsius }: z.infer<typeof Settings>) {
-  if (power !== undefined) {
-    const result = await session.call(powerSet, { on: power });
-    if (!result.ok) return result.error;
-  }
-  if (mode !== undefined) {
-    const result = await session.call(modeSet, { mode });
-    if (!result.ok) return result.error;
-  }
-  if (fan !== undefined) {
-    const result = await session.call(fanSet, { speed: fan });
-    if (!result.ok) return result.error;
-  }
-  if (targetCelsius !== undefined) {
-    const result = await session.call(temperatureSet, { celsius: targetCelsius });
-    if (!result.ok) return result.error;
-  }
-  return undefined;
+  let result: Result<null, ChangeFailure> = ok(null);
+  if (result.ok && power !== undefined) result = await session.call(powerSet, { on: power });
+  if (result.ok && mode !== undefined) result = await session.call(modeSet, { mode });
+  if (result.ok && fan !== undefined) result = await session.call(fanSet, { speed: fan });
+  if (result.ok && targetCelsius !== undefined) result = await session.call(temperatureSet, { celsius: targetCelsius });
+  return result;
 }
 
 export function elysiaApi(options: ApiOptions) {
@@ -68,8 +60,8 @@ export function elysiaApi(options: ApiOptions) {
       "/status",
       async ({ body, status }) => {
         await using session = openSession(options);
-        const failure = await change(session, body);
-        if (failure !== undefined) return status(409, failure);
+        const changed = await change(session, body);
+        if (!changed.ok) return status(409, changed.error);
         const result = await session.call(statusGet, {});
         return result.ok ? result.value : status(409, result.error);
       },
