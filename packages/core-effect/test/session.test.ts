@@ -7,7 +7,7 @@ import type { CatalogDocument } from "@acid-cat/spec-ts";
 import { Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability, Session } from "../src/index.ts";
-import { fixture, fixtureLayer, hidden, position, refuse, Switch } from "./fixture.ts";
+import { echo, fixture, fixtureLayer, hidden, position, refuse, Switch } from "./fixture.ts";
 
 /** Run a test with a session for a target, and the fixture's services. */
 const withSession = <A, E>(target: string, body: (session: Session.Session) => Effect.Effect<A, E, Switch | Scope.Scope>) =>
@@ -140,5 +140,35 @@ test("execute puts failures and call failures in the error channel", () =>
       assert.deepEqual(yield* Effect.flip(session.execute(refuse, {})), { _tag: "Refused", reason: "No." });
       const value = yield* session.execute(hidden, {});
       assert.equal(value, null);
+    }),
+  ));
+
+/** The kind of the call failure in the error channel of a typed call. */
+const callFailureKind = (error: unknown) => {
+  assert.ok(error instanceof Session.CallFailed);
+  return error.kind;
+};
+
+test("call decodes the input with the schema of the capability, and calls only the capability object that the session serves", () =>
+  withSession("app", (session) =>
+    Effect.gen(function* () {
+      const value: { readonly text: string } = yield* session.call(echo, { text: "hi" });
+      assert.deepEqual(value, { text: "hi" });
+      assert.deepEqual(yield* Effect.flip(session.call(refuse, {})), { _tag: "Refused", reason: "No." });
+      assert.equal(callFailureKind(yield* Effect.flip(session.call(echo, { text: 1 }))), "invalid-input");
+
+      const copy = Capability.make({
+        id: echo.id,
+        description: echo.description,
+        audience: echo.audience,
+        input: Schema.Struct({ text: Schema.String }),
+        output: Schema.Struct({ text: Schema.String }),
+        run: (input) => Effect.succeed(input),
+      });
+      assert.equal(callFailureKind(yield* Effect.flip(session.call(copy, { text: "hi" }))), "unknown-capability");
+      assert.equal(callFailureKind(yield* Effect.flip(session.execute(copy, { text: "hi" }))), "unknown-capability");
+      const outcome = yield* session.outcome(copy, { text: "hi" });
+      assert.ok("kind" in outcome);
+      assert.equal(outcome.kind, "unknown-capability");
     }),
   ));

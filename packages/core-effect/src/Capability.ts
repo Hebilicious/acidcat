@@ -81,6 +81,11 @@ export interface Capability<
   readonly availability?: Effect.Effect<SubscriptionRef.SubscriptionRef<Availability>, never, R> | undefined;
   /** The operation, with an input that is already decoded. A capability with no input schema ignores its input. */
   readonly run: (input: Input["Type"]) => Effect.Effect<Output["Type"], Failure["Type"], R>;
+  /**
+   * Decode an input that is not trusted with the input schema. The result is the call of `run` with the decoded input,
+   * or the message of an input that does not decode. `make` builds it.
+   */
+  readonly prepare: (input: unknown) => Effect.Effect<Effect.Effect<Output["Type"], Failure["Type"], R>, string>;
   /** The calls of the capability for code that does not know the types of its schemas. `make` builds it. */
   readonly pipeline: Pipeline<R>;
 }
@@ -213,30 +218,40 @@ export function make<
   };
   const state = definition.state === undefined ? undefined : Effect.map(definition.state.value, readable);
   const parts = { output: definition.output, failures: definition.failures, state };
+  /** The capability, from the calls of one member of the declaration, which share the type `In` of their input. */
+  const finish = <In>(
+    calls: {
+      readonly decode: (input: unknown) => Effect.Effect<In, string>;
+      readonly check: (input: unknown) => Effect.Effect<In, string>;
+      readonly run: (input: In) => Effect.Effect<Output["Type"], Failure["Type"], R>;
+    },
+    run: (input: Input["Type"]) => Effect.Effect<Output["Type"], Failure["Type"], R>,
+  ): Capability<Input, Output, Failure, R | RAvailability | RState, State, Id> => ({
+    ...declared,
+    run,
+    prepare: (input) => Effect.map(calls.decode(input), calls.run),
+    pipeline: pipeline({ ...parts, ...calls }),
+  });
   if (hasInput(definition)) {
     const schema = definition.input;
-    return {
-      ...declared,
-      run: definition.run,
-      pipeline: pipeline({
-        ...parts,
+    return finish(
+      {
         decode: (input) => Schema.decodeUnknownEffect(schema)(input).pipe(Effect.mapError((error) => describe(error.issue))),
         check: (input) => (Schema.is(schema)(input) ? Effect.succeed(input) : Effect.fail(notInput)),
         run: definition.run,
-      }),
-    };
+      },
+      definition.run,
+    );
   }
   const run = definition.run;
-  return {
-    ...declared,
-    run: () => run({}),
-    pipeline: pipeline({
-      ...parts,
+  return finish(
+    {
       decode: (input) => Schema.decodeUnknownEffect(AnyObject)(input).pipe(Effect.mapError((error) => describe(error.issue))),
       check: (input) => (Schema.is(AnyObject)(input) ? Effect.succeed(input) : Effect.fail(notInput)),
       run,
-    }),
-  };
+    },
+    () => run({}),
+  );
 }
 
 const notInput = "input: The input does not agree with the input schema.";

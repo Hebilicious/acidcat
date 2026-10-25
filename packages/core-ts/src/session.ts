@@ -10,8 +10,8 @@ import type { StandardSchemaV1 } from "./standard-schema.ts";
 
 /**
  * The handle of a capability (spec/bindings/typescript.md#handles). `Input`, `Value`, `Failure` and `State` are the
- * types of the schemas of the capability. `getHandle` gives a handle with these types. A handle of `session.handles`
- * has the input type `never`: only `invokeExternal` can call it, because it decodes the input.
+ * types of the schemas of the capability. `session.handle` gives a handle with these types. A handle of
+ * `session.handles` has the input type `never`: only `invokeExternal` can call it, because it decodes the input.
  */
 export interface Handle<Input = never, Value = unknown, Failure = unknown, State = unknown> {
   readonly id: string;
@@ -26,31 +26,9 @@ export interface Handle<Input = never, Value = unknown, Failure = unknown, State
   invokeExternal(input: unknown, options?: { readonly signal?: AbortSignal | undefined }): Promise<Result<unknown, unknown>>;
 }
 
-/** The handle of a capability, with the types of its schemas. `getHandle` gives it. */
+/** The handle of a capability, with the types of its schemas. `session.handle` gives it. */
 export type HandleOf<C> =
   C extends Capability<never, infer Input, infer Value, infer Failures, infer State, string> ? Handle<Input, Value, FailureOf<Failures>, State> : never;
-
-/** The handles of a session, by id, for the capabilities in its view. */
-export interface Handles<Context> extends ReadonlyMap<string, Handle> {
-  /**
-   * The handle of a capability, with the types of the capability. `getHandle` calls it. Only the capability object
-   * that the session serves gets a handle that calls it. Any other capability gets a handle that is always unavailable.
-   */
-  readonly handleOf: <Input, Value, Failures, State, Id extends string>(
-    capability: Capability<Context, Input, Value, Failures, State, Id>,
-  ) => Handle<Input, Value, FailureOf<Failures>, State>;
-}
-
-/**
- * The handle of a capability, with the types of the capability. For a capability outside the view, the handle is
- * always unavailable, and each call rejects as `unknown-capability`.
- */
-export function getHandle<Context, Input, Value, Failures, State, Id extends string>(
-  handles: Handles<Context>,
-  capability: Capability<Context, Input, Value, Failures, State, Id>,
-): Handle<Input, Value, FailureOf<Failures>, State> {
-  return handles.handleOf(capability);
-}
 
 /** The handle of a capability that the session does not serve. */
 function outsideView<Input, Value, Failure, State>(capability: { readonly id: string; readonly description: string }): Handle<Input, Value, Failure, State> {
@@ -74,8 +52,26 @@ export interface Session<Context = unknown> {
    * is first read.
    */
   readonly view: CatalogDocument;
-  /** The handles of the capabilities in the view, by id. */
-  readonly handles: Handles<Context>;
+  /** The handles of the capabilities in the view, by id. Bindings use them. */
+  readonly handles: ReadonlyMap<string, Handle>;
+  /**
+   * The handle of a capability, with the types of the capability. Only the capability object that the session serves
+   * gets a handle that calls it. Any other capability, also one with the same id, gets a handle that is always
+   * unavailable, and each call rejects as `unknown-capability`. Each call of `handle` gives a new handle.
+   */
+  handle<Input, Value, Failures, State, Id extends string>(
+    capability: Capability<Context, Input, Value, Failures, State, Id>,
+  ): Handle<Input, Value, FailureOf<Failures>, State>;
+  /**
+   * A call of a capability with an input that is not trusted. The input schema of the capability checks the input, so
+   * the result has the types of the capability. A call failure rejects with a `CallFailureError`. An input that does not
+   * agree with the schema rejects as `invalid-input`.
+   */
+  call<Input, Value, Failures, State, Id extends string>(
+    capability: Capability<Context, Input, Value, Failures, State, Id>,
+    input: unknown,
+    options?: { readonly signal?: AbortSignal | undefined },
+  ): Promise<Result<Value, FailureOf<Failures>>>;
   /** A call with an input that is not trusted. The outcome is in its JSON form. The promise never rejects. */
   invoke(id: string, input: unknown, options?: { readonly signal?: AbortSignal | undefined }): Promise<Outcome<unknown, unknown>>;
   /**
@@ -87,6 +83,8 @@ export interface Session<Context = unknown> {
   readonly signal: AbortSignal;
   /** Close the session: accept no new calls, cancel the calls in progress, and wait for them. */
   dispose(): Promise<void>;
+  /** Close the session, as `dispose` does, at the end of the block of `await using session = createSession(…)`. */
+  [Symbol.asyncDispose](): Promise<void>;
 }
 
 export interface SessionOptions<Context> {
@@ -106,16 +104,6 @@ interface Served<Context> {
 
 /** The input of a call, decoded: the issues, or the start of the work, which gives the checked result. */
 type Prepared<Context, T> = { readonly issues: readonly StandardSchemaV1.Issue[] } | { readonly start: (call: Call<Context>) => Promise<T> };
-
-/** The handles of a session: a map by id, and `handleOf`. */
-class SessionHandles<Context> extends Map<string, Handle> implements Handles<Context> {
-  readonly handleOf: Handles<Context>["handleOf"];
-
-  constructor(handleOf: Handles<Context>["handleOf"]) {
-    super();
-    this.handleOf = handleOf;
-  }
-}
 
 const always: Observable<Availability> = { getSnapshot: () => AVAILABLE, subscribe: () => ({ unsubscribe() {} }) };
 
@@ -194,7 +182,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
   };
 
   /** The typed handle of a capability that the session serves, or the handle outside the view. */
-  function handleOf<Input, Value, Failures, State, Id extends string>(
+  function handle<Input, Value, Failures, State, Id extends string>(
     capability: Capability<Context, Input, Value, Failures, State, Id>,
   ): Handle<Input, Value, FailureOf<Failures>, State> {
     const entry = served.get(capability.id);
@@ -216,7 +204,29 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     };
   }
 
-  const handles = new SessionHandles<Context>(handleOf);
+  /** A typed call with an input that is not trusted: the input schema of the capability decodes it. */
+  async function call<Input, Value, Failures, State, Id extends string>(
+    capability: Capability<Context, Input, Value, Failures, State, Id>,
+    input: unknown,
+    signal?: AbortSignal,
+  ): Promise<Result<Value, FailureOf<Failures>>> {
+    const entry = served.get(capability.id);
+    if (entry === undefined || entry.capability !== capability) {
+      throw new CallFailureError(callFailure("unknown-capability", `There is no capability ${capability.id}.`));
+    }
+    const prepare = async (): Promise<Prepared<Context, Result<Value, FailureOf<Failures>>>> => {
+      if (capability.input === undefined) return { start: async (each) => checkTyped(capability, await capability.run({}, each)) };
+      const validated = await capability.input["~standard"].validate(input);
+      if (validated.issues !== undefined) return { issues: validated.issues };
+      const { value } = validated;
+      return { start: async (each) => checkTyped(capability, await capability.run(value, each)) };
+    };
+    const outcome = await perform(capability.id, entry, prepare, signal);
+    if (isCallFailure(outcome)) throw new CallFailureError(outcome);
+    return outcome;
+  }
+
+  const handles = new Map<string, Handle>();
   for (const [id, { capability, availability }] of served) {
     const invokeExternal = (input: unknown, callOptions?: { readonly signal?: AbortSignal | undefined }) => settle(invoke(id, input, callOptions?.signal));
     const state = capability.state?.source(options.context);
@@ -238,12 +248,21 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
 
   let view: CatalogDocument | undefined;
 
+  async function dispose() {
+    lifetime.abort();
+    listeners.clear();
+    unsubscribeAll();
+    await Promise.allSettled(running);
+  }
+
   return {
     target: options.target,
     get view() {
       return (view ??= viewOf(catalogOf(app, { toJsonSchema: options.toJsonSchema }), options.target));
     },
     handles,
+    handle,
+    call: (capability, input, callOptions) => call(capability, input, callOptions?.signal),
     signal: lifetime.signal,
     invoke: (id, input, callOptions) => invoke(id, input, callOptions?.signal),
     onChange(listener) {
@@ -259,12 +278,8 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
         },
       };
     },
-    async dispose() {
-      lifetime.abort();
-      listeners.clear();
-      unsubscribeAll();
-      await Promise.allSettled(running);
-    },
+    dispose,
+    [Symbol.asyncDispose]: dispose,
   };
 }
 

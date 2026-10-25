@@ -13,12 +13,6 @@ export const FanSpeed = z.enum(["auto", "low", "medium", "high"]).meta({ id: "Fa
 export const Status = z
   .object({ power: z.boolean(), mode: Mode, fan: FanSpeed, targetCelsius: z.number(), roomCelsius: z.number() })
   .meta({ id: "Status" });
-/** The inputs of the capabilities. An API checks an input that is not trusted with them, then makes a typed call. */
-export const PowerInput = z.object({ on: z.boolean() });
-export const ModeInput = z.object({ mode: Mode });
-export const TemperatureInput = z.object({ celsius: z.number().min(16).max(31) });
-export const FanInput = z.object({ speed: FanSpeed });
-
 export const Offline = z.object({ _tag: z.literal("Offline"), since: z.string().optional() }).meta({ id: "Offline" });
 export const PoweredOff = z.object({ _tag: z.literal("PoweredOff") });
 const UpToDate = z.object({ _tag: z.literal("UpToDate"), version: z.string() });
@@ -98,7 +92,7 @@ export const powerSet = capability({
   id: "aircon.power.set",
   description: "Turn the unit on or off.",
   audience: everywhere,
-  input: PowerInput,
+  input: z.object({ on: z.boolean() }),
   failures: { Offline },
   run: ({ on }, { context }) => change(context.unit, { power: on }),
 });
@@ -107,7 +101,7 @@ export const modeSet = capability({
   id: "aircon.mode.set",
   description: "Choose how the unit runs.",
   audience: controls,
-  input: ModeInput,
+  input: z.object({ mode: Mode }),
   failures: { Offline, PoweredOff },
   run: ({ mode }, { context }) =>
     context.unit.state.power ? change(context.unit, { mode }) : fail({ _tag: "PoweredOff" }),
@@ -117,7 +111,7 @@ export const temperatureSet = capability({
   id: "aircon.temperature.set",
   description: "Set the target temperature in degrees Celsius.",
   audience: controls,
-  input: TemperatureInput,
+  input: z.object({ celsius: z.number().min(16).max(31) }),
   failures: { Offline },
   run: ({ celsius }, { context }) => change(context.unit, { targetCelsius: celsius }),
 });
@@ -126,7 +120,7 @@ export const fanSet = capability({
   id: "aircon.fan.set",
   description: "Set the fan speed.",
   audience: controls,
-  input: FanInput,
+  input: z.object({ speed: FanSpeed }),
   failures: { Offline },
   run: ({ speed }, { context }) => change(context.unit, { fan: speed }),
 });

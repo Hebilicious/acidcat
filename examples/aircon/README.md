@@ -35,7 +35,7 @@ The HTTP and MCP bindings give generic access to the capabilities: one route or 
 
 | File | Library | API | Failures |
 | --- | --- | --- | --- |
-| [`apis/graphql.ts`](apis/graphql.ts) | [Pothos](https://pothos-graphql.dev) and [GraphQL Yoga](https://the-guild.dev/graphql/yoga-server) | `query { status }`, and mutations that return the new status | A GraphQL error with the tag or the kind as `code` |
+| [`apis/graphql.ts`](apis/graphql.ts) | [Pothos](https://pothos-graphql.dev) and [GraphQL Yoga](https://the-guild.dev/graphql/yoga-server) | `query { status }`, and mutations that return the new status | Data: each field returns a union of `Status` and the failures of its capability, for example `Status \| Offline \| PoweredOff` |
 | [`apis/capnweb.ts`](apis/capnweb.ts) | [Cap'n Web](https://github.com/cloudflare/capnweb) | A class with typed methods. A client sends many calls in one request | A result value: `{ ok: false, error }` |
 | [`apis/elysia.ts`](apis/elysia.ts) | [Elysia](https://elysiajs.com) | `GET /status`, and `PATCH /status` that changes many settings. The HTTP binding is mounted with `.mount("/api", …)` | Status 409 with the failure |
 | [`apis/mcp.ts`](apis/mcp.ts) | [Effect](https://effect.website) `effect/ai` | MCP tools `get_status` and `set_controls`, which changes many settings in one call | A tool error with the failure |
@@ -44,8 +44,9 @@ The first three APIs use the application on `@acid-cat/core-ts`, and serve the H
 
 Each API calls the capabilities through a session, so it gets the same outcomes as all other surfaces:
 
-- **One session for each client.** A session serves one client (see [Sessions](../../spec/invocation.md#sessions)). Each request, or each Cap'n Web batch, opens its own session and closes it when the response is ready. The unit is a service in the context, so all sessions share it.
-- **Typed calls.** An API gets input that is not trusted. It checks the input with the input schema of the capability, then calls the typed handle: `getHandle(session.handles, powerSet).execute(input)`. The result has the types of the capability, with no cast. The MCP server checks the parameters of its tools with Effect Schema, then calls `session.execute`.
+- **One session for each client.** A session serves one client (see [Sessions](../../spec/invocation.md#sessions)). Each request, or each Cap'n Web batch, opens its own session with `await using session = openSession(options)`. The session closes when the block ends. The unit is a service in the context, so all sessions share it.
+- **Typed calls.** An API gets input that is not trusted. `session.call(powerSet, input)` checks it with the input schema of the capability, and gives a result with the types of the capability, with no cast. The MCP server checks the parameters of its tools with Effect Schema, then calls the session of `@acid-cat/core-effect`.
+- **Three outcomes.** A value and a failure are results: each API gives them in its own form, as data, as a union member, or as a status code. A call failure rejects as a `CallFailureError`, and each API turns it into an error of its protocol.
 
 ## Run
 

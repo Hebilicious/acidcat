@@ -65,18 +65,29 @@ Standard Schema does not convert to JSON Schema. Give the converter of your sche
 
 When the signal of a request aborts, `mcpHandler` and `httpHandler` cancel the call of the request.
 
-### Typed handles
+### Typed calls and handles
 
-`createSession` gives a `Session<Context>`, and its `handles` are `Handles<Context>`: a map of the handles by id. `getHandle(session.handles, capability)` gives the handle of a capability with the types of its schemas, `HandleOf<typeof capability>`. The handle calls the capability through the session: availability, cancellation, and the checks of the output and of the failures. Its values come from the output schema and from the failure schemas. The session must serve that capability object. For any other capability, also one with the same id, the handle is always unavailable, and each call rejects as `unknown-capability`. Each call of `getHandle` gives a new handle.
+`createSession` gives a `Session<Context>`. It calls a capability with the types of the capability in two ways. Both take the capability object, so the types come from its schemas:
 
-A handle of the map has the input type `never`: call it with `invokeExternal`, which validates the input. A function that gets a session and calls `getHandle` declares its context: `(session: Session<{ unit: Unit }>) => …`.
+- `session.call(capability, input)` takes an input that is not trusted, for example the arguments of a request. The input schema of the capability checks it. The result has the types of the capability. An input that does not agree rejects as `invalid-input`.
+- `session.handle(capability)` gives the handle of the capability (spec/bindings/typescript.md#handles): its availability, its `snapshot` of the state, and `execute` for an input that the types already check.
+
+Both call the capability through the session: availability, cancellation, and the checks of the output and of the failures. The session must serve that capability object. For any other capability, also one with the same id, a call rejects as `unknown-capability`, and the handle is always unavailable.
+
+`session.handles` is the map of the handles by id, for bindings. A handle of the map has the input type `never`: call it with `invokeExternal`, which validates the input. A function that gets a session declares its context: `(session: Session<{ unit: Unit }>) => …`.
+
+A session is async-disposable. `await using` closes it at the end of the block, as `dispose()` does:
 
 ```ts
-import { createSession, getHandle } from "@acid-cat/core-ts";
+import { createSession } from "@acid-cat/core-ts";
 
-const session = createSession(aircon, { target: "app", context: { unit }, toJsonSchema });
-const power = getHandle(session.handles, powerSet); // HandleOf<typeof powerSet>
-const result = await power.execute({ on: true }); // Result<null, { readonly _tag: "Offline" } & { _tag: "Offline"; since?: string }>
+await using session = createSession(aircon, { target: "app", context: { unit }, toJsonSchema });
+const result = await session.call(powerSet, request.body); // Result<null, { readonly _tag: "Offline"; since?: string }>
+if (!result.ok) console.log(result.error._tag); // "Offline"
+
+const power = session.handle(powerSet);
+power.availability.subscribe(render);
+await power.execute({ on: true });
 ```
 
 ### Context for each request
