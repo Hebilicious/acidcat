@@ -5,6 +5,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { isArrayOf, isObject, memberOf, parseJson } from "../json.ts";
+import type { JsonObject } from "../json.ts";
 import { Checks, expect, expectEqual, idsOf, sorted, until } from "./check.ts";
 
 const RULE = "spec/bindings/cli.md";
@@ -22,6 +24,18 @@ const USAGES: { readonly [id: string]: string } = {
   "fixture.toggle": "fixture toggle",
 };
 
+/** An entry of the list that the `list` command gives. */
+type Entry = JsonObject & { readonly id: string };
+
+const isEntry = (value: unknown): value is Entry => isObject(value) && typeof value.id === "string";
+
+/** The list that the `list` command writes to standard output. The check fails when it is not a list of entries. */
+function entriesOf(stdout: string): readonly Entry[] {
+  const list = parseJson(stdout);
+  if (!isArrayOf(list, isEntry)) throw new Error(`list must give a list of objects with an id, got ${JSON.stringify(list)}`);
+  return list;
+}
+
 interface Run {
   readonly code: number | null;
   readonly signal: NodeJS.Signals | null;
@@ -35,7 +49,9 @@ interface Run {
  * the process with an unhandled rejection.
  */
 function start(command: readonly string[], args: readonly string[], signal: AbortSignal) {
-  const child = spawn(command[0]!, [...command.slice(1), ...args], { stdio: ["ignore", "pipe", "pipe"], signal, killSignal: "SIGKILL" });
+  const [program, ...programArgs] = command;
+  if (program === undefined) throw new Error("the command that starts the command line is empty");
+  const child = spawn(program, [...programArgs, ...args], { stdio: ["ignore", "pipe", "pipe"], signal, killSignal: "SIGKILL" });
   const run = new Promise<Run>((resolve, reject) => {
     let stdout = "";
     let stderr = "";
@@ -55,12 +71,12 @@ export async function checkCli(command: readonly string[], options: { readonly d
   await checks.run("a value goes to standard output with exit code 0", `${RULE}#outcomes`, async (signal) => {
     const result = await run(signal, "fixture", "echo", "--text", "hello");
     expectEqual(result.code, 0, "exit code");
-    expectEqual(JSON.parse(result.stdout), { text: "hello" }, "standard output");
+    expectEqual(parseJson(result.stdout), { text: "hello" }, "standard output");
   });
   await checks.run("a failure goes to standard output with exit code 1", `${RULE}#outcomes`, async (signal) => {
     const result = await run(signal, "fixture", "refuse");
     expectEqual(result.code, 1, "exit code");
-    expectEqual((JSON.parse(result.stdout) as { _tag?: string })._tag, "Refused", "_tag");
+    expectEqual(memberOf(parseJson(result.stdout), "_tag"), "Refused", "_tag");
   });
   await checks.run("a defect goes to standard error with exit code 5", `${RULE}#outcomes`, async (signal) => {
     const result = await run(signal, "fixture", "crash");
@@ -98,14 +114,14 @@ export async function checkCli(command: readonly string[], options: { readonly d
   await checks.run("call gives the value of a capability", `${RULE}#commands`, async (signal) => {
     const result = await run(signal, "call", "fixture.echo", '{"text":"hello"}');
     expectEqual(result.code, 0, "exit code");
-    expectEqual(JSON.parse(result.stdout), { text: "hello" }, "standard output");
+    expectEqual(parseJson(result.stdout), { text: "hello" }, "standard output");
   });
   await checks.run("list gives the view", `${RULE}#commands`, async (signal) => {
     const result = await run(signal, "list");
-    expectEqual(sorted((JSON.parse(result.stdout) as { id: string }[]).map((entry) => entry.id)), idsOf("cli"), "ids");
+    expectEqual(sorted(entriesOf(result.stdout).map((entry) => entry.id)), idsOf("cli"), "ids");
   });
   await checks.run("list gives the usage of each capability, with its flags", `${RULE}#commands`, async (signal) => {
-    const entries = JSON.parse((await run(signal, "list")).stdout) as { id: string; usage?: unknown }[];
+    const entries = entriesOf((await run(signal, "list")).stdout);
     for (const { id, usage } of entries) {
       expect(typeof usage === "string", `${id} must have a usage`);
       const [program, ...rest] = usage.split(" ");

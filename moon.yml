@@ -32,6 +32,21 @@ tasks:
       - "packages/catalog/typescript/src/**/*.ts"
       - "packages/cli/src/**/*.ts"
 
+  lint:
+    description: "Lint every TypeScript file with type information, and check that no code turns the type checks off."
+    script: "oxlint --deny-warnings . && node scripts/check-escapes.ts"
+    inputs:
+      - "**/*.ts"
+      - "**/tsconfig*.json"
+      - ".oxlintrc.json"
+      - "scripts/check-escapes.ts"
+
+  typecheck:
+    description: "Type-check the scripts."
+    command: "tsc"
+    args: ["-p", "."]
+    inputs: ["scripts/**/*.ts", "tsconfig.json", "tsconfig.base.json"]
+
   packages:
     description: "Pack the npm packages, install them into an empty project, and run both cores' conformance tests from it."
     command: "node"
@@ -40,6 +55,6 @@ tasks:
     inputs: ["scripts/check-packages.ts", "scripts/npm-packages.ts", "examples/aircon/catalog/aircon.acidcat.json", "packages/*/test/**/*.ts", "packages/*/package.json", "packages/*/dist/**/*", "packages/catalog/typescript/package.json", "packages/catalog/typescript/dist/**/*", "tsconfig.base.json"]
 
   verify:
-    description: "Every check: the examples and fixtures, the toolchain, and every catalog library."
+    description: "Every check: the catalogs, the lint, the toolchain, and every catalog library."
     command: "noop"
-    deps: ["check", "packages", "spec-ts:test", "spec-ts:typecheck", "cli:test", "cli:typecheck", "core-effect:test", "core-effect:typecheck", "core-ts:test", "core-ts:typecheck", "example-aircon:test", "example-aircon:typecheck", "catalog-typescript:test", "catalog-typescript:typecheck", "catalog-python:test", "catalog-python:package", "catalog-go:test", "catalog-rust:test", "catalog-rust:package", "catalog-pkl:test"]
+    deps: ["check", "lint", "typecheck", "packages", "spec-ts:test", "spec-ts:typecheck", "cli:test", "cli:typecheck", "core-effect:test", "core-effect:typecheck", "core-ts:test", "core-ts:typecheck", "example-aircon:test", "example-aircon:typecheck", "catalog-typescript:test", "catalog-typescript:typecheck", "catalog-python:test", "catalog-python:package", "catalog-go:test", "catalog-rust:test", "catalog-rust:package", "catalog-pkl:test"]

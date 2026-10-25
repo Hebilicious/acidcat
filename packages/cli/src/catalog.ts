@@ -4,11 +4,13 @@
  */
 import { canonicalText } from "@acid-cat/catalog";
 import { bundle, REFERENCE, schemasOf, viewOf, visitObjects } from "@acid-cat/spec-ts";
-import type { CatalogCapability as Capability, CatalogDocument as Catalog, JsonObject } from "@acid-cat/spec-ts";
+import type { CatalogCapability, CatalogDocument as Catalog } from "@acid-cat/spec-ts";
 import { Result, Schema, SchemaIssue, SchemaRepresentation } from "effect";
 import type { JsonSchema } from "effect";
 
 import catalogJsonSchema from "../../../schemas/catalog.schema.json" with { type: "json" };
+import { isObject, isRecordOf, isStringArray } from "./json.ts";
+import type { JsonObject } from "./json.ts";
 
 export { bundle, viewOf };
 export type { Catalog };
@@ -27,14 +29,47 @@ const KNOWN_MEMBERS = {
 
 /** The catalog schema (schemas/catalog.schema.json), imported as an Effect schema. */
 const decodeCatalog = (() => {
-  const { $defs, $schema: _schema, $id: _id, ...root } = catalogJsonSchema as JsonSchema.JsonSchema;
+  const { $defs, $schema: _schema, $id: _id, ...root } = catalogJsonSchema;
+  const definitions: JsonSchema.Definitions = $defs;
   const schema = SchemaRepresentation.fromJsonSchemaDocument(
-    { dialect: "draft-2020-12", schema: root, definitions: ($defs ?? {}) as JsonSchema.Definitions },
+    { dialect: "draft-2020-12", schema: root, definitions },
     { patterns: "apply" },
   );
-  // A schema imported from JSON Schema needs no services to decode.
-  return Schema.decodeUnknownResult(schema as Schema.Codec<unknown, unknown>);
+  // A schema imported from JSON Schema has no transformations, so its type side checks the same values. The type side
+  // needs no services to decode.
+  return Schema.decodeUnknownResult(Schema.toType(schema));
 })();
+
+/** True if `key` is absent from the object, or if `isMember` is true for its value. */
+const optional = (object: JsonObject, key: string, isMember: (value: unknown) => boolean): boolean =>
+  !(key in object) || isMember(object[key]);
+
+const isString = (value: unknown): value is string => typeof value === "string";
+
+const isTarget = (value: unknown): value is Catalog["targets"][string] => isObject(value) && isStringArray(value.bindings);
+
+const isCapability = (value: unknown): value is CatalogCapability =>
+  isObject(value) &&
+  typeof value.description === "string" &&
+  optional(value, "audience", isStringArray) &&
+  optional(value, "input", isObject) &&
+  optional(value, "output", isObject) &&
+  optional(value, "state", isObject) &&
+  optional(value, "failures", (failures) => isRecordOf(failures, isObject)) &&
+  optional(value, "readOnly", (readOnly) => typeof readOnly === "boolean");
+
+/**
+ * True if the value has the members and the member types of a catalog. It does not check the catalog rules: `check`
+ * does that.
+ */
+export const isCatalog = (value: unknown): value is Catalog =>
+  isObject(value) &&
+  typeof value.acidcat === "string" &&
+  optional(value, "title", isString) &&
+  optional(value, "description", isString) &&
+  isRecordOf(value.targets, isTarget) &&
+  optional(value, "$defs", (types) => isRecordOf(types, isObject)) &&
+  isRecordOf(value.capabilities, isCapability);
 
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
 
@@ -47,7 +82,11 @@ export function check(document: unknown, text?: string): Report {
     );
     return { errors, warnings: [] };
   }
-  const catalog = document as Catalog;
+  if (!isCatalog(document)) {
+    // The catalog schema requires these members, so this error is a defect of the schema.
+    return { errors: ["the catalog: the members do not have the types of a catalog"], warnings: [] };
+  }
+  const catalog = document;
   const errors = ruleErrors(catalog);
   const warnings = [...unknownMembers(catalog), ...(errors.length === 0 ? schemaWarnings(catalog) : [])];
   if (text !== undefined && text !== canonicalText(catalog)) {
@@ -97,13 +136,13 @@ function unknownMembers(catalog: Catalog): string[] {
 
 /** Schemas that cannot be imported as Effect schemas. They can still be valid JSON Schema, so this is a warning. */
 function schemaWarnings(catalog: Catalog): string[] {
-  const definitions = (catalog.$defs ?? {}) as JsonSchema.Definitions;
+  const definitions: JsonSchema.Definitions = catalog.$defs ?? {};
   const warnings: string[] = [];
   for (const [id, capability] of Object.entries(catalog.capabilities)) {
     for (const [member, schema] of schemasOf(capability)) {
       try {
         SchemaRepresentation.fromJsonSchemaMultiDocument(
-          { dialect: "draft-2020-12", schemas: [schema as JsonSchema.JsonSchema], definitions },
+          { dialect: "draft-2020-12", schemas: [schema], definitions },
           { patterns: "ignore" },
         );
       } catch (cause) {
@@ -120,7 +159,10 @@ function referenceErrors(schema: unknown, types: { readonly [name: string]: Json
     if ("$defs" in node) errors.push("has its own $defs; put shared types in the catalog's $defs");
     if (node.$ref === undefined) return;
     const name = typeof node.$ref === "string" ? REFERENCE.exec(node.$ref)?.[1] : undefined;
-    if (name === undefined || !(name in types)) errors.push(`references ${String(node.$ref)}, which is not a type`);
+    if (name === undefined || !(name in types)) {
+      const reference = typeof node.$ref === "string" ? node.$ref : JSON.stringify(node.$ref);
+      errors.push(`references ${reference}, which is not a type`);
+    }
   });
   return errors;
 }

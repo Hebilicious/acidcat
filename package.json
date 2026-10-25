@@ -7,7 +7,10 @@
   "devDependencies": {
     "@acid-cat/catalog": "workspace:*",
     "@acid-cat/cli": "workspace:*",
+    "@types/node": "catalog:",
     "esbuild": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
     "rolldown": "catalog:",
     "typescript": "catalog:"
   }

@@ -4,15 +4,13 @@
  */
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
+import { isObject, memberOf, parseJson, readJson } from "../json.ts";
 import { Checks, expect, expectEqual, fixture, FORBIDDEN_ORIGIN, idsOf, sorted } from "./check.ts";
 
 const RULE = "spec/bindings/mcp.md";
 
-type ToolResult = {
-  readonly content?: readonly { readonly type: string; readonly text?: string }[];
-  readonly isError?: boolean;
-  readonly structuredContent?: unknown;
-};
+/** A tool result, as the MCP client gives it. */
+type ToolResult = Awaited<ReturnType<Client["callTool"]>>;
 
 /** A connected MCP client. */
 export async function mcpClient(url: string, signal?: AbortSignal): Promise<Client> {
@@ -21,7 +19,11 @@ export async function mcpClient(url: string, signal?: AbortSignal): Promise<Clie
   return client;
 }
 
-const textOf = (result: ToolResult): unknown => JSON.parse(result.content?.[0]?.text ?? "null");
+/** The JSON value in the first text content of a tool result, or `null` when there is no text content. */
+const textOf = (result: ToolResult): unknown => {
+  const first = result.content[0];
+  return parseJson(first?.type === "text" ? first.text : "null");
+};
 
 export async function checkMcp(url: string, options: { readonly maximumBytes: number; readonly deadline: number }): Promise<Checks> {
   const checks = new Checks("mcp", options.deadline);
@@ -33,7 +35,7 @@ export async function checkMcp(url: string, options: { readonly maximumBytes: nu
   if (client === undefined) return checks;
   const mcp = client;
   const call = (signal: AbortSignal, name: string, args: Record<string, unknown>) =>
-    mcp.callTool({ name, arguments: args }, { signal }) as Promise<ToolResult>;
+    mcp.callTool({ name, arguments: args }, { signal });
 
   await checks.run("server/discover gives the description of the catalog as instructions", `${RULE}#server`, () => {
     expectEqual(mcp.getInstructions(), fixture.description, "instructions");
@@ -50,9 +52,9 @@ export async function checkMcp(url: string, options: { readonly maximumBytes: nu
     const refuse = tools.find((tool) => tool.name === "fixture.refuse");
     expect(echo?.annotations?.readOnlyHint === true, "fixture.echo must have readOnlyHint: true");
     expect(refuse?.annotations?.readOnlyHint !== true, "fixture.refuse must not have readOnlyHint: true");
-    expect((echo?.outputSchema as { type?: string } | undefined)?.type === "object", "fixture.echo must have an object outputSchema");
+    expect(echo?.outputSchema?.type === "object", "fixture.echo must have an object outputSchema");
     expect(refuse?.outputSchema === undefined, "fixture.refuse has no object output, so it must have no outputSchema");
-    expect((echo?.inputSchema as { type?: string }).type === "object", "an inputSchema must be an object");
+    expect(echo?.inputSchema.type === "object", "an inputSchema must be an object");
   });
 
   await checks.run("a value is a tool result with structured content", `${RULE}#tools`, async (signal) => {
@@ -65,28 +67,30 @@ export async function checkMcp(url: string, options: { readonly maximumBytes: nu
   await checks.run("a failure is an error result with ok: false", `${RULE}#tools`, async (signal) => {
     const result = await call(signal, "fixture.refuse", {});
     expect(result.isError === true, "a failure must be an error result");
-    const body = textOf(result) as { ok?: boolean; error?: { _tag?: string } };
-    expect(body.ok === false && body.error?._tag === "Refused", `expected { ok: false, error: { _tag: "Refused" } }, got ${JSON.stringify(body)}`);
+    const body = textOf(result);
+    expect(memberOf(body, "ok") === false && memberOf(memberOf(body, "error"), "_tag") === "Refused", `expected { ok: false, error: { _tag: "Refused" } }, got ${JSON.stringify(body)}`);
   });
 
   await checks.run("a defect is an internal call failure with no internal details", `${RULE}#tools`, async (signal) => {
     const result = await call(signal, "fixture.crash", {});
-    const body = textOf(result) as { kind?: string; message?: string; ok?: unknown };
+    const body = textOf(result);
+    expect(isObject(body), `expected an object, got ${JSON.stringify(body)}`);
     expect(result.isError === true && body.kind === "internal" && !("ok" in body), `expected { kind: "internal" }, got ${JSON.stringify(body)}`);
-    expect(!/\n\s+at /.test(body.message ?? ""), "the message must not contain a stack trace");
+    const message = typeof body.message === "string" ? body.message : "";
+    expect(!/\n\s+at /.test(message), "the message must not contain a stack trace");
   });
 
   await checks.run("an input that does not agree with its schema is invalid-input", `${RULE}#tools`, async (signal) => {
     const result = await call(signal, "fixture.echo", { text: 1 });
-    expectEqual((textOf(result) as { kind?: string }).kind, "invalid-input", "kind");
+    expectEqual(memberOf(textOf(result), "kind"), "invalid-input", "kind");
   });
 
   await checks.run("a capability outside the view is an unknown tool", `${RULE}#tools`, async (signal) => {
     const error = await call(signal, "fixture.hidden", {}).then(
       () => undefined,
-      (caught: { code?: number }) => caught,
+      (caught: unknown) => caught,
     );
-    expect(error?.code === -32602, `expected the JSON-RPC error -32602, got ${JSON.stringify(error)}`);
+    expect(memberOf(error, "code") === -32602, `expected the JSON-RPC error -32602, got ${JSON.stringify(error)}`);
   });
 
   await checks.run("an unavailable capability is not listed", `${RULE}#tools`, async (signal) => {
@@ -101,12 +105,12 @@ export async function checkMcp(url: string, options: { readonly maximumBytes: nu
 
   await mcp.close();
 
-  const post = (signal: AbortSignal, init: RequestInit & { headers?: Record<string, string> }) =>
-    fetch(url, { method: "POST", ...init, headers: { "Content-Type": "application/json", ...init.headers }, signal });
+  const post = (signal: AbortSignal, { headers = {}, body }: { readonly headers?: Record<string, string>; readonly body: BodyInit }) =>
+    fetch(url, { method: "POST", body, headers: { "Content-Type": "application/json", ...headers }, signal });
   const rejection = async (response: Response, status: number, code?: number) => {
     expectEqual(response.status, status, "status");
     expectEqual(response.headers.get("Cache-Control"), "no-store", "Cache-Control");
-    if (code !== undefined) expectEqual(((await response.json()) as { error?: { code?: number } }).error?.code, code, "JSON-RPC error code");
+    if (code !== undefined) expectEqual(memberOf(memberOf(await readJson(response), "error"), "code"), code, "JSON-RPC error code");
   };
 
   await checks.run("a method other than POST is rejected with 405", `${RULE}#server`, async (signal) => {

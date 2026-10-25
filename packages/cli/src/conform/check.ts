@@ -2,8 +2,10 @@
 import { setTimeout as pause } from "node:timers/promises";
 
 import fixtureJson from "../../conformance/fixture.acidcat.json" with { type: "json" };
-import { viewOf } from "@acid-cat/spec-ts";
-import type { CatalogDocument } from "@acid-cat/spec-ts";
+import { CALL_FAILURE_KINDS, viewOf } from "@acid-cat/spec-ts";
+import type { CatalogDocument, Outcome } from "@acid-cat/spec-ts";
+
+import { isObject } from "../json.ts";
 
 export interface Check {
   readonly binding: string;
@@ -15,7 +17,18 @@ export interface Check {
 }
 
 /** The conformance fixture: the catalog that each implementation serves. */
-export const fixture = fixtureJson as unknown as CatalogDocument;
+export const fixture: CatalogDocument = fixtureJson;
+
+/**
+ * True if the value is an outcome (spec/invocation.md): `{ ok: true, value }`, `{ ok: false, error }`, or a call
+ * failure `{ kind, message }` with no `ok`.
+ */
+export const isOutcome = (value: unknown): value is Outcome<unknown, unknown> => {
+  if (!isObject(value)) return false;
+  if (value.ok === true) return "value" in value;
+  if (value.ok === false) return "error" in value;
+  return !("ok" in value) && CALL_FAILURE_KINDS.some((kind) => kind === value.kind) && typeof value.message === "string";
+};
 
 /** The ids of the capabilities in the view of a target of the fixture. */
 export const idsOf = (target: string): string[] => Object.keys(viewOf(fixture, target).capabilities).sort();

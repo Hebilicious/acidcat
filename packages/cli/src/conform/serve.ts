@@ -39,7 +39,8 @@ async function answer(
 ): Promise<void> {
   const url = new URL(incoming.url ?? "/", `http://${incoming.headers.host ?? "127.0.0.1"}`);
   const prefix = prefixes.find((candidate) => url.pathname === candidate || url.pathname.startsWith(`${candidate}/`));
-  if (prefix === undefined) {
+  const handler = prefix === undefined ? undefined : routes[prefix];
+  if (handler === undefined) {
     outgoing.writeHead(404).end();
     return;
   }
@@ -53,14 +54,12 @@ async function answer(
     else if (value !== undefined) headers.set(name, value);
   }
   const hasBody = incoming.method !== "GET" && incoming.method !== "HEAD";
-  const request = new Request(url, {
-    method: incoming.method ?? "GET",
-    headers,
-    signal: abort.signal,
-    ...(hasBody ? { body: incoming as unknown as ReadableStream, duplex: "half" } : {}),
-  } as RequestInit);
+  const init: RequestInit = { method: incoming.method ?? "GET", headers, signal: abort.signal };
+  // A request with a stream body must have `duplex: "half"`. The type RequestInit of the DOM library does not declare it.
+  const withBody = (): RequestInit & { readonly duplex: "half" } => ({ ...init, body: bodyOf(incoming), duplex: "half" });
+  const request = new Request(url, hasBody ? withBody() : init);
   try {
-    const response = await routes[prefix]!(request);
+    const response = await handler(request);
     outgoing.writeHead(response.status, Object.fromEntries(response.headers));
     if (response.body === null) {
       outgoing.end();
@@ -72,4 +71,42 @@ async function answer(
     if (!outgoing.headersSent) outgoing.writeHead(500);
     outgoing.end();
   }
+}
+
+/**
+ * The body of an incoming request, as a web stream. The stream reads the request only when the handler reads the body,
+ * and the request pauses after each chunk until the handler reads again. A request that the handler does not read stays
+ * unread, so that Node.js discards it after the response. When the handler cancels the stream, the request discards the
+ * rest of its body.
+ */
+function bodyOf(incoming: IncomingMessage): ReadableStream<Uint8Array> {
+  let open = true;
+  let reading = false;
+  const close = (end: () => void) => {
+    if (open) end();
+    open = false;
+  };
+  return new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (!reading) {
+          reading = true;
+          incoming.on("data", (chunk: unknown) => {
+            if (!open) return;
+            if (!(chunk instanceof Uint8Array)) return close(() => controller.error(new TypeError("a chunk of the request body is not bytes")));
+            controller.enqueue(chunk);
+            incoming.pause();
+          });
+          incoming.on("end", () => close(() => controller.close()));
+          incoming.on("error", (error) => close(() => controller.error(error)));
+        }
+        incoming.resume();
+      },
+      cancel() {
+        open = false;
+        incoming.resume();
+      },
+    },
+    { highWaterMark: 0 },
+  );
 }
