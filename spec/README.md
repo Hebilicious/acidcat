@@ -46,7 +46,7 @@ These terms have these meanings in all documents.
 | [Extensions](extensions/README.md) | Optional conventions: attachments, pagination |
 | [Conformance](conformance.md) | The rules for a conforming catalog, provider and binding |
 
-[`examples/aircon.pkl`](../examples/aircon.pkl) is a full catalog for an air conditioner. [`schemas/`](../schemas) has the JSON Schemas for the catalog and for outcomes.
+[`examples/aircon/catalog/aircon.pkl`](../examples/aircon/catalog/aircon.pkl) is a full catalog for an air conditioner. [`schemas/`](../schemas) has the JSON Schemas for the catalog and for outcomes.
 
 ## Conventions
 

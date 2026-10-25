@@ -10,5 +10,5 @@ tasks:
     description: "Rebuild the example catalogs and the edge-case catalog, byte for byte."
     command: "go"
     args: ["test", "./..."]
-    inputs: ["**/*.go", "go.mod", "/examples/*.acidcat.json", "examples/**/*.acidcat.json", "testdata/**/*"]
+    inputs: ["**/*.go", "go.mod", "examples/**/*.acidcat.json", "testdata/**/*"]
     toolchains: ["system"]

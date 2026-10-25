@@ -84,7 +84,7 @@ try {
   );
   run("pnpm", ["install"]);
 
-  run(path.join(project, "node_modules/.bin/acid-cat"), ["check", path.join(root, "examples/aircon.acidcat.json")]);
+  run(path.join(project, "node_modules/.bin/acid-cat"), ["check", path.join(root, "examples/aircon/catalog/aircon.acidcat.json")]);
 
   const pages = {
     "main entry point": `import { Session, Handles, WebMcp } from "@acid-cat/core-effect";`,

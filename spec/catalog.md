@@ -29,7 +29,7 @@ A **catalog** is a JSON document. It tells what an application can do, and which
 }
 ```
 
-The full example is [`examples/aircon.acidcat.json`](../examples/aircon.acidcat.json). Its source is [`examples/aircon.pkl`](../examples/aircon.pkl).
+The full example is [`examples/aircon/catalog/aircon.acidcat.json`](../examples/aircon/catalog/aircon.acidcat.json). Its source is [`examples/aircon/catalog/aircon.pkl`](../examples/aircon/catalog/aircon.pkl).
 
 ## Build time and run time
 

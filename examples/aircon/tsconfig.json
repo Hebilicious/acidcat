@@ -1,0 +1,4 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["catalog", "core-ts", "core-effect", "apis", "test"]
+}

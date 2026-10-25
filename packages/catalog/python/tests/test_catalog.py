@@ -7,18 +7,12 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE.parent / "examples"))
 
 from acid_cat_catalog import Catalog, CatalogError  # noqa: E402
-from aircon import aircon_catalog  # noqa: E402
 from weather import weather_catalog  # noqa: E402
 
 PACKAGE = HERE.parent
-ROOT = PACKAGE.parent.parent.parent
 
 
 class CatalogTest(unittest.TestCase):
-    def test_writes_the_same_aircon_catalog_as_pkl(self) -> None:
-        expected = (ROOT / "examples" / "aircon.acidcat.json").read_text(encoding="utf-8")
-        self.assertEqual(aircon_catalog().render(), expected)
-
     def test_writes_the_weather_catalog_in_canonical_form(self) -> None:
         expected = (PACKAGE / "examples" / "weather.acidcat.json").read_text(encoding="utf-8")
         self.assertEqual(weather_catalog().render(), expected)

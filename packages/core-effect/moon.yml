@@ -21,10 +21,10 @@ tasks:
     description: "Test sessions, handles and the MCP, HTTP, CLI and WebMCP bindings, with the test applications of the package and the air conditioner."
     command: "node"
     args: ["--test", "--test-timeout=60000", "test/"]
-    inputs: ["src/**/*.ts", "test/**/*.ts", "examples/**/*.ts", "/examples/*.acidcat.json", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/cli/src/**/*.ts", "/packages/cli/conformance/*.acidcat.json"]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/cli/src/**/*.ts", "/packages/cli/conformance/*.acidcat.json"]
 
   typecheck:
-    description: "Type-check the sources, tests and examples."
+    description: "Type-check the sources and tests."
     command: "tsc"
     args: ["-p", "."]
-    inputs: ["src/**/*.ts", "test/**/*.ts", "examples/**/*.ts", "tsconfig.json", "/tsconfig.base.json"]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "tsconfig.json", "/tsconfig.base.json"]

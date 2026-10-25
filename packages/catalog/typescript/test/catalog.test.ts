@@ -3,17 +3,12 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { Catalog } from "../src/index.ts";
-import { airconCatalog } from "../examples/aircon.ts";
 import { libraryCatalog } from "../examples/library.ts";
 
 /** Reads a file. The path is relative to this package. */
 function expected(path: string): string {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf-8");
 }
-
-test("the library writes the same air-conditioner catalog as Pkl", () => {
-  assert.equal(airconCatalog().render(), expected("../../../examples/aircon.acidcat.json"));
-});
 
 test("the library writes the lending-library catalog in canonical form", () => {
   assert.equal(libraryCatalog().render(), expected("examples/library.acidcat.json"));

@@ -1,0 +1,46 @@
+language: "typescript"
+layer: "application"
+
+project:
+  title: "@acid-cat/example-aircon"
+  description: "An air conditioner, described once and served to every surface: its catalog in five languages, its application on both cores with a command line each, and APIs built on it. Not published."
+
+toolchains:
+  default: ["javascript", "node", "pnpm"]
+
+tasks:
+  test:
+    description: "Write the catalog in each language, run the application on both cores and their command lines, and call each API."
+    command: "node"
+    args: ["--test", "--test-timeout=60000", "test/"]
+    inputs:
+      - "catalog/**/*"
+      - "core-ts/**/*.ts"
+      - "core-effect/**/*.ts"
+      - "apis/**/*.ts"
+      - "test/**/*.ts"
+      - "/packages/catalog/typescript/src/**/*.ts"
+      - "/packages/catalog/python/acid_cat_catalog/**/*.py"
+      - "/packages/catalog/go/**/*.go"
+      - "/packages/catalog/rust/src/**/*.rs"
+      - "/packages/core-ts/src/**/*.ts"
+      - "/packages/core-effect/src/**/*.ts"
+      - "/packages/spec-ts/src/**/*.ts"
+      - "/packages/cli/src/**/*.ts"
+
+  typecheck:
+    description: "Type-check the sources and tests."
+    command: "tsc"
+    args: ["-p", "."]
+    inputs:
+      - "catalog/**/*.ts"
+      - "core-ts/**/*.ts"
+      - "core-effect/**/*.ts"
+      - "apis/**/*.ts"
+      - "test/**/*.ts"
+      - "tsconfig.json"
+      - "/tsconfig.base.json"
+      - "/packages/catalog/typescript/src/**/*.ts"
+      - "/packages/core-ts/src/**/*.ts"
+      - "/packages/core-effect/src/**/*.ts"
+      - "/packages/spec-ts/src/**/*.ts"

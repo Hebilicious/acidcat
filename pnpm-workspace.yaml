@@ -4,7 +4,7 @@ packages:
   - "packages/core-effect"
   - "packages/core-ts"
   - "packages/catalog/typescript"
-  - "examples/apis"
+  - "examples/aircon"
 
 # Every dependency is pinned once, here. Packages name `catalog:` and never a version.
 allowBuilds:

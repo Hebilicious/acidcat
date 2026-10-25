@@ -7,17 +7,8 @@ import (
 	"testing"
 
 	"github.com/Hebilicious/acidcat/packages/catalog/go"
-	"github.com/Hebilicious/acidcat/packages/catalog/go/examples/aircon"
 	"github.com/Hebilicious/acidcat/packages/catalog/go/examples/garage"
 )
-
-func TestWritesTheSameAirconCatalogAsPkl(t *testing.T) {
-	rendered, err := aircon.Catalog().Render()
-	if err != nil {
-		t.Fatal(err)
-	}
-	expectBytes(t, rendered, "../../../examples/aircon.acidcat.json")
-}
 
 func TestWritesTheGarageCatalogInCanonicalForm(t *testing.T) {
 	rendered, err := garage.Catalog().Render()

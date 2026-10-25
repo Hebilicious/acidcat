@@ -37,9 +37,9 @@ tasks:
     command: "node"
     args: ["scripts/check-packages.ts"]
     deps: ["spec-ts:build", "catalog-typescript:build", "cli:build", "core-effect:build", "core-ts:build"]
-    inputs: ["scripts/check-packages.ts", "scripts/npm-packages.ts", "examples/aircon.acidcat.json", "packages/*/test/**/*.ts", "packages/*/package.json", "packages/*/dist/**/*", "packages/catalog/typescript/package.json", "packages/catalog/typescript/dist/**/*", "tsconfig.base.json"]
+    inputs: ["scripts/check-packages.ts", "scripts/npm-packages.ts", "examples/aircon/catalog/aircon.acidcat.json", "packages/*/test/**/*.ts", "packages/*/package.json", "packages/*/dist/**/*", "packages/catalog/typescript/package.json", "packages/catalog/typescript/dist/**/*", "tsconfig.base.json"]
 
   verify:
     description: "Every check: the examples and fixtures, the toolchain, and every catalog library."
     command: "noop"
-    deps: ["check", "packages", "spec-ts:test", "spec-ts:typecheck", "cli:test", "cli:typecheck", "core-effect:test", "core-effect:typecheck", "core-ts:test", "core-ts:typecheck", "example-apis:test", "example-apis:typecheck", "catalog-typescript:test", "catalog-typescript:typecheck", "catalog-python:test", "catalog-python:package", "catalog-go:test", "catalog-rust:test", "catalog-rust:package", "catalog-pkl:test"]
+    deps: ["check", "packages", "spec-ts:test", "spec-ts:typecheck", "cli:test", "cli:typecheck", "core-effect:test", "core-effect:typecheck", "core-ts:test", "core-ts:typecheck", "example-aircon:test", "example-aircon:typecheck", "catalog-typescript:test", "catalog-typescript:typecheck", "catalog-python:test", "catalog-python:package", "catalog-go:test", "catalog-rust:test", "catalog-rust:package", "catalog-pkl:test"]
