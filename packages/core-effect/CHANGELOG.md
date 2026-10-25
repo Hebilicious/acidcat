@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.4.0...@acid-cat/core-effect@0.5.0) (2026-10-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cores:** `@acid-cat/core-ts` removes `getHandle` and `Handles`. Use `session.handle(capability)`. `session.handles` is a `ReadonlyMap<string, Handle>`.
+* **cores:** `@acid-cat/spec-ts` `fail` takes the whole failure: `fail({ _tag: "Offline" })` instead of `fail("Offline")`. The old signature accepted a type for the data that the call did not give.
+
+### Features
+
+* **cores:** call a capability with session.call and session.handle, and close a session with await using ([#70](https://github.com/Hebilicious/acidcat/issues/70)) ([0e1dbb5](https://github.com/Hebilicious/acidcat/commit/0e1dbb5c8c31c42d75969b3147ccbea04063d886))
+
+
+### Code Refactoring
+
+* **cores:** type capabilities, sessions and failures so that no code needs a type assertion ([#67](https://github.com/Hebilicious/acidcat/issues/67)) ([6841a29](https://github.com/Hebilicious/acidcat/commit/6841a29031894c8e7df29bcf47d670ac18046ba1))
+
 ## [0.4.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.3.1...@acid-cat/core-effect@0.4.0) (2026-10-16)
 
 
