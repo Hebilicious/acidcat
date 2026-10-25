@@ -12,18 +12,20 @@ cargo add acid-cat-catalog
 use acid_cat_catalog::{Capability, Catalog, Target};
 use serde_json::json;
 
-let mut catalog = Catalog::new(Some("Living-room air conditioner"), None);
-catalog.target("cli", Target { bindings: vec!["cli".into()], ..Target::default() });
-let offline = catalog.r#type("Offline", json!({ "type": "object" }));
-catalog.capability("aircon.power.set", Capability {
-    description: "Turn the unit on or off.".into(),
-    audience: vec!["cli".into()],
-    input: Some(json!({ "type": "object", "required": ["on"], "properties": { "on": { "type": "boolean" } } })),
-    failures: vec![("Offline".into(), offline)],
+let mut catalog = Catalog::new(Some("Music player"), None);
+catalog.target("remote", Target { bindings: vec!["cli".into()], ..Target::default() });
+let unknown = catalog.r#type("UnknownTrack", json!({ "type": "object" }));
+catalog.capability("player.track.play", Capability {
+    description: "Play a track now.".into(),
+    audience: vec!["remote".into()],
+    input: Some(json!({ "type": "object", "required": ["id"], "properties": { "id": { "type": "string" } } })),
+    failures: vec![("UnknownTrack".into(), unknown)],
     ..Capability::default()
 });
 
 std::fs::write("acidcat.catalog.json", catalog.render().expect("the catalog conforms"))?;
 ```
 
-`validate()` lists the rules a catalog breaks, and `render()` returns them as an error. The full example is [`examples/aircon.rs`](examples/aircon.rs). Test with `moon run catalog-rust:test`.
+`validate()` lists the rules a catalog breaks, and `render()` returns them as an error. The full example is [`examples/player.rs`](examples/player.rs), a music player. Run it with `cargo run --example player`.
+
+The tests compare the output of the library with files in this directory: the music-player catalog [`examples/player.acidcat.json`](examples/player.acidcat.json), and a catalog of values that languages write differently, [`tests/fixtures/edge.acidcat.json`](tests/fixtures/edge.acidcat.json). A test also compares [`examples/aircon.rs`](examples/aircon.rs) with the air-conditioner catalog of the repository. Each committed catalog file is in [canonical form](../../../spec/catalog.md#canonical-form), and the root `moon run check` checks this. Thus all catalog libraries agree on the canonical form, and they do not share a test file. Test with `moon run catalog-rust:test`.

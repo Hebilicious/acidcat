@@ -1,0 +1,216 @@
+{
+  "acidcat": "0.1",
+  "title": "Corner bakery",
+  "description": "Take orders for bread, run the till and start the ovens of one bakery.",
+  "targets": {
+    "kitchen": {
+      "bindings": [
+        "cli"
+      ],
+      "description": "The bakers, through a command line in the kitchen."
+    },
+    "mcp": {
+      "bindings": [
+        "mcp"
+      ],
+      "description": "Agents that order for a customer, through an MCP server."
+    },
+    "shop": {
+      "bindings": [
+        "typescript"
+      ],
+      "description": "The web shop where customers order bread."
+    },
+    "till": {
+      "bindings": [
+        "typescript"
+      ],
+      "description": "The till at the counter."
+    }
+  },
+  "$defs": {
+    "Loaf": {
+      "enum": [
+        "baguette",
+        "sourdough",
+        "rye",
+        "brioche"
+      ]
+    },
+    "Order": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "loaf": {
+          "$ref": "#/$defs/Loaf"
+        },
+        "quantity": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/OrderStatus"
+        }
+      },
+      "required": [
+        "id",
+        "loaf",
+        "quantity",
+        "status"
+      ],
+      "type": "object"
+    },
+    "OrderStatus": {
+      "enum": [
+        "waiting",
+        "baking",
+        "ready",
+        "collected"
+      ]
+    },
+    "SoldOut": {
+      "properties": {
+        "loaf": {
+          "$ref": "#/$defs/Loaf"
+        }
+      },
+      "required": [
+        "loaf"
+      ],
+      "type": "object"
+    }
+  },
+  "capabilities": {
+    "bakery.menu.list": {
+      "description": "List the loaves that the bakery sells today.",
+      "audience": [
+        "shop",
+        "till",
+        "mcp"
+      ],
+      "output": {
+        "properties": {
+          "loaves": {
+            "items": {
+              "$ref": "#/$defs/Loaf"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "loaves"
+        ],
+        "type": "object"
+      },
+      "readOnly": true
+    },
+    "bakery.order.get": {
+      "description": "Read an order and its status.",
+      "audience": [
+        "shop",
+        "till",
+        "mcp"
+      ],
+      "input": {
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "$ref": "#/$defs/Order"
+      },
+      "failures": {
+        "NotFound": {
+          "description": "No order has this id.",
+          "type": "object"
+        }
+      },
+      "readOnly": true
+    },
+    "bakery.order.place": {
+      "description": "Order a number of loaves of one kind.",
+      "audience": [
+        "shop",
+        "mcp"
+      ],
+      "input": {
+        "properties": {
+          "loaf": {
+            "$ref": "#/$defs/Loaf"
+          },
+          "quantity": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "loaf",
+          "quantity"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "$ref": "#/$defs/Order"
+      },
+      "failures": {
+        "SoldOut": {
+          "$ref": "#/$defs/SoldOut"
+        }
+      }
+    },
+    "bakery.oven.start": {
+      "description": "Heat the oven to a temperature in degrees Celsius.",
+      "audience": [
+        "kitchen"
+      ],
+      "input": {
+        "properties": {
+          "celsius": {
+            "maximum": 260,
+            "minimum": 150,
+            "type": "number"
+          }
+        },
+        "required": [
+          "celsius"
+        ],
+        "type": "object"
+      },
+      "failures": {
+        "OvenBusy": {
+          "description": "The oven bakes another batch.",
+          "type": "object"
+        }
+      }
+    },
+    "bakery.price.set": {
+      "description": "Set the price of one loaf, in cents.",
+      "audience": [
+        "till"
+      ],
+      "input": {
+        "properties": {
+          "cents": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "loaf": {
+            "$ref": "#/$defs/Loaf"
+          }
+        },
+        "required": [
+          "loaf",
+          "cents"
+        ],
+        "type": "object"
+      }
+    }
+  }
+}

@@ -1,0 +1,235 @@
+{
+  "acidcat": "0.1",
+  "title": "Neighbourhood lending library",
+  "description": "Find books, lend them to members and take them back.",
+  "targets": {
+    "agents": {
+      "bindings": [
+        "mcp"
+      ],
+      "description": "Assistants, through an MCP server."
+    },
+    "desk": {
+      "bindings": [
+        "cli"
+      ],
+      "description": "The terminal at the front desk, for librarians.",
+      "options": {
+        "color": false,
+        "command": "library"
+      }
+    },
+    "members": {
+      "bindings": [
+        "typescript"
+      ],
+      "description": "The web app that members use to find and borrow books."
+    }
+  },
+  "$defs": {
+    "Book": {
+      "properties": {
+        "authors": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "isbn": {
+          "pattern": "^97[89][0-9]{10}$",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "year": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "isbn",
+        "title",
+        "authors",
+        "available"
+      ],
+      "type": "object"
+    },
+    "Loan": {
+      "properties": {
+        "due": {
+          "format": "date",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isbn": {
+          "pattern": "^97[89][0-9]{10}$",
+          "type": "string"
+        },
+        "member": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "isbn",
+        "member",
+        "due"
+      ],
+      "type": "object"
+    },
+    "NotFound": {
+      "properties": {
+        "what": {
+          "enum": [
+            "book",
+            "member",
+            "loan"
+          ]
+        }
+      },
+      "required": [
+        "what"
+      ],
+      "type": "object"
+    }
+  },
+  "capabilities": {
+    "library.books.search": {
+      "description": "Find books by title or author. Return at most limit books.",
+      "audience": [
+        "members",
+        "desk",
+        "agents"
+      ],
+      "input": {
+        "properties": {
+          "availableOnly": {
+            "default": false,
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 10,
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "minLength": 2,
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "items": {
+          "$ref": "#/$defs/Book"
+        },
+        "type": "array"
+      },
+      "readOnly": true
+    },
+    "library.loan.create": {
+      "description": "Lend a book to a member for three weeks.",
+      "audience": [
+        "desk"
+      ],
+      "input": {
+        "properties": {
+          "isbn": {
+            "pattern": "^97[89][0-9]{10}$",
+            "type": "string"
+          },
+          "member": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "isbn",
+          "member"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "$ref": "#/$defs/Loan"
+      },
+      "failures": {
+        "NotFound": {
+          "$ref": "#/$defs/NotFound"
+        },
+        "OnLoan": {
+          "description": "Another member has the book.",
+          "properties": {
+            "back": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      }
+    },
+    "library.loan.return": {
+      "description": "Take a book back from a member.",
+      "audience": [
+        "desk"
+      ],
+      "input": {
+        "properties": {
+          "loan": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "loan"
+        ],
+        "type": "object"
+      },
+      "failures": {
+        "Late": {
+          "properties": {
+            "fee": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "fee"
+          ],
+          "type": "object"
+        },
+        "NotFound": {
+          "$ref": "#/$defs/NotFound"
+        }
+      }
+    },
+    "library.loans.list": {
+      "description": "List the loans of the member who calls.",
+      "audience": [
+        "members",
+        "agents"
+      ],
+      "output": {
+        "items": {
+          "$ref": "#/$defs/Loan"
+        },
+        "type": "array"
+      },
+      "readOnly": true,
+      "state": {
+        "items": {
+          "$ref": "#/$defs/Loan"
+        },
+        "type": "array"
+      }
+    }
+  }
+}

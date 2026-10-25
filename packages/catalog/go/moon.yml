@@ -7,8 +7,8 @@ project:
 
 tasks:
   test:
-    description: "Rebuild the air-conditioner catalog and the canonical fixture, byte for byte."
+    description: "Rebuild the example catalogs and the edge-case catalog, byte for byte."
     command: "go"
     args: ["test", "./..."]
-    inputs: ["**/*.go", "go.mod", "/examples/*.acidcat.json", "/packages/catalog/fixtures/**/*"]
+    inputs: ["**/*.go", "go.mod", "/examples/*.acidcat.json", "examples/**/*.acidcat.json", "testdata/**/*"]
     toolchains: ["system"]

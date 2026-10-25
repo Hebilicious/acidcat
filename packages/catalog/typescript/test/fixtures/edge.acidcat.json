@@ -1,0 +1,50 @@
+{
+  "acidcat": "0.1",
+  "targets": {
+    "shell": {
+      "bindings": [
+        "cli"
+      ]
+    }
+  },
+  "capabilities": {
+    "edge.values.write": {
+      "description": "Text: \"quotes\", a\\b, line\nbreak, bell\u0007, unit\u001f, del, para , ü, 🐈.",
+      "audience": [
+        "shell"
+      ],
+      "output": {
+        "bFirst": "b",
+        "examples": [
+          {
+            "big": 98765432109876540000,
+            "integer": 7,
+            "large": 7.5e+22,
+            "negative": -1.5e-12,
+            "quarter": 0.25,
+            "small": 0.0000035,
+            "tiny": 4e-9,
+            "whole": 250,
+            "zero": 0
+          }
+        ],
+        "properties": {
+          "U": {
+            "type": "string"
+          },
+          "u": {
+            "type": "string"
+          },
+          "Ü": {
+            "type": "string"
+          },
+          "ü": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "yLast": "y"
+      }
+    }
+  }
+}

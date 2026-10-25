@@ -1,0 +1,166 @@
+{
+  "acidcat": "0.1",
+  "title": "Backyard greenhouse",
+  "description": "Watch the climate of one greenhouse, open its vents and water its beds.",
+  "targets": {
+    "assistant": {
+      "bindings": [
+        "mcp"
+      ],
+      "description": "Assistants, through an MCP server."
+    },
+    "automation": {
+      "bindings": [
+        "http"
+      ],
+      "description": "Rules that run on the home server."
+    },
+    "panel": {
+      "bindings": [
+        "typescript"
+      ],
+      "description": "The touch panel at the greenhouse door.",
+      "options": {
+        "refreshSeconds": 15,
+        "theme": "high-contrast"
+      }
+    }
+  },
+  "$defs": {
+    "Bed": {
+      "enum": [
+        "tomatoes",
+        "herbs",
+        "seedlings"
+      ]
+    },
+    "Climate": {
+      "properties": {
+        "celsius": {
+          "type": "number"
+        },
+        "humidity": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+        },
+        "soilMoisture": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        "ventPercent": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "celsius",
+        "humidity",
+        "ventPercent"
+      ],
+      "type": "object"
+    },
+    "TankEmpty": {
+      "description": "The rain-water tank has too little water.",
+      "properties": {
+        "litres": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "capabilities": {
+    "greenhouse.beds.water": {
+      "description": "Water one bed or more for a number of minutes.",
+      "audience": [
+        "panel",
+        "automation"
+      ],
+      "input": {
+        "properties": {
+          "beds": {
+            "items": {
+              "$ref": "#/$defs/Bed"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "minutes": {
+            "maximum": 30,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "mist": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "beds"
+        ],
+        "type": "object"
+      },
+      "failures": {
+        "TankEmpty": {
+          "$ref": "#/$defs/TankEmpty"
+        }
+      }
+    },
+    "greenhouse.climate.get": {
+      "description": "Read the air temperature, the humidity, the vent opening and the soil moisture of each bed.",
+      "audience": [
+        "panel",
+        "automation",
+        "assistant"
+      ],
+      "output": {
+        "$ref": "#/$defs/Climate"
+      },
+      "readOnly": true,
+      "state": {
+        "$ref": "#/$defs/Climate"
+      }
+    },
+    "greenhouse.vents.set": {
+      "description": "Open the roof vents to a percentage. Zero closes them.",
+      "audience": [
+        "panel",
+        "automation",
+        "assistant"
+      ],
+      "input": {
+        "properties": {
+          "percent": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "percent"
+        ],
+        "type": "object"
+      },
+      "failures": {
+        "WindTooStrong": {
+          "properties": {
+            "gustKph": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "gustKph"
+          ],
+          "type": "object"
+        }
+      }
+    }
+  }
+}

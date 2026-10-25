@@ -1,0 +1,50 @@
+{
+  "acidcat": "0.1",
+  "targets": {
+    "speaker": {
+      "bindings": [
+        "cli"
+      ]
+    }
+  },
+  "capabilities": {
+    "edge.values.print": {
+      "description": "Text: \"loud\", E:\\music, newline\n, back\b, gs\u001d, del, ps , ø, 🎵.",
+      "audience": [
+        "speaker"
+      ],
+      "output": {
+        "dKey": "d",
+        "examples": [
+          {
+            "big": 161803398874989500000,
+            "integer": 440,
+            "large": 4.4e+23,
+            "negative": -3.5e-9,
+            "small": 0.0000099,
+            "tenth": 0.1,
+            "tiny": 8.5e-12,
+            "whole": 128,
+            "zero": 0
+          }
+        ],
+        "properties": {
+          "0": {
+            "type": "string"
+          },
+          "o": {
+            "type": "string"
+          },
+          "Ø": {
+            "type": "string"
+          },
+          "ø": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "xKey": "x"
+      }
+    }
+  }
+}

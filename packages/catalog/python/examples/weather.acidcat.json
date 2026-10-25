@@ -1,0 +1,183 @@
+{
+  "acidcat": "0.1",
+  "title": "Hilltop weather station",
+  "description": "Read the sensors of one outdoor weather station and keep them accurate.",
+  "targets": {
+    "agents": {
+      "bindings": [
+        "mcp"
+      ],
+      "description": "Assistants, through an MCP server."
+    },
+    "dashboard": {
+      "bindings": [
+        "typescript"
+      ],
+      "description": "The wall screen in the kitchen that shows the weather now."
+    },
+    "logger": {
+      "bindings": [
+        "http"
+      ],
+      "description": "Scripts that store readings for later study.",
+      "options": {
+        "basePath": "/station",
+        "rateLimit": {
+          "perMinute": 30
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Reading": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "celsius": {
+          "type": "number"
+        },
+        "hectopascals": {
+          "type": "number"
+        },
+        "humidity": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+        },
+        "windKph": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "at",
+        "celsius",
+        "humidity",
+        "hectopascals"
+      ],
+      "type": "object"
+    },
+    "Sensor": {
+      "enum": [
+        "thermometer",
+        "hygrometer",
+        "barometer",
+        "anemometer"
+      ]
+    },
+    "SensorFault": {
+      "properties": {
+        "detail": {
+          "type": "string"
+        },
+        "sensor": {
+          "$ref": "#/$defs/Sensor"
+        }
+      },
+      "required": [
+        "sensor"
+      ],
+      "type": "object"
+    }
+  },
+  "capabilities": {
+    "weather.history.list": {
+      "description": "List the readings of a past period, one for each hour.",
+      "audience": [
+        "logger",
+        "agents"
+      ],
+      "input": {
+        "properties": {
+          "from": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "hours": {
+            "default": 24,
+            "maximum": 168,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sensors": {
+            "items": {
+              "$ref": "#/$defs/Sensor"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "withWind": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "from"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "items": {
+          "$ref": "#/$defs/Reading"
+        },
+        "type": "array"
+      },
+      "readOnly": true
+    },
+    "weather.reading.get": {
+      "description": "Read the latest value of every sensor.",
+      "audience": [
+        "dashboard",
+        "logger",
+        "agents"
+      ],
+      "output": {
+        "$ref": "#/$defs/Reading"
+      },
+      "failures": {
+        "SensorFault": {
+          "$ref": "#/$defs/SensorFault"
+        }
+      },
+      "readOnly": true,
+      "state": {
+        "$ref": "#/$defs/Reading"
+      }
+    },
+    "weather.sensor.calibrate": {
+      "description": "Correct one sensor by a fixed offset.",
+      "audience": [
+        "logger"
+      ],
+      "input": {
+        "properties": {
+          "offset": {
+            "maximum": 5,
+            "minimum": -5,
+            "type": "number"
+          },
+          "sensor": {
+            "$ref": "#/$defs/Sensor"
+          }
+        },
+        "required": [
+          "sensor",
+          "offset"
+        ],
+        "type": "object"
+      },
+      "failures": {
+        "Busy": {
+          "description": "The station is sending a reading. Try again in a few seconds.",
+          "type": "object"
+        },
+        "SensorFault": {
+          "$ref": "#/$defs/SensorFault"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "acidcat": "0.1",
+  "targets": {
+    "terminal": {
+      "bindings": [
+        "cli"
+      ]
+    }
+  },
+  "capabilities": {
+    "edge.numbers.show": {
+      "description": "Text: \"inner\", C:\\temp, cr\r, form\f, nul\u0000, esc\u001b, ls , ñ, 🌦.",
+      "audience": [
+        "terminal"
+      ],
+      "output": {
+        "AKey": "upper",
+        "examples": [
+          {
+            "big": 31415926535897930000,
+            "eighth": 0.125,
+            "integer": 1013,
+            "large": 2.5e+300,
+            "negative": -9.75e-8,
+            "small": 0.00042,
+            "tiny": 6.5e-11,
+            "whole": 3,
+            "zero": 0
+          }
+        ],
+        "mKey": "middle",
+        "properties": {
+          "N": {
+            "type": "string"
+          },
+          "n": {
+            "type": "string"
+          },
+          "ñ": {
+            "type": "string"
+          },
+          "ō": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}

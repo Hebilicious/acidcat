@@ -29,11 +29,24 @@ The libraries check the [catalog rules](../../spec/conformance.md#catalog) that 
 
 ## Identical output
 
-All libraries write catalogs in canonical form. Thus the same catalog gives the same bytes in all languages. Two files test this:
+All libraries write catalogs in canonical form. Thus the same catalog gives the same bytes in all languages.
 
-- [`examples/aircon.acidcat.json`](../../examples/aircon.acidcat.json): each library makes the air-conditioner catalog of [`examples/aircon.pkl`](../../examples/aircon.pkl), and MUST write exactly this file.
-- [`fixtures/edge.acidcat.json`](fixtures/edge.acidcat.json): numbers and strings that languages write differently by default (`16.0`, `1e-7`, `1e21`, escapes, non-ASCII keys). Each library MUST write exactly this file.
+Each library tests its own catalogs, with files in its own directory:
+
+| Library | Example catalog | Edge-case catalog |
+| --- | --- | --- |
+| TypeScript | A lending library: [`typescript/examples/library.acidcat.json`](typescript/examples/library.acidcat.json) | [`typescript/test/fixtures/edge.acidcat.json`](typescript/test/fixtures/edge.acidcat.json) |
+| Python | A weather station: [`python/examples/weather.acidcat.json`](python/examples/weather.acidcat.json) | [`python/tests/fixtures/edge.acidcat.json`](python/tests/fixtures/edge.acidcat.json) |
+| Go | A garage door: [`go/examples/garage/garage.acidcat.json`](go/examples/garage/garage.acidcat.json) | [`go/testdata/edge.acidcat.json`](go/testdata/edge.acidcat.json) |
+| Rust | A music player: [`rust/examples/player.acidcat.json`](rust/examples/player.acidcat.json) | [`rust/tests/fixtures/edge.acidcat.json`](rust/tests/fixtures/edge.acidcat.json) |
+| Pkl | A greenhouse: [`pkl/examples/greenhouse.acidcat.json`](pkl/examples/greenhouse.acidcat.json) | None. `acid-cat format` writes the canonical form of the Pkl output. |
+
+- The test of an example catalog makes the catalog with the library, and compares the output with the committed file, byte for byte.
+- An edge-case catalog holds values that languages write differently by default: a number with a zero fraction, very small and very large numbers, escapes and control characters in strings, and non-ASCII keys. Each library uses different values.
+- Each committed catalog file in the repository MUST be in canonical form. The root `moon run check` checks this. Thus all libraries agree on the canonical form, and they do not share a file.
+
+The TypeScript, Python, Go and Rust libraries also make the air-conditioner catalog of [`examples/aircon.pkl`](../../examples/aircon.pkl), and compare it with [`examples/aircon.acidcat.json`](../../examples/aircon.acidcat.json).
 
 Pkl writes JSON in its own order. Thus `moon run examples` sends the Pkl output through `acid-cat format`.
 
-To add a language, use the same five steps and the same rules, write the canonical form, and pass the two tests.
+To add a language, use the same five steps and the same rules, and write the canonical form. Add an example catalog in a new domain and an edge-case catalog with new values, both in the directory of the library, and test the output of the library against them.

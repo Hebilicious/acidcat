@@ -7,9 +7,8 @@ project:
 
 tasks:
   test:
-    description: "Package the module. Packaging evaluates every module in the package."
-    command: "pkl"
-    args: ["project", "package", "--skip-publish-check"]
-    inputs: ["*.pkl", "PklProject", "version.txt", "LICENSE"]
+    description: "Package the module, then evaluate the greenhouse example. Packaging evaluates every module in the package."
+    script: "pkl project package --skip-publish-check && pkl eval examples/greenhouse.pkl > /dev/null"
+    inputs: ["*.pkl", "examples/*.pkl", "PklProject", "version.txt", "LICENSE"]
     outputs: [".out/**/*"]
     toolchains: ["system"]

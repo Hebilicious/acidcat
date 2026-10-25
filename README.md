@@ -143,8 +143,8 @@ CI runs `moon run verify` on each push to `main` and on each pull request. Chang
 
 | Command | Use |
 | --- | --- |
-| `moon run examples` | Write the example catalogs from Pkl, in canonical form |
-| `moon run check` | Check the examples and the test files |
+| `moon run examples` | Render every Pkl catalog, and write every catalog of the repository in canonical form |
+| `moon run check` | Check that every catalog of the repository is rendered, canonical and conforms |
 | `moon run :test` | Test all packages |
 | `moon run verify` | Do all checks and tests |
 | `pnpm exec acid-cat …` | Run the command line |

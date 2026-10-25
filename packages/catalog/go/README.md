@@ -11,17 +11,19 @@ go get github.com/Hebilicious/acidcat/packages/catalog/go
 The name of the Go package is `catalog`. Import it with `import "github.com/Hebilicious/acidcat/packages/catalog/go"`, and use it as `catalog`.
 
 ```go
-c := catalog.New("Living-room air conditioner", "")
-c.Target("cli", catalog.Target{Bindings: []string{"cli"}})
-offline := c.Type("Offline", catalog.Schema{"type": "object"})
-c.Capability("aircon.power.set", catalog.Capability{
-	Description: "Turn the unit on or off.",
-	Audience:    []string{"cli"},
-	Input:       catalog.Schema{"type": "object", "required": []any{"on"}, "properties": catalog.Schema{"on": catalog.Schema{"type": "boolean"}}},
-	Failures:    map[string]catalog.Schema{"Offline": offline},
+c := catalog.New("Garage door", "")
+c.Target("phone", catalog.Target{Bindings: []string{"typescript"}})
+obstructed := c.Type("Obstructed", catalog.Schema{"type": "object"})
+c.Capability("garage.door.open", catalog.Capability{
+	Description: "Open the door.",
+	Audience:    []string{"phone"},
+	Input:       catalog.Schema{"type": "object", "properties": catalog.Schema{"light": catalog.Schema{"type": "boolean"}}},
+	Failures:    map[string]catalog.Schema{"Obstructed": obstructed},
 })
 
 text, err := c.Render()
 ```
 
-`Validate()` lists the rules a catalog breaks, and `Render()` returns an error for one that breaks any. The full example is [`examples/aircon/aircon.go`](examples/aircon/aircon.go). Test with `moon run catalog-go:test`.
+`Validate()` lists the rules a catalog breaks, and `Render()` returns an error for one that breaks any. The full example is [`examples/garage/garage.go`](examples/garage/garage.go), a garage door.
+
+The tests compare the output of the library with files in this directory: the garage-door catalog [`examples/garage/garage.acidcat.json`](examples/garage/garage.acidcat.json), and a catalog of values that languages write differently, [`testdata/edge.acidcat.json`](testdata/edge.acidcat.json). A test also compares [`examples/aircon/aircon.go`](examples/aircon/aircon.go) with the air-conditioner catalog of the repository. Each committed catalog file is in [canonical form](../../../spec/catalog.md#canonical-form), and the root `moon run check` checks this. Thus all catalog libraries agree on the canonical form, and they do not share a test file. Test with `moon run catalog-go:test`.

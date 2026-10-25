@@ -6,33 +6,48 @@ import type { Availability, Result } from "@acid-cat/spec-ts";
 import { Context, Effect, Layer, Option, Schema, SchemaGetter, SchemaTransformation, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability, Handles, Session } from "../src/index.ts";
-import { aircon, firmwareUpdate, modeSet, Offline, PoweredOff, powerSet, Status, statusGet, Unit, unitLayer } from "../examples/aircon.ts";
 import { fixture, fixtureLayer, holdsLayer, position, Switch } from "./fixture.ts";
+import { Burnt, Lamp, lamp, lampLayer, Light, lightGet, pair, powerSet, sceneSet, Unreachable } from "./lamp.ts";
 
-const rejection = (promise: Promise<unknown>) => promise.then(() => assert.fail("the call must reject"), (error: unknown) => error);
+/** The error that a promise rejects with. */
+const rejection = (promise: Promise<unknown>) => promise.then(() => assert.fail("the promise must reject"), (error: unknown) => error);
+
+/** The call failure that a promise rejects with. */
+const callFailure = (promise: Promise<unknown>) =>
+  promise.then(
+    () => assert.fail("the call must reject"),
+    (error: unknown) => {
+      assert.ok(error instanceof CallFailureError);
+      return error;
+    },
+  );
+
+/** The handle of an id. The handle must exist. */
+const handleOf = (handles: ReadonlyMap<string, Handles.Handle>, id: string) => {
+  const handle = handles.get(id);
+  assert.ok(handle, `there is a handle for ${id}`);
+  return handle;
+};
 
 test("handles give results, and reject call failures with their kind", async () => {
   const session = await Handles.open(fixture, fixtureLayer, { target: "app" });
   try {
     assert.deepEqual([...session.handles.keys()], Object.keys(session.view.capabilities));
-    const handle = (id: string) => session.handles.get(id)!;
+    const handle = (id: string) => handleOf(session.handles, id);
 
     assert.deepEqual(await handle("fixture.echo").execute({ text: "hi" }), { ok: true, value: { text: "hi" } });
     assert.deepEqual(await handle("fixture.echo").invokeExternal({ text: "hi" }), { ok: true, value: { text: "hi" } });
-    const refused = await handle("fixture.refuse").execute({});
-    assert.equal(refused.ok, false);
-    assert.equal((refused as { error: { _tag: string } }).error._tag, "Refused");
+    assert.deepEqual(await handle("fixture.refuse").execute({}), { ok: false, error: { _tag: "Refused", reason: "No." } });
 
-    const invalid = await rejection(handle("fixture.echo").invokeExternal({ text: 1 }));
-    assert.ok(invalid instanceof CallFailureError);
+    const invalid = await callFailure(handle("fixture.echo").invokeExternal({ text: 1 }));
     assert.equal(invalid.kind, "invalid-input");
     assert.equal(invalid.name, "TypeError");
-    assert.equal(((await rejection(handle("fixture.crash").execute({}))) as CallFailureError).kind, "internal");
+    assert.equal((await callFailure(handle("fixture.crash").execute({}))).kind, "internal");
 
     const controller = new AbortController();
-    const held = rejection(handle("fixture.hold").execute({ key: "cancelled" }, { signal: controller.signal }));
+    const held = callFailure(handle("fixture.hold").execute({ key: "cancelled" }, { signal: controller.signal }));
     setTimeout(() => controller.abort(), 20);
-    const cancelled = (await held) as CallFailureError;
+    const cancelled = await held;
     assert.equal(cancelled.kind, "cancelled");
     assert.equal(cancelled.name, "AbortError");
   } finally {
@@ -44,12 +59,12 @@ test("a handle reads its availability when it is asked, and follows it only whil
   const switchRef = Effect.runSync(SubscriptionRef.make(position(true)));
   const turn = (on: boolean) => Effect.runSync(SubscriptionRef.set(switchRef, position(on)));
   const session = await Handles.open(fixture, Layer.merge(Layer.succeed(Switch, switchRef), holdsLayer()), { target: "app" });
-  const toggle = session.handles.get("fixture.toggle")!;
+  const toggle = handleOf(session.handles, "fixture.toggle");
   assert.equal(switchRef.pubsub.subscribers.size, 0);
 
   turn(false);
   assert.deepEqual(toggle.availability.getSnapshot(), position(false));
-  assert.equal(((await rejection(toggle.execute({}))) as CallFailureError).kind, "unavailable");
+  assert.equal((await callFailure(toggle.execute({}))).kind, "unavailable");
 
   const seen: Availability[] = [];
   const first = toggle.availability.subscribe((value) => seen.push(value));
@@ -69,35 +84,38 @@ test("a handle reads its availability when it is asked, and follows it only whil
 
   toggle.availability.subscribe(() => undefined);
   assert.equal(switchRef.pubsub.subscribers.size, 1);
-  const held = rejection(session.handles.get("fixture.hold")!.execute({ key: "pending" }));
+  const held = callFailure(handleOf(session.handles, "fixture.hold").execute({ key: "pending" }));
   await session.dispose();
   assert.equal(switchRef.pubsub.subscribers.size, 0);
-  assert.equal(((await held) as CallFailureError).kind, "cancelled");
+  assert.equal((await held).kind, "cancelled");
   assert.ok(session.signal.aborted);
 });
 
 test("a handle gives the state as copies, and follows it only while it has listeners", async () => {
-  const unit = Context.get(Effect.runSync(Effect.scoped(Layer.build(unitLayer))), Unit);
-  const session = await Handles.open(aircon, Layer.succeed(Unit, unit), { target: "app" });
+  const device = Context.get(Effect.runSync(Effect.scoped(Layer.build(lampLayer))), Lamp);
+  const session = await Handles.open(lamp, Layer.succeed(Lamp, device), { target: "app" });
   try {
-    const snapshot = session.handles.get("aircon.status.get")!.snapshot!;
-    const first = snapshot.getSnapshot() as { power: boolean };
-    assert.equal(first.power, false);
-    first.power = true;
-    assert.equal((snapshot.getSnapshot() as { power: boolean }).power, false);
-    assert.equal(unit.status.pubsub.subscribers.size, 0);
+    const snapshot = Handles.get(session.handles, lightGet).snapshot;
+    assert.ok(snapshot);
+    const first = snapshot.getSnapshot();
+    assert.equal(first.on, false);
+    Object.assign(first, { on: true });
+    assert.equal(snapshot.getSnapshot().on, false);
+    assert.equal(device.light.pubsub.subscribers.size, 0);
 
-    const seen: { power: boolean }[] = [];
-    const subscription = snapshot.subscribe((value) => seen.push(value as { power: boolean }));
-    assert.equal(unit.status.pubsub.subscribers.size, 1);
-    await session.handles.get("aircon.power.set")!.execute({ on: true });
-    assert.deepEqual(seen.map((value) => value.power), [true]);
-    seen[0]!.power = false;
-    assert.equal((snapshot.getSnapshot() as { power: boolean }).power, true);
+    const seen: (typeof Light.Encoded)[] = [];
+    const subscription = snapshot.subscribe((value) => seen.push(value));
+    assert.equal(device.light.pubsub.subscribers.size, 1);
+    await Handles.get(session.handles, powerSet).execute({ on: true });
+    assert.deepEqual(seen.map((value) => value.on), [true]);
+    const [changed] = seen;
+    assert.ok(changed);
+    Object.assign(changed, { on: false });
+    assert.equal(snapshot.getSnapshot().on, true);
 
     subscription.unsubscribe();
-    assert.equal(unit.status.pubsub.subscribers.size, 0);
-    assert.equal(session.handles.get("aircon.power.set")!.snapshot, undefined);
+    assert.equal(device.light.pubsub.subscribers.size, 0);
+    assert.equal(handleOf(session.handles, powerSet.id).snapshot, undefined);
   } finally {
     await session.dispose();
   }
@@ -144,29 +162,30 @@ test("handles need a state schema that encodes synchronously, a failed open rele
 });
 
 test("Handles.get gives a handle with the types of its capability", async () => {
-  const session = await Handles.open(aircon, unitLayer, { target: "app" });
+  const session = await Handles.open(lamp, lampLayer, { target: "app" });
   try {
     const power = Handles.get(session.handles, powerSet);
-    const powered: Result<null, typeof Offline.Type> = await power.execute({ on: true });
+    const powered: Result<null, typeof Unreachable.Type | typeof Burnt.Type> = await power.execute({ on: true });
     assert.deepEqual(powered, { ok: true, value: null });
 
-    const mode = Handles.get(session.handles, modeSet);
-    const moded: Result<null, typeof Offline.Type | typeof PoweredOff.Type> = await mode.execute({ mode: "heat" });
-    assert.deepEqual(moded, { ok: true, value: null });
+    const scene = Handles.get(session.handles, sceneSet);
+    const chosen: Result<null, typeof Unreachable.Type> = await scene.execute({ scene: "relax" });
+    assert.deepEqual(chosen, { ok: true, value: null });
 
-    const status = Handles.get(session.handles, statusGet);
-    const value: Result<typeof Status.Type, typeof Offline.Type> = await status.execute({});
-    const snapshot: typeof Status.Encoded | undefined = status.snapshot?.getSnapshot();
+    const light = Handles.get(session.handles, lightGet);
+    const value: Result<typeof Light.Type, typeof Unreachable.Type> = await light.execute({});
+    const snapshot: typeof Light.Encoded | undefined = light.snapshot?.getSnapshot();
     assert.deepEqual(value, { ok: true, value: snapshot });
+    assert.deepEqual(snapshot, { on: true, brightness: 80, kelvin: 3000, scene: "relax" });
 
     // These calls do not run. `moon run core-effect:typecheck` checks that each one is an error.
     const wrongCalls = () => [
-      // @ts-expect-error The input of aircon.power.set has `on`, a boolean.
+      // @ts-expect-error The input of lamp.power.set has `on`, a boolean.
       power.execute({ on: "yes" }),
-      // @ts-expect-error The mode is one of the literals of `Mode`.
-      mode.execute({ mode: "boil" }),
-      // @ts-expect-error The status has no `humidity`.
-      status.snapshot?.getSnapshot().humidity,
+      // @ts-expect-error The scene is one of the literals of `Scene`.
+      scene.execute({ scene: "disco" }),
+      // @ts-expect-error The light has no `colour`.
+      light.snapshot?.getSnapshot().colour,
     ];
     void wrongCalls;
   } finally {
@@ -175,17 +194,15 @@ test("Handles.get gives a handle with the types of its capability", async () => 
 });
 
 test("Handles.get gives an always unavailable handle for a capability outside the view", async () => {
-  const session = await Handles.open(aircon, unitLayer, { target: "taskbar" });
+  const session = await Handles.open(lamp, lampLayer, { target: "remote" });
   try {
-    const firmware = Handles.get(session.handles, firmwareUpdate);
-    assert.equal(session.handles.has(firmwareUpdate.id), false);
-    assert.equal(firmware.id, "aircon.firmware.update");
-    assert.deepEqual(firmware.availability.getSnapshot(), { available: false, reason: "There is no capability aircon.firmware.update." });
-    assert.equal(firmware.snapshot, undefined);
-    for (const call of [firmware.execute({}), firmware.invokeExternal({})]) {
-      const error = await rejection(call);
-      assert.ok(error instanceof CallFailureError);
-      assert.equal(error.kind, "unknown-capability");
+    const pairing = Handles.get(session.handles, pair);
+    assert.equal(session.handles.has(pair.id), false);
+    assert.equal(pairing.id, "lamp.pair");
+    assert.deepEqual(pairing.availability.getSnapshot(), { available: false, reason: "There is no capability lamp.pair." });
+    assert.equal(pairing.snapshot, undefined);
+    for (const call of [pairing.execute({}), pairing.invokeExternal({})]) {
+      assert.equal((await callFailure(call)).kind, "unknown-capability");
     }
   } finally {
     await session.dispose();
