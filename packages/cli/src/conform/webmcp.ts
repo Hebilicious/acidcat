@@ -6,8 +6,9 @@
  * process.
  */
 import { REFERENCE, visitObjects } from "@acid-cat/spec-ts";
-import type { JsonObject } from "@acid-cat/spec-ts";
 
+import { isArrayOf, isObject, isStringArray, memberOf, parseJson } from "../json.ts";
+import type { JsonObject } from "../json.ts";
 import { abortable, Checks, expect, expectEqual, fixture, idsOf, sorted, until } from "./check.ts";
 
 const RULE = "spec/bindings/webmcp.md";
@@ -22,6 +23,11 @@ export interface RecordedTool {
   readonly inputSchema: unknown;
 }
 
+/** A tool, as a page gives it to `registerTool`. */
+export interface HostTool extends RecordedTool {
+  execute(input: unknown, options: { readonly signal: AbortSignal }): Promise<unknown>;
+}
+
 /** What a call to a tool gives: the value that `execute` resolves with, or the error that it rejects with. */
 export type ToolCall =
   | { readonly resolved: unknown }
@@ -31,7 +37,7 @@ export type ToolCall =
 /** The host that the checks give to the page. */
 export interface TestHost {
   readonly modelContext: {
-    registerTool(tool: object, options: { readonly signal: AbortSignal }): void;
+    registerTool(tool: HostTool, options: { readonly signal: AbortSignal }): void;
   };
   tools(): RecordedTool[];
   /** Call a tool. With an `id`, `cancel` can abort the signal of the call. */
@@ -45,16 +51,14 @@ export interface TestHost {
  * source text to the page.
  */
 export function createTestHost(): TestHost {
-  type Tool = RecordedTool & { execute(input: unknown, options: { signal: AbortSignal }): Promise<unknown> };
-  const registered = new Map<string, Tool>();
+  const registered = new Map<string, HostTool>();
   const calls = new Map<string, AbortController>();
   return {
     modelContext: {
       registerTool(tool, options) {
-        const recorded = tool as Tool;
-        registered.set(recorded.name, recorded);
+        registered.set(tool.name, tool);
         options.signal.addEventListener("abort", () => {
-          if (registered.get(recorded.name) === recorded) registered.delete(recorded.name);
+          if (registered.get(tool.name) === tool) registered.delete(tool.name);
         });
       },
     },
@@ -68,7 +72,10 @@ export function createTestHost(): TestHost {
       try {
         return { resolved: await tool.execute(input, { signal: controller.signal }) };
       } catch (error) {
-        const { name: errorName, kind, message } = error as { name?: unknown; kind?: unknown; message?: unknown };
+        const hasMembers = typeof error === "object" && error !== null;
+        const errorName = hasMembers && "name" in error ? error.name : undefined;
+        const kind = hasMembers && "kind" in error ? error.kind : undefined;
+        const message = hasMembers && "message" in error ? error.message : undefined;
         return { rejected: { name: String(errorName), kind, message: String(message) } };
       } finally {
         if (id !== undefined) calls.delete(id);
@@ -89,6 +96,27 @@ export interface WebMcpDriver {
    */
   call(name: string, input: unknown, options?: { readonly signal?: AbortSignal; readonly cancel?: AbortSignal }): Promise<ToolCall>;
   close(): Promise<void>;
+}
+
+/** The tools that a host gives, after they pass through JSON. The check fails when the value is not a list of tools. */
+function toolsOf(value: unknown): RecordedTool[] {
+  const isTool = (tool: unknown): tool is JsonObject & { readonly name: string; readonly description: string } =>
+    isObject(tool) && typeof tool.name === "string" && typeof tool.description === "string";
+  if (!isArrayOf(value, isTool)) throw new Error(`the host must give a list of tools, got ${JSON.stringify(value)}`);
+  return value.map((tool) => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema }));
+}
+
+/** A tool call that a host gives, after it passes through JSON. The check fails when the value is not a tool call. */
+function toolCallOf(value: unknown): ToolCall {
+  if (isObject(value)) {
+    if (value.missing === true) return { missing: true };
+    if ("resolved" in value) return { resolved: value.resolved };
+    const rejected = value.rejected;
+    if (isObject(rejected) && typeof rejected.name === "string" && typeof rejected.message === "string") {
+      return { rejected: { name: rejected.name, kind: rejected.kind, message: rejected.message } };
+    }
+  }
+  throw new Error(`the host must give a tool call, got ${JSON.stringify(value)}`);
 }
 
 /** A test host as a driver reaches it: in the same process, or in a page. */
@@ -131,10 +159,10 @@ export type WebMcpInstall = (
 export async function processDriver(install: WebMcpInstall): Promise<WebMcpDriver> {
   const host = createTestHost();
   const remove = await install(host.modelContext);
-  const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+  const copy = (value: unknown): unknown => parseJson(JSON.stringify(value));
   return driverOf({
-    tools: async () => copy(host.tools()),
-    call: async (name, input, id) => copy(await host.call(name, input, id)),
+    tools: async () => toolsOf(copy(host.tools())),
+    call: async (name, input, id) => toolCallOf(copy(await host.call(name, input, id))),
     cancel: async (id) => host.cancel(id),
     close: async () => {
       if (typeof remove === "function") await remove();
@@ -163,22 +191,26 @@ export async function browserDriver(url: string): Promise<WebMcpDriver> {
     }
   `);
   await page.goto(url);
-  type Window = { __acidCatConform: TestHost };
+  // The page is not trusted. Each expression calls the test host of the page, with its arguments as JSON, and the
+  // driver checks what the page gives.
+  const host = (method: string, ...args: unknown[]) =>
+    page.evaluate<unknown>(`window.__acidCatConform.${method}(${args.map((arg) => JSON.stringify(arg) ?? "undefined").join(", ")})`);
   return driverOf({
     tools: async () => {
       if (errors.length > 0) throw new Error(`The page has errors: ${errors.join("; ")}`);
-      return page.evaluate(() => (window as unknown as Window).__acidCatConform.tools());
+      return toolsOf(await host("tools"));
     },
-    call: (name, input, id) =>
-      page.evaluate(([name, input, id]) => (window as unknown as Window).__acidCatConform.call(name, input, id), [name, input, id] as const),
-    cancel: (id) => page.evaluate((id) => (window as unknown as Window).__acidCatConform.cancel(id), id),
+    call: async (name, input, id) => toolCallOf(await host("call", name, input, id)),
+    cancel: async (id) => {
+      await host("cancel", id);
+    },
     close: () => browser.close(),
   });
 }
 
 /** True if each `$ref` of a schema refers to a type in its own `$defs` (spec/catalog.md#bundling). */
 function isBundled(schema: JsonObject): boolean {
-  const types = (schema.$defs ?? {}) as JsonObject;
+  const types = isObject(schema.$defs) ? schema.$defs : {};
   let bundled = true;
   visitObjects(schema, (node) => {
     if (typeof node.$ref !== "string") return;
@@ -194,7 +226,9 @@ const names = async (driver: WebMcpDriver, signal: AbortSignal) => sorted((await
 async function heldKeys(driver: WebMcpDriver, signal: AbortSignal): Promise<readonly string[]> {
   const call = await driver.call("fixture.held", {}, { signal });
   expect("resolved" in call, `fixture.held gave ${JSON.stringify(call)}`);
-  return (call.resolved as { readonly value: { readonly keys: readonly string[] } }).value.keys;
+  const keys = memberOf(memberOf(call.resolved, "value"), "keys");
+  expect(isStringArray(keys), `fixture.held gave ${JSON.stringify(call)}, with no list of keys`);
+  return keys;
 }
 
 export async function checkWebMcp(driver: WebMcpDriver, options: { readonly deadline: number }): Promise<Checks> {
@@ -210,11 +244,13 @@ export async function checkWebMcp(driver: WebMcpDriver, options: { readonly dead
       expectEqual(tool.description, view[tool.name]?.description, `description of ${tool.name}`);
       // Each implementation writes its schemas from its own code. Compare what the fixture fixes: an object, its
       // properties and its required properties, with no reference outside the schema.
-      const schema = tool.inputSchema as JsonObject;
-      const input = (view[tool.name]?.input ?? {}) as JsonObject;
+      const schema = tool.inputSchema;
+      expect(isObject(schema), `the input schema of ${tool.name} must be an object`);
+      const input: JsonObject = view[tool.name]?.input ?? {};
+      const required = (object: JsonObject) => (isStringArray(object.required) ? object.required : []);
       expectEqual(schema.type, "object", `type of the input schema of ${tool.name}`);
       expectEqual(sorted(Object.keys(schema.properties ?? {})), sorted(Object.keys(input.properties ?? {})), `properties of ${tool.name}`);
-      expectEqual(sorted((schema.required as string[] | undefined) ?? []), sorted((input.required as string[] | undefined) ?? []), `required properties of ${tool.name}`);
+      expectEqual(sorted(required(schema)), sorted(required(input)), `required properties of ${tool.name}`);
       expect(isBundled(schema), `the input schema of ${tool.name} must be bundled`);
     }
   });
@@ -224,7 +260,7 @@ export async function checkWebMcp(driver: WebMcpDriver, options: { readonly dead
   await checks.run("a failure resolves as a result", `${RULE}#tools`, async (signal) => {
     const call = await driver.call("fixture.refuse", {}, { signal });
     expect("resolved" in call, `the call must resolve, got ${JSON.stringify(call)}`);
-    expectEqual((call.resolved as { error?: { _tag?: string } }).error?._tag, "Refused", "_tag");
+    expectEqual(memberOf(memberOf(call.resolved, "error"), "_tag"), "Refused", "_tag");
   });
   for (const [name, capability, input, kind, errorName] of [
     ["a defect rejects with the kind internal", "fixture.crash", {}, "internal", undefined],

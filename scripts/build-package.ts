@@ -18,6 +18,8 @@ import { isDeepStrictEqual } from "node:util";
 import { basename, isAbsolute, join } from "node:path";
 import { build } from "rolldown";
 
+import { isJsonObject, parseObject, stringMember, stringRecord } from "./npm-packages.ts";
+
 type Exports = string | Record<string, string>;
 
 interface Manifest {
@@ -27,7 +29,21 @@ interface Manifest {
   publishConfig?: { exports?: unknown; bin?: unknown };
 }
 
-const manifest = JSON.parse(readFileSync("package.json", "utf8")) as Manifest;
+/** Read `package.json`, and check the members that this script uses. */
+function readManifest(): Manifest {
+  const json = parseObject(readFileSync("package.json", "utf8"), "package.json");
+  const exports = typeof json.exports === "string" ? json.exports : stringRecord(json.exports, "package.json: exports");
+  const publishConfig = json.publishConfig;
+  if (publishConfig !== undefined && !isJsonObject(publishConfig)) throw new Error("package.json: publishConfig is not an object.");
+  return {
+    name: stringMember(json, "name", "package.json"),
+    exports,
+    ...(json.bin !== undefined && { bin: stringRecord(json.bin, "package.json: bin") }),
+    ...(publishConfig !== undefined && { publishConfig }),
+  };
+}
+
+const manifest = readManifest();
 
 const source = /^\.\/src\/([\w-]+)\.ts$/;
 

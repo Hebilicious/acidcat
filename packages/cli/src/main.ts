@@ -10,13 +10,14 @@ import { Console, Effect, FileSystem, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 
 import packageJson from "../package.json" with { type: "json" };
-import { check, viewOf, type Catalog } from "./catalog.ts";
+import { check, isCatalog, viewOf } from "./catalog.ts";
 import { conform, DEADLINE } from "./conform/index.ts";
+import { parseJson } from "./json.ts";
 
 const readCatalog = Effect.fn("readCatalog")(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(file);
-  return { text, document: JSON.parse(text) as unknown };
+  return { text, document: parseJson(text) };
 });
 
 const fail = Effect.sync(() => {
@@ -58,7 +59,7 @@ const formatCommand = Command.make(
     const fs = yield* FileSystem.FileSystem;
     for (const file of files) {
       const { document } = yield* readCatalog(file);
-      const text = canonicalText(document as Catalog);
+      const text = canonicalText(document);
       if (write) yield* fs.writeFileString(file, text);
       else yield* Effect.sync(() => process.stdout.write(text));
     }
@@ -72,8 +73,11 @@ const viewCommand = Command.make(
     target: Argument.String("target").pipe(Argument.withDescription("The name of a target in the catalog")),
   },
   Effect.fn(function* ({ file, target }) {
-    const { document } = yield* readCatalog(file);
-    const catalog = document as Catalog;
+    const { document: catalog } = yield* readCatalog(file);
+    if (!isCatalog(catalog)) {
+      yield* Console.error(`${file}: error: the file is not a catalog; run \`acid-cat check ${file}\``);
+      return yield* fail;
+    }
     if (!(target in catalog.targets)) {
       yield* Console.error(`${file}: error: there is no target ${target}`);
       return yield* fail;

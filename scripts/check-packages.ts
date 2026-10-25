@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { build } from "esbuild";
 
-import { npmPackages, pack, packedManifest, root } from "./npm-packages.ts";
+import { npmPackages, objectMember, pack, packedManifest, parseObject, root, stringMember } from "./npm-packages.ts";
 
 const keep = process.argv.includes("--keep");
 const project = mkdtempSync(path.join(tmpdir(), "acid-cat-packages-"));
@@ -31,9 +31,10 @@ const run = (command: string, args: readonly string[], cwd = project) =>
   execFileSync(command, args, { cwd, stdio: ["ignore", "inherit", "inherit"] });
 
 /** The version of a dependency that the repository installs, so that the project tests the same versions. */
-const installedVersion = (name: string, directory = "packages/core-effect") =>
-  (JSON.parse(readFileSync(path.join(root, directory, "node_modules", name, "package.json"), "utf-8")) as { version: string })
-    .version;
+const installedVersion = (name: string, directory = "packages/core-effect") => {
+  const file = path.join(root, directory, "node_modules", name, "package.json");
+  return stringMember(parseObject(readFileSync(file, "utf-8"), file), "version", file);
+};
 
 /** Every file path that `exports` or `bin` names, at any depth of conditions. */
 const namedFiles = (value: unknown): string[] =>
@@ -128,12 +129,11 @@ try {
     }
   }
 
-  const base = JSON.parse(readFileSync(path.join(root, "tsconfig.base.json"), "utf-8")) as {
-    compilerOptions: Record<string, unknown>;
-  };
+  const base = parseObject(readFileSync(path.join(root, "tsconfig.base.json"), "utf-8"), "tsconfig.base.json");
+  const compilerOptions = objectMember(base, "compilerOptions", "tsconfig.base.json");
   writeFileSync(
     path.join(project, "tsconfig.json"),
-    JSON.stringify({ compilerOptions: { ...base.compilerOptions, skipLibCheck: false }, include: ["core-effect", "core-ts"] }),
+    JSON.stringify({ compilerOptions: { ...compilerOptions, skipLibCheck: false }, include: ["core-effect", "core-ts"] }),
   );
   run(path.join(project, "node_modules/.bin/tsc"), ["-p", "."]);
 

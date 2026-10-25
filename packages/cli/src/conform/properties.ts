@@ -8,13 +8,15 @@ import type { Outcome } from "@acid-cat/spec-ts";
 import { SdkError } from "@modelcontextprotocol/client";
 import fc from "fast-check";
 
-import { Checks, expect, until } from "./check.ts";
+import { isStringArray, memberOf, parseJson, readJson } from "../json.ts";
+import type { JsonObject } from "../json.ts";
+import { Checks, expect, isOutcome, until } from "./check.ts";
 import { mcpClient } from "./mcp.ts";
 
 const RULE = "spec/invocation.md#cancellation-and-concurrency";
 
 /** A call through one binding. When the signal aborts, the client stops the call and rejects with the reason of the signal. */
-export type Invoke = (id: string, input: object, signal?: AbortSignal) => Promise<Outcome<unknown, unknown>>;
+export type Invoke = (id: string, input: JsonObject, signal?: AbortSignal) => Promise<Outcome<unknown, unknown>>;
 
 export function httpInvoke(base: string): Invoke {
   return async (id, input, signal) => {
@@ -24,7 +26,9 @@ export function httpInvoke(base: string): Invoke {
       body: JSON.stringify(input),
       ...(signal ? { signal } : {}),
     });
-    return (await response.json()) as Outcome<unknown, unknown>;
+    const outcome = await readJson(response);
+    if (!isOutcome(outcome)) throw new Error(`POST /capabilities/${id} gave ${JSON.stringify(outcome)}, which is not an outcome`);
+    return outcome;
   };
 }
 
@@ -33,18 +37,16 @@ export async function mcpInvoke(url: string, signal: AbortSignal): Promise<{ rea
   return {
     invoke: async (id, input, signal) => {
       try {
-        const result = (await client.callTool({ name: id, arguments: input as Record<string, unknown> }, signal ? { signal } : undefined)) as {
-          content: { text: string }[];
-          isError?: boolean;
-          structuredContent?: unknown;
-        };
-        const body = JSON.parse(result.content[0]?.text ?? "null") as Record<string, unknown>;
+        const result = await client.callTool({ name: id, arguments: input }, signal ? { signal } : undefined);
+        const first = result.content[0];
+        const body = parseJson(first?.type === "text" ? first.text : "null");
         if (result.isError !== true) return { ok: true, value: result.structuredContent ?? body };
-        return body as Outcome<unknown, unknown>;
+        if (!isOutcome(body)) throw new Error(`the error result of ${id} gave ${JSON.stringify(body)}, which is not an outcome`);
+        return body;
       } catch (error) {
         // The MCP client rejects a call that its signal aborts with an SdkError that has the reason as its message.
         if (signal?.aborted && error instanceof SdkError && error.message === String(signal.reason)) throw signal.reason;
-        if ((error as { code?: number }).code === -32602) return { kind: "unknown-capability", message: String(error) };
+        if (memberOf(error, "code") === -32602) return { kind: "unknown-capability", message: String(error) };
         throw error;
       }
     },
@@ -71,7 +73,7 @@ function agrees(operation: Operation, outcome: Outcome<unknown, unknown>): boole
     case "echo":
       return "ok" in outcome && outcome.ok && JSON.stringify(outcome.value) === JSON.stringify({ text: operation.text });
     case "refuse":
-      return "ok" in outcome && !outcome.ok && (outcome.error as { _tag?: string })._tag === "Refused";
+      return "ok" in outcome && !outcome.ok && memberOf(outcome.error, "_tag") === "Refused";
     case "crash":
       return "kind" in outcome && outcome.kind === "internal";
     case "invalid":
@@ -114,7 +116,9 @@ const isCancellation = (settled: Settled, reason: unknown): boolean =>
 async function heldKeys(invoke: Invoke, signal: AbortSignal): Promise<readonly string[]> {
   const outcome = await invoke("fixture.held", {}, signal);
   expect("ok" in outcome && outcome.ok, `fixture.held gave ${JSON.stringify(outcome)}`);
-  return (outcome.value as { readonly keys: readonly string[] }).keys;
+  const keys = memberOf(outcome.value, "keys");
+  expect(isStringArray(keys), `fixture.held gave ${JSON.stringify(outcome)}, with no list of keys`);
+  return keys;
 }
 
 /**
@@ -165,8 +169,8 @@ export async function checkProperties(binding: string, invoke: Invoke, deadline:
     await fc.assert(
       fc.asyncProperty(fc.array(operation, { minLength: 1, maxLength: 12 }), async (operations) => {
         fc.pre(!signal.aborted);
-        const outcomes = await Promise.all(operations.map((op) => callFor(invoke, op, signal)));
-        operations.forEach((op, index) => expect(agrees(op, outcomes[index]!), `${op.kind} gave ${JSON.stringify(outcomes[index])}`));
+        const calls = await Promise.all(operations.map(async (op) => ({ op, outcome: await callFor(invoke, op, signal) })));
+        calls.forEach(({ op, outcome }) => expect(agrees(op, outcome), `${op.kind} gave ${JSON.stringify(outcome)}`));
       }),
       { numRuns: 25, includeErrorInReport: true },
     );
