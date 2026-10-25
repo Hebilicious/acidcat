@@ -88,7 +88,7 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 | Module | Binding | Entry point |
 | --- | --- | --- |
 | `Session` | [Invocation](../../spec/invocation.md) | `Session.make(app, { target })` gives a `Session<R>`, where `R` is the services of the application: `invoke` for untrusted input by id, and typed calls (see [Typed calls](#typed-calls)) |
-| `Handles` | [TypeScript](../../spec/bindings/typescript.md) | `Handles.make(app, session)`: handles with promises and observables, for code that does not use Effect, such as a user interface. `Handles.open(app, layer, { target })` opens a session from code that does not use Effect |
+| `Handles` | [TypeScript](../../spec/bindings/typescript.md) | `Handles.make(app, session)`: handles with promises and observables, for code that does not use Effect, such as a user interface. `Handles.open(app, layer, { target, webmcp })` opens a session from code that does not use Effect |
 | `Mcp` | [MCP](../../spec/bindings/mcp.md) | `Mcp.toWebHandler(app, layer, options)`, on `effect/ai/McpServer` |
 | `Http` | [HTTP](../../spec/bindings/http.md) | `Http.toWebHandler(app, layer, options)` |
 | `Cli` | [CLI](../../spec/bindings/cli.md) | `Cli.run(app, options)`, on `effect/cli`. `NodeCli.main(app, layer, options)` from `@acid-cat/core-effect/node` runs it as the main program of a Node.js process |
@@ -123,6 +123,7 @@ const program = Effect.scoped(
 - `session.handle(capability)` gives the handle of a capability with the types of its schemas: `execute` takes the decoded input, and gives the decoded value or failure. `snapshot` gives the state in its JSON form. For a capability that the session does not serve, the handle is always unavailable, and each call rejects as `unknown-capability`.
 - `await using session = await Handles.open(…)` closes the session at the end of the block. `session.dispose()` closes it too.
 - `session.handles` gives the handles by id, without the types of the schemas, for bindings.
+- With the option `webmcp`, a WebMCP host, the session registers its tools on that host. `session.webmcp.status` observes the status of the tools, and `session.webmcp.retry()` tries the last failed update again. The tools close with the session. Without the option, `session.webmcp` is `undefined`. To use the host of the page, give `webmcp: WebMcp.findHost()`.
 
 ```ts
 import { Handles } from "@acid-cat/core-effect";
