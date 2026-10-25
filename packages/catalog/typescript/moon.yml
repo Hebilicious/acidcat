@@ -20,7 +20,7 @@ tasks:
     description: "Rebuild the example catalogs and the edge-case catalog, byte for byte."
     command: "node"
     args: ["--test", "test/"]
-    inputs: ["src/**/*.ts", "examples/**/*.ts", "test/**/*.ts", "/examples/*.acidcat.json", "examples/**/*.acidcat.json", "test/fixtures/**/*"]
+    inputs: ["src/**/*.ts", "examples/**/*.ts", "test/**/*.ts", "examples/**/*.acidcat.json", "test/fixtures/**/*"]
 
   typecheck:
     description: "Type-check the sources, tests and examples."

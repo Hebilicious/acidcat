@@ -5,7 +5,7 @@ projects:
   core-effect: "packages/core-effect"
   core-ts: "packages/core-ts"
   catalog-typescript: "packages/catalog/typescript"
-  example-apis: "examples/apis"
+  example-aircon: "examples/aircon"
   catalog-python: "packages/catalog/python"
   catalog-go: "packages/catalog/go"
   catalog-rust: "packages/catalog/rust"

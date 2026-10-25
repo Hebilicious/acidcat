@@ -54,10 +54,10 @@ The catalog is checked at build time. Programs do not read it at run time.
 
 ## 🌬️ Example
 
-An air conditioner, written in Pkl ([full example](examples/aircon.pkl)):
+An air conditioner, written in Pkl ([full example](examples/aircon/catalog/aircon.pkl)):
 
 ```pkl
-amends "../packages/catalog/pkl/Catalog.pkl"
+amends "../../../packages/catalog/pkl/Catalog.pkl"
 
 targets {
   ["app"] { bindings { "typescript" } }
@@ -78,7 +78,7 @@ capabilities {
 }
 ```
 
-The same catalog in [TypeScript](packages/catalog/typescript/examples/aircon.ts), [Python](packages/catalog/python/examples/aircon.py), [Go](packages/catalog/go/examples/aircon/aircon.go) or [Rust](packages/catalog/rust/examples/aircon.rs) gives the same bytes: [`aircon.acidcat.json`](examples/aircon.acidcat.json).
+The same catalog in [TypeScript](examples/aircon/catalog/typescript.ts), [Python](examples/aircon/catalog/python.py), [Go](examples/aircon/catalog/go/main.go) or [Rust](examples/aircon/catalog/rust/src/main.rs) gives the same bytes: [`aircon.acidcat.json`](examples/aircon/catalog/aircon.acidcat.json). [`examples/aircon`](examples/aircon/README.md) also serves the air conditioner with both TypeScript cores, as a command line, and through APIs.
 
 ## 📚 Specification
 
@@ -118,7 +118,7 @@ These packages show one way to implement the specification. They serve the TypeS
 
 Reference implementations in more languages will follow. You do not need a package from this repository to implement AcidCat. A program that serves the bindings as the specification tells is an implementation. You, or an agent, can write a core for your language from [the specification](spec/README.md), and test it with `acid-cat conform`.
 
-To build your own API, for example in GraphQL, see [`examples/apis`](examples/apis/README.md): GraphQL, Cap'n Web and Elysia APIs, each beside the HTTP binding, and an MCP server in Effect beside the MCP binding.
+To build your own API, for example in GraphQL, see [the APIs of the air conditioner](examples/aircon/README.md#apis): GraphQL, Cap'n Web and Elysia APIs, each beside the HTTP binding, and an MCP server in Effect beside the MCP binding.
 
 ## 🗺️ Roadmap
 

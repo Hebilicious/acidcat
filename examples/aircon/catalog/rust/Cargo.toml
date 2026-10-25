@@ -1,0 +1,10 @@
+[package]
+name = "aircon-catalog"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "The air-conditioner catalog, written with the Rust catalog library."
+
+[dependencies]
+acid-cat-catalog = { path = "../../../../packages/catalog/rust" }
+serde_json = { version = "1", features = ["preserve_order"] }

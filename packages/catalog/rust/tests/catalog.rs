@@ -1,9 +1,6 @@
 use acid_cat_catalog::{Capability, Catalog, Target};
 use serde_json::json;
 
-#[path = "../examples/aircon.rs"]
-mod aircon;
-
 #[path = "../examples/player.rs"]
 mod player;
 
@@ -11,14 +8,6 @@ mod player;
 fn expected(path: &str) -> String {
     std::fs::read_to_string(format!("{}/{path}", env!("CARGO_MANIFEST_DIR")))
         .expect("the expected file exists")
-}
-
-#[test]
-fn writes_the_same_aircon_catalog_as_pkl() {
-    let rendered = aircon::aircon_catalog()
-        .render()
-        .expect("the catalog conforms");
-    assert_eq!(rendered, expected("../../../examples/aircon.acidcat.json"));
 }
 
 #[test]

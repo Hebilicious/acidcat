@@ -233,8 +233,11 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
-  examples/apis:
+  examples/aircon:
     dependencies:
+      '@acid-cat/catalog':
+        specifier: workspace:*
+        version: link:../../packages/catalog/typescript
       '@acid-cat/cli':
         specifier: workspace:*
         version: link:../../packages/cli

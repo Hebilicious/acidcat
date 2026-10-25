@@ -45,7 +45,7 @@ Each library tests its own catalogs, with files in its own directory:
 - An edge-case catalog holds values that languages write differently by default: a number with a zero fraction, very small and very large numbers, escapes and control characters in strings, and non-ASCII keys. Each library uses different values.
 - Each committed catalog file in the repository MUST be in canonical form. The root `moon run check` checks this. Thus all libraries agree on the canonical form, and they do not share a file.
 
-The TypeScript, Python, Go and Rust libraries also make the air-conditioner catalog of [`examples/aircon.pkl`](../../examples/aircon.pkl), and compare it with [`examples/aircon.acidcat.json`](../../examples/aircon.acidcat.json).
+[`examples/aircon/catalog`](../../examples/aircon/catalog) shows one catalog written in Pkl, TypeScript, Python, Go and Rust. Its test checks that each language gives the same bytes.
 
 Pkl writes JSON in its own order. Thus `moon run examples` sends the Pkl output through `acid-cat format`.
 

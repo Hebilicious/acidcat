@@ -10,7 +10,7 @@ tasks:
     description: "Rebuild the example catalogs and the edge-case catalog, byte for byte."
     command: "cargo"
     args: ["test"]
-    inputs: ["src/**/*", "examples/**/*", "tests/**/*", "Cargo.toml", "Cargo.lock", "/examples/*.acidcat.json"]
+    inputs: ["src/**/*", "examples/**/*", "tests/**/*", "Cargo.toml", "Cargo.lock"]
     toolchains: ["system"]
 
   package:

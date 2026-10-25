@@ -121,9 +121,7 @@ cliMain(aircon, { name: "aircon", version: "0.1.0", context: { unit }, toJsonSch
 
 ## Examples and tests
 
-- [`examples/aircon.ts`](examples/aircon.ts) is the air conditioner of [`examples/aircon.pkl`](../../examples/aircon.pkl), with a simulated unit. Its catalog agrees with the Pkl catalog.
-- [`examples/aircon-cli.ts`](examples/aircon-cli.ts) is its command line: `node examples/aircon-cli.ts aircon power set --on`.
-- [`examples/apis`](../../examples/apis/README.md) builds GraphQL, Cap'n Web and Elysia APIs on it, each beside the HTTP binding.
+- [`examples/aircon/core-ts`](../../examples/aircon/README.md) is an air conditioner written with this package, with its command line. [`examples/aircon/apis`](../../examples/aircon/README.md#apis) builds GraphQL, Cap'n Web and Elysia APIs on it, each beside the HTTP binding.
 - `moon run core-ts:test` tests sessions, handles and all bindings with a test application, and runs `acid-cat conform` against all bindings. Each test application is in `test/`:
   - [`test/fixture.ts`](test/fixture.ts) has one capability for each behavior that `acid-cat conform` tests.
   - [`test/kettle.ts`](test/kettle.ts) is an electric kettle, simulated in memory. Its tests examine the catalog that the core writes, named types, state, availability, typed handles and the command line.
