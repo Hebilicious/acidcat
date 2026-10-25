@@ -17,10 +17,10 @@ tasks:
     outputs: ["dist/**/*"]
 
   test:
-    description: "Rebuild the air-conditioner catalog and the canonical fixture, byte for byte."
+    description: "Rebuild the example catalogs and the edge-case catalog, byte for byte."
     command: "node"
     args: ["--test", "test/"]
-    inputs: ["src/**/*.ts", "examples/**/*.ts", "test/**/*.ts", "/examples/*.acidcat.json", "/packages/catalog/fixtures/**/*"]
+    inputs: ["src/**/*.ts", "examples/**/*.ts", "test/**/*.ts", "/examples/*.acidcat.json", "examples/**/*.acidcat.json", "test/fixtures/**/*"]
 
   typecheck:
     description: "Type-check the sources, tests and examples."

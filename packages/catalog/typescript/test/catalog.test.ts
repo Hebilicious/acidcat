@@ -4,41 +4,46 @@ import { test } from "node:test";
 
 import { Catalog } from "../src/index.ts";
 import { airconCatalog } from "../examples/aircon.ts";
+import { libraryCatalog } from "../examples/library.ts";
 
+/** Reads a file. The path is relative to this package. */
 function expected(path: string): string {
-  // Paths are relative to packages/catalog.
-  return readFileSync(new URL(`../../${path}`, import.meta.url), "utf-8");
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf-8");
 }
 
 test("the library writes the same air-conditioner catalog as Pkl", () => {
-  assert.equal(airconCatalog().render(), expected("../../examples/aircon.acidcat.json"));
+  assert.equal(airconCatalog().render(), expected("../../../examples/aircon.acidcat.json"));
+});
+
+test("the library writes the lending-library catalog in canonical form", () => {
+  assert.equal(libraryCatalog().render(), expected("examples/library.acidcat.json"));
 });
 
 test("the library writes the canonical form of every value", () => {
-  const catalog = new Catalog().target("cli", { bindings: ["cli"] }).capability("edge.case.check", {
-    description: "Strings: \"quoted\", back\\slash, tab\t, é,  , \u0001, 😀.",
-    audience: ["cli"],
+  const catalog = new Catalog().target("shell", { bindings: ["cli"] }).capability("edge.values.write", {
+    description: "Text: \"quotes\", a\\b, line\nbreak, bell\u0007, unit\u001f, del\u007f, para , ü, 🐈.",
+    audience: ["shell"],
     output: {
       type: "object",
-      zKey: "last",
-      aKey: "first",
-      properties: { é: { type: "string" }, z: { type: "string" }, Z: { type: "string" } },
+      yLast: "y",
+      bFirst: "b",
+      properties: { ü: { type: "string" }, Ü: { type: "string" }, u: { type: "string" }, U: { type: "string" } },
       examples: [
         {
-          whole: 16.0,
-          half: 0.5,
-          tiny: 1e-7,
-          small: 0.000001,
-          large: 1e21,
-          big: 123456789012345680000,
-          negative: -2.5e-10,
+          whole: 250.0,
+          quarter: 0.25,
+          tiny: 4e-9,
+          small: 0.0000035,
+          large: 7.5e22,
+          big: 98765432109876540000,
+          negative: -1.5e-12,
+          integer: 7,
           zero: 0,
-          integer: 42,
         },
       ],
     },
   });
-  assert.equal(catalog.render(), expected("fixtures/edge.acidcat.json"));
+  assert.equal(catalog.render(), expected("test/fixtures/edge.acidcat.json"));
 });
 
 test("the library reports the catalog rules a catalog breaks", () => {

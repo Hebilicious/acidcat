@@ -20,7 +20,7 @@ tasks:
     description: "Test canonical form, views, bundling and the catalog rules."
     command: "node"
     args: ["--test", "test/"]
-    inputs: ["src/**/*.ts", "test/**/*.ts", "/schemas/**/*.json", "/examples/*.acidcat.json", "/packages/catalog/typescript/src/**/*.ts"]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "test/fixtures/*.acidcat.json", "/schemas/**/*.json", "/packages/catalog/typescript/src/**/*.ts"]
 
   typecheck:
     description: "Type-check the sources, tests and examples."

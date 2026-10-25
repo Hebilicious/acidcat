@@ -14,5 +14,5 @@ package {
   sourceCode = "https://github.com/Hebilicious/acidcat"
   sourceCodeUrlScheme = "https://github.com/Hebilicious/acidcat/blob/\(name)@\(version)/packages/catalog/pkl%{path}#L%{line}-L%{endLine}"
   issueTracker = "https://github.com/Hebilicious/acidcat/issues"
-  exclude { "moon.yml"; "version.txt"; "CHANGELOG.md" }
+  exclude { "moon.yml"; "version.txt"; "CHANGELOG.md"; "examples/**" }
 }

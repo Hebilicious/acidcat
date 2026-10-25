@@ -8,6 +8,7 @@ import (
 
 	"github.com/Hebilicious/acidcat/packages/catalog/go"
 	"github.com/Hebilicious/acidcat/packages/catalog/go/examples/aircon"
+	"github.com/Hebilicious/acidcat/packages/catalog/go/examples/garage"
 )
 
 func TestWritesTheSameAirconCatalogAsPkl(t *testing.T) {
@@ -18,32 +19,45 @@ func TestWritesTheSameAirconCatalogAsPkl(t *testing.T) {
 	expectBytes(t, rendered, "../../../examples/aircon.acidcat.json")
 }
 
-func TestWritesTheCanonicalFormOfEveryValue(t *testing.T) {
-	c := catalog.New("", "").
-		Target("cli", catalog.Target{Bindings: []string{"cli"}}).
-		Capability("edge.case.check", catalog.Capability{
-			Description: "Strings: \"quoted\", back\\slash, tab\t, é, \u2028, \u0001, 😀.",
-			Audience:    []string{"cli"},
-			Output: catalog.Schema{
-				"type": "object",
-				"zKey": "last",
-				"aKey": "first",
-				"properties": catalog.Schema{
-					"é": catalog.Schema{"type": "string"},
-					"z": catalog.Schema{"type": "string"},
-					"Z": catalog.Schema{"type": "string"},
-				},
-				"examples": []any{map[string]any{
-					"whole": 16.0, "half": 0.5, "tiny": 1e-7, "small": 0.000001, "large": 1e21,
-					"big": 123456789012345680000.0, "negative": -2.5e-10, "zero": 0.0, "integer": 42,
-				}},
-			},
-		})
-	rendered, err := c.Render()
+func TestWritesTheGarageCatalogInCanonicalForm(t *testing.T) {
+	rendered, err := garage.Catalog().Render()
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectBytes(t, rendered, "../fixtures/edge.acidcat.json")
+	expectBytes(t, rendered, "examples/garage/garage.acidcat.json")
+}
+
+// edgeCatalog holds numbers and strings that Go writes differently from the canonical form by default.
+func edgeCatalog() *catalog.Catalog {
+	return catalog.New("", "").
+		Target("console", catalog.Target{Bindings: []string{"cli"}}).
+		Capability("edge.strings.echo", catalog.Capability{
+			Description: "Text: \"said\", D:\\logs, tab\t, vt\v, soh\u0001, us\u001f, <&>, ls\u2028, ç, 🚗.",
+			Audience:    []string{"console"},
+			Output: catalog.Schema{
+				"type": "object",
+				"qKey": "q",
+				"cKey": "c",
+				"properties": catalog.Schema{
+					"ç": catalog.Schema{"type": "string"},
+					"Ç": catalog.Schema{"type": "string"},
+					"c": catalog.Schema{"type": "string"},
+					"_": catalog.Schema{"type": "string"},
+				},
+				"examples": []any{map[string]any{
+					"whole": 42.0, "fifth": 0.2, "tiny": 1.25e-9, "small": 0.000015, "large": 3e25,
+					"big": 271828182845904500000.0, "negative": -6.25e-15, "zero": 0.0, "integer": 64,
+				}},
+			},
+		})
+}
+
+func TestWritesTheCanonicalFormOfEveryValue(t *testing.T) {
+	rendered, err := edgeCatalog().Render()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectBytes(t, rendered, "testdata/edge.acidcat.json")
 }
 
 func TestReportsTheRulesACatalogBreaks(t *testing.T) {

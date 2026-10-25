@@ -1,0 +1,176 @@
+{
+  "acidcat": "0.1",
+  "title": "Garage door",
+  "description": "Open, close and watch one motorised garage door.",
+  "targets": {
+    "assistant": {
+      "bindings": [
+        "mcp"
+      ],
+      "description": "A voice assistant, through an MCP server."
+    },
+    "keypad": {
+      "bindings": [
+        "acme:keypad"
+      ],
+      "description": "The keypad on the outside wall.",
+      "options": {
+        "backlight": true,
+        "digits": 6
+      }
+    },
+    "phone": {
+      "bindings": [
+        "typescript",
+        "acme:swift"
+      ],
+      "description": "The phone app of the people who live in the house."
+    }
+  },
+  "$defs": {
+    "Door": {
+      "properties": {
+        "light": {
+          "type": "boolean"
+        },
+        "openSince": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        }
+      },
+      "required": [
+        "position",
+        "light"
+      ],
+      "type": "object"
+    },
+    "Obstructed": {
+      "description": "The light beam at the bottom of the door is broken.",
+      "properties": {
+        "since": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Position": {
+      "enum": [
+        "open",
+        "closed",
+        "opening",
+        "closing",
+        "stopped"
+      ]
+    }
+  },
+  "capabilities": {
+    "garage.code.set": {
+      "description": "Set the code that opens the door from the keypad.",
+      "audience": [
+        "phone"
+      ],
+      "input": {
+        "properties": {
+          "code": {
+            "pattern": "^[0-9]{6}$",
+            "type": "string"
+          },
+          "expires": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "failures": {
+        "TooSimple": {
+          "description": "The code repeats one digit or counts up or down.",
+          "type": "object"
+        }
+      }
+    },
+    "garage.door.close": {
+      "description": "Close the door.",
+      "audience": [
+        "phone",
+        "keypad",
+        "assistant"
+      ],
+      "output": {
+        "$ref": "#/$defs/Door"
+      },
+      "failures": {
+        "Obstructed": {
+          "$ref": "#/$defs/Obstructed"
+        }
+      }
+    },
+    "garage.door.get": {
+      "description": "Read the position of the door and the state of its light.",
+      "audience": [
+        "phone",
+        "keypad",
+        "assistant"
+      ],
+      "output": {
+        "$ref": "#/$defs/Door"
+      },
+      "readOnly": true,
+      "state": {
+        "$ref": "#/$defs/Door"
+      }
+    },
+    "garage.door.open": {
+      "description": "Open the door, and close it again after a number of minutes.",
+      "audience": [
+        "phone",
+        "keypad",
+        "assistant"
+      ],
+      "input": {
+        "properties": {
+          "closeAfterMinutes": {
+            "maximum": 120,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "light": {
+            "default": true,
+            "type": "boolean"
+          },
+          "reason": {
+            "maxLength": 80,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "output": {
+        "$ref": "#/$defs/Door"
+      },
+      "failures": {
+        "Jammed": {
+          "properties": {
+            "motorAmps": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "motorAmps"
+          ],
+          "type": "object"
+        },
+        "Obstructed": {
+          "$ref": "#/$defs/Obstructed"
+        }
+      }
+    }
+  }
+}

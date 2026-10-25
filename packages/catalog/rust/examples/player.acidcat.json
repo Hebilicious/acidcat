@@ -1,0 +1,180 @@
+{
+  "acidcat": "0.1",
+  "title": "Music player",
+  "description": "Play, pause and queue the music of one home speaker.",
+  "targets": {
+    "assistant": {
+      "bindings": [
+        "mcp"
+      ],
+      "description": "Assistants, through an MCP server."
+    },
+    "desktop": {
+      "bindings": [
+        "typescript"
+      ],
+      "description": "The desktop app, with a mini player in the menu bar."
+    },
+    "remote": {
+      "bindings": [
+        "cli"
+      ],
+      "description": "Shell scripts and keyboard shortcuts.",
+      "options": {
+        "aliases": {
+          "next": "skip"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Playback": {
+      "properties": {
+        "playing": {
+          "type": "boolean"
+        },
+        "positionSeconds": {
+          "type": "number"
+        },
+        "queue": {
+          "items": {
+            "$ref": "#/$defs/Track"
+          },
+          "type": "array"
+        },
+        "track": {
+          "$ref": "#/$defs/Track"
+        },
+        "volume": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "playing",
+        "volume",
+        "queue"
+      ],
+      "type": "object"
+    },
+    "Track": {
+      "properties": {
+        "artist": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "seconds": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "artist",
+        "seconds"
+      ],
+      "type": "object"
+    },
+    "UnknownTrack": {
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    }
+  },
+  "capabilities": {
+    "player.playback.get": {
+      "description": "Read the track that plays, its position, the volume and the queue.",
+      "audience": [
+        "desktop",
+        "remote",
+        "assistant"
+      ],
+      "output": {
+        "$ref": "#/$defs/Playback"
+      },
+      "readOnly": true,
+      "state": {
+        "$ref": "#/$defs/Playback"
+      }
+    },
+    "player.track.play": {
+      "description": "Play a track now, or add it to the queue.",
+      "audience": [
+        "desktop",
+        "remote",
+        "assistant"
+      ],
+      "input": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "queue": {
+            "default": "now",
+            "enum": [
+              "now",
+              "next",
+              "last"
+            ]
+          },
+          "shuffle": {
+            "type": "boolean"
+          },
+          "startSeconds": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "$ref": "#/$defs/Playback"
+      },
+      "failures": {
+        "Offline": {
+          "description": "The speaker does not answer on the home network.",
+          "type": "object"
+        },
+        "UnknownTrack": {
+          "$ref": "#/$defs/UnknownTrack"
+        }
+      }
+    },
+    "player.volume.set": {
+      "description": "Set the volume, from 0 to 100.",
+      "audience": [
+        "desktop",
+        "remote"
+      ],
+      "input": {
+        "properties": {
+          "level": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level"
+        ],
+        "type": "object"
+      }
+    }
+  }
+}

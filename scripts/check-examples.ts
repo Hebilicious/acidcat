@@ -1,41 +1,36 @@
 /**
- * Check this repository's example catalogs and fixtures.
+ * Check every catalog file of this repository: the examples, and the fixtures of each package.
  *
- * Every Pkl catalog in `examples/` and `packages/cli/conformance/` must render, once put in canonical form, to
- * exactly the committed `.acidcat.json` file beside it. Every committed catalog, including the catalog libraries' fixtures, must then conform.
+ * Each Pkl catalog source must render, once put in canonical form, to exactly the committed `.acidcat.json` file beside
+ * it. Each committed `.acidcat.json` file must conform, and `check` warns when it is not in canonical form. Thus each catalog library tests
+ * its own catalogs, and all libraries still agree on the canonical form.
  *
  * Usage: node scripts/check-examples.ts
  */
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { canonicalText } from "@acid-cat/catalog";
 import { check } from "@acid-cat/cli";
 
-const root = path.resolve(import.meta.dirname, "..");
+import { catalogFiles, pklSources, renderedPath, root } from "./catalogs.ts";
+
 const problems: string[] = [];
 
-const sources = ["examples", "packages/cli/conformance"].flatMap((directory) =>
-  readdirSync(path.join(root, directory))
-    .filter((name) => name.endsWith(".pkl"))
-    .map((name) => `${directory}/${name}`),
-);
-for (const source of sources) {
+for (const source of pklSources()) {
+  const committed = renderedPath(source);
+  if (!existsSync(path.join(root, committed))) {
+    problems.push(`${committed}: missing; run \`moon run examples\``);
+    continue;
+  }
   const rendered = execFileSync("pkl", ["eval", path.join(root, source)], { encoding: "utf-8" });
-  const committed = source.replace(/\.pkl$/, ".acidcat.json");
   if (canonicalText(JSON.parse(rendered)) !== readFileSync(path.join(root, committed), "utf-8")) {
     problems.push(`${committed}: stale; run \`moon run examples\``);
   }
 }
 
-const catalogs = [
-  ...readdirSync(path.join(root, "examples"))
-    .filter((name) => name.endsWith(".acidcat.json"))
-    .map((name) => `examples/${name}`),
-  ...readdirSync(path.join(root, "packages/catalog/fixtures")).map((name) => `packages/catalog/fixtures/${name}`),
-  "packages/cli/conformance/fixture.acidcat.json",
-];
+const catalogs = catalogFiles();
 for (const file of catalogs) {
   const text = readFileSync(path.join(root, file), "utf-8");
   const report = check(JSON.parse(text), text);
@@ -46,4 +41,4 @@ if (problems.length > 0) {
   process.stderr.write(`${problems.join("\n")}\n`);
   process.exit(1);
 }
-process.stdout.write(`Every example and fixture conforms (${catalogs.length} catalogs).\n`);
+process.stdout.write(`Every catalog is in canonical form and conforms (${catalogs.length} catalogs).\n`);

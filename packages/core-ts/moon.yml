@@ -18,7 +18,7 @@ tasks:
 
   test:
     deps: ["cli:browser"]
-    description: "Test sessions, handles and the MCP, HTTP, CLI and WebMCP bindings, with the test application and the air conditioner. WebMCP also runs in Chromium."
+    description: "Test sessions, handles and the MCP, HTTP, CLI and WebMCP bindings, with the test application, the kettle and the air conditioner. WebMCP also runs in Chromium."
     command: "node"
     args: ["--test", "--test-timeout=60000", "test/"]
     inputs: ["src/**/*.ts", "test/**/*.ts", "examples/**/*.ts", "/examples/*.acidcat.json", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/cli/src/**/*.ts", "/packages/cli/conformance/*.acidcat.json"]

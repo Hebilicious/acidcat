@@ -7,10 +7,10 @@ project:
 
 tasks:
   test:
-    description: "Rebuild the air-conditioner catalog and the canonical fixture, byte for byte."
+    description: "Rebuild the example catalogs and the edge-case catalog, byte for byte."
     command: "python"
     args: ["-m", "unittest", "discover", "-s", "tests"]
-    inputs: ["acid_cat_catalog/**/*.py", "examples/**/*.py", "tests/**/*.py", "/examples/*.acidcat.json", "/packages/catalog/fixtures/**/*"]
+    inputs: ["acid_cat_catalog/**/*.py", "examples/**/*.py", "tests/**/*.py", "/examples/*.acidcat.json", "examples/**/*.acidcat.json", "tests/fixtures/**/*"]
     toolchains: ["system"]
     env:
       PYTHONDONTWRITEBYTECODE: "1"

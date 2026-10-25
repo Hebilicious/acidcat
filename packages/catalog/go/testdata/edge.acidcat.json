@@ -1,0 +1,50 @@
+{
+  "acidcat": "0.1",
+  "targets": {
+    "console": {
+      "bindings": [
+        "cli"
+      ]
+    }
+  },
+  "capabilities": {
+    "edge.strings.echo": {
+      "description": "Text: \"said\", D:\\logs, tab\t, vt\u000b, soh\u0001, us\u001f, <&>, ls , ç, 🚗.",
+      "audience": [
+        "console"
+      ],
+      "output": {
+        "cKey": "c",
+        "examples": [
+          {
+            "big": 271828182845904500000,
+            "fifth": 0.2,
+            "integer": 64,
+            "large": 3e+25,
+            "negative": -6.25e-15,
+            "small": 0.000015,
+            "tiny": 1.25e-9,
+            "whole": 42,
+            "zero": 0
+          }
+        ],
+        "properties": {
+          "_": {
+            "type": "string"
+          },
+          "c": {
+            "type": "string"
+          },
+          "Ç": {
+            "type": "string"
+          },
+          "ç": {
+            "type": "string"
+          }
+        },
+        "qKey": "q",
+        "type": "object"
+      }
+    }
+  }
+}

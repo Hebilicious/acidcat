@@ -1,0 +1,104 @@
+/// A greenhouse with vents, a watering system and climate sensors, written with the Pkl catalog module.
+amends "../Catalog.pkl"
+
+title = "Backyard greenhouse"
+description = "Watch the climate of one greenhouse, open its vents and water its beds."
+
+targets {
+  ["panel"] {
+    description = "The touch panel at the greenhouse door."
+    bindings { "typescript" }
+    options {
+      theme = "high-contrast"
+      refreshSeconds = 15
+    }
+  }
+  ["automation"] {
+    description = "Rules that run on the home server."
+    bindings { "http" }
+  }
+  ["assistant"] {
+    description = "Assistants, through an MCP server."
+    bindings { "mcp" }
+  }
+}
+
+types {
+  ["Bed"] { enum { "tomatoes"; "herbs"; "seedlings" } }
+  ["Climate"] {
+    type = "object"
+    required { "celsius"; "humidity"; "ventPercent" }
+    properties {
+      celsius { type = "number" }
+      humidity { type = "number"; minimum = 0; maximum = 100 }
+      ventPercent { type = "integer"; minimum = 0; maximum = 100 }
+      soilMoisture {
+        type = "object"
+        additionalProperties { type = "number" }
+      }
+    }
+  }
+  ["TankEmpty"] {
+    type = "object"
+    description = "The rain-water tank has too little water."
+    properties {
+      litres { type = "number" }
+    }
+  }
+}
+
+local everyone = new Listing { "panel"; "automation"; "assistant" }
+
+capabilities {
+  ["greenhouse.climate.get"] {
+    description = "Read the air temperature, the humidity, the vent opening and the soil moisture of each bed."
+    audience = everyone
+    readOnly = true
+    output = module.ref("Climate")
+    state = module.ref("Climate")
+  }
+
+  ["greenhouse.vents.set"] {
+    description = "Open the roof vents to a percentage. Zero closes them."
+    audience = everyone
+    input {
+      type = "object"
+      required { "percent" }
+      properties {
+        percent { type = "integer"; minimum = 0; maximum = 100 }
+      }
+    }
+    failures {
+      ["WindTooStrong"] {
+        type = "object"
+        required { "gustKph" }
+        properties {
+          gustKph { type = "number" }
+        }
+      }
+    }
+  }
+
+  ["greenhouse.beds.water"] {
+    description = "Water one bed or more for a number of minutes."
+    audience { "panel"; "automation" }
+    input {
+      type = "object"
+      required { "beds" }
+      properties {
+        beds {
+          type = "array"
+          items = module.ref("Bed")
+          minItems = 1
+          uniqueItems = true
+        }
+        minutes { type = "integer"; minimum = 1; maximum = 30; default = 5 }
+        mist { type = "boolean" }
+        note { type = "string" }
+      }
+    }
+    failures {
+      ["TankEmpty"] = module.ref("TankEmpty")
+    }
+  }
+}

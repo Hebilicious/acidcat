@@ -4,8 +4,12 @@ use serde_json::json;
 #[path = "../examples/aircon.rs"]
 mod aircon;
 
+#[path = "../examples/player.rs"]
+mod player;
+
+/// Reads a file. The path is relative to this package.
 fn expected(path: &str) -> String {
-    std::fs::read_to_string(format!("{}/../{path}", env!("CARGO_MANIFEST_DIR")))
+    std::fs::read_to_string(format!("{}/{path}", env!("CARGO_MANIFEST_DIR")))
         .expect("the expected file exists")
 }
 
@@ -14,32 +18,45 @@ fn writes_the_same_aircon_catalog_as_pkl() {
     let rendered = aircon::aircon_catalog()
         .render()
         .expect("the catalog conforms");
-    assert_eq!(rendered, expected("../../examples/aircon.acidcat.json"));
+    assert_eq!(rendered, expected("../../../examples/aircon.acidcat.json"));
 }
 
 #[test]
-fn writes_the_canonical_form_of_every_value() {
+fn writes_the_player_catalog_in_canonical_form() {
+    let rendered = player::player_catalog()
+        .render()
+        .expect("the catalog conforms");
+    assert_eq!(rendered, expected("examples/player.acidcat.json"));
+}
+
+/// A catalog with numbers and strings that Rust writes differently from the canonical form by default.
+fn edge_catalog() -> Catalog {
     let mut catalog = Catalog::new(None, None);
     catalog
-        .target("cli", Target { bindings: vec!["cli".into()], ..Target::default() })
-        .capability("edge.case.check", Capability {
-            description: "Strings: \"quoted\", back\\slash, tab\t, é, \u{2028}, \u{1}, 😀.".into(),
-            audience: vec!["cli".into()],
+        .target("speaker", Target { bindings: vec!["cli".into()], ..Target::default() })
+        .capability("edge.values.print", Capability {
+            description: "Text: \"loud\", E:\\music, newline\n, back\u{8}, gs\u{1d}, del\u{7f}, ps\u{2029}, ø, 🎵.".into(),
+            audience: vec!["speaker".into()],
             output: Some(json!({
                 "type": "object",
-                "zKey": "last",
-                "aKey": "first",
-                "properties": { "é": { "type": "string" }, "z": { "type": "string" }, "Z": { "type": "string" } },
+                "xKey": "x",
+                "dKey": "d",
+                "properties": { "ø": { "type": "string" }, "Ø": { "type": "string" }, "o": { "type": "string" }, "0": { "type": "string" } },
                 "examples": [{
-                    "whole": 16.0, "half": 0.5, "tiny": 1e-7, "small": 0.000001, "large": 1e21,
-                    "big": 123456789012345680000.0, "negative": -2.5e-10, "zero": 0.0, "integer": 42
+                    "whole": 128.0, "tenth": 0.1, "tiny": 8.5e-12, "small": 0.0000099, "large": 4.4e23,
+                    "big": 161803398874989500000.0, "negative": -3.5e-9, "zero": 0.0, "integer": 440
                 }]
             })),
             ..Capability::default()
         });
+    catalog
+}
+
+#[test]
+fn writes_the_canonical_form_of_every_value() {
     assert_eq!(
-        catalog.render().expect("the catalog conforms"),
-        expected("fixtures/edge.acidcat.json")
+        edge_catalog().render().expect("the catalog conforms"),
+        expected("tests/fixtures/edge.acidcat.json")
     );
 }
 

@@ -8,20 +8,22 @@ Write a catalog in Pkl. The module checks the catalog rules while you write. Ren
 amends "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@0.1.0#/Catalog.pkl"
 
 targets {
-  ["cli"] { bindings { "cli" } }
+  ["panel"] { bindings { "typescript" } }
 }
 
 capabilities {
-  ["aircon.power.set"] {
-    description = "Turn the unit on or off."
-    audience { "cli" }
+  ["greenhouse.vents.set"] {
+    description = "Open the roof vents to a percentage."
+    audience { "panel" }
   }
 }
 ```
 
 ```sh
-pkl eval aircon.pkl --output-path aircon.acidcat.json
-acid-cat format --write aircon.acidcat.json
+pkl eval greenhouse.pkl --output-path greenhouse.acidcat.json
+acid-cat format --write greenhouse.acidcat.json
 ```
 
-In this repository, the examples amend [`Catalog.pkl`](Catalog.pkl) by its path. `moon run catalog-pkl:test` packages the module into `.out/`.
+The full example is [`examples/greenhouse.pkl`](examples/greenhouse.pkl), a greenhouse. It amends [`Catalog.pkl`](Catalog.pkl) by its path. Its canonical JSON is [`examples/greenhouse.acidcat.json`](examples/greenhouse.acidcat.json). The root `moon run check` renders each `.pkl` catalog that has an `.acidcat.json` file beside it, and compares the two. It also checks that each committed catalog file is in [canonical form](../../../spec/catalog.md#canonical-form).
+
+`moon run catalog-pkl:test` packages the module into `.out/`, then evaluates the example. The package does not contain the example. The evaluation checks the catalog rules of the example.

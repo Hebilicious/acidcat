@@ -10,25 +10,25 @@ toolchains:
 
 tasks:
   examples:
-    description: "Render every example catalog from Pkl, and put it in canonical form."
-    script: "pkl eval examples/*.pkl packages/cli/conformance/*.pkl --output-path '%{moduleDir}/%{moduleName}.acidcat.json' && node packages/cli/src/main.ts format --write examples/*.acidcat.json packages/cli/conformance/*.acidcat.json"
-    inputs: ["examples/*.pkl", "packages/cli/conformance/*.pkl", "packages/catalog/pkl/**/*.pkl", "packages/cli/src/**/*.ts", "packages/catalog/typescript/src/**/*.ts"]
-    outputs: ["examples/*.acidcat.json", "packages/cli/conformance/*.acidcat.json"]
+    description: "Render every Pkl catalog, and write every catalog of the repository in canonical form."
+    command: "node"
+    args: ["scripts/render-catalogs.ts"]
+    inputs: ["**/*.pkl", "**/*.acidcat.json", "scripts/catalogs.ts", "scripts/render-catalogs.ts", "packages/catalog/typescript/src/**/*.ts"]
     toolchains: ["system"]
     options:
       runInCI: false
+      cache: false
 
   check:
-    description: "Check that every example is rendered and canonical, and that every example and fixture conforms."
+    description: "Check that every Pkl catalog is rendered, and that every catalog of the repository is canonical and conforms."
     command: "node"
     args: ["scripts/check-examples.ts"]
     inputs:
-      - "examples/**/*"
+      - "**/*.pkl"
+      - "**/*.acidcat.json"
       - "schemas/**/*.json"
+      - "scripts/catalogs.ts"
       - "scripts/check-examples.ts"
-      - "packages/catalog/pkl/**/*.pkl"
-      - "packages/catalog/fixtures/**/*"
-      - "packages/cli/conformance/**/*"
       - "packages/catalog/typescript/src/**/*.ts"
       - "packages/cli/src/**/*.ts"
 
