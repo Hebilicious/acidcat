@@ -8,6 +8,7 @@ import { test } from "node:test";
 import { Command } from "effect/cli";
 
 import { Cli } from "../src/index.ts";
+import { decodeText, Listing } from "./decode.ts";
 import { fixture } from "./fixture.ts";
 
 const program = (file: string) => (...args: string[]) => {
@@ -24,8 +25,7 @@ const cliWithFlag = program("./fixture-cli-flags.ts");
 /** The command line with the command `position` of the application, and a description in the options. */
 const cliWithCommand = program("./fixture-cli-commands.ts");
 
-const toggle = (stdout: string) =>
-  (JSON.parse(stdout) as { id: string; available: boolean }[]).find((entry) => entry.id === "fixture.toggle");
+const toggle = (stdout: string) => decodeText(Listing, stdout).find((entry) => entry.id === "fixture.toggle");
 
 test("a value goes to standard output with exit code 0", () => {
   const run = cli("fixture", "echo", "--text", "hi");
@@ -53,7 +53,7 @@ test("an unknown command and a missing flag have exit codes", () => {
 });
 
 test("list gives the capabilities of the view", () => {
-  const ids = (JSON.parse(cli("list").stdout) as { id: string }[]).map((entry) => entry.id);
+  const ids = decodeText(Listing, cli("list").stdout).map((entry) => entry.id);
   assert.ok(ids.includes("fixture.echo"));
   assert.ok(!ids.includes("fixture.hidden"));
 });

@@ -34,17 +34,25 @@ export interface Installation {
 
 /** The WebMCP host of the page, if there is one (spec/bindings/webmcp.md#host). */
 export function findHost(): ModelContext | undefined {
-  const scope = globalThis as { document?: { modelContext?: unknown }; navigator?: { modelContext?: unknown } };
-  for (const candidate of [scope.document?.modelContext, scope.navigator?.modelContext]) {
-    if (typeof (candidate as ModelContext | undefined)?.registerTool === "function") return candidate as ModelContext;
+  const scope: object = globalThis;
+  const holders = ["document" in scope ? scope.document : undefined, "navigator" in scope ? scope.navigator : undefined];
+  for (const holder of holders) {
+    const candidate = typeof holder === "object" && holder !== null && "modelContext" in holder ? holder.modelContext : undefined;
+    if (isModelContext(candidate)) return candidate;
   }
   return undefined;
 }
 
+/** Tell if a value has a `registerTool` function. The result of `registerTool` is not known, as `ModelContext` says. */
+function isModelContext(value: unknown): value is ModelContext {
+  return typeof value === "object" && value !== null && "registerTool" in value && typeof value.registerTool === "function";
+}
+
 /** Register the capabilities of a session as tools. If there is no host, do nothing and return `undefined`. */
 export function installWebMcp(session: Session, options: { readonly host?: ModelContext | undefined } = {}): Installation | undefined {
-  const host = options.host ?? findHost();
-  if (host === undefined) return undefined;
+  const found = options.host ?? findHost();
+  if (found === undefined) return undefined;
+  const host: ModelContext = found;
 
   let status: Status = { phase: "loading", message: null };
   const listeners = new Set<(value: Status) => void>();
@@ -61,7 +69,8 @@ export function installWebMcp(session: Session, options: { readonly host?: Model
   let dirty = false;
 
   const toolFor = (id: string): ModelContextTool => {
-    const capability = session.view.capabilities[id]!;
+    const capability = session.view.capabilities[id];
+    if (capability === undefined) throw new Error(`The view of the session has no capability ${id}.`);
     return {
       name: id,
       description: capability.description,
@@ -88,7 +97,7 @@ export function installWebMcp(session: Session, options: { readonly host?: Model
         if (registered.has(id)) continue;
         const controller = new AbortController();
         added.set(id, controller);
-        await host!.registerTool(toolFor(id), { signal: AbortSignal.any([controller.signal, lifetime.signal]) });
+        await host.registerTool(toolFor(id), { signal: AbortSignal.any([controller.signal, lifetime.signal]) });
       }
     } catch (error) {
       for (const controller of added.values()) controller.abort();
@@ -145,7 +154,7 @@ export function installWebMcp(session: Session, options: { readonly host?: Model
       subscription.unsubscribe();
       lifetime.abort();
       registered.clear();
-      await Promise.allSettled([...calls]);
+      await Promise.allSettled(calls);
       setStatus({ phase: "disposed", message: null });
     },
   };

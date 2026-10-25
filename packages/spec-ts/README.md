@@ -12,7 +12,8 @@ pnpm add @acid-cat/spec-ts
 
 | Export | Use |
 | --- | --- |
-| `ok`, `fail`, `callFailure`, `isCallFailure` | Make and test [outcomes](../../spec/invocation.md#outcomes) |
+| `ok`, `fail`, `callFailure`, `isCallFailure` | Make and test [outcomes](../../spec/invocation.md#outcomes). `fail` takes the whole failure: `fail({ _tag: "Offline", since })` |
+| `isJsonObject` | Tell if a value is a JSON object: not `null`, and not an array |
 | `CALL_FAILURE_KINDS`, `CallFailureError` | The kinds of call failure, and the JavaScript error for one |
 | `AVAILABLE`, `unavailable` | Make [availability](../../spec/invocation.md#availability) values |
 | `viewOf`, `bundle` | The [view](../../spec/catalog.md#views) of a target, and a schema with its shared types |

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { z } from "zod";
+
 import { Unit } from "../core-ts/aircon.ts";
 import { elysiaApi } from "../apis/elysia.ts";
 
@@ -28,7 +30,8 @@ test("a failure gives 409, a call failure its status, and a bad body 422", async
   assert.deepEqual(await poweredOff.json(), { _tag: "PoweredOff" });
   const invalid = await app.handle(request("/status", { method: "PATCH", body: { targetCelsius: 40 } }));
   assert.equal(invalid.status, 422);
-  assert.equal(((await invalid.json()) as { kind: string }).kind, "invalid-input");
+  const { kind } = z.object({ kind: z.string(), message: z.string() }).parse(await invalid.json());
+  assert.equal(kind, "invalid-input");
   assert.equal((await app.handle(request("/status", { method: "PATCH", body: { mode: "warm" } }))).status, 422);
 });
 

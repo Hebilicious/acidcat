@@ -12,7 +12,9 @@ test("the TypeScript core passes acid-cat conform through WebMCP in Chromium", a
     format: "esm",
     platform: "browser",
   });
-  const script = bundled.outputFiles[0]!.text;
+  const [output] = bundled.outputFiles;
+  assert.ok(output !== undefined);
+  const script = output.text;
   const served = await serve({
     "/page": async (request) =>
       new URL(request.url).pathname === "/page/fixture.js"

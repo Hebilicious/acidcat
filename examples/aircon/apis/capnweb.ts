@@ -11,7 +11,7 @@ import type { Session } from "@acid-cat/core-ts";
 import type { z } from "zod";
 
 import { FanInput, fanSet, ModeInput, modeSet, PowerInput, powerSet, statusGet, TemperatureInput, temperatureSet } from "../core-ts/aircon.ts";
-import type { FanSpeed, Mode } from "../core-ts/aircon.ts";
+import type { Context, FanSpeed, Mode } from "../core-ts/aircon.ts";
 import { decode, forbidden, foreignOrigin, httpBinding, withSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
 
@@ -21,9 +21,9 @@ import type { ApiOptions } from "./shared.ts";
  * makes a typed call.
  */
 export class AirconApi extends RpcTarget {
-  readonly #session: Session;
+  readonly #session: Session<Context>;
 
-  constructor(session: Session) {
+  constructor(session: Session<Context>) {
     super();
     this.#session = session;
   }

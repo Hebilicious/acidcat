@@ -157,7 +157,7 @@ export class Catalog {
       if ("$defs" in node) problems.push("carries its own $defs; declare shared types with type()");
       if (node.$ref === undefined) return;
       const name = typeof node.$ref === "string" ? REFERENCE.exec(node.$ref)?.[1] : undefined;
-      if (name === undefined || !this.#types.has(name)) problems.push(`references ${String(node.$ref)}, which is not a type`);
+      if (name === undefined || !this.#types.has(name)) problems.push(`references ${typeof node.$ref === "string" ? node.$ref : JSON.stringify(node.$ref)}, which is not a type`);
     });
     return problems;
   }
@@ -167,11 +167,14 @@ function compact(value: Record<string, unknown>): Schema {
   return Object.fromEntries(Object.entries(value).filter(([, member]) => member !== undefined));
 }
 
-function visit(value: unknown, onObject: (node: Record<string, unknown>) => void): void {
+/** Tell if a value is an object that is not `null`. Each of its members is read as `unknown`. */
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => value !== null && typeof value === "object";
+
+function visit(value: unknown, onObject: (node: Readonly<Record<string, unknown>>) => void): void {
   if (Array.isArray(value)) {
-    value.forEach((item) => visit(item, onObject));
-  } else if (value !== null && typeof value === "object") {
-    onObject(value as Record<string, unknown>);
+    value.forEach((item: unknown) => visit(item, onObject));
+  } else if (isRecord(value)) {
+    onObject(value);
     Object.values(value).forEach((item) => visit(item, onObject));
   }
 }

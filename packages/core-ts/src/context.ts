@@ -36,7 +36,11 @@ export async function withContext<Context, A>(
 /** Call `Symbol.asyncDispose` or `Symbol.dispose` of a value, if it has one. */
 async function release(value: unknown): Promise<void> {
   if (typeof value !== "object" || value === null) return;
-  const disposable = value as Partial<AsyncDisposable & Disposable>;
-  if (typeof disposable[Symbol.asyncDispose] === "function") await disposable[Symbol.asyncDispose]!();
-  else if (typeof disposable[Symbol.dispose] === "function") disposable[Symbol.dispose]!();
+  const asyncDispose = Symbol.asyncDispose in value ? value[Symbol.asyncDispose] : undefined;
+  const dispose = Symbol.dispose in value ? value[Symbol.dispose] : undefined;
+  if (isFunction(asyncDispose)) await asyncDispose.call(value);
+  else if (isFunction(dispose)) dispose.call(value);
 }
+
+/** Tell if a value is a function. A function can take any arguments, and its result is not known. */
+const isFunction = (value: unknown): value is (...args: never[]) => unknown => typeof value === "function";

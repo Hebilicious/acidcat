@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Deferred, Effect, Layer } from "effect";
+import { Deferred, Effect, Layer, Schema } from "effect";
 
 import { Mcp } from "../src/index.ts";
 import { countedFixtureLayer, fixture, fixtureLayer, heldApp, recordingApp } from "./fixture.ts";
@@ -26,16 +26,44 @@ function mcpRequest(method: string, params: object = {}, name?: string) {
   });
 }
 
+/** A JSON-RPC answer. Each test decodes `result` with the schema of the method. */
+const Answer = Schema.Struct({
+  result: Schema.optional(Schema.Unknown),
+  error: Schema.optional(Schema.Struct({ code: Schema.Number, message: Schema.String })),
+});
+const Discovery = Schema.Struct({ instructions: Schema.optional(Schema.String) });
+const Tools = Schema.Struct({
+  tools: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      outputSchema: Schema.optional(Schema.Struct({ type: Schema.optional(Schema.String) })),
+      annotations: Schema.Struct({ readOnlyHint: Schema.optional(Schema.Boolean) }),
+    }),
+  ),
+});
+const ToolResult = Schema.Struct({
+  isError: Schema.optional(Schema.Boolean),
+  structuredContent: Schema.optional(Schema.Unknown),
+  content: Schema.NonEmptyArray(Schema.Struct({ text: Schema.String })),
+});
+
+/** The `result` of an answer, decoded with `schema`. */
+const resultOf = <S extends Schema.Decoder<unknown>>(schema: S, answer: typeof Answer.Type): S["Type"] =>
+  Schema.decodeUnknownSync(schema)(answer.result);
+
+/** The JSON-RPC answer of a response. */
+const answerOf = async (response: Response) => Schema.decodeUnknownSync(Answer)(await response.json());
+
 async function mcp(method: string, params: object = {}, name?: string) {
   const response = await handler(mcpRequest(method, params, name));
   assert.equal(response.status, 200);
-  return (await response.json()) as { result?: any; error?: { code: number; message: string } };
+  return answerOf(response);
 }
 
 const call = (name: string, args: object) => mcp("tools/call", { name, arguments: args }, name);
 
 test("server/discover gives the instructions of the options, or else the description of the application", async () => {
-  assert.equal((await mcp("server/discover")).result.instructions, fixture.description);
+  assert.equal(resultOf(Discovery, await mcp("server/discover")).instructions, fixture.description);
   const instructed = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), {
     name: "fixture",
     version: "0.0.0",
@@ -43,12 +71,11 @@ test("server/discover gives the instructions of the options, or else the descrip
     instructions: "Use fixture.echo to test the server.",
   });
   const response = await instructed(mcpRequest("server/discover"));
-  assert.equal(((await response.json()) as { result: { instructions?: string } }).result.instructions, "Use fixture.echo to test the server.");
+  assert.equal(resultOf(Discovery, await answerOf(response)).instructions, "Use fixture.echo to test the server.");
 });
 
 test("tools/list gives the available capabilities of the view, with their schemas and hints", async () => {
-  const { result } = await mcp("tools/list");
-  const tools = result.tools as { name: string; inputSchema: object; outputSchema?: object; annotations: { readOnlyHint?: boolean } }[];
+  const { tools } = resultOf(Tools, await mcp("tools/list"));
   assert.deepEqual(tools.map((tool) => tool.name).sort(), [
     "fixture.crash",
     "fixture.echo",
@@ -59,22 +86,23 @@ test("tools/list gives the available capabilities of the view, with their schema
     "fixture.switch.set",
     "fixture.toggle",
   ]);
-  const echo = tools.find((tool) => tool.name === "fixture.echo")!;
+  const echo = tools.find((tool) => tool.name === "fixture.echo");
+  assert.ok(echo !== undefined);
   assert.equal(echo.annotations.readOnlyHint, true);
-  assert.equal((echo.outputSchema as { type?: string }).type, "object");
+  assert.equal(echo.outputSchema?.type, "object");
 });
 
 test("tools/call gives each outcome in the form of the binding", async () => {
-  const value = await call("fixture.echo", { text: "hi" });
-  assert.deepEqual(value.result.structuredContent, { text: "hi" });
-  assert.equal(value.result.isError ?? false, false);
+  const value = resultOf(ToolResult, await call("fixture.echo", { text: "hi" }));
+  assert.deepEqual(value.structuredContent, { text: "hi" });
+  assert.equal(value.isError ?? false, false);
 
-  const failure = await call("fixture.refuse", {});
-  assert.equal(failure.result.isError, true);
-  assert.deepEqual(JSON.parse(failure.result.content[0].text), { ok: false, error: { _tag: "Refused", reason: "No." } });
+  const failure = resultOf(ToolResult, await call("fixture.refuse", {}));
+  assert.equal(failure.isError, true);
+  assert.deepEqual(JSON.parse(failure.content[0].text), { ok: false, error: { _tag: "Refused", reason: "No." } });
 
-  const crash = await call("fixture.crash", {});
-  assert.deepEqual(JSON.parse(crash.result.content[0].text), { kind: "internal", message: "The capability failed." });
+  const crash = resultOf(ToolResult, await call("fixture.crash", {}));
+  assert.deepEqual(JSON.parse(crash.content[0].text), { kind: "internal", message: "The capability failed." });
 });
 
 test("a tool outside the view is an unknown tool", async () => {
@@ -90,7 +118,7 @@ test("requests are rejected before the protocol is read", async () => {
   assert.equal((await post({ headers: { "Content-Type": "application/json" }, body: "x".repeat(1_048_577) })).status, 413);
   const notJson = await post({ headers: { "Content-Type": "application/json" }, body: "{" });
   assert.equal(notJson.status, 400);
-  assert.equal(((await notJson.json()) as { error: { code: number } }).error.code, -32700);
+  assert.equal((await answerOf(notJson)).error?.code, -32700);
 });
 
 test("with per-request services, each request that passes the screening has its own services", async () => {
@@ -99,8 +127,8 @@ test("with per-request services, each request that passes the screening has its 
 
   const set = mcpRequest("tools/call", { name: "fixture.switch.set", arguments: { on: false } }, "fixture.switch.set");
   assert.equal((await perRequest(set)).status, 200);
-  const { result } = (await (await perRequest(mcpRequest("tools/list"))).json()) as { result: { tools: { name: string }[] } };
-  assert.ok(result.tools.some((tool) => tool.name === "fixture.toggle"));
+  const { tools } = resultOf(Tools, await answerOf(await perRequest(mcpRequest("tools/list"))));
+  assert.ok(tools.some((tool) => tool.name === "fixture.toggle"));
   assert.deepEqual(counts, { built: 2, released: 2 });
 
   assert.equal((await perRequest(new Request(`${ORIGIN}/mcp`, { method: "GET" }))).status, 405);
@@ -139,9 +167,9 @@ for (const services of ["shared", "per-request"] as const) {
 
     await Effect.runPromise(Deferred.await(started));
     controller.abort();
-    const { result } = (await (await answer).json()) as { result: { isError: boolean; content: { text: string }[] } };
+    const result = resultOf(ToolResult, await answerOf(await answer));
     assert.equal(result.isError, true);
-    assert.deepEqual(JSON.parse(result.content[0]!.text), { kind: "cancelled", message: "The call was cancelled." });
+    assert.deepEqual(JSON.parse(result.content[0].text), { kind: "cancelled", message: "The call was cancelled." });
     assert.equal(Deferred.isDoneUnsafe(interrupted), true);
   });
 
@@ -149,12 +177,10 @@ for (const services of ["shared", "per-request"] as const) {
     const { app, record } = recordingApp();
     const handler = Mcp.toWebHandler(app, Layer.empty, { name: "recorded", version: "0.0.0", allowedOrigins: [ORIGIN], services });
     const request = mcpRequest("tools/call", { name: "recorded.run", arguments: {} }, "recorded.run");
-    const { result } = (await (await handler(new Request(request, { signal: AbortSignal.abort() }))).json()) as {
-      result: { isError: boolean; content: { text: string }[] };
-    };
+    const result = resultOf(ToolResult, await answerOf(await handler(new Request(request, { signal: AbortSignal.abort() }))));
 
     assert.equal(result.isError, true);
-    assert.deepEqual(JSON.parse(result.content[0]!.text), { kind: "cancelled", message: "The call was cancelled." });
+    assert.deepEqual(JSON.parse(result.content[0].text), { kind: "cancelled", message: "The call was cancelled." });
     assert.equal(record.ran, false);
   });
 }

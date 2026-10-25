@@ -3,10 +3,11 @@ import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
 import type { Availability } from "@acid-cat/spec-ts";
-import { Effect, Fiber, Layer, Queue, Schema, Scope, Stream, SubscriptionRef } from "effect";
+import type { CatalogDocument } from "@acid-cat/spec-ts";
+import { Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability, Session } from "../src/index.ts";
-import { fixture, fixtureLayer, position, Switch } from "./fixture.ts";
+import { fixture, fixtureLayer, hidden, position, refuse, Switch } from "./fixture.ts";
 
 /** Run a test with a session for a target, and the fixture's services. */
 const withSession = <A, E>(target: string, body: (session: Session.Session) => Effect.Effect<A, E, Switch | Scope.Scope>) =>
@@ -14,19 +15,26 @@ const withSession = <A, E>(target: string, body: (session: Session.Session) => E
     Effect.scoped(Effect.flatMap(Session.make(fixture, { target }), body)).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
   );
 
+/** The capability of a catalog with an id. It must exist. */
+function capabilityIn(document: CatalogDocument, id: string) {
+  const capability = document.capabilities[id];
+  assert.ok(capability !== undefined, `The catalog has no capability ${id}.`);
+  return capability;
+}
+
 test("the application writes a catalog that conforms", () => {
   const text = App.render(fixture);
   assert.deepEqual(check(JSON.parse(text), text), { errors: [], warnings: [] });
   const document = App.document(fixture);
-  assert.deepEqual(Object.keys(document.capabilities["fixture.refuse"]!.failures ?? {}), ["Refused"]);
-  assert.equal(document.capabilities["fixture.echo"]!.readOnly, true);
+  assert.deepEqual(Object.keys(capabilityIn(document, "fixture.refuse").failures ?? {}), ["Refused"]);
+  assert.equal(capabilityIn(document, "fixture.echo").readOnly, true);
 });
 
 test("an empty struct is an input with no properties, and a record is an input that takes any object", () => {
-  const capability = (input: Schema.Codec<any, any>) =>
+  const capability = (input: Capability.AnySchema) =>
     Capability.make({ id: "probe.run", description: "Probe.", audience: ["cli"], input, run: () => Effect.succeed(null) });
-  const inputOf = (input: Schema.Codec<any, any>) =>
-    App.document(App.make({ targets: { cli: { bindings: ["cli"] } }, capabilities: [capability(input)] })).capabilities["probe.run"]!.input;
+  const inputOf = (input: Capability.AnySchema) =>
+    capabilityIn(App.document(App.make({ targets: { cli: { bindings: ["cli"] } }, capabilities: [capability(input)] })), "probe.run").input;
   assert.deepEqual(inputOf(Schema.Struct({})), { type: "object", properties: {} });
   assert.deepEqual(inputOf(Schema.Record(Schema.String, Schema.Json)), { type: "object" });
 });
@@ -48,7 +56,7 @@ test("an input that is a union of objects is an object schema, and the catalog c
   });
   const text = App.render(app);
   assert.deepEqual(check(JSON.parse(text), text), { errors: [], warnings: [] });
-  assert.equal(App.document(app).capabilities["probe.find"]!.input!.type, "object");
+  assert.equal(capabilityIn(App.document(app), "probe.find").input?.type, "object");
 });
 
 test("a call gives a value, a failure or a call failure", () =>
@@ -117,17 +125,20 @@ test("closing a session cancels its calls, and later calls fail as cancelled", a
   );
   const held = Effect.runPromise(session.invoke("fixture.hold", { key: "pending" }));
   await new Promise((resolve) => setTimeout(resolve, 20));
-  await Effect.runPromise(Scope.close(scope, { _tag: "Success", value: undefined } as never));
-  assert.equal((await held as { kind?: string }).kind, "cancelled");
-  assert.equal(((await Effect.runPromise(session.invoke("fixture.echo", { text: "x" }))) as { kind?: string }).kind, "cancelled");
+  await Effect.runPromise(Scope.close(scope, Exit.void));
+  const outcome = await held;
+  assert.ok("kind" in outcome);
+  assert.equal(outcome.kind, "cancelled");
+  const later = await Effect.runPromise(session.invoke("fixture.echo", { text: "x" }));
+  assert.ok("kind" in later);
+  assert.equal(later.kind, "cancelled");
 });
 
 test("execute puts failures and call failures in the error channel", () =>
   withSession("app", (session) =>
     Effect.gen(function* () {
-      const [, refuse, , , , , hidden] = fixture.capabilities;
-      assert.deepEqual(yield* Effect.flip(session.execute(refuse!, {})), { _tag: "Refused", reason: "No." });
-      const value = yield* session.execute(hidden!, {});
+      assert.deepEqual(yield* Effect.flip(session.execute(refuse, {})), { _tag: "Refused", reason: "No." });
+      const value = yield* session.execute(hidden, {});
       assert.equal(value, null);
     }),
   ));

@@ -4,17 +4,17 @@
  */
 import { bundle, CLI_EXIT_CODES, cliExitCode, cliUsage, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
 import type { CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec-ts";
-import { Console, Effect, Layer, Option, Schema } from "effect";
-import type { Terminal } from "effect";
+import { Console, Effect, Option, Predicate, Schema } from "effect";
 import { Argument, CliError, Command, Flag } from "effect/cli";
 
 import * as App from "./App.ts";
 import * as Session from "./Session.ts";
 
 /**
- * The options of the command line. `E` and `R` are the errors and the services of the commands of the application.
+ * The options of the command line. `Commands` is the type of the commands of the application. Their errors and their
+ * services are the errors and the services of the command line.
  */
-export interface Options<E = never, R = never> {
+export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = readonly []> {
   readonly name: string;
   readonly version: string;
   /** The target that the command line serves. The default is `"cli"`. */
@@ -29,14 +29,14 @@ export interface Options<E = never, R = never> {
    * must not be `call`, `list`, the name of another command of the application, or the first word of the command of a
    * capability (spec/bindings/cli.md#commands).
    */
-  readonly commands?: ReadonlyArray<Command.Command<any, any, any, E, R>> | undefined;
+  readonly commands?: Commands | undefined;
 }
 
 /**
  * The command line as an Effect. Exit codes follow spec/bindings/cli.md. To run it as the main program of a Node.js
  * process, use `NodeCli.main` from `@acid-cat/core-effect/node`.
  */
-export const run = <R, E = never, CR = never>(app: App.App<R>, options: Options<E, CR>) =>
+export const run = <R, const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(app: App.App<R>, options: Options<Commands>) =>
   runCommand(command(app, options), options);
 
 /**
@@ -47,13 +47,12 @@ export const run = <R, E = never, CR = never>(app: App.App<R>, options: Options<
 export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   command: Command.Command<Name, Input, ContextInput, E, R>,
   options: { readonly version: string },
-): Effect.Effect<void | number, Exclude<E, CliError.CliError | Terminal.QuitError>, R | Command.Environment> =>
-  Command.run(command, { version: options.version }).pipe(
-    Effect.catch((error) =>
-      CliError.isCliError(error)
-        ? Effect.sync(() => (process.exitCode = exitCodeOf(error)))
-        : Effect.fail(error as Exclude<E, CliError.CliError | Terminal.QuitError>),
-    ),
+): Effect.Effect<void | number, Exclude<E, CliError.CliError>, R | Command.Environment> =>
+  Effect.catchIf(
+    Command.run(command, { version: options.version }),
+    CliError.isCliError,
+    (error) => Effect.sync(() => (process.exitCode = exitCodeOf(error))),
+    Effect.fail,
   );
 
 /**
@@ -78,11 +77,17 @@ export type AppCommand<R, E = never> = Command.Command<string, {}, {}, E, R>;
  * The root command: one command for each capability in the view, `call`, `list`, and the commands of the application.
  * It throws if the name of a command of the application is not allowed (see `Options.commands`).
  */
-export function command<R, E = never, CR = never>(app: App.App<R>, options: Options<E, CR>): AppCommand<R | CR, E> {
+export function command<R, const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(
+  app: App.App<R>,
+  options: Options<Commands>,
+): AppCommand<R | Command.Services<Commands[number]>, Command.Error<Commands[number]>> {
   const target = options.target ?? "cli";
   const view = Session.make(app, { target });
   const document = App.document(app);
-  const catalogView = { ...document, capabilities: Object.fromEntries(Object.entries(document.capabilities).filter(([, c]) => (c.audience ?? []).includes(target))) } as CatalogDocument;
+  const catalogView: CatalogDocument = {
+    ...document,
+    capabilities: Object.fromEntries(Object.entries(document.capabilities).filter(([, c]) => (c.audience ?? []).includes(target))),
+  };
   const types = catalogView.$defs ?? {};
 
   const invoke = (id: string, input: unknown) =>
@@ -93,14 +98,16 @@ export function command<R, E = never, CR = never>(app: App.App<R>, options: Opti
 
   const leaves = Object.entries(catalogView.capabilities).map(([id, capability]) => {
     const schema = bundle(capability.input ?? { type: "object" }, types);
-    const properties = (schema.properties ?? {}) as { readonly [name: string]: JsonObject };
-    const required = new Set((schema.required ?? []) as readonly string[]);
-    const definitions = (schema.$defs ?? {}) as { readonly [name: string]: JsonObject };
+    const properties = schemasIn(schema.properties);
+    const required = new Set(isStrings(schema.required) ? schema.required : []);
+    const definitions = schemasIn(schema.$defs);
     const flags = Object.fromEntries(
       Object.entries(properties).map(([name, property]) => [name, flagFor(name, resolve(property, definitions), required.has(name))]),
     );
     const path = commandPath(id);
-    const leaf: AppCommand<R> = Command.make(path.at(-1)!, flags, (parsed: Record<string, unknown>) => invoke(id, inputFrom(parsed))).pipe(
+    const name = path.at(-1);
+    if (name === undefined) throw new Error(`The capability id ${id} has no words.`);
+    const leaf: AppCommand<R> = Command.make(name, flags, (parsed: Record<string, unknown>) => invoke(id, inputFrom(parsed))).pipe(
       Command.withDescription(capability.description),
     );
     return { path, leaf };
@@ -139,10 +146,13 @@ export function command<R, E = never, CR = never>(app: App.App<R>, options: Opti
   ).pipe(Command.withDescription("List the capabilities, with their availability."));
 
   const reserved = new Set(["call", "list"]);
+  const taken = new Set(reserved);
   for (const { path } of leaves) {
-    if (reserved.has(path[0]!)) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
+    const [first] = path;
+    if (first === undefined) continue;
+    if (reserved.has(first)) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
+    taken.add(first);
   }
-  const taken = new Set([...reserved, ...leaves.map(({ path }) => path[0]!)]);
   for (const added of options.commands ?? []) {
     if (taken.has(added.name)) throw new Error(`The command ${added.name} of the application has the same name as another command.`);
     taken.add(added.name);
@@ -164,13 +174,14 @@ function group<R>(leaves: readonly Leaf<R>[], prefix: readonly string[]): AppCom
   const commands: AppCommand<R>[] = [];
   const byWord = new Map<string, Leaf<R>[]>();
   for (const entry of leaves) {
-    if (entry.path.length === 1) {
+    const [word, ...rest] = entry.path;
+    if (word === undefined || rest.length === 0) {
       commands.push(entry.leaf);
       continue;
     }
-    const children = byWord.get(entry.path[0]!) ?? [];
-    children.push({ path: entry.path.slice(1), leaf: entry.leaf });
-    byWord.set(entry.path[0]!, children);
+    const children = byWord.get(word) ?? [];
+    children.push({ path: rest, leaf: entry.leaf });
+    byWord.set(word, children);
   }
   for (const [word, children] of byWord) {
     commands.push(
@@ -183,6 +194,18 @@ function group<R>(leaves: readonly Leaf<R>[], prefix: readonly string[]): AppCom
   return commands;
 }
 
+const isStrings = Schema.is(Schema.Array(Schema.String));
+const isStringEnum = Schema.is(Schema.NonEmptyArray(Schema.String));
+
+/**
+ * The schemas in a `properties` or `$defs` object, by name. A schema that is not an object, for example `true`, has no
+ * keywords, so it becomes the empty schema.
+ */
+function schemasIn(value: unknown): { readonly [name: string]: JsonObject } {
+  if (!Predicate.isReadonlyObject(value)) return {};
+  return Object.fromEntries(Object.entries(value).map(([name, schema]) => [name, Predicate.isReadonlyObject(schema) ? schema : {}]));
+}
+
 /** A property schema, or the type that it refers to. */
 function resolve(property: JsonObject, definitions: { readonly [name: string]: JsonObject }): JsonObject {
   const name = typeof property.$ref === "string" ? REFERENCE.exec(property.$ref)?.[1] : undefined;
@@ -191,10 +214,9 @@ function resolve(property: JsonObject, definitions: { readonly [name: string]: J
 
 /** The flag for one property of the input (spec/bindings/cli.md#commands). */
 function flagFor(name: string, property: JsonObject, required: boolean) {
-  const enumValues = Array.isArray(property.enum) && property.enum.every((value) => typeof value === "string") ? (property.enum as string[]) : undefined;
   const base: Flag.Flag<unknown> =
-    enumValues !== undefined
-      ? Flag.Literals(name, enumValues as [string, ...string[]])
+    isStringEnum(property.enum)
+      ? Flag.Literals(name, property.enum)
       : property.type === "integer"
         ? Flag.Int(name)
         : property.type === "number"

@@ -2,7 +2,7 @@
  * The WebMCP binding (spec/bindings/webmcp.md): register capabilities as WebMCP tools in a web page.
  */
 import { bundle, callFailure, CallFailureError, isCallFailure } from "@acid-cat/spec-ts";
-import { Effect, Option, Queue, Scope, Stream, SubscriptionRef } from "effect";
+import { Effect, Option, Predicate, Queue, Scope, Stream, SubscriptionRef } from "effect";
 
 import type * as Session from "./Session.ts";
 
@@ -34,12 +34,22 @@ export interface Installation {
 
 /** The WebMCP host of the page, if there is one (spec/bindings/webmcp.md#host). */
 export function findHost(): ModelContext | undefined {
-  const scope = globalThis as { document?: { modelContext?: unknown }; navigator?: { modelContext?: unknown } };
-  for (const candidate of [scope.document?.modelContext, scope.navigator?.modelContext]) {
-    if (typeof (candidate as ModelContext | undefined)?.registerTool === "function") return candidate as ModelContext;
+  for (const owner of ["document", "navigator"]) {
+    const candidate = property(property(globalThis, owner), "modelContext");
+    if (isModelContext(candidate)) return candidate;
   }
   return undefined;
 }
+
+/** A property of a value, or `undefined` if the value has no such property. */
+const property = (value: unknown, name: string): unknown => (Predicate.hasProperty(value, name) ? value[name] : undefined);
+
+/**
+ * `true` if the value has a `registerTool` function. JavaScript cannot check the parameters of a function, so the
+ * check stops there, as in the specification of the host (spec/bindings/webmcp.md#host).
+ */
+const isModelContext = (value: unknown): value is ModelContext =>
+  Predicate.hasProperty(value, "registerTool") && typeof value.registerTool === "function";
 
 /**
  * Register the capabilities of a session as tools. If there is no host, do nothing and return `None`. The tools are
@@ -60,7 +70,8 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
     const types = session.view.$defs ?? {};
 
     const toolFor = (id: string): ModelContextTool => {
-      const capability = session.view.capabilities[id]!;
+      const capability = session.view.capabilities[id];
+      if (capability === undefined) throw new Error(`The view has no capability ${id}.`);
       return {
         name: id,
         description: capability.description,
@@ -138,7 +149,7 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
         yield* SubscriptionRef.set(status, { phase: "closing", message: null });
         lifetime.abort();
         registered.clear();
-        yield* Effect.promise(() => Promise.allSettled([...calls]));
+        yield* Effect.promise(() => Promise.allSettled(calls));
         yield* SubscriptionRef.set(status, { phase: "disposed", message: null });
       }),
     );

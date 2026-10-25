@@ -1,13 +1,18 @@
-import type { Availability } from "@acid-cat/spec-ts";
-import type { SubscriptionRef } from "effect";
+import type { Availability, Outcome } from "@acid-cat/spec-ts";
+import type { Effect, SubscriptionRef } from "effect";
+
+import type { Readable } from "../Capability.ts";
 
 /**
- * The refs that a session got from the provider, by id. Only the handles of the session read them. This module is not
- * an entry point of the package, so other code cannot get the refs of a provider through a session.
+ * What the handles of a session need from it, by id: the refs that the session got from the provider, and calls with
+ * inputs that are already decoded but not typed. This module is not an entry point of the package, so other code
+ * cannot get them through a session.
  */
 export interface ServedRefs {
   readonly availability: (id: string) => SubscriptionRef.SubscriptionRef<Availability> | undefined;
-  readonly state: (id: string) => SubscriptionRef.SubscriptionRef<unknown> | undefined;
+  readonly state: (id: string) => Readable<unknown> | undefined;
+  /** A call with an input that is already decoded. The outcome is not encoded. This effect never fails. */
+  readonly execute: (id: string, input: unknown) => Effect.Effect<Outcome<unknown, unknown>>;
 }
 
 const sessions = new WeakMap<object, ServedRefs>();

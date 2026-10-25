@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { Effect, Layer, Schema } from "effect";
 
 import { App, Capability, Handles, Http, Session } from "../src/index.ts";
+import { CatalogShape, decodeBody, Listing } from "./decode.ts";
 
 /** An application whose input schema counts how many times Effect writes it as JSON Schema. */
 function countedApp() {
@@ -67,13 +68,13 @@ test("an HTTP call and GET /capabilities write no JSON Schema, and GET /catalog 
     }),
   );
   assert.equal(call.status, 200);
-  const list = (await (await handler(new Request("https://probe.example/capabilities"))).json()) as { id: string; available: boolean }[];
+  const list = await decodeBody(Listing, await handler(new Request("https://probe.example/capabilities")));
   assert.deepEqual(list, [{ id: "probe.echo", available: true }]);
   assert.equal(counts.writes, 0);
 
   for (let request = 0; request < 2; request++) {
     const catalog = await handler(new Request("https://probe.example/catalog"));
-    assert.ok("probe.echo" in ((await catalog.json()) as { capabilities: object }).capabilities);
+    assert.ok("probe.echo" in (await decodeBody(CatalogShape, catalog)).capabilities);
   }
   assert.equal(counts.writes, 1);
 });

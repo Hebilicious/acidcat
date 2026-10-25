@@ -5,7 +5,7 @@
 import { canonicalText } from "@acid-cat/catalog";
 import { objectInput, REFERENCE } from "@acid-cat/spec-ts";
 import type { CatalogCapability, CatalogDocument, JsonObject } from "@acid-cat/spec-ts";
-import { Schema } from "effect";
+import { Predicate, Schema } from "effect";
 
 import type * as Capability from "./Capability.ts";
 
@@ -28,16 +28,17 @@ export const make = <const Capabilities extends readonly Capability.Any[]>(app: 
   readonly title?: string;
   readonly description?: string;
   readonly targets: { readonly [name: string]: Target };
-  readonly capabilities: Capabilities;
+  /** Each capability needs only the services of all the capabilities, so the intersection accepts the same values. */
+  readonly capabilities: Capabilities & readonly Capability.Any<Capability.Services<Capabilities[number]>>[];
 }): App<Capability.Services<Capabilities[number]>> => app;
 
-const documents = new WeakMap<App<any>, CatalogDocument>();
+const documents = new WeakMap<App<unknown>, CatalogDocument>();
 
 /**
  * The catalog of an application, as a JSON document. The document is written one time for each application. Later
  * calls give the same document.
  */
-export function document(app: App<any>): CatalogDocument {
+export function document(app: App<unknown>): CatalogDocument {
   let written = documents.get(app);
   if (written === undefined) {
     written = write(app);
@@ -46,7 +47,7 @@ export function document(app: App<any>): CatalogDocument {
   return written;
 }
 
-function write(app: App<any>): CatalogDocument {
+function write(app: App<unknown>): CatalogDocument {
   const types: Record<string, JsonObject> = {};
 
   const toJson = (schema: Schema.Top, where: string): JsonObject => {
@@ -56,9 +57,9 @@ function write(app: App<any>): CatalogDocument {
       if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(definition)) {
         throw new Error(`${where}: two different schemas have the identifier ${name}. Give each one its own identifier.`);
       }
-      types[name] = definition as JsonObject;
+      types[name] = definition;
     }
-    return json as JsonObject;
+    return json;
   };
 
   const capabilities: Record<string, CatalogCapability> = {};
@@ -104,13 +105,14 @@ function write(app: App<any>): CatalogDocument {
 }
 
 /** The catalog of an application, as text in canonical form. */
-export const render = (app: App<any>): string => canonicalText(document(app));
+export const render = (app: App<unknown>): string => canonicalText(document(app));
 
 function tagOf(schema: JsonObject, types: { readonly [name: string]: JsonObject }): string | undefined {
   const name = typeof schema.$ref === "string" ? REFERENCE.exec(schema.$ref)?.[1] : undefined;
   const resolved = name === undefined ? schema : types[name];
-  const tag = (resolved?.properties as { readonly _tag?: JsonObject } | undefined)?._tag;
-  if (tag === undefined) return undefined;
+  const properties = resolved?.properties;
+  const tag = Predicate.isReadonlyObject(properties) ? properties._tag : undefined;
+  if (!Predicate.isReadonlyObject(tag)) return undefined;
   if (typeof tag.const === "string") return tag.const;
   if (Array.isArray(tag.enum) && tag.enum.length === 1 && typeof tag.enum[0] === "string") return tag.enum[0];
   return undefined;
@@ -125,6 +127,6 @@ function tagOf(schema: JsonObject, types: { readonly [name: string]: JsonObject 
 function inputSchema(input: Schema.Top, json: JsonObject): JsonObject {
   const notNull = Object.keys(json).length === 1 && JSON.stringify(json.not) === JSON.stringify({ type: "null" });
   if (!notNull) return json;
-  const fields = "fields" in input ? (input.fields as object) : undefined;
-  return fields !== undefined && Object.keys(fields).length === 0 ? { type: "object", properties: {} } : { type: "object" };
+  const fields = "fields" in input ? input.fields : undefined;
+  return Predicate.isReadonlyObject(fields) && Object.keys(fields).length === 0 ? { type: "object", properties: {} } : { type: "object" };
 }

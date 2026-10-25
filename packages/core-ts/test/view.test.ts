@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { z } from "zod";
+
 import { createSession, httpHandler } from "../src/index.ts";
 import type { ToJsonSchema } from "../src/index.ts";
-import { fixture, options, toJsonSchema } from "./fixture.ts";
+import { fixture, options, readJson, toJsonSchema } from "./fixture.ts";
 
 /** A `toJsonSchema` that counts the schemas it writes. */
 function countedToJsonSchema() {
@@ -48,7 +50,7 @@ test("an HTTP call and GET /capabilities write no JSON Schema, and GET /catalog 
   assert.equal((await handler(new Request("https://fixture.example/capabilities"))).status, 200);
   assert.equal(counts.writes, 0);
 
-  const catalog = async () => (await (await handler(new Request("https://fixture.example/catalog"))).json()) as { capabilities: object };
+  const catalog = async () => readJson(await handler(new Request("https://fixture.example/catalog")), z.object({ capabilities: z.record(z.string(), z.unknown()) }));
   assert.ok("fixture.echo" in (await catalog()).capabilities);
   const written = counts.writes;
   assert.ok(written > 0);

@@ -92,7 +92,7 @@ export const fill = capability({
   failures: { Overflow },
   run: ({ litres }, { context }) => {
     const total = context.kettle.status.litres + litres;
-    if (total > CAPACITY) return fail("Overflow", { capacity: CAPACITY });
+    if (total > CAPACITY) return fail({ _tag: "Overflow", capacity: CAPACITY });
     context.kettle.change({ litres: total });
     return ok(null);
   },
@@ -105,7 +105,7 @@ export const boil = capability({
   output: Boiled,
   failures: { Empty },
   run: (_, { context }) => {
-    if (context.kettle.status.litres === 0) return fail("Empty");
+    if (context.kettle.status.litres === 0) return fail({ _tag: "Empty" });
     context.kettle.change({ celsius: 100 });
     return ok({ celsius: 100 });
   },
@@ -118,7 +118,7 @@ export const warmSet = capability({
   input: z.object({ drink: Drink }),
   failures: { Empty },
   run: ({ drink }, { context }) => {
-    if (context.kettle.status.litres === 0) return fail("Empty");
+    if (context.kettle.status.litres === 0) return fail({ _tag: "Empty" });
     context.kettle.change({ keepWarm: drink, celsius: WARM_CELSIUS[drink] });
     return ok(null);
   },

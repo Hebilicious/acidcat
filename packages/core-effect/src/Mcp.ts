@@ -3,7 +3,7 @@
  */
 import { bundle, MCP_REJECTIONS, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec-ts";
 import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer, ManagedRuntime } from "effect";
+import { Context, Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
@@ -119,12 +119,14 @@ export const registerTools = (session: Session.Session, signal: AbortSignal = ne
       if (!(yield* session.availability(id)).available) continue;
       const output = capability.output === undefined ? undefined : bundle(capability.output, types);
       const hasOutputSchema = output?.type === "object";
+      const inputSchema = yield* decodeToolInput(bundle(capability.input ?? { type: "object" }, types));
+      const outputSchema = hasOutputSchema ? yield* decodeToolOutput(output) : undefined;
       yield* server.addTool({
         tool: new McpSchema.Tool({
           name: id,
           description: capability.description,
-          inputSchema: bundle(capability.input ?? { type: "object" }, types) as never,
-          ...(hasOutputSchema ? { outputSchema: output as never } : {}),
+          inputSchema,
+          ...(outputSchema === undefined ? {} : { outputSchema }),
           annotations: { readOnlyHint: capability.readOnly === true },
         }),
         annotations: Context.empty(),
@@ -133,11 +135,19 @@ export const registerTools = (session: Session.Session, signal: AbortSignal = ne
             .invoke(id, payload ?? {})
             .pipe(
               cancelOnAbort(signal),
-              Effect.map((outcome) => new McpSchema.CallToolResult(mcpToolResult(outcome, hasOutputSchema) as never)),
+              Effect.flatMap((outcome) => decodeToolResult(mcpToolResult(outcome, hasOutputSchema))),
             ),
       });
     }
   });
+
+/**
+ * The schemas of a tool, and its result, in the types of `effect/ai`. The catalog makes each of them, so a value that
+ * does not decode is a defect.
+ */
+const decodeToolInput = (schema: JsonObject) => Effect.orDie(Schema.decodeUnknownEffect(McpSchema.ToolJson)(schema));
+const decodeToolOutput = (schema: unknown) => Effect.orDie(Schema.decodeUnknownEffect(McpSchema.ToolOutputJson)(schema));
+const decodeToolResult = (result: unknown) => Effect.orDie(Schema.decodeUnknownEffect(McpSchema.CallToolResult)(result));
 
 function rejection(reason: Rejection): Response {
   const { status, code } = MCP_REJECTIONS[reason];

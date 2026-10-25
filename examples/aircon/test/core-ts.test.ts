@@ -1,33 +1,19 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
-import type { CatalogDocument } from "@acid-cat/spec-ts";
 import type { z } from "zod";
 
 import { aircon, firmwareUpdate, modeSet, Offline, PoweredOff, powerSet, Status, statusGet, toJsonSchema, Unit } from "../core-ts/aircon.ts";
 import { CallFailureError, catalogOf, createSession, getHandle, renderCatalog, runCli } from "@acid-cat/core-ts";
 import type { Result } from "@acid-cat/core-ts";
-
-const written = JSON.parse(readFileSync(new URL("../catalog/aircon.acidcat.json", import.meta.url), "utf-8")) as CatalogDocument;
-
-/** The parts of a catalog that do not depend on how its schemas are written. */
-const shape = (catalog: CatalogDocument) => ({
-  targets: catalog.targets,
-  capabilities: Object.fromEntries(
-    Object.entries(catalog.capabilities).map(([id, capability]) => [
-      id,
-      { audience: capability.audience, readOnly: capability.readOnly ?? false, failures: Object.keys(capability.failures ?? {}).sort(), state: capability.state !== undefined },
-    ]),
-  ),
-});
+import { shape, writtenText } from "./shape.ts";
 
 test("the code writes a catalog that conforms and agrees with the Pkl catalog", () => {
   const text = renderCatalog(aircon, { toJsonSchema });
   assert.deepEqual(check(JSON.parse(text), text).errors, []);
-  assert.deepEqual(shape(catalogOf(aircon, { toJsonSchema })), shape(written));
+  assert.deepEqual(shape(catalogOf(aircon, { toJsonSchema })), shape(JSON.parse(writtenText)));
 });
 
 test("the unit works through a session and the command line", async () => {
@@ -35,7 +21,9 @@ test("the unit works through a session and the command line", async () => {
   const session = createSession(aircon, { target: "mcp", context: { unit }, toJsonSchema });
   assert.deepEqual(await session.invoke("aircon.mode.set", { mode: "heat" }), { ok: false, error: { _tag: "PoweredOff" } });
   assert.deepEqual(await session.invoke("aircon.power.set", { on: true }), { ok: true, value: null });
-  assert.equal(((await session.invoke("aircon.temperature.set", { celsius: 40 })) as { kind: string }).kind, "invalid-input");
+  const invalid = await session.invoke("aircon.temperature.set", { celsius: 40 });
+  assert.ok("kind" in invalid, "a temperature outside 16 to 31 is a call failure");
+  assert.equal(invalid.kind, "invalid-input");
   await session.dispose();
 
   const out: string[] = [];
@@ -50,15 +38,17 @@ test("the unit works through a session and the command line", async () => {
 test("a handle gives the state as copies, and each change", async () => {
   const unit = new Unit();
   const session = createSession(aircon, { target: "app", context: { unit }, toJsonSchema });
-  const snapshot = session.handles.get("aircon.status.get")!.snapshot!;
-  assert.equal((snapshot.getSnapshot() as { power: boolean }).power, false);
-  const seen: unknown[] = [];
+  const { snapshot } = getHandle(session.handles, statusGet);
+  assert.ok(snapshot, "aircon.status.get has state");
+  const off: z.infer<typeof Status> = { power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 };
+  assert.deepEqual(snapshot.getSnapshot(), off);
+  const seen: z.infer<typeof Status>[] = [];
   snapshot.subscribe((value) => seen.push(value));
   await session.invoke("aircon.power.set", { on: true });
-  assert.equal((seen.at(-1) as { power: boolean }).power, true);
-  (snapshot.getSnapshot() as { power: boolean }).power = false;
+  assert.deepEqual(seen, [{ ...off, power: true }]);
+  snapshot.getSnapshot().power = false;
   assert.equal(unit.state.power, true);
-  assert.equal(session.handles.get("aircon.power.set")!.snapshot, undefined);
+  assert.equal(getHandle(session.handles, powerSet).snapshot, undefined);
   await session.dispose();
 });
 
@@ -78,14 +68,14 @@ test("getHandle gives a handle with the types of its capability", async () => {
   assert.deepEqual(value, { ok: true, value: snapshot });
 
   // These calls do not run. `moon run core-ts:typecheck` checks that each one is an error.
-  const wrongCalls = () => [
+  const wrongCalls = () => {
     // @ts-expect-error The input of aircon.power.set has `on`, a boolean.
-    power.execute({ on: "yes" }),
+    void power.execute({ on: "yes" });
     // @ts-expect-error The mode is one of the values of `Mode`.
-    mode.execute({ mode: "boil" }),
+    void mode.execute({ mode: "boil" });
     // @ts-expect-error The status has no `humidity`.
-    status.snapshot?.getSnapshot().humidity,
-  ];
+    void status.snapshot?.getSnapshot().humidity;
+  };
   void wrongCalls;
   await session.dispose();
 });

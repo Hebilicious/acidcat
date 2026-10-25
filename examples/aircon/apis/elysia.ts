@@ -13,6 +13,7 @@ import { Elysia } from "elysia";
 import { z } from "zod";
 
 import { FanInput, fanSet, FanSpeed, Mode, ModeInput, modeSet, PowerInput, powerSet, statusGet, TemperatureInput, temperatureSet } from "../core-ts/aircon.ts";
+import type { Context } from "../core-ts/aircon.ts";
 import { decode, Failure, forbidden, foreignOrigin, httpBinding, value, withSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
 
@@ -24,10 +25,10 @@ const Settings = z.object({
   targetCelsius: z.number().optional(),
 });
 
-const status = (session: Session) => value(getHandle(session.handles, statusGet).execute({}));
+const status = (session: Session<Context>) => value(getHandle(session.handles, statusGet).execute({}));
 
 /** Change each setting that `settings` gives, then give the new status. */
-async function change(session: Session, settings: z.infer<typeof Settings>) {
+async function change(session: Session<Context>, settings: z.infer<typeof Settings>) {
   const { handles } = session;
   if (settings.power !== undefined) await value(getHandle(handles, powerSet).execute(decode(PowerInput, { on: settings.power })));
   if (settings.mode !== undefined) await value(getHandle(handles, modeSet).execute(decode(ModeInput, { mode: settings.mode })));

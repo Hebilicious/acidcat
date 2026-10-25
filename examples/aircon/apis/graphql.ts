@@ -14,16 +14,16 @@ import { createYoga } from "graphql-yoga";
 import type { z } from "zod";
 
 import { FanInput, fanSet, FanSpeed, Mode, ModeInput, modeSet, PowerInput, powerSet, statusGet, TemperatureInput, temperatureSet } from "../core-ts/aircon.ts";
-import type { Status } from "../core-ts/aircon.ts";
+import type { Context as AirconContext, Status } from "../core-ts/aircon.ts";
 import { decode, Failure, forbidden, foreignOrigin, httpBinding, value, withSession } from "./shared.ts";
-import type { ApiOptions } from "./shared.ts";
+import type { ApiOptions, TaggedFailure } from "./shared.ts";
 
 interface Context {
-  readonly session: Session;
+  readonly session: Session<AirconContext>;
 }
 
 /** The value of a call. A failure or a call failure becomes a GraphQL error, with its tag or its kind as `code`. */
-async function call<Value, Tagged extends { readonly _tag: string }>(run: () => Promise<Result<Value, Tagged>>): Promise<Value> {
+async function call<Value, Tagged extends TaggedFailure>(run: () => Promise<Result<Value, Tagged>>): Promise<Value> {
   try {
     return await value(run());
   } catch (error) {
@@ -35,7 +35,7 @@ async function call<Value, Tagged extends { readonly _tag: string }>(run: () => 
   }
 }
 
-const status = (session: Session) => call(() => getHandle(session.handles, statusGet).execute({}));
+const status = (session: Session<AirconContext>) => call(() => getHandle(session.handles, statusGet).execute({}));
 
 const builder = new SchemaBuilder<{ Context: Context }>({});
 
@@ -60,7 +60,7 @@ builder.queryType({
 });
 
 /** Make a call, then give the new status. */
-const change = async <Value, Tagged extends { readonly _tag: string }>(session: Session, run: () => Promise<Result<Value, Tagged>>) => {
+const change = async <Value, Tagged extends TaggedFailure>(session: Session<AirconContext>, run: () => Promise<Result<Value, Tagged>>) => {
   await call(run);
   return status(session);
 };

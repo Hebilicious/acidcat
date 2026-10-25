@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Effect, Layer, Option, Scope, SubscriptionRef } from "effect";
+import { CallFailureError } from "@acid-cat/spec-ts";
+import { Effect, Exit, Layer, Option, Scope, SubscriptionRef } from "effect";
 
 import { Session, WebMcp } from "../src/index.ts";
 import { fixture, fixtureLayer, position, Switch } from "./fixture.ts";
@@ -22,6 +23,13 @@ function fakeHost() {
   return host;
 }
 
+/** The tool of a host with a name. It must exist. */
+function toolOf(host: ReturnType<typeof fakeHost>, name: string) {
+  const tool = host.tools.get(name);
+  assert.ok(tool !== undefined, `The host has no tool ${name}.`);
+  return tool;
+}
+
 const settle = Effect.sleep(20);
 
 test("tools follow availability, a failed update keeps the last tools, and closing removes them", () =>
@@ -36,10 +44,11 @@ test("tools follow availability, a failed update keeps the last tools, and closi
       assert.ok(host.tools.has("fixture.hidden"));
       assert.ok(host.tools.has("fixture.toggle"));
 
-      const echo = yield* Effect.promise(() => host.tools.get("fixture.echo")!.execute({ text: "hi" }));
+      const echo = yield* Effect.promise(() => toolOf(host, "fixture.echo").execute({ text: "hi" }));
       assert.deepEqual(echo, { ok: true, value: { text: "hi" } });
-      const crash = yield* Effect.promise(() => host.tools.get("fixture.crash")!.execute({}).catch((error) => error));
-      assert.equal((crash as { kind: string }).kind, "internal");
+      const crash = yield* Effect.promise(() => toolOf(host, "fixture.crash").execute({}).catch((error: unknown) => error));
+      assert.ok(crash instanceof CallFailureError);
+      assert.equal(crash.kind, "internal");
 
       yield* SubscriptionRef.set(yield* Switch, position(false));
       yield* settle;
@@ -58,7 +67,7 @@ test("tools follow availability, a failed update keeps the last tools, and closi
       assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "ready");
       assert.ok(host.tools.has("fixture.toggle"));
 
-      yield* Scope.close(scope, { _tag: "Success", value: undefined } as never);
+      yield* Scope.close(scope, Exit.void);
       assert.equal(host.tools.size, 0);
       assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "disposed");
     }).pipe(Effect.provide(Layer.fresh(fixtureLayer))),

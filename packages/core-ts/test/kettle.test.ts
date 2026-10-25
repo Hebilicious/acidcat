@@ -168,7 +168,8 @@ test("getHandle gives a handle with the types of its capability", async () => {
   assert.equal(snapshot?.keepWarm, "white-tea");
 
   // These calls do not run. `moon run core-ts:typecheck` checks that each one is an error.
-  const wrongCalls = (boiled: Result<{ celsius: number }, { readonly _tag: "Empty" }>) => [
+  const wrongCalls = (boiled: Result<{ celsius: number }, { readonly _tag: "Empty" }>) => {
+    void [
     // @ts-expect-error The input of kettle.fill has `litres`, a number.
     filling.execute({ litres: "one" }),
     // @ts-expect-error The drink is one of the values of `Drink`.
@@ -179,7 +180,8 @@ test("getHandle gives a handle with the types of its capability", async () => {
     boiled.ok ? boiled.value.litres : undefined,
     // @ts-expect-error The only failure of kettle.boil is Empty.
     boiled.ok || boiled.error._tag === "Overflow",
-  ];
+    ];
+  };
   void wrongCalls;
   await session.dispose();
 });
@@ -199,6 +201,33 @@ test("getHandle gives an always unavailable handle for a capability outside the 
     assert.ok(error instanceof CallFailureError);
     assert.equal(error.kind, "unknown-capability");
   }
+  await session.dispose();
+});
+
+test("getHandle serves only the capability object of the application, and a capability with no input gets an empty object", async () => {
+  const seen: unknown[] = [];
+  const probe = defineCapability({
+    id: "probe.empty",
+    description: "Record the input.",
+    audience: ["app"],
+    run: (input) => {
+      seen.push(input);
+      return ok(null);
+    },
+  });
+  const app = defineApp({ targets: { app: { bindings: ["typescript"] } }, capabilities: [probe] });
+  const session = createSession(app, { target: "app", context: undefined, toJsonSchema });
+
+  assert.deepEqual(await getHandle(session.handles, probe).execute({}), { ok: true, value: null });
+  assert.deepEqual(await session.invoke("probe.empty", { extra: 1 }), { ok: true, value: null });
+  assert.deepEqual(seen, [{}, {}]);
+
+  const copy = defineCapability({ id: "probe.empty", description: "Another capability with the same id.", audience: ["app"], run: () => ok(null) });
+  const other = getHandle(session.handles, copy);
+  assert.equal(other.availability.getSnapshot().available, false);
+  const error = await other.execute({}).catch((caught: unknown) => caught);
+  assert.ok(error instanceof CallFailureError);
+  assert.equal(error.kind, "unknown-capability");
   await session.dispose();
 });
 

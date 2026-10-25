@@ -1,8 +1,8 @@
 /**
  * The CLI binding (spec/bindings/cli.md): a command line made from the catalog.
  */
-import { bundle, CLI_EXIT_CODES, cliExitCode, cliFlags, cliUsage, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
-import type { JsonObject, Outcome } from "@acid-cat/spec-ts";
+import { bundle, CLI_EXIT_CODES, cliExitCode, cliFlags, cliUsage, commandPath, isCallFailure, isJsonObject, REFERENCE } from "@acid-cat/spec-ts";
+import type { CatalogCapability, CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
 import { createSession } from "./session.ts";
@@ -72,7 +72,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     if (path[0] === "call" || path[0] === "list") throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
   }
   const added = options.commands ?? [];
-  const taken = new Set(["call", "list", ...commands.map(({ path }) => path[0]!)]);
+  const taken = new Set(["call", "list", ...commands.flatMap(({ path }) => path.slice(0, 1))]);
   for (const command of added) {
     if (taken.has(command.name)) throw new Error(`The command ${command.name} of the application has the same name as another command.`);
     taken.add(command.name);
@@ -99,7 +99,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       io.stdout(
         JSON.stringify(
           [...session.handles.values()].map((handle) => {
-            const input = session.view.capabilities[handle.id]!.input;
+            const input = viewCapability(session.view, handle.id).input;
             return {
               id: handle.id,
               description: handle.description,
@@ -132,7 +132,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       .sort((a, b) => b.path.length - a.path.length)[0];
     if (match === undefined) throw new UsageError(`There is no command ${args.filter((arg) => !arg.startsWith("-")).join(" ")}.`, CLI_EXIT_CODES["unknown-capability"]);
 
-    const capability = session.view.capabilities[match.id]!;
+    const capability = viewCapability(session.view, match.id);
     const schema = bundle(capability.input ?? { type: "object" }, types);
     const flagArgs = args.slice(match.path.length);
     if (flagArgs.includes("--help") || flagArgs.includes("-h")) {
@@ -151,25 +151,27 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
 
 /** Make the input from the flags (spec/bindings/cli.md#commands). */
 function parseFlags(args: readonly string[], schema: JsonObject): Record<string, unknown> {
-  const properties = (schema.properties ?? {}) as { readonly [name: string]: JsonObject };
-  const definitions = (schema.$defs ?? {}) as { readonly [name: string]: JsonObject };
+  const properties = objectOrEmpty(schema.properties);
+  const definitions = objectOrEmpty(schema.$defs);
   const input: Record<string, unknown> = {};
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]!;
+  // The loop and the value of a flag read the same iterator, so that a value is not read again as a flag.
+  const remaining = args.values();
+  for (const arg of remaining) {
     if (!arg.startsWith("--")) throw new UsageError(`Unexpected argument ${arg}.`, CLI_EXIT_CODES["invalid-input"]);
-    const [name, inline] = arg.slice(2).split(/=(.*)/s, 2) as [string, string | undefined];
+    const [name = "", inline] = arg.slice(2).split(/=(.*)/s, 2);
     const property = properties[name];
     if (property === undefined) throw new UsageError(`Unknown flag --${name}.`, CLI_EXIT_CODES["invalid-input"]);
-    const type = resolve(property, definitions);
+    const type = resolve(objectOrEmpty(property), definitions);
     if (type.type === "boolean") {
       input[name] = inline === undefined ? true : inline === "true";
       continue;
     }
-    const text = inline ?? args[(index += 1)];
+    const text = inline ?? remaining.next().value;
     if (text === undefined) throw new UsageError(`The flag --${name} needs a value.`, CLI_EXIT_CODES["invalid-input"]);
     input[name] = valueOf(name, text, type);
   }
-  for (const name of (schema.required ?? []) as readonly string[]) {
+  const required = Array.isArray(schema.required) ? schema.required.filter((name): name is string => typeof name === "string") : [];
+  for (const name of required) {
     if (!(name in input)) throw new UsageError(`The flag --${name} is required.`, CLI_EXIT_CODES["invalid-input"]);
   }
   return input;
@@ -195,9 +197,19 @@ function valueOf(name: string, text: string, type: JsonObject): unknown {
   }
 }
 
-function resolve(property: JsonObject, definitions: { readonly [name: string]: JsonObject }): JsonObject {
+function resolve(property: JsonObject, definitions: JsonObject): JsonObject {
   const name = typeof property.$ref === "string" ? REFERENCE.exec(property.$ref)?.[1] : undefined;
-  return name === undefined ? property : (definitions[name] ?? property);
+  return name === undefined ? property : objectOrEmpty(definitions[name] ?? property);
+}
+
+/** A value as a JSON object, or an empty object when it is not one. */
+const objectOrEmpty = (value: unknown): JsonObject => (isJsonObject(value) ? value : {});
+
+/** The capability `id` of a view. The view has it, because the session serves it. */
+function viewCapability(view: CatalogDocument, id: string): CatalogCapability {
+  const capability = view.capabilities[id];
+  if (capability === undefined) throw new Error(`The view of the session has no capability ${id}.`);
+  return capability;
 }
 
 function help(name: string, description: string, paths: readonly string[], added: readonly CliCommand<unknown>[]): string {

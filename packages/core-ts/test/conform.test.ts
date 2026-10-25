@@ -19,7 +19,8 @@ test("the TypeScript core passes acid-cat conform through all its bindings", asy
       cli: [process.execPath, new URL("./fixture-cli.ts", import.meta.url).pathname],
       webmcp: (modelContext) => {
         const session = createSession(fixture, { target: "app", ...options() });
-        const installation = installWebMcp(session, { host: modelContext })!;
+        const installation = installWebMcp(session, { host: modelContext });
+        assert.ok(installation !== undefined);
         return async () => {
           await installation.dispose();
           await session.dispose();

@@ -5,8 +5,8 @@ import { check } from "@acid-cat/cli";
 import { z } from "zod";
 
 import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, httpHandler, installWebMcp, mcpHandler, ok, renderCatalog, runCli } from "../src/index.ts";
-import type { App, CliCommand, CliOptions, ModelContextTool } from "../src/index.ts";
-import { fixture, heldApp, Holds, options, Switch, toJsonSchema } from "./fixture.ts";
+import type { App, CliCommand, CliOptions, ModelContextTool, Outcome } from "../src/index.ts";
+import { fixture, heldApp, Holds, options, readJson, Switch, toJsonSchema } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
 
 test("the application writes a catalog that conforms", () => {
@@ -30,25 +30,30 @@ test("an input that is a union of objects is an object schema, and the catalog c
   });
   const text = renderCatalog(app, { toJsonSchema });
   assert.deepEqual(check(JSON.parse(text), text), { errors: [], warnings: [] });
-  assert.equal(catalogOf(app, { toJsonSchema }).capabilities["probe.find"]!.input!.type, "object");
+  assert.equal(catalogOf(app, { toJsonSchema }).capabilities["probe.find"]?.input?.type, "object");
 });
+
+/** The kind of a call failure, or `undefined` for a result. */
+const kindOf = (outcome: Outcome<unknown, unknown>) => ("kind" in outcome ? outcome.kind : undefined);
 
 test("a call gives a value, a failure or a call failure", async () => {
   const session = createSession(fixture, { target: "mcp", ...options() });
   assert.deepEqual(await session.invoke("fixture.echo", { text: "hi" }), { ok: true, value: { text: "hi" } });
   assert.deepEqual(await session.invoke("fixture.refuse", {}), { ok: false, error: { _tag: "Refused", reason: "No." } });
-  assert.equal(((await session.invoke("fixture.echo", { text: 1 })) as { kind: string }).kind, "invalid-input");
+  assert.equal(kindOf(await session.invoke("fixture.echo", { text: 1 })), "invalid-input");
   assert.deepEqual(await session.invoke("fixture.crash", {}), { kind: "internal", message: "The capability failed." });
-  assert.equal(((await session.invoke("fixture.hidden", {})) as { kind: string }).kind, "unknown-capability");
-  assert.equal(((await session.invoke("fixture.missing", {})) as { kind: string }).kind, "unknown-capability");
+  assert.equal(kindOf(await session.invoke("fixture.hidden", {})), "unknown-capability");
+  assert.equal(kindOf(await session.invoke("fixture.missing", {})), "unknown-capability");
   await session.dispose();
 });
 
 test("handles follow the TypeScript binding", async () => {
   const session = createSession(fixture, { target: "app", ...options() });
-  const echo = session.handles.get("fixture.echo")!;
+  const echo = session.handles.get("fixture.echo");
+  const crash = session.handles.get("fixture.crash");
+  assert.ok(echo !== undefined && crash !== undefined);
   assert.deepEqual(await echo.invokeExternal({ text: "hi" }), { ok: true, value: { text: "hi" } });
-  const error = await session.handles.get("fixture.crash")!.invokeExternal({}).catch((caught: unknown) => caught);
+  const error = await crash.invokeExternal({}).catch((caught: unknown) => caught);
   assert.ok(error instanceof CallFailureError);
   assert.equal(error.kind, "internal");
   await session.dispose();
@@ -66,12 +71,12 @@ test("availability, cancellation and closing", async () => {
   const controller = new AbortController();
   const held = session.invoke("fixture.hold", { key: "cancelled" }, { signal: controller.signal });
   controller.abort();
-  assert.equal(((await held) as { kind: string }).kind, "cancelled");
+  assert.equal(kindOf(await held), "cancelled");
 
   const pending = session.invoke("fixture.hold", { key: "pending" });
   await session.dispose();
-  assert.equal(((await pending) as { kind: string }).kind, "cancelled");
-  assert.equal(((await session.invoke("fixture.echo", { text: "x" })) as { kind: string }).kind, "cancelled");
+  assert.equal(kindOf(await pending), "cancelled");
+  assert.equal(kindOf(await session.invoke("fixture.echo", { text: "x" })), "cancelled");
 });
 
 test("a session subscribes to the availabilities only while it has listeners", async () => {
@@ -91,7 +96,9 @@ test("a session subscribes to the availabilities only while it has listeners", a
   second.unsubscribe();
   assert.equal(switcher.subscribers, 0);
 
-  const handle = session.handles.get("fixture.toggle")!.availability.subscribe(() => undefined);
+  const toggle = session.handles.get("fixture.toggle");
+  assert.ok(toggle !== undefined);
+  const handle = toggle.availability.subscribe(() => undefined);
   assert.equal(switcher.subscribers, 1);
   handle.unsubscribe();
   assert.equal(switcher.subscribers, 0);
@@ -106,24 +113,38 @@ test("a session subscribes to the availabilities only while it has listeners", a
 
 test("MCP gives the view and each outcome", async () => {
   const handler = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...options() });
+  const Reply = z.object({
+    result: z
+      .object({
+        tools: z.array(z.object({ name: z.string(), annotations: z.object({ readOnlyHint: z.boolean() }) })).optional(),
+        structuredContent: z.unknown().optional(),
+        isError: z.boolean().optional(),
+        content: z.tuple([z.object({ text: z.string() })]).optional(),
+      })
+      .optional(),
+    error: z.object({ code: z.number() }).optional(),
+  });
   const rpc = async (method: string, params: object = {}) =>
-    (await (
+    readJson(
       await handler(
         new Request("https://fixture.example/mcp", {
           method: "POST",
           headers: { "Content-Type": "application/json", "mcp-method": method, "mcp-protocol-version": "2026-07-28" },
           body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } } }),
         }),
-      )
-    ).json()) as { result?: any; error?: { code: number } };
-  const tools = (await rpc("tools/list")).result.tools as { name: string; annotations: { readOnlyHint: boolean }; outputSchema?: object }[];
+      ),
+      Reply,
+    );
+  const tools = (await rpc("tools/list")).result?.tools ?? [];
   assert.deepEqual(tools.map((tool) => tool.name).sort(), ["fixture.crash", "fixture.echo", "fixture.held", "fixture.hold", "fixture.refuse", "fixture.release", "fixture.switch.set", "fixture.toggle"]);
-  assert.equal(tools.find((tool) => tool.name === "fixture.echo")!.annotations.readOnlyHint, true);
+  assert.equal(tools.find((tool) => tool.name === "fixture.echo")?.annotations.readOnlyHint, true);
   const value = await rpc("tools/call", { name: "fixture.echo", arguments: { text: "hi" } });
-  assert.deepEqual(value.result.structuredContent, { text: "hi" });
+  assert.deepEqual(value.result?.structuredContent, { text: "hi" });
   const failure = await rpc("tools/call", { name: "fixture.refuse", arguments: {} });
-  assert.equal(failure.result.isError, true);
-  assert.deepEqual(JSON.parse(failure.result.content[0].text), { ok: false, error: { _tag: "Refused", reason: "No." } });
+  assert.equal(failure.result?.isError, true);
+  const content = failure.result?.content;
+  assert.ok(content !== undefined);
+  assert.deepEqual(JSON.parse(content[0].text), { ok: false, error: { _tag: "Refused", reason: "No." } });
   assert.equal((await rpc("tools/call", { name: "fixture.hidden", arguments: {} })).error?.code, -32602);
   assert.equal((await handler(new Request("https://fixture.example/mcp"))).status, 405);
 });
@@ -138,7 +159,7 @@ test("MCP gives the instructions of the options, or else the description of the 
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "server/discover", params: { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } } }),
       }),
     );
-    return ((await response.json()) as { result: { instructions?: string } }).result.instructions;
+    return (await readJson(response, z.object({ result: z.object({ instructions: z.string().optional() }) }))).result.instructions;
   };
   assert.equal(await discover(), fixture.description);
   assert.equal(await discover("Use fixture.echo to test the server."), "Use fixture.echo to test the server.");
@@ -152,7 +173,7 @@ test("HTTP gives each outcome its status code", async () => {
   assert.equal((await post("fixture.echo", { text: 1 })).status, 422);
   assert.equal((await post("fixture.hidden", {})).status, 404);
   assert.equal((await post("fixture.crash", {})).status, 500);
-  const list = (await (await handler(new Request("https://fixture.example/api/capabilities"))).json()) as { id: string }[];
+  const list = await readJson(await handler(new Request("https://fixture.example/api/capabilities")), z.array(z.object({ id: z.string() })));
   assert.ok(!list.some((entry) => entry.id === "fixture.hidden"));
 });
 
@@ -178,7 +199,7 @@ test("with createContext, each MCP request that passes the screening has its own
       }),
     );
   await rpc("tools/call", { name: "fixture.switch.set", arguments: { on: false } });
-  const { result } = (await (await rpc("tools/list")).json()) as { result: { tools: { name: string }[] } };
+  const { result } = await readJson(await rpc("tools/list"), z.object({ result: z.object({ tools: z.array(z.object({ name: z.string() })) }) }));
   assert.ok(result.tools.some((tool) => tool.name === "fixture.toggle"));
   assert.deepEqual(counts, { created: 2, released: 2 });
 
@@ -195,7 +216,7 @@ test("with createContext, each HTTP request that passes the screening has its ow
     new Request("https://fixture.example/api/capabilities/fixture.switch.set", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ on: false }) }),
   );
   assert.equal(set.status, 200);
-  const list = (await (await handler(new Request("https://fixture.example/api/capabilities"))).json()) as { id: string; available: boolean }[];
+  const list = await readJson(await handler(new Request("https://fixture.example/api/capabilities")), z.array(z.object({ id: z.string(), available: z.boolean() })));
   assert.equal(list.find((entry) => entry.id === "fixture.toggle")?.available, true);
   assert.deepEqual(counts, { created: 2, released: 2 });
 
@@ -245,9 +266,9 @@ test("the abort of an MCP request cancels its call", async () => {
 
   await started;
   controller.abort();
-  const { result } = (await (await answer).json()) as { result: { isError: boolean; content: { text: string }[] } };
+  const { result } = await readJson(await answer, z.object({ result: z.object({ isError: z.boolean(), content: z.tuple([z.object({ text: z.string() })]) }) }));
   assert.equal(result.isError, true);
-  assert.deepEqual(JSON.parse(result.content[0]!.text), { kind: "cancelled", message: "The call was cancelled." });
+  assert.deepEqual(JSON.parse(result.content[0].text), { kind: "cancelled", message: "The call was cancelled." });
   assert.equal(seen.aborted, true);
 });
 
@@ -321,11 +342,14 @@ test("WebMCP tools follow availability, and a failed update keeps the last tools
   const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
   const context = options();
   const session = createSession(fixture, { target: "app", ...context });
-  const installed = installWebMcp(session, { host })!;
+  const installed = installWebMcp(session, { host });
+  assert.ok(installed !== undefined);
   await settle();
   assert.equal(installed.status.getSnapshot().phase, "ready");
   assert.ok(tools.has("fixture.hidden"));
-  assert.deepEqual(await tools.get("fixture.echo")!.execute({ text: "hi" }), { ok: true, value: { text: "hi" } });
+  const echo = tools.get("fixture.echo");
+  assert.ok(echo !== undefined);
+  assert.deepEqual(await echo.execute({ text: "hi" }), { ok: true, value: { text: "hi" } });
 
   context.context.switch.set(false);
   await settle();

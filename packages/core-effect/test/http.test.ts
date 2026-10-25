@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { Deferred, Effect, Layer } from "effect";
 
 import { Http } from "../src/index.ts";
+import { CatalogShape, decodeBody, Listing } from "./decode.ts";
 import { countedFixtureLayer, fixture, fixtureLayer, heldApp, recordingApp } from "./fixture.ts";
 
 const ORIGIN = "https://fixture.example";
@@ -14,7 +15,7 @@ const post = (id: string, body: unknown, headers: HeadersInit = { "Content-Type"
 
 test("GET /capabilities lists the view with availability", async () => {
   const response = await handler(new Request(`${ORIGIN}/api/capabilities`));
-  const list = (await response.json()) as { id: string; available: boolean }[];
+  const list = await decodeBody(Listing, response);
   assert.equal(response.status, 200);
   assert.ok(list.some((entry) => entry.id === "fixture.echo" && entry.available));
   assert.ok(!list.some((entry) => entry.id === "fixture.hidden"));
@@ -35,7 +36,7 @@ test("POST gives each outcome its status code", async () => {
 });
 
 test("GET /catalog gives the view", async () => {
-  const view = (await (await handler(new Request(`${ORIGIN}/api/catalog`))).json()) as { targets: object };
+  const view = await decodeBody(CatalogShape, await handler(new Request(`${ORIGIN}/api/catalog`)));
   assert.deepEqual(Object.keys(view.targets), ["api"]);
 });
 
@@ -49,7 +50,7 @@ test("with per-request services, each request that passes the screening has its 
   const { counts, layer } = countedFixtureLayer();
   const perRequest = Http.toWebHandler(fixture, layer, { allowedOrigins: [ORIGIN], base: "/api", services: "per-request" });
   const toggle = async () => {
-    const list = (await (await perRequest(new Request(`${ORIGIN}/api/capabilities`))).json()) as { id: string; available: boolean }[];
+    const list = await decodeBody(Listing, await perRequest(new Request(`${ORIGIN}/api/capabilities`)));
     return list.find((entry) => entry.id === "fixture.toggle")?.available;
   };
 
