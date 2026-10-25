@@ -5,12 +5,12 @@
  * The handles use a session of Effect. The program that opens the session keeps its services and its scope.
  */
 import { AVAILABLE, CallFailureError, callFailure } from "@acid-cat/spec-ts";
-import type { Availability, Result } from "@acid-cat/spec-ts";
-import { Cause, Effect, Exit, Fiber, FiberSet, Layer, Schema, Scope, Stream, SubscriptionRef } from "effect";
+import type { Availability, Outcome, Result } from "@acid-cat/spec-ts";
+import { Cause, Effect, Exit, Fiber, FiberSet, Layer, Schema, Scope, Stream } from "effect";
 
 import type * as App from "./App.ts";
 import type * as Capability from "./Capability.ts";
-import { changesAfter } from "./internal/changes.ts";
+import { changesAfter, readable } from "./internal/changes.ts";
 import { refsOf } from "./internal/served.ts";
 import * as Session from "./Session.ts";
 
@@ -42,19 +42,70 @@ export interface Handle<Input = unknown, Value = unknown, Failure = unknown, Sta
 }
 
 /** The handle of a capability, with the types of its schemas. */
-export type HandleOf<C> =
-  C extends Capability.Capability<infer Input, infer Output, infer Failure, any, infer State>
-    ? Handle<Input["Type"], Output["Type"], Failure["Type"], State["Encoded"]>
-    : never;
+export type HandleOf<C extends Capability.Any> = Handle<
+  NonNullable<C["input"]>["Type"],
+  NonNullable<C["output"]>["Type"],
+  NonNullable<C["failures"]>[number]["Type"],
+  NonNullable<C["state"]>["schema"]["Encoded"]
+>;
+
+/** The handles of a session, by id, for an application that needs the services `R`. */
+export interface HandleMap<R = never> extends ReadonlyMap<string, Handle> {
+  /** A typed call with an input that is already decoded. `get` uses it. A call failure rejects with a `CallFailureError`. */
+  readonly execute: <Input, Value, Failure>(
+    capability: Session.Executable<Input, Value, Failure, R>,
+    input: NoInfer<Input>,
+    options?: CallOptions,
+  ) => Promise<Result<Value, Failure>>;
+}
 
 /**
  * The handle of a capability in `handles`, with the types of the capability. For a capability outside the view, the
- * handle is always unavailable, and each call rejects as `unknown-capability`.
+ * handle is always unavailable, and each call rejects as `unknown-capability`. The capability needs only services of
+ * the application of the handles.
  */
-export const get = <C extends Capability.Any>(handles: ReadonlyMap<string, Handle>, capability: C): HandleOf<C> =>
-  (handles.get(capability.id) ?? outsideView(capability)) as HandleOf<C>;
+export function get<
+  Input extends Capability.AnySchema,
+  Output extends Capability.AnySchema,
+  Failure extends Capability.AnySchema,
+  R,
+  State extends Capability.AnySchema,
+  Id extends string,
+>(
+  handles: HandleMap<R>,
+  capability: Capability.Capability<Input, Output, Failure, R, State, Id>,
+): Handle<Input["Type"], Output["Type"], Failure["Type"], State["Encoded"]> {
+  const handle = handles.get(capability.id);
+  if (handle === undefined) return outsideView(capability);
+  const state = capability.state;
+  const snapshot = handle.snapshot === undefined || state === undefined ? undefined : checked(handle.snapshot, Schema.is(Schema.toEncoded(state.schema)), capability.id);
+  return {
+    id: handle.id,
+    description: handle.description,
+    audience: handle.audience,
+    availability: handle.availability,
+    ...(snapshot === undefined ? {} : { snapshot }),
+    execute: (input, options) => handles.execute(capability, input, options),
+    invokeExternal: (input, options) => handle.invokeExternal(input, options),
+  };
+}
 
-function outsideView(capability: Capability.Any): Handle {
+/**
+ * An observable of values in the JSON form of a state schema. The handle of the session encoded each value with that
+ * schema, so a value that does not agree with it is a defect, and throws.
+ */
+function checked<T>(source: Observable<unknown>, is: (value: unknown) => value is T, id: string): Observable<T> {
+  const check = (value: unknown): T => {
+    if (is(value)) return value;
+    throw new Error(`The state of ${id} does not agree with its schema.`);
+  };
+  return {
+    getSnapshot: () => check(source.getSnapshot()),
+    subscribe: (listener) => source.subscribe((value) => listener(check(value))),
+  };
+}
+
+function outsideView(capability: Capability.Any): Handle<never, never, never, never> {
   const failure = callFailure("unknown-capability", `There is no capability ${capability.id}.`);
   const reject = () => Promise.reject(new CallFailureError(failure));
   return {
@@ -76,18 +127,18 @@ const constant = <T>(value: T): Observable<T> => ({ getSnapshot: () => value, su
  * of the ref at the moment that it is delivered, and never the same value two times in sequence.
  */
 function observe<A, T>(
-  ref: SubscriptionRef.SubscriptionRef<A>,
+  ref: Capability.Readable<A>,
   read: (value: A) => T,
   follow: (effect: Effect.Effect<void>) => Fiber.Fiber<void>,
 ): Observable<T> {
   const listeners = new Set<(value: T) => void>();
   let follower: Fiber.Fiber<void> | undefined;
   return {
-    getSnapshot: () => read(SubscriptionRef.getUnsafe(ref)),
+    getSnapshot: () => read(ref.get()),
     subscribe(listener) {
       listeners.add(listener);
       follower ??= follow(
-        changesAfter(ref, SubscriptionRef.getUnsafe(ref)).pipe(
+        changesAfter(ref, ref.get()).pipe(
           Stream.runForEach((value) =>
             Effect.sync(() => {
               const delivered = read(value);
@@ -112,7 +163,7 @@ function observe<A, T>(
  * encodes synchronously. Encode the current value one time to check this.
  */
 function synchronousEncoder(id: string, schema: Capability.AnySchema, current: unknown): (value: unknown) => unknown {
-  const encode = Schema.encodeUnknownSync(schema as Schema.Codec<unknown, unknown>);
+  const encode = Schema.encodeUnknownSync(schema);
   try {
     encode(current);
   } catch (cause) {
@@ -133,7 +184,7 @@ const detached = <T>(source: Observable<T>): Observable<T> => ({
  * and the calls in progress are cancelled. The handles start no fiber until a listener subscribes. The session must
  * come from `Session.make`.
  */
-export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effect<ReadonlyMap<string, Handle>, never, Scope.Scope> =>
+export const make = <R>(app: App.App<R>, session: Session.Session<R>): Effect.Effect<HandleMap<R>, never, Scope.Scope> =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope;
     const context = yield* Effect.context<never>();
@@ -159,13 +210,13 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
       const id = capability.id;
 
       const availabilityRef = refs.availability(id);
-      const availability = availabilityRef === undefined ? constant(AVAILABLE) : observe(availabilityRef, (value) => value, follow);
+      const availability = availabilityRef === undefined ? constant(AVAILABLE) : observe(readable(availabilityRef), (value) => value, follow);
 
       const stateRef = refs.state(id);
       const snapshot =
         stateRef === undefined || capability.state === undefined
           ? undefined
-          : detached(observe(stateRef, synchronousEncoder(id, capability.state.schema, SubscriptionRef.getUnsafe(stateRef)), follow));
+          : detached(observe(stateRef, synchronousEncoder(id, capability.state.schema, stateRef.get()), follow));
 
       handles.set(id, {
         id,
@@ -173,37 +224,25 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
         audience: [session.target],
         availability,
         ...(snapshot === undefined ? {} : { snapshot }),
-        execute: (input, options) =>
-          run(
-            session.execute(capability, input as never).pipe(
-              Effect.map((value) => ({ ok: true as const, value })),
-              Effect.catch((error: unknown) =>
-                error instanceof Session.CallFailed
-                  ? Effect.die(new CallFailureError(error))
-                  : Effect.succeed({ ok: false as const, error }),
-              ),
-            ),
-            options,
-          ),
-        invokeExternal: (input, options) =>
-          run(
-            session.invoke(id, input).pipe(
-              Effect.flatMap((outcome) => ("kind" in outcome ? Effect.die(new CallFailureError(outcome)) : Effect.succeed(outcome))),
-            ),
-            options,
-          ),
+        execute: (input, options) => run(resultOf(refs.execute(id, input)), options),
+        invokeExternal: (input, options) => run(resultOf(session.invoke(id, input)), options),
       });
     }
-    return handles as ReadonlyMap<string, Handle>;
+    const execute: HandleMap<R>["execute"] = (capability, input, options) => run(resultOf(session.call(capability, input)), options);
+    return Object.assign(handles, { execute });
   });
 
+/** The result of an outcome. A call failure is a defect, which rejects the promise of the call with a `CallFailureError`. */
+const resultOf = <Value, Failure>(outcome: Effect.Effect<Outcome<Value, Failure>>): Effect.Effect<Result<Value, Failure>> =>
+  Effect.flatMap(outcome, (each) => ("kind" in each ? Effect.die(new CallFailureError(each)) : Effect.succeed(each)));
+
 /** A session for code that does not use Effect. */
-export interface PromiseSession {
+export interface PromiseSession<R = never> {
   readonly target: string;
   /** The view of the target. */
   readonly view: Session.Session["view"];
   /** The handles of the capabilities in the view, by id. */
-  readonly handles: ReadonlyMap<string, Handle>;
+  readonly handles: HandleMap<R>;
   /** The signal of the session. It aborts when the session closes. */
   readonly signal: AbortSignal;
   /** Close the session: cancel the calls in progress, and wait for them. */
@@ -214,7 +253,7 @@ export interface PromiseSession {
  * Open a session and its handles from code that does not use Effect. `layer` gives the services of the capabilities.
  * If the session or its handles cannot open, the services are released, and the promise rejects.
  */
-export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: { readonly target: string }): Promise<PromiseSession> {
+export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: { readonly target: string }): Promise<PromiseSession<R>> {
   const scope = Effect.runSync(Scope.make());
   const lifetime = new AbortController();
   const opened = await Effect.runPromiseExit(

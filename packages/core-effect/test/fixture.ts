@@ -80,6 +80,21 @@ const Flags = Schema.Struct({
 
 const everywhere = ["app", "mcp", "cli", "api"];
 
+export const refuse = Capability.make({
+  id: "fixture.refuse",
+  description: "Always return the failure Refused.",
+  audience: everywhere,
+  failures: [Refused],
+  run: () => Effect.fail(Refused.make({ reason: "No." })),
+});
+
+export const hidden = Capability.make({
+  id: "fixture.hidden",
+  description: "Only the app target can use this capability.",
+  audience: ["app"],
+  run: () => Effect.succeed(null),
+});
+
 export const fixture = App.make({
   title: "Fixture",
   description: "One capability for each behavior that acid-cat conform tests.",
@@ -99,13 +114,7 @@ export const fixture = App.make({
       output: Text,
       run: (input) => Effect.succeed(input),
     }),
-    Capability.make({
-      id: "fixture.refuse",
-      description: "Always return the failure Refused.",
-      audience: everywhere,
-      failures: [Refused],
-      run: () => Effect.fail(Refused.make({ reason: "No." })),
-    }),
+    refuse,
     Capability.make({
       id: "fixture.crash",
       description: "Always fail with a defect.",
@@ -136,12 +145,7 @@ export const fixture = App.make({
       input: Key,
       run: ({ key }) => Holds.use((holds) => holds.release(key)).pipe(Effect.as(null)),
     }),
-    Capability.make({
-      id: "fixture.hidden",
-      description: "Only the app target can use this capability.",
-      audience: ["app"],
-      run: () => Effect.succeed(null),
-    }),
+    hidden,
     Capability.make({
       id: "fixture.toggle",
       description: "Available only while the switch is on.",

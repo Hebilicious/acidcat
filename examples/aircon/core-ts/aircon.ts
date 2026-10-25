@@ -70,7 +70,7 @@ const capability = capabilitiesFor<Context>();
 
 /** Change the unit if it is online. */
 const change = (unit: Unit, update: Partial<State>) => {
-  if (!unit.state.online) return fail("Offline");
+  if (!unit.state.online) return fail({ _tag: "Offline" });
   unit.change(update);
   return ok(null);
 };
@@ -90,7 +90,7 @@ export const statusGet = capability({
   state: { schema: Status, source: (context) => context.unit.status },
   run: (_, { context }) => {
     const { online, firmware: _firmware, ...status } = context.unit.state;
-    return online ? ok(status) : fail("Offline");
+    return online ? ok(status) : fail({ _tag: "Offline" });
   },
 });
 
@@ -110,7 +110,7 @@ export const modeSet = capability({
   input: ModeInput,
   failures: { Offline, PoweredOff },
   run: ({ mode }, { context }) =>
-    context.unit.state.power ? change(context.unit, { mode }) : fail("PoweredOff"),
+    context.unit.state.power ? change(context.unit, { mode }) : fail({ _tag: "PoweredOff" }),
 });
 
 export const temperatureSet = capability({
@@ -137,7 +137,7 @@ export const firmwareUpdate = capability({
   audience: ["app"],
   failures: { Offline, UpToDate },
   availability: (context) => context.unit.online,
-  run: (_, { context }) => fail("UpToDate", { version: context.unit.state.firmware }),
+  run: (_, { context }) => fail({ _tag: "UpToDate", version: context.unit.state.firmware }),
 });
 
 // --- The application ---------------------------------------------------------------------------------------------

@@ -179,14 +179,14 @@ test("Handles.get gives a handle with the types of its capability", async () => 
     assert.deepEqual(snapshot, { on: true, brightness: 80, kelvin: 3000, scene: "relax" });
 
     // These calls do not run. `moon run core-effect:typecheck` checks that each one is an error.
-    const wrongCalls = () => [
+    const wrongCalls = () => {
       // @ts-expect-error The input of lamp.power.set has `on`, a boolean.
-      power.execute({ on: "yes" }),
+      void power.execute({ on: "yes" });
       // @ts-expect-error The scene is one of the literals of `Scene`.
-      scene.execute({ scene: "disco" }),
+      void scene.execute({ scene: "disco" });
       // @ts-expect-error The light has no `colour`.
-      light.snapshot?.getSnapshot().colour,
-    ];
+      void light.snapshot?.getSnapshot().colour;
+    };
     void wrongCalls;
   } finally {
     await session.dispose();

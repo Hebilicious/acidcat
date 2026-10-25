@@ -10,6 +10,7 @@ import {
   fail,
   httpStatus,
   isId,
+  isJsonObject,
   mcpToolResult,
   objectInput,
   ok,
@@ -46,7 +47,7 @@ test("the usage of a command gives its flags, required flags first", () => {
 });
 
 test("each outcome has its exit code, status code and MCP result", () => {
-  const offline = fail("Offline", { since: "2026-01-01T00:00:00Z" });
+  const offline = fail({ _tag: "Offline", since: "2026-01-01T00:00:00Z" });
   assert.deepEqual(offline, { ok: false, error: { _tag: "Offline", since: "2026-01-01T00:00:00Z" } });
   assert.equal(cliExitCode(ok(null)), 0);
   assert.equal(cliExitCode(offline), 1);
@@ -93,11 +94,13 @@ test("views keep one target, and bundles keep the types they use", () => {
   };
   const view = viewOf(catalog, "mcp");
   assert.deepEqual(Object.keys(view.capabilities), ["a.status"]);
-  assert.deepEqual(view.capabilities["a.status"]!.audience, ["mcp"]);
+  assert.deepEqual(view.capabilities["a.status"]?.audience, ["mcp"]);
   assert.deepEqual(Object.keys(view.$defs ?? {}).sort(), ["Mode", "Status"]);
-  const bundled = bundle({ $ref: "#/$defs/Status" }, catalog.$defs!);
+  assert.ok(catalog.$defs !== undefined);
+  const bundled = bundle({ $ref: "#/$defs/Status" }, catalog.$defs);
   assert.equal(bundled.type, "object");
-  assert.deepEqual(Object.keys(bundled.$defs as object), ["Mode"]);
+  assert.ok(isJsonObject(bundled.$defs));
+  assert.deepEqual(Object.keys(bundled.$defs), ["Mode"]);
 });
 
 test("an input that is a union of objects becomes an object schema", () => {

@@ -2,7 +2,7 @@
  * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP, revision 2026-07-28, with no state on the
  * server between requests.
  */
-import { bundle, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec-ts";
+import { bundle, isJsonObject, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec-ts";
 import type { Rejection } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
@@ -31,14 +31,29 @@ export interface McpSettings {
   readonly maximumBytes?: number | undefined;
 }
 
+/** The members of a JSON-RPC request that the server reads. A request with no `id` is a notification. */
 interface JsonRpcRequest {
-  readonly jsonrpc: "2.0";
   readonly id?: string | number | null;
-  readonly method: string;
-  readonly params?: {
-    readonly name?: string;
-    readonly arguments?: unknown;
-    readonly _meta?: { readonly "io.modelcontextprotocol/protocolVersion"?: string };
+  readonly method?: string | undefined;
+  readonly name?: string | undefined;
+  readonly arguments?: unknown;
+  readonly protocolVersion?: unknown;
+}
+
+/**
+ * Read the members of a JSON-RPC request from a parsed body. A member that does not have its type is left out. An
+ * `id` that is not a string or a number is `null`.
+ */
+function readRequest(body: unknown): JsonRpcRequest {
+  if (!isJsonObject(body)) return {};
+  const { id, method, params } = body;
+  const meta = isJsonObject(params) ? params["_meta"] : undefined;
+  return {
+    ...("id" in body ? { id: typeof id === "string" || typeof id === "number" ? id : null } : {}),
+    method: typeof method === "string" ? method : undefined,
+    name: isJsonObject(params) && typeof params["name"] === "string" ? params["name"] : undefined,
+    arguments: isJsonObject(params) ? params["arguments"] : undefined,
+    protocolVersion: isJsonObject(meta) ? meta["io.modelcontextprotocol/protocolVersion"] : undefined,
   };
 }
 
@@ -57,7 +72,7 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
     if ("rejection" in body) return rejection(body.rejection);
     let message: JsonRpcRequest;
     try {
-      message = JSON.parse(body.text) as JsonRpcRequest;
+      message = readRequest(JSON.parse(body.text));
     } catch {
       return rejection("not-utf8");
     }
@@ -70,7 +85,7 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
       return error(400, id, -32022, `Unsupported protocol version ${version}`, { supported: [MCP_PROTOCOL_VERSION] });
     }
     if (message.id === undefined) return new Response(null, { status: 200, headers: { "Content-Type": "application/json" } });
-    const metaVersion = message.params?._meta?.["io.modelcontextprotocol/protocolVersion"];
+    const metaVersion = message.protocolVersion;
     if (metaVersion === undefined) return error(400, id, -32602, "Required request metadata is missing");
     if (metaVersion !== version) return error(400, id, -32020, "MCP-Protocol-Version header does not match request metadata");
 
@@ -107,12 +122,12 @@ async function answer(session: Session, message: JsonRpcRequest, options: McpSet
     case "tools/list":
       return complete({ tools: listTools(session) }, true);
     case "tools/call": {
-      const name = message.params?.name ?? "";
+      const name = message.name ?? "";
       const handle = session.handles.get(name);
       if (handle === undefined || !handle.availability.getSnapshot().available) {
         return error(200, id, MCP_UNKNOWN_TOOL, `Tool '${name}' not found`);
       }
-      const outcome = await session.invoke(name, message.params?.arguments ?? {}, { signal });
+      const outcome = await session.invoke(name, message.arguments ?? {}, { signal });
       return complete(mcpToolResult(outcome, hasObjectOutput(session, name)));
     }
     default:
@@ -125,7 +140,8 @@ function listTools(session: Session) {
   return [...session.handles.values()]
     .filter((handle) => handle.availability.getSnapshot().available)
     .map((handle) => {
-      const capability = session.view.capabilities[handle.id]!;
+      const capability = session.view.capabilities[handle.id];
+      if (capability === undefined) throw new Error(`The view of the session has no capability ${handle.id}.`);
       const output = capability.output === undefined ? undefined : bundle(capability.output, types);
       return {
         name: handle.id,

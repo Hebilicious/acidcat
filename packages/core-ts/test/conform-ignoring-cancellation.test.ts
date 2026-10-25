@@ -24,7 +24,8 @@ test("acid-cat conform fails only the cancellation checks of an implementation t
       conform({
         webmcp: (modelContext) => {
           const session = createSession(fixture, { target: "app", ...ignoring() });
-          const installation = installWebMcp(session, { host: modelContext })!;
+          const installation = installWebMcp(session, { host: modelContext });
+          assert.ok(installation !== undefined);
           return async () => {
             await installation.dispose();
             await session.dispose();

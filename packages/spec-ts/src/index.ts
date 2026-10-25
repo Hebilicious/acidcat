@@ -32,11 +32,8 @@ export type Outcome<Value, Failure> = Result<Value, Failure> | CallFailure;
 
 export const ok = <Value>(value: Value): Result<Value, never> => ({ ok: true, value });
 
-/** A failure with its tag, as a result. */
-export const fail = <Tag extends string, Data extends object = {}>(
-  tag: Tag,
-  data?: Data,
-): Result<never, { readonly _tag: Tag } & Data> => ({ ok: false, error: { _tag: tag, ...(data ?? ({} as Data)) } });
+/** A failure, with its tag in `_tag`, as a result: `fail({ _tag: "Offline" })`. */
+export const fail = <const Failure extends { readonly _tag: string }>(failure: Failure): Result<never, Failure> => ({ ok: false, error: failure });
 
 export const callFailure = (kind: CallFailureKind, message: string): CallFailure => ({ kind, message });
 
@@ -97,15 +94,16 @@ export const cliExitCode = (outcome: Outcome<unknown, unknown>): number =>
  * code point order of the names. `input` is the bundled input schema.
  */
 export function cliFlags(input: JsonObject): string[] {
-  const properties = (input.properties ?? {}) as { readonly [name: string]: JsonObject };
-  const definitions = (input.$defs ?? {}) as { readonly [name: string]: JsonObject };
-  const required = new Set((input.required ?? []) as readonly string[]);
+  const properties = objectOrEmpty(input.properties);
+  const definitions = objectOrEmpty(input.$defs);
+  const required = new Set(stringsOf(input.required));
   const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   const names = Object.keys(properties).sort(byName);
   return [...names.filter((name) => required.has(name)), ...names.filter((name) => !required.has(name))].map((name) => {
-    const reference = properties[name]!.$ref;
+    const declared = objectOrEmpty(properties[name]);
+    const reference = declared.$ref;
     const target = typeof reference === "string" ? REFERENCE.exec(reference)?.[1] : undefined;
-    const property = (target === undefined ? undefined : definitions[target]) ?? properties[name]!;
+    const property = objectOrEmpty((target === undefined ? undefined : definitions[target]) ?? declared);
     const flag = property.type === "boolean" ? `--${name}` : `--${name} <${flagValue(property)}>`;
     return required.has(name) ? flag : `[${flag}]`;
   });
@@ -164,7 +162,7 @@ export function screenRequest(
   const origin = request.headers.get("Origin");
   if (origin !== null && !rules.allowedOrigins.includes(origin)) return "origin";
   if (request.method === "GET" || request.method === "HEAD") return undefined;
-  const mediaType = (request.headers.get("Content-Type") ?? "").split(";")[0]!.trim().toLowerCase();
+  const mediaType = ((request.headers.get("Content-Type") ?? "").split(";")[0] ?? "").trim().toLowerCase();
   if (mediaType !== rules.mediaType) return "media-type";
   const declared = Number(request.headers.get("Content-Length") ?? "");
   if (Number.isFinite(declared) && declared > rules.maximumBytes) return "too-large";
@@ -263,6 +261,16 @@ export interface CatalogDocument extends JsonObject {
 
 export const REFERENCE = /^#\/\$defs\/([A-Za-z][A-Za-z0-9_]*)$/;
 
+/** Tell if a value is a JSON object: an object that is not `null` and not an array. */
+export const isJsonObject = (value: unknown): value is JsonObject => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** A value as a JSON object, or an empty object when it is not one. */
+const objectOrEmpty = (value: unknown): JsonObject => (isJsonObject(value) ? value : {});
+
+/** The strings in a value that is an array, or no strings when it is not an array. */
+const stringsOf = (value: unknown): readonly string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+
 /** The schemas of a capability, each with the member that holds it. */
 export function schemasOf(capability: CatalogCapability): readonly (readonly [string, JsonObject])[] {
   const members: (readonly [string, JsonObject | undefined])[] = [
@@ -278,8 +286,8 @@ export function schemasOf(capability: CatalogCapability): readonly (readonly [st
 export function visitObjects(value: unknown, onObject: (node: JsonObject) => void): void {
   if (Array.isArray(value)) {
     value.forEach((item) => visitObjects(item, onObject));
-  } else if (value !== null && typeof value === "object") {
-    onObject(value as JsonObject);
+  } else if (isJsonObject(value)) {
+    onObject(value);
     Object.values(value).forEach((item) => visitObjects(item, onObject));
   }
 }
@@ -307,8 +315,8 @@ export function typesUsedBy(schema: unknown, types: { readonly [name: string]: J
  */
 export function objectInput(schema: JsonObject, types: { readonly [name: string]: JsonObject }): JsonObject {
   const resolve = (node: unknown): JsonObject | undefined => {
-    if (node === null || typeof node !== "object" || Array.isArray(node)) return undefined;
-    const object = node as JsonObject;
+    if (!isJsonObject(node)) return undefined;
+    const object = node;
     const name = typeof object.$ref === "string" ? REFERENCE.exec(object.$ref)?.[1] : undefined;
     return name === undefined ? object : types[name];
   };

@@ -12,7 +12,9 @@ test("the Effect core passes acid-cat conform through WebMCP in Chromium", async
     format: "esm",
     platform: "browser",
   });
-  const script = bundled.outputFiles[0]!.text;
+  const [output] = bundled.outputFiles;
+  assert.ok(output !== undefined, "esbuild wrote no file.");
+  const script = output.text;
   const served = await serve({
     "/page": async (request) =>
       new URL(request.url).pathname === "/page/fixture.js"

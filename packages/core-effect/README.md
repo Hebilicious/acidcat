@@ -35,10 +35,11 @@ export const aircon = App.make({
 });
 ```
 
-- `input` is a `Schema.Struct`, or a `Schema.Union` of structs. The catalog writes a union with `"type": "object"`, so that it is an object schema. With no `input`, the input is an empty object. Use `Schema.Finite` or `Schema.Int` for numbers: `Schema.Number` also accepts `Infinity` and `NaN`, which JSON cannot hold.
+- `input` is a `Schema.Struct`, or a `Schema.Union` of structs. The catalog writes a union with `"type": "object"`, so that it is an object schema. With no `input`, `run` gets the object that the client sent, as a `Capability.NoInput`. Use `Schema.Finite` or `Schema.Int` for numbers: `Schema.Number` also accepts `Infinity` and `NaN`, which JSON cannot hold.
 - Each failure is a `Schema.TaggedStruct`. Its tag is the tag in the catalog.
 - `availability` is an optional Effect that gives a `SubscriptionRef` of availability values. With no `availability`, the capability is always available.
 - `state` is an optional `{ schema, value }`: the schema of the [state](../../spec/invocation.md#state), and an Effect that gives a `SubscriptionRef` of its values. Handles need a state schema that encodes synchronously, because `getSnapshot` is synchronous. `Handles.make` fails with an error that names the capability if the schema does not.
+- `Capability.make` builds the `pipeline` of the capability: the calls that a session makes when it does not know the types of the schemas. Each part checks its values with the schemas of the same capability. Declare each capability with `Capability.make`.
 - Give a shared type an `identifier` annotation. It becomes a named type in `$defs`.
 - `Capability.make` keeps the literal type of `id`, so that an application can type its ids, for example `typeof powerSet.id`. The capability needs the services that `run`, `availability` and `state` need.
 
@@ -86,7 +87,7 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 
 | Module | Binding | Entry point |
 | --- | --- | --- |
-| `Session` | [Invocation](../../spec/invocation.md) | `Session.make(app, { target })`: `invoke` for untrusted input, `execute` for typed calls |
+| `Session` | [Invocation](../../spec/invocation.md) | `Session.make(app, { target })` gives a `Session<R>`, where `R` is the services of the application: `invoke` for untrusted input, `call` and `execute` for typed calls of capabilities that need only services in `R` |
 | `Handles` | [TypeScript](../../spec/bindings/typescript.md) | `Handles.make(app, session)`: handles with promises and observables, for code that does not use Effect, such as a user interface. `Handles.open(app, layer, { target })` opens a session from code that does not use Effect |
 | `Mcp` | [MCP](../../spec/bindings/mcp.md) | `Mcp.toWebHandler(app, layer, options)`, on `effect/ai/McpServer` |
 | `Http` | [HTTP](../../spec/bindings/http.md) | `Http.toWebHandler(app, layer, options)` |
@@ -97,7 +98,7 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 
 ### Typed handles
 
-`Handles.get(handles, capability)` gives the handle of a capability with the types of its schemas: `execute` takes the decoded input, and gives the decoded value or failure. `snapshot` gives the state in its JSON form. For a capability outside the view, the handle is always unavailable, and each call rejects as `unknown-capability`.
+`Handles.get(handles, capability)` gives the handle of a capability with the types of its schemas: `execute` takes the decoded input, and gives the decoded value or failure. `snapshot` gives the state in its JSON form. `handles` is the `HandleMap<R>` of `Handles.make` or `Handles.open`, and the capability needs only services in `R`. For a capability outside the view, the handle is always unavailable, and each call rejects as `unknown-capability`.
 
 ```ts
 import { Handles } from "@acid-cat/core-effect";

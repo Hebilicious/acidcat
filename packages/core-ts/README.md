@@ -27,18 +27,20 @@ export const aircon = defineApp<{ unit: Unit }>({
       audience: ["cli", "mcp"],
       input: z.object({ on: z.boolean() }),
       failures: { Offline },
-      run: async ({ on }, { context, signal }) => ((await context.unit.setPower(on, signal)) ? ok(null) : fail("Offline")),
+      run: async ({ on }, { context, signal }) => ((await context.unit.setPower(on, signal)) ? ok(null) : fail({ _tag: "Offline" })),
     }),
   ],
 });
 ```
 
-- `run` gets the input, an `AbortSignal` and the context. It returns `ok(value)` or `fail(tag, data)`. If it throws, the call fails as `internal`.
+- `run` gets the input, an `AbortSignal` and the context. It returns `ok(value)` or `fail(failure)`, for example `fail({ _tag: "Offline", since })`. The types check that the value agrees with the output schema, that the failure has a tag of `failures`, and that it has the members of the schema of that tag. If `run` throws, the call fails as `internal`.
+- With an input schema, `run` gets the output of the schema. With none, it gets an empty object.
 - A failure schema describes the whole failure object, with its `_tag`.
 - `availability` is an optional function that returns an observable availability. A session reads it with `getSnapshot` when a call comes in. It subscribes to it only while `onChange` or the handle has listeners.
 - `state` is an optional `{ schema, source }`: the schema of the [state](../../spec/invocation.md#state), and a function that returns an observable. The handle gives it as `snapshot`.
 - `capabilitiesFor<Context>()` sets the context type one time. The other types come from the schemas.
 - `defineCapability` and `capabilitiesFor` keep the literal type of `id`, so that an application can type its ids. `run`, `availability` and `state` all get the same `Context`.
+- An application lists only capabilities that `defineCapability` or `capabilitiesFor` made. Each one has `decode`, which validates an input that is not trusted with the input schema and then gives the call of `run`. A session calls it, because there the type of the input is not known.
 
 ## Write the catalog
 
@@ -65,26 +67,16 @@ When the signal of a request aborts, `mcpHandler` and `httpHandler` cancel the c
 
 ### Typed handles
 
-`getHandle(session.handles, capability)` gives the handle of a capability with the types of its schemas. For a capability outside the view, the handle is always unavailable, and each call rejects as `unknown-capability`.
+`createSession` gives a `Session<Context>`, and its `handles` are `Handles<Context>`: a map of the handles by id. `getHandle(session.handles, capability)` gives the handle of a capability with the types of its schemas, `HandleOf<typeof capability>`. The handle calls the capability through the session: availability, cancellation, and the checks of the output and of the failures. Its values come from the output schema and from the failure schemas. The session must serve that capability object. For any other capability, also one with the same id, the handle is always unavailable, and each call rejects as `unknown-capability`. Each call of `getHandle` gives a new handle.
+
+A handle of the map has the input type `never`: call it with `invokeExternal`, which validates the input. A function that gets a session and calls `getHandle` declares its context: `(session: Session<{ unit: Unit }>) => …`.
 
 ```ts
 import { createSession, getHandle } from "@acid-cat/core-ts";
 
 const session = createSession(aircon, { target: "app", context: { unit }, toJsonSchema });
 const power = getHandle(session.handles, powerSet); // HandleOf<typeof powerSet>
-const result = await power.execute({ on: true }); // Result<null, { _tag: "Offline"; since?: string }>
-```
-
-### Context for each request
-
-`mcpHandler` and `httpHandler` take `context` or `createContext`. With `context`, all requests share one context. With `createContext(request)`, the handler makes a new context for each request that passes the screening. Use it when a request must not use objects that an earlier request made, for example on Cloudflare Workers, or when a stateful service must not be shared between callers. When the context has `Symbol.asyncDispose` or `Symbol.dispose`, the handler calls it after the response:
-
-```ts
-const handler = httpHandler(aircon, {
-  allowedOrigins: [],
-  toJsonSchema,
-  createContext: () => ({ unit: connectUnit(env), [Symbol.asyncDispose]: () => disconnectUnit() }),
-});
+const result = await power.execute({ on: true }); // Result<null, { readonly _tag: "Offline" } & { _tag: "Offline"; since?: string }>
 ```
 
 ### Context for each request

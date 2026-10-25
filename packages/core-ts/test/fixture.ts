@@ -1,7 +1,7 @@
 /** A test application with one capability for each behavior that the tests examine. */
 import { z } from "zod";
 
-import { AVAILABLE, defineApp, defineCapability, fail, ok, unavailable } from "../src/index.ts";
+import { AVAILABLE, capabilitiesFor, defineApp, defineCapability, fail, ok, unavailable } from "../src/index.ts";
 import type { Availability, Observable } from "../src/index.ts";
 
 /** A switch that the tests turn on and off, to change the availability of `fixture.toggle`. */
@@ -86,7 +86,14 @@ export interface Context {
   readonly holds: Holds;
 }
 
-export const toJsonSchema = (schema: unknown) => z.toJSONSchema(schema as z.ZodType, { target: "draft-2020-12" });
+/** The JSON Schema of a Zod schema. The fixtures use only Zod schemas. */
+export const toJsonSchema = (schema: unknown) => {
+  if (!(schema instanceof z.ZodType)) throw new TypeError("The fixtures give only Zod schemas.");
+  return z.toJSONSchema(schema, { target: "draft-2020-12" });
+};
+
+/** Read the JSON body of a response, and check it with a schema. */
+export const readJson = async <S extends z.ZodType>(response: Response, schema: S): Promise<z.output<S>> => schema.parse(await response.json());
 
 const Text = z.object({ text: z.string() });
 const Key = z.object({ key: z.string() });
@@ -102,6 +109,7 @@ const Flags = z.object({
 });
 
 const everywhere = ["app", "mcp", "cli", "api"];
+const capability = capabilitiesFor<Context>();
 
 export const fixture = defineApp<Context>({
   title: "Fixture",
@@ -127,7 +135,7 @@ export const fixture = defineApp<Context>({
       description: "Always return the failure Refused.",
       audience: everywhere,
       failures: { Refused: z.object({ _tag: z.literal("Refused"), reason: z.string() }) },
-      run: () => fail("Refused", { reason: "No." }),
+      run: () => fail({ _tag: "Refused", reason: "No." }),
     }),
     defineCapability({
       id: "fixture.crash",
@@ -137,7 +145,7 @@ export const fixture = defineApp<Context>({
         throw new Error("secret internal detail");
       },
     }),
-    defineCapability<Context, typeof Hold, typeof Key>({
+    capability({
       id: "fixture.hold",
       description:
         "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held gives the key. With a marker, the call writes a file at that path when it starts to hold.",
@@ -149,7 +157,7 @@ export const fixture = defineApp<Context>({
         return ok({ key });
       },
     }),
-    defineCapability<Context, undefined, typeof Keys>({
+    capability({
       id: "fixture.held",
       description: "Return the keys of the calls to fixture.hold that hold now.",
       audience: everywhere,
@@ -157,7 +165,7 @@ export const fixture = defineApp<Context>({
       output: Keys,
       run: (_, { context }) => ok({ keys: context.holds.held() }),
     }),
-    defineCapability<Context, typeof Key>({
+    capability({
       id: "fixture.release",
       description: "Release the calls to fixture.hold that hold the key.",
       audience: everywhere,
@@ -173,7 +181,7 @@ export const fixture = defineApp<Context>({
       audience: ["app"],
       run: () => ok(null),
     }),
-    defineCapability<Context, z.ZodObject<{}>>({
+    capability({
       id: "fixture.toggle",
       description: "Available only while the switch is on.",
       audience: everywhere,
@@ -181,7 +189,7 @@ export const fixture = defineApp<Context>({
       availability: (context) => context.switch,
       run: () => ok(null),
     }),
-    defineCapability<Context, z.ZodObject<{ on: z.ZodBoolean }>>({
+    capability({
       id: "fixture.switch.set",
       description: "Turn the switch on or off. The switch controls the availability of fixture.toggle.",
       audience: everywhere,

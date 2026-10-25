@@ -19,7 +19,11 @@ const afterInterruptHandlers = <A, E, R>(program: Effect.Effect<A, E, R>) => Eff
  * Run the command line as the main program of the process. `layer` gives the services of the capabilities, and of the
  * commands of the application.
  */
-export function main<R, E, CE = never, CR = never>(app: App.App<R>, layer: Layer.Layer<R | CR, E>, options: Cli.Options<CE, CR>): void {
+export function main<R, E, const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(
+  app: App.App<R>,
+  layer: Layer.Layer<R | Command.Services<Commands[number]>, E>,
+  options: Cli.Options<Commands>,
+): void {
   Cli.run(app, options).pipe(Effect.provide(Layer.merge(layer, NodeServices.layer)), afterInterruptHandlers, NodeRuntime.runMain);
 }
 

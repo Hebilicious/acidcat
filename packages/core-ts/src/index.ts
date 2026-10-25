@@ -1,7 +1,7 @@
 export { capabilitiesFor, catalogOf, defineApp, defineCapability, renderCatalog } from "./app.ts";
-export type { AnyCapability, App, Capability, Observable, Target, ToJsonSchema } from "./app.ts";
+export type { AnyCapability, App, Call, Capability, CapabilityDeclaration, CapabilityFactory, EmptyInput, FailureOf, Observable, Target, ToJsonSchema } from "./app.ts";
 export { createSession, getHandle } from "./session.ts";
-export type { Handle, HandleOf, Session, SessionOptions } from "./session.ts";
+export type { Handle, HandleOf, Handles, Session, SessionOptions } from "./session.ts";
 export { mcpHandler } from "./mcp.ts";
 export type { McpOptions, McpSettings } from "./mcp.ts";
 export { httpHandler } from "./http.ts";

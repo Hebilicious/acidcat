@@ -25,24 +25,22 @@ async function connect(path: string): Promise<Client> {
   return client;
 }
 
-type ToolResult = { isError?: boolean; structuredContent?: any; content?: { text?: string }[] };
-
 test("the server of the application has its own tools", async () => {
   const client = await connect("/mcp");
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((tool) => tool.name).sort(), ["get_status", "set_controls"]);
   assert.equal(tools.find((tool) => tool.name === "get_status")?.annotations?.readOnlyHint, true);
 
-  const poweredOff = (await client.callTool({ name: "set_controls", arguments: { mode: "heat" } })) as ToolResult;
+  const poweredOff = await client.callTool({ name: "set_controls", arguments: { mode: "heat" } });
   assert.equal(poweredOff.isError, true);
   assert.match(JSON.stringify(poweredOff), /PoweredOff/);
 
-  const changed = (await client.callTool({ name: "set_controls", arguments: { power: true, mode: "heat", targetCelsius: 24 } })) as ToolResult;
+  const changed = await client.callTool({ name: "set_controls", arguments: { power: true, mode: "heat", targetCelsius: 24 } });
   assert.equal(changed.isError ?? false, false);
   assert.deepEqual(changed.structuredContent, { power: true, mode: "heat", fan: "auto", targetCelsius: 24, roomCelsius: 25 });
 
   const invalid = await client.callTool({ name: "set_controls", arguments: { targetCelsius: 40 } }).then(
-    (result) => (result as ToolResult).isError === true,
+    (result) => result.isError === true,
     () => true,
   );
   assert.ok(invalid, "a temperature outside 16 to 31 must be refused");
@@ -61,6 +59,7 @@ test("the MCP binding serves one tool for each capability, on the same unit", as
     "aircon.status.get",
     "aircon.temperature.set",
   ]);
-  const status = (await binding.callTool({ name: "aircon.status.get", arguments: {} })) as ToolResult;
-  assert.equal(status.structuredContent.fan, "high");
+  const status = await binding.callTool({ name: "aircon.status.get", arguments: {} });
+  // The first test changed the power, the mode and the target temperature of the same unit.
+  assert.deepEqual(status.structuredContent, { power: true, mode: "heat", fan: "high", targetCelsius: 24, roomCelsius: 25 });
 });

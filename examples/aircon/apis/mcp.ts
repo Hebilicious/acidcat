@@ -55,7 +55,7 @@ export const AirconTools = Toolkit.make(GetStatus, SetControls);
 const handlers = AirconTools.toLayer(
   Effect.gen(function* () {
     const services = yield* Effect.context<Unit>();
-    const withSession = <A, E>(use: (session: Session.Session) => Effect.Effect<A, E | Session.CallFailed>) =>
+    const withSession = <A, E>(use: (session: Session.Session<Unit>) => Effect.Effect<A, E | Session.CallFailed>) =>
       Session.make(aircon, { target: "mcp" }).pipe(
         Effect.flatMap(use),
         // A call failure is not a failure of the tool. The server reports it as an internal error.
@@ -63,7 +63,7 @@ const handlers = AirconTools.toLayer(
         Effect.scoped,
         Effect.provideContext(services),
       );
-    const status = (session: Session.Session) => session.execute(statusGet, {});
+    const status = (session: Session.Session<Unit>) => session.execute(statusGet, {});
     return {
       get_status: () => withSession(status),
       set_controls: (controls) =>
