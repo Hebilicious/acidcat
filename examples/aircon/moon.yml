@@ -9,6 +9,15 @@ toolchains:
   default: ["javascript", "node", "pnpm"]
 
 tasks:
+  schema:
+    description: "Write the schema of the GraphQL API to apis/schema.graphql."
+    command: "node"
+    args: ["apis/write-schema.ts"]
+    inputs: ["apis/graphql.ts", "apis/shared.ts", "apis/write-schema.ts", "core-ts/**/*.ts"]
+    outputs: ["apis/schema.graphql"]
+    options:
+      runInCI: false
+
   test:
     description: "Write the catalog in each language, run the application on both cores and their command lines, and call each API."
     command: "node"
@@ -17,7 +26,7 @@ tasks:
       - "catalog/**/*"
       - "core-ts/**/*.ts"
       - "core-effect/**/*.ts"
-      - "apis/**/*.ts"
+      - "apis/**/*"
       - "test/**/*.ts"
       - "/packages/catalog/typescript/src/**/*.ts"
       - "/packages/catalog/python/acid_cat_catalog/**/*.py"

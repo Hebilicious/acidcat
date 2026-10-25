@@ -1,0 +1,63 @@
+enum FanSpeed {
+  auto
+  high
+  low
+  medium
+}
+
+enum Mode {
+  auto
+  cool
+  dry
+  fan
+  heat
+}
+
+type Mutation {
+  """Set the fan speed."""
+  setFan(speed: FanSpeed!): StatusResult!
+
+  """Choose how the unit runs."""
+  setMode(mode: Mode!): SetModeResult!
+
+  """Turn the unit on or off."""
+  setPower(on: Boolean!): StatusResult!
+
+  """Set the target temperature in degrees Celsius."""
+  setTemperature(celsius: Float!): StatusResult!
+}
+
+"""The unit is not on the network."""
+type Offline {
+  _tag: String!
+  since: String
+}
+
+"""The unit is off, so it cannot change its mode."""
+type PoweredOff {
+  _tag: String!
+}
+
+type Query {
+  """
+  Read the unit's power, mode, fan speed, target temperature and room temperature.
+  """
+  status: StatusResult!
+}
+
+"""The status of the unit, or the failure that stops the change of mode."""
+union SetModeResult = Offline | PoweredOff | Status
+
+"""
+The power, mode, fan speed, target temperature and room temperature of the unit.
+"""
+type Status {
+  fan: FanSpeed!
+  mode: Mode!
+  power: Boolean!
+  roomCelsius: Float!
+  targetCelsius: Float!
+}
+
+"""The status of the unit, or the failure that stops the call."""
+union StatusResult = Offline | Status

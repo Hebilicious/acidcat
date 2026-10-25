@@ -35,7 +35,7 @@ The HTTP and MCP bindings give generic access to the capabilities: one route or 
 
 | File | Library | API | Failures |
 | --- | --- | --- | --- |
-| [`apis/graphql.ts`](apis/graphql.ts) | [Pothos](https://pothos-graphql.dev) and [GraphQL Yoga](https://the-guild.dev/graphql/yoga-server) | `query { status }`, and mutations that return the new status | Data: each field returns a union of `Status` and the failures of its capability, for example `Status \| Offline \| PoweredOff` |
+| [`apis/graphql.ts`](apis/graphql.ts) | [Pothos](https://pothos-graphql.dev) and [GraphQL Yoga](https://the-guild.dev/graphql/yoga-server) | `query { status }`, and mutations that return the new status. The schema is in [`apis/schema.graphql`](apis/schema.graphql) | Data: each field returns a union of `Status` and the failures of its capability, for example `Status \| Offline \| PoweredOff` |
 | [`apis/capnweb.ts`](apis/capnweb.ts) | [Cap'n Web](https://github.com/cloudflare/capnweb) | A class with typed methods. A client sends many calls in one request | A result value: `{ ok: false, error }` |
 | [`apis/elysia.ts`](apis/elysia.ts) | [Elysia](https://elysiajs.com) | `GET /status`, and `PATCH /status` that changes many settings. The HTTP binding is mounted with `.mount("/api", …)` | Status 409 with the failure |
 | [`apis/mcp.ts`](apis/mcp.ts) | [Effect](https://effect.website) `effect/ai` | MCP tools `get_status` and `set_controls`, which changes many settings in one call | A tool error with the failure |

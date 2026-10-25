@@ -26,7 +26,7 @@ interface Context {
   readonly session: Session<AirconContext>;
 }
 
-const builder = new SchemaBuilder<{ Context: Context }>({});
+const builder = new SchemaBuilder<{ Context: Context; DefaultFieldNullability: false }>({ defaultFieldNullability: false });
 
 const ModeType = builder.enumType("Mode", { values: Mode.options });
 const FanSpeedType = builder.enumType("FanSpeed", { values: FanSpeed.options });
@@ -61,8 +61,16 @@ const typeOf = (value: z.infer<typeof Status> | z.infer<typeof Offline> | z.infe
   return value._tag === "Offline" ? OfflineType : PoweredOffType;
 };
 
-const StatusResult = builder.unionType("StatusResult", { types: [StatusType, OfflineType], resolveType: typeOf });
-const SetModeResult = builder.unionType("SetModeResult", { types: [StatusType, OfflineType, PoweredOffType], resolveType: typeOf });
+const StatusResult = builder.unionType("StatusResult", {
+  description: "The status of the unit, or the failure that stops the call.",
+  types: [StatusType, OfflineType],
+  resolveType: typeOf,
+});
+const SetModeResult = builder.unionType("SetModeResult", {
+  description: "The status of the unit, or the failure that stops the change of mode.",
+  types: [StatusType, OfflineType, PoweredOffType],
+  resolveType: typeOf,
+});
 
 /** The status of the unit, or the failure that stops the read. */
 async function statusOf(session: Session<AirconContext>) {
@@ -72,7 +80,7 @@ async function statusOf(session: Session<AirconContext>) {
 
 builder.queryType({
   fields: (t) => ({
-    status: t.field({ type: StatusResult, resolve: (_, __, { session }) => statusOf(session) }),
+    status: t.field({ type: StatusResult, description: statusGet.description, resolve: (_, __, { session }) => statusOf(session) }),
   }),
 });
 
@@ -80,6 +88,7 @@ builder.mutationType({
   fields: (t) => ({
     setPower: t.field({
       type: StatusResult,
+      description: powerSet.description,
       args: { on: t.arg.boolean({ required: true }) },
       resolve: async (_, args, { session }) => {
         const result = await session.call(powerSet, args);
@@ -88,6 +97,7 @@ builder.mutationType({
     }),
     setMode: t.field({
       type: SetModeResult,
+      description: modeSet.description,
       args: { mode: t.arg({ type: ModeType, required: true }) },
       resolve: async (_, args, { session }) => {
         const result = await session.call(modeSet, args);
@@ -96,6 +106,7 @@ builder.mutationType({
     }),
     setFan: t.field({
       type: StatusResult,
+      description: fanSet.description,
       args: { speed: t.arg({ type: FanSpeedType, required: true }) },
       resolve: async (_, args, { session }) => {
         const result = await session.call(fanSet, args);
@@ -104,6 +115,7 @@ builder.mutationType({
     }),
     setTemperature: t.field({
       type: StatusResult,
+      description: temperatureSet.description,
       args: { celsius: t.arg.float({ required: true }) },
       resolve: async (_, args, { session }) => {
         const result = await session.call(temperatureSet, args);

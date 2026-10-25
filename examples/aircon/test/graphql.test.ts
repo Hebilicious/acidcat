@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
+import { printSchema } from "graphql";
 import { z } from "zod";
 
 import { Unit } from "../core-ts/aircon.ts";
-import { graphqlApi } from "../apis/graphql.ts";
+import { graphqlApi, schema } from "../apis/graphql.ts";
 
 /** A GraphQL response. Each error has the `code` of the call failure in its extensions. */
 const GraphQLResponse = z.object({
@@ -56,4 +58,9 @@ test("the HTTP binding is at /api, and a foreign origin is rejected", async () =
   const listed = CapabilityList.parse(await (await api(new Request("http://localhost/api/capabilities"))).json());
   assert.deepEqual(listed.map((entry) => entry.id), ["aircon.status.get", "aircon.power.set", "aircon.mode.set", "aircon.temperature.set", "aircon.fan.set"]);
   assert.equal((await post(api, "{ status { power } }", { Origin: "https://example.com" })).status, 403);
+});
+
+test("apis/schema.graphql is the schema of the API", () => {
+  const committed = readFileSync(new URL("../apis/schema.graphql", import.meta.url), "utf-8");
+  assert.equal(committed, `${printSchema(schema)}\n`, "apis/schema.graphql is stale: run `moon run examples`");
 });

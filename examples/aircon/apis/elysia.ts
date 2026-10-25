@@ -25,14 +25,28 @@ const Settings = z.object({
   targetCelsius: z.number().optional(),
 });
 
-/** The calls that change the settings that the body gives, in order. */
-function changes(session: Session<Context>, { power, mode, fan, targetCelsius }: z.infer<typeof Settings>) {
-  return [
-    ...(power === undefined ? [] : [() => session.call(powerSet, { on: power })]),
-    ...(mode === undefined ? [] : [() => session.call(modeSet, { mode })]),
-    ...(fan === undefined ? [] : [() => session.call(fanSet, { speed: fan })]),
-    ...(targetCelsius === undefined ? [] : [() => session.call(temperatureSet, { celsius: targetCelsius })]),
-  ];
+/**
+ * Change each setting that the body gives, in order. The first failure stops the change and is the result. The settings
+ * before it stay changed.
+ */
+async function change(session: Session<Context>, { power, mode, fan, targetCelsius }: z.infer<typeof Settings>) {
+  if (power !== undefined) {
+    const result = await session.call(powerSet, { on: power });
+    if (!result.ok) return result.error;
+  }
+  if (mode !== undefined) {
+    const result = await session.call(modeSet, { mode });
+    if (!result.ok) return result.error;
+  }
+  if (fan !== undefined) {
+    const result = await session.call(fanSet, { speed: fan });
+    if (!result.ok) return result.error;
+  }
+  if (targetCelsius !== undefined) {
+    const result = await session.call(temperatureSet, { celsius: targetCelsius });
+    if (!result.ok) return result.error;
+  }
+  return undefined;
 }
 
 export function elysiaApi(options: ApiOptions) {
@@ -45,29 +59,19 @@ export function elysiaApi(options: ApiOptions) {
       return { kind: error.kind, message: error.message };
     })
     .mount("/api", httpBinding(options, ""))
-    .get("/status", async ({ set }) => {
+    .get("/status", async ({ status }) => {
       await using session = openSession(options);
-      const status = await session.call(statusGet, {});
-      if (status.ok) return status.value;
-      set.status = 409;
-      return status.error;
+      const result = await session.call(statusGet, {});
+      return result.ok ? result.value : status(409, result.error);
     })
     .patch(
       "/status",
-      async ({ body, set }) => {
+      async ({ body, status }) => {
         await using session = openSession(options);
-        // The first failure stops the request. The settings before it stay changed.
-        for (const change of changes(session, body)) {
-          const result = await change();
-          if (!result.ok) {
-            set.status = 409;
-            return result.error;
-          }
-        }
-        const status = await session.call(statusGet, {});
-        if (status.ok) return status.value;
-        set.status = 409;
-        return status.error;
+        const failure = await change(session, body);
+        if (failure !== undefined) return status(409, failure);
+        const result = await session.call(statusGet, {});
+        return result.ok ? result.value : status(409, result.error);
       },
       { body: Settings },
     );

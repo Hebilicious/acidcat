@@ -10,9 +10,10 @@ toolchains:
 
 tasks:
   examples:
-    description: "Render every Pkl catalog, and write every catalog of the repository in canonical form."
+    description: "Render every Pkl catalog, write every catalog of the repository in canonical form, and write the GraphQL schema of the example."
     command: "node"
     args: ["scripts/render-catalogs.ts"]
+    deps: ["example-aircon:schema"]
     inputs: ["**/*.pkl", "**/*.acidcat.json", "scripts/catalogs.ts", "scripts/render-catalogs.ts", "packages/catalog/typescript/src/**/*.ts"]
     toolchains: ["system"]
     options:
