@@ -28,12 +28,15 @@ const Settings = z.object({
 /** A call that changes one setting. */
 type Change<Failure> = () => Promise<Result<null, Failure>>;
 
-/** The change of a setting that the body gives, or nothing when the body does not give the setting. */
-const given = <Value, Failure>(value: Value | undefined, change: (value: Value) => Promise<Result<null, Failure>>): Change<Failure> | undefined =>
+/** A case: the change of a setting when the body gives the setting, or nothing when it does not. */
+const when = <Value, Failure>(value: Value | undefined, change: (value: Value) => Promise<Result<null, Failure>>): Change<Failure> | undefined =>
   value === undefined ? undefined : () => change(value);
 
-/** Make the changes in order. The first failure stops them and is the result. The changes before it stay. */
-async function inOrder<Failure>(changes: readonly (Change<Failure> | undefined)[]): Promise<Result<null, Failure>> {
+/**
+ * Make the change of each case that applies, in order, until one fails. The failure is the result. The changes before
+ * it stay.
+ */
+async function untilFailure<Failure>(changes: readonly (Change<Failure> | undefined)[]): Promise<Result<null, Failure>> {
   for (const change of changes) {
     const result = await change?.();
     if (result?.ok === false) return result;
@@ -43,11 +46,11 @@ async function inOrder<Failure>(changes: readonly (Change<Failure> | undefined)[
 
 /** Change each setting that the body gives, in order. */
 const change = (session: Session<Context>, { power, mode, fan, targetCelsius }: z.infer<typeof Settings>) =>
-  inOrder([
-    given(power, (on) => session.call(powerSet, { on })),
-    given(mode, (mode) => session.call(modeSet, { mode })),
-    given(fan, (speed) => session.call(fanSet, { speed })),
-    given(targetCelsius, (celsius) => session.call(temperatureSet, { celsius })),
+  untilFailure([
+    when(power, (on) => session.call(powerSet, { on })),
+    when(mode, (mode) => session.call(modeSet, { mode })),
+    when(fan, (speed) => session.call(fanSet, { speed })),
+    when(targetCelsius, (celsius) => session.call(temperatureSet, { celsius })),
   ]);
 
 export function elysiaApi(options: ApiOptions) {
