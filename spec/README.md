@@ -30,7 +30,7 @@ These terms have these meanings in all documents.
 | **Binding** | The rules that make one kind of surface from a view. A **protocol binding** makes a surface on the network or in a terminal, for example MCP or a command line. A **language binding** makes a surface in code, for example TypeScript. See [Bindings](bindings/README.md) |
 | **Provider** | The code that does the operations |
 | **Client** | A program or a person that calls capabilities through a binding |
-| **Session** | The context of the calls of one client. It holds the identity of the client |
+| **Session** | One period in which one client calls the capabilities of one target. It holds the identity of the client. It opens, and later it closes |
 | **Invocation** | One call: an id and an input go in, one outcome comes out. See [Invocation](invocation.md) |
 | **Outcome** | The end of a call: a **value**, a **failure** or a **call failure** |
 | **Availability** | If a capability can run now in a session. If it cannot, the availability gives a reason |
