@@ -6,19 +6,17 @@
  * `{ ok: false, error }`. A call failure rejects, as a `CallFailureError` does.
  */
 import { RpcTarget, newHttpBatchRpcResponse } from "capnweb";
-import { getHandle } from "@acid-cat/core-ts";
 import type { Session } from "@acid-cat/core-ts";
 import type { z } from "zod";
 
-import { FanInput, fanSet, ModeInput, modeSet, PowerInput, powerSet, statusGet, TemperatureInput, temperatureSet } from "../core-ts/aircon.ts";
+import { fanSet, modeSet, powerSet, statusGet, temperatureSet } from "../core-ts/aircon.ts";
 import type { Context, FanSpeed, Mode } from "../core-ts/aircon.ts";
-import { decode, forbidden, foreignOrigin, httpBinding, withSession } from "./shared.ts";
+import { forbidden, foreignOrigin, httpBinding, openSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
 
 /**
- * The methods that a client can call, on the session of one request. The types of the parameters are for the client.
- * A client can send any value, so each method checks its arguments with the input schema of its capability, then
- * makes a typed call.
+ * The methods that a client can call, on the session of one batch. The types of the parameters are for the client. A
+ * client can send any value, so `session.call` checks the arguments with the input schema of the capability.
  */
 export class AirconApi extends RpcTarget {
   readonly #session: Session<Context>;
@@ -29,23 +27,23 @@ export class AirconApi extends RpcTarget {
   }
 
   status() {
-    return getHandle(this.#session.handles, statusGet).execute({});
+    return this.#session.call(statusGet, {});
   }
 
   setPower(on: boolean) {
-    return getHandle(this.#session.handles, powerSet).execute(decode(PowerInput, { on }));
+    return this.#session.call(powerSet, { on });
   }
 
   setMode(mode: z.infer<typeof Mode>) {
-    return getHandle(this.#session.handles, modeSet).execute(decode(ModeInput, { mode }));
+    return this.#session.call(modeSet, { mode });
   }
 
   setFan(speed: z.infer<typeof FanSpeed>) {
-    return getHandle(this.#session.handles, fanSet).execute(decode(FanInput, { speed }));
+    return this.#session.call(fanSet, { speed });
   }
 
   setTemperature(celsius: number) {
-    return getHandle(this.#session.handles, temperatureSet).execute(decode(TemperatureInput, { celsius }));
+    return this.#session.call(temperatureSet, { celsius });
   }
 }
 
@@ -55,7 +53,9 @@ export function capnwebApi(options: ApiOptions): (request: Request) => Promise<R
   return async (request) => {
     if (foreignOrigin(request, options)) return forbidden();
     const path = new URL(request.url).pathname;
-    if (path === "/rpc") return withSession(options, (session) => newHttpBatchRpcResponse(request, new AirconApi(session)));
-    return path.startsWith("/api/") ? http(request) : new Response(null, { status: 404 });
+    if (path.startsWith("/api/")) return http(request);
+    if (path !== "/rpc") return new Response(null, { status: 404 });
+    await using session = openSession(options);
+    return await newHttpBatchRpcResponse(request, new AirconApi(session));
   };
 }

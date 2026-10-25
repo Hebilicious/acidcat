@@ -6,7 +6,7 @@
  */
 import { AVAILABLE, CallFailureError, callFailure } from "@acid-cat/spec-ts";
 import type { Availability, Outcome, Result } from "@acid-cat/spec-ts";
-import { Cause, Effect, Exit, Fiber, FiberSet, Layer, Schema, Scope, Stream } from "effect";
+import { Cause, Context, Effect, Exit, Fiber, FiberSet, Layer, Schema, Scope, Stream } from "effect";
 
 import type * as App from "./App.ts";
 import type * as Capability from "./Capability.ts";
@@ -49,22 +49,8 @@ export type HandleOf<C extends Capability.Any> = Handle<
   NonNullable<C["state"]>["schema"]["Encoded"]
 >;
 
-/** The handles of a session, by id, for an application that needs the services `R`. */
-export interface HandleMap<R = never> extends ReadonlyMap<string, Handle> {
-  /** A typed call with an input that is already decoded. `get` uses it. A call failure rejects with a `CallFailureError`. */
-  readonly execute: <Input, Value, Failure>(
-    capability: Session.Executable<Input, Value, Failure, R>,
-    input: NoInfer<Input>,
-    options?: CallOptions,
-  ) => Promise<Result<Value, Failure>>;
-}
-
-/**
- * The handle of a capability in `handles`, with the types of the capability. For a capability outside the view, the
- * handle is always unavailable, and each call rejects as `unknown-capability`. The capability needs only services of
- * the application of the handles.
- */
-export function get<
+/** The typed handle of a capability that a session serves, from its handle by id and its typed call. */
+function typedHandle<
   Input extends Capability.AnySchema,
   Output extends Capability.AnySchema,
   Failure extends Capability.AnySchema,
@@ -72,11 +58,10 @@ export function get<
   State extends Capability.AnySchema,
   Id extends string,
 >(
-  handles: HandleMap<R>,
   capability: Capability.Capability<Input, Output, Failure, R, State, Id>,
+  handle: Handle,
+  execute: (input: Input["Type"], options: CallOptions | undefined) => Promise<Result<Output["Type"], Failure["Type"]>>,
 ): Handle<Input["Type"], Output["Type"], Failure["Type"], State["Encoded"]> {
-  const handle = handles.get(capability.id);
-  if (handle === undefined) return outsideView(capability);
   const state = capability.state;
   const snapshot = handle.snapshot === undefined || state === undefined ? undefined : checked(handle.snapshot, Schema.is(Schema.toEncoded(state.schema)), capability.id);
   return {
@@ -85,7 +70,7 @@ export function get<
     audience: handle.audience,
     availability: handle.availability,
     ...(snapshot === undefined ? {} : { snapshot }),
-    execute: (input, options) => handles.execute(capability, input, options),
+    execute,
     invokeExternal: (input, options) => handle.invokeExternal(input, options),
   };
 }
@@ -184,7 +169,7 @@ const detached = <T>(source: Observable<T>): Observable<T> => ({
  * and the calls in progress are cancelled. The handles start no fiber until a listener subscribes. The session must
  * come from `Session.make`.
  */
-export const make = <R>(app: App.App<R>, session: Session.Session<R>): Effect.Effect<HandleMap<R>, never, Scope.Scope> =>
+export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effect<ReadonlyMap<string, Handle>, never, Scope.Scope> =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope;
     const context = yield* Effect.context<never>();
@@ -193,16 +178,7 @@ export const make = <R>(app: App.App<R>, session: Session.Session<R>): Effect.Ef
     const follow = yield* FiberSet.runtime(yield* FiberSet.make<void>())();
     const refs = refsOf(session);
 
-    /** Run a call as a promise. The signal of the call and the scope interrupt it, as `cancelled`. */
-    const run = <A>(effect: Effect.Effect<A, unknown>, options: CallOptions | undefined): Promise<A> => {
-      const signal = AbortSignal.any([lifetime.signal, ...(options?.signal ? [options.signal] : [])]);
-      if (signal.aborted) return Promise.reject(new CallFailureError(callFailure("cancelled", "The call was cancelled.")));
-      return Effect.runPromiseExitWith(context)(effect, { signal }).then((exit) => {
-        if (Exit.isSuccess(exit)) return exit.value;
-        if (Cause.hasInterruptsOnly(exit.cause)) throw new CallFailureError(callFailure("cancelled", "The call was cancelled."));
-        throw Cause.squash(exit.cause);
-      });
-    };
+    const run = runner(lifetime.signal, context);
 
     const handles = new Map<string, Handle>();
     for (const capability of app.capabilities) {
@@ -228,25 +204,62 @@ export const make = <R>(app: App.App<R>, session: Session.Session<R>): Effect.Ef
         invokeExternal: (input, options) => run(resultOf(session.invoke(id, input)), options),
       });
     }
-    const execute: HandleMap<R>["execute"] = (capability, input, options) => run(resultOf(session.call(capability, input)), options);
-    return Object.assign(handles, { execute });
+    return handles;
   });
 
 /** The result of an outcome. A call failure is a defect, which rejects the promise of the call with a `CallFailureError`. */
 const resultOf = <Value, Failure>(outcome: Effect.Effect<Outcome<Value, Failure>>): Effect.Effect<Result<Value, Failure>> =>
   Effect.flatMap(outcome, (each) => ("kind" in each ? Effect.die(new CallFailureError(each)) : Effect.succeed(each)));
 
-/** A session for code that does not use Effect. */
+/**
+ * Run a call as a promise. `lifetime` and the signal of the call interrupt it, as `cancelled`. A defect rejects the
+ * promise, for example the `CallFailureError` of `resultOf`.
+ */
+const runner =
+  (lifetime: AbortSignal, context: Context.Context<never>) =>
+  <A>(effect: Effect.Effect<A, unknown>, options: CallOptions | undefined): Promise<A> => {
+    const signal = AbortSignal.any([lifetime, ...(options?.signal ? [options.signal] : [])]);
+    if (signal.aborted) return Promise.reject(new CallFailureError(callFailure("cancelled", "The call was cancelled.")));
+    return Effect.runPromiseExitWith(context)(effect, { signal }).then((exit) => {
+      if (Exit.isSuccess(exit)) return exit.value;
+      if (Cause.hasInterruptsOnly(exit.cause)) throw new CallFailureError(callFailure("cancelled", "The call was cancelled."));
+      throw Cause.squash(exit.cause);
+    });
+  };
+
+/** A session for code that does not use Effect, of an application that needs the services `R`. */
 export interface PromiseSession<R = never> {
   readonly target: string;
   /** The view of the target. */
   readonly view: Session.Session["view"];
-  /** The handles of the capabilities in the view, by id. */
-  readonly handles: HandleMap<R>;
+  /** The handles of the capabilities in the view, by id. Bindings use them. */
+  readonly handles: ReadonlyMap<string, Handle>;
+  /**
+   * The handle of a capability, with the types of the capability. Only the capability object that the session serves
+   * gets a handle that calls it. Any other capability, also one with the same id, gets a handle that is always
+   * unavailable, and each call rejects as `unknown-capability`. Each call of `handle` gives a new handle.
+   */
+  handle<
+    Input extends Capability.AnySchema,
+    Output extends Capability.AnySchema,
+    Failure extends Capability.AnySchema,
+    State extends Capability.AnySchema,
+    Id extends string,
+  >(
+    capability: Capability.Capability<Input, Output, Failure, R, State, Id>,
+  ): Handle<Input["Type"], Output["Type"], Failure["Type"], State["Encoded"]>;
+  /**
+   * A call of a capability with an input that is not trusted. The input schema of the capability decodes the input, so
+   * the result has the types of the capability. A call failure rejects with a `CallFailureError`: an input that does
+   * not decode as `invalid-input`, and a capability object that the session does not serve as `unknown-capability`.
+   */
+  call<Value, Failure>(capability: Session.Preparable<Value, Failure, R>, input: unknown, options?: CallOptions): Promise<Result<Value, Failure>>;
   /** The signal of the session. It aborts when the session closes. */
   readonly signal: AbortSignal;
   /** Close the session: cancel the calls in progress, and wait for them. */
   dispose(): Promise<void>;
+  /** Close the session, as `dispose` does, at the end of the block of `await using session = await Handles.open(…)`. */
+  [Symbol.asyncDispose](): Promise<void>;
 }
 
 /**
@@ -261,24 +274,38 @@ export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, opti
       // The services live as long as the session.
       const services = yield* Layer.buildWithScope(layer, scope);
       const session = yield* Session.make(app, options).pipe(Effect.provideContext(services));
-      return { session, handles: yield* make(app, session) };
+      return { services, session, handles: yield* make(app, session) };
     }).pipe(Scope.provide(scope)),
   );
   if (Exit.isFailure(opened)) {
     await Effect.runPromise(Scope.close(scope, opened));
     throw Cause.squash(opened.cause);
   }
-  const { session, handles } = opened.value;
+  const { services, session, handles } = opened.value;
+  const refs = refsOf(session);
+  const run = runner(lifetime.signal, Context.empty());
+  /** A program of a capability, with the services of the session. */
+  const withServices = <A, Err>(program: Effect.Effect<A, Err, R>): Effect.Effect<A, Err> =>
+    Effect.updateContext(program, (current: Context.Context<never>) => Context.merge(current, services));
+  const dispose = async () => {
+    lifetime.abort();
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+  };
   return {
     target: session.target,
     get view() {
       return session.view;
     },
     handles,
-    signal: lifetime.signal,
-    async dispose() {
-      lifetime.abort();
-      await Effect.runPromise(Scope.close(scope, Exit.void));
+    handle: (capability) => {
+      const handle = handles.get(capability.id);
+      if (handle === undefined || !refs.serves(capability)) return outsideView(capability);
+      return typedHandle(capability, handle, (input, callOptions) => run(resultOf(session.outcome(capability, input)), callOptions));
     },
+    call: (capability, input, callOptions) =>
+      run(resultOf(refs.perform(capability, Effect.map(capability.prepare(input), withServices))), callOptions),
+    signal: lifetime.signal,
+    dispose,
+    [Symbol.asyncDispose]: dispose,
   };
 }

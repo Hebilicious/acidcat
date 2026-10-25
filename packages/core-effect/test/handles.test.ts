@@ -95,7 +95,7 @@ test("a handle gives the state as copies, and follows it only while it has liste
   const device = Context.get(Effect.runSync(Effect.scoped(Layer.build(lampLayer))), Lamp);
   const session = await Handles.open(lamp, Layer.succeed(Lamp, device), { target: "app" });
   try {
-    const snapshot = Handles.get(session.handles, lightGet).snapshot;
+    const snapshot = session.handle(lightGet).snapshot;
     assert.ok(snapshot);
     const first = snapshot.getSnapshot();
     assert.equal(first.on, false);
@@ -106,7 +106,7 @@ test("a handle gives the state as copies, and follows it only while it has liste
     const seen: (typeof Light.Encoded)[] = [];
     const subscription = snapshot.subscribe((value) => seen.push(value));
     assert.equal(device.light.pubsub.subscribers.size, 1);
-    await Handles.get(session.handles, powerSet).execute({ on: true });
+    await session.handle(powerSet).execute({ on: true });
     assert.deepEqual(seen.map((value) => value.on), [true]);
     const [changed] = seen;
     assert.ok(changed);
@@ -161,18 +161,18 @@ test("handles need a state schema that encodes synchronously, a failed open rele
   assert.equal(state, "first");
 });
 
-test("Handles.get gives a handle with the types of its capability", async () => {
+test("session.handle gives a handle with the types of its capability", async () => {
   const session = await Handles.open(lamp, lampLayer, { target: "app" });
   try {
-    const power = Handles.get(session.handles, powerSet);
+    const power = session.handle(powerSet);
     const powered: Result<null, typeof Unreachable.Type | typeof Burnt.Type> = await power.execute({ on: true });
     assert.deepEqual(powered, { ok: true, value: null });
 
-    const scene = Handles.get(session.handles, sceneSet);
+    const scene = session.handle(sceneSet);
     const chosen: Result<null, typeof Unreachable.Type> = await scene.execute({ scene: "relax" });
     assert.deepEqual(chosen, { ok: true, value: null });
 
-    const light = Handles.get(session.handles, lightGet);
+    const light = session.handle(lightGet);
     const value: Result<typeof Light.Type, typeof Unreachable.Type> = await light.execute({});
     const snapshot: typeof Light.Encoded | undefined = light.snapshot?.getSnapshot();
     assert.deepEqual(value, { ok: true, value: snapshot });
@@ -193,10 +193,10 @@ test("Handles.get gives a handle with the types of its capability", async () => 
   }
 });
 
-test("Handles.get gives an always unavailable handle for a capability outside the view", async () => {
+test("session.handle gives an always unavailable handle for a capability outside the view, or for a capability object that the session does not serve", async () => {
   const session = await Handles.open(lamp, lampLayer, { target: "remote" });
   try {
-    const pairing = Handles.get(session.handles, pair);
+    const pairing = session.handle(pair);
     assert.equal(session.handles.has(pair.id), false);
     assert.equal(pairing.id, "lamp.pair");
     assert.deepEqual(pairing.availability.getSnapshot(), { available: false, reason: "There is no capability lamp.pair." });
@@ -207,4 +207,37 @@ test("Handles.get gives an always unavailable handle for a capability outside th
   } finally {
     await session.dispose();
   }
+});
+
+test("session.call decodes the input with the schema of the capability, and calls only the capability object that the session serves", async () => {
+  const session = await Handles.open(lamp, lampLayer, { target: "app" });
+  try {
+    const powered: Result<null, typeof Unreachable.Type | typeof Burnt.Type> = await session.call(powerSet, { on: true });
+    assert.deepEqual(powered, { ok: true, value: null });
+    assert.equal((await callFailure(session.call(powerSet, { on: "yes" }))).kind, "invalid-input");
+
+    const copy = Capability.make({
+      id: powerSet.id,
+      description: powerSet.description,
+      audience: powerSet.audience,
+      input: Schema.Struct({ on: Schema.Boolean }),
+      run: () => Effect.succeed(null),
+    });
+    assert.equal((await callFailure(session.call(copy, { on: true }))).kind, "unknown-capability");
+    const handle = session.handle(copy);
+    assert.equal(handle.availability.getSnapshot().available, false);
+    assert.equal((await callFailure(handle.execute({ on: true }))).kind, "unknown-capability");
+  } finally {
+    await session.dispose();
+  }
+});
+
+test("await using closes the promise session at the end of the block", async () => {
+  let signal: AbortSignal | undefined;
+  {
+    await using session = await Handles.open(lamp, lampLayer, { target: "app" });
+    signal = session.signal;
+    assert.equal(signal.aborted, false);
+  }
+  assert.equal(signal.aborted, true);
 });

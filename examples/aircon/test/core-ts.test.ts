@@ -6,7 +6,7 @@ import { check } from "@acid-cat/cli";
 import type { z } from "zod";
 
 import { aircon, firmwareUpdate, modeSet, Offline, PoweredOff, powerSet, Status, statusGet, toJsonSchema, Unit } from "../core-ts/aircon.ts";
-import { CallFailureError, catalogOf, createSession, getHandle, renderCatalog, runCli } from "@acid-cat/core-ts";
+import { CallFailureError, catalogOf, createSession, renderCatalog, runCli } from "@acid-cat/core-ts";
 import type { Result } from "@acid-cat/core-ts";
 import { shape, writtenText } from "./shape.ts";
 
@@ -38,7 +38,7 @@ test("the unit works through a session and the command line", async () => {
 test("a handle gives the state as copies, and each change", async () => {
   const unit = new Unit();
   const session = createSession(aircon, { target: "app", context: { unit }, toJsonSchema });
-  const { snapshot } = getHandle(session.handles, statusGet);
+  const { snapshot } = session.handle(statusGet);
   assert.ok(snapshot, "aircon.status.get has state");
   const off: z.infer<typeof Status> = { power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 };
   assert.deepEqual(snapshot.getSnapshot(), off);
@@ -48,21 +48,21 @@ test("a handle gives the state as copies, and each change", async () => {
   assert.deepEqual(seen, [{ ...off, power: true }]);
   snapshot.getSnapshot().power = false;
   assert.equal(unit.state.power, true);
-  assert.equal(getHandle(session.handles, powerSet).snapshot, undefined);
+  assert.equal(session.handle(powerSet).snapshot, undefined);
   await session.dispose();
 });
 
-test("getHandle gives a handle with the types of its capability", async () => {
+test("session.handle gives a handle with the types of its capability", async () => {
   const session = createSession(aircon, { target: "app", context: { unit: new Unit() }, toJsonSchema });
-  const power = getHandle(session.handles, powerSet);
+  const power = session.handle(powerSet);
   const powered: Result<null, z.infer<typeof Offline>> = await power.execute({ on: true });
   assert.deepEqual(powered, { ok: true, value: null });
 
-  const mode = getHandle(session.handles, modeSet);
+  const mode = session.handle(modeSet);
   const moded: Result<null, z.infer<typeof Offline> | z.infer<typeof PoweredOff>> = await mode.execute({ mode: "heat" });
   assert.deepEqual(moded, { ok: true, value: null });
 
-  const status = getHandle(session.handles, statusGet);
+  const status = session.handle(statusGet);
   const value: Result<z.infer<typeof Status>, z.infer<typeof Offline>> = await status.execute({});
   const snapshot: z.infer<typeof Status> | undefined = status.snapshot?.getSnapshot();
   assert.deepEqual(value, { ok: true, value: snapshot });
@@ -80,9 +80,9 @@ test("getHandle gives a handle with the types of its capability", async () => {
   await session.dispose();
 });
 
-test("getHandle gives an always unavailable handle for a capability outside the view", async () => {
+test("session.handle gives an always unavailable handle for a capability outside the view", async () => {
   const session = createSession(aircon, { target: "taskbar", context: { unit: new Unit() }, toJsonSchema });
-  const firmware = getHandle(session.handles, firmwareUpdate);
+  const firmware = session.handle(firmwareUpdate);
   assert.equal(session.handles.has(firmwareUpdate.id), false);
   assert.equal(firmware.id, "aircon.firmware.update");
   assert.deepEqual(firmware.availability.getSnapshot(), { available: false, reason: "There is no capability aircon.firmware.update." });

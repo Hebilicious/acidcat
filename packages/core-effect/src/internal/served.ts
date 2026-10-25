@@ -13,6 +13,13 @@ export interface ServedRefs {
   readonly state: (id: string) => Readable<unknown> | undefined;
   /** A call with an input that is already decoded. The outcome is not encoded. This effect never fails. */
   readonly execute: (id: string, input: unknown) => Effect.Effect<Outcome<unknown, unknown>>;
+  /** `true` if the session serves this capability object. */
+  readonly serves: (capability: { readonly id: string }) => boolean;
+  /**
+   * Admit a typed call of a capability object, prepare its program, and run it. A program that needs services gets
+   * them from its caller. This effect never fails.
+   */
+  readonly perform: <A, E>(capability: { readonly id: string }, prepared: Effect.Effect<Effect.Effect<A, E>, string>) => Effect.Effect<Outcome<A, E>>;
 }
 
 const sessions = new WeakMap<object, ServedRefs>();

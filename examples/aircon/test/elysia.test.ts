@@ -25,9 +25,10 @@ test("the routes of the application call the capabilities", async () => {
 test("a failure gives 409, a call failure its status, and a bad body 422", async () => {
   const unit = new Unit();
   const app = elysiaApi({ unit });
-  const poweredOff = await app.handle(request("/status", { method: "PATCH", body: { mode: "heat" } }));
+  const poweredOff = await app.handle(request("/status", { method: "PATCH", body: { mode: "heat", fan: "high" } }));
   assert.equal(poweredOff.status, 409);
   assert.deepEqual(await poweredOff.json(), { _tag: "PoweredOff" });
+  assert.equal(unit.state.fan, "auto", "the failure stops the settings after it");
   const invalid = await app.handle(request("/status", { method: "PATCH", body: { targetCelsius: 40 } }));
   assert.equal(invalid.status, 422);
   const { kind } = z.object({ kind: z.string(), message: z.string() }).parse(await invalid.json());

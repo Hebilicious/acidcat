@@ -1,43 +1,32 @@
 /**
  * A GraphQL API for the air conditioner, with Pothos and GraphQL Yoga, next to the HTTP binding at `/api`.
  *
- * The schema is application code: its types and fields are a design choice. Each request has its own session. Each
- * mutation checks its arguments with the input schema of its capability, makes a typed call, and returns the new
- * status. A failure becomes a GraphQL error whose `code` is the tag of the failure, or the kind of the call failure.
- * Yoga masks all other errors.
+ * The schema is application code: its types and fields are a design choice. It keeps the three outcomes of a call:
+ *
+ * - a value is data: the status of the unit;
+ * - a failure is data too: each field returns a union of the status and the failures of its capability, so a client
+ *   gets the failure with its type, for example `... on PoweredOff`;
+ * - a call failure is a GraphQL error whose `code` is the kind of the call failure. Yoga masks all other errors.
+ *
+ * Each request has its own session. `session.call` checks the arguments with the input schema of the capability.
  */
 import SchemaBuilder from "@pothos/core";
-import { CallFailureError, getHandle } from "@acid-cat/core-ts";
-import type { Result, Session } from "@acid-cat/core-ts";
+import { CallFailureError } from "@acid-cat/core-ts";
+import type { Session } from "@acid-cat/core-ts";
 import { GraphQLError } from "graphql";
 import { createYoga } from "graphql-yoga";
 import type { z } from "zod";
 
-import { FanInput, fanSet, FanSpeed, Mode, ModeInput, modeSet, PowerInput, powerSet, statusGet, TemperatureInput, temperatureSet } from "../core-ts/aircon.ts";
-import type { Context as AirconContext, Status } from "../core-ts/aircon.ts";
-import { decode, Failure, forbidden, foreignOrigin, httpBinding, value, withSession } from "./shared.ts";
-import type { ApiOptions, TaggedFailure } from "./shared.ts";
+import { fanSet, FanSpeed, Mode, modeSet, powerSet, statusGet, temperatureSet } from "../core-ts/aircon.ts";
+import type { Context as AirconContext, Offline, PoweredOff, Status } from "../core-ts/aircon.ts";
+import { forbidden, foreignOrigin, httpBinding, openSession } from "./shared.ts";
+import type { ApiOptions } from "./shared.ts";
 
 interface Context {
   readonly session: Session<AirconContext>;
 }
 
-/** The value of a call. A failure or a call failure becomes a GraphQL error, with its tag or its kind as `code`. */
-async function call<Value, Tagged extends TaggedFailure>(run: () => Promise<Result<Value, Tagged>>): Promise<Value> {
-  try {
-    return await value(run());
-  } catch (error) {
-    if (error instanceof Failure) {
-      throw new GraphQLError(error.message, { extensions: { code: error.failure._tag, failure: error.failure } });
-    }
-    if (error instanceof CallFailureError) throw new GraphQLError(error.message, { extensions: { code: error.kind } });
-    throw error;
-  }
-}
-
-const status = (session: Session<AirconContext>) => call(() => getHandle(session.handles, statusGet).execute({}));
-
-const builder = new SchemaBuilder<{ Context: Context }>({});
+const builder = new SchemaBuilder<{ Context: Context; DefaultFieldNullability: false }>({ defaultFieldNullability: false });
 
 const ModeType = builder.enumType("Mode", { values: Mode.options });
 const FanSpeedType = builder.enumType("FanSpeed", { values: FanSpeed.options });
@@ -53,53 +42,109 @@ const StatusType = builder.objectRef<z.infer<typeof Status>>("Status").implement
   }),
 });
 
-builder.queryType({
+const OfflineType = builder.objectRef<z.infer<typeof Offline>>("Offline").implement({
+  description: "The unit is not on the network.",
   fields: (t) => ({
-    status: t.field({ type: StatusType, resolve: (_, __, { session }) => status(session) }),
+    _tag: t.exposeString("_tag"),
+    since: t.exposeString("since", { nullable: true }),
   }),
 });
 
-/** Make a call, then give the new status. */
-const change = async <Value, Tagged extends TaggedFailure>(session: Session<AirconContext>, run: () => Promise<Result<Value, Tagged>>) => {
-  await call(run);
-  return status(session);
+const PoweredOffType = builder.objectRef<z.infer<typeof PoweredOff>>("PoweredOff").implement({
+  description: "The unit is off, so it cannot change its mode.",
+  fields: (t) => ({ _tag: t.exposeString("_tag") }),
+});
+
+/** The GraphQL type of a value or a failure: a failure has a `_tag`. */
+const typeOf = (value: z.infer<typeof Status> | z.infer<typeof Offline> | z.infer<typeof PoweredOff>) => {
+  if (!("_tag" in value)) return StatusType;
+  return value._tag === "Offline" ? OfflineType : PoweredOffType;
 };
+
+const StatusResult = builder.unionType("StatusResult", {
+  description: "The status of the unit, or the failure that stops the call.",
+  types: [StatusType, OfflineType],
+  resolveType: typeOf,
+});
+const SetModeResult = builder.unionType("SetModeResult", {
+  description: "The status of the unit, or the failure that stops the change of mode.",
+  types: [StatusType, OfflineType, PoweredOffType],
+  resolveType: typeOf,
+});
+
+/** The status of the unit, or the failure that stops the read. */
+async function statusOf(session: Session<AirconContext>) {
+  const result = await session.call(statusGet, {});
+  return result.ok ? result.value : result.error;
+}
+
+builder.queryType({
+  fields: (t) => ({
+    status: t.field({ type: StatusResult, description: statusGet.description, resolve: (_, __, { session }) => statusOf(session) }),
+  }),
+});
 
 builder.mutationType({
   fields: (t) => ({
     setPower: t.field({
-      type: StatusType,
+      type: StatusResult,
+      description: powerSet.description,
       args: { on: t.arg.boolean({ required: true }) },
-      resolve: (_, args, { session }) => change(session, () => getHandle(session.handles, powerSet).execute(decode(PowerInput, args))),
+      resolve: async (_, args, { session }) => {
+        const result = await session.call(powerSet, args);
+        return result.ok ? statusOf(session) : result.error;
+      },
     }),
     setMode: t.field({
-      type: StatusType,
+      type: SetModeResult,
+      description: modeSet.description,
       args: { mode: t.arg({ type: ModeType, required: true }) },
-      resolve: (_, args, { session }) => change(session, () => getHandle(session.handles, modeSet).execute(decode(ModeInput, args))),
+      resolve: async (_, args, { session }) => {
+        const result = await session.call(modeSet, args);
+        return result.ok ? statusOf(session) : result.error;
+      },
     }),
     setFan: t.field({
-      type: StatusType,
+      type: StatusResult,
+      description: fanSet.description,
       args: { speed: t.arg({ type: FanSpeedType, required: true }) },
-      resolve: (_, args, { session }) => change(session, () => getHandle(session.handles, fanSet).execute(decode(FanInput, args))),
+      resolve: async (_, args, { session }) => {
+        const result = await session.call(fanSet, args);
+        return result.ok ? statusOf(session) : result.error;
+      },
     }),
     setTemperature: t.field({
-      type: StatusType,
+      type: StatusResult,
+      description: temperatureSet.description,
       args: { celsius: t.arg.float({ required: true }) },
-      resolve: (_, args, { session }) =>
-        change(session, () => getHandle(session.handles, temperatureSet).execute(decode(TemperatureInput, args))),
+      resolve: async (_, args, { session }) => {
+        const result = await session.call(temperatureSet, args);
+        return result.ok ? statusOf(session) : result.error;
+      },
     }),
   }),
 });
 
 export const schema = builder.toSchema();
 
+/** A call failure becomes a GraphQL error with its kind as `code`. Yoga masks all other errors. */
+function maskError(error: unknown, message: string): Error {
+  const cause = error instanceof GraphQLError ? error.originalError : error;
+  if (!(cause instanceof CallFailureError)) return new GraphQLError(message);
+  return new GraphQLError(cause.message, {
+    ...(error instanceof GraphQLError ? { nodes: error.nodes, path: error.path } : {}),
+    extensions: { code: cause.kind },
+  });
+}
+
 /** A web request handler: GraphQL at `/graphql`, and the HTTP binding at `/api`. */
 export function graphqlApi(options: ApiOptions): (request: Request) => Promise<Response> {
   const http = httpBinding(options, "/api");
-  const yoga = createYoga<Context>({ schema, graphiql: false });
+  const yoga = createYoga<Context>({ schema, graphiql: false, maskedErrors: { maskError } });
   return async (request) => {
     if (foreignOrigin(request, options)) return forbidden();
     if (new URL(request.url).pathname.startsWith("/api/")) return http(request);
-    return withSession(options, (session) => Promise.resolve(yoga.fetch(request, { session })));
+    await using session = openSession(options);
+    return await yoga.fetch(request, { session });
   };
 }

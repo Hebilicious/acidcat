@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { check } from "@acid-cat/cli";
 import { z } from "zod";
 
-import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, getHandle, ok, renderCatalog, runCli } from "../src/index.ts";
+import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, ok, renderCatalog, runCli } from "../src/index.ts";
 import type { Result } from "../src/index.ts";
 import { boil, descale, fill, Kettle, kettle, statusGet, toJsonSchema, warmSet } from "./kettle.ts";
 import type { Status } from "./kettle.ts";
@@ -95,7 +95,7 @@ test("a session gives values, failures of the capability and call failures", asy
 test("availability comes from the context, and a call to an unavailable capability fails as unavailable", async () => {
   const context = { kettle: filledKettle() };
   const session = createSession(kettle, { target: "app", context, toJsonSchema });
-  const handle = getHandle(session.handles, descale);
+  const handle = session.handle(descale);
   assert.deepEqual(handle.availability.getSnapshot(), { available: true });
 
   const seen: unknown[] = [];
@@ -116,7 +116,7 @@ test("availability comes from the context, and a call to an unavailable capabili
 test("a handle gives the state as copies, and each change", async () => {
   const context = { kettle: filledKettle() };
   const session = createSession(kettle, { target: "app", context, toJsonSchema });
-  const snapshot = getHandle(session.handles, statusGet).snapshot;
+  const snapshot = session.handle(statusGet).snapshot;
   assert.ok(snapshot !== undefined);
   assert.deepEqual(snapshot.getSnapshot(), { litres: 1, celsius: 20 });
 
@@ -146,22 +146,22 @@ test("a handle gives the state as copies, and each change", async () => {
   await session.dispose();
 });
 
-test("getHandle gives a handle with the types of its capability", async () => {
+test("session.handle gives a handle with the types of its capability", async () => {
   const session = createSession(kettle, { target: "app", context: { kettle: new Kettle() }, toJsonSchema });
 
-  const boiling = getHandle(session.handles, boil);
+  const boiling = session.handle(boil);
   const empty: Result<{ celsius: number }, { readonly _tag: "Empty" }> = await boiling.execute({});
   assert.deepEqual(empty, { ok: false, error: { _tag: "Empty" } });
 
-  const filling = getHandle(session.handles, fill);
+  const filling = session.handle(fill);
   const filled: Result<null, { readonly _tag: "Overflow"; readonly capacity: number }> = await filling.execute({ litres: 1 });
   assert.deepEqual(filled, { ok: true, value: null });
 
-  const warming = getHandle(session.handles, warmSet);
+  const warming = session.handle(warmSet);
   const warmed: Result<null, { readonly _tag: "Empty" }> = await warming.execute({ drink: "white-tea" });
   assert.deepEqual(warmed, { ok: true, value: null });
 
-  const status = getHandle(session.handles, statusGet);
+  const status = session.handle(statusGet);
   const value: Result<Status, never> = await status.execute({});
   const snapshot: Status | undefined = status.snapshot?.getSnapshot();
   assert.deepEqual(value, { ok: true, value: snapshot });
@@ -186,12 +186,12 @@ test("getHandle gives a handle with the types of its capability", async () => {
   await session.dispose();
 });
 
-test("getHandle gives an always unavailable handle for a capability outside the view", async () => {
+test("session.handle gives an always unavailable handle for a capability outside the view", async () => {
   const session = createSession(kettle, { target: "panel", context: { kettle: new Kettle() }, toJsonSchema });
   assert.deepEqual([...session.handles.keys()].sort(), ["kettle.boil", "kettle.status.get"]);
   assert.deepEqual(Object.keys(session.view.capabilities).sort(), ["kettle.boil", "kettle.status.get"]);
 
-  const warming = getHandle(session.handles, warmSet);
+  const warming = session.handle(warmSet);
   assert.equal(session.handles.has(warmSet.id), false);
   assert.equal(warming.id, "kettle.warm.set");
   assert.deepEqual(warming.availability.getSnapshot(), { available: false, reason: "There is no capability kettle.warm.set." });
@@ -204,7 +204,7 @@ test("getHandle gives an always unavailable handle for a capability outside the 
   await session.dispose();
 });
 
-test("getHandle serves only the capability object of the application, and a capability with no input gets an empty object", async () => {
+test("session.handle serves only the capability object of the application, and a capability with no input gets an empty object", async () => {
   const seen: unknown[] = [];
   const probe = defineCapability({
     id: "probe.empty",
@@ -218,17 +218,49 @@ test("getHandle serves only the capability object of the application, and a capa
   const app = defineApp({ targets: { app: { bindings: ["typescript"] } }, capabilities: [probe] });
   const session = createSession(app, { target: "app", context: undefined, toJsonSchema });
 
-  assert.deepEqual(await getHandle(session.handles, probe).execute({}), { ok: true, value: null });
+  assert.deepEqual(await session.handle(probe).execute({}), { ok: true, value: null });
   assert.deepEqual(await session.invoke("probe.empty", { extra: 1 }), { ok: true, value: null });
   assert.deepEqual(seen, [{}, {}]);
 
   const copy = defineCapability({ id: "probe.empty", description: "Another capability with the same id.", audience: ["app"], run: () => ok(null) });
-  const other = getHandle(session.handles, copy);
+  const other = session.handle(copy);
   assert.equal(other.availability.getSnapshot().available, false);
   const error = await other.execute({}).catch((caught: unknown) => caught);
   assert.ok(error instanceof CallFailureError);
   assert.equal(error.kind, "unknown-capability");
   await session.dispose();
+});
+
+test("session.call checks an input that is not trusted with the schema of the capability, and gives a typed result", async () => {
+  const session = createSession(kettle, { target: "app", context: { kettle: filledKettle(1) }, toJsonSchema });
+
+  const filled: Result<null, { readonly _tag: "Overflow"; capacity: number }> = await session.call(fill, { litres: 0.5 });
+  assert.deepEqual(filled, { ok: true, value: null });
+  assert.deepEqual(await session.call(fill, { litres: 0.5 }), { ok: false, error: { _tag: "Overflow", capacity: 1.7 } });
+  const status: Result<Status, never> = await session.call(statusGet, { ignored: true });
+  assert.equal(status.ok, true);
+
+  for (const input of [{ litres: "a lot" }, { litres: 99 }, "two litres"]) {
+    const error = await session.call(fill, input).catch((caught: unknown) => caught);
+    assert.ok(error instanceof CallFailureError);
+    assert.equal(error.kind, "invalid-input");
+  }
+
+  const copy = defineCapability({ id: "kettle.boil", description: "Another capability with the same id.", audience: ["app"], run: () => ok(null) });
+  const outside = await session.call(copy, {}).catch((caught: unknown) => caught);
+  assert.ok(outside instanceof CallFailureError);
+  assert.equal(outside.kind, "unknown-capability");
+  await session.dispose();
+});
+
+test("await using closes the session at the end of its block", async () => {
+  let signal: AbortSignal | undefined;
+  {
+    await using session = createSession(kettle, { target: "app", context: { kettle: new Kettle() }, toJsonSchema });
+    signal = session.signal;
+    assert.equal(signal.aborted, false);
+  }
+  assert.equal(signal.aborted, true);
 });
 
 test("the command line resolves flags through named types, and changes the context", async () => {

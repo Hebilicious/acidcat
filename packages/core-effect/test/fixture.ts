@@ -80,6 +80,16 @@ const Flags = Schema.Struct({
 
 const everywhere = ["app", "mcp", "cli", "api"];
 
+export const echo = Capability.make({
+  id: "fixture.echo",
+  description: "Return the input text.",
+  audience: everywhere,
+  readOnly: true,
+  input: Text,
+  output: Text,
+  run: (input) => Effect.succeed(input),
+});
+
 export const refuse = Capability.make({
   id: "fixture.refuse",
   description: "Always return the failure Refused.",
@@ -105,15 +115,7 @@ export const fixture = App.make({
     api: { bindings: ["http"] },
   },
   capabilities: [
-    Capability.make({
-      id: "fixture.echo",
-      description: "Return the input text.",
-      audience: everywhere,
-      readOnly: true,
-      input: Text,
-      output: Text,
-      run: (input) => Effect.succeed(input),
-    }),
+    echo,
     refuse,
     Capability.make({
       id: "fixture.crash",

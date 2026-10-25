@@ -87,7 +87,7 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 
 | Module | Binding | Entry point |
 | --- | --- | --- |
-| `Session` | [Invocation](../../spec/invocation.md) | `Session.make(app, { target })` gives a `Session<R>`, where `R` is the services of the application: `invoke` for untrusted input, `call` and `execute` for typed calls of capabilities that need only services in `R` |
+| `Session` | [Invocation](../../spec/invocation.md) | `Session.make(app, { target })` gives a `Session<R>`, where `R` is the services of the application: `invoke` for untrusted input by id, and typed calls (see [Typed calls](#typed-calls)) |
 | `Handles` | [TypeScript](../../spec/bindings/typescript.md) | `Handles.make(app, session)`: handles with promises and observables, for code that does not use Effect, such as a user interface. `Handles.open(app, layer, { target })` opens a session from code that does not use Effect |
 | `Mcp` | [MCP](../../spec/bindings/mcp.md) | `Mcp.toWebHandler(app, layer, options)`, on `effect/ai/McpServer` |
 | `Http` | [HTTP](../../spec/bindings/http.md) | `Http.toWebHandler(app, layer, options)` |
@@ -96,16 +96,41 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 
 `layer` gives the services that the capabilities need. A web handler is `(request: Request) => Promise<Response>`. It works in Node, Bun, Deno and Cloudflare Workers. When the signal of a request aborts, the handler cancels the call of the request.
 
-### Typed handles
+### Typed calls
 
-`Handles.get(handles, capability)` gives the handle of a capability with the types of its schemas: `execute` takes the decoded input, and gives the decoded value or failure. `snapshot` gives the state in its JSON form. `handles` is the `HandleMap<R>` of `Handles.make` or `Handles.open`, and the capability needs only services in `R`. For a capability outside the view, the handle is always unavailable, and each call rejects as `unknown-capability`.
+A typed call takes the capability object, and has the types of its schemas. Only the capability object that the session serves can be called. Any other object, also one with the same id, is `unknown-capability`. The capability needs only services of the application.
+
+| Effect `Session` | Input | Result |
+| --- | --- | --- |
+| `session.call(capability, input)` | not trusted: the input schema of the capability decodes it | `Effect<Value, Failure \| CallFailed>`. An input that does not decode is the call failure `invalid-input` |
+| `session.execute(capability, input)` | already decoded, with the type of the input | `Effect<Value, Failure \| CallFailed>` |
+| `session.outcome(capability, input)` | already decoded, with the type of the input | `Effect<Outcome<Value, Failure>>`, which never fails |
+
+```ts
+import { Session } from "@acid-cat/core-effect";
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const session = yield* Session.make(aircon, { target: "mcp" });
+    return yield* session.call(powerSet, { on: true }); // Effect<null, typeof Offline.Type | Session.CallFailed>
+  }),
+);
+```
+
+`Handles.open` gives a session for code that does not use Effect, with the same names:
+
+- `session.call(capability, input)` decodes an input that is not trusted, and gives `Promise<Result<Value, Failure>>`. A call failure rejects with a `CallFailureError`: an input that does not decode as `invalid-input`.
+- `session.handle(capability)` gives the handle of a capability with the types of its schemas: `execute` takes the decoded input, and gives the decoded value or failure. `snapshot` gives the state in its JSON form. For a capability that the session does not serve, the handle is always unavailable, and each call rejects as `unknown-capability`.
+- `await using session = await Handles.open(…)` closes the session at the end of the block. `session.dispose()` closes it too.
+- `session.handles` gives the handles by id, without the types of the schemas, for bindings.
 
 ```ts
 import { Handles } from "@acid-cat/core-effect";
 
-const session = await Handles.open(aircon, unitLayer, { target: "app" });
-const power = Handles.get(session.handles, powerSet); // Handles.HandleOf<typeof powerSet>
-const result = await power.execute({ on: true }); // Result<null, typeof Offline.Type>
+await using session = await Handles.open(aircon, unitLayer, { target: "app" });
+const result = await session.call(powerSet, request.body); // Result<null, typeof Offline.Type>
+const power = session.handle(powerSet); // Handles.HandleOf<typeof powerSet>
+await power.execute({ on: true }); // Result<null, typeof Offline.Type>
 ```
 
 ### Services for each request

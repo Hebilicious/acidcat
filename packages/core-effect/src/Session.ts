@@ -14,12 +14,21 @@ import { register } from "./internal/served.ts";
 export class CallFailed extends Data.TaggedError("CallFailed")<CallFailure> {}
 
 /**
- * The part of a capability that a typed call uses: its id and its operation. Each `Capability` is an `Executable` with
- * the types of its schemas.
+ * The part of a capability that a typed call with a decoded input uses: its id and its operation. Each `Capability` is
+ * an `Executable` with the types of its schemas.
  */
 export interface Executable<Input, Value, Failure, R> {
   readonly id: string;
   readonly run: (input: Input) => Effect.Effect<Value, Failure, R>;
+}
+
+/**
+ * The part of a capability that a typed call with an input that is not trusted uses: its id, and the decoding of its
+ * input. Each `Capability` is a `Preparable` with the types of its schemas.
+ */
+export interface Preparable<Value, Failure, R> {
+  readonly id: string;
+  readonly prepare: (input: unknown) => Effect.Effect<Effect.Effect<Value, Failure, R>, string>;
 }
 
 /** A session of an application that needs the services `R`. */
@@ -46,18 +55,22 @@ export interface Session<R = never> {
   /** A call with an input that is not trusted. The outcome is in its JSON form. This effect never fails. */
   readonly invoke: (id: string, input: unknown) => Effect.Effect<Outcome<unknown, unknown>>;
   /**
-   * A typed call from Effect code. The capability needs only services of the application. The session admits the call
-   * by the id of the capability. The outcome holds the value, the failure or the call failure. This effect never fails.
+   * A typed call from Effect code, with an input that is not trusted. The input schema of the capability decodes the
+   * input, so the value and the failure have the types of the capability. An input that does not decode fails as the
+   * call failure `invalid-input`. Only the capability object that the session serves can be called: any other object,
+   * also one with the same id, fails as `unknown-capability`. Failures and call failures are in the error channel.
    */
-  readonly call: <Input, Value, Failure>(
-    capability: Executable<Input, Value, Failure, R>,
-    input: NoInfer<Input>,
-  ) => Effect.Effect<Outcome<Value, Failure>>;
-  /** A typed call, as `call`, with failures and call failures in the error channel. */
+  readonly call: <Value, Failure>(capability: Preparable<Value, Failure, R>, input: unknown) => Effect.Effect<Value, Failure | CallFailed>;
+  /** A typed call, as `call`, with an input that is already decoded. */
   readonly execute: <Input, Value, Failure>(
     capability: Executable<Input, Value, Failure, R>,
     input: NoInfer<Input>,
   ) => Effect.Effect<Value, Failure | CallFailed>;
+  /** A typed call, as `execute`, whose outcome holds the value, the failure or the call failure. This effect never fails. */
+  readonly outcome: <Input, Value, Failure>(
+    capability: Executable<Input, Value, Failure, R>,
+    input: NoInfer<Input>,
+  ) => Effect.Effect<Outcome<Value, Failure>>;
 }
 
 interface Served<R> {
@@ -116,12 +129,15 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
         return callFailure("internal", "The capability failed.");
       });
 
-    /** Admit a call: the session is open, and the capability is in the view and available. */
-    const admit = (id: string) =>
+    /**
+     * Admit a call: the session is open, and the capability is in the view and available. With `object`, the capability
+     * must also be that object.
+     */
+    const admit = (id: string, object?: { readonly id: string }) =>
       Effect.gen(function* () {
         if (yield* Ref.get(closed)) return callFailure("cancelled", "The session is closed.");
         const entry = served.get(id);
-        if (entry === undefined) return unknown(id);
+        if (entry === undefined || (object !== undefined && entry.capability !== object)) return unknown(id);
         const current = yield* availabilityOf(id);
         if (!current.available) return callFailure("unavailable", current.reason);
         return entry.capability;
@@ -151,20 +167,19 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
     const invoke = (id: string, input: unknown): Effect.Effect<Outcome<unknown, unknown>> =>
       throughPipeline(id, (pipeline) => pipeline.invoke(input));
 
-    const typedCall: Session<R>["call"] = (capability, input) =>
+    /** Admit a typed call of a capability object, prepare its program, and run it. */
+    const perform = <A, E>(capability: { readonly id: string }, prepared: Effect.Effect<Effect.Effect<A, E, R>, string>) =>
       Effect.gen(function* () {
-        const admitted = yield* admit(capability.id);
+        const admitted = yield* admit(capability.id, capability);
         if ("kind" in admitted) return admitted;
-        return yield* call(capability.run(input));
+        const program = yield* Effect.result(prepared);
+        if (program._tag === "Failure") return callFailure("invalid-input", program.failure);
+        return yield* call(program.success);
       });
 
-    const execute: Session<R>["execute"] = (capability, input) =>
-      Effect.gen(function* () {
-        const outcome = yield* typedCall(capability, input);
-        if ("kind" in outcome) return yield* new CallFailed(outcome);
-        if (!outcome.ok) return yield* Effect.fail(outcome.error);
-        return outcome.value;
-      });
+    const outcome: Session<R>["outcome"] = (capability, input) => perform(capability, Effect.succeed(capability.run(input)));
+    const execute: Session<R>["execute"] = (capability, input) => lift(outcome(capability, input));
+    const typedCall: Session<R>["call"] = (capability, input) => lift(perform(capability, capability.prepare(input)));
 
     const availabilityRefs = [...served.values()].flatMap(({ availability }) => (availability === undefined ? [] : [readable(availability)]));
     const changes = Stream.suspend(() =>
@@ -187,11 +202,23 @@ export const make = <R>(app: App.App<R>, options: { readonly target: string }): 
       invoke,
       call: typedCall,
       execute,
+      outcome,
     };
     register(session, {
       availability: (id) => served.get(id)?.availability,
       state: (id) => served.get(id)?.state?.value,
       execute: (id, input) => throughPipeline(id, (pipeline) => pipeline.execute(input)),
+      serves: (capability) => served.get(capability.id)?.capability === capability,
+      perform,
     });
     return session;
+  });
+
+/** An outcome with its failures and call failures in the error channel. */
+const lift = <Value, Failure>(outcome: Effect.Effect<Outcome<Value, Failure>>): Effect.Effect<Value, Failure | CallFailed> =>
+  Effect.gen(function* () {
+    const each = yield* outcome;
+    if ("kind" in each) return yield* new CallFailed(each);
+    if (!each.ok) return yield* Effect.fail(each.error);
+    return each.value;
   });
