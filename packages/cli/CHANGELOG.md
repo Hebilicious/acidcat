@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/cli@0.5.0...@acid-cat/cli@0.6.0) (2026-10-26)
+
+
+### Miscellaneous Chores
+
+* **@acid-cat/cli:** Synchronize npm versions
+
 ## [0.5.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/cli@0.4.0...@acid-cat/cli@0.5.0) (2026-10-25)
 
 
