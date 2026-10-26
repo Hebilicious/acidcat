@@ -235,7 +235,7 @@ export interface WebMcpRegistration {
    * Ask for the last failed update again. The promise resolves when the request is queued, not when the update ends.
    * `status` gives the outcome of the update.
    */
-  retry(): Promise<void>;
+  readonly retry: () => Promise<void>;
 }
 
 export interface OpenOptions {
@@ -244,7 +244,10 @@ export interface OpenOptions {
   readonly webmcp?: WebMcp.ModelContext | undefined;
 }
 
-/** A session for code that does not use Effect, of an application that needs the services `R`. */
+/**
+ * A session for code that does not use Effect, of an application that needs the services `R`. Its functions do not use
+ * `this`, so code can pass them on alone, for example `onClose(session.dispose)`.
+ */
 export interface PromiseSession<R = never> {
   readonly target: string;
   /** The view of the target. */
@@ -256,7 +259,7 @@ export interface PromiseSession<R = never> {
    * gets a handle that calls it. Any other capability, also one with the same id, gets a handle that is always
    * unavailable, and each call rejects as `unknown-capability`. Each call of `handle` gives a new handle.
    */
-  handle<
+  readonly handle: <
     Input extends Capability.AnySchema,
     Output extends Capability.AnySchema,
     Failure extends Capability.AnySchema,
@@ -264,21 +267,25 @@ export interface PromiseSession<R = never> {
     Id extends string,
   >(
     capability: Capability.Capability<Input, Output, Failure, R, State, Id>,
-  ): Handle<Input["Type"], Output["Type"], Failure["Type"], State["Encoded"]>;
+  ) => Handle<Input["Type"], Output["Type"], Failure["Type"], State["Encoded"]>;
   /**
    * A call of a capability with an input that is not trusted. The input schema of the capability decodes the input, so
    * the result has the types of the capability. A call failure rejects with a `CallFailureError`: an input that does
    * not decode as `invalid-input`, and a capability object that the session does not serve as `unknown-capability`.
    */
-  call<Value, Failure>(capability: Session.Preparable<Value, Failure, R>, input: unknown, options?: CallOptions): Promise<Result<Value, Failure>>;
+  readonly call: <Value, Failure>(
+    capability: Session.Preparable<Value, Failure, R>,
+    input: unknown,
+    options?: CallOptions,
+  ) => Promise<Result<Value, Failure>>;
   /** The tools of the session on the WebMCP host of `open`, or `undefined` if `open` got no host. */
   readonly webmcp: WebMcpRegistration | undefined;
   /** The signal of the session. It aborts when the session closes. */
   readonly signal: AbortSignal;
   /** Close the session: remove its tools, cancel the calls in progress, and wait for them. */
-  dispose(): Promise<void>;
+  readonly dispose: () => Promise<void>;
   /** Close the session, as `dispose` does, at the end of the block of `await using session = await Handles.open(…)`. */
-  [Symbol.asyncDispose](): Promise<void>;
+  readonly [Symbol.asyncDispose]: () => Promise<void>;
 }
 
 /**

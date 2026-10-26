@@ -241,3 +241,11 @@ test("await using closes the promise session at the end of the block", async () 
   }
   assert.equal(signal.aborted, true);
 });
+
+test("the functions of a promise session work when code takes them off the session", async () => {
+  const { call, dispose, handle, signal } = await Handles.open(lamp, lampLayer, { target: "app" });
+  assert.deepEqual(await call(powerSet, { on: true }), { ok: true, value: null });
+  assert.equal(handle(lightGet).id, "lamp.light.get");
+  await dispose();
+  assert.equal(signal.aborted, true);
+});
