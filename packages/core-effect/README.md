@@ -88,7 +88,7 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 | Module | Binding | Entry point |
 | --- | --- | --- |
 | `Session` | [Invocation](../../spec/invocation.md) | `Session.make(app, { target })` gives a `Session<R>`, where `R` is the services of the application: `invoke` for untrusted input by id, and typed calls (see [Typed calls](#typed-calls)) |
-| `Handles` | [TypeScript](../../spec/bindings/typescript.md) | `Handles.make(app, session)`: handles with promises and observables, for code that does not use Effect, such as a user interface. `Handles.open(app, layer, { target })` opens a session from code that does not use Effect |
+| `Handles` | [TypeScript](../../spec/bindings/typescript.md) | `Handles.make(app, session)`: handles with promises and observables, for code that does not use Effect, such as a user interface. `Handles.open(app, layer, { target, webmcp })` opens a session from code that does not use Effect |
 | `Mcp` | [MCP](../../spec/bindings/mcp.md) | `Mcp.toWebHandler(app, layer, options)`, on `effect/ai/McpServer` |
 | `Http` | [HTTP](../../spec/bindings/http.md) | `Http.toWebHandler(app, layer, options)` |
 | `Cli` | [CLI](../../spec/bindings/cli.md) | `Cli.run(app, options)`, on `effect/cli`. `NodeCli.main(app, layer, options)` from `@acid-cat/core-effect/node` runs it as the main program of a Node.js process |
@@ -131,6 +131,18 @@ await using session = await Handles.open(aircon, unitLayer, { target: "app" });
 const result = await session.call(powerSet, request.body); // Result<null, typeof Offline.Type>
 const power = session.handle(powerSet); // Handles.HandleOf<typeof powerSet>
 await power.execute({ on: true }); // Result<null, typeof Offline.Type>
+```
+
+With the option `webmcp`, a WebMCP host, the session also registers its tools on that host. The tools close with the session. Without the option, `session.webmcp` is `undefined`. To use the host of the page, give `webmcp: WebMcp.findHost()`.
+
+- `session.webmcp.status` observes the status of the tools.
+- `session.webmcp.retry()` asks for the last failed update again. Its promise resolves when the request is queued, not when the update ends. Watch `status` for the outcome.
+
+```ts
+import { Handles, WebMcp } from "@acid-cat/core-effect";
+
+await using session = await Handles.open(aircon, unitLayer, { target: "app", webmcp: WebMcp.findHost() });
+session.webmcp?.status.subscribe((status) => render(status.phase));
 ```
 
 ### Services for each request

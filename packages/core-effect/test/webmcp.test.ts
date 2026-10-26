@@ -4,8 +4,9 @@ import { test } from "node:test";
 import { CallFailureError } from "@acid-cat/spec-ts";
 import { Effect, Exit, Layer, Option, Scope, SubscriptionRef } from "effect";
 
-import { Session, WebMcp } from "../src/index.ts";
+import { Handles, Session, WebMcp } from "../src/index.ts";
 import { fixture, fixtureLayer, position, Switch } from "./fixture.ts";
+import { lamp, lampLayer } from "./lamp.ts";
 
 /** A WebMCP host in memory. It can refuse a tool, to test a failed update. */
 function fakeHost() {
@@ -82,3 +83,28 @@ test("with no host, the binding does nothing", () =>
       }),
     ).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
   ));
+
+test("Handles.open registers the tools on a host, observes their status, and dispose removes them", async () => {
+  const host = fakeHost();
+  const phases: WebMcp.Phase[] = [];
+  {
+    await using session = await Handles.open(lamp, lampLayer, { target: "app", webmcp: host });
+    const webmcp = session.webmcp;
+    assert.ok(webmcp !== undefined);
+    webmcp.status.subscribe((status) => phases.push(status.phase));
+    await Effect.runPromise(settle);
+    assert.equal(webmcp.status.getSnapshot().phase, "ready");
+    const available = [...session.handles.values()].filter((handle) => handle.availability.getSnapshot().available);
+    assert.deepEqual([...host.tools.keys()].sort(), available.map((handle) => handle.id).sort());
+    await webmcp.retry();
+    await Effect.runPromise(settle);
+    assert.equal(webmcp.status.getSnapshot().phase, "ready");
+  }
+  assert.equal(host.tools.size, 0);
+  assert.ok(phases.includes("reconciling"));
+});
+
+test("Handles.open without a host registers no tool", async () => {
+  await using session = await Handles.open(lamp, lampLayer, { target: "app" });
+  assert.equal(session.webmcp, undefined);
+});

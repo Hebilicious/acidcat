@@ -6,13 +6,14 @@
  */
 import { AVAILABLE, CallFailureError, callFailure } from "@acid-cat/spec-ts";
 import type { Availability, Outcome, Result } from "@acid-cat/spec-ts";
-import { Cause, Context, Effect, Exit, Fiber, FiberSet, Layer, Schema, Scope, Stream } from "effect";
+import { Cause, Context, Effect, Exit, Fiber, FiberSet, Layer, Option, Schema, Scope, Stream } from "effect";
 
 import type * as App from "./App.ts";
 import type * as Capability from "./Capability.ts";
 import { changesAfter, readable } from "./internal/changes.ts";
 import { refsOf } from "./internal/served.ts";
 import * as Session from "./Session.ts";
+import * as WebMcp from "./WebMcp.ts";
 
 /** A value that changes, and that code without Effect can read and observe. */
 export interface Observable<T> {
@@ -227,6 +228,22 @@ const runner =
     });
   };
 
+/** The tools of a session on a WebMCP host, while the session is open. */
+export interface WebMcpRegistration {
+  readonly status: Observable<WebMcp.Status>;
+  /**
+   * Ask for the last failed update again. The promise resolves when the request is queued, not when the update ends.
+   * `status` gives the outcome of the update.
+   */
+  retry(): Promise<void>;
+}
+
+export interface OpenOptions {
+  readonly target: string;
+  /** The WebMCP host that gets the tools of the session. Without a host, the session registers no tool. */
+  readonly webmcp?: WebMcp.ModelContext | undefined;
+}
+
 /** A session for code that does not use Effect, of an application that needs the services `R`. */
 export interface PromiseSession<R = never> {
   readonly target: string;
@@ -254,9 +271,11 @@ export interface PromiseSession<R = never> {
    * not decode as `invalid-input`, and a capability object that the session does not serve as `unknown-capability`.
    */
   call<Value, Failure>(capability: Session.Preparable<Value, Failure, R>, input: unknown, options?: CallOptions): Promise<Result<Value, Failure>>;
+  /** The tools of the session on the WebMCP host of `open`, or `undefined` if `open` got no host. */
+  readonly webmcp: WebMcpRegistration | undefined;
   /** The signal of the session. It aborts when the session closes. */
   readonly signal: AbortSignal;
-  /** Close the session: cancel the calls in progress, and wait for them. */
+  /** Close the session: remove its tools, cancel the calls in progress, and wait for them. */
   dispose(): Promise<void>;
   /** Close the session, as `dispose` does, at the end of the block of `await using session = await Handles.open(…)`. */
   [Symbol.asyncDispose](): Promise<void>;
@@ -264,24 +283,34 @@ export interface PromiseSession<R = never> {
 
 /**
  * Open a session and its handles from code that does not use Effect. `layer` gives the services of the capabilities.
- * If the session or its handles cannot open, the services are released, and the promise rejects.
+ * With `options.webmcp`, the session also registers its tools on that WebMCP host. The services, the handles and the
+ * tools close together. If one of them cannot open, the others are released, and the promise rejects.
  */
-export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: { readonly target: string }): Promise<PromiseSession<R>> {
+export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: OpenOptions): Promise<PromiseSession<R>> {
   const scope = Effect.runSync(Scope.make());
   const lifetime = new AbortController();
   const opened = await Effect.runPromiseExit(
     Effect.gen(function* () {
       // The services live as long as the session.
       const services = yield* Layer.buildWithScope(layer, scope);
-      const session = yield* Session.make(app, options).pipe(Effect.provideContext(services));
-      return { services, session, handles: yield* make(app, session) };
+      const session = yield* Session.make(app, { target: options.target }).pipe(Effect.provideContext(services));
+      const handles = yield* make(app, session);
+      const installation = options.webmcp === undefined ? Option.none<WebMcp.Installation>() : yield* WebMcp.install(session, { host: options.webmcp });
+      const follow = yield* FiberSet.runtime(yield* FiberSet.make<void>())();
+      const webmcp = Option.getOrUndefined(
+        Option.map(installation, ({ status, retry }): WebMcpRegistration => ({
+          status: observe(readable(status), (value) => value, follow),
+          retry: () => Effect.runPromise(retry),
+        })),
+      );
+      return { services, session, handles, webmcp };
     }).pipe(Scope.provide(scope)),
   );
   if (Exit.isFailure(opened)) {
     await Effect.runPromise(Scope.close(scope, opened));
     throw Cause.squash(opened.cause);
   }
-  const { services, session, handles } = opened.value;
+  const { services, session, handles, webmcp } = opened.value;
   const refs = refsOf(session);
   const run = runner(lifetime.signal, Context.empty());
   /** A program of a capability, with the services of the session. */
@@ -304,6 +333,7 @@ export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, opti
     },
     call: (capability, input, callOptions) =>
       run(resultOf(refs.perform(capability, Effect.map(capability.prepare(input), withServices))), callOptions),
+    webmcp,
     signal: lifetime.signal,
     dispose,
     [Symbol.asyncDispose]: dispose,
