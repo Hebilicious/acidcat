@@ -47,7 +47,7 @@ export const aircon = App.make({
 
 A session gets the ref of each availability and each state one time, when it opens. It starts no fiber. It reads the availability ref when a call comes in, so a call that comes after `SubscriptionRef.set` is decided on the new value. `session.changes` and `session.state(id)` follow the refs only while they run, and a handle follows its refs only while it has listeners.
 
-Make each ref in a layer, so that all sessions share it. If the source of an availability or a state is a `Stream`, follow the stream one time in that layer:
+Make each ref in a layer, so that all sessions share it. If the source of an availability or a state is a `Stream`, follow the stream one time in that layer. Fork the follower with `startImmediately: true`, so that it subscribes to the source before the layer is built. A follower that starts later loses each change that the source gives before it subscribes, for example from a `PubSub`:
 
 ```ts
 import { AVAILABLE } from "@acid-cat/spec-ts";
@@ -60,8 +60,11 @@ const connectionLayer = Layer.effect(
   Connection,
   Effect.gen(function* () {
     const ref = yield* SubscriptionRef.make<Availability>(AVAILABLE);
-    // `connectionChanges` is a Stream<Availability>. The fiber stops when the layer is released.
-    yield* connectionChanges.pipe(Stream.runForEach((value) => SubscriptionRef.set(ref, value)), Effect.forkScoped);
+    // `connectionChanges` is a Stream<Availability>. The fiber subscribes to it now, and stops when the layer is released.
+    yield* connectionChanges.pipe(
+      Stream.runForEach((value) => SubscriptionRef.set(ref, value)),
+      Effect.forkScoped({ startImmediately: true }),
+    );
     return ref;
   }),
 );
