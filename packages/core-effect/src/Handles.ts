@@ -231,7 +231,10 @@ const runner =
 /** The tools of a session on a WebMCP host, while the session is open. */
 export interface WebMcpRegistration {
   readonly status: Observable<WebMcp.Status>;
-  /** Try the last failed update again. */
+  /**
+   * Ask for the last failed update again. The promise resolves when the request is queued, not when the update ends.
+   * `status` gives the outcome of the update.
+   */
   retry(): Promise<void>;
 }
 

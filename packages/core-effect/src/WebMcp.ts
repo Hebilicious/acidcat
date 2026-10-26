@@ -28,7 +28,7 @@ export interface Status {
 
 export interface Installation {
   readonly status: SubscriptionRef.SubscriptionRef<Status>;
-  /** Try the last failed update again. */
+  /** Ask for the last failed update again. The effect ends when the request is queued. `status` gives the outcome. */
   readonly retry: Effect.Effect<void>;
 }
 

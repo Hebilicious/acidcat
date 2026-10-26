@@ -123,7 +123,6 @@ const program = Effect.scoped(
 - `session.handle(capability)` gives the handle of a capability with the types of its schemas: `execute` takes the decoded input, and gives the decoded value or failure. `snapshot` gives the state in its JSON form. For a capability that the session does not serve, the handle is always unavailable, and each call rejects as `unknown-capability`.
 - `await using session = await Handles.open(…)` closes the session at the end of the block. `session.dispose()` closes it too.
 - `session.handles` gives the handles by id, without the types of the schemas, for bindings.
-- With the option `webmcp`, a WebMCP host, the session registers its tools on that host. `session.webmcp.status` observes the status of the tools, and `session.webmcp.retry()` tries the last failed update again. The tools close with the session. Without the option, `session.webmcp` is `undefined`. To use the host of the page, give `webmcp: WebMcp.findHost()`.
 
 ```ts
 import { Handles } from "@acid-cat/core-effect";
@@ -132,6 +131,18 @@ await using session = await Handles.open(aircon, unitLayer, { target: "app" });
 const result = await session.call(powerSet, request.body); // Result<null, typeof Offline.Type>
 const power = session.handle(powerSet); // Handles.HandleOf<typeof powerSet>
 await power.execute({ on: true }); // Result<null, typeof Offline.Type>
+```
+
+With the option `webmcp`, a WebMCP host, the session also registers its tools on that host. The tools close with the session. Without the option, `session.webmcp` is `undefined`. To use the host of the page, give `webmcp: WebMcp.findHost()`.
+
+- `session.webmcp.status` observes the status of the tools.
+- `session.webmcp.retry()` asks for the last failed update again. Its promise resolves when the request is queued, not when the update ends. Watch `status` for the outcome.
+
+```ts
+import { Handles, WebMcp } from "@acid-cat/core-effect";
+
+await using session = await Handles.open(aircon, unitLayer, { target: "app", webmcp: WebMcp.findHost() });
+session.webmcp?.status.subscribe((status) => render(status.phase));
 ```
 
 ### Services for each request
