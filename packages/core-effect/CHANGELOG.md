@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.5.0...@acid-cat/core-effect@0.6.0) (2026-10-26)
+
+
+### Features
+
+* **core-effect:** register the tools of a session on a WebMCP host from Handles.open ([#72](https://github.com/Hebilicious/acidcat/issues/72)) ([a15e3d3](https://github.com/Hebilicious/acidcat/commit/a15e3d328a3bcaf8e5455512ca9627a2712d41bb))
+
 ## [0.5.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.4.0...@acid-cat/core-effect@0.5.0) (2026-10-25)
 
 
