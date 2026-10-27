@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.6.0...@acid-cat/core-effect@0.6.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **cores:** declare the functions of a session as properties, so that code can pass them on alone ([#76](https://github.com/Hebilicious/acidcat/issues/76)) ([a9a7ddf](https://github.com/Hebilicious/acidcat/commit/a9a7ddfd179f949492ae88464c7e4c6e8e3f2e90))
+
 ## [0.6.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.5.0...@acid-cat/core-effect@0.6.0) (2026-10-26)
 
 
