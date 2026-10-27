@@ -140,6 +140,7 @@ With the option `webmcp`, a WebMCP host, the session also registers its tools on
 
 - `session.webmcp.status` observes the status of the tools.
 - `session.webmcp.retry()` asks for the last failed update again. Its promise resolves when the request is queued, not when the update ends. Watch `status` for the outcome.
+- `session.webmcp.remove()` removes the tools from the host while the session stays open. The session then registers no more tools, and `retry()` does nothing. The promise resolves when the tools are removed. The calls in progress continue, and the handles and the services stay open, so a capability can call `remove()` during its own call. `status` is `closing` until the WebMCP calls in progress end, then `disposed`. A second `remove()` does nothing more, and `dispose()` works after it. `WebMcp.install` gives the same operation as the effect `remove` of the installation.
 
 ```ts
 import { Handles, WebMcp } from "@acid-cat/core-effect";
