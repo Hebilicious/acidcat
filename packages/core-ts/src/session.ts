@@ -45,6 +45,7 @@ function outsideView<Input, Value, Failure, State>(capability: { readonly id: st
   };
 }
 
+/** A session. Its functions do not use `this`, so code can pass them on alone, for example `onClose(session.dispose)`. */
 export interface Session<Context = unknown> {
   readonly target: string;
   /**
@@ -59,32 +60,32 @@ export interface Session<Context = unknown> {
    * gets a handle that calls it. Any other capability, also one with the same id, gets a handle that is always
    * unavailable, and each call rejects as `unknown-capability`. Each call of `handle` gives a new handle.
    */
-  handle<Input, Value, Failures, State, Id extends string>(
+  readonly handle: <Input, Value, Failures, State, Id extends string>(
     capability: Capability<Context, Input, Value, Failures, State, Id>,
-  ): Handle<Input, Value, FailureOf<Failures>, State>;
+  ) => Handle<Input, Value, FailureOf<Failures>, State>;
   /**
    * A call of a capability with an input that is not trusted. The input schema of the capability checks the input, so
    * the result has the types of the capability. A call failure rejects with a `CallFailureError`. An input that does not
    * agree with the schema rejects as `invalid-input`.
    */
-  call<Input, Value, Failures, State, Id extends string>(
+  readonly call: <Input, Value, Failures, State, Id extends string>(
     capability: Capability<Context, Input, Value, Failures, State, Id>,
     input: unknown,
     options?: { readonly signal?: AbortSignal | undefined },
-  ): Promise<Result<Value, FailureOf<Failures>>>;
+  ) => Promise<Result<Value, FailureOf<Failures>>>;
   /** A call with an input that is not trusted. The outcome is in its JSON form. The promise never rejects. */
-  invoke(id: string, input: unknown, options?: { readonly signal?: AbortSignal | undefined }): Promise<Outcome<unknown, unknown>>;
+  readonly invoke: (id: string, input: unknown, options?: { readonly signal?: AbortSignal | undefined }) => Promise<Outcome<unknown, unknown>>;
   /**
    * An event each time the availability of a capability changes. The session subscribes to the availabilities when the
    * first listener subscribes, and unsubscribes after the last listener unsubscribes.
    */
-  onChange(listener: () => void): { unsubscribe(): void };
+  readonly onChange: (listener: () => void) => { unsubscribe(): void };
   /** The signal of the session. It aborts when the session closes. */
   readonly signal: AbortSignal;
   /** Close the session: accept no new calls, cancel the calls in progress, and wait for them. */
-  dispose(): Promise<void>;
+  readonly dispose: () => Promise<void>;
   /** Close the session, as `dispose` does, at the end of the block of `await using session = createSession(…)`. */
-  [Symbol.asyncDispose](): Promise<void>;
+  readonly [Symbol.asyncDispose]: () => Promise<void>;
 }
 
 export interface SessionOptions<Context> {
@@ -265,7 +266,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     call: (capability, input, callOptions) => call(capability, input, callOptions?.signal),
     signal: lifetime.signal,
     invoke: (id, input, callOptions) => invoke(id, input, callOptions?.signal),
-    onChange(listener) {
+    onChange: (listener) => {
       if (lifetime.signal.aborted) return { unsubscribe() {} };
       if (listeners.size === 0) {
         const announce = () => listeners.forEach((each) => each());

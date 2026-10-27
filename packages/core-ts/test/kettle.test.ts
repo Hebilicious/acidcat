@@ -284,3 +284,13 @@ test("the command line resolves flags through named types, and changes the conte
   assert.deepEqual(await run("kettle", "status", "get"), { code: 0, stdout: { litres: 1.5, celsius: 40, keepWarm: "baby-milk" } });
   assert.equal((await run("kettle", "descale")).code, 2);
 });
+
+test("the functions of a session work when code takes them off the session", async () => {
+  const { call, dispose, handle, invoke, onChange, signal } = createSession(kettle, { target: "app", context: { kettle: new Kettle() }, toJsonSchema });
+  assert.deepEqual(await call(fill, { litres: 1 }), { ok: true, value: null });
+  assert.deepEqual(await invoke("kettle.boil", {}), { ok: true, value: { celsius: 100 } });
+  assert.equal(handle(statusGet).id, "kettle.status.get");
+  onChange(() => undefined).unsubscribe();
+  await dispose();
+  assert.equal(signal.aborted, true);
+});

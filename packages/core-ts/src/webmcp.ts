@@ -27,9 +27,9 @@ export interface Status {
 export interface Installation {
   readonly status: Observable<Status>;
   /** Try the last failed update again. */
-  retry(): void;
+  readonly retry: () => void;
   /** Remove all tools, and wait for the calls in progress. */
-  dispose(): Promise<void>;
+  readonly dispose: () => Promise<void>;
 }
 
 /** The WebMCP host of the page, if there is one (spec/bindings/webmcp.md#host). */
@@ -149,7 +149,7 @@ export function installWebMcp(session: Session, options: { readonly host?: Model
       },
     },
     retry: () => void reconcile(),
-    async dispose() {
+    dispose: async () => {
       setStatus({ phase: "closing", message: null });
       subscription.unsubscribe();
       lifetime.abort();
