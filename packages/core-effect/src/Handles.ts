@@ -228,14 +228,21 @@ const runner =
     });
   };
 
-/** The tools of a session on a WebMCP host, while the session is open. */
+/** The tools of a session on a WebMCP host, while the session is open, or until `remove`. */
 export interface WebMcpRegistration {
   readonly status: Observable<WebMcp.Status>;
   /**
    * Ask for the last failed update again. The promise resolves when the request is queued, not when the update ends.
-   * `status` gives the outcome of the update.
+   * `status` gives the outcome of the update. After `remove`, it does nothing.
    */
   readonly retry: () => Promise<void>;
+  /**
+   * Remove the tools of the session from the host, and register no more tools, while the session stays open. The promise
+   * resolves when the tools are removed. The calls in progress continue, so a capability can call it during its own
+   * call. The handles and the services stay open. `status` is `closing` until the WebMCP calls in progress end, then
+   * `disposed`. A second call does nothing more, and `dispose` works after it.
+   */
+  readonly remove: () => Promise<void>;
 }
 
 export interface OpenOptions {
@@ -305,9 +312,10 @@ export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, opti
       const installation = options.webmcp === undefined ? Option.none<WebMcp.Installation>() : yield* WebMcp.install(session, { host: options.webmcp });
       const follow = yield* FiberSet.runtime(yield* FiberSet.make<void>())();
       const webmcp = Option.getOrUndefined(
-        Option.map(installation, ({ status, retry }): WebMcpRegistration => ({
+        Option.map(installation, ({ status, retry, remove }): WebMcpRegistration => ({
           status: observe(readable(status), (value) => value, follow),
           retry: () => Effect.runPromise(retry),
+          remove: () => Effect.runPromise(remove),
         })),
       );
       return { services, session, handles, webmcp };

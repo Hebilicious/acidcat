@@ -2,7 +2,7 @@
  * The WebMCP binding (spec/bindings/webmcp.md): register capabilities as WebMCP tools in a web page.
  */
 import { bundle, callFailure, CallFailureError, isCallFailure } from "@acid-cat/spec-ts";
-import { Effect, Option, Predicate, Queue, Scope, Stream, SubscriptionRef } from "effect";
+import { Effect, Fiber, Option, Predicate, Queue, Scope, Stream, SubscriptionRef } from "effect";
 
 import type * as Session from "./Session.ts";
 
@@ -30,6 +30,12 @@ export interface Installation {
   readonly status: SubscriptionRef.SubscriptionRef<Status>;
   /** Ask for the last failed update again. The effect ends when the request is queued. `status` gives the outcome. */
   readonly retry: Effect.Effect<void>;
+  /**
+   * Remove all tools, and stop the updates, while the scope stays open. The effect ends when the tools are removed. The
+   * calls in progress continue. `status` is `closing` until they end, then `disposed`. `retry` then does nothing. A
+   * second `remove` does nothing more, and the scope can close after it.
+   */
+  readonly remove: Effect.Effect<void>;
 }
 
 /** The WebMCP host of the page, if there is one (spec/bindings/webmcp.md#host). */
@@ -64,6 +70,7 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
     const context = yield* Effect.context<never>();
     const status = yield* SubscriptionRef.make<Status>({ phase: "loading", message: null });
     const lifetime = new AbortController();
+    const withdrawal = new AbortController();
     const registered = new Map<string, AbortController>();
     const calls = new Set<Promise<unknown>>();
     const requests = yield* Queue.sliding<void>(1);
@@ -106,9 +113,10 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
       const registrations = [...wanted].filter((id) => !registered.has(id));
       const result = yield* Effect.tryPromise(async () => {
         for (const id of registrations) {
+          if (withdrawal.signal.aborted) return;
           const controller = new AbortController();
           added.set(id, controller);
-          await host.registerTool(toolFor(id), { signal: AbortSignal.any([controller.signal, lifetime.signal]) });
+          await host.registerTool(toolFor(id), { signal: AbortSignal.any([controller.signal, withdrawal.signal, lifetime.signal]) });
         }
       }).pipe(Effect.result);
       if (result._tag === "Failure") {
@@ -125,7 +133,7 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
       }
     });
 
-    yield* Effect.forever(
+    const updates = yield* Effect.forever(
       Effect.gen(function* () {
         yield* Queue.take(requests);
         yield* SubscriptionRef.set(status, { phase: "reconciling", message: null });
@@ -137,11 +145,13 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
     ).pipe(Effect.forkIn(scope));
 
     // Start to follow the changes before the first update reads the availability, so that no change comes between them.
-    yield* session.changes.pipe(
+    const follower = yield* session.changes.pipe(
       Stream.runForEach(() => Queue.offer(requests, undefined)),
       Effect.forkIn(scope, { startImmediately: true }),
     );
     yield* Queue.offer(requests, undefined);
+
+    const disposed = SubscriptionRef.set(status, { phase: "disposed", message: null });
 
     yield* Scope.addFinalizer(
       scope,
@@ -150,9 +160,21 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
         lifetime.abort();
         registered.clear();
         yield* Effect.promise(() => Promise.allSettled(calls));
-        yield* SubscriptionRef.set(status, { phase: "disposed", message: null });
+        yield* disposed;
       }),
     );
 
-    return Option.some<Installation>({ status, retry: Queue.offer(requests, undefined).pipe(Effect.asVoid) });
+    const remove = yield* Effect.cached(
+      Effect.gen(function* () {
+        if (lifetime.signal.aborted) return;
+        withdrawal.abort();
+        registered.clear();
+        yield* Fiber.interruptAll([updates, follower]);
+        if (calls.size === 0) return yield* disposed;
+        yield* SubscriptionRef.set(status, { phase: "closing", message: null });
+        yield* Effect.promise(() => Promise.allSettled(calls)).pipe(Effect.andThen(disposed), Effect.forkIn(scope));
+      }).pipe(Effect.uninterruptible),
+    );
+
+    return Option.some<Installation>({ status, retry: Queue.offer(requests, undefined).pipe(Effect.asVoid), remove });
   });

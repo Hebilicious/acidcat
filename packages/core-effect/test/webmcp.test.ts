@@ -74,6 +74,35 @@ test("tools follow availability, a failed update keeps the last tools, and closi
     }).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
   ));
 
+test("remove takes the tools away while the scope stays open, does nothing a second time, and closing works after it", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const host = fakeHost();
+      const scope = yield* Scope.make();
+      const session = yield* Session.make(fixture, { target: "app" }).pipe(Scope.provide(scope));
+      const installed = Option.getOrThrow(yield* WebMcp.install(session, { host }).pipe(Scope.provide(scope)));
+      yield* settle;
+      assert.ok(host.tools.has("fixture.toggle"));
+
+      yield* installed.remove;
+      assert.equal(host.tools.size, 0);
+      assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "disposed");
+      yield* installed.remove;
+
+      yield* SubscriptionRef.set(yield* Switch, position(false));
+      yield* SubscriptionRef.set(yield* Switch, position(true));
+      yield* installed.retry;
+      yield* settle;
+      assert.equal(host.tools.size, 0);
+      assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "disposed");
+
+      yield* Scope.close(scope, Exit.void);
+      assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "disposed");
+      yield* installed.remove;
+      assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "disposed");
+    }).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
+  ));
+
 test("with no host, the binding does nothing", () =>
   Effect.runPromise(
     Effect.scoped(
@@ -107,4 +136,51 @@ test("Handles.open registers the tools on a host, observes their status, and dis
 test("Handles.open without a host registers no tool", async () => {
   await using session = await Handles.open(lamp, lampLayer, { target: "app" });
   assert.equal(session.webmcp, undefined);
+});
+
+test("Handles.open: remove takes the tools away during a call of the same session, and the calls in progress complete", async () => {
+  const host = fakeHost();
+  const phases: WebMcp.Phase[] = [];
+  const session = await Handles.open(fixture, fixtureLayer, { target: "app", webmcp: host });
+  const webmcp = session.webmcp;
+  assert.ok(webmcp !== undefined);
+  webmcp.status.subscribe((status) => phases.push(status.phase));
+  const handle = (id: string) => {
+    const found = session.handles.get(id);
+    assert.ok(found !== undefined, `The session has no handle ${id}.`);
+    return found;
+  };
+  await Effect.runPromise(settle);
+  assert.ok(host.tools.has("fixture.toggle"));
+
+  const sessionCall = handle("fixture.hold").invokeExternal({ key: "session" });
+  const toolCall = toolOf(host, "fixture.hold").execute({ key: "tool" });
+  await Effect.runPromise(settle);
+  assert.deepEqual(await handle("fixture.held").invokeExternal({}), { ok: true, value: { keys: ["session", "tool"] } });
+
+  await webmcp.remove();
+  assert.equal(host.tools.size, 0);
+  assert.equal(webmcp.status.getSnapshot().phase, "closing");
+  await webmcp.remove();
+  assert.equal(host.tools.size, 0);
+
+  await handle("fixture.switch.set").invokeExternal({ on: false });
+  await handle("fixture.switch.set").invokeExternal({ on: true });
+  await webmcp.retry();
+  await Effect.runPromise(settle);
+  assert.equal(host.tools.size, 0);
+
+  assert.equal(session.signal.aborted, false);
+  await handle("fixture.release").invokeExternal({ key: "session" });
+  await handle("fixture.release").invokeExternal({ key: "tool" });
+  assert.deepEqual(await sessionCall, { ok: true, value: { key: "session" } });
+  assert.deepEqual(await toolCall, { ok: true, value: { key: "tool" } });
+  await Effect.runPromise(settle);
+  assert.equal(webmcp.status.getSnapshot().phase, "disposed");
+  assert.deepEqual(await handle("fixture.echo").invokeExternal({ text: "still open" }), { ok: true, value: { text: "still open" } });
+
+  await session.dispose();
+  assert.equal(host.tools.size, 0);
+  assert.equal(webmcp.status.getSnapshot().phase, "disposed");
+  assert.deepEqual(phases.slice(-2), ["closing", "disposed"]);
 });

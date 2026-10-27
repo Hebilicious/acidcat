@@ -16,6 +16,7 @@ The binding MUST NOT use the return value of `registerTool`. To remove a tool, t
 - **Listing.** A capability is registered while it is available. It is removed when it becomes unavailable. The binding does one update at a time. A change during an update causes one more update. If an update fails, the tools stay as they were before the update.
 - **Outcomes.** `execute` resolves with the result in its JSON form. A call failure rejects with an `Error` that has a `kind` property.
 - **Cancellation.** The signal that the host gives to `execute` cancels the call. When the binding closes, it cancels all calls in progress.
+- **Removal.** The binding SHOULD let the page remove all tools while the session stays open. After a removal, the binding registers no more tools. A removal does not cancel the calls through the handles of the session.
 
 ## Status
 
