@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.6.1...@acid-cat/core-effect@0.7.0) (2026-10-27)
+
+
+### Features
+
+* **core-effect:** remove the WebMCP tools of a session without closing it ([#79](https://github.com/Hebilicious/acidcat/issues/79)) ([d9be71a](https://github.com/Hebilicious/acidcat/commit/d9be71aaa47af4632bef86950fdebfeee7ee3802))
+
 ## [0.6.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.6.0...@acid-cat/core-effect@0.6.1) (2026-10-27)
 
 
