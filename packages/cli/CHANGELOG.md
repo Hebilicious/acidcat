@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/cli@0.8.0...@acid-cat/cli@0.9.0) (2026-10-28)
+
+
+### Features
+
+* **mcp:** add a stdio transport to the MCP binding ([#82](https://github.com/Hebilicious/acidcat/issues/82)) ([a9f3043](https://github.com/Hebilicious/acidcat/commit/a9f3043a8b9888e50321bda8de4b44337a1a9098))
+
 ## [0.8.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/cli@0.7.0...@acid-cat/cli@0.8.0) (2026-10-28)
 
 
