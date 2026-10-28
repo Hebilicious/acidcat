@@ -14,7 +14,7 @@ import type { WebMcpInstall } from "./webmcp.ts";
 export type { Check } from "./check.ts";
 export { DEADLINE, fixture } from "./check.ts";
 export { serve } from "./serve.ts";
-export type { Served, WebHandler } from "./serve.ts";
+export type { Routes, Served, WebHandler } from "./serve.ts";
 export { createTestHost } from "./webmcp.ts";
 export type { TestHost, WebMcpInstall } from "./webmcp.ts";
 

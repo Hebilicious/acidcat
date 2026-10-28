@@ -63,4 +63,6 @@ node apis/main.ts graphql   # or capnweb, elysia, mcp
 moon run example-aircon:test
 ```
 
+`apis/main.ts` serves the API on `http://127.0.0.1:3000`, with `serve` from `@acid-cat/core-ts/node`.
+
 The test runs the Python, Go and Rust programs of `catalog/`, so it needs `python`, `go` and `cargo`. proto installs them from [`.prototools`](../../.prototools).

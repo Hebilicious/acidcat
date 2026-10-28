@@ -11,10 +11,16 @@ export interface Served {
   close(): Promise<void>;
 }
 
-export type WebHandler = (request: Request) => Promise<Response>;
+export type WebHandler = (request: Request) => Promise<Response> | Response;
 
-/** Serve handlers by path prefix, for example `{ "/mcp": mcp, "/api": http }`. */
-export function serve(routes: { readonly [prefix: string]: WebHandler }): Promise<Served> {
+/** Handlers by path prefix, for example `{ "/mcp": mcp, "/api": http }`. The longest prefix that matches gets the request. */
+export interface Routes {
+  readonly [prefix: string]: WebHandler;
+}
+
+/** Serve one handler for all paths, or handlers by path prefix, on `127.0.0.1` and a free port. */
+export function serve(handler: WebHandler | Routes): Promise<Served> {
+  const routes: Routes = typeof handler === "function" ? { "/": handler } : handler;
   const prefixes = Object.keys(routes).sort((a, b) => b.length - a.length);
   const server = createServer((incoming, outgoing) => {
     void answer(incoming, outgoing, prefixes, routes);
@@ -35,10 +41,12 @@ async function answer(
   incoming: IncomingMessage,
   outgoing: ServerResponse,
   prefixes: readonly string[],
-  routes: { readonly [prefix: string]: WebHandler },
+  routes: Routes,
 ): Promise<void> {
   const url = new URL(incoming.url ?? "/", `http://${incoming.headers.host ?? "127.0.0.1"}`);
-  const prefix = prefixes.find((candidate) => url.pathname === candidate || url.pathname.startsWith(`${candidate}/`));
+  const prefix = prefixes.find(
+    (candidate) => candidate === "/" || url.pathname === candidate || url.pathname.startsWith(`${candidate}/`),
+  );
   const handler = prefix === undefined ? undefined : routes[prefix];
   if (handler === undefined) {
     outgoing.writeHead(404).end();
