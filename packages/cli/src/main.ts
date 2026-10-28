@@ -93,6 +93,7 @@ const conformCommand = Command.make(
   "conform",
   {
     mcp: url("mcp", "The URL of the MCP server"),
+    mcpStdio: url("mcp-stdio", "The command that starts the MCP server through standard input and output, for example \"node fixture-mcp-stdio.ts\""),
     http: url("http", "The base URL of the HTTP API, before /capabilities"),
     cli: url("cli", "The command that starts the command line, for example \"node fixture-cli.ts\""),
     webmcp: url("webmcp", "The URL of a web page that serves the app target. It runs in Chromium, through Playwright"),
@@ -104,19 +105,20 @@ const conformCommand = Command.make(
   },
   Effect.fn(function* (options) {
     const value = (option: Option.Option<string>) => (Option.isSome(option) ? option.value : undefined);
-    const command = value(options.cli)?.split(/\s+/).filter((word) => word !== "");
+    const words = (option: Option.Option<string>) => value(option)?.split(/\s+/).filter((word) => word !== "");
     const results = yield* Effect.promise(() =>
       conform({
         mcp: value(options.mcp),
+        mcpStdio: words(options.mcpStdio),
         http: value(options.http),
-        cli: command,
+        cli: words(options.cli),
         webmcp: value(options.webmcp),
         maximumBytes: options.maximumBytes,
         deadline: options.deadline,
       }),
     );
     if (results.length === 0) {
-      yield* Console.error("Give at least one binding: --mcp, --http, --cli or --webmcp.");
+      yield* Console.error("Give at least one binding: --mcp, --mcp-stdio, --http, --cli or --webmcp.");
       return yield* fail;
     }
     for (const result of results) {
