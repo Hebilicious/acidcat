@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 
 import type { Outcome } from "@acid-cat/spec-ts";
 import { SdkError } from "@modelcontextprotocol/client";
+import type { Client } from "@modelcontextprotocol/client";
 import fc from "fast-check";
 
 import { isStringArray, memberOf, parseJson, readJson } from "../json.ts";
@@ -34,23 +35,25 @@ export function httpInvoke(base: string): Invoke {
 
 export async function mcpInvoke(url: string, signal: AbortSignal): Promise<{ readonly invoke: Invoke; close(): Promise<void> }> {
   const client = await mcpClient(url, signal);
-  return {
-    invoke: async (id, input, signal) => {
-      try {
-        const result = await client.callTool({ name: id, arguments: input }, signal ? { signal } : undefined);
-        const first = result.content[0];
-        const body = parseJson(first?.type === "text" ? first.text : "null");
-        if (result.isError !== true) return { ok: true, value: result.structuredContent ?? body };
-        if (!isOutcome(body)) throw new Error(`the error result of ${id} gave ${JSON.stringify(body)}, which is not an outcome`);
-        return body;
-      } catch (error) {
-        // The MCP client rejects a call that its signal aborts with an SdkError that has the reason as its message.
-        if (signal?.aborted && error instanceof SdkError && error.message === String(signal.reason)) throw signal.reason;
-        if (memberOf(error, "code") === -32602) return { kind: "unknown-capability", message: String(error) };
-        throw error;
-      }
-    },
-    close: () => client.close(),
+  return { invoke: clientInvoke(client), close: () => client.close() };
+}
+
+/** Calls through a connected MCP client, with any transport. */
+export function clientInvoke(client: Client): Invoke {
+  return async (id, input, signal) => {
+    try {
+      const result = await client.callTool({ name: id, arguments: input }, signal ? { signal } : undefined);
+      const first = result.content[0];
+      const body = parseJson(first?.type === "text" ? first.text : "null");
+      if (result.isError !== true) return { ok: true, value: result.structuredContent ?? body };
+      if (!isOutcome(body)) throw new Error(`the error result of ${id} gave ${JSON.stringify(body)}, which is not an outcome`);
+      return body;
+    } catch (error) {
+      // The MCP client rejects a call that its signal aborts with an SdkError that has the reason as its message.
+      if (signal?.aborted && error instanceof SdkError && error.message === String(signal.reason)) throw signal.reason;
+      if (memberOf(error, "code") === -32602) return { kind: "unknown-capability", message: String(error) };
+      throw error;
+    }
   };
 }
 
@@ -113,7 +116,7 @@ const isCancellation = (settled: Settled, reason: unknown): boolean =>
   "outcome" in settled ? "kind" in settled.outcome && settled.outcome.kind === "cancelled" : settled.rejected === reason;
 
 /** The keys of the calls that hold now, as fixture.held gives them through the binding. */
-async function heldKeys(invoke: Invoke, signal: AbortSignal): Promise<readonly string[]> {
+export async function heldKeys(invoke: Invoke, signal: AbortSignal): Promise<readonly string[]> {
   const outcome = await invoke("fixture.held", {}, signal);
   expect("ok" in outcome && outcome.ok, `fixture.held gave ${JSON.stringify(outcome)}`);
   const keys = memberOf(outcome.value, "keys");

@@ -7,6 +7,7 @@ import type { Check } from "./check.ts";
 import { checkCli } from "./cli.ts";
 import { checkHttp } from "./http.ts";
 import { checkMcp } from "./mcp.ts";
+import { checkMcpStdio } from "./mcp-stdio.ts";
 import { checkProperties, httpInvoke, mcpInvoke } from "./properties.ts";
 import { browserDriver, checkWebMcp, processDriver } from "./webmcp.ts";
 import type { WebMcpInstall } from "./webmcp.ts";
@@ -21,6 +22,11 @@ export type { TestHost, WebMcpInstall } from "./webmcp.ts";
 export interface ConformOptions {
   /** The URL of the MCP server, for example `http://localhost:8787/mcp`. */
   readonly mcp?: string | undefined;
+  /**
+   * The command that starts the MCP server through standard input and standard output, for example
+   * `["node", "fixture-mcp-stdio.ts"]`. Each check starts its own process.
+   */
+  readonly mcpStdio?: readonly string[] | undefined;
   /** The base URL of the HTTP API, before `/capabilities`. */
   readonly http?: string | undefined;
   /** The command that starts the command line, for example `["node", "fixture-cli.ts"]`. */
@@ -51,6 +57,9 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
       results.push(...(await checkProperties("mcp", mcp.invoke, deadline)).results);
       await mcp.close();
     }
+  }
+  if (options.mcpStdio !== undefined) {
+    for (const checks of await checkMcpStdio(options.mcpStdio, { deadline })) results.push(...checks.results);
   }
   if (options.http !== undefined) {
     results.push(...(await checkHttp(options.http, { maximumBytes, deadline })).results);

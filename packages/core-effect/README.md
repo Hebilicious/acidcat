@@ -92,7 +92,7 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 | --- | --- | --- |
 | `Session` | [Invocation](../../spec/invocation.md) | `Session.make(app, { target })` gives a `Session<R>`, where `R` is the services of the application: `invoke` for untrusted input by id, and typed calls (see [Typed calls](#typed-calls)) |
 | `Handles` | [TypeScript](../../spec/bindings/typescript.md) | `Handles.make(app, session)`: handles with promises and observables, for code that does not use Effect, such as a user interface. `Handles.open(app, layer, { target, webmcp })` opens a session from code that does not use Effect |
-| `Mcp` | [MCP](../../spec/bindings/mcp.md) | `Mcp.toWebHandler(app, layer, options)`, on `effect/ai/McpServer` |
+| `Mcp` | [MCP](../../spec/bindings/mcp.md) | Through HTTP: `Mcp.toWebHandler(app, layer, options)`. Through stdio: `Mcp.serveStdio(app, options)`, and `NodeMcp.main(app, layer, options)` from `@acid-cat/core-effect/node` (see [MCP through stdio](#mcp-through-stdio)). Both on `effect/ai/McpServer` |
 | `Http` | [HTTP](../../spec/bindings/http.md) | `Http.toWebHandler(app, layer, options)` |
 | `Cli` | [CLI](../../spec/bindings/cli.md) | `Cli.run(app, options)`, on `effect/cli`. `NodeCli.main(app, layer, options)` from `@acid-cat/core-effect/node` runs it as the main program of a Node.js process |
 | `WebMcp` | [WebMCP](../../spec/bindings/webmcp.md) | `WebMcp.install(session)` |
@@ -126,6 +126,22 @@ The handler is one handler for all paths, or handlers by path prefix. The longes
 When a client closes its connection, the signal of its request aborts, so the handler cancels the call. `@acid-cat/core-effect/NodeServer` needs only Node.js. `@acid-cat/core-effect/node` exports `NodeServer` too, with `NodeCli`, which needs `@effect/platform-node`.
 
 `NodeServer` gives a plain HTTP/1.1 server. For more, use a library for web handlers, for example [srvx](https://srvx.h3.dev): HTTPS, HTTP/2, middleware, or the same server code on Bun and Deno. Give it the handler. Make sure that the library aborts the signal of a request when the client closes the connection. If it does not, a closed connection does not cancel the call.
+
+### MCP through stdio
+
+An MCP client, for example a coding agent, can start the server as a local process. `NodeMcp.main` serves the standard input and output of a Node.js process:
+
+```ts
+#!/usr/bin/env node
+import { NodeMcp } from "@acid-cat/core-effect/node";
+
+NodeMcp.main(aircon, unitLayer, { name: "aircon", version: "1.0.0" });
+```
+
+- The process is one session. The server serves revision `2026-07-28`, and the `initialize` handshake of revisions `2025-11-25` and `2025-06-18`.
+- When the availability of a capability changes, the server sends `notifications/tools/list_changed`. `notifications/cancelled` interrupts the call.
+- `Mcp.serveStdio(app, options)` is the server on the `Stdio` service of `effect`, for any runtime. It completes when standard input ends. Then the session closes, and the calls in progress are interrupted. `Mcp.layerStdio(app, options)` is the same server as a layer, which serves while its scope is open.
+- Standard output carries only MCP messages, so the server sends the logs of Effect to standard error. Do not write to standard output from a capability.
 
 ### Typed calls
 

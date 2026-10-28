@@ -16,6 +16,7 @@ test("the TypeScript core passes acid-cat conform through all its bindings", asy
   try {
     const results = await conform({
       mcp: `${served.url}/mcp`,
+      mcpStdio: [process.execPath, new URL("./fixture-mcp-stdio.ts", import.meta.url).pathname],
       http: `${served.url}/api`,
       cli: [process.execPath, new URL("./fixture-cli.ts", import.meta.url).pathname],
       webmcp: (modelContext) => {

@@ -5,8 +5,8 @@ One air conditioner, described once and served to every surface. The unit is sim
 | Directory | Contents |
 | --- | --- |
 | [`catalog/`](catalog) | The catalog, written in Pkl, TypeScript, Python, Go and Rust. Each language gives the same bytes |
-| [`core-ts/`](core-ts) | The application on [`@acid-cat/core-ts`](../../packages/core-ts), with Zod, and its command line |
-| [`core-effect/`](core-effect) | The application on [`@acid-cat/core-effect`](../../packages/core-effect), fully in Effect, and its command line |
+| [`core-ts/`](core-ts) | The application on [`@acid-cat/core-ts`](../../packages/core-ts), with Zod, its command line, and its MCP server through stdio |
+| [`core-effect/`](core-effect) | The application on [`@acid-cat/core-effect`](../../packages/core-effect), fully in Effect, its command line, and its MCP server through stdio |
 | [`apis/`](apis) | APIs whose design the application controls: GraphQL, Cap'n Web, Elysia and an MCP server |
 | [`test/`](test) | The tests of all parts |
 
@@ -36,6 +36,17 @@ The input of `aircon.schedule.set` has two arrays: `days`, with items of the sha
 ```
 aircon aircon schedule set --days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]
 ```
+
+## MCP server through stdio
+
+Each application also has an MCP server through [stdio](../../spec/bindings/mcp.md#stdio), for MCP clients that start a local process. It serves the view of the `mcp` target. For example, give an MCP client this command:
+
+```sh
+node examples/aircon/core-ts/mcp-stdio.ts
+node examples/aircon/core-effect/mcp-stdio.ts
+```
+
+The process is one session with one simulated unit. When standard input ends, the process exits.
 
 ## APIs
 

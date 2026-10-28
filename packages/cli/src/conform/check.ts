@@ -72,6 +72,8 @@ export class Checks {
  * Read a state until `done` is true for it, and give that value. The read and the pause between two reads stop when the
  * signal of the check aborts.
  */
+export async function until<T, Done extends T>(what: string, read: () => Promise<T>, done: (value: T) => value is Done, signal: AbortSignal): Promise<Done>;
+export async function until<T>(what: string, read: () => Promise<T>, done: (value: T) => boolean, signal: AbortSignal): Promise<T>;
 export async function until<T>(what: string, read: () => Promise<T>, done: (value: T) => boolean, signal: AbortSignal): Promise<T> {
   let last: T | undefined;
   try {

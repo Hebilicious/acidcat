@@ -1,6 +1,6 @@
 /**
- * Conformance checks for the MCP binding (spec/bindings/mcp.md). The protocol checks use the official MCP client,
- * with revision 2026-07-28. The rejection checks send requests that a client never sends.
+ * Conformance checks for the MCP binding through HTTP (spec/bindings/mcp.md). The protocol checks use the official MCP
+ * client, with revision 2026-07-28. The rejection checks send requests that a client never sends.
  */
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
@@ -29,15 +29,55 @@ export async function checkMcp(url: string, options: { readonly maximumBytes: nu
   const checks = new Checks("mcp", options.deadline);
   let client: Client | undefined;
 
-  await checks.run("an MCP client connects with revision 2026-07-28", `${RULE}#server`, async (signal) => {
+  await checks.run("an MCP client connects with revision 2026-07-28", `${RULE}#http`, async (signal) => {
     client = await mcpClient(url, signal);
   });
   if (client === undefined) return checks;
   const mcp = client;
+  await checkTools(checks, mcp);
+  await mcp.close();
+
+  const post = (signal: AbortSignal, { headers = {}, body }: { readonly headers?: Record<string, string>; readonly body: BodyInit }) =>
+    fetch(url, { method: "POST", body, headers: { "Content-Type": "application/json", ...headers }, signal });
+  const rejection = async (response: Response, status: number, code?: number) => {
+    expectEqual(response.status, status, "status");
+    expectEqual(response.headers.get("Cache-Control"), "no-store", "Cache-Control");
+    if (code !== undefined) expectEqual(memberOf(memberOf(await readJson(response), "error"), "code"), code, "JSON-RPC error code");
+  };
+
+  await checks.run("a method other than POST is rejected with 405", `${RULE}#http`, async (signal) => {
+    const response = await fetch(url, { signal });
+    await rejection(response, 405);
+    expectEqual(response.headers.get("Allow"), "POST", "Allow");
+  });
+  await checks.run("an origin that is not allowed is rejected with 403", `${RULE}#http`, async (signal) => {
+    await rejection(await post(signal, { headers: { Origin: FORBIDDEN_ORIGIN }, body: "{}" }), 403);
+  });
+  await checks.run("a media type other than JSON is rejected with 415", `${RULE}#http`, async (signal) => {
+    await rejection(await post(signal, { headers: { "Content-Type": "text/plain" }, body: "{}" }), 415);
+  });
+  await checks.run("a body over the limit is rejected with 413 and -32600", `${RULE}#http`, async (signal) => {
+    await rejection(await post(signal, { body: " ".repeat(options.maximumBytes + 1) }), 413, -32600);
+  });
+  await checks.run("a body that is not JSON is rejected with 400 and -32700", `${RULE}#http`, async (signal) => {
+    await rejection(await post(signal, { body: "{" }), 400, -32700);
+  });
+  await checks.run("a body that is not UTF-8 is rejected with 400", `${RULE}#http`, async (signal) => {
+    await rejection(await post(signal, { body: new Uint8Array([0x7b, 0xff, 0x7d]) }), 400);
+  });
+
+  return checks;
+}
+
+/**
+ * The checks of the tools and their outcomes, through a connected client (spec/bindings/mcp.md#tools). Each transport
+ * runs them.
+ */
+export async function checkTools(checks: Checks, mcp: Client): Promise<void> {
   const call = (signal: AbortSignal, name: string, args: Record<string, unknown>) =>
     mcp.callTool({ name, arguments: args }, { signal });
 
-  await checks.run("server/discover gives the description of the catalog as instructions", `${RULE}#server`, () => {
+  await checks.run("the instructions are the description of the catalog", `${RULE}#server`, () => {
     expectEqual(mcp.getInstructions(), fixture.description, "instructions");
   });
 
@@ -99,40 +139,7 @@ export async function checkMcp(url: string, options: { readonly maximumBytes: nu
       const { tools } = await mcp.listTools(undefined, { signal });
       expect(!tools.some((tool) => tool.name === "fixture.toggle"), "fixture.toggle must not be listed while it is unavailable");
     } finally {
-      await call(AbortSignal.timeout(options.deadline), "fixture.switch.set", { on: true });
+      await call(AbortSignal.timeout(checks.deadline), "fixture.switch.set", { on: true });
     }
   });
-
-  await mcp.close();
-
-  const post = (signal: AbortSignal, { headers = {}, body }: { readonly headers?: Record<string, string>; readonly body: BodyInit }) =>
-    fetch(url, { method: "POST", body, headers: { "Content-Type": "application/json", ...headers }, signal });
-  const rejection = async (response: Response, status: number, code?: number) => {
-    expectEqual(response.status, status, "status");
-    expectEqual(response.headers.get("Cache-Control"), "no-store", "Cache-Control");
-    if (code !== undefined) expectEqual(memberOf(memberOf(await readJson(response), "error"), "code"), code, "JSON-RPC error code");
-  };
-
-  await checks.run("a method other than POST is rejected with 405", `${RULE}#server`, async (signal) => {
-    const response = await fetch(url, { signal });
-    await rejection(response, 405);
-    expectEqual(response.headers.get("Allow"), "POST", "Allow");
-  });
-  await checks.run("an origin that is not allowed is rejected with 403", `${RULE}#server`, async (signal) => {
-    await rejection(await post(signal, { headers: { Origin: FORBIDDEN_ORIGIN }, body: "{}" }), 403);
-  });
-  await checks.run("a media type other than JSON is rejected with 415", `${RULE}#server`, async (signal) => {
-    await rejection(await post(signal, { headers: { "Content-Type": "text/plain" }, body: "{}" }), 415);
-  });
-  await checks.run("a body over the limit is rejected with 413 and -32600", `${RULE}#server`, async (signal) => {
-    await rejection(await post(signal, { body: " ".repeat(options.maximumBytes + 1) }), 413, -32600);
-  });
-  await checks.run("a body that is not JSON is rejected with 400 and -32700", `${RULE}#server`, async (signal) => {
-    await rejection(await post(signal, { body: "{" }), 400, -32700);
-  });
-  await checks.run("a body that is not UTF-8 is rejected with 400", `${RULE}#server`, async (signal) => {
-    await rejection(await post(signal, { body: new Uint8Array([0x7b, 0xff, 0x7d]) }), 400);
-  });
-
-  return checks;
 }

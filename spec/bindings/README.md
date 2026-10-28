@@ -39,7 +39,7 @@ Each remote binding tells its status codes. It also tells if it accepts requests
 | --- | --- | --- |
 | [`typescript`](typescript.md) | Language | Handles in TypeScript and JavaScript |
 | [`webmcp`](webmcp.md) | Protocol | WebMCP tools in a web page |
-| [`mcp`](mcp.md) | Protocol | An MCP server through HTTP |
+| [`mcp`](mcp.md) | Protocol | An MCP server through HTTP, or through standard input and output |
 | [`cli`](cli.md) | Protocol | A command line |
 | [`http`](http.md) | Protocol | JSON through HTTP |
 

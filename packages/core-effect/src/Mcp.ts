@@ -1,14 +1,15 @@
 /**
- * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP, built on `effect/ai/McpServer`.
+ * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP or through stdio, built on `effect/ai/McpServer`.
  */
 import { bundle, MCP_REJECTIONS, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec-ts";
-import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer, ManagedRuntime, Schema } from "effect";
+import type { JsonObject, Outcome, Rejection } from "@acid-cat/spec-ts";
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Logger, ManagedRuntime, Schema, Stdio, Stream, SubscriptionRef } from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
 import type * as App from "./App.ts";
 import { cancelOnAbort } from "./internal/cancel.ts";
+import { refsOf } from "./internal/served.ts";
 import * as Session from "./Session.ts";
 
 export interface Options {
@@ -114,31 +115,154 @@ const respond = <R>(app: App.App<R>, request: Request, options: Options) =>
 export const registerTools = (session: Session.Session, signal: AbortSignal = new AbortController().signal) =>
   Effect.gen(function* () {
     const server = yield* McpServer.McpServer;
-    const types = session.view.$defs ?? {};
-    for (const [id, capability] of Object.entries(session.view.capabilities)) {
+    for (const id of Object.keys(session.view.capabilities)) {
       if (!(yield* session.availability(id)).available) continue;
-      const output = capability.output === undefined ? undefined : bundle(capability.output, types);
-      const hasOutputSchema = output?.type === "object";
-      const inputSchema = yield* decodeToolInput(bundle(capability.input ?? { type: "object" }, types));
-      const outputSchema = hasOutputSchema ? yield* decodeToolOutput(output) : undefined;
-      yield* server.addTool({
-        tool: new McpSchema.Tool({
-          name: id,
-          description: capability.description,
-          inputSchema,
-          ...(outputSchema === undefined ? {} : { outputSchema }),
-          annotations: { readOnlyHint: capability.readOnly === true },
-        }),
-        annotations: Context.empty(),
-        handle: (payload: unknown) =>
-          session
-            .invoke(id, payload ?? {})
-            .pipe(
-              cancelOnAbort(signal),
-              Effect.flatMap((outcome) => decodeToolResult(mcpToolResult(outcome, hasOutputSchema))),
-            ),
-      });
+      yield* server.addTool(yield* toolFor(session, id, Context.empty(), cancelOnAbort(signal)));
     }
+  });
+
+/**
+ * The tool of a capability in the view of a session: its name, description, schemas and hints, and its call.
+ * `annotations` go to `effect/ai`. `around` wraps each call, for example to cancel it.
+ */
+const toolFor = (
+  session: Session.Session,
+  id: string,
+  annotations: Context.Context<never>,
+  around: (call: Effect.Effect<Outcome<unknown, unknown>>) => Effect.Effect<Outcome<unknown, unknown>> = (call) => call,
+) =>
+  Effect.gen(function* () {
+    const capability = session.view.capabilities[id];
+    if (capability === undefined) return yield* Effect.die(new Error(`The view of the session has no capability ${id}.`));
+    const types = session.view.$defs ?? {};
+    const output = capability.output === undefined ? undefined : bundle(capability.output, types);
+    const hasOutputSchema = output?.type === "object";
+    const inputSchema = yield* decodeToolInput(bundle(capability.input ?? { type: "object" }, types));
+    const outputSchema = hasOutputSchema ? yield* decodeToolOutput(output) : undefined;
+    return {
+      tool: new McpSchema.Tool({
+        name: id,
+        description: capability.description,
+        inputSchema,
+        ...(outputSchema === undefined ? {} : { outputSchema }),
+        annotations: { readOnlyHint: capability.readOnly === true },
+      }),
+      annotations,
+      handle: (payload: unknown) =>
+        around(session.invoke(id, payload ?? {})).pipe(Effect.flatMap((outcome) => decodeToolResult(mcpToolResult(outcome, hasOutputSchema)))),
+    };
+  });
+
+export interface StdioOptions {
+  /** The name and version that the server tells to clients. */
+  readonly name: string;
+  readonly version: string;
+  /** Guidance for a model about the whole server. The default is the description of the application. */
+  readonly instructions?: string | undefined;
+  /** The target that the server serves. The default is `"mcp"`. */
+  readonly target?: string | undefined;
+}
+
+/**
+ * The MCP server through the standard input and output of `Stdio` (spec/bindings/mcp.md#stdio), while the scope of the
+ * layer is open. The server is one session. It serves revision 2026-07-28, and the `initialize` handshake of revisions
+ * 2025-11-25 and 2025-06-18. The logs of the effects in the layer go to standard error.
+ */
+export const layerStdio = <R>(app: App.App<R>, options: StdioOptions) =>
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const session = yield* Session.make(app, { target: options.target ?? "mcp" });
+      yield* serveTools(session);
+    }),
+  ).pipe(
+    Layer.provideMerge(
+      McpServer.layerStdio({
+        name: options.name,
+        version: options.version,
+        instructions: options.instructions ?? app.description,
+        protocols: [McpProtocol.v2026_07_28, McpProtocol.v2025_11_25, McpProtocol.v2025_06_18],
+      }),
+    ),
+    Layer.provide(Layer.effect(Stdio.Stdio, Effect.map(Effect.service(Stdio.Stdio), framed))),
+    // Standard output carries only MCP messages, so the logs go to standard error.
+    Layer.provide(Layer.succeed(Logger.LogToStderr, true)),
+  );
+
+/**
+ * Standard input, one JSON message on each line. The server answers a line that is not JSON with the JSON-RPC error
+ * -32700, and keeps the session. An empty line is ignored.
+ */
+const framed = (stdio: Stdio.Stdio): Stdio.Stdio => {
+  const parseError = `${JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "The line is not JSON." } })}\n`;
+  const isJson = (line: string) => {
+    try {
+      JSON.parse(line);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const stdin = stdio.stdin.pipe(
+    Stream.decodeText,
+    Stream.splitLines,
+    Stream.filter((line) => line.trim() !== ""),
+    Stream.filterEffect((line) =>
+      isJson(line) ? Effect.succeed(true) : Effect.as(Effect.ignore(Stream.run(Stream.make(parseError), stdio.stdout())), false),
+    ),
+    Stream.map((line) => `${line}\n`),
+    Stream.encodeText,
+  );
+  return Stdio.make({ ...stdio, stdin });
+};
+
+/**
+ * Serve the MCP server through the standard input and output of `Stdio` until standard input ends. Then the session
+ * closes: the calls in progress are cancelled, and the effect completes. The process is one session.
+ */
+export const serveStdio = <R>(app: App.App<R>, options: StdioOptions) =>
+  Effect.gen(function* () {
+    const stdio = yield* Stdio.Stdio;
+    const ended = yield* Deferred.make<void>();
+    const input = Stdio.make({ ...stdio, stdin: stdio.stdin.pipe(Stream.ensuring(Deferred.done(ended, Exit.void))) });
+    const server = layerStdio(app, options).pipe(Layer.provide(Layer.succeed(Stdio.Stdio, input)));
+    // When the server stops writing standard output, it interrupts its own fiber. That is a normal end too.
+    const fiber = yield* Effect.forkChild(Layer.launch(server), { startImmediately: true });
+    yield* Effect.raceFirst(Effect.asVoid(Fiber.await(fiber)), Deferred.await(ended));
+    yield* Fiber.interrupt(fiber);
+    const exit = yield* Fiber.await(fiber);
+    if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause);
+  });
+
+/**
+ * Register one tool for each capability in the view of the session. A tool is listed and can be called only while its
+ * capability is available. When the set of available capabilities changes, the server sends
+ * `notifications/tools/list_changed`.
+ */
+const serveTools = (session: Session.Session) =>
+  Effect.gen(function* () {
+    const server = yield* McpServer.McpServer;
+    const refs = refsOf(session);
+    const ids = Object.keys(session.view.capabilities);
+    const isAvailable = (id: string) => {
+      const ref = refs.availability(id);
+      return ref === undefined || SubscriptionRef.getUnsafe(ref).available;
+    };
+    const availableIds = () => ids.filter(isAvailable).join("\n");
+    let listed = "";
+    // Start to follow the changes before the first read of the availability, so that no change comes between them.
+    yield* session.changes.pipe(
+      Stream.runForEach(() =>
+        Effect.suspend(() => {
+          const next = availableIds();
+          if (next === listed) return Effect.void;
+          listed = next;
+          return server.notifications["notifications/tools/list_changed"]({});
+        }),
+      ),
+      Effect.forkScoped({ startImmediately: true }),
+    );
+    listed = availableIds();
+    for (const id of ids) yield* server.addTool(yield* toolFor(session, id, Context.make(McpSchema.EnabledWhen, () => isAvailable(id))));
   });
 
 /**

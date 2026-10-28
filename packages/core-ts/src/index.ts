@@ -4,6 +4,8 @@ export { createSession } from "./session.ts";
 export type { Handle, HandleOf, Session, SessionOptions } from "./session.ts";
 export { mcpHandler } from "./mcp.ts";
 export type { McpOptions, McpSettings } from "./mcp.ts";
+export { main as mcpStdioMain, runMcpStdio } from "./mcp-stdio.ts";
+export type { McpStdioIo, McpStdioOptions } from "./mcp-stdio.ts";
 export { httpHandler } from "./http.ts";
 export type { HttpOptions, HttpSettings } from "./http.ts";
 export type { ContextOption } from "./context.ts";

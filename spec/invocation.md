@@ -42,7 +42,7 @@ Availability can change at any time. A session MUST decide each call on the avai
 
 ## Sessions
 
-A **session** is one period in which one client calls the capabilities of one target. Each binding decides when its sessions open and close. For example, the MCP binding opens one session for each request.
+A **session** is one period in which one client calls the capabilities of one target. Each binding decides when its sessions open and close. For example, the MCP binding through HTTP opens one session for each request, and the MCP binding through stdio opens one session for each process.
 
 - A session serves one client. A provider MUST NOT give the calls of two clients the same session. When a session closes, it cancels all its calls, and each client must keep its calls when a different client goes away.
 - An input MUST NOT contain identity data, credentials or tokens. The session holds the identity of its client.
