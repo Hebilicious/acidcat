@@ -17,7 +17,7 @@ for (const core of ["core-ts", "core-effect"] as const) {
     const client = await connect(core);
     try {
       const { tools } = await client.listTools();
-      assert.deepEqual(tools.map((tool) => tool.name).sort(), ["aircon.fan.set", "aircon.mode.set", "aircon.power.set", "aircon.status.get", "aircon.temperature.set"]);
+      assert.deepEqual(tools.map((tool) => tool.name).sort(), ["aircon.fan.set", "aircon.mode.set", "aircon.power.set", "aircon.schedule.set", "aircon.status.get", "aircon.temperature.set"]);
       const poweredOff = await client.callTool({ name: "aircon.mode.set", arguments: { mode: "heat" } });
       assert.equal(poweredOff.isError, true);
       await client.callTool({ name: "aircon.power.set", arguments: { on: true } });
