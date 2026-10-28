@@ -1,9 +1,10 @@
 /**
- * Serve one of the APIs on a local port, with a simulated unit.
+ * Serve one of the APIs on http://127.0.0.1:3000, with a simulated unit. `serve` from `@acid-cat/core-ts/node` serves the
+ * web handler of the API on Node.js.
  *
  * Usage: node apis/main.ts graphql|capnweb|elysia|mcp
  */
-import { serve } from "@acid-cat/cli";
+import { serve } from "@acid-cat/core-ts/node";
 
 import { Unit } from "../core-ts/aircon.ts";
 import { capnwebApi } from "./capnweb.ts";

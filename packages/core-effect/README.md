@@ -6,7 +6,7 @@ All of this package is Effect: a capability is an Effect program with Effect Sch
 
 ```sh
 pnpm add @acid-cat/core-effect effect
-pnpm add @effect/platform-node  # only for @acid-cat/core-effect/node
+pnpm add @effect/platform-node  # only for NodeCli, from @acid-cat/core-effect/node
 ```
 
 `effect` and `@effect/platform-node` are peer dependencies, so that the application and the core share one Effect. The package supports Effect 4.
@@ -96,26 +96,36 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 | `Http` | [HTTP](../../spec/bindings/http.md) | `Http.toWebHandler(app, layer, options)` |
 | `Cli` | [CLI](../../spec/bindings/cli.md) | `Cli.run(app, options)`, on `effect/cli`. `NodeCli.main(app, layer, options)` from `@acid-cat/core-effect/node` runs it as the main program of a Node.js process |
 | `WebMcp` | [WebMCP](../../spec/bindings/webmcp.md) | `WebMcp.install(session)` |
+| `NodeServer` | MCP and HTTP | `NodeServer.serve(handler, options)` and `NodeServer.layer(handler, options)` serve web handlers on Node.js. See [Serve on Node.js](#serve-on-nodejs) |
 
 `layer` gives the services that the capabilities need. A web handler is `(request: Request) => Promise<Response>`. It works in Node, Bun, Deno and Cloudflare Workers. When the signal of a request aborts, the handler cancels the call of the request.
 
 ### Serve on Node.js
 
-Node.js has no server for web handlers. Use an adapter, for example [`@hono/node-server`](https://github.com/honojs/node-server) or [srvx](https://srvx.h3.dev). The MCP handler answers on all paths, so send it only the requests for its URL:
+`NodeServer` serves web handlers on Node.js, with only `node:http`. It has no other dependency. The server runs in a scope.
 
 ```ts
-import { serve } from "@hono/node-server";
+import * as NodeServer from "@acid-cat/core-effect/NodeServer";
+import { Effect, Layer } from "effect";
 
 const mcp = Mcp.toWebHandler(aircon, unitLayer, mcpOptions);
 const http = Http.toWebHandler(aircon, unitLayer, httpOptions);
 
-serve({
-  port: 3000,
-  fetch: (request) => (new URL(request.url).pathname === "/mcp" ? mcp(request) : http(request)),
-});
+Layer.launch(NodeServer.layer({ "/mcp": mcp, "/": http }, { port: 3000 })).pipe(Effect.runFork);
 ```
 
-The handler cancels a call when the signal of its request aborts. Make sure that your adapter aborts this signal when the client closes the connection. If it does not, a closed connection does not cancel the call.
+`NodeServer.serve(handler, options)` is an Effect that needs a `Scope`. It gives the `url` and the `port` of the server, and the server closes when the scope closes. `NodeServer.layer(handler, options)` serves while the layer is built. `Layer.launch` runs it until the program is interrupted. Both fail with `ServeError` when the server cannot listen, for example when the port is in use.
+
+The handler is one handler for all paths, or handlers by path prefix. The longest prefix that matches gets the request, and the prefix `/` matches all paths. The MCP handler answers on all paths, so give it only its own prefix. A path that no prefix matches gets `404`. A handler that rejects gets `500`.
+
+| Option | Default | Use |
+| --- | --- | --- |
+| `port` | `3000` | The port. With `0`, the system chooses a free port |
+| `hostname` | `127.0.0.1` | The address. Only the same computer can connect. Use `0.0.0.0` or `::` to accept connections from the network |
+
+When a client closes its connection, the signal of its request aborts, so the handler cancels the call. `@acid-cat/core-effect/NodeServer` needs only Node.js. `@acid-cat/core-effect/node` exports `NodeServer` too, with `NodeCli`, which needs `@effect/platform-node`.
+
+`NodeServer` gives a plain HTTP/1.1 server. For more, use a library for web handlers, for example [srvx](https://srvx.h3.dev): HTTPS, HTTP/2, middleware, or the same server code on Bun and Deno. Give it the handler. Make sure that the library aborts the signal of a request when the client closes the connection. If it does not, a closed connection does not cancel the call.
 
 ### Typed calls
 
@@ -234,7 +244,7 @@ const report = Command.make("report", {}, () =>
 NodeCli.main(aircon, unitLayer, { name: "aircon", version: "0.1.0", description: "Control the air conditioner.", commands: [report] });
 ```
 
-`@acid-cat/core-effect` works in all runtimes, including browsers. Only `@acid-cat/core-effect/node` needs Node.js.
+`@acid-cat/core-effect` works in all runtimes, including browsers. Only `@acid-cat/core-effect/node` and `@acid-cat/core-effect/NodeServer` need Node.js.
 
 Each module also has its own entry point, for example `@acid-cat/core-effect/Session`. The package has no side effects, so a bundler keeps only the modules that a program imports, from either entry point. A web page that imports `Session`, `Handles` and `WebMcp` does not contain `Cli` or `Mcp`, or the `effect/cli` and `effect/ai` modules that they use.
 

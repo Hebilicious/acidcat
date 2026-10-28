@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { conform, serve } from "@acid-cat/cli";
+import { conform } from "@acid-cat/cli";
 
 import { createSession, httpHandler, installWebMcp, mcpHandler } from "../src/index.ts";
+import { serve } from "../src/node.ts";
 import { fixture, options } from "./fixture.ts";
 
 test("the TypeScript core passes acid-cat conform through all its bindings", async () => {
@@ -11,7 +12,7 @@ test("the TypeScript core passes acid-cat conform through all its bindings", asy
   const served = await serve({
     "/mcp": mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...shared }),
     "/api": httpHandler(fixture, { allowedOrigins: [], base: "/api", ...shared }),
-  });
+  }, { port: 0 });
   try {
     const results = await conform({
       mcp: `${served.url}/mcp`,

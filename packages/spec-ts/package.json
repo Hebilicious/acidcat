@@ -1,7 +1,7 @@
 {
   "name": "@acid-cat/spec-ts",
   "version": "0.7.0",
-  "description": "The fixed details of the AcidCat specification as TypeScript data and pure functions, with no dependencies. Part of the TypeScript reference implementation.",
+  "description": "The fixed details of the AcidCat specification as TypeScript data and pure functions, with no dependencies, and a Node.js server for web handlers. Part of the TypeScript reference implementation.",
   "keywords": [
     "acidcat",
     "specification"
@@ -21,13 +21,20 @@
   "files": [
     "dist"
   ],
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts"
+  },
   "publishConfig": {
     "access": "public",
     "exports": {
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "./node": {
+        "types": "./dist/node.d.ts",
+        "default": "./dist/node.js"
       }
     }
   },

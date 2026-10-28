@@ -19,3 +19,14 @@ pnpm add @acid-cat/spec-ts
 | `viewOf`, `bundle` | The [view](../../spec/catalog.md#views) of a target, and a schema with its shared types |
 
 The other exports give the names, flags, exit codes and tool shapes of each [binding](../../spec/bindings/README.md).
+
+## Serve on Node.js
+
+`@acid-cat/spec-ts/node` needs Node.js. The main entry point works in all runtimes.
+
+| Export | Use |
+| --- | --- |
+| `serve(handler, options)` | Serve web handlers, `(request: Request) => Promise<Response>`, on Node.js with only `node:http`. `handler` is one handler, or handlers by path prefix. `options.port` is `3000` by default, and `options.hostname` is `127.0.0.1` by default. The result has `url`, `port` and `close()`, and `await using` closes it |
+| `WebHandler`, `Routes`, `ServeOptions`, `Served` | The types of `serve` |
+
+The signal of a request aborts when the client closes the connection. A path that no prefix matches gets `404`. A handler that rejects gets `500`. Both cores export `serve` for their users: `@acid-cat/core-ts/node` and `NodeServer` in `@acid-cat/core-effect`.

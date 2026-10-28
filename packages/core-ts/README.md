@@ -62,26 +62,34 @@ Standard Schema does not convert to JSON Schema. Give the converter of your sche
 | `httpHandler(app, options)` | [HTTP](../../spec/bindings/http.md) | `(request: Request) => Promise<Response>` |
 | `cliMain(app, options)`, `runCli(…)` | [CLI](../../spec/bindings/cli.md) | The command line of the process, or an exit code |
 | `installWebMcp(session)` | [WebMCP](../../spec/bindings/webmcp.md) | Tools in the page, with a status |
+| `serve(handler, options)`, from `@acid-cat/core-ts/node` | MCP and HTTP | A Node.js server for the web handlers. See [Serve on Node.js](#serve-on-nodejs) |
 
 When the signal of a request aborts, `mcpHandler` and `httpHandler` cancel the call of the request.
 
 ### Serve on Node.js
 
-Node.js has no server for web handlers. Use an adapter, for example [`@hono/node-server`](https://github.com/honojs/node-server) or [srvx](https://srvx.h3.dev). The MCP handler answers on all paths, so send it only the requests for its URL:
+`@acid-cat/core-ts/node` serves web handlers on Node.js, with only `node:http`. It has no other dependency.
 
 ```ts
-import { serve } from "@hono/node-server";
+import { serve } from "@acid-cat/core-ts/node";
 
 const mcp = mcpHandler(aircon, { name: "aircon", version: "1.0.0", allowedOrigins: [], toJsonSchema, context: { unit } });
 const http = httpHandler(aircon, { allowedOrigins: [], toJsonSchema, context: { unit } });
 
-serve({
-  port: 3000,
-  fetch: (request) => (new URL(request.url).pathname === "/mcp" ? mcp(request) : http(request)),
-});
+const server = await serve({ "/mcp": mcp, "/": http }, { port: 3000 });
+console.log(server.url); // http://127.0.0.1:3000
 ```
 
-The handler cancels a call when the signal of its request aborts. Make sure that your adapter aborts this signal when the client closes the connection. If it does not, a closed connection does not cancel the call.
+`serve(handler, options)` takes one handler for all paths, or handlers by path prefix. The longest prefix that matches gets the request, and the prefix `/` matches all paths. The MCP handler answers on all paths, so give it only its own prefix. A path that no prefix matches gets `404`. A handler that rejects gets `500`.
+
+| Option | Default | Use |
+| --- | --- | --- |
+| `port` | `3000` | The port. With `0`, the system chooses a free port. `server.port` gives it |
+| `hostname` | `127.0.0.1` | The address. Only the same computer can connect. Use `0.0.0.0` or `::` to accept connections from the network |
+
+`serve` resolves when the server listens. `server.close()` stops it, and `await using server = await serve(…)` closes it at the end of the block. When a client closes its connection, the signal of its request aborts, so the handler cancels the call.
+
+`serve` gives a plain HTTP/1.1 server. For more, use a library for web handlers, for example [srvx](https://srvx.h3.dev): HTTPS, HTTP/2, middleware, or the same server code on Bun and Deno. Give it the handler. Make sure that the library aborts the signal of a request when the client closes the connection. If it does not, a closed connection does not cancel the call.
 
 ### Typed calls and handles
 

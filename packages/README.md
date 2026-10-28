@@ -21,7 +21,7 @@ These packages show one way to implement the specification. Reference implementa
 
 | Package | Directory | Registry name | Use |
 | --- | --- | --- | --- |
-| Specification data | [`spec-ts/`](spec-ts) | npm `@acid-cat/spec-ts` | The fixed details of the specification as TypeScript data and pure functions, with no dependencies |
+| Specification data | [`spec-ts/`](spec-ts) | npm `@acid-cat/spec-ts` | The fixed details of the specification as TypeScript data and pure functions, with no dependencies, and a Node.js server for web handlers that both cores use |
 | Core for Effect | [`core-effect/`](core-effect) | npm `@acid-cat/core-effect` | Serve capabilities, written fully in Effect: capabilities are Effect programs, sessions are scopes, services are layers |
 | Core for TypeScript | [`core-ts/`](core-ts) | npm `@acid-cat/core-ts` | Serve capabilities in plain TypeScript, with no Effect dependency: capabilities return promises, inputs use Standard Schema |
 

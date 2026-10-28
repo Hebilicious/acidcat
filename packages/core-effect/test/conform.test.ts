@@ -1,18 +1,25 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { conform, serve } from "@acid-cat/cli";
+import { conform } from "@acid-cat/cli";
 import { Effect, Exit, Layer, Scope } from "effect";
 
 import { Http, Mcp, Session, WebMcp } from "../src/index.ts";
+import { NodeServer } from "../src/node.ts";
 import { fixture, fixtureLayer } from "./fixture.ts";
 
 test("the Effect core passes acid-cat conform through all its bindings", async () => {
   const services = Layer.fresh(fixtureLayer);
-  const served = await serve({
-    "/mcp": Mcp.toWebHandler(fixture, services, { name: "fixture", version: "0.0.0", allowedOrigins: [] }),
-    "/api": Http.toWebHandler(fixture, services, { allowedOrigins: [], base: "/api" }),
-  });
+  const server = Effect.runSync(Scope.make());
+  const served = await Effect.runPromise(
+    NodeServer.serve(
+      {
+        "/mcp": Mcp.toWebHandler(fixture, services, { name: "fixture", version: "0.0.0", allowedOrigins: [] }),
+        "/api": Http.toWebHandler(fixture, services, { allowedOrigins: [], base: "/api" }),
+      },
+      { port: 0 },
+    ).pipe(Scope.provide(server)),
+  );
   try {
     const results = await conform({
       mcp: `${served.url}/mcp`,
@@ -33,6 +40,6 @@ test("the Effect core passes acid-cat conform through all its bindings", async (
     assert.deepEqual(failed, [], failed.map((result) => `${result.binding}: ${result.name}: ${result.detail}`).join("\n"));
     assert.ok(results.length > 40);
   } finally {
-    await served.close();
+    await Effect.runPromise(Scope.close(server, Exit.void));
   }
 });
