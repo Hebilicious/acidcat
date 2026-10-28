@@ -22,6 +22,8 @@ export function airconCatalog(): Catalog {
 
   const mode = catalog.type("Mode", { enum: ["cool", "heat", "dry", "fan", "auto"] });
   const fanSpeed = catalog.type("FanSpeed", { enum: ["auto", "low", "medium", "high"] });
+  const day = catalog.type("Day", { enum: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] });
+  const hour = { type: "integer", minimum: 0, maximum: 23 };
   const status = catalog.type("Status", {
     type: "object",
     required: ["power", "mode", "fan", "targetCelsius", "roomCelsius"],
@@ -32,6 +34,11 @@ export function airconCatalog(): Catalog {
       targetCelsius: { type: "number" },
       roomCelsius: { type: "number" },
     },
+  });
+  const schedule = catalog.type("Schedule", {
+    type: "object",
+    required: ["days", "hours"],
+    properties: { days: { type: "array", items: day }, hours: { type: "array", items: hour } },
   });
   const offline = catalog.type("Offline", {
     type: "object",
@@ -77,6 +84,17 @@ export function airconCatalog(): Catalog {
       description: "Set the fan speed.",
       audience: controls,
       ...setting("speed", fanSpeed),
+    })
+    .capability("aircon.schedule.set", {
+      description: "Turn the unit on at each given hour, on each given day. The default hour is 7.",
+      audience: controls,
+      input: {
+        type: "object",
+        required: ["days"],
+        properties: { days: { type: "array", items: day }, hours: { type: "array", items: hour } },
+      },
+      output: schedule,
+      failures: { Offline: offline },
     })
     .capability("aircon.firmware.update", {
       description: "Install the latest firmware. The unit restarts and is offline for about a minute.",

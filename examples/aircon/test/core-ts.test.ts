@@ -106,3 +106,16 @@ test("the command line runs a capability, and a flag follows a $ref to its type"
   assert.deepEqual(JSON.parse(poweredOff.stdout), { _tag: "PoweredOff" });
   assert.equal(run("aircon", "mode", "set", "--mode", "boil").status, 3);
 });
+
+test("an array input takes one repeated flag for each item, or JSON text of the array", () => {
+  const cli = new URL("../core-ts/cli.ts", import.meta.url).pathname;
+  const run = (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { encoding: "utf-8", timeout: 20_000 });
+  const schedule = run("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours=18");
+  assert.equal(schedule.status, 0);
+  assert.deepEqual(JSON.parse(schedule.stdout), { days: ["mon", "fri"], hours: [7, 18] });
+  assert.deepEqual(JSON.parse(run("aircon", "schedule", "set", "--days", "sat").stdout), { days: ["sat"], hours: [7] });
+  assert.deepEqual(JSON.parse(run("aircon", "schedule", "set", "--days", '["tue","thu"]', "--hours", "[6]").stdout), { days: ["tue", "thu"], hours: [6] });
+  assert.equal(run("aircon", "schedule", "set", "--days", '["noon"]').status, 3);
+  assert.equal(run("aircon", "schedule", "set", "--days", "mon", "--hours", "24").status, 3);
+  assert.match(run("list").stdout, /"usage": "aircon aircon schedule set --days <mon\|tue\|wed\|thu\|fri\|sat\|sun>\.\.\. \[--hours <integer>\.\.\.\]"/);
+});

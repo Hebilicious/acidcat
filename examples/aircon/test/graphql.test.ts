@@ -56,7 +56,7 @@ test("a failure is data with its type, and a call failure is an error with its k
 test("the HTTP binding is at /api, and a foreign origin is rejected", async () => {
   const api = graphqlApi({ unit: new Unit() });
   const listed = CapabilityList.parse(await (await api(new Request("http://localhost/api/capabilities"))).json());
-  assert.deepEqual(listed.map((entry) => entry.id), ["aircon.status.get", "aircon.power.set", "aircon.mode.set", "aircon.temperature.set", "aircon.fan.set"]);
+  assert.deepEqual(listed.map((entry) => entry.id), ["aircon.status.get", "aircon.power.set", "aircon.mode.set", "aircon.temperature.set", "aircon.fan.set", "aircon.schedule.set"]);
   assert.equal((await post(api, "{ status { power } }", { Origin: "https://example.com" })).status, 403);
 });
 

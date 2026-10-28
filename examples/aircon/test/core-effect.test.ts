@@ -46,7 +46,7 @@ test("an agent sees the mcp view through MCP", async () => {
   );
   const { result } = Schema.decodeUnknownSync(ToolList)(await response.json());
   const tools = result.tools.map((tool) => tool.name).sort();
-  assert.deepEqual(tools, ["aircon.fan.set", "aircon.mode.set", "aircon.power.set", "aircon.status.get", "aircon.temperature.set"]);
+  assert.deepEqual(tools, ["aircon.fan.set", "aircon.mode.set", "aircon.power.set", "aircon.schedule.set", "aircon.status.get", "aircon.temperature.set"]);
 });
 
 test("a flag follows a $ref to its type", async () => {
@@ -56,6 +56,20 @@ test("a flag follows a $ref to its type", async () => {
   assert.equal(run.status, 1);
   assert.deepEqual(JSON.parse(run.stdout), { _tag: "PoweredOff" });
   assert.equal(spawnSync(process.execPath, [cli, "aircon", "mode", "set", "--mode", "boil"], { timeout: 20_000 }).status, 3);
+});
+
+test("an array input takes one repeated flag for each item, or JSON text of the array", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const cli = new URL("../core-effect/cli.ts", import.meta.url).pathname;
+  const run = (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { encoding: "utf-8", timeout: 20_000 });
+  const schedule = run("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours=18");
+  assert.equal(schedule.status, 0);
+  assert.deepEqual(JSON.parse(schedule.stdout), { days: ["mon", "fri"], hours: [7, 18] });
+  assert.deepEqual(JSON.parse(run("aircon", "schedule", "set", "--days", "sat").stdout), { days: ["sat"], hours: [7] });
+  assert.deepEqual(JSON.parse(run("aircon", "schedule", "set", "--days", '["tue","thu"]', "--hours", "[6]").stdout), { days: ["tue", "thu"], hours: [6] });
+  assert.equal(run("aircon", "schedule", "set", "--days", '["noon"]').status, 3);
+  assert.equal(run("aircon", "schedule", "set", "--days", "mon", "--hours", "24").status, 3);
+  assert.match(run("list").stdout, /"usage": "aircon aircon schedule set --days <mon\|tue\|wed\|thu\|fri\|sat\|sun>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });
 
 test("the state gives the current value, then each change", () =>

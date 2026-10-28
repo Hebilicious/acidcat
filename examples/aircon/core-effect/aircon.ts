@@ -3,7 +3,7 @@
  */
 import { AVAILABLE } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer, Schema, SubscriptionRef } from "effect";
+import { Context, Effect, Layer, Ref, Schema, SubscriptionRef } from "effect";
 
 import { App, Capability } from "@acid-cat/core-effect";
 
@@ -14,6 +14,13 @@ export const FanSpeed = Schema.Literals(["auto", "low", "medium", "high"]).annot
 
 /** A target temperature that the unit accepts. */
 export const Celsius = Schema.Finite.check(Schema.isBetween({ minimum: 16, maximum: 31 }));
+
+export const Day = Schema.Literals(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]).annotate({ identifier: "Day" });
+
+/** An hour of the day, from 0 to 23. */
+const Hour = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 23 }));
+
+export const Schedule = Schema.Struct({ days: Schema.Array(Day), hours: Schema.Array(Hour) }).annotate({ identifier: "Schedule" });
 
 export const Status = Schema.Struct({
   power: Schema.Boolean,
@@ -37,6 +44,8 @@ export class Unit extends Context.Service<
     /** Available while the unit is online, and `unavailable("The unit is offline.")` while it is not. */
     readonly connection: SubscriptionRef.SubscriptionRef<Availability>;
     readonly firmware: string;
+    /** The days and hours when the unit turns on. */
+    readonly schedule: Ref.Ref<typeof Schedule.Type>;
   }
 >()("aircon/Unit") {}
 
@@ -47,6 +56,7 @@ export const unitLayer = Layer.effect(
       status: yield* SubscriptionRef.make<typeof Status.Type>({ power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 }),
       connection: yield* SubscriptionRef.make<Availability>(AVAILABLE),
       firmware: "1.0.0",
+      schedule: yield* Ref.make<typeof Schedule.Type>({ days: [], hours: [] }),
     };
   }),
 );
@@ -121,6 +131,22 @@ export const fanSet = Capability.make({
   run: ({ speed }) => change((state) => ({ ...state, fan: speed })),
 });
 
+export const scheduleSet = Capability.make({
+  id: "aircon.schedule.set",
+  description: "Turn the unit on at each given hour, on each given day. The default hour is 7.",
+  audience: controls,
+  input: Schema.Struct({ days: Schema.Array(Day), hours: Schema.optionalKey(Schema.Array(Hour)) }),
+  output: Schedule,
+  failures: [Offline],
+  run: ({ days, hours = [7] }) =>
+    Effect.gen(function* () {
+      yield* onlineStatus;
+      const schedule = { days, hours };
+      yield* Ref.set((yield* Unit).schedule, schedule);
+      return schedule;
+    }),
+});
+
 export const firmwareUpdate = Capability.make({
   id: "aircon.firmware.update",
   description: "Install the latest firmware. The unit restarts and is offline for about a minute.",
@@ -142,5 +168,5 @@ export const aircon = App.make({
     mcp: { description: "Agents, through an MCP server.", bindings: ["mcp"] },
     api: { description: "Home-automation systems and scripts.", bindings: ["http"] },
   },
-  capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, firmwareUpdate],
+  capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, scheduleSet, firmwareUpdate],
 });

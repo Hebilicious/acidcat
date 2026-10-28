@@ -29,6 +29,7 @@ targets {
 types {
   ["Mode"] { enum { "cool"; "heat"; "dry"; "fan"; "auto" } }
   ["FanSpeed"] { enum { "auto"; "low"; "medium"; "high" } }
+  ["Day"] { enum { "mon"; "tue"; "wed"; "thu"; "fri"; "sat"; "sun" } }
   ["Status"] {
     type = "object"
     required { "power"; "mode"; "fan"; "targetCelsius"; "roomCelsius" }
@@ -40,6 +41,14 @@ types {
       roomCelsius { type = "number" }
     }
   }
+  ["Schedule"] {
+    type = "object"
+    required { "days"; "hours" }
+    properties {
+      days { type = "array"; items = module.ref("Day") }
+      hours { type = "array"; items = hour }
+    }
+  }
   ["Offline"] {
     type = "object"
     properties {
@@ -47,6 +56,9 @@ types {
     }
   }
 }
+
+/// An hour of the day, from 0 to 23.
+local hour = new Dynamic { type = "integer"; minimum = 0; maximum = 23 }
 
 local everywhere = new Listing { "app"; "taskbar"; "cli"; "mcp"; "api" }
 local controls = new Listing { "app"; "cli"; "mcp"; "api" }
@@ -94,6 +106,21 @@ capabilities {
     })
 
   ["aircon.fan.set"] = setting("Set the fan speed.", "speed", module.ref("FanSpeed"))
+
+  ["aircon.schedule.set"] {
+    description = "Turn the unit on at each given hour, on each given day. The default hour is 7."
+    audience = controls
+    input {
+      type = "object"
+      required { "days" }
+      properties {
+        days { type = "array"; items = module.ref("Day") }
+        hours { type = "array"; items = hour }
+      }
+    }
+    output = module.ref("Schedule")
+    failures { ["Offline"] = module.ref("Offline") }
+  }
 
   ["aircon.firmware.update"] {
     description = "Install the latest firmware. The unit restarts and is offline for about a minute."

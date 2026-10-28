@@ -30,6 +30,8 @@ def aircon_catalog() -> Catalog:
 
     mode = catalog.type("Mode", {"enum": ["cool", "heat", "dry", "fan", "auto"]})
     fan_speed = catalog.type("FanSpeed", {"enum": ["auto", "low", "medium", "high"]})
+    day = catalog.type("Day", {"enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]})
+    hour = {"type": "integer", "minimum": 0, "maximum": 23}
     status = catalog.type(
         "Status",
         {
@@ -42,6 +44,14 @@ def aircon_catalog() -> Catalog:
                 "targetCelsius": {"type": "number"},
                 "roomCelsius": {"type": "number"},
             },
+        },
+    )
+    schedule = catalog.type(
+        "Schedule",
+        {
+            "type": "object",
+            "required": ["days", "hours"],
+            "properties": {"days": {"type": "array", "items": day}, "hours": {"type": "array", "items": hour}},
         },
     )
     offline = catalog.type(
@@ -93,6 +103,18 @@ def aircon_catalog() -> Catalog:
         description="Set the fan speed.",
         audience=controls,
         input=setting("speed", fan_speed),
+        failures={"Offline": offline},
+    )
+    catalog.capability(
+        "aircon.schedule.set",
+        description="Turn the unit on at each given hour, on each given day. The default hour is 7.",
+        audience=controls,
+        input={
+            "type": "object",
+            "required": ["days"],
+            "properties": {"days": {"type": "array", "items": day}, "hours": {"type": "array", "items": hour}},
+        },
+        output=schedule,
         failures={"Offline": offline},
     )
     catalog.capability(

@@ -37,6 +37,8 @@ A language-neutral specification. Describe what your application can do one time
 | 🔌 HTTP | `POST /capabilities/aircon.temperature.set` |
 | 🧩 Your language | a typed function, for example `execute({ celsius: 22 })` in TypeScript |
 
+On the command line, each input property is a flag. An array of simple values takes one flag for each item, `aircon schedule set --days mon --days fri --hours 7`, or the whole array as JSON text, `--days '["mon","fri"]'`.
+
 The catalog is checked at build time. Programs do not read it at run time.
 
 ## 🧭 How it works
