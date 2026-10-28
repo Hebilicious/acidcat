@@ -28,6 +28,7 @@ These terms have these meanings in all documents.
 | **Audience** | The targets that can use a capability. A capability with no audience is not available to any target |
 | **View** | The part of the catalog that one target can see. A view is a catalog |
 | **Binding** | The rules that make one kind of surface from a view. A **protocol binding** makes a surface on the network or in a terminal, for example MCP or a command line. A **language binding** makes a surface in code, for example TypeScript. See [Bindings](bindings/README.md) |
+| **Transport** | How a protocol binding carries messages between a client and a server, for example HTTP, or the standard input and output of a process (stdio) |
 | **Provider** | The code that does the operations |
 | **Client** | A program or a person that calls capabilities through a binding |
 | **Session** | One period in which one client calls the capabilities of one target. It holds the identity of the client. It opens, and later it closes |
