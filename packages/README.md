@@ -21,9 +21,11 @@ These packages show one way to implement the specification. Reference implementa
 
 | Package | Directory | Registry name | Use |
 | --- | --- | --- | --- |
-| Specification data | [`spec-ts/`](spec-ts) | npm `@acid-cat/spec-ts` | The fixed details of the specification as TypeScript data and pure functions, with no dependencies, and a Node.js server for web handlers that both cores use |
+| Specification data | [`spec-ts/`](spec-ts) | npm `@acid-cat/spec-ts` | The fixed details of the specification as TypeScript data and pure functions, with no dependencies |
 | Core for Effect | [`core-effect/`](core-effect) | npm `@acid-cat/core-effect` | Serve capabilities, written fully in Effect: capabilities are Effect programs, sessions are scopes, services are layers |
 | Core for TypeScript | [`core-ts/`](core-ts) | npm `@acid-cat/core-ts` | Serve capabilities in plain TypeScript, with no Effect dependency: capabilities return promises, inputs use Standard Schema |
+
+`@acid-cat/spec-ts` holds only the data and pure functions of the specification. Runtime code, such as servers and I/O, goes in the cores.
 
 ### Two cores
 
@@ -37,6 +39,7 @@ Each core is complete in its own style. Neither core wraps the other. Both cores
 | Cancellation | Fiber interruption | `AbortSignal` |
 | MCP server | `effect/ai/McpServer` | Built in |
 | Command line | `effect/cli` | Built in |
+| Node.js server | `NodeServer`, which serves in a scope | `serve` from `@acid-cat/core-ts/node` |
 | Availability and state | A `SubscriptionRef` | An observable source |
 | Handles for code without Effect | `Handles.make`, `Handles.open` | `createSession` |
 

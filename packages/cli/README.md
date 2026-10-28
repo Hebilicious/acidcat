@@ -51,7 +51,7 @@ The command line is an [Effect](https://effect.website) program that uses `effec
 | --- | --- |
 | `src/catalog.ts` | The catalog rules, views and bundling |
 | `src/main.ts` | The commands |
-| `src/conform/` | The conformance checks, and `serve`, which serves web handlers on a free local port with `serve` from `@acid-cat/spec-ts/node` |
+| `src/conform/` | The conformance checks, and `serve`, which serves web handlers on a local port |
 | `conformance/` | The conformance fixture, in Pkl and in JSON |
 | `test/` | Tests. Run them with `moon run cli:test` |
 | `test/fixtures/` | The catalog of the tests: a bakery, in canonical form |

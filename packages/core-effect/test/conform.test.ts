@@ -5,7 +5,7 @@ import { conform } from "@acid-cat/cli";
 import { Effect, Exit, Layer, Scope } from "effect";
 
 import { Http, Mcp, Session, WebMcp } from "../src/index.ts";
-import { NodeServer } from "../src/node.ts";
+import * as NodeServer from "../src/NodeServer.ts";
 import { fixture, fixtureLayer } from "./fixture.ts";
 
 test("the Effect core passes acid-cat conform through all its bindings", async () => {

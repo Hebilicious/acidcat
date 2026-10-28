@@ -17,7 +17,7 @@ tasks:
     outputs: ["dist/**/*"]
 
   test:
-    description: "Test outcomes, names, bindings, catalog operations and the Node.js server."
+    description: "Test outcomes, names, bindings and catalog operations."
     command: "node"
     args: ["--test", "test/"]
     inputs: ["src/**/*.ts", "test/**/*.ts"]

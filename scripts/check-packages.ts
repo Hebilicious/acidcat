@@ -10,8 +10,9 @@
  *   entry point and once from the entry point of each module. The bundle must not contain `effect/cli` or `effect/ai`:
  *   a page pays only for the modules that it imports;
  * - copies the conformance test of each core, with its imports changed to the package names, type-checks it with
- *   strict options and the declarations of all libraries, and runs it. `acid-cat conform` then tests both cores
- *   through MCP, HTTP, CLI and WebMCP, all from the installed packages.
+ *   strict options and the declarations of all libraries, and runs it. Each test serves its web handlers with the
+ *   Node.js server of its core. `acid-cat conform` then tests both cores through MCP, HTTP, CLI and WebMCP, all from
+ *   the installed packages.
  *
  * Usage: node scripts/check-packages.ts [--keep]
  */
@@ -124,7 +125,8 @@ try {
     for (const file of ["conform.test.ts", "fixture.ts", "fixture-cli.ts"]) {
       const text = readFileSync(path.join(root, "packages", core, "test", file), "utf-8")
         .replaceAll('"../src/index.ts"', `"@acid-cat/${core}"`)
-        .replaceAll('"../src/node.ts"', `"@acid-cat/${core}/node"`);
+        .replaceAll('"../src/node.ts"', `"@acid-cat/${core}/node"`)
+        .replaceAll('"../src/NodeServer.ts"', `"@acid-cat/${core}/NodeServer"`);
       writeFileSync(path.join(project, core, file), text);
     }
   }
