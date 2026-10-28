@@ -36,6 +36,8 @@ local flags = new Dynamic {
     label { type = "string" }
     verbose { type = "boolean" }
     extra { type = "object" }
+    steps { type = "array"; items { type = "integer" } }
+    tags { type = "array"; items { type = "string" } }
   }
 }
 

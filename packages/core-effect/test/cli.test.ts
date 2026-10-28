@@ -25,6 +25,9 @@ const cliWithFlag = program("./fixture-cli-flags.ts");
 /** The command line with the command `position` of the application, and a description in the options. */
 const cliWithCommand = program("./fixture-cli-commands.ts");
 
+/** The command line with a required repeated flag and an optional repeated flag. */
+const cliWithRepeated = program("./fixture-cli-repeated.ts");
+
 const toggle = (stdout: string) => decodeText(Listing, stdout).find((entry) => entry.id === "fixture.toggle");
 
 test("a value goes to standard output with exit code 0", () => {
@@ -50,6 +53,18 @@ test("each call failure has its exit code", () => {
 test("an unknown command and a missing flag have exit codes", () => {
   assert.equal(cli("nope").code, 2);
   assert.equal(cli("fixture", "echo").code, 3);
+});
+
+test("a repeated flag gives its items in order, or JSON text of the array, and a required one must occur", () => {
+  const plan = cliWithRepeated("probe", "plan", "--days", "tue", "--hours=9", "--days", "mon");
+  assert.equal(plan.code, 0);
+  assert.deepEqual(JSON.parse(plan.stdout), { days: ["tue", "mon"], hours: [9] });
+  assert.deepEqual(JSON.parse(cliWithRepeated("probe", "plan", "--days", "mon").stdout), { days: ["mon"] });
+  assert.equal(cliWithRepeated("probe", "plan").code, 3);
+  assert.deepEqual(JSON.parse(cliWithRepeated("probe", "plan", "--days", '["tue","mon"]', "--hours", "[]").stdout), { days: ["tue", "mon"], hours: [] });
+  assert.equal(cliWithRepeated("probe", "plan", "--days", '["sun"]').code, 3);
+  assert.equal(cliWithRepeated("probe", "plan", "--days", "mon", "--hours", "late").code, 3);
+  assert.match(cliWithRepeated("list").stdout, /"usage": "probe probe plan --days <mon\|tue>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });
 
 test("list gives the capabilities of the view", () => {

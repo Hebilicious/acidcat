@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
 import { isArrayOf, isObject, memberOf, parseJson } from "../json.ts";
 import type { JsonObject } from "../json.ts";
@@ -15,7 +16,7 @@ const RULE = "spec/bindings/cli.md";
 const USAGES: { readonly [id: string]: string } = {
   "fixture.crash": "fixture crash",
   "fixture.echo": "fixture echo --text <string>",
-  "fixture.flags": "fixture flags --mode <fast|slow> [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--verbose]",
+  "fixture.flags": "fixture flags --mode <fast|slow> [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]",
   "fixture.held": "fixture held",
   "fixture.hold": "fixture hold --key <string> [--marker <string>]",
   "fixture.refuse": "fixture refuse",
@@ -88,6 +89,8 @@ export async function checkCli(command: readonly string[], options: { readonly d
     ["a capability outside the view has exit code 2", ["call", "fixture.hidden"], 2],
     ["a missing required flag has exit code 3", ["fixture", "echo"], 3],
     ["a flag that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--ratio", "soon"], 3],
+    ["an item of a repeated flag that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--steps", "1", "--steps", "soon"], 3],
+    ["an item of a repeated flag as JSON text that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--steps", '[1,"soon"]'], 3],
     ["invalid input through call has exit code 3", ["call", "fixture.echo", '{"text":1}'], 3],
   ] as const) {
     await checks.run(name, `${RULE}#outcomes`, async (signal) => {
@@ -110,6 +113,23 @@ export async function checkCli(command: readonly string[], options: { readonly d
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+  await checks.run("each flag gives the value of its property, and a repeated flag gives one item for each occurrence", `${RULE}#commands`, async (signal) => {
+    const scalars = ["--mode", "slow", "--count", "3", "--ratio=0.5", "--label", "x", "--verbose", "--extra", '{"a":1}'];
+    const repeated = ["--steps", "2", "--tags", '["a"]', "--steps=1", "--tags", "b"];
+    const result = await run(signal, "fixture", "flags", ...scalars, ...repeated);
+    expectEqual(result.code, 0, "exit code");
+    const expected = { mode: "slow", count: 3, ratio: 0.5, label: "x", verbose: true, extra: { a: 1 }, steps: [2, 1], tags: ['["a"]', "b"] };
+    // The order of the members of an object has no meaning in JSON.
+    const output = parseJson(result.stdout);
+    expect(isDeepStrictEqual(output, expected), `standard output: expected ${JSON.stringify(expected)}, got ${JSON.stringify(output)}`);
+  });
+  await checks.run("a repeated flag that occurs once with JSON text of an array gives that array", `${RULE}#commands`, async (signal) => {
+    const result = await run(signal, "fixture", "flags", "--steps", "[2,1]", "--mode", "fast", "--verbose", '--tags=["a","b"]');
+    expectEqual(result.code, 0, "exit code");
+    const expected = { mode: "fast", verbose: true, steps: [2, 1], tags: ["a", "b"] };
+    const output = parseJson(result.stdout);
+    expect(isDeepStrictEqual(output, expected), `standard output: expected ${JSON.stringify(expected)}, got ${JSON.stringify(output)}`);
   });
   await checks.run("call gives the value of a capability", `${RULE}#commands`, async (signal) => {
     const result = await run(signal, "call", "fixture.echo", '{"text":"hello"}');

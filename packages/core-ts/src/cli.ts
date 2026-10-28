@@ -1,7 +1,19 @@
 /**
  * The CLI binding (spec/bindings/cli.md): a command line made from the catalog.
  */
-import { bundle, CLI_EXIT_CODES, cliExitCode, cliFlags, cliUsage, commandPath, isCallFailure, isJsonObject, REFERENCE } from "@acid-cat/spec-ts";
+import {
+  bundle,
+  CLI_EXIT_CODES,
+  cliExitCode,
+  cliFlags,
+  cliJsonArray,
+  cliRepeatedItems,
+  cliResolve,
+  cliUsage,
+  commandPath,
+  isCallFailure,
+  isJsonObject,
+} from "@acid-cat/spec-ts";
 import type { CatalogCapability, CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
@@ -154,6 +166,8 @@ function parseFlags(args: readonly string[], schema: JsonObject): Record<string,
   const properties = objectOrEmpty(schema.properties);
   const definitions = objectOrEmpty(schema.$defs);
   const input: Record<string, unknown> = {};
+  // The values of each repeated flag, in the order of the flags.
+  const repeated = new Map<string, { readonly items: JsonObject; readonly values: string[] }>();
   // The loop and the value of a flag read the same iterator, so that a value is not read again as a flag.
   const remaining = args.values();
   for (const arg of remaining) {
@@ -161,14 +175,25 @@ function parseFlags(args: readonly string[], schema: JsonObject): Record<string,
     const [name = "", inline] = arg.slice(2).split(/=(.*)/s, 2);
     const property = properties[name];
     if (property === undefined) throw new UsageError(`Unknown flag --${name}.`, CLI_EXIT_CODES["invalid-input"]);
-    const type = resolve(objectOrEmpty(property), definitions);
+    const type = cliResolve(objectOrEmpty(property), definitions);
     if (type.type === "boolean") {
       input[name] = inline === undefined ? true : inline === "true";
       continue;
     }
     const text = inline ?? remaining.next().value;
     if (text === undefined) throw new UsageError(`The flag --${name} needs a value.`, CLI_EXIT_CODES["invalid-input"]);
-    input[name] = valueOf(name, text, type);
+    const items = cliRepeatedItems(type, definitions);
+    if (items === undefined) {
+      input[name] = valueOf(name, text, type);
+    } else {
+      const flag = repeated.get(name) ?? { items, values: [] };
+      flag.values.push(text);
+      repeated.set(name, flag);
+    }
+  }
+  // A repeated flag gives JSON text of the whole array, or one item for each occurrence.
+  for (const [name, { items, values }] of repeated) {
+    input[name] = cliJsonArray(values) ?? values.map((text) => valueOf(name, text, items));
   }
   const required = Array.isArray(schema.required) ? schema.required.filter((name): name is string => typeof name === "string") : [];
   for (const name of required) {
@@ -195,11 +220,6 @@ function valueOf(name: string, text: string, type: JsonObject): unknown {
   } catch {
     throw new UsageError(`The flag --${name} must be JSON.`, CLI_EXIT_CODES["invalid-input"]);
   }
-}
-
-function resolve(property: JsonObject, definitions: JsonObject): JsonObject {
-  const name = typeof property.$ref === "string" ? REFERENCE.exec(property.$ref)?.[1] : undefined;
-  return name === undefined ? property : objectOrEmpty(definitions[name] ?? property);
 }
 
 /** A value as a JSON object, or an empty object when it is not one. */

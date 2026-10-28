@@ -55,7 +55,13 @@ test("acid-cat conform fails the interrupt check of a command line that never wr
   const after = results.slice(results.indexOf(interrupt) + 1);
   assert.deepEqual(
     after.map((result) => `${result.passed ? "passed" : "failed"}: ${result.name}`),
-    ["passed: call gives the value of a capability", "passed: list gives the view", "passed: list gives the usage of each capability, with its flags"],
+    [
+      "passed: each flag gives the value of its property, and a repeated flag gives one item for each occurrence",
+      "passed: a repeated flag that occurs once with JSON text of an array gives that array",
+      "passed: call gives the value of a capability",
+      "passed: list gives the view",
+      "passed: list gives the usage of each capability, with its flags",
+    ],
   );
   assert.deepEqual(results.filter((result) => !result.passed), [interrupt]);
 });
