@@ -65,6 +65,24 @@ Standard Schema does not convert to JSON Schema. Give the converter of your sche
 
 When the signal of a request aborts, `mcpHandler` and `httpHandler` cancel the call of the request.
 
+### Serve on Node.js
+
+Node.js has no server for web handlers. Use an adapter, for example [`@hono/node-server`](https://github.com/honojs/node-server) or [srvx](https://srvx.h3.dev). The MCP handler answers on all paths, so send it only the requests for its URL:
+
+```ts
+import { serve } from "@hono/node-server";
+
+const mcp = mcpHandler(aircon, { name: "aircon", version: "1.0.0", allowedOrigins: [], toJsonSchema, context: { unit } });
+const http = httpHandler(aircon, { allowedOrigins: [], toJsonSchema, context: { unit } });
+
+serve({
+  port: 3000,
+  fetch: (request) => (new URL(request.url).pathname === "/mcp" ? mcp(request) : http(request)),
+});
+```
+
+The handler cancels a call when the signal of its request aborts. Make sure that your adapter aborts this signal when the client closes the connection. If it does not, a closed connection does not cancel the call.
+
 ### Typed calls and handles
 
 `createSession` gives a `Session<Context>`. It calls a capability with the types of the capability in two ways. Both take the capability object, so the types come from its schemas:
