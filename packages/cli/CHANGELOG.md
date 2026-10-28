@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/cli@0.7.0...@acid-cat/cli@0.8.0) (2026-10-28)
+
+
+### Features
+
+* **cli:** take array inputs as repeated flags ([#81](https://github.com/Hebilicious/acidcat/issues/81)) ([f33b456](https://github.com/Hebilicious/acidcat/commit/f33b456ac7ee2bf83f2f8dda1446f370d12b653d))
+* **cores:** serve web handlers on Node.js with no extra dependency ([#83](https://github.com/Hebilicious/acidcat/issues/83)) ([561eb59](https://github.com/Hebilicious/acidcat/commit/561eb590cc0824a0a64cca93b4cb7b3cfa1b5e6f))
+
 ## [0.7.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/cli@0.6.1...@acid-cat/cli@0.7.0) (2026-10-27)
 
 
