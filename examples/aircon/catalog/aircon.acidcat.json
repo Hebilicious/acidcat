@@ -36,6 +36,17 @@
     }
   },
   "$defs": {
+    "Day": {
+      "enum": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat",
+        "sun"
+      ]
+    },
     "FanSpeed": {
       "enum": [
         "auto",
@@ -60,6 +71,29 @@
           "type": "string"
         }
       },
+      "type": "object"
+    },
+    "Schedule": {
+      "properties": {
+        "days": {
+          "items": {
+            "$ref": "#/$defs/Day"
+          },
+          "type": "array"
+        },
+        "hours": {
+          "items": {
+            "maximum": 23,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "days",
+        "hours"
+      ],
       "type": "object"
     },
     "Status": {
@@ -183,6 +217,45 @@
           "on"
         ],
         "type": "object"
+      },
+      "failures": {
+        "Offline": {
+          "$ref": "#/$defs/Offline"
+        }
+      }
+    },
+    "aircon.schedule.set": {
+      "description": "Turn the unit on at each given hour, on each given day. The default hour is 7.",
+      "audience": [
+        "app",
+        "cli",
+        "mcp",
+        "api"
+      ],
+      "input": {
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/$defs/Day"
+            },
+            "type": "array"
+          },
+          "hours": {
+            "items": {
+              "maximum": 23,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "days"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "$ref": "#/$defs/Schedule"
       },
       "failures": {
         "Offline": {

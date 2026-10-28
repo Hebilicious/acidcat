@@ -35,7 +35,7 @@ The exit code is 0 if there are no errors. It is 1 if there are errors. With `--
 `conform` tests a running implementation of the [conformance fixture](conformance/fixture.pkl) through its bindings (see [Conformance](../../spec/conformance.md#acid-cat-conform)):
 
 - **MCP:** the official MCP client, with revision `2026-07-28`, for tools and outcomes; raw requests for rejections.
-- **HTTP** and **CLI:** each outcome, each kind of call failure, availability, and rejections. For the CLI, an interrupt (`SIGINT`) during a call that holds gives exit code 130.
+- **HTTP** and **CLI:** each outcome, each kind of call failure, availability, and rejections. For the CLI, also each kind of flag, including a repeated flag that gives one item of an array for each occurrence, or the whole array as JSON text, and the usage line of each command. An interrupt (`SIGINT`) during a call that holds gives exit code 130.
 - **WebMCP:** the checks act as the WebMCP host. `--webmcp <url>` opens a page that serves the `app` target in Chromium, through [Playwright](https://playwright.dev), with a test `modelContext`. Install Playwright to use it: `pnpm add -D playwright`, then `pnpm exec playwright install chromium`. In code, `webmcp` can also be a function that installs the implementation on a host in the same process.
 - **Properties:** with fast-check, through each remote binding: concurrent calls each get exactly their own outcome, and a cancellation changes only its own call.
 

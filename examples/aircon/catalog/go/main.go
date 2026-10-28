@@ -32,6 +32,8 @@ func airconCatalog() *catalog.Catalog {
 
 	mode := c.Type("Mode", schema{"enum": []any{"cool", "heat", "dry", "fan", "auto"}})
 	fanSpeed := c.Type("FanSpeed", schema{"enum": []any{"auto", "low", "medium", "high"}})
+	day := c.Type("Day", schema{"enum": []any{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}})
+	hour := schema{"type": "integer", "minimum": 0, "maximum": 23}
 	status := c.Type("Status", schema{
 		"type":     "object",
 		"required": []any{"power", "mode", "fan", "targetCelsius", "roomCelsius"},
@@ -41,6 +43,14 @@ func airconCatalog() *catalog.Catalog {
 			"fan":           fanSpeed,
 			"targetCelsius": schema{"type": "number"},
 			"roomCelsius":   schema{"type": "number"},
+		},
+	})
+	schedule := c.Type("Schedule", schema{
+		"type":     "object",
+		"required": []any{"days", "hours"},
+		"properties": schema{
+			"days":  schema{"type": "array", "items": day},
+			"hours": schema{"type": "array", "items": hour},
 		},
 	})
 	offline := c.Type("Offline", schema{
@@ -90,6 +100,20 @@ func airconCatalog() *catalog.Catalog {
 			Audience:    controls,
 			Input:       setting("speed", fanSpeed),
 			Failures:    offlineOnly,
+		}).
+		Capability("aircon.schedule.set", catalog.Capability{
+			Description: "Turn the unit on at each given hour, on each given day. The default hour is 7.",
+			Audience:    controls,
+			Input: schema{
+				"type":     "object",
+				"required": []any{"days"},
+				"properties": schema{
+					"days":  schema{"type": "array", "items": day},
+					"hours": schema{"type": "array", "items": hour},
+				},
+			},
+			Output:   schedule,
+			Failures: offlineOnly,
 		}).
 		Capability("aircon.firmware.update", catalog.Capability{
 			Description: "Install the latest firmware. The unit restarts and is offline for about a minute.",

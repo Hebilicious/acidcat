@@ -61,6 +61,22 @@ fn aircon_catalog() -> Catalog {
         "FanSpeed",
         json!({ "enum": ["auto", "low", "medium", "high"] }),
     );
+    let day = catalog.r#type(
+        "Day",
+        json!({ "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] }),
+    );
+    let hour = json!({ "type": "integer", "minimum": 0, "maximum": 23 });
+    let schedule = catalog.r#type(
+        "Schedule",
+        json!({
+            "type": "object",
+            "required": ["days", "hours"],
+            "properties": {
+                "days": { "type": "array", "items": day },
+                "hours": { "type": "array", "items": hour }
+            }
+        }),
+    );
     let status = catalog.r#type(
         "Status",
         json!({
@@ -127,8 +143,23 @@ fn aircon_catalog() -> Catalog {
         })
         .capability("aircon.fan.set", Capability {
             description: "Set the fan speed.".into(),
-            audience: controls,
+            audience: controls.clone(),
             input: Some(setting("speed", fan_speed)),
+            failures: offline_only(),
+            ..Capability::default()
+        })
+        .capability("aircon.schedule.set", Capability {
+            description: "Turn the unit on at each given hour, on each given day. The default hour is 7.".into(),
+            audience: controls,
+            input: Some(json!({
+                "type": "object",
+                "required": ["days"],
+                "properties": {
+                    "days": { "type": "array", "items": day },
+                    "hours": { "type": "array", "items": hour }
+                }
+            })),
+            output: Some(schedule),
             failures: offline_only(),
             ..Capability::default()
         })

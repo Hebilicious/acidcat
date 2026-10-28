@@ -10,6 +10,9 @@ import type { Availability, Observable, ToJsonSchema } from "@acid-cat/core-ts";
 
 export const Mode = z.enum(["cool", "heat", "dry", "fan", "auto"]).meta({ id: "Mode" });
 export const FanSpeed = z.enum(["auto", "low", "medium", "high"]).meta({ id: "FanSpeed" });
+export const Day = z.enum(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]).meta({ id: "Day" });
+const Hour = z.number().int().min(0).max(23);
+export const Schedule = z.object({ days: z.array(Day), hours: z.array(Hour) }).meta({ id: "Schedule" });
 export const Status = z
   .object({ power: z.boolean(), mode: Mode, fan: FanSpeed, targetCelsius: z.number(), roomCelsius: z.number() })
   .meta({ id: "Status" });
@@ -38,6 +41,8 @@ export class Unit {
   };
 
   state: State = { power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25, online: true, firmware: "1.0.0" };
+  /** The days and hours when the unit turns on. */
+  schedule: z.infer<typeof Schedule> = { days: [], hours: [] };
   readonly #listeners = new Set<(value: Availability) => void>();
 
   /** The availability of the operations that need the unit online. */
@@ -125,6 +130,20 @@ export const fanSet = capability({
   run: ({ speed }, { context }) => change(context.unit, { fan: speed }),
 });
 
+export const scheduleSet = capability({
+  id: "aircon.schedule.set",
+  description: "Turn the unit on at each given hour, on each given day. The default hour is 7.",
+  audience: controls,
+  input: z.object({ days: z.array(Day), hours: z.array(Hour).optional() }),
+  output: Schedule,
+  failures: { Offline },
+  run: ({ days, hours = [7] }, { context }) => {
+    if (!context.unit.state.online) return fail({ _tag: "Offline" });
+    context.unit.schedule = { days, hours };
+    return ok(context.unit.schedule);
+  },
+});
+
 export const firmwareUpdate = capability({
   id: "aircon.firmware.update",
   description: "Install the latest firmware. The unit restarts and is offline for about a minute.",
@@ -146,7 +165,7 @@ export const aircon = defineApp<Context>({
     mcp: { description: "Agents, through an MCP server.", bindings: ["mcp"] },
     api: { description: "Home-automation systems and scripts.", bindings: ["http"] },
   },
-  capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, firmwareUpdate],
+  capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, scheduleSet, firmwareUpdate],
 });
 
 /** Converts a Zod schema to JSON Schema, for the catalog. */

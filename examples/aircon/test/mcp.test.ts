@@ -56,6 +56,7 @@ test("the MCP binding serves one tool for each capability, on the same unit", as
     "aircon.fan.set",
     "aircon.mode.set",
     "aircon.power.set",
+    "aircon.schedule.set",
     "aircon.status.get",
     "aircon.temperature.set",
   ]);
