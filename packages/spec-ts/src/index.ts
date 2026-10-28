@@ -100,17 +100,52 @@ export function cliFlags(input: JsonObject): string[] {
   const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   const names = Object.keys(properties).sort(byName);
   return [...names.filter((name) => required.has(name)), ...names.filter((name) => !required.has(name))].map((name) => {
-    const declared = objectOrEmpty(properties[name]);
-    const reference = declared.$ref;
-    const target = typeof reference === "string" ? REFERENCE.exec(reference)?.[1] : undefined;
-    const property = objectOrEmpty((target === undefined ? undefined : definitions[target]) ?? declared);
-    const flag = property.type === "boolean" ? `--${name}` : `--${name} <${flagValue(property)}>`;
+    const property = cliResolve(objectOrEmpty(properties[name]), definitions);
+    const items = cliRepeatedItems(property, definitions);
+    const flag =
+      items !== undefined ? `--${name} <${flagValue(items)}>...` : property.type === "boolean" ? `--${name}` : `--${name} <${flagValue(property)}>`;
     return required.has(name) ? flag : `[${flag}]`;
   });
 }
 
+/** A property schema, or the type in `definitions` that its `$ref` refers to. */
+export function cliResolve(property: JsonObject, definitions: JsonObject): JsonObject {
+  const target = typeof property.$ref === "string" ? REFERENCE.exec(property.$ref)?.[1] : undefined;
+  return target === undefined ? property : objectOrEmpty(definitions[target] ?? property);
+}
+
+/**
+ * The schema of the items of a repeated flag (spec/bindings/cli.md#commands), or `undefined` when the property does
+ * not give a repeated flag. A property gives a repeated flag when its type is `array`, and its `items` schema, or the
+ * type that it refers to, is an `enum` of strings, `integer`, `number` or `string`. `property` is already resolved.
+ */
+export function cliRepeatedItems(property: JsonObject, definitions: JsonObject): JsonObject | undefined {
+  if (property.type !== "array" || !isJsonObject(property.items)) return undefined;
+  const items = cliResolve(property.items, definitions);
+  return isStringEnum(items.enum) || items.type === "integer" || items.type === "number" || items.type === "string" ? items : undefined;
+}
+
+/**
+ * The array that a repeated flag gives as JSON text (spec/bindings/cli.md#commands), or `undefined` when its values
+ * give one item each. `values` are the values of the flag, in the order of the flags. They give an array as JSON text
+ * when the flag occurs exactly once and its value is JSON text of an array.
+ */
+export function cliJsonArray(values: readonly string[]): readonly unknown[] | undefined {
+  const [value] = values;
+  if (values.length !== 1 || value === undefined) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const isStringEnum = (value: unknown): value is readonly string[] =>
+  Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === "string");
+
 function flagValue(property: JsonObject): string {
-  if (Array.isArray(property.enum) && property.enum.every((value) => typeof value === "string")) return property.enum.join("|");
+  if (isStringEnum(property.enum)) return property.enum.join("|");
   if (property.type === "integer" || property.type === "number" || property.type === "string") return property.type;
   return "json";
 }

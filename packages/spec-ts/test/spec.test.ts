@@ -5,6 +5,7 @@ import {
   bundle,
   CallFailureError,
   cliExitCode,
+  cliJsonArray,
   cliUsage,
   commandPath,
   fail,
@@ -27,6 +28,16 @@ test("ids become surface names", () => {
   assert.deepEqual(commandPath("aircon.power.set"), ["aircon", "power", "set"]);
 });
 
+test("a repeated flag that occurs once with JSON text of an array gives that array", () => {
+  assert.deepEqual(cliJsonArray(["[1,2]"]), [1, 2]);
+  assert.deepEqual(cliJsonArray(["[]"]), []);
+  assert.equal(cliJsonArray(["1"]), undefined);
+  assert.equal(cliJsonArray(["mon"]), undefined);
+  assert.equal(cliJsonArray(['{"a":1}']), undefined);
+  assert.equal(cliJsonArray(["[1,2]", "3"]), undefined);
+  assert.equal(cliJsonArray([]), undefined);
+});
+
 test("the usage of a command gives its flags, required flags first", () => {
   const input = {
     type: "object",
@@ -37,10 +48,16 @@ test("the usage of a command gives its flags, required flags first", () => {
       note: { type: "string" },
       quiet: { type: "boolean" },
       limits: { type: "array" },
+      levels: { type: "array", items: { type: "integer" } },
+      speeds: { type: "array", items: { $ref: "#/$defs/FanSpeed" } },
+      pairs: { type: "array", items: { type: "array" } },
     },
     $defs: { FanSpeed: { enum: ["auto", "low"] } },
   };
-  assert.equal(cliUsage("aircon", "aircon.fan.set", input), "aircon aircon fan set --on --speed <auto|low> [--limits <json>] [--note <string>] [--quiet]");
+  assert.equal(
+    cliUsage("aircon", "aircon.fan.set", { ...input, required: [...input.required, "levels"] }),
+    "aircon aircon fan set --levels <integer>... --on --speed <auto|low> [--limits <json>] [--note <string>] [--pairs <json>] [--quiet] [--speeds <auto|low>...]",
+  );
   assert.equal(cliUsage("aircon", "aircon.status.get", undefined), "aircon aircon status get");
   assert.equal(cliUsage("aircon", "aircon.status.get", { type: "object", properties: {} }), "aircon aircon status get");
   assert.equal(cliUsage("aircon", "aircon.batch.run", { oneOf: [{ type: "object" }] }), "aircon call aircon.batch.run '<json>'");

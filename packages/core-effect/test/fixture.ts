@@ -76,6 +76,8 @@ const Flags = Schema.Struct({
   label: Schema.optionalKey(Schema.String),
   verbose: Schema.optionalKey(Schema.Boolean),
   extra: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),
+  steps: Schema.optionalKey(Schema.Array(Schema.Int)),
+  tags: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
 const everywhere = ["app", "mcp", "cli", "api"];

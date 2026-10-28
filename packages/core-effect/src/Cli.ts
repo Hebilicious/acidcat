@@ -2,10 +2,10 @@
  * The CLI binding (spec/bindings/cli.md): a command line made from the catalog, with `effect/cli`. This module works
  * in all runtimes. `NodeCli` in `@acid-cat/core-effect/node` runs it in Node.js.
  */
-import { bundle, CLI_EXIT_CODES, cliExitCode, cliUsage, commandPath, isCallFailure, REFERENCE } from "@acid-cat/spec-ts";
+import { bundle, CLI_EXIT_CODES, cliExitCode, cliJsonArray, cliRepeatedItems, cliResolve, cliUsage, commandPath, isCallFailure, isJsonObject } from "@acid-cat/spec-ts";
 import type { CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec-ts";
 import { Console, Effect, Option, Predicate, Schema } from "effect";
-import { Argument, CliError, Command, Flag } from "effect/cli";
+import { Argument, CliError, Command, Flag, Primitive } from "effect/cli";
 
 import * as App from "./App.ts";
 import * as Session from "./Session.ts";
@@ -100,9 +100,9 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     const schema = bundle(capability.input ?? { type: "object" }, types);
     const properties = schemasIn(schema.properties);
     const required = new Set(isStrings(schema.required) ? schema.required : []);
-    const definitions = schemasIn(schema.$defs);
+    const definitions = isJsonObject(schema.$defs) ? schema.$defs : {};
     const flags = Object.fromEntries(
-      Object.entries(properties).map(([name, property]) => [name, flagFor(name, resolve(property, definitions), required.has(name))]),
+      Object.entries(properties).map(([name, property]) => [name, flagFor(name, cliResolve(property, definitions), definitions, required.has(name))]),
     );
     const path = commandPath(id);
     const name = path.at(-1);
@@ -206,30 +206,55 @@ function schemasIn(value: unknown): { readonly [name: string]: JsonObject } {
   return Object.fromEntries(Object.entries(value).map(([name, schema]) => [name, Predicate.isReadonlyObject(schema) ? schema : {}]));
 }
 
-/** A property schema, or the type that it refers to. */
-function resolve(property: JsonObject, definitions: { readonly [name: string]: JsonObject }): JsonObject {
-  const name = typeof property.$ref === "string" ? REFERENCE.exec(property.$ref)?.[1] : undefined;
-  return name === undefined ? property : (definitions[name] ?? property);
+/**
+ * The flag for one property of the input (spec/bindings/cli.md#commands). A repeated flag must occur at least once if
+ * it is required.
+ */
+function flagFor(name: string, property: JsonObject, definitions: JsonObject, required: boolean) {
+  const items = cliRepeatedItems(property, definitions);
+  const flag = describe(items === undefined ? scalarFlag(name, property) : repeatedFlag(name, items), property);
+  if (property.type === "boolean" && !required) return flag.pipe(Flag.withDefault(false));
+  return required ? flag : flag.pipe(Flag.optional);
 }
 
-/** The flag for one property of the input (spec/bindings/cli.md#commands). */
-function flagFor(name: string, property: JsonObject, required: boolean) {
-  const base: Flag.Flag<unknown> =
-    isStringEnum(property.enum)
-      ? Flag.Literals(name, property.enum)
-      : property.type === "integer"
-        ? Flag.Int(name)
-        : property.type === "number"
-          ? Flag.Finite(name)
-          : property.type === "boolean"
-            ? Flag.Boolean(name)
-            : property.type === "string"
-              ? Flag.String(name)
-              : Flag.String(name).pipe(Flag.withSchema(Schema.fromJsonString(Schema.Json)));
-  const described = typeof property.description === "string" ? base.pipe(Flag.withDescription(property.description)) : base;
-  if (property.type === "boolean" && !required) return described.pipe(Flag.withDefault(false));
-  return required ? described : described.pipe(Flag.optional);
+/** The flag that takes one value of the type of `property`, or JSON text for a type with no flag of its own. */
+function scalarFlag(name: string, property: JsonObject): Flag.Flag<unknown> {
+  if (isStringEnum(property.enum)) return Flag.Literals(name, property.enum);
+  if (property.type === "integer") return Flag.Int(name);
+  if (property.type === "number") return Flag.Finite(name);
+  if (property.type === "boolean") return Flag.Boolean(name);
+  if (property.type === "string") return Flag.String(name);
+  return Flag.String(name).pipe(Flag.withSchema(Schema.fromJsonString(Schema.Json)));
 }
+
+/**
+ * A repeated flag. If it occurs exactly once with JSON text of an array, it gives that array. If not, each occurrence
+ * gives one item of the type of `items`, in the order of the flags.
+ */
+function repeatedFlag(name: string, items: JsonObject): Flag.Flag<unknown> {
+  const primitive = itemPrimitive(items);
+  const item = (value: string) =>
+    primitive.parse(value).pipe(Effect.mapError((expected) => new CliError.InvalidValue({ option: name, value, expected, kind: "flag" })));
+  return Flag.String(name).pipe(
+    Flag.withMetavar(Primitive.getTypeName(primitive)),
+    Flag.atLeast(1),
+    Flag.mapEffect((values) => {
+      const array = cliJsonArray(values);
+      return array === undefined ? Effect.forEach(values, item) : Effect.succeed(array);
+    }),
+  );
+}
+
+/** The parser of one item of a repeated flag: `items` is an `enum` of strings, `integer`, `number` or `string`. */
+function itemPrimitive(items: JsonObject): Primitive.Primitive<unknown> {
+  if (isStringEnum(items.enum)) return Primitive.Choice(items.enum.map((value) => [value, value] as const));
+  if (items.type === "integer") return Primitive.Int;
+  if (items.type === "number") return Primitive.Finite;
+  return Primitive.String;
+}
+
+const describe = (flag: Flag.Flag<unknown>, property: JsonObject): Flag.Flag<unknown> =>
+  typeof property.description === "string" ? flag.pipe(Flag.withDescription(property.description)) : flag;
 
 /** The input from the parsed flags: each flag that the user gave, and nothing for the others. */
 function inputFrom(parsed: Record<string, unknown>): Record<string, unknown> {

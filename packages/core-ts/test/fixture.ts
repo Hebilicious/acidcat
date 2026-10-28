@@ -106,6 +106,8 @@ const Flags = z.object({
   label: z.string().optional(),
   verbose: z.boolean().optional(),
   extra: z.record(z.string(), z.unknown()).optional(),
+  steps: z.array(z.number().int()).optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 const everywhere = ["app", "mcp", "cli", "api"];

@@ -273,7 +273,7 @@ test("the abort of an MCP request cancels its call", async () => {
 });
 
 /** Run the command line of an application with arguments, and keep what it writes. */
-async function commandLine(app: App<Context>, cliOptions: CliOptions<Context>, ...args: string[]) {
+async function commandLine<C>(app: App<C>, cliOptions: CliOptions<C>, ...args: string[]) {
   const out: string[] = [];
   const err: string[] = [];
   const code = await runCli(app, cliOptions, args, { stdout: (text) => out.push(text), stderr: (text) => err.push(text) });
@@ -292,6 +292,33 @@ test("the command line gives each outcome its exit code", async () => {
   assert.equal((await run("fixture", "flags", "--mode", "fast", "--ratio", "soon")).code, 3);
   assert.equal((await run("fixture", "crash")).code, 5);
   assert.equal((await run("--help")).code, 0);
+});
+
+test("a repeated flag gives its items in order, or JSON text of the array, and a required one must occur", async () => {
+  const Day = z.enum(["mon", "tue"]).meta({ id: "Day" });
+  const app = defineApp({
+    targets: { cli: { bindings: ["cli"] } },
+    capabilities: [
+      defineCapability({
+        id: "probe.plan",
+        description: "Return the days and the hours.",
+        audience: ["cli"],
+        input: z.object({ days: z.array(Day), hours: z.array(z.number().int()).optional() }),
+        output: z.object({ days: z.array(Day), hours: z.array(z.number().int()).optional() }),
+        run: (input) => ok(input),
+      }),
+    ],
+  });
+  const run = (...args: string[]) => commandLine(app, { name: "probe", version: "0.0.0", context: undefined, toJsonSchema }, ...args);
+  const plan = await run("probe", "plan", "--days", "tue", "--hours=9", "--days", "mon");
+  assert.equal(plan.code, 0);
+  assert.deepEqual(JSON.parse(plan.stdout), { days: ["tue", "mon"], hours: [9] });
+  assert.deepEqual(JSON.parse((await run("probe", "plan", "--days", "mon")).stdout), { days: ["mon"] });
+  assert.equal((await run("probe", "plan")).code, 3);
+  assert.deepEqual(JSON.parse((await run("probe", "plan", "--days", '["tue","mon"]', "--hours", "[]")).stdout), { days: ["tue", "mon"], hours: [] });
+  assert.equal((await run("probe", "plan", "--days", '["sun"]')).code, 3);
+  assert.equal((await run("probe", "plan", "--days", "mon", "--hours", "late")).code, 3);
+  assert.match((await run("list")).stdout, /"usage": "probe probe plan --days <mon\|tue>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });
 
 /** A command of the application. It uses the context, and writes its first argument. */
