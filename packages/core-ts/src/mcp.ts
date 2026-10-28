@@ -135,7 +135,8 @@ async function answer(session: Session, message: JsonRpcRequest, options: McpSet
   }
 }
 
-function listTools(session: Session) {
+/** The tools of the available capabilities in the view of a session (spec/bindings/mcp.md#tools). */
+export function listTools(session: Session) {
   const types = session.view.$defs ?? {};
   return [...session.handles.values()]
     .filter((handle) => handle.availability.getSnapshot().available)
@@ -153,7 +154,8 @@ function listTools(session: Session) {
     });
 }
 
-function hasObjectOutput(session: Session, id: string): boolean {
+/** True if the bundled output schema of a capability has `"type": "object"`. */
+export function hasObjectOutput(session: Session, id: string): boolean {
   const output = session.view.capabilities[id]?.output;
   return output !== undefined && bundle(output, session.view.$defs ?? {}).type === "object";
 }

@@ -6,3 +6,4 @@
  */
 export * as NodeCli from "./NodeCli.ts";
 export * as NodeServer from "./NodeServer.ts";
+export * as NodeMcp from "./NodeMcp.ts";

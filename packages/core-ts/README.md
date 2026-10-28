@@ -58,7 +58,8 @@ Standard Schema does not convert to JSON Schema. Give the converter of your sche
 | Function | Binding | Result |
 | --- | --- | --- |
 | `createSession(app, options)` | [TypeScript](../../spec/bindings/typescript.md) | A session with a handle for each capability in the view |
-| `mcpHandler(app, options)` | [MCP](../../spec/bindings/mcp.md) | `(request: Request) => Promise<Response>` |
+| `mcpHandler(app, options)` | [MCP](../../spec/bindings/mcp.md#http) through HTTP | `(request: Request) => Promise<Response>` |
+| `mcpStdioMain(app, options)`, `runMcpStdio(…)` | [MCP](../../spec/bindings/mcp.md#stdio) through stdio | The MCP server of the process, or a promise that resolves when the input ends |
 | `httpHandler(app, options)` | [HTTP](../../spec/bindings/http.md) | `(request: Request) => Promise<Response>` |
 | `cliMain(app, options)`, `runCli(…)` | [CLI](../../spec/bindings/cli.md) | The command line of the process, or an exit code |
 | `installWebMcp(session)` | [WebMCP](../../spec/bindings/webmcp.md) | Tools in the page, with a status |
@@ -90,6 +91,19 @@ console.log(server.url); // http://127.0.0.1:3000
 `serve` resolves when the server listens. `server.close()` stops it, and `await using server = await serve(…)` closes it at the end of the block. When a client closes its connection, the signal of its request aborts, so the handler cancels the call.
 
 `serve` gives a plain HTTP/1.1 server. For more, use a library for web handlers, for example [srvx](https://srvx.h3.dev): HTTPS, HTTP/2, middleware, or the same server code on Bun and Deno. Give it the handler. Make sure that the library aborts the signal of a request when the client closes the connection. If it does not, a closed connection does not cancel the call.
+
+### MCP through stdio
+
+An MCP client, for example a coding agent, can start the server as a local process. `mcpStdioMain` serves the standard input and output of the process. The process is one session, with one `context`. The server serves revision `2026-07-28`, and the `initialize` handshake of revisions `2025-11-25` and `2025-06-18`. When the availability of a capability changes, the server sends `notifications/tools/list_changed`. `notifications/cancelled` cancels a call. When standard input ends, the session closes and the calls in progress are cancelled.
+
+```ts
+#!/usr/bin/env node
+import { mcpStdioMain } from "@acid-cat/core-ts";
+
+mcpStdioMain(aircon, { name: "aircon", version: "1.0.0", context: { unit }, toJsonSchema });
+```
+
+Standard output carries only MCP messages. The session writes defects to standard error. Do not write to standard output from a capability. `runMcpStdio(app, options, { input, write })` is the same server on any stream: `input` is an async iterable of bytes or text, for example a `ReadableStream`, and `write` writes one line. It works in all runtimes.
 
 ### Typed calls and handles
 

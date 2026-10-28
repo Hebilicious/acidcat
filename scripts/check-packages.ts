@@ -122,7 +122,7 @@ try {
 
   for (const core of ["core-effect", "core-ts"]) {
     mkdirSync(path.join(project, core));
-    for (const file of ["conform.test.ts", "fixture.ts", "fixture-cli.ts"]) {
+    for (const file of ["conform.test.ts", "fixture.ts", "fixture-cli.ts", "fixture-mcp-stdio.ts"]) {
       const text = readFileSync(path.join(root, "packages", core, "test", file), "utf-8")
         .replaceAll('"../src/index.ts"', `"@acid-cat/${core}"`)
         .replaceAll('"../src/node.ts"', `"@acid-cat/${core}/node"`)
