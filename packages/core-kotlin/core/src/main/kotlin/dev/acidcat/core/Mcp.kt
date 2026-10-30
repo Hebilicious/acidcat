@@ -168,7 +168,7 @@ private suspend fun answer(session: Session<*>, message: JsonRpcRequest, id: Jso
     }
 }
 
-private fun listTools(session: Session<*>): JsonArray {
+internal fun listTools(session: Session<*>): JsonArray {
     val types = session.view.obj("\$defs").orEmpty()
     val capabilities = session.view.obj("capabilities").orEmpty()
     return JsonArray(
@@ -186,7 +186,7 @@ private fun listTools(session: Session<*>): JsonArray {
     )
 }
 
-private fun hasObjectOutput(session: Session<*>, id: String): Boolean {
+internal fun hasObjectOutput(session: Session<*>, id: String): Boolean {
     val output = session.view.obj("capabilities")?.obj(id)?.get("output") ?: return false
     return (bundle(output, session.view.obj("\$defs").orEmpty()) as? JsonObject)?.string("type") == "object"
 }

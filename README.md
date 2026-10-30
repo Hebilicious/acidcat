@@ -121,7 +121,7 @@ These packages show one way to implement the specification. They serve the TypeS
 
 ### Reference implementation in Kotlin
 
-These packages show the same specification on the JVM and on Android. They serve the Kotlin binding and the MCP, CLI and HTTP bindings, and they pass all checks of `acid-cat conform` for these bindings.
+These packages show the same specification on the JVM and on Android. They serve the Kotlin binding, the MCP binding through HTTP and stdio, and the CLI and HTTP bindings, and they pass all checks of `acid-cat conform` for these bindings.
 
 | Package | Use |
 | --- | --- |

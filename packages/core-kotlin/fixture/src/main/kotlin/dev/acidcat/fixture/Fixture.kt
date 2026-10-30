@@ -94,6 +94,8 @@ public data class Flags(
     val label: String? = null,
     val verbose: Boolean? = null,
     val extra: JsonObject? = null,
+    val steps: List<Long>? = null,
+    val tags: List<String>? = null,
 )
 
 @Serializable

@@ -22,7 +22,7 @@ class ConformTest {
     private val repository = File(System.getProperty("acidcat.repository"))
 
     @Test
-    fun `the Kotlin core passes acid-cat conform through its MCP, HTTP and CLI bindings`() {
+    fun `the Kotlin core passes acid-cat conform through its MCP, HTTP and CLI bindings, and MCP through stdio`() {
         val quiet = SessionOptions(onDefect = { _, _ -> })
         val context = FixtureContext()
         val server = embeddedServer(Netty, port = 0, host = "127.0.0.1") {
@@ -38,18 +38,25 @@ class ConformTest {
         try {
             val port = runBlocking { server.engine.resolvedConnectors().first().port }
             val url = "http://127.0.0.1:$port"
-            val output = conform("--mcp", "$url/mcp", "--http", "$url/api", "--cli", cliLauncher().path)
+            val output = conform(
+                "--mcp", "$url/mcp",
+                "--mcp-stdio", launcher("dev.acidcat.fixture.FixtureMcpStdioKt").path,
+                "--http", "$url/api",
+                "--cli", launcher("dev.acidcat.fixture.FixtureCliKt").path,
+            )
+            // The report of each check stays in the build directory, also when all checks pass.
+            File(System.getProperty("acidcat.report")).apply { parentFile.mkdirs() }.writeText(output.second)
             assertEquals(0, output.first, output.second)
         } finally {
             server.stop(0, 0)
         }
     }
 
-    /** A script that starts the command line of the fixture with the class path of the tests. */
-    private fun cliLauncher(): File {
-        val script = Files.createTempFile("fixture-cli", ".sh").toFile()
+    /** A script that starts a main class of the fixture with the class path of the tests. */
+    private fun launcher(mainClass: String): File {
+        val script = Files.createTempFile("fixture", ".sh").toFile()
         val java = File(System.getProperty("java.home"), "bin/java").path
-        script.writeText("#!/bin/sh\nexec '$java' -cp '${System.getProperty("java.class.path")}' dev.acidcat.fixture.FixtureCliKt \"\$@\"\n")
+        script.writeText("#!/bin/sh\nexec '$java' -cp '${System.getProperty("java.class.path")}' $mainClass \"\$@\"\n")
         script.setExecutable(true)
         script.deleteOnExit()
         return script
