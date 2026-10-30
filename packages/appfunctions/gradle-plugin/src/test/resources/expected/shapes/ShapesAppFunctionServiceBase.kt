@@ -24,6 +24,7 @@ public abstract class ShapesAppFunctionServiceBase : AppFunctionService() {
     @AppFunctionDeclaration(isDescribedByKDoc = true)
     public suspend fun shapes_arrays_sum(
         choices: List<String>? = null,
+        days: List<String>? = null,
         flags: BooleanArray? = null,
         nested: String? = null,
         numbers: LongArray? = null,
@@ -35,6 +36,7 @@ public abstract class ShapesAppFunctionServiceBase : AppFunctionService() {
             id = "shapes.arrays.sum",
             input = input {
                 put("choices", choices)
+                put("days", days)
                 put("flags", flags)
                 putJson("nested", nested)
                 put("numbers", numbers)
