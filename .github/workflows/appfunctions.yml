@@ -83,3 +83,7 @@ jobs:
         run: tail -n 200 emulator.log
 
       - run: moon run appfunctions:conform
+
+      - name: Print the log of the device
+        if: failure()
+        run: adb logcat -d -t 400 || true
