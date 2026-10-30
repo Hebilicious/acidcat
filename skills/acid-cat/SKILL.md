@@ -14,7 +14,7 @@ The specification is at https://github.com/Hebilicious/acidcat/tree/main/spec. R
 ## Rules
 
 - **The catalog is the contract.** Change the catalog first, then the code. A capability that is not in the catalog does not exist for a client.
-- **Never write or change the JSON of a catalog by hand.** The JSON is an output. Write its source: a Pkl module that amends `Catalog.pkl`, a program with a catalog library, or the code of the application when a core writes the catalog. Then write the JSON again. `acid-cat format` writes the canonical form.
+- **Prefer a source to JSON by hand.** Write the catalog as a Pkl module that amends `Catalog.pkl`, a program with a catalog library, or the code of the application when a core writes the catalog, and let the tool write the JSON. A source finds errors, shares types and gives the canonical form. JSON by hand is allowed: then run `acid-cat check --strict` and `acid-cat format --write` after each change. When a catalog has a source, never change its JSON: change the source, and write the JSON again.
 - **Ids are names, not versions.** An id is two or more segments with dots between them: `aircon.power.set`. Each segment matches `[a-z][a-z0-9]*(-[a-z0-9]+)*`. Do not change the meaning of an id. Give a new meaning a new id.
 - **Each audience is explicit.** A capability with no audience is available to no target. Give agents (`mcp`, WebMCP, AppFunctions targets) only the capabilities that they must have.
 - **A failure is data.** Declare each failure that a capability can return, by tag, in `failures`. A failure value has its tag in `_tag`. A defect (an exception) becomes the call failure `internal`, and its details stay on the server.
@@ -79,7 +79,7 @@ acid-cat conform --mcp http://127.0.0.1:3000/mcp --http http://127.0.0.1:3000/ap
 
 ## Common mistakes
 
-- A JSON catalog that a person changed, and that its source no longer writes.
+- A JSON catalog that has a source, changed by hand, so that the source no longer writes it.
 - A capability for agents with no `failures`: the agent cannot tell "the unit is offline" from a defect.
 - A number schema with no limits for a value that has limits. The agent sends values that the operation cannot use.
 - An input with a user id. Use the session instead.
