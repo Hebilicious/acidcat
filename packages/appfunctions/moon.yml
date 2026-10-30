@@ -39,8 +39,8 @@ tasks:
       mutex: "gradle"
 
   conform:
-    description: "Install the conformance fixture on the device that adb reaches, and run acid-cat conform --appfunctions against it. ANDROID_SERIAL chooses the device."
-    script: 'ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}" gradle --console=plain :appfunctions-fixture:installDebug && node ../cli/src/main.ts conform --appfunctions dev.acidcat.fixture ${ANDROID_SERIAL:+--adb-serial "$ANDROID_SERIAL"}'
+    description: "Install the conformance fixture on the device that adb reaches, and run acid-cat conform --appfunctions against it. ANDROID_SERIAL chooses the device, and ACIDCAT_DEADLINE gives the time of each check, in milliseconds."
+    script: 'ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}" gradle --console=plain :appfunctions-fixture:installDebug && node ../cli/src/main.ts conform --appfunctions dev.acidcat.fixture ${ANDROID_SERIAL:+--adb-serial "$ANDROID_SERIAL"} ${ACIDCAT_DEADLINE:+--deadline "$ACIDCAT_DEADLINE"}'
     toolchains: ["system"]
     options:
       mutex: "gradle"
