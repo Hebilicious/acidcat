@@ -247,13 +247,22 @@ const serveTools = (session: Session.Session) =>
       const ref = refs.availability(id);
       return ref === undefined || SubscriptionRef.getUnsafe(ref).available;
     };
-    const availableIds = () => ids.filter(isAvailable).join("\n");
-    let listed = "";
-    // Start to follow the changes before the first read of the availability, so that no change comes between them.
-    yield* session.changes.pipe(
-      Stream.runForEach(() =>
+    // The availability of each capability, as the server last saw it in the stream of its changes. The server compares
+    // the values of the stream, not the values at the moment that it reads them: when a capability becomes available and
+    // then unavailable before the server reads the first change, the server still sees both changes, and tells both.
+    const seen = new Map(ids.map((id) => [id, isAvailable(id)]));
+    const seenIds = () => ids.filter((id) => seen.get(id) === true).join("\n");
+    let listed = seenIds();
+    // Each availability gives its current value when the stream subscribes to it, then each change.
+    const followed = ids.flatMap((id) => {
+      const ref = refs.availability(id);
+      return ref === undefined ? [] : [SubscriptionRef.changes(ref).pipe(Stream.map((availability) => ({ id, available: availability.available })))];
+    });
+    yield* Stream.mergeAll(followed, { concurrency: "unbounded" }).pipe(
+      Stream.runForEach(({ id, available }) =>
         Effect.suspend(() => {
-          const next = availableIds();
+          seen.set(id, available);
+          const next = seenIds();
           if (next === listed) return Effect.void;
           listed = next;
           return server.notifications["notifications/tools/list_changed"]({});
@@ -261,7 +270,6 @@ const serveTools = (session: Session.Session) =>
       ),
       Effect.forkScoped({ startImmediately: true }),
     );
-    listed = availableIds();
     for (const id of ids) yield* server.addTool(yield* toolFor(session, id, Context.make(McpSchema.EnabledWhen, () => isAvailable(id))));
   });
 
