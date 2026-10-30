@@ -56,11 +56,13 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # AppFunctions needs Android 16 (API 36) or later. The emulator runs Android 17 (API 37) with the Google APIs.
+      # AppFunctions needs Android 16 (API 36) or later. The emulator runs Android 17 (API 37) with the image for automated
+      # tests (ATD), which works without a GPU. With the image of the Google APIs, surfaceflinger aborts in the graphics
+      # mapper of the emulator, and the platform restarts, with its service app_function.
       - name: Start an emulator
         timeout-minutes: 20
         run: |
-          image="system-images;android-37.0;google_apis;x86_64"
+          image="system-images;android-37.0;aosp_atd;x86_64"
           tools="$ANDROID_HOME/cmdline-tools/latest/bin"
           # avdmanager and the emulator read the virtual devices from the same directory.
           export ANDROID_USER_HOME="$RUNNER_TEMP/android"
@@ -70,8 +72,6 @@ jobs:
           "$tools/sdkmanager" --install emulator platform-tools "$image" > /dev/null
           echo no | "$tools/avdmanager" create avd --name conform --package "$image" --device pixel_6
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          # swangle_indirect renders with SwiftShader through ANGLE. With swiftshader_indirect, surfaceflinger aborts in the
-          # graphics mapper of the emulator, and the platform restarts, with its service app_function.
           nohup "$ANDROID_HOME/emulator/emulator" -avd conform -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
             -accel on -gpu swangle_indirect -memory 4096 -cores 4 -partition-size 4096 -camera-back none -camera-front none > emulator.log 2>&1 &
           adb="$ANDROID_HOME/platform-tools/adb"
