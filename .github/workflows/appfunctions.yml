@@ -32,6 +32,10 @@ jobs:
     name: acid-cat conform --appfunctions
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      # avdmanager and the emulator read the virtual devices from the same directory.
+      ANDROID_USER_HOME: ${{ runner.temp }}/android
+      ANDROID_AVD_HOME: ${{ runner.temp }}/android/avd
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -51,16 +55,25 @@ jobs:
 
       # AppFunctions needs Android 16 (API 36) or later. The emulator runs Android 17 (API 37) with the Google APIs.
       - name: Start an emulator
+        timeout-minutes: 20
         run: |
           image="system-images;android-37.0;google_apis;x86_64"
           tools="$ANDROID_HOME/cmdline-tools/latest/bin"
+          mkdir -p "$ANDROID_AVD_HOME"
           yes | "$tools/sdkmanager" --licenses > /dev/null
           "$tools/sdkmanager" --install emulator platform-tools "$image" > /dev/null
-          echo no | "$tools/avdmanager" create avd --name conform --package "$image"
+          echo no | "$tools/avdmanager" create avd --name conform --package "$image" --device pixel_6
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          nohup "$ANDROID_HOME/emulator/emulator" -avd conform -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > emulator.log 2>&1 &
+          nohup "$ANDROID_HOME/emulator/emulator" -avd conform -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
+            -accel on -gpu swiftshader_indirect -memory 4096 -cores 4 -camera-back none -camera-front none > emulator.log 2>&1 &
           adb="$ANDROID_HOME/platform-tools/adb"
-          "$adb" wait-for-device
-          until [ "$("$adb" shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; do sleep 5; done
+          # The boot has 15 minutes. A boot that does not end fails the step, and the next step prints the log.
+          timeout 900 "$adb" wait-for-device
+          timeout 900 sh -c "until [ \"\$('$adb' shell getprop sys.boot_completed | tr -d '\r')\" = 1 ]; do sleep 5; done"
+          "$adb" shell getprop ro.build.version.sdk
+
+      - name: Print the log of the emulator
+        if: failure()
+        run: tail -n 200 emulator.log
 
       - run: moon run appfunctions:conform
