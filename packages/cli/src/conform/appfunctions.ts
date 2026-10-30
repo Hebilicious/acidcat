@@ -66,7 +66,13 @@ export function adbDevice(options: AppFunctionsOptions): AppFunctionsDevice {
   return {
     async list(signal) {
       const { output } = await shell([...command, "list-app-functions", "--package", options.package], signal);
-      return functionsOf(parseJson(output), options.package);
+      let listed: unknown;
+      try {
+        listed = parseJson(output);
+      } catch {
+        throw new Error(`list-app-functions gave text that is not JSON: ${output.trim().slice(0, 500)}`);
+      }
+      return functionsOf(listed, options.package);
     },
     async execute(functionId, parameters, { timeoutSeconds, signal }) {
       const words = [...command, "execute-app-function", "--package", options.package, "--function", functionId, "--parameters", JSON.stringify(parameters)];
@@ -174,7 +180,20 @@ export async function checkAppFunctions(device: AppFunctionsDevice, options: { r
   const release = (key: string, signal: AbortSignal) => call("fixture.release", { key }, signal);
 
   await checks.run("the platform lists one app function for each capability of the view", `${RULE}#names`, async (signal) => {
-    functions = await device.list(signal);
+    // The platform indexes the app functions of an app after it installs the app, so the check waits for the list.
+    let problem = "";
+    functions = await until(
+      "the platform lists the app functions of the package",
+      () =>
+        device.list(signal).catch((error: unknown) => {
+          problem = error instanceof Error ? error.message : String(error);
+          return [];
+        }),
+      (listed) => listed.length > 0,
+      signal,
+    ).catch((error: unknown) => {
+      throw new Error(problem === "" ? String(error) : problem);
+    });
     const names = functions.map((each) => each.functionId.slice(each.functionId.lastIndexOf("#") + 1));
     expectEqual(sorted(names), sorted(view.map(functionName)), "the names of the app functions");
   });
