@@ -54,6 +54,10 @@ tasks:
     args: ["scripts/check-packages.ts"]
     deps: ["spec-ts:build", "catalog-typescript:build", "cli:build", "core-effect:build", "core-ts:build"]
     inputs: ["scripts/check-packages.ts", "scripts/npm-packages.ts", "examples/aircon/catalog/aircon.acidcat.json", "packages/*/test/**/*.ts", "packages/*/package.json", "packages/*/dist/**/*", "packages/catalog/typescript/package.json", "packages/catalog/typescript/dist/**/*", "tsconfig.base.json"]
+    # The conformance tests start servers, command lines and Chromium. Two of them at the same time on a small CI runner
+    # take longer than the time of a test, so the tasks that run them share the mutex "conform".
+    options:
+      mutex: "conform"
 
   verify:
     description: "Every check: the catalogs, the lint, the toolchain, and every catalog library."

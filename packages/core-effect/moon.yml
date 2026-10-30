@@ -22,6 +22,10 @@ tasks:
     command: "node"
     args: ["--test", "--test-timeout=60000", "test/"]
     inputs: ["src/**/*.ts", "test/**/*.ts", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/cli/src/**/*.ts", "/packages/cli/conformance/*.acidcat.json"]
+    # The conformance tests start servers, command lines and Chromium. Two of them at the same time on a small CI runner
+    # take longer than the time of a test, so the tasks that run them share the mutex "conform".
+    options:
+      mutex: "conform"
 
   typecheck:
     description: "Type-check the sources and tests."
