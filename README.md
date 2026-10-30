@@ -145,7 +145,7 @@ See [packages/README.md](packages/README.md).
 
 ## 🛠️ Development
 
-[proto](https://moonrepo.dev/proto) installs the tools in `.prototools`: Moon, Node, pnpm, Pkl, Python, Go, Rust, Java and Gradle. [Moon](https://moonrepo.dev) runs the tasks.
+[proto](https://moonrepo.dev/proto) installs the tools in `.prototools`: Moon, Node, pnpm, Pkl, Python, Go, Rust, a JDK and Gradle. The Kotlin packages contain no Java: the JDK runs Gradle, the Kotlin compiler and the tests, and Gradle gets the version of Kotlin that `packages/core-kotlin/gradle/libs.versions.toml` pins. [Moon](https://moonrepo.dev) runs the tasks.
 
 ```sh
 proto install
