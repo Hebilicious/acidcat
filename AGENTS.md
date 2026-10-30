@@ -37,6 +37,7 @@ When a design decision is made for something that does not exist yet, build it. 
 - proto installs the tools (`.prototools`). Moon runs the operations.
 - spec-ts holds only the data and pure functions of the specification. Runtime code, such as servers and I/O, goes in the cores.
 - After a change to `packages/`, `schemas/` or `examples/`, run `moon run examples`, then `moon run verify`. Commit the JSON files that change.
+- Never write or change a catalog (`*.acidcat.json`) by hand. Change its source, a Pkl module or the code that writes it, and write the JSON again. Only the test inputs of the tools that read JSON catalogs, for example the catalogs that `acid-cat check` must reject, are JSON files that a person writes.
 - TypeScript passes `moon run lint`: no type assertions (only `as const`), no non-null assertions, no `any`, no `@ts-ignore`, and `@ts-expect-error` only for a negative type test. Never turn a check off: do not add `oxlint-disable` comments, and do not change `.oxlintrc.json` or `tsconfig.base.json` to make code pass. Check data that is not trusted at run time, and make the types flow from it. A type guard checks at run time everything that its type claims.
 - Commits have no AI attribution.
 - Each published package has the license file of the repository, and a task in `moon run verify` that builds or packages it the way that its registry receives it.

@@ -43,14 +43,15 @@ An implementation does not read the catalog at run time. It uses its own code. T
 
 ## Writing a catalog
 
-Only the JSON document is normative. You can write a catalog in these ways:
+Only the JSON document is normative. The JSON document is an output: a tool writes it from a source. Do not write the JSON document by hand, and do not change it by hand. Write the source, and write the JSON again from it. The source is one of these:
 
-- in JSON or YAML;
-- in [Pkl](https://pkl-lang.org), with [`Catalog.pkl`](../packages/catalog/pkl/Catalog.pkl);
-- with a [catalog library](../packages/catalog/README.md) for TypeScript, Python, Go or Rust;
-- with a generator that reads the code of the application.
+- a [Pkl](https://pkl-lang.org) module that amends [`Catalog.pkl`](../packages/catalog/pkl/Catalog.pkl). `pkl eval` and `acid-cat format` write the JSON;
+- a program that uses a [catalog library](../packages/catalog/README.md) for TypeScript, Python, Go or Rust;
+- the code of the application, when a core writes its catalog, for example `renderCatalog` of `@acid-cat/core-ts`.
 
-We recommend Pkl to write a catalog by hand. Pkl finds errors before it writes the JSON. In Pkl, shared types go in `types`, and `module.ref("Name")` refers to one.
+We recommend Pkl when no code writes the catalog. Pkl finds errors before it writes the JSON. In Pkl, shared types go in `types`, and `module.ref("Name")` refers to one.
+
+The JSON document is long and has rules that the editor of a person does not check: canonical form, references, views. A source finds these errors, shares types, and gives the same bytes each time. Commit the source and the JSON together, and check in the build that the JSON is the output of the source.
 
 ## Document
 

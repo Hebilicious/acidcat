@@ -80,7 +80,7 @@ capabilities {
 }
 ```
 
-The same catalog in [TypeScript](examples/aircon/catalog/typescript.ts), [Python](examples/aircon/catalog/python.py), [Go](examples/aircon/catalog/go/main.go) or [Rust](examples/aircon/catalog/rust/src/main.rs) gives the same bytes: [`aircon.acidcat.json`](examples/aircon/catalog/aircon.acidcat.json). [`examples/aircon`](examples/aircon/README.md) also serves the air conditioner with both TypeScript cores, as a command line, and through APIs.
+Write the catalog in Pkl, with a catalog library, or from the code of the application. Do not write the JSON by hand: tools write it, in [canonical form](spec/catalog.md#canonical-form). The same catalog in [TypeScript](examples/aircon/catalog/typescript.ts), [Python](examples/aircon/catalog/python.py), [Go](examples/aircon/catalog/go/main.go) or [Rust](examples/aircon/catalog/rust/src/main.rs) gives the same bytes: [`aircon.acidcat.json`](examples/aircon/catalog/aircon.acidcat.json). [`examples/aircon`](examples/aircon/README.md) also serves the air conditioner with both TypeScript cores, as a command line, and through APIs.
 
 ## 📚 Specification
 
