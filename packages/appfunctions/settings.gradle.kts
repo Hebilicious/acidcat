@@ -1,4 +1,4 @@
-rootProject.name = "acid-cat-appfunctions"
+rootProject.name = "appfunctions"
 
 pluginManagement {
     includeBuild("gradle-plugin")

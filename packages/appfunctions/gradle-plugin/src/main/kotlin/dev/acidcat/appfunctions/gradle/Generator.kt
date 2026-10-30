@@ -301,9 +301,12 @@ private class Writer(private val view: JsonObject, private val settings: Generat
         if ("prefixItems" in schema) return KotlinType.Json
         val items = schema["items"] ?: return KotlinType.Json
         val itemObject = resolve(items, types) as? JsonObject ?: return KotlinType.Json
-        if (acceptsNull(itemObject) || itemObject.keys.any { it in COMPOSITION || it == "enum" || it == "const" }) {
-            return if (singleType(itemObject) == "string" && "enum" in itemObject) KotlinType.Plain("List<String>") else KotlinType.Json
+        // Items that are an enum of strings, with or without "type": "string", are strings.
+        val enum = itemObject["enum"] as? JsonArray
+        if (enum != null && enum.isNotEmpty() && enum.all { (it as? JsonPrimitive)?.isString == true } && itemObject.keys.none { it in COMPOSITION }) {
+            return KotlinType.Plain("List<String>")
         }
+        if (acceptsNull(itemObject) || itemObject.keys.any { it in COMPOSITION || it == "enum" || it == "const" }) return KotlinType.Json
         return when (singleType(itemObject)) {
             "string" -> KotlinType.Plain("List<String>")
             "integer" -> KotlinType.Plain("LongArray")
