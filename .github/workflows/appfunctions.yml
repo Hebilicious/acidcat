@@ -1,6 +1,10 @@
 name: AppFunctions
 
-# Run acid-cat conform against the AppFunctions fixture on an emulator. The job runs when a change can change the result.
+# Run acid-cat conform against the AppFunctions fixture on an emulator. The run takes about 20 minutes, so it does not run
+# on each push to a pull request:
+# - on main, after a change that can change the result;
+# - on a pull request with the label `appfunctions`, each time that the label is added and at each push while it is there;
+# - by hand, from the Actions tab (workflow_dispatch).
 on:
   push:
     branches: [main]
@@ -12,13 +16,8 @@ on:
       - "packages/cli/src/conform/**"
       - "packages/cli/conformance/**"
   pull_request:
-    paths:
-      - ".github/workflows/appfunctions.yml"
-      - ".prototools"
-      - "packages/appfunctions/**"
-      - "packages/core-kotlin/**"
-      - "packages/cli/src/conform/**"
-      - "packages/cli/conformance/**"
+    types: [labeled, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -30,6 +29,7 @@ concurrency:
 jobs:
   conform:
     name: acid-cat conform --appfunctions
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'appfunctions')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
