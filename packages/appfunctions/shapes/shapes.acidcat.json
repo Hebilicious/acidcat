@@ -97,6 +97,15 @@
             },
             "type": "array"
           },
+          "days": {
+            "items": {
+              "enum": [
+                "mon",
+                "tue"
+              ]
+            },
+            "type": "array"
+          },
           "flags": {
             "items": {
               "type": "boolean"
