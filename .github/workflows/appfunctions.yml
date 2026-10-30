@@ -32,10 +32,6 @@ jobs:
     name: acid-cat conform --appfunctions
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      # avdmanager and the emulator read the virtual devices from the same directory.
-      ANDROID_USER_HOME: ${{ runner.temp }}/android
-      ANDROID_AVD_HOME: ${{ runner.temp }}/android/avd
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -63,6 +59,9 @@ jobs:
         run: |
           image="system-images;android-37.0;google_apis;x86_64"
           tools="$ANDROID_HOME/cmdline-tools/latest/bin"
+          # avdmanager and the emulator read the virtual devices from the same directory.
+          export ANDROID_USER_HOME="$RUNNER_TEMP/android"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android/avd"
           mkdir -p "$ANDROID_AVD_HOME"
           yes | "$tools/sdkmanager" --licenses > /dev/null
           "$tools/sdkmanager" --install emulator platform-tools "$image" > /dev/null
