@@ -44,5 +44,4 @@ tasks:
     toolchains: ["system"]
     options:
       mutex: "gradle"
-      runInCI: false
       cache: false
