@@ -17,7 +17,7 @@ def aircon_catalog() -> Catalog:
     catalog.target(
         "app",
         description="The phone, desktop and web apps that people use.",
-        bindings=["typescript", "acme:swift", "acme:kotlin"],
+        bindings=["typescript", "acme:swift", "kotlin"],
     )
     catalog.target(
         "taskbar",
@@ -27,6 +27,7 @@ def aircon_catalog() -> Catalog:
     catalog.target("cli", bindings=["cli"])
     catalog.target("mcp", description="Agents, through an MCP server.", bindings=["mcp"])
     catalog.target("api", description="Home-automation systems and scripts.", bindings=["http"])
+    catalog.target("phone", description="Agents on an Android phone, through app functions.", bindings=["appfunctions"])
 
     mode = catalog.type("Mode", {"enum": ["cool", "heat", "dry", "fan", "auto"]})
     fan_speed = catalog.type("FanSpeed", {"enum": ["auto", "low", "medium", "high"]})
@@ -59,8 +60,8 @@ def aircon_catalog() -> Catalog:
         {"type": "object", "properties": {"since": {"type": "string", "format": "date-time"}}},
     )
 
-    everywhere = ["app", "taskbar", "cli", "mcp", "api"]
-    controls = ["app", "cli", "mcp", "api"]
+    everywhere = ["app", "taskbar", "cli", "mcp", "api", "phone"]
+    controls = ["app", "cli", "mcp", "api", "phone"]
 
     def setting(name: str, prop: Schema) -> Schema:
         return {"type": "object", "required": [name], "properties": {name: prop}}

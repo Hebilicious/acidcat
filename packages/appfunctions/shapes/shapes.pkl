@@ -1,0 +1,192 @@
+/// The shapes: one capability for each kind of schema that the AppFunctions binding maps to a type. The build of
+/// `packages/appfunctions/shapes` generates the app functions of the target android, and compiles them.
+amends "../../catalog/pkl/Catalog.pkl"
+
+title = "Shapes"
+description = "One capability for each kind of schema that the AppFunctions binding maps to a type. The build compiles the generated code. Nothing runs it."
+
+targets {
+  ["android"] { bindings { "kotlin"; "appfunctions" } }
+  ["other"] { bindings { "http" } }
+}
+
+types {
+  ["Place"] {
+    type = "object"
+    description = "A named place."
+    required { "name"; "location" }
+    properties {
+      name { type = "string" }
+      location = module.ref("Point")
+      tags { type = "array"; items { type = "string" } }
+    }
+  }
+  ["Point"] {
+    type = "object"
+    required { "latitude"; "longitude" }
+    properties {
+      latitude { type = "number" }
+      longitude { type = "number" }
+    }
+  }
+  ["Tree"] {
+    type = "object"
+    description = "A type that contains itself."
+    required { "label" }
+    properties {
+      label { type = "string" }
+      children { type = "array"; items = module.ref("Tree") }
+    }
+  }
+  ["Unit"] { type = "string"; `enum` { "celsius"; "fahrenheit" } }
+}
+
+local android = new Listing { "android" }
+
+/// The schema of the failure with the tag `tag`, its other members `fields`, and the names of the required ones.
+local function failure(tag: String, fields: Dynamic, needed: Listing<String>) = new Dynamic {
+  type = "object"
+  required { "_tag"; ...needed }
+  properties {
+    _tag { type = "string"; `const` = tag }
+    ...fields
+  }
+}
+
+capabilities {
+  ["shapes.primitives.echo"] {
+    description = "Return each primitive. The description has a comment end */ in it."
+    audience = android
+    input {
+      type = "object"
+      required { "text"; "count" }
+      properties {
+        text { type = "string"; description = "Some text." }
+        count { type = "integer" }
+        ratio { type = "number" }
+        flag { type = "boolean" }
+        unit = module.ref("Unit")
+        mode { type = "string"; `const` = "only" }
+        `when` { type = "string"; format = "date-time" }
+      }
+    }
+    output {
+      type = "object"
+      title = "Primitives"
+      required { "text" }
+      properties {
+        text { type = "string" }
+        count { type = "integer" }
+      }
+    }
+  }
+
+  ["shapes.arrays.sum"] {
+    description = "Take an array of each kind."
+    audience = android
+    readOnly = true
+    input {
+      type = "object"
+      properties {
+        words { type = "array"; items { type = "string" } }
+        numbers { type = "array"; items { type = "integer" } }
+        ratios { type = "array"; items { type = "number" } }
+        flags { type = "array"; items { type = "boolean" } }
+        places { type = "array"; items = module.ref("Place") }
+        nested { type = "array"; items { type = "array"; items { type = "string" } } }
+        choices { type = "array"; items { type = "string"; `enum` { "a"; "b" } } }
+        days { type = "array"; items { `enum` { "mon"; "tue" } } }
+      }
+    }
+    output { type = "array"; items { type = "integer" } }
+  }
+
+  ["shapes.places.find"] {
+    description = "Find a place by its name."
+    audience = android
+    input {
+      type = "object"
+      required { "name" }
+      properties {
+        name { type = "string" }
+        near = module.ref("Point")
+      }
+    }
+    output = module.ref("Place")
+    failures {
+      ["NotFound"] = failure("NotFound", new Dynamic { name { type = "string" } }, new Listing { "name" })
+      ["Offline"] = failure("Offline", new Dynamic {}, new Listing {})
+      ["rate-limited"] = failure("rate-limited", new Dynamic { retryAfter { type = "integer" } }, new Listing {})
+    }
+  }
+
+  ["shapes.json.keep"] {
+    description = "Keep each schema that has no type of AppFunctions as JSON text."
+    audience = android
+    input {
+      type = "object"
+      required { "maybe" }
+      properties {
+        free { type = "object" }
+        map { type = "object"; additionalProperties { type = "integer" } }
+        union { oneOf { new { type = "string" } new { type = "integer" } } }
+        anything {}
+        tree = module.ref("Tree")
+        maybe { type { "string"; "null" } }
+        empty { type = "object"; properties {} }
+      }
+    }
+    output { oneOf { new { type = "string" } new { type = "integer" } } }
+  }
+
+  ["shapes.whole-input.take"] {
+    description = "Take an input with no properties member, as JSON text."
+    audience = android
+    input {
+      type = "object"
+      anyOf {
+        new { type = "object"; required { "a" }; properties { a { type = "string" } } }
+        new { type = "object"; required { "b" }; properties { b { type = "integer" } } }
+      }
+    }
+  }
+
+  ["shapes.names.map"] {
+    description = "Map property names that are not Kotlin identifiers."
+    audience = android
+    input {
+      type = "object"
+      properties {
+        `max-speed` { type = "number" }
+        `2fast` { type = "boolean" }
+        `in` { type = "string" }
+        `class` { type = "string" }
+      }
+    }
+    output {
+      type = "object"
+      title = "Names"
+      properties {
+        `max-speed` { type = "number" }
+        nested { type = "object"; properties { `in` { type = "string" } } }
+      }
+    }
+  }
+
+  ["shapes.nothing.do"] {
+    description = "Take nothing and return nothing."
+    audience = android
+  }
+
+  ["shapes.nullable.get"] {
+    description = "Return a value that can be null."
+    audience = android
+    output { type { "string"; "null" } }
+    failures { ["Gone"] = failure("Gone", new Dynamic {}, new Listing {}) }
+  }
+
+  ["shapes.other.only"] {
+    description = "Only the other target can use this capability."
+    audience { "other" }
+  }
+}

@@ -10,7 +10,7 @@ export function airconCatalog(): Catalog {
   catalog
     .target("app", {
       description: "The phone, desktop and web apps that people use.",
-      bindings: ["typescript", "acme:swift", "acme:kotlin"],
+      bindings: ["typescript", "acme:swift", "kotlin"],
     })
     .target("taskbar", {
       description: "A desktop taskbar widget showing the status and a power toggle.",
@@ -18,7 +18,8 @@ export function airconCatalog(): Catalog {
     })
     .target("cli", { bindings: ["cli"] })
     .target("mcp", { description: "Agents, through an MCP server.", bindings: ["mcp"] })
-    .target("api", { description: "Home-automation systems and scripts.", bindings: ["http"] });
+    .target("api", { description: "Home-automation systems and scripts.", bindings: ["http"] })
+    .target("phone", { description: "Agents on an Android phone, through app functions.", bindings: ["appfunctions"] });
 
   const mode = catalog.type("Mode", { enum: ["cool", "heat", "dry", "fan", "auto"] });
   const fanSpeed = catalog.type("FanSpeed", { enum: ["auto", "low", "medium", "high"] });
@@ -45,8 +46,8 @@ export function airconCatalog(): Catalog {
     properties: { since: { type: "string", format: "date-time" } },
   });
 
-  const everywhere = ["app", "taskbar", "cli", "mcp", "api"];
-  const controls = ["app", "cli", "mcp", "api"];
+  const everywhere = ["app", "taskbar", "cli", "mcp", "api", "phone"];
+  const controls = ["app", "cli", "mcp", "api", "phone"];
   const setting = (name: string, property: Schema) => ({
     input: { type: "object", required: [name], properties: { [name]: property } },
     failures: { Offline: offline },

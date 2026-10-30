@@ -60,6 +60,6 @@ tasks:
       mutex: "conform"
 
   verify:
-    description: "Every check: the catalogs, the lint, the toolchain, and every catalog library."
+    description: "Every check: the catalogs, the lint, the toolchain, every catalog library, and every core."
     command: "noop"
-    deps: ["check", "lint", "typecheck", "packages", "spec-ts:test", "spec-ts:typecheck", "cli:test", "cli:typecheck", "core-effect:test", "core-effect:typecheck", "core-ts:test", "core-ts:typecheck", "example-aircon:test", "example-aircon:typecheck", "catalog-typescript:test", "catalog-typescript:typecheck", "catalog-python:test", "catalog-python:package", "catalog-go:test", "catalog-rust:test", "catalog-rust:package", "catalog-pkl:test"]
+    deps: ["check", "lint", "typecheck", "packages", "spec-ts:test", "spec-ts:typecheck", "cli:test", "cli:typecheck", "core-effect:test", "core-effect:typecheck", "core-ts:test", "core-ts:typecheck", "example-aircon:test", "example-aircon:typecheck", "catalog-typescript:test", "catalog-typescript:typecheck", "catalog-python:test", "catalog-python:package", "catalog-go:test", "catalog-rust:test", "catalog-rust:package", "catalog-pkl:test", "core-kotlin:test", "core-kotlin:package", "appfunctions:test", "appfunctions:package", "example-aircon-kotlin:test"]

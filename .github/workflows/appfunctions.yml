@@ -1,0 +1,104 @@
+name: AppFunctions
+
+# Run acid-cat conform against the AppFunctions fixture on an emulator. The run takes about 20 minutes, so it does not run
+# on each push to a pull request:
+# - on main, after a change that can change the result;
+# - on a pull request with the label `appfunctions`, each time that the label is added and at each push while it is there;
+# - by hand, from the Actions tab (workflow_dispatch).
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/appfunctions.yml"
+      - ".prototools"
+      - "packages/appfunctions/**"
+      - "packages/core-kotlin/**"
+      - "packages/cli/src/conform/**"
+      - "packages/cli/conformance/**"
+  pull_request:
+    types: [labeled, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: appfunctions-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conform:
+    name: acid-cat conform --appfunctions
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'appfunctions')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # Moon compares the pull request with `main`, so it needs the full history.
+        with:
+          fetch-depth: 0
+
+      # proto installs the tools in .prototools, with a JDK and Gradle. The JDK runs Gradle and the Kotlin compiler.
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      # Gradle runs on the JDK of JAVA_HOME. The runner sets it to its own JDK, so the job sets it to the JDK of .prototools.
+      - name: Use the JDK of .prototools
+        run: echo "JAVA_HOME=$(java -XshowSettings:properties -version 2>&1 | awk -F'= ' '/java.home/ {print $2}')" >> "$GITHUB_ENV"
+
+      - run: pnpm install --frozen-lockfile
+
+      # The emulator needs KVM. The runner gives it only to the group kvm.
+      - name: Give KVM to the job
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # AppFunctions needs Android 16 (API 36) or later. The emulator runs Android 17 (API 37) with the image for automated
+      # tests (ATD), which works without a GPU. With the image of the Google APIs, surfaceflinger aborts in the graphics
+      # mapper of the emulator, and the platform restarts, with its service app_function.
+      - name: Start an emulator
+        timeout-minutes: 20
+        run: |
+          image="system-images;android-37.0;aosp_atd;x86_64"
+          tools="$ANDROID_HOME/cmdline-tools/latest/bin"
+          # avdmanager and the emulator read the virtual devices from the same directory.
+          export ANDROID_USER_HOME="$RUNNER_TEMP/android"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          yes | "$tools/sdkmanager" --licenses > /dev/null
+          "$tools/sdkmanager" --install emulator platform-tools "$image" > /dev/null
+          echo no | "$tools/avdmanager" create avd --name conform --package "$image" --device pixel_6
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          nohup "$ANDROID_HOME/emulator/emulator" -avd conform -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
+            -accel on -gpu swangle_indirect -memory 4096 -cores 4 -partition-size 4096 -camera-back none -camera-front none > emulator.log 2>&1 &
+          adb="$ANDROID_HOME/platform-tools/adb"
+          # The boot has 15 minutes. A boot that does not end fails the step, and the next step prints the log.
+          timeout 900 "$adb" wait-for-device
+          timeout 900 sh -c "until [ \"\$('$adb' shell getprop sys.boot_completed | tr -d '\r')\" = 1 ]; do sleep 5; done"
+          # AppSearch, which keeps the index of app functions, works only after user 0 is unlocked. The unlock comes after
+          # the boot. Wake the device and dismiss the keyguard, then wait for the unlock.
+          "$adb" shell input keyevent KEYCODE_WAKEUP
+          "$adb" shell wm dismiss-keyguard
+          timeout 600 sh -c "until [ \"\$('$adb' shell am get-started-user-state 0 | tr -d '\r')\" = RUNNING_UNLOCKED ]; do sleep 5; done"
+          "$adb" shell getprop ro.build.version.sdk
+
+      - name: Print the log of the emulator
+        if: failure()
+        run: tail -n 200 emulator.log
+
+      # The emulator renders in software and is slow, so each check has 2 minutes.
+      - run: moon run appfunctions:conform
+        env:
+          ACIDCAT_DEADLINE: "120000"
+
+      - name: Print the log of the device
+        if: failure()
+        run: |
+          # One listing of the app functions, with its time, tells a slow platform from one that does not answer.
+          time timeout 300 adb shell cmd app_function list-app-functions --package dev.acidcat.fixture | head -c 3000 || true
+          # The crash buffer keeps the stack of a crash of the platform or of the app.
+          adb logcat -b crash -d || true
+          adb logcat -d -t 400 || true

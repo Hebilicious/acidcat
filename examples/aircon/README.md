@@ -7,6 +7,7 @@ One air conditioner, described once and served to every surface. The unit is sim
 | [`catalog/`](catalog) | The catalog, written in Pkl, TypeScript, Python, Go and Rust. Each language gives the same bytes |
 | [`core-ts/`](core-ts) | The application on [`@acid-cat/core-ts`](../../packages/core-ts), with Zod, its command line, and its MCP server through stdio |
 | [`core-effect/`](core-effect) | The application on [`@acid-cat/core-effect`](../../packages/core-effect), fully in Effect, its command line, and its MCP server through stdio |
+| [`kotlin/`](kotlin) | The application on [`acid-cat-core-kotlin`](../../packages/core-kotlin), its command line, its MCP server through stdio, and an Android app whose app functions come from the catalog |
 | [`apis/`](apis) | APIs whose design the application controls: GraphQL, Cap'n Web, Elysia and an MCP server |
 | [`test/`](test) | The tests of all parts |
 
@@ -47,6 +48,29 @@ node examples/aircon/core-effect/mcp-stdio.ts
 ```
 
 The process is one session with one simulated unit. When standard input ends, the process exits.
+
+## Kotlin and Android
+
+[`kotlin/`](kotlin) is the same application in Kotlin, on the JVM and on Android. Its test compares its catalog with `aircon.acidcat.json`, as the tests of the TypeScript applications do. The catalog is the contract: each implementation follows it in its own language, and no implementation uses the code of another.
+
+| Part | Target | Surface |
+| --- | --- | --- |
+| [`aircon/Aircon.kt`](kotlin/aircon/src/main/kotlin/dev/acidcat/example/aircon/Aircon.kt) | | The capabilities, with Kotlin types |
+| [`aircon/Cli.kt`](kotlin/aircon/src/main/kotlin/dev/acidcat/example/aircon/Cli.kt) | `cli` | The command line |
+| [`aircon/Mcp.kt`](kotlin/aircon/src/main/kotlin/dev/acidcat/example/aircon/Mcp.kt) | `mcp` | The MCP server through stdio |
+| [`android/MainActivity.kt`](kotlin/android/src/main/kotlin/dev/acidcat/example/aircon/android/MainActivity.kt) | `app` | The screen of the Android app, through the [Kotlin binding](../../spec/bindings/kotlin.md) |
+| [`android/build.gradle.kts`](kotlin/android/build.gradle.kts) | `phone` | The [app functions](../../spec/bindings/appfunctions.md) of the Android app, for the agents on the phone |
+
+The Gradle plugin `dev.acidcat.appfunctions` reads the view of the `phone` target from `aircon.acidcat.json` at build time, and generates the app functions. The screen and the app functions use one simulated unit. Thus when an agent turns the unit on, the screen shows it at once, because the screen follows the state of `aircon.status.get`. `aircon.firmware.update` is only in the `app` target, so the screen can call it, and the agents cannot.
+
+```sh
+cd examples/aircon/kotlin
+gradle :aircon-kotlin:run --args="aircon schedule set --days mon --days fri"
+gradle --quiet :aircon-kotlin:mcp            # an MCP server through stdio
+gradle :aircon-android:installDebug           # Android 16 or later
+adb shell cmd app_function execute-app-function --package dev.acidcat.example.aircon \
+  --function 'dev.acidcat.example.aircon.android.functions.AirconAppFunctionServiceBase#aircon_power_set' --parameters '{"on":true}'
+```
 
 ## APIs
 

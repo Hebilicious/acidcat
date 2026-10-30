@@ -27,7 +27,7 @@ If `.local/AGENTS.md` exists, read it too. The `.local/` directory contains priv
 
 1. Add a site, as its own Moon project.
 
-Both cores MUST pass `acid-cat conform`. Each core runs it in its tests.
+Each core MUST pass `acid-cat conform` for each binding that it serves. Each core runs it in its tests.
 
 When a design decision is made for something that does not exist yet, build it. Do not only record it. At the end of each piece of work, tell what was asked and is not done, and why.
 
@@ -42,6 +42,7 @@ When a design decision is made for something that does not exist yet, build it. 
 - TypeScript passes `moon run lint`: no type assertions (only `as const`), no non-null assertions, no `any`, no `@ts-ignore`, and `@ts-expect-error` only for a negative type test. Never turn a check off: do not add `oxlint-disable` comments, and do not change `.oxlintrc.json` or `tsconfig.base.json` to make code pass. Check data that is not trusted at run time, and make the types flow from it. A type guard checks at run time everything that its type claims.
 - Commits have no AI attribution.
 - Each published package has the license file of the repository, and a task in `moon run verify` that builds or packages it the way that its registry receives it.
+- The skill [`skills/acid-cat`](skills/acid-cat/SKILL.md) tells agents how to build with AcidCat. When a change adds or changes a rule of the catalog, a core, a binding or a command of `acid-cat`, change the skill in the same pull request. `gh skill publish --dry-run .` validates it.
 - Release by merging the release pull request of release-please. Do not change a version or a `CHANGELOG.md` by hand. See [Publishing](packages/README.md#publishing).
 
 ## Branches and pull requests

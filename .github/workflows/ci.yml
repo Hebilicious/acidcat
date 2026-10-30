@@ -22,10 +22,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      # proto installs the tools in .prototools: Moon, Node, pnpm, Pkl, Python, Go and Rust.
+      # proto installs the tools in .prototools: Moon, Node, pnpm, Pkl, Python, Go, Rust, a JDK and Gradle. The JDK runs
+      # Gradle and the Kotlin compiler. The runner has the Android SDK in ANDROID_HOME, and Gradle installs the parts that
+      # the Android packages need.
       - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
+
+      # Gradle and its tests run on the JDK of JAVA_HOME. The runner sets it to its own JDK, so the job sets it to the JDK
+      # of .prototools.
+      - name: Use the JDK of .prototools
+        run: echo "JAVA_HOME=$(java -XshowSettings:properties -version 2>&1 | awk -F'= ' '/java.home/ {print $2}')" >> "$GITHUB_ENV"
 
       - run: pnpm install --frozen-lockfile
 

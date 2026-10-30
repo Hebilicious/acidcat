@@ -77,8 +77,8 @@ const change = (update: (status: typeof Status.Type) => typeof Status.Type) =>
 
 // --- The capabilities --------------------------------------------------------------------------------------------
 
-const everywhere = ["app", "taskbar", "cli", "mcp", "api"];
-const controls = ["app", "cli", "mcp", "api"];
+const everywhere = ["app", "taskbar", "cli", "mcp", "api", "phone"];
+const controls = ["app", "cli", "mcp", "api", "phone"];
 
 export const statusGet = Capability.make({
   id: "aircon.status.get",
@@ -162,11 +162,12 @@ export const aircon = App.make({
   title: "Living-room air conditioner",
   description: "Control and monitor one split-unit air conditioner on the home network.",
   targets: {
-    app: { description: "The phone, desktop and web apps that people use.", bindings: ["typescript", "acme:swift", "acme:kotlin"] },
+    app: { description: "The phone, desktop and web apps that people use.", bindings: ["typescript", "acme:swift", "kotlin"] },
     taskbar: { description: "A desktop taskbar widget showing the status and a power toggle.", bindings: ["typescript"] },
     cli: { bindings: ["cli"] },
     mcp: { description: "Agents, through an MCP server.", bindings: ["mcp"] },
     api: { description: "Home-automation systems and scripts.", bindings: ["http"] },
+    phone: { description: "Agents on an Android phone, through app functions.", bindings: ["appfunctions"] },
   },
   capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, scheduleSet, firmwareUpdate],
 });

@@ -1,0 +1,47 @@
+language: "kotlin"
+layer: "library"
+
+project:
+  title: "acid-cat-appfunctions"
+  description: "Serve the capabilities of a target as Android AppFunctions: a runtime library and a Gradle plugin that generates the service. Maven packages: dev.acidcat:acid-cat-appfunctions and the plugin dev.acidcat.appfunctions."
+
+# The Android SDK is in ANDROID_HOME. Without it, the tasks use ~/Android/Sdk, where Android Studio installs it. The Gradle
+# builds share the build of the Kotlin core and its caches, so each Gradle task has the mutex "gradle", and the tasks wait
+# for the Gradle tasks of core-kotlin.
+tasks:
+  test:
+    deps: ["core-kotlin:package"]
+    description: "Test the generator and the runtime, and build the conformance fixture and the shapes, so that the AppFunctions compiler reads the generated code."
+    script: 'ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}" gradle --console=plain :gradle-plugin:test :acid-cat-appfunctions:testDebugUnitTest :appfunctions-fixture:assembleDebug :appfunctions-shapes:assembleDebug'
+    inputs:
+      - "runtime/src/**/*"
+      - "gradle-plugin/src/**/*"
+      - "fixture/src/**/*"
+      - "shapes/src/**/*"
+      - "shapes/shapes.acidcat.json"
+      - "**/*.gradle.kts"
+      - "gradle.properties"
+      - "/packages/core-kotlin/core/src/main/**/*"
+      - "/packages/core-kotlin/fixture/src/main/**/*"
+      - "/packages/core-kotlin/fixture/fixture.acidcat.json"
+      - "/packages/core-kotlin/gradle/libs.versions.toml"
+    toolchains: ["system"]
+    options:
+      mutex: "gradle"
+
+  package:
+    deps: ["test"]
+    description: "Publish the runtime library and the Gradle plugin, with their sources and POM files, into build/repository, as Maven Central and the Gradle Plugin Portal receive them."
+    script: 'ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}" gradle --console=plain :acid-cat-appfunctions:publishAllPublicationsToLocalRepository :gradle-plugin:publishAllPublicationsToLocalRepository'
+    inputs: ["runtime/src/main/**/*", "gradle-plugin/src/main/**/*", "**/*.gradle.kts", "gradle.properties", "LICENSE", "/packages/core-kotlin/gradle/libs.versions.toml"]
+    toolchains: ["system"]
+    options:
+      mutex: "gradle"
+
+  conform:
+    description: "Install the conformance fixture on the device that adb reaches, and run acid-cat conform --appfunctions against it. ANDROID_SERIAL chooses the device, and ACIDCAT_DEADLINE gives the time of each check, in milliseconds."
+    script: 'ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}" gradle --console=plain :appfunctions-fixture:installDebug && node ../cli/src/main.ts conform --appfunctions dev.acidcat.fixture ${ANDROID_SERIAL:+--adb-serial "$ANDROID_SERIAL"} ${ACIDCAT_DEADLINE:+--deadline "$ACIDCAT_DEADLINE"}'
+    toolchains: ["system"]
+    options:
+      mutex: "gradle"
+      cache: false

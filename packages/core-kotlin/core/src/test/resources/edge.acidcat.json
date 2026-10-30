@@ -1,0 +1,74 @@
+{
+  "acidcat": "0.1",
+  "title": "Kotlin edge cases: \"quotes\", back\\slash, tab\t, bell\u0007 and é",
+  "targets": {
+    "a-first": {
+      "bindings": [
+        "http"
+      ],
+      "options": {
+        "huge": 1e+21,
+        "negative": -0.000001,
+        "ratio": 2.5,
+        "tiny": 1e-7,
+        "whole": 3
+      }
+    },
+    "z-last": {
+      "bindings": [
+        "kotlin"
+      ]
+    }
+  },
+  "capabilities": {
+    "edge.numbers.get": {
+      "description": "Return numbers: 0.1, 100 and 1e-7.",
+      "audience": [
+        "a-first"
+      ],
+      "output": {
+        "properties": {
+          "Z": {
+            "const": 1e+300
+          },
+          "a": {
+            "default": 5e-324
+          },
+          "ü": {
+            "maximum": 123456789012,
+            "minimum": -1.5,
+            "type": "number"
+          },
+          "日本": {
+            "multipleOf": 0.25,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "edge.strings.get": {
+      "description": "Line one.\nLine two.\u001f ",
+      "audience": [
+        "z-last"
+      ],
+      "output": {
+        "examples": [
+          "😀",
+          "😀x"
+        ],
+        "pattern": "^[a-z]+\\d*$",
+        "properties": {
+          "￮": {
+            "type": "string"
+          },
+          "😀": {
+            "type": "string"
+          }
+        },
+        "type": "string"
+      },
+      "readOnly": true
+    }
+  }
+}

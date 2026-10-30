@@ -38,11 +38,13 @@ Each remote binding tells its status codes. It also tells if it accepts requests
 | Name | Kind | Surface |
 | --- | --- | --- |
 | [`typescript`](typescript.md) | Language | Handles in TypeScript and JavaScript |
+| [`kotlin`](kotlin.md) | Language | Handles in Kotlin, on the JVM and on Android |
 | [`webmcp`](webmcp.md) | Protocol | WebMCP tools in a web page |
 | [`mcp`](mcp.md) | Protocol | An MCP server through HTTP, or through standard input and output |
 | [`cli`](cli.md) | Protocol | A command line |
 | [`http`](http.md) | Protocol | JSON through HTTP |
+| [`appfunctions`](appfunctions.md) | Protocol | App functions of an Android app, for the agents on the device |
 
-You can write other bindings to the same rules, for example for Swift, Kotlin or gRPC. Give a new binding a name with a prefix, as in `acme:swift`.
+You can write other bindings to the same rules, for example for Swift or gRPC. Give a new binding a name with a prefix, as in `acme:swift`.
 
 An API whose design you want to control, for example a GraphQL API, is application code. Build it on a language binding, with the library that you prefer. The HTTP binding gives generic access to the capabilities. [`examples/aircon`](../../examples/aircon/README.md#apis) builds APIs with GraphQL, Cap'n Web and Elysia, each beside the HTTP binding, and an MCP server beside the MCP binding.

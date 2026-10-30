@@ -1,0 +1,27 @@
+language: "kotlin"
+layer: "application"
+
+project:
+  title: "aircon-kotlin"
+  description: "The air conditioner in Kotlin: its command line, its MCP server through stdio, and an Android app with app functions from the catalog. Not published."
+
+# The Android SDK is in ANDROID_HOME. Without it, the task uses ~/Android/Sdk. The Gradle builds share the builds of the
+# Kotlin packages and their caches, so the task has the mutex "gradle" and waits for their Gradle tasks.
+tasks:
+  test:
+    deps: ["appfunctions:package"]
+    description: "Check that the Kotlin application agrees with catalog/aircon.acidcat.json, test it, and build the Android app, whose app functions come from that catalog."
+    script: 'ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}" gradle --console=plain :aircon-kotlin:test :aircon-android:assembleDebug'
+    inputs:
+      - "aircon/src/**/*"
+      - "android/src/**/*"
+      - "**/*.gradle.kts"
+      - "gradle.properties"
+      - "/examples/aircon/catalog/aircon.acidcat.json"
+      - "/packages/core-kotlin/core/src/main/**/*"
+      - "/packages/core-kotlin/gradle/libs.versions.toml"
+      - "/packages/appfunctions/runtime/src/main/**/*"
+      - "/packages/appfunctions/gradle-plugin/src/main/**/*"
+    toolchains: ["system"]
+    options:
+      mutex: "gradle"
