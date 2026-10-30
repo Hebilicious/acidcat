@@ -13,7 +13,7 @@
       "bindings": [
         "typescript",
         "acme:swift",
-        "acme:kotlin"
+        "kotlin"
       ],
       "description": "The phone, desktop and web apps that people use."
     },
@@ -27,6 +27,12 @@
         "mcp"
       ],
       "description": "Agents, through an MCP server."
+    },
+    "phone": {
+      "bindings": [
+        "appfunctions"
+      ],
+      "description": "Agents on an Android phone, through app functions."
     },
     "taskbar": {
       "bindings": [
@@ -131,7 +137,8 @@
         "app",
         "cli",
         "mcp",
-        "api"
+        "api",
+        "phone"
       ],
       "input": {
         "properties": {
@@ -175,7 +182,8 @@
         "app",
         "cli",
         "mcp",
-        "api"
+        "api",
+        "phone"
       ],
       "input": {
         "properties": {
@@ -205,7 +213,8 @@
         "taskbar",
         "cli",
         "mcp",
-        "api"
+        "api",
+        "phone"
       ],
       "input": {
         "properties": {
@@ -230,7 +239,8 @@
         "app",
         "cli",
         "mcp",
-        "api"
+        "api",
+        "phone"
       ],
       "input": {
         "properties": {
@@ -270,7 +280,8 @@
         "taskbar",
         "cli",
         "mcp",
-        "api"
+        "api",
+        "phone"
       ],
       "output": {
         "$ref": "#/$defs/Status"
@@ -291,7 +302,8 @@
         "app",
         "cli",
         "mcp",
-        "api"
+        "api",
+        "phone"
       ],
       "input": {
         "properties": {

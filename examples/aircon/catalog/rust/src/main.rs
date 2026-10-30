@@ -15,7 +15,7 @@ fn aircon_catalog() -> Catalog {
             "app",
             Target {
                 description: Some("The phone, desktop and web apps that people use.".into()),
-                bindings: strings(&["typescript", "acme:swift", "acme:kotlin"]),
+                bindings: strings(&["typescript", "acme:swift", "kotlin"]),
                 ..Target::default()
             },
         )
@@ -49,6 +49,14 @@ fn aircon_catalog() -> Catalog {
             Target {
                 description: Some("Home-automation systems and scripts.".into()),
                 bindings: strings(&["http"]),
+                ..Target::default()
+            },
+        )
+        .target(
+            "phone",
+            Target {
+                description: Some("Agents on an Android phone, through app functions.".into()),
+                bindings: strings(&["appfunctions"]),
                 ..Target::default()
             },
         );
@@ -99,8 +107,8 @@ fn aircon_catalog() -> Catalog {
         }),
     );
 
-    let everywhere = strings(&["app", "taskbar", "cli", "mcp", "api"]);
-    let controls = strings(&["app", "cli", "mcp", "api"]);
+    let everywhere = strings(&["app", "taskbar", "cli", "mcp", "api", "phone"]);
+    let controls = strings(&["app", "cli", "mcp", "api", "phone"]);
     let setting = |name: &str, property: Schema| json!({ "type": "object", "required": [name], "properties": { name: property } });
     let offline_only = || vec![("Offline".to_owned(), offline.clone())];
 
