@@ -52,10 +52,11 @@ These packages implement the specification on the JVM and on Android, with corou
 | --- | --- | --- | --- |
 | Core for Kotlin | [`core-kotlin/core/`](core-kotlin) | Maven `dev.acidcat:acid-cat-core-kotlin` | Serve capabilities in Kotlin: capabilities are suspending functions, schemas come from serializable types, availability and state are `StateFlow`s. It serves the Kotlin binding, the MCP binding through HTTP and stdio, and the HTTP and CLI bindings |
 | Ktor adapter | [`core-kotlin/ktor/`](core-kotlin) | Maven `dev.acidcat:acid-cat-ktor` | Serve the MCP and HTTP handlers of the core with Ktor |
+| AppFunctions | [`appfunctions/`](appfunctions) | Maven `dev.acidcat:acid-cat-appfunctions`, Gradle plugin `dev.acidcat.appfunctions` | Serve a target as Android app functions. The plugin generates the service from the catalog at build time |
 
-The packages use Gradle. One version catalog, [`core-kotlin/gradle/libs.versions.toml`](core-kotlin/gradle/libs.versions.toml), pins each dependency.
+The packages use Gradle. One version catalog, [`core-kotlin/gradle/libs.versions.toml`](core-kotlin/gradle/libs.versions.toml), pins each dependency of both builds. The Android packages need the Android SDK (see the development section of the [README](../README.md)).
 
-`moon run core-kotlin:test` runs `acid-cat conform` against the MCP, HTTP and CLI bindings of the fixture of the core.
+`moon run core-kotlin:test` runs `acid-cat conform` against the MCP, HTTP and CLI bindings of the fixture of the core. `moon run appfunctions:test` builds the AppFunctions fixture without a device. `moon run appfunctions:conform` installs it on a device and runs `acid-cat conform --appfunctions` against it.
 
 ## Publishing
 
@@ -79,7 +80,7 @@ Each registry has its own release workflow. A tag that is pushed by hand on `mai
 | crates.io | `acid-cat-catalog` | `crates/v0.1.0` | `release-crates.yml` |
 | Pkl | `acid-cat-catalog` | `acid-cat-catalog@0.1.0` | `release-pkl.yml`: a GitHub release with the package files |
 | Go | `github.com/Hebilicious/acidcat/packages/catalog/go` | `packages/catalog/go/v0.1.0` | None. The Go module proxy reads the tag |
-| Maven Central | The Kotlin packages | None | None. `moon run core-kotlin:package` writes the files that Maven Central receives into `build/repository`. They are not published |
+| Maven Central and the Gradle Plugin Portal | The Kotlin packages | None | None. `moon run core-kotlin:package` and `moon run appfunctions:package` write the files that the registries receive into `build/repository`. They are not published |
 
 The workflows authenticate with trusted publishing. They hold no tokens.
 

@@ -11,6 +11,7 @@ projects:
   catalog-rust: "packages/catalog/rust"
   catalog-pkl: "packages/catalog/pkl"
   core-kotlin: "packages/core-kotlin"
+  appfunctions: "packages/appfunctions"
 
 defaultProject: "acid-cat"
 telemetry: false

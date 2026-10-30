@@ -3,6 +3,8 @@
  * serves the conformance fixture (conformance/fixture.acidcat.json), with its switch on.
  */
 import { DEADLINE } from "./check.ts";
+import { adbDevice, checkAppFunctions } from "./appfunctions.ts";
+import type { AppFunctionsDevice, AppFunctionsOptions } from "./appfunctions.ts";
 import type { Check } from "./check.ts";
 import { checkCli } from "./cli.ts";
 import { checkHttp } from "./http.ts";
@@ -12,6 +14,8 @@ import { checkProperties, httpInvoke, mcpInvoke } from "./properties.ts";
 import { browserDriver, checkWebMcp, processDriver } from "./webmcp.ts";
 import type { WebMcpInstall } from "./webmcp.ts";
 
+export type { AppFunction, AppFunctionsDevice, AppFunctionsOptions, Execution } from "./appfunctions.ts";
+export { adbDevice, functionName } from "./appfunctions.ts";
 export type { Check } from "./check.ts";
 export { DEADLINE, fixture } from "./check.ts";
 export { serve } from "./serve.ts";
@@ -36,6 +40,11 @@ export interface ConformOptions {
    * on a host in the same process. A page runs in Chromium, through Playwright.
    */
   readonly webmcp?: string | WebMcpInstall | undefined;
+  /**
+   * The AppFunctions binding: the package of an Android app that serves the target `android`, on a device that adb
+   * reaches, or a device that the caller gives.
+   */
+  readonly appfunctions?: AppFunctionsOptions | AppFunctionsDevice | undefined;
   /** The body limit of the remote bindings, in bytes. The default is 1 MiB. */
   readonly maximumBytes?: number | undefined;
   /**
@@ -73,6 +82,10 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
     } finally {
       await driver.close();
     }
+  }
+  if (options.appfunctions !== undefined) {
+    const device = "package" in options.appfunctions ? adbDevice(options.appfunctions) : options.appfunctions;
+    results.push(...(await checkAppFunctions(device, { deadline })).results);
   }
   return results;
 }

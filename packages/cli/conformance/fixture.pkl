@@ -10,9 +10,10 @@ targets {
   ["mcp"] { bindings { "mcp" } }
   ["cli"] { bindings { "cli" } }
   ["api"] { bindings { "http" } }
+  ["android"] { bindings { "kotlin"; "appfunctions" } }
 }
 
-local allTargets = new Listing { "app"; "mcp"; "cli"; "api" }
+local allTargets = new Listing { "app"; "mcp"; "cli"; "api"; "android" }
 
 local text = new Dynamic {
   type = "object"

@@ -3,6 +3,12 @@
   "title": "Fixture",
   "description": "One capability for each behavior that acid-cat conform tests.",
   "targets": {
+    "android": {
+      "bindings": [
+        "kotlin",
+        "appfunctions"
+      ]
+    },
     "api": {
       "bindings": [
         "http"
@@ -31,7 +37,8 @@
         "app",
         "mcp",
         "cli",
-        "api"
+        "api",
+        "android"
       ]
     },
     "fixture.echo": {
@@ -40,7 +47,8 @@
         "app",
         "mcp",
         "cli",
-        "api"
+        "api",
+        "android"
       ],
       "input": {
         "properties": {
@@ -166,7 +174,8 @@
         "app",
         "mcp",
         "cli",
-        "api"
+        "api",
+        "android"
       ],
       "output": {
         "properties": {
@@ -197,7 +206,8 @@
         "app",
         "mcp",
         "cli",
-        "api"
+        "api",
+        "android"
       ],
       "input": {
         "properties": {
@@ -233,7 +243,8 @@
         "app",
         "mcp",
         "cli",
-        "api"
+        "api",
+        "android"
       ],
       "failures": {
         "Refused": {
@@ -261,7 +272,8 @@
         "app",
         "mcp",
         "cli",
-        "api"
+        "api",
+        "android"
       ],
       "input": {
         "properties": {
@@ -282,7 +294,8 @@
         "app",
         "mcp",
         "cli",
-        "api"
+        "api",
+        "android"
       ],
       "input": {
         "properties": {
@@ -303,7 +316,8 @@
         "app",
         "mcp",
         "cli",
-        "api"
+        "api",
+        "android"
       ],
       "input": {
         "properties": {},
