@@ -33,6 +33,7 @@ tasks.test {
     useJUnitPlatform()
     // The conformance test runs `acid-cat conform` from packages/cli with Node.
     systemProperty("acidcat.repository", rootDir.resolve("../..").canonicalPath)
+    systemProperty("acidcat.report", layout.buildDirectory.file("conform.txt").get().asFile.path)
     inputs.dir(rootDir.resolve("../cli/src"))
     inputs.file(rootDir.resolve("../cli/conformance/fixture.acidcat.json"))
     testLogging {

@@ -94,6 +94,18 @@
           "ratio": {
             "type": "number"
           },
+          "steps": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "verbose": {
             "type": "boolean"
           }
@@ -124,6 +136,18 @@
           },
           "ratio": {
             "type": "number"
+          },
+          "steps": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "verbose": {
             "type": "boolean"

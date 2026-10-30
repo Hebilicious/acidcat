@@ -50,7 +50,7 @@ These packages implement the specification on the JVM and on Android, with corou
 
 | Package | Directory | Registry name | Use |
 | --- | --- | --- | --- |
-| Core for Kotlin | [`core-kotlin/core/`](core-kotlin) | Maven `dev.acidcat:acid-cat-core-kotlin` | Serve capabilities in Kotlin: capabilities are suspending functions, schemas come from serializable types, availability and state are `StateFlow`s. It serves the Kotlin binding and the MCP, HTTP and CLI bindings |
+| Core for Kotlin | [`core-kotlin/core/`](core-kotlin) | Maven `dev.acidcat:acid-cat-core-kotlin` | Serve capabilities in Kotlin: capabilities are suspending functions, schemas come from serializable types, availability and state are `StateFlow`s. It serves the Kotlin binding, the MCP binding through HTTP and stdio, and the HTTP and CLI bindings |
 | Ktor adapter | [`core-kotlin/ktor/`](core-kotlin) | Maven `dev.acidcat:acid-cat-ktor` | Serve the MCP and HTTP handlers of the core with Ktor |
 
 The packages use Gradle. One version catalog, [`core-kotlin/gradle/libs.versions.toml`](core-kotlin/gradle/libs.versions.toml), pins each dependency.
