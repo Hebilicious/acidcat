@@ -70,8 +70,10 @@ jobs:
           "$tools/sdkmanager" --install emulator platform-tools "$image" > /dev/null
           echo no | "$tools/avdmanager" create avd --name conform --package "$image" --device pixel_6
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          # swangle_indirect renders with SwiftShader through ANGLE. With swiftshader_indirect, surfaceflinger aborts in the
+          # graphics mapper of the emulator, and the platform restarts, with its service app_function.
           nohup "$ANDROID_HOME/emulator/emulator" -avd conform -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
-            -accel on -gpu swiftshader_indirect -memory 4096 -cores 4 -partition-size 4096 -camera-back none -camera-front none > emulator.log 2>&1 &
+            -accel on -gpu swangle_indirect -memory 4096 -cores 4 -partition-size 4096 -camera-back none -camera-front none > emulator.log 2>&1 &
           adb="$ANDROID_HOME/platform-tools/adb"
           # The boot has 15 minutes. A boot that does not end fails the step, and the next step prints the log.
           timeout 900 "$adb" wait-for-device
