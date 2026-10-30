@@ -93,7 +93,9 @@ public suspend fun notes_note_create(
 | `moon run appfunctions:package` | Write the files that Maven Central and the Gradle Plugin Portal receive into `build/repository` |
 
 - [`fixture/`](fixture) is an Android app that serves the target `android` of the fixture of [`acid-cat-core-kotlin`](../core-kotlin), as app functions.
-- [`shapes/`](shapes) is an Android library whose catalog, [`shapes.acidcat.json`](shapes/shapes.acidcat.json), has one capability for each kind of schema. The build compiles its generated code. Nothing runs it.
+- [`shapes/`](shapes) is an Android library whose catalog has one capability for each kind of schema. Its source is [`shapes.pkl`](shapes/shapes.pkl), and `moon run examples` writes [`shapes.acidcat.json`](shapes/shapes.acidcat.json). The build compiles its generated code. Nothing runs it.
+
+On CI, the workflow `appfunctions.yml` runs `moon run appfunctions:conform` on an emulator with Android 17. It takes about 20 minutes, so it runs on `main` after a change to the Kotlin packages or to `acid-cat conform`, on a pull request with the label `appfunctions`, and by hand from the Actions tab.
 
 ## Limits
 
