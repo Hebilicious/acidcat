@@ -94,7 +94,8 @@ File("acidcat.catalog.json").writeText(aircon.renderCatalog()) // canonical form
 | Function | Binding | Result |
 | --- | --- | --- |
 | `app.openSession(target, context)` | [Kotlin](../../spec/bindings/kotlin.md) | A session with a handle for each capability in the view |
-| `mcpHandler(app, McpSettings(…), context)` | [MCP](../../spec/bindings/mcp.md) | A `WebHandler` |
+| `mcpHandler(app, McpSettings(…), context)` | [MCP](../../spec/bindings/mcp.md#http) through HTTP | A `WebHandler` |
+| `mcpStdioMain(app, McpStdioSettings(…), context)`, `runMcpStdio(…)` | [MCP](../../spec/bindings/mcp.md#stdio) through stdio | The MCP server of the process, or the server on a flow of lines |
 | `httpHandler(app, HttpSettings(…), context)` | [HTTP](../../spec/bindings/http.md) | A `WebHandler` |
 | `cliMain(app, CliSettings(…), args)`, `runCli(…)` | [CLI](../../spec/bindings/cli.md) | The command line of the process, or an exit code |
 
@@ -137,11 +138,19 @@ Use the Netty engine. When a client closes its connection, the adapter cancels t
 fun main(args: Array<String>) = cliMain(aircon, CliSettings(name = "aircon", version = "1.0.0", context = device), args)
 ```
 
-An interrupt (`SIGINT`) cancels the call, and the process exits with the code 130. `CliSettings.commands` adds commands of the application.
+An interrupt (`SIGINT`) cancels the call, and the process exits with the code 130. An array of simple items is a repeated flag: `--tags a --tags b`, or `--tags '["a","b"]'`. `CliSettings.commands` adds commands of the application.
+
+### MCP through stdio
+
+```kotlin
+fun main() = mcpStdioMain(aircon, McpStdioSettings(name = "aircon", version = "1.0.0"), device)
+```
+
+The process is one session. It serves revision `2026-07-28` and the `initialize` handshake of revisions `2025-11-25` and `2025-06-18`, so local MCP clients can start it. It tells the client when the set of available tools changes. When standard input ends, it cancels the calls in progress and exits.
 
 ## Tests
 
-`moon run core-kotlin:test` runs the tests of the core, and runs `acid-cat conform` from [`packages/cli`](../cli) against the MCP, HTTP and CLI bindings of the fixture, with Node:
+`moon run core-kotlin:test` runs the tests of the core, and runs `acid-cat conform` from [`packages/cli`](../cli) against the MCP binding through HTTP and through stdio, and the HTTP and CLI bindings of the fixture, with Node. `fixture/build/conform.txt` has the result of each check.
 
 - [`fixture/src/main/kotlin/dev/acidcat/fixture/Fixture.kt`](fixture/src/main/kotlin/dev/acidcat/fixture/Fixture.kt) has one capability for each behavior that `acid-cat conform` tests.
 - [`fixture/fixture.acidcat.json`](fixture/fixture.acidcat.json) is the catalog that the core writes for the fixture. A test checks it, and `moon run core-kotlin:catalog` writes it again.

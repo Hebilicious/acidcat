@@ -78,14 +78,36 @@ public fun cliFlags(input: JsonObject): List<String> {
     val names = properties.keys.sortedWith(CodePointOrder)
     return (names.filter { it in required } + names.filter { it !in required }).map { name ->
         val property = resolve(properties.getValue(name), definitions) as? JsonObject ?: JsonObject(emptyMap())
-        val flag = if (property.string("type") == "boolean") "--$name" else "--$name <${flagValue(property)}>"
+        val items = repeatedItems(property, definitions)
+        val flag = when {
+            items != null -> "--$name <${flagValue(items)}>..."
+            property.string("type") == "boolean" -> "--$name"
+            else -> "--$name <${flagValue(property)}>"
+        }
         if (name in required) flag else "[$flag]"
     }
 }
 
+/**
+ * The schema of the items of a repeated flag, or `null` when the property does not give a repeated flag. A property
+ * gives a repeated flag when its type is `array`, and its `items` schema, or the type that it refers to, is an `enum`
+ * of strings, `integer`, `number` or `string`. `property` is already resolved.
+ */
+private fun repeatedItems(property: JsonObject, definitions: Map<String, JsonElement>): JsonObject? {
+    if (property.string("type") != "array") return null
+    val items = property["items"]?.let { resolve(it, definitions) } as? JsonObject ?: return null
+    return items.takeIf { stringEnum(it) != null || it.string("type") in setOf("integer", "number", "string") }
+}
+
+/** The strings of an `enum` that has only strings, or `null`. */
+private fun stringEnum(schema: JsonObject): List<String>? {
+    val enum = schema["enum"] as? JsonArray ?: return null
+    val strings = enum.map { (it as? JsonPrimitive)?.takeIf { value -> value.isString }?.content ?: return null }
+    return strings.ifEmpty { null }
+}
+
 private fun flagValue(property: JsonObject): String {
-    val enum = property["enum"] as? JsonArray
-    if (enum != null && enum.all { (it as? JsonPrimitive)?.isString == true }) return enum.joinToString("|") { (it as JsonPrimitive).content }
+    stringEnum(property)?.let { return it.joinToString("|") }
     return when (val type = property.string("type")) {
         "integer", "number", "string" -> type
         else -> "json"
@@ -227,6 +249,8 @@ private fun parseFlags(args: List<String>, schema: JsonObject): JsonObject {
     val properties = schema.obj("properties").orEmpty()
     val definitions = schema.obj("\$defs").orEmpty()
     val input = LinkedHashMap<String, JsonElement>()
+    // The values of each repeated flag, in the order of the flags, with the schema of its items.
+    val repeated = LinkedHashMap<String, Pair<JsonObject, MutableList<String>>>()
     val remaining = args.iterator()
     while (remaining.hasNext()) {
         val arg = remaining.next()
@@ -241,7 +265,14 @@ private fun parseFlags(args: List<String>, schema: JsonObject): JsonObject {
         }
         val text = inline ?: (if (remaining.hasNext()) remaining.next() else null)
             ?: throw UsageError("The flag --$name needs a value.", CliExitCodes.INVALID_INPUT)
-        input[name] = valueOf(name, text, type)
+        val items = repeatedItems(type, definitions)
+        if (items == null) input[name] = valueOf(name, text, type) else repeated.getOrPut(name) { items to mutableListOf() }.second += text
+    }
+    // A repeated flag gives JSON text of the whole array, when it occurs once with that text, or one item for each flag.
+    for ((name, flag) in repeated) {
+        val (items, values) = flag
+        val whole = values.singleOrNull()?.let { text -> runCatching { AcidCatJson.parseToJsonElement(text) }.getOrNull() } as? JsonArray
+        input[name] = whole ?: JsonArray(values.map { valueOf(name, it, items) })
     }
     for (name in schema.strings("required")) {
         if (name !in input) throw UsageError("The flag --$name is required.", CliExitCodes.INVALID_INPUT)
@@ -250,9 +281,8 @@ private fun parseFlags(args: List<String>, schema: JsonObject): JsonObject {
 }
 
 private fun valueOf(name: String, text: String, type: JsonObject): JsonElement {
-    val enum = type["enum"] as? JsonArray
-    if (enum != null && enum.all { (it as? JsonPrimitive)?.isString == true }) {
-        val values = enum.map { (it as JsonPrimitive).content }
+    val values = stringEnum(type)
+    if (values != null) {
         if (text !in values) throw UsageError("The flag --$name must be one of: ${values.joinToString(", ")}.", CliExitCodes.INVALID_INPUT)
         return JsonPrimitive(text)
     }
