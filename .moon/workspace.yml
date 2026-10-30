@@ -6,6 +6,7 @@ projects:
   core-ts: "packages/core-ts"
   catalog-typescript: "packages/catalog/typescript"
   example-aircon: "examples/aircon"
+  example-aircon-kotlin: "examples/aircon/kotlin"
   catalog-python: "packages/catalog/python"
   catalog-go: "packages/catalog/go"
   catalog-rust: "packages/catalog/rust"
