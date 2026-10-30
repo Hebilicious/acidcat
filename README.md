@@ -15,6 +15,7 @@ A language-neutral specification. Describe what your application can do one time
 ![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
 ![Go](https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-B7410E?logo=rust&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?logo=kotlin&logoColor=white)
 ![Pkl](https://img.shields.io/badge/Pkl-6B9543)
 ![Moon](https://img.shields.io/badge/monorepo-moon-6E56CF)
 
@@ -89,7 +90,7 @@ The same catalog in [TypeScript](examples/aircon/catalog/typescript.ts), [Python
 | [Overview and vocabulary](spec/README.md) | The terms and the documents |
 | [Catalog](spec/catalog.md) | Targets, capabilities, types, views, canonical form |
 | [Invocation](spec/invocation.md) | Outcomes, availability, sessions, cancellation |
-| [Bindings](spec/bindings/README.md) | TypeScript, WebMCP, MCP, CLI, HTTP |
+| [Bindings](spec/bindings/README.md) | TypeScript, Kotlin, WebMCP, MCP, CLI, HTTP |
 | [Extensions](spec/extensions/README.md) | Attachments, pagination |
 | [Conformance](spec/conformance.md) | How to test a catalog and an implementation |
 
@@ -118,6 +119,15 @@ These packages show one way to implement the specification. They serve the TypeS
 | [`@acid-cat/core-effect`](packages/core-effect) | ⚡ Serve capabilities, written fully in Effect |
 | [`@acid-cat/core-ts`](packages/core-ts) | 🟦 Serve capabilities in plain TypeScript, with no Effect dependency |
 
+### Reference implementation in Kotlin
+
+These packages show the same specification on the JVM and on Android. They serve the Kotlin binding and the MCP, CLI and HTTP bindings, and they pass all checks of `acid-cat conform` for these bindings.
+
+| Package | Use |
+| --- | --- |
+| [`dev.acidcat:acid-cat-core-kotlin`](packages/core-kotlin) | 🟪 Serve capabilities in Kotlin, with coroutines and kotlinx.serialization |
+| [`dev.acidcat:acid-cat-ktor`](packages/core-kotlin) | 🌐 Serve the MCP and HTTP bindings with Ktor |
+
 Reference implementations in more languages will follow. You do not need a package from this repository to implement AcidCat. A program that serves the bindings as the specification tells is an implementation. You, or an agent, can write a core for your language from [the specification](spec/README.md), and test it with `acid-cat conform`.
 
 To build your own API, for example in GraphQL, see [the APIs of the air conditioner](examples/aircon/README.md#apis): GraphQL, Cap'n Web and Elysia APIs, each beside the HTTP binding, and an MCP server in Effect beside the MCP binding.
@@ -126,6 +136,8 @@ To build your own API, for example in GraphQL, see [the APIs of the air conditio
 
 - [x] `acid-cat conform`: test a running implementation through each binding
 - [x] A reference implementation in TypeScript: `@acid-cat/spec-ts`, `@acid-cat/core-effect` and `@acid-cat/core-ts`
+- [x] A reference implementation in Kotlin: `acid-cat-core-kotlin` and `acid-cat-ktor`
+- [ ] Publish the Kotlin packages to Maven Central
 - [ ] Reference implementations in more languages
 - [ ] A site that publishes the specification
 
@@ -133,7 +145,7 @@ See [packages/README.md](packages/README.md).
 
 ## 🛠️ Development
 
-[proto](https://moonrepo.dev/proto) installs the tools in `.prototools`: Moon, Node, pnpm, Pkl, Python, Go and Rust. [Moon](https://moonrepo.dev) runs the tasks.
+[proto](https://moonrepo.dev/proto) installs the tools in `.prototools`: Moon, Node, pnpm, Pkl, Python, Go, Rust, Java and Gradle. [Moon](https://moonrepo.dev) runs the tasks.
 
 ```sh
 proto install

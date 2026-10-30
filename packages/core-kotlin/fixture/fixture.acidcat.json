@@ -1,0 +1,291 @@
+{
+  "acidcat": "0.1",
+  "title": "Fixture",
+  "description": "One capability for each behavior that acid-cat conform tests.",
+  "targets": {
+    "api": {
+      "bindings": [
+        "http"
+      ]
+    },
+    "app": {
+      "bindings": [
+        "kotlin"
+      ]
+    },
+    "cli": {
+      "bindings": [
+        "cli"
+      ]
+    },
+    "mcp": {
+      "bindings": [
+        "mcp"
+      ]
+    }
+  },
+  "capabilities": {
+    "fixture.crash": {
+      "description": "Always fail with a defect.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ]
+    },
+    "fixture.echo": {
+      "description": "Return the input text.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "input": {
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "Text",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "Text",
+        "type": "object"
+      },
+      "readOnly": true
+    },
+    "fixture.flags": {
+      "description": "Return the input. The input has one property for each kind of command-line flag.",
+      "audience": [
+        "cli"
+      ],
+      "input": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "extra": {
+            "type": "object"
+          },
+          "label": {
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "fast",
+              "slow"
+            ],
+            "type": "string"
+          },
+          "ratio": {
+            "type": "number"
+          },
+          "verbose": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "Flags",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "extra": {
+            "type": "object"
+          },
+          "label": {
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "fast",
+              "slow"
+            ],
+            "type": "string"
+          },
+          "ratio": {
+            "type": "number"
+          },
+          "verbose": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "Flags",
+        "type": "object"
+      }
+    },
+    "fixture.held": {
+      "description": "Return the keys of the calls to fixture.hold that hold now.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "output": {
+        "properties": {
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "title": "Keys",
+        "type": "object"
+      },
+      "readOnly": true
+    },
+    "fixture.hidden": {
+      "description": "Only the app target can use this capability.",
+      "audience": [
+        "app"
+      ]
+    },
+    "fixture.hold": {
+      "description": "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held gives the key. With a marker, the call writes a file at that path when it starts to hold.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "input": {
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "marker": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "HoldInput",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "Key",
+        "type": "object"
+      }
+    },
+    "fixture.refuse": {
+      "description": "Always return the failure Refused.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "failures": {
+        "Refused": {
+          "properties": {
+            "_tag": {
+              "const": "Refused",
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "reason"
+          ],
+          "title": "Refused",
+          "type": "object"
+        }
+      }
+    },
+    "fixture.release": {
+      "description": "Release the calls to fixture.hold that hold the key.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "input": {
+        "properties": {
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "Key",
+        "type": "object"
+      }
+    },
+    "fixture.switch.set": {
+      "description": "Turn the switch on or off. The switch controls the availability of fixture.toggle.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "input": {
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "title": "SwitchInput",
+        "type": "object"
+      }
+    },
+    "fixture.toggle": {
+      "description": "Available only while the switch is on.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "input": {
+        "properties": {},
+        "title": "Empty",
+        "type": "object"
+      }
+    }
+  }
+}

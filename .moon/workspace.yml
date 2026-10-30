@@ -10,6 +10,7 @@ projects:
   catalog-go: "packages/catalog/go"
   catalog-rust: "packages/catalog/rust"
   catalog-pkl: "packages/catalog/pkl"
+  core-kotlin: "packages/core-kotlin"
 
 defaultProject: "acid-cat"
 telemetry: false
@@ -23,6 +24,9 @@ hasher:
   ignorePatterns:
     - "**/node_modules/**"
     - "packages/catalog/rust/target/**"
+    - "**/build/**"
+    - "**/.gradle/**"
+    - "**/.kotlin/**"
 
 pipeline:
   installDependencies:
