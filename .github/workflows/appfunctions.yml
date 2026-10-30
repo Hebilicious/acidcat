@@ -43,8 +43,8 @@ jobs:
         with:
           auto-install: true
 
-      # Gradle runs on JAVA_HOME. The runner sets it to its own Java, so the job sets it to the Java of .prototools.
-      - name: Use the Java of .prototools
+      # Gradle runs on the JDK of JAVA_HOME. The runner sets it to its own JDK, so the job sets it to the JDK of .prototools.
+      - name: Use the JDK of .prototools
         run: echo "JAVA_HOME=$(java -XshowSettings:properties -version 2>&1 | awk -F'= ' '/java.home/ {print $2}')" >> "$GITHUB_ENV"
 
       - run: pnpm install --frozen-lockfile
