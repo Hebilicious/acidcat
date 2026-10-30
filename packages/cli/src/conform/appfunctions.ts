@@ -170,8 +170,15 @@ export async function checkAppFunctions(device: AppFunctionsDevice, options: { r
     if (found === undefined) throw new Error(`there is no app function ${functionName(id)}`);
     return found.functionId;
   };
-  const call = (id: string, parameters: JsonObject, signal: AbortSignal, timeoutSeconds?: number) =>
-    device.execute(idOf(id), parameters, { signal, ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }) });
+  /**
+   * Execute the app function of a capability. A check can start a call and stop before it awaits the call, for example
+   * when an earlier step fails. The rejection of such a call is observed here, so it fails the check, not the process.
+   */
+  const call = (id: string, parameters: JsonObject, signal: AbortSignal, timeoutSeconds?: number) => {
+    const execution = device.execute(idOf(id), parameters, { signal, ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }) });
+    execution.catch(() => undefined);
+    return execution;
+  };
   const held = async (signal: AbortSignal): Promise<readonly string[]> => {
     const keys = memberOf(returned(await call("fixture.held", {}, signal), "fixture.held"), "keys");
     if (!isArrayOf(keys, (key): key is string => typeof key === "string")) throw new Error(`fixture.held gave ${JSON.stringify(keys)}`);
