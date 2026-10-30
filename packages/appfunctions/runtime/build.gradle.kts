@@ -48,6 +48,8 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    // Robolectric runs the Android SDK 36 only on Java 21 or later.
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
     // Robolectric reads an internal class of the JDK.
     jvmArgs("--add-exports", "java.base/jdk.internal.access=ALL-UNNAMED", "--add-opens", "java.base/jdk.internal.access=ALL-UNNAMED")
 }
