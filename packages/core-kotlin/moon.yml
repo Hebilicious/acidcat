@@ -5,7 +5,9 @@ project:
   title: "acid-cat-core-kotlin"
   description: "Serve AcidCat capabilities in Kotlin, and serve the MCP and HTTP bindings with Ktor. Maven packages: dev.acidcat:acid-cat-core-kotlin and dev.acidcat:acid-cat-ktor."
 
-# Each Gradle task has the mutex "gradle": the Gradle builds share the build of the Kotlin core and its caches.
+# The Gradle builds share the build of the Kotlin core and its caches, so two Gradle tasks never run at the same time.
+# The test runs acid-cat conform, so it has the mutex "conform" of the other conformance suites, and `package` waits for
+# it. The other Gradle tasks have the mutex "gradle".
 tasks:
   test:
     description: "Test sessions, handles, schemas, the canonical form and the bindings, and run acid-cat conform against the MCP, HTTP and CLI bindings of the fixture."
@@ -23,9 +25,10 @@ tasks:
       - "/packages/cli/conformance/*.acidcat.json"
     toolchains: ["system"]
     options:
-      mutex: "gradle"
+      mutex: "conform"
 
   package:
+    deps: ["test"]
     description: "Publish the two Maven packages, with their sources and POM files, into build/repository, as Maven Central receives them."
     command: "gradle"
     args: ["--console=plain", "publishAllPublicationsToLocalRepository"]
