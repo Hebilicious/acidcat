@@ -1,0 +1,46 @@
+language: "kotlin"
+layer: "library"
+
+project:
+  title: "acid-cat-core-kotlin"
+  description: "Serve AcidCat capabilities in Kotlin, and serve the MCP and HTTP bindings with Ktor. Maven packages: dev.acidcat:acid-cat-core-kotlin and dev.acidcat:acid-cat-ktor."
+
+# Each Gradle task has the mutex "gradle": the Gradle builds share the build of the Kotlin core and its caches.
+tasks:
+  test:
+    description: "Test sessions, handles, schemas, the canonical form and the bindings, and run acid-cat conform against the MCP, HTTP and CLI bindings of the fixture."
+    command: "gradle"
+    args: ["--console=plain", "test"]
+    inputs:
+      - "core/src/**/*"
+      - "ktor/src/**/*"
+      - "fixture/src/**/*"
+      - "fixture/fixture.acidcat.json"
+      - "**/*.gradle.kts"
+      - "gradle/libs.versions.toml"
+      - "gradle.properties"
+      - "/packages/cli/src/**/*.ts"
+      - "/packages/cli/conformance/*.acidcat.json"
+    toolchains: ["system"]
+    options:
+      mutex: "gradle"
+
+  package:
+    description: "Publish the two Maven packages, with their sources and POM files, into build/repository, as Maven Central receives them."
+    command: "gradle"
+    args: ["--console=plain", "publishAllPublicationsToLocalRepository"]
+    inputs: ["core/src/main/**/*", "ktor/src/main/**/*", "**/*.gradle.kts", "gradle/libs.versions.toml", "gradle.properties", "LICENSE"]
+    outputs: ["build/repository/**/*"]
+    toolchains: ["system"]
+    options:
+      mutex: "gradle"
+
+  catalog:
+    description: "Write fixture/fixture.acidcat.json, the catalog that the core writes for the fixture."
+    command: "gradle"
+    args: ["--console=plain", ":fixture:writeCatalog"]
+    toolchains: ["system"]
+    options:
+      mutex: "gradle"
+      runInCI: false
+      cache: false

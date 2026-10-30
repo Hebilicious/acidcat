@@ -27,7 +27,7 @@ If `.local/AGENTS.md` exists, read it too. The `.local/` directory contains priv
 
 1. Add a site, as its own Moon project.
 
-Both cores MUST pass `acid-cat conform`. Each core runs it in its tests.
+Each core MUST pass `acid-cat conform` for each binding that it serves. Each core runs it in its tests.
 
 When a design decision is made for something that does not exist yet, build it. Do not only record it. At the end of each piece of work, tell what was asked and is not done, and why.
 
