@@ -31,6 +31,16 @@ function toolOf(host: ReturnType<typeof fakeHost>, name: string) {
   return tool;
 }
 
+/**
+ * Wait until `done` is true. The binding updates its tools in its own fiber, so a test waits for the state that it checks,
+ * not for a time. The wait fails after 5 seconds.
+ */
+const until = (done: () => boolean | Promise<boolean>) =>
+  Effect.gen(function* () {
+    while (!(yield* Effect.promise(async () => done()))) yield* Effect.sleep(5);
+  }).pipe(Effect.timeout("5 seconds"), Effect.orDie);
+
+/** A short time, for the one check that nothing happens. */
 const settle = Effect.sleep(20);
 
 test("tools follow availability, a failed update keeps the last tools, and closing removes them", () =>
@@ -40,7 +50,7 @@ test("tools follow availability, a failed update keeps the last tools, and closi
       const scope = yield* Scope.make();
       const session = yield* Session.make(fixture, { target: "app" }).pipe(Scope.provide(scope));
       const installed = Option.getOrThrow(yield* WebMcp.install(session, { host }).pipe(Scope.provide(scope)));
-      yield* settle;
+      yield* until(() => SubscriptionRef.getUnsafe(installed.status).phase === "ready" && host.tools.has("fixture.toggle"));
       assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "ready");
       assert.ok(host.tools.has("fixture.hidden"));
       assert.ok(host.tools.has("fixture.toggle"));
@@ -52,19 +62,19 @@ test("tools follow availability, a failed update keeps the last tools, and closi
       assert.equal(crash.kind, "internal");
 
       yield* SubscriptionRef.set(yield* Switch, position(false));
-      yield* settle;
+      yield* until(() => !host.tools.has("fixture.toggle"));
       assert.ok(!host.tools.has("fixture.toggle"));
 
       host.refuse.add("fixture.toggle");
       yield* SubscriptionRef.set(yield* Switch, position(true));
-      yield* settle;
+      yield* until(() => SubscriptionRef.getUnsafe(installed.status).phase === "failed");
       const failed = yield* SubscriptionRef.get(installed.status);
       assert.equal(failed.phase, "failed");
       assert.ok(host.tools.has("fixture.echo"));
 
       host.refuse.clear();
       yield* installed.retry;
-      yield* settle;
+      yield* until(() => SubscriptionRef.getUnsafe(installed.status).phase === "ready" && host.tools.has("fixture.toggle"));
       assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "ready");
       assert.ok(host.tools.has("fixture.toggle"));
 
@@ -81,7 +91,7 @@ test("remove takes the tools away while the scope stays open, does nothing a sec
       const scope = yield* Scope.make();
       const session = yield* Session.make(fixture, { target: "app" }).pipe(Scope.provide(scope));
       const installed = Option.getOrThrow(yield* WebMcp.install(session, { host }).pipe(Scope.provide(scope)));
-      yield* settle;
+      yield* until(() => host.tools.has("fixture.toggle"));
       assert.ok(host.tools.has("fixture.toggle"));
 
       yield* installed.remove;
@@ -92,7 +102,7 @@ test("remove takes the tools away while the scope stays open, does nothing a sec
       yield* SubscriptionRef.set(yield* Switch, position(false));
       yield* SubscriptionRef.set(yield* Switch, position(true));
       yield* installed.retry;
-      yield* settle;
+      yield* until(() => host.tools.size === 0 && SubscriptionRef.getUnsafe(installed.status).phase === "disposed");
       assert.equal(host.tools.size, 0);
       assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "disposed");
 
@@ -121,12 +131,12 @@ test("Handles.open registers the tools on a host, observes their status, and dis
     const webmcp = session.webmcp;
     assert.ok(webmcp !== undefined);
     webmcp.status.subscribe((status) => phases.push(status.phase));
-    await Effect.runPromise(settle);
+    await Effect.runPromise(until(() => webmcp.status.getSnapshot().phase === "ready"));
     assert.equal(webmcp.status.getSnapshot().phase, "ready");
     const available = [...session.handles.values()].filter((handle) => handle.availability.getSnapshot().available);
     assert.deepEqual([...host.tools.keys()].sort(), available.map((handle) => handle.id).sort());
     await webmcp.retry();
-    await Effect.runPromise(settle);
+    await Effect.runPromise(until(() => webmcp.status.getSnapshot().phase === "ready"));
     assert.equal(webmcp.status.getSnapshot().phase, "ready");
   }
   assert.equal(host.tools.size, 0);
@@ -150,12 +160,12 @@ test("Handles.open: remove takes the tools away during a call of the same sessio
     assert.ok(found !== undefined, `The session has no handle ${id}.`);
     return found;
   };
-  await Effect.runPromise(settle);
+  await Effect.runPromise(until(() => host.tools.has("fixture.toggle")));
   assert.ok(host.tools.has("fixture.toggle"));
 
   const sessionCall = handle("fixture.hold").invokeExternal({ key: "session" });
   const toolCall = toolOf(host, "fixture.hold").execute({ key: "tool" });
-  await Effect.runPromise(settle);
+  await Effect.runPromise(until(async () => JSON.stringify(await handle("fixture.held").invokeExternal({})).includes('"session","tool"')));
   assert.deepEqual(await handle("fixture.held").invokeExternal({}), { ok: true, value: { keys: ["session", "tool"] } });
 
   await webmcp.remove();
@@ -167,6 +177,7 @@ test("Handles.open: remove takes the tools away during a call of the same sessio
   await handle("fixture.switch.set").invokeExternal({ on: false });
   await handle("fixture.switch.set").invokeExternal({ on: true });
   await webmcp.retry();
+  // Nothing must happen here, and a test cannot wait for nothing, so it waits for a time.
   await Effect.runPromise(settle);
   assert.equal(host.tools.size, 0);
 
@@ -175,7 +186,7 @@ test("Handles.open: remove takes the tools away during a call of the same sessio
   await handle("fixture.release").invokeExternal({ key: "tool" });
   assert.deepEqual(await sessionCall, { ok: true, value: { key: "session" } });
   assert.deepEqual(await toolCall, { ok: true, value: { key: "tool" } });
-  await Effect.runPromise(settle);
+  await Effect.runPromise(until(() => webmcp.status.getSnapshot().phase === "disposed"));
   assert.equal(webmcp.status.getSnapshot().phase, "disposed");
   assert.deepEqual(await handle("fixture.echo").invokeExternal({ text: "still open" }), { ok: true, value: { text: "still open" } });
 
