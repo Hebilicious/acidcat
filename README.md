@@ -80,7 +80,7 @@ capabilities {
 }
 ```
 
-We recommend that you write the catalog in Pkl, with a catalog library, or from the code of the application, and that a tool writes the JSON, in [canonical form](spec/catalog.md#canonical-form). JSON written by hand is also a catalog, if it conforms. The same catalog in [TypeScript](examples/aircon/catalog/typescript.ts), [Python](examples/aircon/catalog/python.py), [Go](examples/aircon/catalog/go/main.go) or [Rust](examples/aircon/catalog/rust/src/main.rs) gives the same bytes: [`aircon.acidcat.json`](examples/aircon/catalog/aircon.acidcat.json). [`examples/aircon`](examples/aircon/README.md) also serves the air conditioner with both TypeScript cores, as a command line, and through APIs.
+The best way to write a catalog is in Pkl, with a catalog library, or from the code of the application. A tool then writes the JSON, in [canonical form](spec/catalog.md#canonical-form). JSON written by hand is also a catalog, if it conforms. The same catalog in [TypeScript](examples/aircon/catalog/typescript.ts), [Python](examples/aircon/catalog/python.py), [Go](examples/aircon/catalog/go/main.go) or [Rust](examples/aircon/catalog/rust/src/main.rs) gives the same bytes: [`aircon.acidcat.json`](examples/aircon/catalog/aircon.acidcat.json). [`examples/aircon`](examples/aircon/README.md) also serves the air conditioner with both TypeScript cores, as a command line, and through APIs.
 
 ## 📚 Specification
 

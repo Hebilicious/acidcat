@@ -43,13 +43,13 @@ An implementation does not read the catalog at run time. It uses its own code. T
 
 ## Writing a catalog
 
-Only the JSON document is normative. We recommend that a tool writes the JSON document from a source, and that you write the source, not the JSON. The source is one of these:
+Only the JSON document is normative. The best way is to write a source, and to let a tool write the JSON document from it. The source is one of these:
 
 - a [Pkl](https://pkl-lang.org) module that amends [`Catalog.pkl`](../packages/catalog/pkl/Catalog.pkl). `pkl eval` and `acid-cat format` write the JSON;
 - a program that uses a [catalog library](../packages/catalog/README.md) for TypeScript, Python, Go or Rust;
 - the code of the application, when a core writes its catalog, for example `renderCatalog` of `@acid-cat/core-ts`.
 
-We recommend Pkl when no code writes the catalog. Pkl finds errors before it writes the JSON. In Pkl, shared types go in `types`, and `module.ref("Name")` refers to one.
+When no code writes the catalog, use Pkl. Pkl finds errors before it writes the JSON. In Pkl, shared types go in `types`, and `module.ref("Name")` refers to one.
 
 You can also write the JSON document by hand. A JSON document is a catalog when it conforms, however it was written. Then run `acid-cat check` after each change, and `acid-cat format --write` to keep the canonical form.
 

@@ -20,6 +20,7 @@ If `.local/AGENTS.md` exists, read it too. The `.local/` directory contains priv
 - Describe what is true now. Do not write history, changes, or plans for a person ("now", "no longer", "the user decided"). Put plans in a "Roadmap" section.
 - Use Simplified Technical English (ASD-STE100): short sentences, one topic in each sentence, active voice, simple words, and the same word for the same thing.
 - Use RFC 2119 words only for requirements.
+- Do not write "we", "our" or "us". Address the reader, or tell what is true: "Use Pkl", not "We recommend Pkl".
 - Keep library names (Effect, XState, Vue) out of the core specification. They can be in bindings and in packages.
 
 ## Plan
