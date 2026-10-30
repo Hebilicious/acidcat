@@ -44,6 +44,19 @@ Each core is complete in its own style. Neither core wraps the other. Both cores
 | Handles for code without Effect | `Handles.make`, `Handles.open` | `createSession` |
 
 
+## Reference implementation in Kotlin
+
+These packages implement the specification on the JVM and on Android, with coroutines and kotlinx.serialization. They do not use the TypeScript packages. The tests of each package run `acid-cat conform` from [`cli/`](cli).
+
+| Package | Directory | Registry name | Use |
+| --- | --- | --- | --- |
+| Core for Kotlin | [`core-kotlin/core/`](core-kotlin) | Maven `dev.acidcat:acid-cat-core-kotlin` | Serve capabilities in Kotlin: capabilities are suspending functions, schemas come from serializable types, availability and state are `StateFlow`s. It serves the Kotlin binding and the MCP, HTTP and CLI bindings |
+| Ktor adapter | [`core-kotlin/ktor/`](core-kotlin) | Maven `dev.acidcat:acid-cat-ktor` | Serve the MCP and HTTP handlers of the core with Ktor |
+
+The packages use Gradle. One version catalog, [`core-kotlin/gradle/libs.versions.toml`](core-kotlin/gradle/libs.versions.toml), pins each dependency.
+
+`moon run core-kotlin:test` runs `acid-cat conform` against the MCP, HTTP and CLI bindings of the fixture of the core.
+
 ## Publishing
 
 [release-please](https://github.com/googleapis/release-please) makes the releases, in [`release.yml`](../.github/workflows/release.yml). It reads the commits on `main`, whose titles have the form `type(scope): subject`, and keeps one release pull request open:
@@ -66,6 +79,7 @@ Each registry has its own release workflow. A tag that is pushed by hand on `mai
 | crates.io | `acid-cat-catalog` | `crates/v0.1.0` | `release-crates.yml` |
 | Pkl | `acid-cat-catalog` | `acid-cat-catalog@0.1.0` | `release-pkl.yml`: a GitHub release with the package files |
 | Go | `github.com/Hebilicious/acidcat/packages/catalog/go` | `packages/catalog/go/v0.1.0` | None. The Go module proxy reads the tag |
+| Maven Central | The Kotlin packages | None | None. `moon run core-kotlin:package` writes the files that Maven Central receives into `build/repository`. They are not published |
 
 The workflows authenticate with trusted publishing. They hold no tokens.
 

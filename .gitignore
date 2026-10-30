@@ -10,3 +10,9 @@ CLAUDE.local.md
 
 # Task worktrees, one for each branch.
 .worktrees/
+
+# Gradle and Android build output.
+.gradle/
+.kotlin/
+build/
+local.properties

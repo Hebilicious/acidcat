@@ -43,7 +43,7 @@ These terms have these meanings in all documents.
 | --- | --- |
 | [Catalog](catalog.md) | Targets, capabilities, ids, schemas, types, views, canonical form |
 | [Invocation](invocation.md) | Outcomes, availability, sessions, cancellation, concurrency, state |
-| [Bindings](bindings/README.md) | The rules for all bindings, and the bindings in this specification |
+| [Bindings](bindings/README.md) | The rules for all bindings, and the bindings in this specification: TypeScript, Kotlin, WebMCP, MCP, CLI and HTTP |
 | [Extensions](extensions/README.md) | Optional conventions: attachments, pagination |
 | [Conformance](conformance.md) | The rules for a conforming catalog, provider and binding |
 
