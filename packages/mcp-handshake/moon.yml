@@ -1,0 +1,29 @@
+language: "typescript"
+layer: "library"
+
+project:
+  title: "@acid-cat/mcp-handshake"
+  description: "The initialize handshake of earlier MCP revisions in front of an MCP server through HTTP. npm package: @acid-cat/mcp-handshake."
+
+toolchains:
+  default: ["javascript", "node", "pnpm"]
+
+tasks:
+  build:
+    description: "Bundle the package and write its declarations into dist/, for npm."
+    command: "node"
+    args: ["../../scripts/build-package.ts"]
+    inputs: ["src/**/*", "package.json", "tsconfig.json", "tsconfig.build.json", "/tsconfig.base.json", "/scripts/build-package.ts"]
+    outputs: ["dist/**/*"]
+
+  test:
+    description: "Test the handshake in front of an MCP server."
+    command: "node"
+    args: ["--test", "test/"]
+    inputs: ["src/**/*.ts", "test/**/*.ts"]
+
+  typecheck:
+    description: "Type-check the sources and tests."
+    command: "tsc"
+    args: ["-p", "."]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "tsconfig.json", "/tsconfig.base.json"]

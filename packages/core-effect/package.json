@@ -88,6 +88,7 @@
   },
   "dependencies": {
     "@acid-cat/catalog": "workspace:*",
+    "@acid-cat/mcp-handshake": "workspace:*",
     "@acid-cat/spec-ts": "workspace:*"
   },
   "peerDependencies": {

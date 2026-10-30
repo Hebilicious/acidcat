@@ -149,49 +149,6 @@ test("MCP gives the view and each outcome", async () => {
   assert.equal((await handler(new Request("https://fixture.example/mcp"))).status, 405);
 });
 
-test("MCP through HTTP serves the initialize handshake of earlier revisions with no state", async () => {
-  const handler = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...options() });
-  const post = (message: object, version?: string) =>
-    handler(
-      new Request("https://fixture.example/mcp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(version === undefined ? {} : { "mcp-protocol-version": version }) },
-        body: JSON.stringify({ jsonrpc: "2.0", ...message }),
-      }),
-    );
-  const Answer = z.object({ result: z.record(z.string(), z.unknown()).optional(), error: z.object({ code: z.number() }).optional() });
-  const initialized = await readJson(await post({ id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } } }), Answer);
-  assert.deepEqual(initialized.result, {
-    protocolVersion: "2025-06-18",
-    capabilities: { tools: { listChanged: false } },
-    serverInfo: { name: "fixture", version: "0.0.0" },
-    instructions: fixture.description,
-  });
-  const latest = await readJson(await post({ id: 1, method: "initialize", params: { protocolVersion: "2024-11-05" } }), Answer);
-  assert.equal(latest.result?.["protocolVersion"], "2025-11-25");
-
-  const notified = await post({ method: "notifications/initialized" }, "2025-06-18");
-  assert.equal(notified.status, 202);
-  assert.equal(notified.headers.get("Mcp-Session-Id"), null);
-
-  const listed = await readJson(await post({ id: 2, method: "tools/list" }, "2025-06-18"), Answer);
-  assert.ok(Array.isArray(listed.result?.["tools"]));
-  assert.deepEqual(Object.keys(listed.result ?? {}), ["tools"]);
-  const called = await readJson(await post({ id: 3, method: "tools/call", params: { name: "fixture.echo", arguments: { text: "hi" } } }, "2025-11-25"), Answer);
-  assert.deepEqual(called.result?.["structuredContent"], { text: "hi" });
-  assert.equal(called.result?.["_meta"], undefined);
-  const unknown = await post({ id: 4, method: "tools/call", params: { name: "fixture.hidden", arguments: {} } }, "2025-11-25");
-  assert.equal(unknown.status, 200);
-  assert.equal((await readJson(unknown, Answer)).error?.code, -32602);
-  assert.deepEqual((await readJson(await post({ id: 5, method: "ping" }, "2025-11-25"), Answer)).result, {});
-
-  const unsupported = await post({ id: 6, method: "tools/list" }, "2024-01-01");
-  assert.equal(unsupported.status, 400);
-  assert.equal((await readJson(unsupported, Answer)).error?.code, -32022);
-  const missing = await post({ id: 7, method: "tools/list", params: { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } } });
-  assert.equal((await readJson(missing, Answer)).error?.code, -32020);
-});
-
 test("MCP gives the instructions of the options, or else the description of the application", async () => {
   const discover = async (instructions?: string) => {
     const handler = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], instructions, ...options() });

@@ -259,26 +259,12 @@ export function mcpHandshakeVersion(offered: unknown): string {
 }
 
 /**
- * The revision of a request through HTTP (spec/bindings/mcp.md#revisions-through-http), from its `MCP-Protocol-Version`
- * header and the revision in `params._meta`. A request with no header is a request of a revision with a handshake.
+ * True if a request through HTTP is of a revision with a handshake (spec/bindings/mcp.md#earlier-revisions-through-http),
+ * from its `MCP-Protocol-Version` header and the revision in its `params._meta`.
  */
-export type McpHttpRevision =
-  | { readonly revision: "current" }
-  | { readonly revision: "handshake" }
-  | { readonly revision: "rejected"; readonly code: number; readonly message: string; readonly data?: JsonObject };
-
-export function mcpHttpRevision(header: string | null, metaVersion: unknown): McpHttpRevision {
-  if (header === MCP_PROTOCOL_VERSION) {
-    if (metaVersion === undefined) return { revision: "rejected", code: -32602, message: "Required request metadata is missing" };
-    if (metaVersion !== header) return { revision: "rejected", code: -32020, message: "MCP-Protocol-Version header does not match request metadata" };
-    return { revision: "current" };
-  }
-  if (header === null) {
-    if (metaVersion === MCP_PROTOCOL_VERSION) return { revision: "rejected", code: -32020, message: "MCP-Protocol-Version header is required" };
-    return { revision: "handshake" };
-  }
-  if (MCP_HANDSHAKE_VERSIONS.some((version) => version === header)) return { revision: "handshake" };
-  return { revision: "rejected", code: -32022, message: `Unsupported protocol version ${header}`, data: { supported: MCP_SUPPORTED_VERSIONS } };
+export function isMcpHandshakeRequest(header: string | null, metaVersion: unknown): boolean {
+  if (header === null) return metaVersion !== MCP_PROTOCOL_VERSION;
+  return MCP_HANDSHAKE_VERSIONS.some((version) => version === header);
 }
 
 /** The information about a server that `initialize` gives. */

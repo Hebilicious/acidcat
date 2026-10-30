@@ -8,6 +8,7 @@
   "tag-separator": "@",
   "packages": {
     "packages/spec-ts": { "release-type": "node", "component": "@acid-cat/spec-ts" },
+    "packages/mcp-handshake": { "release-type": "node", "component": "@acid-cat/mcp-handshake" },
     "packages/catalog/typescript": { "release-type": "node", "component": "@acid-cat/catalog" },
     "packages/cli": { "release-type": "node", "component": "@acid-cat/cli" },
     "packages/core-effect": { "release-type": "node", "component": "@acid-cat/core-effect" },
@@ -38,7 +39,7 @@
     {
       "type": "linked-versions",
       "groupName": "npm",
-      "components": ["@acid-cat/spec-ts", "@acid-cat/catalog", "@acid-cat/cli", "@acid-cat/core-effect", "@acid-cat/core-ts"]
+      "components": ["@acid-cat/spec-ts", "@acid-cat/mcp-handshake", "@acid-cat/catalog", "@acid-cat/cli", "@acid-cat/core-effect", "@acid-cat/core-ts"]
     }
   ]
 }

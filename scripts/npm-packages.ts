@@ -59,6 +59,7 @@ export function stringRecord(value: unknown, what: string): Record<string, strin
 
 export const npmPackages = [
   { name: "@acid-cat/spec-ts", directory: "packages/spec-ts" },
+  { name: "@acid-cat/mcp-handshake", directory: "packages/mcp-handshake" },
   { name: "@acid-cat/catalog", directory: "packages/catalog/typescript" },
   { name: "@acid-cat/cli", directory: "packages/cli" },
   { name: "@acid-cat/core-effect", directory: "packages/core-effect" },

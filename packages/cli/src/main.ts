@@ -93,6 +93,10 @@ const conformCommand = Command.make(
   "conform",
   {
     mcp: url("mcp", "The URL of the MCP server"),
+    mcpHandshake: Flag.Boolean("mcp-handshake").pipe(
+      Flag.withDescription("Check the initialize handshake of MCP revision 2025-11-25 through --mcp too"),
+      Flag.withDefault(false),
+    ),
     mcpStdio: url("mcp-stdio", "The command that starts the MCP server through standard input and output, for example \"node fixture-mcp-stdio.ts\""),
     http: url("http", "The base URL of the HTTP API, before /capabilities"),
     cli: url("cli", "The command that starts the command line, for example \"node fixture-cli.ts\""),
@@ -109,6 +113,7 @@ const conformCommand = Command.make(
     const results = yield* Effect.promise(() =>
       conform({
         mcp: value(options.mcp),
+        mcpHandshake: options.mcpHandshake,
         mcpStdio: words(options.mcpStdio),
         http: value(options.http),
         cli: words(options.cli),

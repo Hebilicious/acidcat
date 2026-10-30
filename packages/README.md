@@ -24,8 +24,9 @@ These packages show one way to implement the specification. Reference implementa
 | Specification data | [`spec-ts/`](spec-ts) | npm `@acid-cat/spec-ts` | The fixed details of the specification as TypeScript data and pure functions, with no dependencies |
 | Core for Effect | [`core-effect/`](core-effect) | npm `@acid-cat/core-effect` | Serve capabilities, written fully in Effect: capabilities are Effect programs, sessions are scopes, services are layers |
 | Core for TypeScript | [`core-ts/`](core-ts) | npm `@acid-cat/core-ts` | Serve capabilities in plain TypeScript, with no Effect dependency: capabilities return promises, inputs use Standard Schema |
+| MCP handshake | [`mcp-handshake/`](mcp-handshake) | npm `@acid-cat/mcp-handshake` | Serve MCP clients of earlier revisions, which open the session with `initialize`, from an MCP server through HTTP. Both cores re-export it |
 
-`@acid-cat/spec-ts` holds only the data and pure functions of the specification. Runtime code, such as servers and I/O, goes in the cores.
+`@acid-cat/spec-ts` holds only the data and pure functions of the specification. Runtime code, such as servers and I/O, goes in the cores, and in `@acid-cat/mcp-handshake`, which works in front of either core.
 
 ### Two cores
 
@@ -50,7 +51,7 @@ Each core is complete in its own style. Neither core wraps the other. Both cores
 
 - A package gets a release when a commit with the type `feat`, `fix`, `perf`, `revert` or `deps` changes a file in its directory. Other types, and files outside the packages, give no release.
 - Before version 1.0, `feat` and a breaking change (`!`) increase the minor version. The other types increase the patch version.
-- The five npm packages are linked: they always have the same version, and they are released together.
+- The six npm packages are linked: they always have the same version, and they are released together.
 - The release pull request changes the versions in the package files, and the `CHANGELOG.md` of each package. release-please writes these changelogs.
 
 To release, merge the release pull request. release-please then tags each released package and creates its GitHub release. Each new tag starts the release workflow of its registry. [`release-please-config.json`](../release-please-config.json) holds the settings, and [`.release-please-manifest.json`](../.release-please-manifest.json) holds the version of each package.
@@ -61,7 +62,7 @@ Each registry has its own release workflow. A tag that is pushed by hand on `mai
 
 | Registry | Packages | Tag | Workflow |
 | --- | --- | --- | --- |
-| npm | The five npm packages, all at one version | `npm/v0.1.0` | `release-npm.yml`: `moon run verify`, then `scripts/publish-npm.ts` |
+| npm | The six npm packages, all at one version | `npm/v0.1.0` | `release-npm.yml`: `moon run verify`, then `scripts/publish-npm.ts` |
 | PyPI | `acid-cat-catalog` | `pypi/v0.1.0` | `release-pypi.yml` |
 | crates.io | `acid-cat-catalog` | `crates/v0.1.0` | `release-crates.yml` |
 | Pkl | `acid-cat-catalog` | `acid-cat-catalog@0.1.0` | `release-pkl.yml`: a GitHub release with the package files |
