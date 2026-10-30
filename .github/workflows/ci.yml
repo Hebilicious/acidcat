@@ -22,13 +22,9 @@ jobs:
         with:
           fetch-depth: 0
 
-<<<<<<< HEAD
       # proto installs the tools in .prototools: Moon, Node, pnpm, Pkl, Python, Go, Rust, a JDK and Gradle. The JDK runs
-      # Gradle and the Kotlin compiler.
-=======
-      # proto installs the tools in .prototools: Moon, Node, pnpm, Pkl, Python, Go, Rust, Java and Gradle. The runner has
-      # the Android SDK in ANDROID_HOME, and Gradle installs the parts that the Android packages need.
->>>>>>> 5f28938 (feat(appfunctions): serve a target as Android app functions, and test them with acid-cat conform)
+      # Gradle and the Kotlin compiler. The runner has the Android SDK in ANDROID_HOME, and Gradle installs the parts that
+      # the Android packages need.
       - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
