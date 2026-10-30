@@ -133,6 +133,14 @@ Reference implementations in more languages will follow. You do not need a packa
 
 To build your own API, for example in GraphQL, see [the APIs of the air conditioner](examples/aircon/README.md#apis): GraphQL, Cap'n Web and Elysia APIs, each beside the HTTP binding, and an MCP server in Effect beside the MCP binding.
 
+## 🤖 Agent skill
+
+[`skills/acid-cat`](skills/acid-cat/SKILL.md) is a skill for coding agents that build with AcidCat. It tells an agent the rules of the catalog, how to choose a core, how to add a capability, which function serves each binding, and how to test. Install it in a project with the GitHub CLI:
+
+```sh
+gh skill install Hebilicious/acidcat acid-cat
+```
+
 ## 🗺️ Roadmap
 
 - [x] `acid-cat conform`: test a running implementation through each binding
