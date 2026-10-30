@@ -97,4 +97,6 @@ jobs:
         run: |
           # One listing of the app functions, with its time, tells a slow platform from one that does not answer.
           time timeout 300 adb shell cmd app_function list-app-functions --package dev.acidcat.fixture | head -c 3000 || true
+          # The crash buffer keeps the stack of a crash of the platform or of the app.
+          adb logcat -b crash -d || true
           adb logcat -d -t 400 || true
