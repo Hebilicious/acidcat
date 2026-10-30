@@ -76,6 +76,11 @@ jobs:
           # The boot has 15 minutes. A boot that does not end fails the step, and the next step prints the log.
           timeout 900 "$adb" wait-for-device
           timeout 900 sh -c "until [ \"\$('$adb' shell getprop sys.boot_completed | tr -d '\r')\" = 1 ]; do sleep 5; done"
+          # AppSearch, which keeps the index of app functions, works only after user 0 is unlocked. The unlock comes after
+          # the boot. Wake the device and dismiss the keyguard, then wait for the unlock.
+          "$adb" shell input keyevent KEYCODE_WAKEUP
+          "$adb" shell wm dismiss-keyguard
+          timeout 600 sh -c "until [ \"\$('$adb' shell am get-started-user-state 0 | tr -d '\r')\" = RUNNING_UNLOCKED ]; do sleep 5; done"
           "$adb" shell getprop ro.build.version.sdk
 
       - name: Print the log of the emulator
