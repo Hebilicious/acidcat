@@ -184,3 +184,50 @@ for (const services of ["shared", "per-request"] as const) {
     assert.equal(record.ran, false);
   });
 }
+
+/** One MCP request of a revision with a handshake. `version` is the `MCP-Protocol-Version` header, if any. */
+const handshakePost = (message: object, version?: string) =>
+  handler(
+    new Request(`${ORIGIN}/mcp`, {
+      method: "POST",
+      headers: { Accept: "application/json, text/event-stream", "Content-Type": "application/json", ...(version === undefined ? {} : { "mcp-protocol-version": version }) },
+      body: JSON.stringify({ jsonrpc: "2.0", ...message }),
+    }),
+  );
+
+const Initialized = Schema.Struct({
+  protocolVersion: Schema.String,
+  capabilities: Schema.Unknown,
+  serverInfo: Schema.Struct({ name: Schema.String, version: Schema.String }),
+  instructions: Schema.optional(Schema.String),
+});
+
+test("the server serves the initialize handshake of earlier revisions with no state", async () => {
+  const initialized = resultOf(Initialized, await answerOf(await handshakePost({ id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } })));
+  assert.deepEqual(initialized, {
+    protocolVersion: "2025-06-18",
+    capabilities: { tools: { listChanged: false } },
+    serverInfo: { name: "fixture", version: "0.0.0" },
+    instructions: fixture.description,
+  });
+  const latest = resultOf(Initialized, await answerOf(await handshakePost({ id: 1, method: "initialize", params: { protocolVersion: "2024-11-05" } })));
+  assert.equal(latest.protocolVersion, "2025-11-25");
+
+  const notified = await handshakePost({ method: "notifications/initialized" }, "2025-06-18");
+  assert.equal(notified.status, 202);
+  assert.equal(notified.headers.get("Mcp-Session-Id"), null);
+
+  const listed = await answerOf(await handshakePost({ id: 2, method: "tools/list" }, "2025-06-18"));
+  assert.ok(resultOf(Tools, listed).tools.some((tool) => tool.name === "fixture.echo"));
+  assert.deepEqual(Object.keys(Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(listed.result)), ["tools"]);
+  const called = await answerOf(await handshakePost({ id: 3, method: "tools/call", params: { name: "fixture.echo", arguments: { text: "hi" } } }, "2025-11-25"));
+  assert.deepEqual(resultOf(ToolResult, called).structuredContent, { text: "hi" });
+  const unknown = await handshakePost({ id: 4, method: "tools/call", params: { name: "fixture.hidden", arguments: {} } }, "2025-11-25");
+  assert.equal(unknown.status, 200);
+  assert.equal((await answerOf(unknown)).error?.code, -32602);
+  assert.deepEqual((await answerOf(await handshakePost({ id: 5, method: "ping" }, "2025-11-25"))).result, {});
+
+  const unsupported = await handshakePost({ id: 6, method: "tools/list" }, "2024-01-01");
+  assert.equal(unsupported.status, 400);
+  assert.equal((await answerOf(unsupported)).error?.code, -32022);
+});

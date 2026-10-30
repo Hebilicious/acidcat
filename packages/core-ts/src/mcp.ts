@@ -1,9 +1,21 @@
 /**
- * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP, revision 2026-07-28, with no state on the
- * server between requests.
+ * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP, with no state on the server between requests. The
+ * server serves revision 2026-07-28, and the `initialize` handshake of revisions 2025-11-25 and 2025-06-18.
  */
-import { bundle, isJsonObject, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec-ts";
-import type { Rejection } from "@acid-cat/spec-ts";
+import {
+  bundle,
+  isJsonObject,
+  MCP_PROTOCOL_VERSION,
+  MCP_REJECTIONS,
+  MCP_UNKNOWN_TOOL,
+  mcpHandshakeResult,
+  mcpHttpRevision,
+  mcpInitializeResult,
+  mcpToolResult,
+  readBounded,
+  screenRequest,
+} from "@acid-cat/spec-ts";
+import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
 import { withContext } from "./context.ts";
@@ -38,6 +50,8 @@ interface JsonRpcRequest {
   readonly name?: string | undefined;
   readonly arguments?: unknown;
   readonly protocolVersion?: unknown;
+  /** The revision that the client offers in `initialize`. */
+  readonly offeredVersion?: unknown;
 }
 
 /**
@@ -54,6 +68,7 @@ function readRequest(body: unknown): JsonRpcRequest {
     name: isJsonObject(params) && typeof params["name"] === "string" ? params["name"] : undefined,
     arguments: isJsonObject(params) ? params["arguments"] : undefined,
     protocolVersion: isJsonObject(meta) ? meta["io.modelcontextprotocol/protocolVersion"] : undefined,
+    offeredVersion: isJsonObject(params) ? params["protocolVersion"] : undefined,
   };
 }
 
@@ -77,22 +92,23 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
       return rejection("not-utf8");
     }
 
-    // Revision 2026-07-28: each request names its revision in a header, and each request repeats it in `_meta`.
-    const version = request.headers.get("MCP-Protocol-Version");
+    // Revision 2026-07-28 names its revision in a header and in `_meta`. A client of an earlier revision opens the
+    // session with `initialize`, and the server keeps no state for it.
     const id = message.id ?? null;
-    if (version === null) return error(400, id, -32020, "MCP-Protocol-Version header is required");
-    if (version !== MCP_PROTOCOL_VERSION) {
-      return error(400, id, -32022, `Unsupported protocol version ${version}`, { supported: [MCP_PROTOCOL_VERSION] });
+    const revision = mcpHttpRevision(request.headers.get("MCP-Protocol-Version"), message.protocolVersion);
+    if (revision.revision === "rejected") return error(400, id, revision.code, revision.message, revision.data);
+    const current = revision.revision === "current";
+    const settings = { ...options, instructions: options.instructions ?? app.description };
+    if (message.id === undefined) {
+      return current ? new Response(null, { status: 200, headers: { "Content-Type": "application/json" } }) : new Response(null, { status: 202 });
     }
-    if (message.id === undefined) return new Response(null, { status: 200, headers: { "Content-Type": "application/json" } });
-    const metaVersion = message.protocolVersion;
-    if (metaVersion === undefined) return error(400, id, -32602, "Required request metadata is missing");
-    if (metaVersion !== version) return error(400, id, -32020, "MCP-Protocol-Version header does not match request metadata");
+    if (!current && message.method === "initialize") return reply(id, mcpInitializeResult(message.offeredVersion, settings, CAPABILITIES));
+    if (!current && message.method === "ping") return reply(id, {});
 
     return withContext<Context, Response>(options, request, async (context) => {
       const session = createSession(app, { target: options.target ?? "mcp", context, toJsonSchema: options.toJsonSchema });
       try {
-        return await answer(session, message, { ...options, instructions: options.instructions ?? app.description }, request.signal);
+        return await answer(session, message, settings, current, request.signal);
       } finally {
         await session.dispose();
       }
@@ -100,21 +116,32 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
   };
 }
 
-async function answer(session: Session, message: JsonRpcRequest, options: McpSettings, signal: AbortSignal): Promise<Response> {
+/** The capabilities of the server. Through HTTP, the server keeps no session, so it sends no changes of the tools. */
+const CAPABILITIES = { tools: { listChanged: false } };
+
+/**
+ * Answer a request in a session. With `current`, the request is of revision 2026-07-28. Without it, the request is of
+ * a revision with a handshake: its results have no members of revision 2026-07-28, and its errors have the status 200.
+ */
+async function answer(session: Session, message: JsonRpcRequest, options: McpSettings, current: boolean, signal: AbortSignal): Promise<Response> {
   const id = message.id ?? null;
-  const complete = (result: object, list = false) =>
-    reply(id, {
+  const complete = (result: JsonObject, list = false) => {
+    const full = {
       _meta: { "io.modelcontextprotocol/serverInfo": { name: options.name, version: options.version } },
       resultType: "complete",
       ...(list ? { ttlMs: 0, cacheScope: "private" } : {}),
       ...result,
-    });
+    };
+    return reply(id, current ? full : mcpHandshakeResult(full));
+  };
+  const failure = (status: number, code: number, text: string) => error(current ? status : 200, id, code, text);
   switch (message.method) {
     case "server/discover":
+      if (!current) return failure(404, -32601, `Method not found: ${message.method}`);
       return complete(
         {
           supportedVersions: [MCP_PROTOCOL_VERSION],
-          capabilities: { tools: { listChanged: false } },
+          capabilities: CAPABILITIES,
           ...(options.instructions === undefined ? {} : { instructions: options.instructions }),
         },
         true,
@@ -125,13 +152,13 @@ async function answer(session: Session, message: JsonRpcRequest, options: McpSet
       const name = message.name ?? "";
       const handle = session.handles.get(name);
       if (handle === undefined || !handle.availability.getSnapshot().available) {
-        return error(200, id, MCP_UNKNOWN_TOOL, `Tool '${name}' not found`);
+        return failure(200, MCP_UNKNOWN_TOOL, `Tool '${name}' not found`);
       }
       const outcome = await session.invoke(name, message.arguments ?? {}, { signal });
-      return complete(mcpToolResult(outcome, hasObjectOutput(session, name)));
+      return complete({ ...mcpToolResult(outcome, hasObjectOutput(session, name)) });
     }
     default:
-      return error(404, id, -32601, `Method not found: ${message.method}`);
+      return failure(404, -32601, `Method not found: ${message.method}`);
   }
 }
 

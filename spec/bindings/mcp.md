@@ -32,8 +32,7 @@ A server serves one transport or both. The rules for the [server](#server) and t
 ## HTTP
 
 - The server uses one URL. It SHOULD be `/mcp` on the origin of the application.
-- The server uses MCP revision `2026-07-28`. This revision keeps no state on the server between requests. The server rejects revisions that keep state.
-- The server answers `server/discover`, `tools/list` and `tools/call`.
+- The server keeps no state between requests. It serves MCP revisions as [Revisions through HTTP](#revisions-through-http) tells.
 - Each request has its own session. The session closes when the response is complete.
 - When the client closes the request of a call, the call is cancelled.
 - The server accepts requests that have no `Origin` header.
@@ -47,6 +46,28 @@ The server rejects requests as follows. Each rejection has the header `Cache-Con
 | The media type is not `application/json` | 415 | None |
 | The body is too long | 413 | `-32600` |
 | The body is not UTF-8, or not JSON | 400 | `-32700` |
+
+### Revisions through HTTP
+
+The server MUST serve MCP revision `2026-07-28`, and the `initialize` handshake of revision `2025-11-25`. It MAY serve the `initialize` handshake of earlier revisions. The `MCP-Protocol-Version` header of a request gives its revision:
+
+| Header | Revision of the request |
+| --- | --- |
+| `2026-07-28` | `2026-07-28` |
+| A revision with a handshake that the server serves | That revision |
+| No header | A revision with a handshake, unless `params._meta["io.modelcontextprotocol/protocolVersion"]` is `2026-07-28`. Then the server rejects the request with status 400 and the JSON-RPC error `-32020` |
+| Another value | None. The server rejects the request with status 400 and the JSON-RPC error `-32022`. The `data.supported` member of the error lists the revisions that the server serves |
+
+A request of revision `2026-07-28` follows that revision. The server answers `server/discover`, `tools/list` and `tools/call`.
+
+The server keeps no state for a revision with a handshake either:
+
+- The server answers `initialize`, `ping`, `tools/list` and `tools/call`.
+- `initialize` gives the revision of the client if the server serves it. If not, it gives the latest revision that the server serves with that handshake. Its capabilities are `"tools": { "listChanged": false }`.
+- The server gives no `Mcp-Session-Id` header.
+- The server answers a notification with status 202 and no body.
+- A JSON-RPC error has the status 200.
+- A result has none of the members that only revision `2026-07-28` has: `_meta`, `resultType`, `ttlMs` and `cacheScope`.
 
 ## Stdio
 
@@ -69,4 +90,4 @@ The client starts the server as a process. The client writes JSON-RPC messages t
 
 MCP gives an unknown tool as a protocol error. All other problems come back as tool results, so that a model can see them and correct its call.
 
-Many MCP clients start a local server as a process and open the session with `initialize`. A server through stdio serves these clients, and also clients of revision `2026-07-28`. Through HTTP, each request is complete in itself, so the server does not need the handshake.
+Many MCP clients open the session with `initialize`. A server through stdio serves these clients, and also clients of revision `2026-07-28`. Through HTTP, a server of an earlier revision can omit `Mcp-Session-Id` and keep no state. So the server answers the handshake without a session, and each later request is complete in itself. An application does not need a bridge for these clients.

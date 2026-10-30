@@ -1,7 +1,18 @@
 /**
  * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP or through stdio, built on `effect/ai/McpServer`.
  */
-import { bundle, MCP_REJECTIONS, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec-ts";
+import {
+  bundle,
+  isJsonObject,
+  MCP_PROTOCOL_VERSION,
+  MCP_REJECTIONS,
+  mcpHandshakeResult,
+  mcpHttpRevision,
+  mcpInitializeResult,
+  mcpToolResult,
+  readBounded,
+  screenRequest,
+} from "@acid-cat/spec-ts";
 import type { JsonObject, Outcome, Rejection } from "@acid-cat/spec-ts";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Logger, ManagedRuntime, Schema, Stdio, Stream, SubscriptionRef } from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
@@ -48,7 +59,9 @@ export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, op
   return async (request: Request): Promise<Response> => {
     const admitted = await admit(request, options);
     if (admitted instanceof Response) return admitted;
-    const answer = respond(app, admitted, options);
+    const early = answerWithoutSession(app, admitted, options);
+    if (early !== undefined) return early;
+    const answer = respondTo(app, admitted, options);
     return runtime === undefined ? Effect.runPromise(Effect.provide(answer, layer)) : runtime.runPromise(answer);
   };
 }
@@ -60,14 +73,25 @@ export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, op
 export const handle = <R>(app: App.App<R>, request: Request, options: Options) =>
   Effect.flatMap(
     Effect.promise(() => admit(request, options)),
-    (admitted) => (admitted instanceof Response ? Effect.succeed(admitted) : respond(app, admitted, options)),
+    (admitted) => {
+      if (admitted instanceof Response) return Effect.succeed(admitted);
+      const early = answerWithoutSession(app, admitted, options);
+      return early === undefined ? respondTo(app, admitted, options) : Effect.succeed(early);
+    },
   );
 
+/** A request that passed the screening: the request with the body that was read, and the parsed body. */
+interface Admitted {
+  readonly request: Request;
+  readonly message: JsonObject;
+  readonly current: boolean;
+}
+
 /**
- * Screen a request and read its body (spec/bindings/mcp.md). The result is the rejection, or the request with the body
- * that was read and the signal of the request.
+ * Screen a request, read its body and find its revision (spec/bindings/mcp.md). The result is the rejection, or the
+ * request with the body that was read and the signal of the request.
  */
-async function admit(request: Request, options: Options): Promise<Request | Response> {
+async function admit(request: Request, options: Options): Promise<Admitted | Response> {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
   const screened = screenRequest(request, {
     methods: ["POST"],
@@ -78,13 +102,110 @@ async function admit(request: Request, options: Options): Promise<Request | Resp
   if (screened !== undefined) return rejection(screened);
   const body = await readBounded(request, maximumBytes);
   if ("rejection" in body) return rejection(body.rejection);
+  let parsed: unknown;
   try {
-    JSON.parse(body.text);
+    parsed = JSON.parse(body.text);
   } catch {
     return rejection("not-utf8");
   }
-  return new Request(request.url, { body: body.text, headers: request.headers, method: "POST", signal: request.signal });
+  const message = isJsonObject(parsed) ? parsed : {};
+  const params = isJsonObject(message["params"]) ? message["params"] : {};
+  const meta = isJsonObject(params["_meta"]) ? params["_meta"] : {};
+  const revision = mcpHttpRevision(request.headers.get("MCP-Protocol-Version"), meta[PROTOCOL_VERSION_KEY]);
+  if (revision.revision === "rejected") {
+    const { code, message: text, data } = revision;
+    return json({ jsonrpc: "2.0", id: idOf(message), error: { code, message: text, ...(data === undefined ? {} : { data }) } }, 400);
+  }
+  const admitted = new Request(request.url, { body: body.text, headers: request.headers, method: "POST", signal: request.signal });
+  return { request: admitted, message, current: revision.revision === "current" };
 }
+
+const PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
+const CLIENT_CAPABILITIES_KEY = "io.modelcontextprotocol/clientCapabilities";
+
+/** The id of a JSON-RPC message, or `null` when it has none or when it is not a string or a number. */
+const idOf = (message: JsonObject) => {
+  const id = message["id"];
+  return typeof id === "string" || typeof id === "number" ? id : null;
+};
+
+/**
+ * The answer to a request of a revision with a handshake that needs no session: a notification, `initialize` and
+ * `ping`. The server keeps no state for the handshake. Other requests give `undefined`.
+ */
+function answerWithoutSession<R>(app: App.App<R>, admitted: Admitted, options: Options): Response | undefined {
+  if (admitted.current) return undefined;
+  const { message } = admitted;
+  if (!("id" in message)) return new Response(null, { status: 202 });
+  const id = idOf(message);
+  const params = isJsonObject(message["params"]) ? message["params"] : {};
+  switch (message["method"]) {
+    case "initialize": {
+      const server = { name: options.name, version: options.version, instructions: options.instructions ?? app.description };
+      return json({ jsonrpc: "2.0", id, result: mcpInitializeResult(params["protocolVersion"], server, { tools: { listChanged: false } }) });
+    }
+    case "ping":
+      return json({ jsonrpc: "2.0", id, result: {} });
+    case "tools/list":
+    case "tools/call":
+      return undefined;
+    default:
+      return json({ jsonrpc: "2.0", id, error: { code: -32601, message: `Method not found: ${String(message["method"])}` } });
+  }
+}
+
+/**
+ * Answer a request that needs a session. A request of a revision with a handshake goes to the server as a request of
+ * revision 2026-07-28, and its result loses the members that only revision 2026-07-28 has.
+ */
+const respondTo = <R>(app: App.App<R>, admitted: Admitted, options: Options) => {
+  if (admitted.current) return respond(app, admitted.request, options);
+  const { message } = admitted;
+  const id = idOf(message);
+  const method = typeof message["method"] === "string" ? message["method"] : "";
+  const params = isJsonObject(message["params"]) ? message["params"] : {};
+  const meta = isJsonObject(params["_meta"]) ? params["_meta"] : {};
+  const headers = new Headers(admitted.request.headers);
+  headers.set("MCP-Protocol-Version", MCP_PROTOCOL_VERSION);
+  headers.set("Mcp-Method", method);
+  headers.set("Accept", "application/json, text/event-stream");
+  if (method === "tools/call" && typeof params["name"] === "string") headers.set("Mcp-Name", params["name"]);
+  const body = { ...message, params: { ...params, _meta: { ...meta, [PROTOCOL_VERSION_KEY]: MCP_PROTOCOL_VERSION, [CLIENT_CAPABILITIES_KEY]: {} } } };
+  const request = new Request(admitted.request.url, { method: "POST", headers, body: JSON.stringify(body), signal: admitted.request.signal });
+  return Effect.flatMap(respond(app, request, options), (response) =>
+    Effect.promise(async () => {
+      const answer = await messageOf(response);
+      const result = memberOf(answer, "result");
+      if (isJsonObject(result)) return json({ jsonrpc: "2.0", id, result: mcpHandshakeResult(result) });
+      const error = memberOf(answer, "error");
+      return json({ jsonrpc: "2.0", id, error: isJsonObject(error) ? error : { code: -32603, message: "The server gave no answer." } });
+    }),
+  );
+};
+
+const memberOf = (value: unknown, member: string) => (isJsonObject(value) ? value[member] : undefined);
+
+/** The JSON-RPC answer in a response: the body, or the last message of a stream of server-sent events. */
+async function messageOf(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!(response.headers.get("Content-Type") ?? "").includes("text/event-stream")) return parseOrNull(text);
+  const messages = text
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => parseOrNull(line.slice("data:".length)))
+    .filter((each) => isJsonObject(each) && "id" in each);
+  return messages.at(-1) ?? null;
+}
+
+function parseOrNull(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+const json = (body: JsonObject, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
 /** Answer one MCP request that passed the screening, with a new session. */
 const respond = <R>(app: App.App<R>, request: Request, options: Options) =>

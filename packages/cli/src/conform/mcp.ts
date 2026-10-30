@@ -1,6 +1,7 @@
 /**
  * Conformance checks for the MCP binding through HTTP (spec/bindings/mcp.md). The protocol checks use the official MCP
- * client, with revision 2026-07-28. The rejection checks send requests that a client never sends.
+ * client, once with revision 2026-07-28 and once with the `initialize` handshake of revision 2025-11-25. The other
+ * checks send requests that a client never sends.
  */
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
@@ -12,9 +13,9 @@ const RULE = "spec/bindings/mcp.md";
 /** A tool result, as the MCP client gives it. */
 type ToolResult = Awaited<ReturnType<Client["callTool"]>>;
 
-/** A connected MCP client. */
-export async function mcpClient(url: string, signal?: AbortSignal): Promise<Client> {
-  const client = new Client({ name: "acid-cat-conform", version: "0.1.0" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
+/** A connected MCP client. With `handshake`, the client opens the session with `initialize`. */
+export async function mcpClient(url: string, signal?: AbortSignal, handshake = false): Promise<Client> {
+  const client = new Client({ name: "acid-cat-conform", version: "0.1.0" }, handshake ? {} : { versionNegotiation: { mode: { pin: "2026-07-28" } } });
   await client.connect(new StreamableHTTPClientTransport(new URL(url)), signal ? { signal } : undefined);
   return client;
 }
@@ -37,6 +38,18 @@ export async function checkMcp(url: string, options: { readonly maximumBytes: nu
   await checkTools(checks, mcp);
   await mcp.close();
 
+  const handshakeChecks = new Checks("mcp 2025-11-25", options.deadline);
+  let handshakeClient: Client | undefined;
+  await handshakeChecks.run("an MCP client connects with the initialize handshake of revision 2025-11-25", `${RULE}#revisions-through-http`, async (signal) => {
+    handshakeClient = await mcpClient(url, signal, true);
+    expectEqual(handshakeClient.getNegotiatedProtocolVersion(), "2025-11-25", "the revision of the session");
+  });
+  if (handshakeClient !== undefined) {
+    await checkTools(handshakeChecks, handshakeClient);
+    await handshakeClient.close();
+  }
+  checks.results.push(...handshakeChecks.results);
+
   const post = (signal: AbortSignal, { headers = {}, body }: { readonly headers?: Record<string, string>; readonly body: BodyInit }) =>
     fetch(url, { method: "POST", body, headers: { "Content-Type": "application/json", ...headers }, signal });
   const rejection = async (response: Response, status: number, code?: number) => {
@@ -44,6 +57,23 @@ export async function checkMcp(url: string, options: { readonly maximumBytes: nu
     expectEqual(response.headers.get("Cache-Control"), "no-store", "Cache-Control");
     if (code !== undefined) expectEqual(memberOf(memberOf(await readJson(response), "error"), "code"), code, "JSON-RPC error code");
   };
+
+  const rpc = (signal: AbortSignal, message: object, version?: string) =>
+    post(signal, { headers: version === undefined ? {} : { "MCP-Protocol-Version": version }, body: JSON.stringify({ jsonrpc: "2.0", ...message }) });
+  await checks.run("initialize gives the revision of the client, and the server keeps no session", `${RULE}#revisions-through-http`, async (signal) => {
+    const response = await rpc(signal, { id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "acid-cat-conform", version: "0.1.0" } } });
+    expectEqual(response.status, 200, "status");
+    expectEqual(response.headers.get("Mcp-Session-Id"), null, "Mcp-Session-Id");
+    expectEqual(memberOf(memberOf(await readJson(response), "result"), "protocolVersion"), "2025-11-25", "protocolVersion");
+  });
+  await checks.run("a notification of a revision with a handshake gets 202", `${RULE}#revisions-through-http`, async (signal) => {
+    expectEqual((await rpc(signal, { method: "notifications/initialized" }, "2025-11-25")).status, 202, "status");
+  });
+  await checks.run("an unsupported revision is rejected with 400 and -32022", `${RULE}#revisions-through-http`, async (signal) => {
+    const response = await rpc(signal, { id: 1, method: "tools/list", params: {} }, "2000-01-01");
+    expectEqual(response.status, 400, "status");
+    expectEqual(memberOf(memberOf(await readJson(response), "error"), "code"), -32022, "JSON-RPC error code");
+  });
 
   await checks.run("a method other than POST is rejected with 405", `${RULE}#http`, async (signal) => {
     const response = await fetch(url, { signal });

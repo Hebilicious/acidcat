@@ -242,7 +242,71 @@ export async function readBounded(
 
 export const MCP_PROTOCOL_VERSION = "2026-07-28";
 
+/** The revisions with an `initialize` handshake that a server serves, the latest first. */
+export const MCP_HANDSHAKE_VERSIONS = ["2025-11-25", "2025-06-18"] as const;
+
+/** Each revision that a server serves. */
+export const MCP_SUPPORTED_VERSIONS: readonly string[] = [MCP_PROTOCOL_VERSION, ...MCP_HANDSHAKE_VERSIONS];
+
 export const MCP_UNKNOWN_TOOL = -32602;
+
+/**
+ * The revision that `initialize` gives: the revision that the client offers if the server serves it, or else the latest
+ * revision with a handshake.
+ */
+export function mcpHandshakeVersion(offered: unknown): string {
+  return MCP_HANDSHAKE_VERSIONS.find((version) => version === offered) ?? MCP_HANDSHAKE_VERSIONS[0];
+}
+
+/**
+ * The revision of a request through HTTP (spec/bindings/mcp.md#revisions-through-http), from its `MCP-Protocol-Version`
+ * header and the revision in `params._meta`. A request with no header is a request of a revision with a handshake.
+ */
+export type McpHttpRevision =
+  | { readonly revision: "current" }
+  | { readonly revision: "handshake" }
+  | { readonly revision: "rejected"; readonly code: number; readonly message: string; readonly data?: JsonObject };
+
+export function mcpHttpRevision(header: string | null, metaVersion: unknown): McpHttpRevision {
+  if (header === MCP_PROTOCOL_VERSION) {
+    if (metaVersion === undefined) return { revision: "rejected", code: -32602, message: "Required request metadata is missing" };
+    if (metaVersion !== header) return { revision: "rejected", code: -32020, message: "MCP-Protocol-Version header does not match request metadata" };
+    return { revision: "current" };
+  }
+  if (header === null) {
+    if (metaVersion === MCP_PROTOCOL_VERSION) return { revision: "rejected", code: -32020, message: "MCP-Protocol-Version header is required" };
+    return { revision: "handshake" };
+  }
+  if (MCP_HANDSHAKE_VERSIONS.some((version) => version === header)) return { revision: "handshake" };
+  return { revision: "rejected", code: -32022, message: `Unsupported protocol version ${header}`, data: { supported: MCP_SUPPORTED_VERSIONS } };
+}
+
+/** The information about a server that `initialize` gives. */
+export interface McpServerInfo {
+  readonly name: string;
+  readonly version: string;
+  readonly instructions?: string | undefined;
+}
+
+/** The result of `initialize`, for the revision that the client offers. */
+export function mcpInitializeResult(offered: unknown, server: McpServerInfo, capabilities: JsonObject): JsonObject {
+  return {
+    protocolVersion: mcpHandshakeVersion(offered),
+    capabilities,
+    serverInfo: { name: server.name, version: server.version },
+    ...(server.instructions === undefined ? {} : { instructions: server.instructions }),
+  };
+}
+
+/**
+ * A result of revision 2026-07-28 as a result of a revision with a handshake: without the members that only revision
+ * 2026-07-28 has.
+ */
+export function mcpHandshakeResult(result: JsonObject): JsonObject {
+  return Object.fromEntries(Object.entries(result).filter(([member]) => !CURRENT_ONLY_MEMBERS.has(member)));
+}
+
+const CURRENT_ONLY_MEMBERS = new Set(["_meta", "resultType", "ttlMs", "cacheScope"]);
 
 /** The HTTP status and JSON-RPC error code for each rejected MCP request. */
 export const MCP_REJECTIONS: { readonly [R in Rejection]: { readonly status: number; readonly code?: number } } = {

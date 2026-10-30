@@ -67,6 +67,8 @@ Standard Schema does not convert to JSON Schema. Give the converter of your sche
 
 When the signal of a request aborts, `mcpHandler` and `httpHandler` cancel the call of the request.
 
+`mcpHandler` keeps no state between requests. It serves revision `2026-07-28`, and the `initialize` handshake of revisions `2025-11-25` and `2025-06-18`. A client of an earlier revision connects to the same URL, and the application needs no bridge.
+
 ### Serve on Node.js
 
 `@acid-cat/core-ts/node` serves web handlers on Node.js, with only `node:http`. It has no other dependency.
