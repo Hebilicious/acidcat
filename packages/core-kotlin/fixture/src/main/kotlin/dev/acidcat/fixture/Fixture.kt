@@ -105,7 +105,7 @@ public sealed interface RefuseFailure {
     public data class Refused(val reason: String) : RefuseFailure
 }
 
-private val everywhere = listOf("app", "mcp", "cli", "api")
+private val everywhere = listOf("app", "mcp", "cli", "api", "android")
 private val capability = capabilitiesFor<FixtureContext>()
 
 public val echo: dev.acidcat.core.Capability<FixtureContext, Text, Text, Nothing, Nothing> =
@@ -123,6 +123,7 @@ public val fixture: App<FixtureContext> = App(
         "mcp" to Target(listOf("mcp")),
         "cli" to Target(listOf("cli")),
         "api" to Target(listOf("http")),
+        "android" to Target(listOf("kotlin", "appfunctions")),
     ),
     capabilities = listOf(
         echo,

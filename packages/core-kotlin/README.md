@@ -87,7 +87,7 @@ val aircon = App(
 File("acidcat.catalog.json").writeText(aircon.renderCatalog()) // canonical form
 ```
 
-`aircon.catalog` is the catalog as a `JsonObject`. Write the catalog in a build task or a test, and commit it.
+`aircon.catalog` is the catalog as a `JsonObject`. Write the catalog in a build task or a test, and commit it. The Gradle plugin of [`acid-cat-appfunctions`](../appfunctions) reads it.
 
 ## Serve the capabilities
 
@@ -98,6 +98,7 @@ File("acidcat.catalog.json").writeText(aircon.renderCatalog()) // canonical form
 | `mcpStdioMain(app, McpStdioSettings(…), context)`, `runMcpStdio(…)` | [MCP](../../spec/bindings/mcp.md#stdio) through stdio | The MCP server of the process, or the server on a flow of lines |
 | `httpHandler(app, HttpSettings(…), context)` | [HTTP](../../spec/bindings/http.md) | A `WebHandler` |
 | `cliMain(app, CliSettings(…), args)`, `runCli(…)` | [CLI](../../spec/bindings/cli.md) | The command line of the process, or an exit code |
+| `AppFunctionsBinding(app, target, context)` in [`acid-cat-appfunctions`](../appfunctions) | [AppFunctions](../../spec/bindings/appfunctions.md) | The app functions of an Android app |
 
 ### Sessions and handles
 
@@ -152,6 +153,6 @@ The process is one session. It serves revision `2026-07-28` and the `initialize`
 
 `moon run core-kotlin:test` runs the tests of the core, and runs `acid-cat conform` from [`packages/cli`](../cli) against the MCP binding through HTTP and through stdio, and the HTTP and CLI bindings of the fixture, with Node. `fixture/build/conform.txt` has the result of each check.
 
-- [`fixture/src/main/kotlin/dev/acidcat/fixture/Fixture.kt`](fixture/src/main/kotlin/dev/acidcat/fixture/Fixture.kt) has one capability for each behavior that `acid-cat conform` tests.
+- [`fixture/src/main/kotlin/dev/acidcat/fixture/Fixture.kt`](fixture/src/main/kotlin/dev/acidcat/fixture/Fixture.kt) has one capability for each behavior that `acid-cat conform` tests. The Android fixture of [`acid-cat-appfunctions`](../appfunctions) serves it too.
 - [`fixture/fixture.acidcat.json`](fixture/fixture.acidcat.json) is the catalog that the core writes for the fixture. A test checks it, and `moon run core-kotlin:catalog` writes it again.
 - [`core/src/test/resources/edge.acidcat.json`](core/src/test/resources/edge.acidcat.json) is the canonical form that `acid-cat format` writes for `edge.input.json`. The core writes the same bytes.

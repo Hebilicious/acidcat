@@ -97,6 +97,8 @@ const conformCommand = Command.make(
     http: url("http", "The base URL of the HTTP API, before /capabilities"),
     cli: url("cli", "The command that starts the command line, for example \"node fixture-cli.ts\""),
     webmcp: url("webmcp", "The URL of a web page that serves the app target. It runs in Chromium, through Playwright"),
+    appfunctions: url("appfunctions", "The package of an Android app that serves the android target as app functions. adb reaches its device"),
+    adbSerial: url("adb-serial", "The serial number of the device for --appfunctions, as adb devices gives it"),
     maximumBytes: Flag.Int("max-bytes").pipe(Flag.withDescription("The body limit of the remote bindings"), Flag.withDefault(1_048_576)),
     deadline: Flag.Int("deadline").pipe(
       Flag.withDescription("The time, in milliseconds, that each check has to settle. A check that does not settle in this time fails"),
@@ -113,12 +115,13 @@ const conformCommand = Command.make(
         http: value(options.http),
         cli: words(options.cli),
         webmcp: value(options.webmcp),
+        appfunctions: Option.isSome(options.appfunctions) ? { package: options.appfunctions.value, serial: value(options.adbSerial) } : undefined,
         maximumBytes: options.maximumBytes,
         deadline: options.deadline,
       }),
     );
     if (results.length === 0) {
-      yield* Console.error("Give at least one binding: --mcp, --mcp-stdio, --http, --cli or --webmcp.");
+      yield* Console.error("Give at least one binding: --mcp, --mcp-stdio, --http, --cli, --webmcp or --appfunctions.");
       return yield* fail;
     }
     for (const result of results) {

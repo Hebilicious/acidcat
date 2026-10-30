@@ -1,0 +1,66 @@
+name: AppFunctions
+
+# Run acid-cat conform against the AppFunctions fixture on an emulator. The job runs when a change can change the result.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/appfunctions.yml"
+      - ".prototools"
+      - "packages/appfunctions/**"
+      - "packages/core-kotlin/**"
+      - "packages/cli/src/conform/**"
+      - "packages/cli/conformance/**"
+  pull_request:
+    paths:
+      - ".github/workflows/appfunctions.yml"
+      - ".prototools"
+      - "packages/appfunctions/**"
+      - "packages/core-kotlin/**"
+      - "packages/cli/src/conform/**"
+      - "packages/cli/conformance/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: appfunctions-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conform:
+    name: acid-cat conform --appfunctions
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # proto installs the tools in .prototools, with a JDK and Gradle. The JDK runs Gradle and the Kotlin compiler.
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - run: pnpm install --frozen-lockfile
+
+      # The emulator needs KVM. The runner gives it only to the group kvm.
+      - name: Give KVM to the job
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # AppFunctions needs Android 16 (API 36) or later. The emulator runs Android 17 (API 37) with the Google APIs.
+      - name: Start an emulator
+        run: |
+          image="system-images;android-37.0;google_apis;x86_64"
+          tools="$ANDROID_HOME/cmdline-tools/latest/bin"
+          yes | "$tools/sdkmanager" --licenses > /dev/null
+          "$tools/sdkmanager" --install emulator platform-tools "$image" > /dev/null
+          echo no | "$tools/avdmanager" create avd --name conform --package "$image"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          nohup "$ANDROID_HOME/emulator/emulator" -avd conform -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > emulator.log 2>&1 &
+          adb="$ANDROID_HOME/platform-tools/adb"
+          "$adb" wait-for-device
+          until [ "$("$adb" shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; do sleep 5; done
+
+      - run: moon run appfunctions:conform

@@ -45,6 +45,8 @@ A provider and its bindings conform for a target if, through each binding of the
 | `fixture.switch.set` | Turns the switch on or off |
 | `fixture.flags` | Returns its input. The input has one property for each kind of command-line flag. Only the `cli` target can use it |
 
+The fixture has the targets `app`, `mcp`, `cli`, `api` and `android`. Each binding of the tests serves one of them: WebMCP serves `app`, MCP serves `mcp`, the CLI serves `cli`, HTTP serves `api`, and AppFunctions serves `android`.
+
 All the sessions of one provider share the calls that hold, so `fixture.held` through one request gives the keys of the calls of other requests. A provider that serves the CLI binding MUST write the file of a `marker`. Other providers MAY ignore `marker`.
 
 The switch MUST be on when the tests start. The implementation gives no MCP instructions of its own, so its MCP instructions are the `description` of the fixture.
@@ -52,18 +54,19 @@ The switch MUST be on when the tests start. The implementation gives no MCP inst
 ## `acid-cat conform`
 
 ```sh
-acid-cat conform --mcp <url> --mcp-stdio "<command>" --http <base url> --cli "<command>" --webmcp <page url>
+acid-cat conform --mcp <url> --mcp-stdio "<command>" --http <base url> --cli "<command>" --webmcp <page url> --appfunctions <package> [--adb-serial <serial>]
 ```
 
-Give one or more bindings. `--mcp` tests the MCP binding through HTTP, and `--mcp-stdio` tests it through stdio. For each binding, `acid-cat conform` tests the rules above. It uses the official MCP client for MCP, and sends requests that a client never sends to test rejections. For MCP through stdio, it starts the server as a process. It tests the session with revision `2026-07-28` and with the `initialize` handshake of revision `2025-11-25`. It also tests the changes of the tools, `notifications/cancelled`, lines that are not JSON, and the end of standard input. For WebMCP, it opens the page in a browser, gives the page a test host as `modelContext`, and calls the tools that the page registers. For the CLI, it interrupts a call and examines the exit code. Through MCP, with each transport, and through HTTP, property-based tests examine two guarantees of [Invocation](invocation.md#cancellation-and-concurrency) with random sets of calls: each call gets exactly its own outcome, and the cancellation of one call does not change other calls.
+Give one or more bindings. `--mcp` tests the MCP binding through HTTP, and `--mcp-stdio` tests it through stdio. For each binding, `acid-cat conform` tests the rules above. It uses the official MCP client for MCP, and sends requests that a client never sends to test rejections. For MCP through stdio, it starts the server as a process. It tests the session with revision `2026-07-28` and with the `initialize` handshake of revision `2025-11-25`. It also tests the changes of the tools, `notifications/cancelled`, lines that are not JSON, and the end of standard input. For WebMCP, it opens the page in a browser, gives the page a test host as `modelContext`, and calls the tools that the page registers. For the CLI, it interrupts a call and examines the exit code. For AppFunctions, it calls the app functions of the package through the platform of an Android device, with `adb shell cmd app_function`, and examines their metadata, their return values, their errors and their enabled states. Through MCP, with each transport, and through HTTP, property-based tests examine two guarantees of [Invocation](invocation.md#cancellation-and-concurrency) with random sets of calls: each call gets exactly its own outcome, and the cancellation of one call does not change other calls. Through AppFunctions, tests examine the same two guarantees with a fixed set of calls, because each call starts a command on the device.
 
-The tests wait for states that they can observe, not for times. Before a test cancels a call to `fixture.hold`, it waits until `fixture.held` gives the key of the call. For the CLI, it waits until the marker file exists, then it sends the interrupt. A cancelled call passes only if it ends with the cancellation of its binding:
+The tests wait for states that they can observe, not for times. Before a test cancels a call to `fixture.hold`, it waits until `fixture.held` gives the key of the call. For the CLI, it waits until the marker file exists, then it sends the interrupt. A caller of app functions cannot cancel an execution from outside the device, so AppFunctions tests give the call a time of 5 seconds, and the platform cancels it at the end of that time. A cancelled call passes only if it ends with the cancellation of its binding:
 
 - through MCP or HTTP: the call failure `cancelled`, or the client stops the call itself;
 - through WebMCP: a rejection with the name `AbortError` and the kind `cancelled`;
+- through AppFunctions: the platform cancels the execution at the end of its time;
 - through the CLI: the process exits with the code 130.
 
-Through MCP, HTTP and WebMCP, the key of the cancelled call must then leave `fixture.held`. Each call that a test does not cancel must hold until the test releases it, then return its own key.
+Through MCP, HTTP, WebMCP and AppFunctions, the key of the cancelled call must then leave `fixture.held`. Each call that a test does not cancel must hold until the test releases it, then return its own key.
 
 Each test has one deadline: `--deadline`, in milliseconds, 30 seconds by default. A test that does not settle before its deadline fails with "did not settle". The test then stops its calls, kills the command line that it started, and releases each key that it used. This cleanup has a deadline of the same length, so `acid-cat conform` always ends. The deadline never makes a test pass.
 

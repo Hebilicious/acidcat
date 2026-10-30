@@ -90,7 +90,7 @@ The best way to write a catalog is in Pkl, with a catalog library, or from the c
 | [Overview and vocabulary](spec/README.md) | The terms and the documents |
 | [Catalog](spec/catalog.md) | Targets, capabilities, types, views, canonical form |
 | [Invocation](spec/invocation.md) | Outcomes, availability, sessions, cancellation |
-| [Bindings](spec/bindings/README.md) | TypeScript, Kotlin, WebMCP, MCP, CLI, HTTP |
+| [Bindings](spec/bindings/README.md) | TypeScript, Kotlin, WebMCP, MCP, CLI, HTTP, AppFunctions |
 | [Extensions](spec/extensions/README.md) | Attachments, pagination |
 | [Conformance](spec/conformance.md) | How to test a catalog and an implementation |
 
@@ -121,12 +121,13 @@ These packages show one way to implement the specification. They serve the TypeS
 
 ### Reference implementation in Kotlin
 
-These packages show the same specification on the JVM and on Android. They serve the Kotlin binding, the MCP binding through HTTP and stdio, and the CLI and HTTP bindings, and they pass all checks of `acid-cat conform` for these bindings.
+These packages show the same specification on the JVM and on Android. They serve the Kotlin binding, the MCP binding through HTTP and stdio, and the CLI, HTTP and AppFunctions bindings, and they pass all checks of `acid-cat conform` for these bindings.
 
 | Package | Use |
 | --- | --- |
 | [`dev.acidcat:acid-cat-core-kotlin`](packages/core-kotlin) | 🟪 Serve capabilities in Kotlin, with coroutines and kotlinx.serialization |
 | [`dev.acidcat:acid-cat-ktor`](packages/core-kotlin) | 🌐 Serve the MCP and HTTP bindings with Ktor |
+| [`dev.acidcat:acid-cat-appfunctions`](packages/appfunctions) | 🤖 Serve a target as Android app functions, for the agents on the device, with the Gradle plugin `dev.acidcat.appfunctions` |
 
 Reference implementations in more languages will follow. You do not need a package from this repository to implement AcidCat. A program that serves the bindings as the specification tells is an implementation. You, or an agent, can write a core for your language from [the specification](spec/README.md), and test it with `acid-cat conform`.
 
@@ -136,8 +137,8 @@ To build your own API, for example in GraphQL, see [the APIs of the air conditio
 
 - [x] `acid-cat conform`: test a running implementation through each binding
 - [x] A reference implementation in TypeScript: `@acid-cat/spec-ts`, `@acid-cat/core-effect` and `@acid-cat/core-ts`
-- [x] A reference implementation in Kotlin: `acid-cat-core-kotlin` and `acid-cat-ktor`
-- [ ] Publish the Kotlin packages to Maven Central
+- [x] A reference implementation in Kotlin, with Android AppFunctions: `acid-cat-core-kotlin`, `acid-cat-ktor` and `acid-cat-appfunctions`
+- [ ] Publish the Kotlin packages to Maven Central, and the Gradle plugin to the Gradle Plugin Portal
 - [ ] Reference implementations in more languages
 - [ ] A site that publishes the specification
 
@@ -153,6 +154,8 @@ pnpm install
 moon run verify
 ```
 
+The Kotlin packages for Android need the Android SDK, with the platform 37. Gradle finds it in `ANDROID_HOME`. Without `ANDROID_HOME`, the Moon tasks use `~/Android/Sdk`, where Android Studio and the Android command line install it.
+
 CI runs `moon run verify` on each push to `main` and on each pull request. Changes go into `main` only through a pull request, with a squash merge. The `semantic` check requires the pull request title and each commit title to have the form `type(scope): subject`, for example `fix(catalog): reject duplicate ids`.
 
 | Command | Use |
@@ -162,6 +165,7 @@ CI runs `moon run verify` on each push to `main` and on each pull request. Chang
 | `moon run lint` | Lint all TypeScript with type information, and check that no code turns the type checks off |
 | `moon run :test` | Test all packages |
 | `moon run verify` | Do all checks and tests |
+| `moon run appfunctions:conform` | Install the AppFunctions fixture on a device or an emulator with Android 16 or later, and run `acid-cat conform` against it |
 | `pnpm exec acid-cat …` | Run the command line |
 | `moon run :build` | Build the npm packages into `dist/` |
 | `moon run packages` | Install the packed npm packages into an empty project, and test them |

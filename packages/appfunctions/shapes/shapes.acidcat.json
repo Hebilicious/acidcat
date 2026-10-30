@@ -1,0 +1,441 @@
+{
+  "acidcat": "0.1",
+  "title": "Shapes",
+  "description": "One capability for each kind of schema that the AppFunctions binding maps to a type. The build compiles the generated code. Nothing runs it.",
+  "targets": {
+    "android": {
+      "bindings": [
+        "kotlin",
+        "appfunctions"
+      ]
+    },
+    "other": {
+      "bindings": [
+        "http"
+      ]
+    }
+  },
+  "$defs": {
+    "Place": {
+      "description": "A named place.",
+      "properties": {
+        "location": {
+          "$ref": "#/$defs/Point"
+        },
+        "name": {
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "location"
+      ],
+      "type": "object"
+    },
+    "Point": {
+      "properties": {
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "latitude",
+        "longitude"
+      ],
+      "type": "object"
+    },
+    "Tree": {
+      "description": "A type that contains itself.",
+      "properties": {
+        "children": {
+          "items": {
+            "$ref": "#/$defs/Tree"
+          },
+          "type": "array"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object"
+    },
+    "Unit": {
+      "enum": [
+        "celsius",
+        "fahrenheit"
+      ],
+      "type": "string"
+    }
+  },
+  "capabilities": {
+    "shapes.arrays.sum": {
+      "description": "Take an array of each kind.",
+      "audience": [
+        "android"
+      ],
+      "input": {
+        "properties": {
+          "choices": {
+            "items": {
+              "enum": [
+                "a",
+                "b"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "flags": {
+            "items": {
+              "type": "boolean"
+            },
+            "type": "array"
+          },
+          "nested": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "numbers": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "places": {
+            "items": {
+              "$ref": "#/$defs/Place"
+            },
+            "type": "array"
+          },
+          "ratios": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "words": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "output": {
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "readOnly": true
+    },
+    "shapes.json.keep": {
+      "description": "Keep each schema that has no type of AppFunctions as JSON text.",
+      "audience": [
+        "android"
+      ],
+      "input": {
+        "properties": {
+          "anything": {},
+          "empty": {
+            "properties": {},
+            "type": "object"
+          },
+          "free": {
+            "type": "object"
+          },
+          "map": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "maybe": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tree": {
+            "$ref": "#/$defs/Tree"
+          },
+          "union": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          }
+        },
+        "required": [
+          "maybe"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          }
+        ]
+      }
+    },
+    "shapes.names.map": {
+      "description": "Map property names that are not Kotlin identifiers.",
+      "audience": [
+        "android"
+      ],
+      "input": {
+        "properties": {
+          "2fast": {
+            "type": "boolean"
+          },
+          "class": {
+            "type": "string"
+          },
+          "in": {
+            "type": "string"
+          },
+          "max-speed": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "max-speed": {
+            "type": "number"
+          },
+          "nested": {
+            "properties": {
+              "in": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "title": "Names",
+        "type": "object"
+      }
+    },
+    "shapes.nothing.do": {
+      "description": "Take nothing and return nothing.",
+      "audience": [
+        "android"
+      ]
+    },
+    "shapes.nullable.get": {
+      "description": "Return a value that can be null.",
+      "audience": [
+        "android"
+      ],
+      "output": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "failures": {
+        "Gone": {
+          "properties": {
+            "_tag": {
+              "const": "Gone",
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    "shapes.other.only": {
+      "description": "Only the other target can use this capability.",
+      "audience": [
+        "other"
+      ]
+    },
+    "shapes.places.find": {
+      "description": "Find a place by its name.",
+      "audience": [
+        "android"
+      ],
+      "input": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "near": {
+            "$ref": "#/$defs/Point"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "$ref": "#/$defs/Place"
+      },
+      "failures": {
+        "NotFound": {
+          "properties": {
+            "_tag": {
+              "const": "NotFound",
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "name"
+          ],
+          "type": "object"
+        },
+        "Offline": {
+          "properties": {
+            "_tag": {
+              "const": "Offline",
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "type": "object"
+        },
+        "rate-limited": {
+          "properties": {
+            "_tag": {
+              "const": "rate-limited",
+              "type": "string"
+            },
+            "retryAfter": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    "shapes.primitives.echo": {
+      "description": "Return each primitive. The description has a comment end */ in it.",
+      "audience": [
+        "android"
+      ],
+      "input": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "flag": {
+            "type": "boolean"
+          },
+          "mode": {
+            "const": "only",
+            "type": "string"
+          },
+          "ratio": {
+            "type": "number"
+          },
+          "text": {
+            "description": "Some text.",
+            "type": "string"
+          },
+          "unit": {
+            "$ref": "#/$defs/Unit"
+          },
+          "when": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "count"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "Primitives",
+        "type": "object"
+      }
+    },
+    "shapes.whole-input.take": {
+      "description": "Take an input with no properties member, as JSON text.",
+      "audience": [
+        "android"
+      ],
+      "input": {
+        "anyOf": [
+          {
+            "properties": {
+              "a": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "a"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "b": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "b"
+            ],
+            "type": "object"
+          }
+        ],
+        "type": "object"
+      }
+    }
+  }
+}
