@@ -7,7 +7,7 @@ description = "Control and monitor one split-unit air conditioner on the home ne
 targets {
   ["app"] {
     description = "The phone, desktop and web apps that people use."
-    bindings { "typescript"; "acme:swift"; "acme:kotlin" }
+    bindings { "typescript"; "acme:swift"; "kotlin" }
   }
   ["taskbar"] {
     description = "A desktop taskbar widget showing the status and a power toggle."
@@ -23,6 +23,10 @@ targets {
   ["api"] {
     description = "Home-automation systems and scripts."
     bindings { "http" }
+  }
+  ["phone"] {
+    description = "Agents on an Android phone, through app functions."
+    bindings { "appfunctions" }
   }
 }
 
@@ -60,8 +64,8 @@ types {
 /// An hour of the day, from 0 to 23.
 local hour = new Dynamic { type = "integer"; minimum = 0; maximum = 23 }
 
-local everywhere = new Listing { "app"; "taskbar"; "cli"; "mcp"; "api" }
-local controls = new Listing { "app"; "cli"; "mcp"; "api" }
+local everywhere = new Listing { "app"; "taskbar"; "cli"; "mcp"; "api"; "phone" }
+local controls = new Listing { "app"; "cli"; "mcp"; "api"; "phone" }
 
 /// A command that takes one required input property.
 local function setting(text: String, name: String, property: Dynamic) = new Capability {

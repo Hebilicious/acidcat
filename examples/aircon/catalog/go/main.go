@@ -20,7 +20,7 @@ func airconCatalog() *catalog.Catalog {
 	c.
 		Target("app", catalog.Target{
 			Description: "The phone, desktop and web apps that people use.",
-			Bindings:    []string{"typescript", "acme:swift", "acme:kotlin"},
+			Bindings:    []string{"typescript", "acme:swift", "kotlin"},
 		}).
 		Target("taskbar", catalog.Target{
 			Description: "A desktop taskbar widget showing the status and a power toggle.",
@@ -28,7 +28,8 @@ func airconCatalog() *catalog.Catalog {
 		}).
 		Target("cli", catalog.Target{Bindings: []string{"cli"}}).
 		Target("mcp", catalog.Target{Description: "Agents, through an MCP server.", Bindings: []string{"mcp"}}).
-		Target("api", catalog.Target{Description: "Home-automation systems and scripts.", Bindings: []string{"http"}})
+		Target("api", catalog.Target{Description: "Home-automation systems and scripts.", Bindings: []string{"http"}}).
+		Target("phone", catalog.Target{Description: "Agents on an Android phone, through app functions.", Bindings: []string{"appfunctions"}})
 
 	mode := c.Type("Mode", schema{"enum": []any{"cool", "heat", "dry", "fan", "auto"}})
 	fanSpeed := c.Type("FanSpeed", schema{"enum": []any{"auto", "low", "medium", "high"}})
@@ -58,8 +59,8 @@ func airconCatalog() *catalog.Catalog {
 		"properties": schema{"since": schema{"type": "string", "format": "date-time"}},
 	})
 
-	everywhere := []string{"app", "taskbar", "cli", "mcp", "api"}
-	controls := []string{"app", "cli", "mcp", "api"}
+	everywhere := []string{"app", "taskbar", "cli", "mcp", "api", "phone"}
+	controls := []string{"app", "cli", "mcp", "api", "phone"}
 	setting := func(name string, property schema) schema {
 		return schema{"type": "object", "required": []any{name}, "properties": schema{name: property}}
 	}
