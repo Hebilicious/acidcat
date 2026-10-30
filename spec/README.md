@@ -1,6 +1,6 @@
 # AcidCat specification
 
-AcidCat describes what an application can do in one document, the **catalog**. Each surface of the application comes from the catalog, in the language that the surface needs. Examples of surfaces are a web app, a desktop widget, a mobile app, a command line, an MCP server, and an HTTP API.
+AcidCat describes what an application can do in one document, the **catalog**. Each surface of the application comes from the catalog, in the language that the surface needs. Examples of surfaces are a web app, a desktop widget, a mobile app, the app functions of an Android app, a command line, an MCP server, and an HTTP API.
 
 ```
                          catalog
@@ -43,7 +43,7 @@ These terms have these meanings in all documents.
 | --- | --- |
 | [Catalog](catalog.md) | Targets, capabilities, ids, schemas, types, views, canonical form |
 | [Invocation](invocation.md) | Outcomes, availability, sessions, cancellation, concurrency, state |
-| [Bindings](bindings/README.md) | The rules for all bindings, and the bindings in this specification: TypeScript, Kotlin, WebMCP, MCP, CLI and HTTP |
+| [Bindings](bindings/README.md) | The rules for all bindings, and the bindings in this specification: TypeScript, Kotlin, WebMCP, MCP, CLI, HTTP and AppFunctions |
 | [Extensions](extensions/README.md) | Optional conventions: attachments, pagination |
 | [Conformance](conformance.md) | The rules for a conforming catalog, provider and binding |
 

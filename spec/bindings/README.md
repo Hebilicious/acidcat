@@ -43,6 +43,7 @@ Each remote binding tells its status codes. It also tells if it accepts requests
 | [`mcp`](mcp.md) | Protocol | An MCP server through HTTP, or through standard input and output |
 | [`cli`](cli.md) | Protocol | A command line |
 | [`http`](http.md) | Protocol | JSON through HTTP |
+| [`appfunctions`](appfunctions.md) | Protocol | App functions of an Android app, for the agents on the device |
 
 You can write other bindings to the same rules, for example for Swift or gRPC. Give a new binding a name with a prefix, as in `acme:swift`.
 

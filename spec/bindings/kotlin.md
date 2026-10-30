@@ -1,6 +1,6 @@
 # Kotlin binding
 
-A language binding for Kotlin, on the JVM and on Android. A session gives a **handle** for each capability in its view. Code in the same process uses handles. Protocol bindings, for example MCP and the command line, use the same sessions.
+A language binding for Kotlin, on the JVM and on Android. A session gives a **handle** for each capability in its view. Code in the same process uses handles. Protocol bindings, for example AppFunctions, MCP and the command line, use the same sessions.
 
 The binding uses coroutines for calls and cancellation, and kotlinx.serialization for JSON values.
 
