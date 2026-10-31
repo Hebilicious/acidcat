@@ -72,7 +72,7 @@ test("the MCP binding serves revision 2026-07-28 only, and the wrapped binding s
   await assert.rejects(legacy().connect(new StreamableHTTPClientTransport(new URL(`${served.url}/capabilities/mcp`))));
 
   const client = legacy();
-  await client.connect(new StreamableHTTPClientTransport(new URL(`${served.url}/capabilities/mcp-handshake`)));
+  await client.connect(new StreamableHTTPClientTransport(new URL(`${served.url}/capabilities/mcp-legacy`)));
   assert.equal(client.getNegotiatedProtocolVersion(), "2025-11-25");
   const { tools } = await client.listTools();
   assert.ok(tools.some((tool) => tool.name === "aircon.status.get"));
@@ -81,7 +81,7 @@ test("the MCP binding serves revision 2026-07-28 only, and the wrapped binding s
   assert.equal(typeof status.structuredContent, "object");
   await client.close();
 
-  const current = await connect("/capabilities/mcp-handshake");
+  const current = await connect("/capabilities/mcp-legacy");
   assert.equal(current.getNegotiatedProtocolVersion(), "2026-07-28");
   await current.close();
 });

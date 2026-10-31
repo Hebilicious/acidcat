@@ -64,7 +64,7 @@ The first three APIs use the application on `@acid-cat/core-ts`, and serve the H
 | URL | MCP revisions | Use |
 | --- | --- | --- |
 | `/capabilities/mcp` | `2026-07-28` | `Mcp.toWebHandler(…)`. Use this form when your clients support revision `2026-07-28` |
-| `/capabilities/mcp-handshake` | `2026-07-28`, and the [`initialize` handshake](../../spec/bindings/mcp.md#earlier-revisions-through-http) of `2025-11-25` and `2025-06-18` | `Mcp.withHandshake(Mcp.toWebHandler(…))`, for clients that still open the session with `initialize`. This form keeps no session, so it does not send `notifications/tools/list_changed` to these clients |
+| `/capabilities/mcp-legacy` | `2026-07-28`, and the [`initialize` handshake](../../spec/bindings/mcp.md#earlier-revisions-through-http) of `2025-11-25` and `2025-06-18` | `Mcp.withHandshake(Mcp.toWebHandler(…))`, for clients that still open the session with `initialize`. This form keeps no session, so it does not send `notifications/tools/list_changed` to these clients |
 
 All APIs reject origins that they do not allow.
 

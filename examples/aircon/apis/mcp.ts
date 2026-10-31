@@ -6,7 +6,7 @@
  * `@acid-cat/core-effect` serves one tool for each capability. It is served two times:
  *
  * - at `/capabilities/mcp`, with revision 2026-07-28 only. Use this form when your clients support this revision.
- * - at `/capabilities/mcp-handshake`, wrapped in `Mcp.withHandshake`, for clients that still open the session with the
+ * - at `/capabilities/mcp-legacy`, wrapped in `Mcp.withHandshake`, for clients that still open the session with the
  *   `initialize` handshake of revision 2025-11-25 or 2025-06-18.
  */
 import { Mcp, Session } from "@acid-cat/core-effect";
@@ -91,7 +91,7 @@ export interface McpApiOptions {
 
 /**
  * A web request handler: the MCP server of the application at `/mcp`, and the MCP binding at `/capabilities/mcp` and
- * `/capabilities/mcp-handshake`. All use the same unit. `dispose` stops the server of the application.
+ * `/capabilities/mcp-legacy`. All use the same unit. `dispose` stops the server of the application.
  */
 export function mcpApi(options: McpApiOptions = {}) {
   const allowedOrigins = [...(options.allowedOrigins ?? [])];
@@ -107,14 +107,14 @@ export function mcpApi(options: McpApiOptions = {}) {
   );
   const application = HttpRouter.toWebHandler(server, { disableLogger: true });
   const binding = Mcp.toWebHandler(aircon, unit, { name: "aircon", version: "0.1.0", allowedOrigins, path: "/capabilities/mcp" });
-  const handshake = Mcp.withHandshake(
-    Mcp.toWebHandler(aircon, unit, { name: "aircon", version: "0.1.0", allowedOrigins, path: "/capabilities/mcp-handshake" }),
+  const legacy = Mcp.withHandshake(
+    Mcp.toWebHandler(aircon, unit, { name: "aircon", version: "0.1.0", allowedOrigins, path: "/capabilities/mcp-legacy" }),
   );
 
   return {
     handler: (request: Request): Promise<Response> => {
       const path = new URL(request.url).pathname;
-      if (path === "/capabilities/mcp-handshake") return handshake(request);
+      if (path === "/capabilities/mcp-legacy") return legacy(request);
       return path.startsWith("/capabilities/") ? binding(request) : application.handler(request);
     },
     dispose: application.dispose,

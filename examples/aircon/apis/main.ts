@@ -20,7 +20,7 @@ const apis = {
     const app = elysiaApi({ unit });
     return { handler: async (request: Request) => app.handle(request), paths: ["/status", "/api"] };
   },
-  mcp: () => ({ handler: mcpApi().handler, paths: ["/mcp", "/capabilities/mcp", "/capabilities/mcp-handshake"] }),
+  mcp: () => ({ handler: mcpApi().handler, paths: ["/mcp", "/capabilities/mcp", "/capabilities/mcp-legacy"] }),
 };
 
 const name = process.argv[2];
