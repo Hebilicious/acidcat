@@ -1,5 +1,6 @@
 packages:
   - "packages/spec-ts"
+  - "packages/mcp-handshake"
   - "packages/cli"
   - "packages/core-effect"
   - "packages/core-ts"

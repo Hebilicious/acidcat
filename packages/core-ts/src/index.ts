@@ -4,6 +4,8 @@ export { createSession } from "./session.ts";
 export type { Handle, HandleOf, Session, SessionOptions } from "./session.ts";
 export { mcpHandler } from "./mcp.ts";
 export type { McpOptions, McpSettings } from "./mcp.ts";
+export { mcpHandshake } from "@acid-cat/mcp-handshake";
+export type { McpHandshakeOptions } from "@acid-cat/mcp-handshake";
 export { main as mcpStdioMain, runMcpStdio } from "./mcp-stdio.ts";
 export type { McpStdioIo, McpStdioOptions } from "./mcp-stdio.ts";
 export { httpHandler } from "./http.ts";

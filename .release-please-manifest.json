@@ -1,5 +1,6 @@
 {
   "packages/spec-ts": "0.9.0",
+  "packages/mcp-handshake": "0.9.0",
   "packages/catalog/typescript": "0.9.0",
   "packages/cli": "0.9.0",
   "packages/core-effect": "0.9.0",

@@ -12,6 +12,13 @@ import { cancelOnAbort } from "./internal/cancel.ts";
 import { refsOf } from "./internal/served.ts";
 import * as Session from "./Session.ts";
 
+/**
+ * Wrap the web handler of `toWebHandler` so that it also serves MCP clients of revisions 2025-11-25 and 2025-06-18,
+ * which open the session with `initialize` (spec/bindings/mcp.md#earlier-revisions-through-http). It keeps no state.
+ */
+export { mcpHandshake as withHandshake } from "@acid-cat/mcp-handshake";
+export type { McpHandshakeOptions as HandshakeOptions } from "@acid-cat/mcp-handshake";
+
 export interface Options {
   /** The name and version that the server tells to clients. */
   readonly name: string;

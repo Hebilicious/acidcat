@@ -23,6 +23,11 @@ export interface ConformOptions {
   /** The URL of the MCP server, for example `http://localhost:8787/mcp`. */
   readonly mcp?: string | undefined;
   /**
+   * Check the `initialize` handshake of revision 2025-11-25 through the MCP server too
+   * (spec/bindings/mcp.md#earlier-revisions-through-http). The default is `false`.
+   */
+  readonly mcpHandshake?: boolean | undefined;
+  /**
    * The command that starts the MCP server through standard input and standard output, for example
    * `["node", "fixture-mcp-stdio.ts"]`. Each check starts its own process.
    */
@@ -51,7 +56,7 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
   const deadline = options.deadline ?? DEADLINE;
   const results: Check[] = [];
   if (options.mcp !== undefined) {
-    results.push(...(await checkMcp(options.mcp, { maximumBytes, deadline })).results);
+    results.push(...(await checkMcp(options.mcp, { maximumBytes, deadline, handshake: options.mcpHandshake === true })).results);
     const mcp = await mcpInvoke(options.mcp, AbortSignal.timeout(deadline)).catch(() => undefined);
     if (mcp !== undefined) {
       results.push(...(await checkProperties("mcp", mcp.invoke, deadline)).results);

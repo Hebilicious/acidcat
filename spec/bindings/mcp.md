@@ -48,6 +48,18 @@ The server rejects requests as follows. Each rejection has the header `Cache-Con
 | The body is too long | 413 | `-32600` |
 | The body is not UTF-8, or not JSON | 400 | `-32700` |
 
+## Earlier revisions through HTTP
+
+Many MCP clients open the session with the `initialize` handshake of revision `2025-11-25` or `2025-06-18`. A server through HTTP SHOULD serve the `initialize` handshake of revision `2025-11-25`. It MAY serve the `initialize` handshake of earlier revisions. The server keeps no state for the handshake.
+
+- **Revision of a request.** The `MCP-Protocol-Version` header gives the revision. A request with no header, and with no revision `2026-07-28` in `params._meta`, uses the handshake.
+- **Methods.** The server answers `initialize`, `ping`, `tools/list` and `tools/call`. `initialize` gives the revision of the client if the server serves it. If not, it gives the latest revision that the server serves with that handshake. Its capabilities are `"tools": { "listChanged": false }`.
+- **No session.** The response has no `Mcp-Session-Id` header. The server answers a notification with 202 and no body.
+- **Errors.** A JSON-RPC error has the HTTP status 200. The rejections of [HTTP](#http) stay the same.
+- **Results.** A result has no `_meta`, `resultType`, `ttlMs` or `cacheScope` member. These members are only in revision `2026-07-28`.
+
+A translation layer in front of a server of revision `2026-07-28` can serve the handshake. It sends each request to the server as `server/discover`, `tools/list` or `tools/call`, and changes the result.
+
 ## Stdio
 
 The client starts the server as a process. The client writes JSON-RPC messages to the standard input of the process, and the server writes JSON-RPC messages to its standard output.
@@ -69,4 +81,8 @@ The client starts the server as a process. The client writes JSON-RPC messages t
 
 MCP gives an unknown tool as a protocol error. All other problems come back as tool results, so that a model can see them and correct its call.
 
-Many MCP clients start a local server as a process and open the session with `initialize`. A server through stdio serves these clients, and also clients of revision `2026-07-28`. Through HTTP, each request is complete in itself, so the server does not need the handshake.
+Many MCP clients start a local server as a process and open the session with `initialize`. A server through stdio serves these clients, and also clients of revision `2026-07-28`. Through HTTP, each request of revision `2026-07-28` is complete in itself. The handshake of earlier revisions keeps no state either, because a server through HTTP does not have to give a session. So a server can serve both without state.
+
+## Roadmap
+
+- Remove [Earlier revisions through HTTP](#earlier-revisions-through-http) when the official MCP SDKs use revision `2026-07-28` by default. The default of the official TypeScript client is the `initialize` handshake of revision `2025-11-25`. The test of the MCP binding in the aircon example uses this default. It fails when the default changes.

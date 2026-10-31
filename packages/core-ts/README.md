@@ -59,6 +59,7 @@ Standard Schema does not convert to JSON Schema. Give the converter of your sche
 | --- | --- | --- |
 | `createSession(app, options)` | [TypeScript](../../spec/bindings/typescript.md) | A session with a handle for each capability in the view |
 | `mcpHandler(app, options)` | [MCP](../../spec/bindings/mcp.md#http) through HTTP | `(request: Request) => Promise<Response>` |
+| `mcpHandshake(handler)` | [MCP](../../spec/bindings/mcp.md#earlier-revisions-through-http) through HTTP, for earlier revisions | The handler, which also serves the `initialize` handshake of earlier revisions. From [`@acid-cat/mcp-handshake`](../mcp-handshake) |
 | `mcpStdioMain(app, options)`, `runMcpStdio(…)` | [MCP](../../spec/bindings/mcp.md#stdio) through stdio | The MCP server of the process, or a promise that resolves when the input ends |
 | `httpHandler(app, options)` | [HTTP](../../spec/bindings/http.md) | `(request: Request) => Promise<Response>` |
 | `cliMain(app, options)`, `runCli(…)` | [CLI](../../spec/bindings/cli.md) | The command line of the process, or an exit code |

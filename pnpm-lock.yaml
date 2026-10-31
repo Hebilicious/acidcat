@@ -345,6 +345,9 @@ importers:
       '@acid-cat/catalog':
         specifier: workspace:*
         version: link:../catalog/typescript
+      '@acid-cat/mcp-handshake':
+        specifier: workspace:*
+        version: link:../mcp-handshake
       '@acid-cat/spec-ts':
         specifier: workspace:*
         version: link:../spec-ts
@@ -376,6 +379,9 @@ importers:
       '@acid-cat/catalog':
         specifier: workspace:*
         version: link:../catalog/typescript
+      '@acid-cat/mcp-handshake':
+        specifier: workspace:*
+        version: link:../mcp-handshake
       '@acid-cat/spec-ts':
         specifier: workspace:*
         version: link:../spec-ts
@@ -398,6 +404,19 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.6.7
+
+  packages/mcp-handshake:
+    dependencies:
+      '@acid-cat/spec-ts':
+        specifier: workspace:*
+        version: link:../spec-ts
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
 
   packages/spec-ts:
     devDependencies:

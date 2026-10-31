@@ -59,7 +59,14 @@ The HTTP and MCP bindings give generic access to the capabilities: one route or 
 | [`apis/elysia.ts`](apis/elysia.ts) | [Elysia](https://elysiajs.com) | `GET /status`, and `PATCH /status` that changes many settings. The HTTP binding is mounted with `.mount("/api", …)` | Status 409 with the failure |
 | [`apis/mcp.ts`](apis/mcp.ts) | [Effect](https://effect.website) `effect/ai` | MCP tools `get_status` and `set_controls`, which changes many settings in one call | A tool error with the failure |
 
-The first three APIs use the application on `@acid-cat/core-ts`, and serve the HTTP binding at `/api`. [`apis/shared.ts`](apis/shared.ts) has what they share. The MCP server uses the application on `@acid-cat/core-effect`, and serves the MCP binding at `/capabilities/mcp`. All APIs reject origins that they do not allow.
+The first three APIs use the application on `@acid-cat/core-ts`, and serve the HTTP binding at `/api`. [`apis/shared.ts`](apis/shared.ts) has what they share. The MCP server uses the application on `@acid-cat/core-effect`, and serves the MCP binding at two URLs:
+
+| URL | MCP revisions | Use |
+| --- | --- | --- |
+| `/capabilities/mcp` | `2026-07-28` | `Mcp.toWebHandler(…)`. Use this form when your clients support revision `2026-07-28` |
+| `/capabilities/mcp-legacy` | `2026-07-28`, and the [`initialize` handshake](../../spec/bindings/mcp.md#earlier-revisions-through-http) of `2025-11-25` and `2025-06-18` | `Mcp.withHandshake(Mcp.toWebHandler(…))`, for clients that still open the session with `initialize`. This form keeps no session, so it does not send `notifications/tools/list_changed` to these clients |
+
+All APIs reject origins that they do not allow.
 
 Each API calls the capabilities through a session, so it gets the same outcomes as all other surfaces:
 

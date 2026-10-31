@@ -6,7 +6,7 @@ The AcidCat command line. npm package: `@acid-cat/cli`. It gives the `acid-cat` 
 acid-cat check [--strict] <catalog.json ...>  # check catalogs
 acid-cat format [--write] <catalog.json ...>  # write catalogs in canonical form
 acid-cat view <catalog.json> <target>         # write the view of one target
-acid-cat conform --mcp <url> --mcp-stdio "<command>" --http <url> --cli "<command>" --webmcp <url> [--deadline <ms>]  # test an implementation
+acid-cat conform --mcp <url> [--mcp-handshake] --mcp-stdio "<command>" --http <url> --cli "<command>" --webmcp <url> [--deadline <ms>]  # test an implementation
 ```
 
 Install it as a development dependency, and run it with `pnpm exec acid-cat …`:
@@ -34,7 +34,7 @@ The exit code is 0 if there are no errors. It is 1 if there are errors. With `--
 
 `conform` tests a running implementation of the [conformance fixture](conformance/fixture.pkl) through its bindings (see [Conformance](../../spec/conformance.md#acid-cat-conform)):
 
-- **MCP through HTTP:** `--mcp <url>`. The official MCP client, with revision `2026-07-28`, for tools and outcomes; raw requests for rejections.
+- **MCP through HTTP:** `--mcp <url>`. The official MCP client, with revision `2026-07-28`, for tools and outcomes; raw requests for rejections. With `--mcp-handshake`, or `mcpHandshake: true` in code, the checks also test the [`initialize` handshake of earlier revisions](../../spec/bindings/mcp.md#earlier-revisions-through-http): the client of revision `2025-11-25` tests the tools and outcomes again, and raw requests test `initialize` with no session and a notification.
 - **MCP through stdio:** `--mcp-stdio "<command>"`, or `mcpStdio` in code. The checks start the server as a process. The official MCP client tests the tools and outcomes two times: with revision `2026-07-28`, and with the `initialize` handshake of revision `2025-11-25`. It also tests `notifications/tools/list_changed` and `notifications/cancelled`. Raw lines test the version negotiation, a line that is not JSON, a standard output with only JSON-RPC messages, and the end of standard input.
 - **HTTP** and **CLI:** each outcome, each kind of call failure, availability, and rejections. For the CLI, also each kind of flag, including a repeated flag that gives one item of an array for each occurrence, or the whole array as JSON text, and the usage line of each command. An interrupt (`SIGINT`) during a call that holds gives exit code 130.
 - **WebMCP:** the checks act as the WebMCP host. `--webmcp <url>` opens a page that serves the `app` target in Chromium, through [Playwright](https://playwright.dev), with a test `modelContext`. Install Playwright to use it: `pnpm add -D playwright`, then `pnpm exec playwright install chromium`. In code, `webmcp` can also be a function that installs the implementation on a host in the same process.

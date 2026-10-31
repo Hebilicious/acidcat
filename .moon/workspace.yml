@@ -1,6 +1,7 @@
 projects:
   acid-cat: "."
   spec-ts: "packages/spec-ts"
+  mcp-handshake: "packages/mcp-handshake"
   cli: "packages/cli"
   core-effect: "packages/core-effect"
   core-ts: "packages/core-ts"

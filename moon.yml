@@ -52,7 +52,7 @@ tasks:
     description: "Pack the npm packages, install them into an empty project, and run both cores' conformance tests from it."
     command: "node"
     args: ["scripts/check-packages.ts"]
-    deps: ["spec-ts:build", "catalog-typescript:build", "cli:build", "core-effect:build", "core-ts:build"]
+    deps: ["spec-ts:build", "mcp-handshake:build", "catalog-typescript:build", "cli:build", "core-effect:build", "core-ts:build"]
     inputs: ["scripts/check-packages.ts", "scripts/npm-packages.ts", "examples/aircon/catalog/aircon.acidcat.json", "packages/*/test/**/*.ts", "packages/*/package.json", "packages/*/dist/**/*", "packages/catalog/typescript/package.json", "packages/catalog/typescript/dist/**/*", "tsconfig.base.json"]
     # The conformance tests start servers, command lines and Chromium. Two of them at the same time on a small CI runner
     # take longer than the time of a test, so the tasks that run them share the mutex "conform".
@@ -62,4 +62,4 @@ tasks:
   verify:
     description: "Every check: the catalogs, the lint, the toolchain, and every catalog library."
     command: "noop"
-    deps: ["check", "lint", "typecheck", "packages", "spec-ts:test", "spec-ts:typecheck", "cli:test", "cli:typecheck", "core-effect:test", "core-effect:typecheck", "core-ts:test", "core-ts:typecheck", "example-aircon:test", "example-aircon:typecheck", "catalog-typescript:test", "catalog-typescript:typecheck", "catalog-python:test", "catalog-python:package", "catalog-go:test", "catalog-rust:test", "catalog-rust:package", "catalog-pkl:test"]
+    deps: ["check", "lint", "typecheck", "packages", "spec-ts:test", "spec-ts:typecheck", "mcp-handshake:test", "mcp-handshake:typecheck", "cli:test", "cli:typecheck", "core-effect:test", "core-effect:typecheck", "core-ts:test", "core-ts:typecheck", "example-aircon:test", "example-aircon:typecheck", "catalog-typescript:test", "catalog-typescript:typecheck", "catalog-python:test", "catalog-python:package", "catalog-go:test", "catalog-rust:test", "catalog-rust:package", "catalog-pkl:test"]
