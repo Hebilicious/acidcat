@@ -3,7 +3,8 @@
  *
  * The tools are a design choice: `get_status`, and `set_controls`, which changes many settings in one call. Each tool
  * calls the capabilities with typed calls, through a session of the `mcp` target. The MCP binding of
- * `@acid-cat/core-effect` serves one tool for each capability, at `/capabilities/mcp`.
+ * `@acid-cat/core-effect` serves one tool for each capability, at `/capabilities/mcp`. `Mcp.withHandshake` lets MCP
+ * clients that open the session with `initialize` use the binding too.
  */
 import { Mcp, Session } from "@acid-cat/core-effect";
 import { Effect, Layer, Schema } from "effect";
@@ -102,7 +103,9 @@ export function mcpApi(options: McpApiOptions = {}) {
     Layer.provide(unit),
   );
   const application = HttpRouter.toWebHandler(server, { disableLogger: true });
-  const binding = Mcp.toWebHandler(aircon, unit, { name: "aircon", version: "0.1.0", allowedOrigins, path: "/capabilities/mcp" });
+  const binding = Mcp.withHandshake(
+    Mcp.toWebHandler(aircon, unit, { name: "aircon", version: "0.1.0", allowedOrigins, path: "/capabilities/mcp" }),
+  );
 
   return {
     handler: (request: Request): Promise<Response> =>

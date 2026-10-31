@@ -59,7 +59,7 @@ The HTTP and MCP bindings give generic access to the capabilities: one route or 
 | [`apis/elysia.ts`](apis/elysia.ts) | [Elysia](https://elysiajs.com) | `GET /status`, and `PATCH /status` that changes many settings. The HTTP binding is mounted with `.mount("/api", …)` | Status 409 with the failure |
 | [`apis/mcp.ts`](apis/mcp.ts) | [Effect](https://effect.website) `effect/ai` | MCP tools `get_status` and `set_controls`, which changes many settings in one call | A tool error with the failure |
 
-The first three APIs use the application on `@acid-cat/core-ts`, and serve the HTTP binding at `/api`. [`apis/shared.ts`](apis/shared.ts) has what they share. The MCP server uses the application on `@acid-cat/core-effect`, and serves the MCP binding at `/capabilities/mcp`. All APIs reject origins that they do not allow.
+The first three APIs use the application on `@acid-cat/core-ts`, and serve the HTTP binding at `/api`. [`apis/shared.ts`](apis/shared.ts) has what they share. The MCP server uses the application on `@acid-cat/core-effect`, and serves the MCP binding at `/capabilities/mcp`. The binding is wrapped in `Mcp.withHandshake`, so MCP clients that open the session with the [`initialize` handshake](../../spec/bindings/mcp.md#earlier-revisions-through-http) of revision `2025-11-25` can use it too. All APIs reject origins that they do not allow.
 
 Each API calls the capabilities through a session, so it gets the same outcomes as all other surfaces:
 

@@ -64,3 +64,15 @@ test("the MCP binding serves one tool for each capability, on the same unit", as
   // The first test changed the power, the mode and the target temperature of the same unit.
   assert.deepEqual(status.structuredContent, { power: true, mode: "heat", fan: "high", targetCelsius: 24, roomCelsius: 25 });
 });
+
+test("a client of revision 2025-11-25 uses the MCP binding through the initialize handshake", async () => {
+  const client = new Client({ name: "example-test", version: "0.0.0" });
+  await client.connect(new StreamableHTTPClientTransport(new URL(`${served.url}/capabilities/mcp`)));
+  assert.equal(client.getNegotiatedProtocolVersion(), "2025-11-25");
+  const { tools } = await client.listTools();
+  assert.ok(tools.some((tool) => tool.name === "aircon.status.get"));
+  const status = await client.callTool({ name: "aircon.status.get", arguments: {} });
+  assert.equal(status.isError ?? false, false);
+  assert.equal(typeof status.structuredContent, "object");
+  await client.close();
+});
