@@ -65,11 +65,14 @@ test("the MCP binding serves one tool for each capability, on the same unit", as
   assert.deepEqual(status.structuredContent, { power: true, mode: "heat", fan: "high", targetCelsius: 24, roomCelsius: 25 });
 });
 
-test("the official MCP client, with its default options, uses the MCP binding through the initialize handshake", async () => {
+test("the MCP binding serves revision 2026-07-28 only, and the wrapped binding serves the initialize handshake too", async () => {
   // The default of the official client is the initialize handshake of revision 2025-11-25. When this default becomes
   // revision 2026-07-28, this test fails: see the roadmap of spec/bindings/mcp.md.
-  const client = new Client({ name: "example-test", version: "0.0.0" });
-  await client.connect(new StreamableHTTPClientTransport(new URL(`${served.url}/capabilities/mcp`)));
+  const legacy = () => new Client({ name: "example-test", version: "0.0.0" });
+  await assert.rejects(legacy().connect(new StreamableHTTPClientTransport(new URL(`${served.url}/capabilities/mcp`))));
+
+  const client = legacy();
+  await client.connect(new StreamableHTTPClientTransport(new URL(`${served.url}/capabilities/mcp-handshake`)));
   assert.equal(client.getNegotiatedProtocolVersion(), "2025-11-25");
   const { tools } = await client.listTools();
   assert.ok(tools.some((tool) => tool.name === "aircon.status.get"));
@@ -77,4 +80,8 @@ test("the official MCP client, with its default options, uses the MCP binding th
   assert.equal(status.isError ?? false, false);
   assert.equal(typeof status.structuredContent, "object");
   await client.close();
+
+  const current = await connect("/capabilities/mcp-handshake");
+  assert.equal(current.getNegotiatedProtocolVersion(), "2026-07-28");
+  await current.close();
 });
