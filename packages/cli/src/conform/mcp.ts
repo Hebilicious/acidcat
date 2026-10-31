@@ -15,7 +15,7 @@ type ToolResult = Awaited<ReturnType<Client["callTool"]>>;
 
 /** A connected MCP client. With `handshake`, the client opens the session with `initialize`. */
 export async function mcpClient(url: string, signal?: AbortSignal, handshake = false): Promise<Client> {
-  const client = new Client({ name: "acid-cat-conform", version: "0.1.0" }, handshake ? {} : { versionNegotiation: { mode: { pin: "2026-07-28" } } });
+  const client = new Client({ name: "acid-cat-conform", version: "0.1.0" }, handshake ? { versionNegotiation: { mode: "legacy" } } : { versionNegotiation: { mode: { pin: "2026-07-28" } } });
   await client.connect(new StreamableHTTPClientTransport(new URL(url)), signal ? { signal } : undefined);
   return client;
 }

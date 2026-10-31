@@ -242,57 +242,7 @@ export async function readBounded(
 
 export const MCP_PROTOCOL_VERSION = "2026-07-28";
 
-/** The revisions with an `initialize` handshake that a server serves, the latest first. */
-export const MCP_HANDSHAKE_VERSIONS = ["2025-11-25", "2025-06-18"] as const;
-
-/** Each revision that a server serves. */
-export const MCP_SUPPORTED_VERSIONS: readonly string[] = [MCP_PROTOCOL_VERSION, ...MCP_HANDSHAKE_VERSIONS];
-
 export const MCP_UNKNOWN_TOOL = -32602;
-
-/**
- * The revision that `initialize` gives: the revision that the client offers if the server serves it, or else the latest
- * revision with a handshake.
- */
-export function mcpHandshakeVersion(offered: unknown): string {
-  return MCP_HANDSHAKE_VERSIONS.find((version) => version === offered) ?? MCP_HANDSHAKE_VERSIONS[0];
-}
-
-/**
- * True if a request through HTTP is of a revision with a handshake (spec/bindings/mcp.md#earlier-revisions-through-http),
- * from its `MCP-Protocol-Version` header and the revision in its `params._meta`.
- */
-export function isMcpHandshakeRequest(header: string | null, metaVersion: unknown): boolean {
-  if (header === null) return metaVersion !== MCP_PROTOCOL_VERSION;
-  return MCP_HANDSHAKE_VERSIONS.some((version) => version === header);
-}
-
-/** The information about a server that `initialize` gives. */
-export interface McpServerInfo {
-  readonly name: string;
-  readonly version: string;
-  readonly instructions?: string | undefined;
-}
-
-/** The result of `initialize`, for the revision that the client offers. */
-export function mcpInitializeResult(offered: unknown, server: McpServerInfo, capabilities: JsonObject): JsonObject {
-  return {
-    protocolVersion: mcpHandshakeVersion(offered),
-    capabilities,
-    serverInfo: { name: server.name, version: server.version },
-    ...(server.instructions === undefined ? {} : { instructions: server.instructions }),
-  };
-}
-
-/**
- * A result of revision 2026-07-28 as a result of a revision with a handshake: without the members that only revision
- * 2026-07-28 has.
- */
-export function mcpHandshakeResult(result: JsonObject): JsonObject {
-  return Object.fromEntries(Object.entries(result).filter(([member]) => !CURRENT_ONLY_MEMBERS.has(member)));
-}
-
-const CURRENT_ONLY_MEMBERS = new Set(["_meta", "resultType", "ttlMs", "cacheScope"]);
 
 /** The HTTP status and JSON-RPC error code for each rejected MCP request. */
 export const MCP_REJECTIONS: { readonly [R in Rejection]: { readonly status: number; readonly code?: number } } = {

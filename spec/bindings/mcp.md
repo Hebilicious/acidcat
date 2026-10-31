@@ -85,4 +85,4 @@ Many MCP clients start a local server as a process and open the session with `in
 
 ## Roadmap
 
-- Remove [Earlier revisions through HTTP](#earlier-revisions-through-http) when most MCP clients use revision `2026-07-28`.
+- Remove [Earlier revisions through HTTP](#earlier-revisions-through-http) when the official MCP SDKs use revision `2026-07-28` by default. The default of the official TypeScript client is the `initialize` handshake of revision `2025-11-25`. The test of the MCP binding in the aircon example uses this default. It fails when the default changes.

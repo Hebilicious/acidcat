@@ -2,7 +2,7 @@
  * The MCP binding through standard input and standard output (spec/bindings/mcp.md#stdio). The process is one session.
  * The server serves revision 2026-07-28, and the `initialize` handshake of revisions 2025-11-25 and 2025-06-18.
  */
-import { isJsonObject, MCP_PROTOCOL_VERSION, MCP_SUPPORTED_VERSIONS, MCP_UNKNOWN_TOOL, mcpInitializeResult, mcpToolResult } from "@acid-cat/spec-ts";
+import { isJsonObject, MCP_PROTOCOL_VERSION, MCP_UNKNOWN_TOOL, mcpToolResult } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
@@ -28,6 +28,11 @@ export interface McpStdioIo {
   /** Write one line to standard output. The text ends with a newline. */
   readonly write: (text: string) => void;
 }
+
+/** The revisions with an `initialize` handshake that the server serves, the latest first. */
+const HANDSHAKE_VERSIONS = ["2025-11-25", "2025-06-18"] as const;
+
+const SUPPORTED_VERSIONS = [MCP_PROTOCOL_VERSION, ...HANDSHAKE_VERSIONS];
 
 const PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
 const SUBSCRIPTION_ID_KEY = "io.modelcontextprotocol/subscriptionId";
@@ -164,7 +169,7 @@ class StdioServer {
     if (method === "ping") return this.#result(id, {});
     const modern = protocolVersion !== undefined;
     if (modern && protocolVersion !== MCP_PROTOCOL_VERSION) {
-      return this.#error(id, -32022, `Unsupported protocol version ${JSON.stringify(protocolVersion)}`, { supported: MCP_SUPPORTED_VERSIONS });
+      return this.#error(id, -32022, `Unsupported protocol version ${JSON.stringify(protocolVersion)}`, { supported: SUPPORTED_VERSIONS });
     }
     /** The result of a request: in revision 2026-07-28 it has the server information and a result type. */
     const complete = (result: JsonObject, list = false) =>
@@ -183,7 +188,7 @@ class StdioServer {
       case "server/discover":
         return complete(
           {
-            supportedVersions: MCP_SUPPORTED_VERSIONS,
+            supportedVersions: SUPPORTED_VERSIONS,
             capabilities: { tools: { listChanged: true } },
             ...(this.#options.instructions === undefined ? {} : { instructions: this.#options.instructions }),
           },
@@ -202,7 +207,13 @@ class StdioServer {
 
   /** The `initialize` handshake. The server selects the revision of the client if it serves it, or else its latest. */
   #initialize(id: Id | null, offered: unknown): void {
-    this.#result(id, mcpInitializeResult(offered, this.#options, { tools: { listChanged: true } }));
+    const version = HANDSHAKE_VERSIONS.find((each) => each === offered) ?? HANDSHAKE_VERSIONS[0];
+    this.#result(id, {
+      protocolVersion: version,
+      capabilities: { tools: { listChanged: true } },
+      serverInfo: { name: this.#options.name, version: this.#options.version },
+      ...(this.#options.instructions === undefined ? {} : { instructions: this.#options.instructions }),
+    });
     this.#initialized = true;
   }
 
