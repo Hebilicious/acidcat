@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/catalog@0.9.0...@acid-cat/catalog@0.10.0) (2026-10-31)
+
+
+### Miscellaneous Chores
+
+* **@acid-cat/catalog:** Synchronize npm versions
+
 ## [0.9.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/catalog@0.8.0...@acid-cat/catalog@0.9.0) (2026-10-28)
 
 
