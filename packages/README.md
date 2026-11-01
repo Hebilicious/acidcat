@@ -73,9 +73,9 @@ The workflows authenticate with trusted publishing. They hold no tokens.
 ### npm
 
 - `moon run :build` writes `dist/` in each npm package with [`scripts/build-package.ts`](../scripts/build-package.ts). In the workspace, `exports` and `bin` point to the TypeScript sources. `publishConfig` points to `dist/`, and pnpm uses it when it packs a package.
-- `moon run packages` packs the packages, installs the tarballs into an empty project, type-checks both cores' conformance tests against the installed declarations, and runs them. `moon run verify` includes it.
+- `moon run verify` builds each npm package.
 - `node scripts/publish-npm.ts [--dry-run] [<package> ...]` publishes in dependency order, and skips versions that are on npm already.
-- Peer dependency ranges come from the `peers` catalog in `pnpm-workspace.yaml`. The packages test against the versions in the default catalog.
+- Peer dependency ranges come from the `peers` catalog in `pnpm-workspace.yaml`. The packages test against the versions in the lockfile. `effect` and its platform packages have `^` ranges in the default catalog, so that a published package does not hold `effect` back while a platform package moves on.
 
 npm accepts a trusted publisher only for a package that exists. To publish a new package for the first time, log in with `npm login --auth-type=web`, run `node scripts/publish-npm.ts <package>`, and then connect the package to the workflow:
 
