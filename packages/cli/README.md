@@ -42,7 +42,7 @@ The exit code is 0 if there are no errors. It is 1 if there are errors. With `--
 
 The checks wait for states that they can observe, not for times. Before a check cancels a call to `fixture.hold`, it waits until `fixture.held` gives the key of the call, or, for the CLI, until the marker file of the call exists. Each check has one deadline: `--deadline`, or `deadline` in code, in milliseconds. The default is 30 000. A check that does not settle before its deadline fails with "did not settle", and the check stops what it started. This cleanup has a deadline of the same length, so `conform` always returns. The deadline never makes a check pass.
 
-The exit code is 1 if a check fails. Both AcidCat cores run `conform` in their tests. In code, use `conform()` and `serve()` from `@acid-cat/cli`. `createTestHost()` gives the WebMCP host of the checks.
+The exit code is 1 if a check fails. Both AcidCat cores run `conform` in their tests. In code, use `conform()` and `serve()` from `@acid-cat/cli`. This `serve()` is for tests: it listens on `127.0.0.1`, on a free port, with plain HTTP. To serve an application, use the server of its core: `serve` from `@acid-cat/core-ts/node`, or `NodeServer` from `@acid-cat/core-effect`. `createTestHost()` gives the WebMCP host of the checks.
 
 ## Implementation
 
@@ -52,7 +52,7 @@ The command line is an [Effect](https://effect.website) program that uses `effec
 | --- | --- |
 | `src/catalog.ts` | The catalog rules, views and bundling |
 | `src/main.ts` | The commands |
-| `src/conform/` | The conformance checks, and `serve`, which serves web handlers on a local port |
+| `src/conform/` | The conformance checks, and `serve`, which serves web handlers on a local port for the tests |
 | `conformance/` | The conformance fixture, in Pkl and in JSON |
 | `test/` | Tests. Run them with `moon run cli:test` |
 | `test/fixtures/` | The catalog of the tests: a bakery, in canonical form |
