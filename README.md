@@ -152,6 +152,5 @@ CI runs `moon run verify` on each push to `main` and on each pull request. Chang
 | `moon run verify` | Do all checks and tests |
 | `pnpm exec acid-cat …` | Run the command line |
 | `moon run :build` | Build the npm packages into `dist/` |
-| `moon run packages` | Install the packed npm packages into an empty project, and test them |
 
 To publish the packages, see [Publishing](packages/README.md#publishing).
