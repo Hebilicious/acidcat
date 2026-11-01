@@ -125,7 +125,9 @@ The handler is one handler for all paths, or handlers by path prefix. The longes
 
 When a client closes its connection, the signal of its request aborts, so the handler cancels the call. `@acid-cat/core-effect/NodeServer` needs only Node.js. `@acid-cat/core-effect/node` exports `NodeServer` too, with `NodeCli`, which needs `@effect/platform-node`.
 
-`NodeServer` gives a plain HTTP/1.1 server. For more, use a library for web handlers, for example [srvx](https://srvx.h3.dev): HTTPS, HTTP/2, middleware, or the same server code on Bun and Deno. Give it the handler. Make sure that the library aborts the signal of a request when the client closes the connection. If it does not, a closed connection does not cancel the call.
+`NodeServer` gives a plain HTTP/1.1 server. It does not serve HTTPS. When clients connect through a network, end TLS before the server, in the platform: a load balancer, the ingress of a Kubernetes cluster (for example with cert-manager for the certificates), or a tunnel such as Cloudflare Tunnel. The platform sends plain HTTP to the server on its private network. Set `hostname` to `0.0.0.0` or `::`, so that the platform can connect. Do not put a TLS proxy in the process in front of `NodeServer`.
+
+For more, use a library for web handlers, for example [srvx](https://srvx.h3.dev): HTTPS in the process, when TLS must reach the server, HTTP/2, middleware, or the same server code on Bun and Deno. Give it the handler. Make sure that the library aborts the signal of a request when the client closes the connection. If it does not, a closed connection does not cancel the call.
 
 ### MCP through stdio
 
