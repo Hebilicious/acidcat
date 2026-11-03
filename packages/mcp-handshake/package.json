@@ -1,6 +1,6 @@
 {
   "name": "@acid-cat/mcp-handshake",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Serve MCP clients of the revisions with an initialize handshake from an AcidCat MCP server through HTTP, with no state. Part of the TypeScript reference implementation.",
   "keywords": [
     "acidcat",
