@@ -56,4 +56,5 @@ When a design decision is made for something that does not exist yet, build it. 
 - A human reviews each pull request. Hand off the pull request URL. Merge only after the human accepts the work, or when the human explicitly says to merge without review.
 - Each session owns its own branch. Do not push to, rebase or merge a branch that another session owns.
 - The session that merges a branch makes CI pass on it. Rebase on `main`, fix what fails, and merge only when every required check is green. Never skip or weaken a check to make it pass.
+- "Merge" means the work is on `main` both locally and on `origin`: merge the pull request and pull `main`. It is one step: never stop halfway, and never ask whether to do the second half. `main` and `origin/main` are always the same commit: check before reporting a merge as done, and if you find them apart, pull.
 - After the merge, remove the worktree with `git worktree remove .worktrees/<branch>`.
