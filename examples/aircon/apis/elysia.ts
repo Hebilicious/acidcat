@@ -1,6 +1,7 @@
 /**
  * An Elysia server for the air conditioner. It mounts the HTTP binding at `/api`, and adds its own routes:
- * `GET /status`, and `PATCH /status`, which changes more than one setting in one request.
+ * `GET /status`, `PATCH /status`, which changes more than one setting in one request, and `GET /status/changes`, a
+ * stream of server-sent events that follows the event `aircon.status.changed`.
  *
  * Each request has its own session. `PATCH /status` checks the shape of its body with Zod, and `session.call` checks
  * each setting with the input schema of its capability. The application chooses the status codes: a failure gives
@@ -9,10 +10,10 @@
 import { CallFailureError, ok } from "@acid-cat/core-ts";
 import type { Result, Session } from "@acid-cat/core-ts";
 import { HTTP_STATUS } from "@acid-cat/spec-ts";
-import { Elysia } from "elysia";
+import { Elysia, sse } from "elysia";
 import { z } from "zod";
 
-import { fanSet, FanSpeed, Mode, modeSet, powerSet, statusGet, temperatureSet } from "../core-ts/aircon.ts";
+import { fanSet, FanSpeed, Mode, modeSet, powerSet, statusChanged, statusGet, temperatureSet } from "../core-ts/aircon.ts";
 import type { Context, Offline, PoweredOff } from "../core-ts/aircon.ts";
 import { forbidden, foreignOrigin, httpBinding, openSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
@@ -66,5 +67,17 @@ export function elysiaApi(options: ApiOptions) {
         return result.ok ? result.value : status(409, result.error);
       },
       { body: Settings },
-    );
+    )
+    .get("/status/changes", async function* ({ request }) {
+      // The session of the request stays open until the stream ends.
+      await using session = openSession(options);
+      // When the client goes away, the signal of the request aborts and cancels the subscription. Elysia also calls
+      // `return()` of the generator, but that call waits until the `await` of the loop ends, so it alone does not stop
+      // a subscription that waits for its next occurrence.
+      const occurrences = await session.eventHandle(statusChanged).subscribe({}, { signal: request.signal });
+      // Elysia sends the response after the first value of the generator. This first event tells the client how long
+      // to wait before it connects again, and sends the response before the first change.
+      yield sse({ retry: 1000 });
+      for await (const occurrence of occurrences) yield sse({ event: statusChanged.id, data: occurrence.data });
+    });
 }
