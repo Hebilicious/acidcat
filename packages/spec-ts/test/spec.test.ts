@@ -4,16 +4,22 @@ import { test } from "node:test";
 import {
   bundle,
   CallFailureError,
+  cliEventUsage,
   cliExitCode,
   cliJsonArray,
   cliUsage,
   commandPath,
   fail,
+  httpEventMessage,
   httpStatus,
+  isOccurrence,
   isId,
   isJsonObject,
+  mcpEventParams,
+  mcpSubscribeError,
   mcpToolResult,
   objectInput,
+  occurrenceOf,
   ok,
   readBounded,
   screenRequest,
@@ -133,4 +139,56 @@ test("an input that is a union of objects becomes an object schema", () => {
   assert.equal(objectInput(object, types), object);
   const reference = { $ref: "#/$defs/ById" };
   assert.equal(objectInput(reference, types), reference);
+});
+
+test("views keep the events of one target, and the types that they use", () => {
+  const catalog: CatalogDocument = {
+    acidcat: "0.1",
+    targets: { app: { bindings: ["typescript"] }, mcp: { bindings: ["mcp"] } },
+    $defs: { Status: { type: "object" }, Secret: { type: "object" } },
+    capabilities: {},
+    events: {
+      "a.changed": { description: "x", audience: ["app", "mcp"], payload: { $ref: "#/$defs/Status" } },
+      "a.secret": { description: "y", audience: ["app"], payload: { $ref: "#/$defs/Secret" } },
+    },
+  };
+  const view = viewOf(catalog, "mcp");
+  assert.deepEqual(Object.keys(view.events ?? {}), ["a.changed"]);
+  assert.deepEqual(view.events?.["a.changed"]?.audience, ["mcp"]);
+  assert.deepEqual(Object.keys(view.$defs ?? {}), ["Status"]);
+  assert.equal("events" in viewOf({ ...catalog, events: { "a.secret": { description: "y", audience: ["app"] } } }, "mcp"), false);
+});
+
+test("an emitted value becomes an occurrence", () => {
+  const now = () => new Date("2026-11-10T09:30:00.000Z");
+  const occurrence = occurrenceOf("a.changed", { data: { n: 1 }, cursor: "1" }, () => "e1", now);
+  assert.deepEqual(occurrence, { eventId: "e1", name: "a.changed", timestamp: "2026-11-10T09:30:00.000Z", data: { n: 1 }, cursor: "1" });
+  assert.ok(isOccurrence(occurrence));
+  assert.equal(occurrenceOf("a.changed", { data: {}, eventId: "x", truncated: true }, () => "e1", now).eventId, "x");
+  assert.equal(isOccurrence({ ...occurrence, data: 1 }), false);
+  assert.equal(isOccurrence({ ...occurrence, extra: 1 }), false);
+  assert.equal(isOccurrence({ ...occurrence, truncated: false }), false);
+});
+
+test("occurrences become server-sent events, MCP notifications and CLI usage", () => {
+  const occurrence = { eventId: "e1", name: "a.changed", timestamp: "2026-11-10T09:30:00Z", data: {}, cursor: "7", truncated: true } as const;
+  assert.equal(httpEventMessage.next(occurrence), `event: next\nid: 7\ndata: ${JSON.stringify(occurrence)}\n\n`);
+  assert.equal(httpEventMessage.complete(), "event: complete\ndata:\n\n");
+  assert.equal(httpEventMessage.error({ kind: "internal", message: "m" }), 'event: error\ndata: {"kind":"internal","message":"m"}\n\n');
+  assert.deepEqual(mcpEventParams(occurrence, 3), {
+    eventId: "e1",
+    name: "a.changed",
+    timestamp: "2026-11-10T09:30:00Z",
+    data: {},
+    cursor: "7",
+    _meta: { "io.modelcontextprotocol/subscriptionId": 3 },
+  });
+  assert.deepEqual(mcpSubscribeError({ kind: "unknown-capability", message: "m" }), { code: -32023, message: "m", data: { kind: "event" } });
+  assert.equal(mcpSubscribeError({ kind: "invalid-input", message: "m" }).code, -32602);
+  assert.equal(cliEventUsage("aircon", "aircon.status.changed", { type: "object", properties: {} }), "aircon watch aircon.status.changed");
+  assert.equal(cliEventUsage("x", "a.b", { type: "object" }), "x watch a.b '<json>'");
+  assert.equal(
+    cliEventUsage("x", "a.b", { type: "object", required: ["room"], properties: { room: { type: "string" } } }),
+    "x watch a.b --room <string>",
+  );
 });

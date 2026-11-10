@@ -3,6 +3,7 @@
  * implementation. This package has no dependencies.
  *
  * - Outcomes and call failures: spec/invocation.md
+ * - Subscriptions and occurrences: spec/events.md
  * - Names, views and bundling: spec/catalog.md
  * - Exit codes, status codes and MCP results: spec/bindings/
  */
@@ -49,6 +50,75 @@ export class CallFailureError extends Error {
     this.name = failure.kind === "cancelled" ? "AbortError" : failure.kind === "invalid-input" ? "TypeError" : "Error";
   }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Events (spec/events.md)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** The kinds of call failure that a subscription can fail with before its first occurrence, in order of precedence. */
+export const SUBSCRIBE_FAILURE_KINDS = ["cancelled", "unknown-capability", "invalid-input", "internal"] as const;
+
+/** One thing that happened, in its JSON form (spec/events.md#occurrences). */
+export interface Occurrence<Payload = unknown> {
+  readonly eventId: string;
+  readonly name: string;
+  readonly timestamp: string;
+  readonly data: Payload;
+  readonly cursor?: string;
+  readonly truncated?: true;
+}
+
+/** What a provider gives for one occurrence. The binding adds `name`, and makes `eventId` and `timestamp` if they are absent. */
+export interface Emitted<Payload = unknown> {
+  readonly data: Payload;
+  readonly eventId?: string;
+  readonly timestamp?: string;
+  readonly cursor?: string;
+  readonly truncated?: true;
+}
+
+/** Where a subscription starts (spec/events.md#resuming). */
+export interface Resume {
+  readonly cursor?: string;
+  readonly maxAgeMs?: number;
+}
+
+/**
+ * The occurrence for an emitted value. `makeId` gives an `eventId` that is unique in the subscription, and `now` gives
+ * the time, when the provider gives none.
+ */
+export function occurrenceOf<Payload>(name: string, emitted: Emitted<Payload>, makeId: () => string, now: () => Date): Occurrence<Payload> {
+  return {
+    eventId: emitted.eventId ?? makeId(),
+    name,
+    timestamp: emitted.timestamp ?? now().toISOString(),
+    data: emitted.data,
+    ...(emitted.cursor === undefined ? {} : { cursor: emitted.cursor }),
+    ...(emitted.truncated === true ? { truncated: true } : {}),
+  };
+}
+
+/** Tell if a value is an occurrence in its JSON form. `data` can be any JSON object. */
+export function isOccurrence(value: unknown): value is Occurrence {
+  return (
+    isJsonObject(value) &&
+    typeof value.eventId === "string" &&
+    value.eventId.length > 0 &&
+    typeof value.name === "string" &&
+    isId(value.name) &&
+    typeof value.timestamp === "string" &&
+    !Number.isNaN(Date.parse(value.timestamp)) &&
+    isJsonObject(value.data) &&
+    (value.cursor === undefined || typeof value.cursor === "string") &&
+    (value.truncated === undefined || value.truncated === true) &&
+    Object.keys(value).every((key) => OCCURRENCE_MEMBERS.has(key))
+  );
+}
+
+const OCCURRENCE_MEMBERS = new Set(["eventId", "name", "timestamp", "data", "cursor", "truncated"]);
+
+/** The time with no message on a stream after which a binding sends a keepalive or a heartbeat, in milliseconds. */
+export const KEEPALIVE_MS = 15_000;
 
 // ---------------------------------------------------------------------------------------------------------------
 // Availability (spec/invocation.md#availability)
@@ -159,6 +229,18 @@ export function cliUsage(program: string, id: string, input: JsonObject | undefi
   return [program, ...commandPath(id), ...(input === undefined ? [] : cliFlags(input))].join(" ");
 }
 
+/**
+ * The `usage` of an event in `list` (spec/bindings/cli.md#events). `input` is the bundled input schema, or `undefined`
+ * when the event has no input.
+ */
+export function cliEventUsage(program: string, id: string, input: JsonObject | undefined): string {
+  if (input !== undefined && input.properties === undefined) return `${program} watch ${id} '<json>'`;
+  return [program, "watch", id, ...(input === undefined ? [] : cliFlags(input))].join(" ");
+}
+
+/** The exit code for each end of a subscription through the CLI (spec/bindings/cli.md#events). */
+export const CLI_WATCH_EXIT_CODES = { complete: 0, cancelled: 130, internal: 5 } as const;
+
 // ---------------------------------------------------------------------------------------------------------------
 // HTTP binding (spec/bindings/http.md)
 // ---------------------------------------------------------------------------------------------------------------
@@ -173,6 +255,27 @@ export const HTTP_STATUS = {
 
 export const httpStatus = (outcome: Outcome<unknown, unknown>): number =>
   isCallFailure(outcome) ? HTTP_STATUS[outcome.kind] : 200;
+
+/** One message of a stream of server-sent events, as text, with the blank line that ends it. */
+export function sseMessage(fields: { readonly event?: string | undefined; readonly id?: string | undefined; readonly data: string }): string {
+  const lines = [
+    ...(fields.event === undefined ? [] : [`event: ${fields.event}`]),
+    ...(fields.id === undefined ? [] : [`id: ${fields.id}`]),
+    ...fields.data.split("\n").map((line) => (line === "" ? "data:" : `data: ${line}`)),
+  ];
+  return `${lines.join("\n")}\n\n`;
+}
+
+/** The messages of a subscription through the HTTP binding (spec/bindings/http.md#events). */
+export const httpEventMessage = {
+  next: (occurrence: Occurrence): string => sseMessage({ event: "next", id: occurrence.cursor, data: JSON.stringify(occurrence) }),
+  complete: (): string => sseMessage({ event: "complete", data: "" }),
+  error: (failure: CallFailure): string => sseMessage({ event: "error", data: JSON.stringify({ kind: failure.kind, message: failure.message }) }),
+  keepalive: (): string => ":\n\n",
+} as const;
+
+/** The media type of a stream of server-sent events. */
+export const SSE_MEDIA_TYPE = "text/event-stream";
 
 // ---------------------------------------------------------------------------------------------------------------
 // Remote bindings (spec/bindings/README.md#remote-bindings)
@@ -253,6 +356,44 @@ export const MCP_REJECTIONS: { readonly [R in Rejection]: { readonly status: num
   "not-utf8": { status: 400, code: -32700 },
 };
 
+/** The identifier of the MCP events extension (spec/bindings/mcp.md#events). */
+export const MCP_EVENTS_EXTENSION = "io.modelcontextprotocol/events";
+
+/** The key in `params._meta` that holds the id of the `events/stream` request. */
+export const MCP_SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId";
+
+/** The JSON-RPC errors of the MCP events extension. Their numbers are not final in SEP-3415. */
+export const MCP_EVENT_ERRORS = {
+  notFound: -32023,
+  unsupported: -32026,
+  invalidParams: -32602,
+  internal: -32603,
+} as const;
+
+/** The JSON-RPC error for a call failure of a subscription before its first occurrence. */
+export function mcpSubscribeError(failure: CallFailure): { readonly code: number; readonly message: string; readonly data?: JsonObject } {
+  if (failure.kind === "unknown-capability") return { code: MCP_EVENT_ERRORS.notFound, message: failure.message, data: { kind: "event" } };
+  if (failure.kind === "invalid-input") return { code: MCP_EVENT_ERRORS.invalidParams, message: failure.message };
+  return { code: MCP_EVENT_ERRORS.internal, message: failure.message };
+}
+
+/** An entry of `events/list`. `input` and `payload` are the bundled schemas. */
+export function mcpEventEntry(id: string, description: string, input: JsonObject | undefined, payload: JsonObject | undefined): JsonObject {
+  return {
+    name: id,
+    description,
+    delivery: ["push"],
+    inputSchema: input ?? { type: "object" },
+    payloadSchema: payload ?? { type: "object" },
+  };
+}
+
+/** The params of `notifications/events/event` for an occurrence: the occurrence without `truncated`. */
+export function mcpEventParams(occurrence: Occurrence, subscriptionId: string | number): JsonObject {
+  const { truncated: _, ...rest } = occurrence;
+  return { ...rest, _meta: { [MCP_SUBSCRIPTION_ID]: subscriptionId } };
+}
+
 export interface McpToolResult {
   readonly content: readonly [{ readonly type: "text"; readonly text: string }];
   readonly isError?: true;
@@ -285,6 +426,13 @@ export interface CatalogCapability extends JsonObject {
   readonly state?: JsonObject;
 }
 
+export interface CatalogEvent extends JsonObject {
+  readonly description: string;
+  readonly audience?: readonly string[];
+  readonly input?: JsonObject;
+  readonly payload?: JsonObject;
+}
+
 export interface CatalogDocument extends JsonObject {
   readonly acidcat: string;
   readonly title?: string;
@@ -292,6 +440,7 @@ export interface CatalogDocument extends JsonObject {
   readonly targets: { readonly [name: string]: JsonObject & { readonly bindings: readonly string[] } };
   readonly $defs?: { readonly [name: string]: JsonObject };
   readonly capabilities: { readonly [id: string]: CatalogCapability };
+  readonly events?: { readonly [id: string]: CatalogEvent };
 }
 
 export const REFERENCE = /^#\/\$defs\/([A-Za-z][A-Za-z0-9_]*)$/;
@@ -313,6 +462,15 @@ export function schemasOf(capability: CatalogCapability): readonly (readonly [st
     ["output", capability.output],
     ["state", capability.state],
     ...Object.entries(capability.failures ?? {}).map(([tag, schema]) => [`failure ${tag}`, schema] as const),
+  ];
+  return members.filter((entry): entry is readonly [string, JsonObject] => entry[1] !== undefined);
+}
+
+/** The schemas of an event, each with the member that holds it. */
+export function eventSchemasOf(event: CatalogEvent): readonly (readonly [string, JsonObject])[] {
+  const members: (readonly [string, JsonObject | undefined])[] = [
+    ["input", event.input],
+    ["payload", event.payload],
   ];
   return members.filter((entry): entry is readonly [string, JsonObject] => entry[1] !== undefined);
 }
@@ -378,16 +536,21 @@ export function viewOf(catalog: CatalogDocument, target: string): CatalogDocumen
       .filter(([, capability]) => (capability.audience ?? []).includes(target))
       .map(([id, capability]) => [id, { ...capability, audience: [target] }]),
   );
+  const events = Object.fromEntries(
+    Object.entries(catalog.events ?? {})
+      .filter(([, event]) => (event.audience ?? []).includes(target))
+      .map(([id, event]) => [id, { ...event, audience: [target] }]),
+  );
   const used = new Map<string, JsonObject>();
-  for (const capability of Object.values(capabilities)) {
-    for (const [, schema] of schemasOf(capability)) for (const [name, type] of typesUsedBy(schema, types)) used.set(name, type);
-  }
-  const { $defs: _, ...rest } = catalog;
+  const schemas = [...Object.values(capabilities).flatMap(schemasOf), ...Object.values(events).flatMap(eventSchemasOf)];
+  for (const [, schema] of schemas) for (const [name, type] of typesUsedBy(schema, types)) used.set(name, type);
+  const { $defs: _, events: __, ...rest } = catalog;
   const declared = catalog.targets[target];
   return {
     ...rest,
     targets: declared === undefined ? {} : { [target]: declared },
     ...(used.size > 0 ? { $defs: Object.fromEntries(used) } : {}),
     capabilities,
+    ...(Object.keys(events).length > 0 ? { events } : {}),
   };
 }
