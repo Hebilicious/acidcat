@@ -16,7 +16,7 @@ The specification is at https://github.com/Hebilicious/acidcat/tree/main/spec. R
 - **The catalog is the contract.** Change the catalog first, then the code. A capability that is not in the catalog does not exist for a client.
 - **Prefer a source to JSON by hand.** Write the catalog as a Pkl module that amends `Catalog.pkl`, a program with a catalog library, or the code of the application when a core writes the catalog, and let the tool write the JSON. A source finds errors, shares types and gives the canonical form. JSON by hand is allowed: then run `acid-cat check --strict` and `acid-cat format --write` after each change. When a catalog has a source, never change its JSON: change the source, and write the JSON again.
 - **Ids are names, not versions.** An id is two or more segments with dots between them: `aircon.power.set`. Each segment matches `[a-z][a-z0-9]*(-[a-z0-9]+)*`. Do not change the meaning of an id. Give a new meaning a new id.
-- **Each audience is explicit.** A capability with no audience is available to no target. Give agents (`mcp` and WebMCP targets) only the capabilities that they must have.
+- **Each audience is explicit.** A capability or an event with no audience is available to no target. Give agents (`mcp` and WebMCP targets) only the capabilities that they must have.
 - **A failure is data.** Declare each failure that a capability can return, by tag, in `failures`. A failure value has its tag in `_tag`. A defect (an exception) becomes the call failure `internal`, and its details stay on the server.
 - **Inputs carry no identity.** No user id, token or credential in an input. The session holds the identity of the client.
 - **Descriptions are for people and for agents.** Tell what the capability does, its effects, and the effects that stay after a cancellation.
@@ -49,6 +49,16 @@ A core in another language follows the specification and passes `acid-cat confor
 3. Write the JSON of the catalog again, and run `acid-cat check --strict <catalog>`.
 4. Run the tests of the application, and `acid-cat conform` for each binding that the application serves.
 
+## Add an event
+
+An **event** is a thing that happens in the application, that clients follow, for example `aircon.status.changed`. A client subscribes with an input, and gets an **occurrence** each time that the thing happens. Use an event when clients must know about a change as it happens. Use a capability for a call that gives one result.
+
+1. Add it to `events` in the source of the catalog: id, description, audience, input, payload. In Pkl: `events { ["aircon.status.changed"] { … } }`. In a catalog library: `event(id, …)`.
+2. Obey the rules: the id is not also the id of a capability. The input and the payload are objects: `"type": "object"`, or a `$ref` to a type that is an object. Put a filter in the input, for example `{ "room": … }`. Put a failure of the source in the payload, as a union with a `_tag`.
+3. Write the JSON of the catalog again, and run `acid-cat check --strict <catalog>`. A view has the events whose audience has its target.
+
+To keep old clients working, add members to a payload, and do not remove or change members. [spec/events.md](https://github.com/Hebilicious/acidcat/blob/main/spec/events.md) tells how subscriptions, occurrences and cursors work. The document of each binding tells how it serves them. The WebMCP binding does not serve events.
+
 ## Serve a binding
 
 Each target of the catalog lists its bindings. Each binding serves the **view** of its target: only the capabilities whose audience has the target.
@@ -78,6 +88,7 @@ acid-cat conform --mcp http://127.0.0.1:3000/mcp --http http://127.0.0.1:3000/ap
 ## Common mistakes
 
 - A JSON catalog that has a source, changed by hand, so that the source no longer writes it.
+- An event payload that is a string or an array. Wrap it in an object, so that it can get new members.
 - A capability for agents with no `failures`: the agent cannot tell "the unit is offline" from a defect.
 - A number schema with no limits for a value that has limits. The agent sends values that the operation cannot use.
 - An input with a user id. Use the session instead.
