@@ -15,7 +15,7 @@ The client gives the id of the event and an input. It can also give a cursor (se
   | --- | --- |
   | `cancelled` | The client, the session or the provider stopped the subscription before it started |
   | `unknown-capability` | The id is not an event in the view of the target |
-  | `invalid-input` | The input does not agree with the input schema of the event |
+  | `invalid-input` | The input does not agree with the input schema of the event, or `maxAgeMs` is not valid |
   | `internal` | All other problems |
 
   If more than one kind applies, use the first kind in the table. The rules for the messages of call failures apply.
@@ -73,7 +73,7 @@ A **cursor** is a string that tells a position in the occurrences of an event. O
 
 - A provider MAY give a cursor with each occurrence. An event that gives cursors SHOULD give a cursor with each occurrence.
 - A client MAY give a cursor when it subscribes. The provider then starts after that position, and sends the occurrences after it. If the provider cannot start at that position, it starts at a later position, and the first occurrence has `"truncated": true`.
-- A client MAY also give `maxAgeMs`, a number of milliseconds. The provider then sends no occurrence that is older than that time. If this skips occurrences, the first occurrence has `"truncated": true`.
+- A client MAY also give `maxAgeMs`, a number of milliseconds. It is an integer that is 0 or more. Another value fails as `invalid-input`. The provider then sends no occurrence that is older than that time. If this skips occurrences, the first occurrence has `"truncated": true`.
 - With no cursor, the subscription starts now. The provider sends no occurrence from before the subscription.
 - A provider that gives no cursors ignores the cursor and `maxAgeMs` of the client.
 
