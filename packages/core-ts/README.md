@@ -1,8 +1,8 @@
 # @acid-cat/core-ts
 
-Serve AcidCat capabilities in plain TypeScript. npm package: `@acid-cat/core-ts`.
+Serve AcidCat capabilities and events in plain TypeScript. npm package: `@acid-cat/core-ts`.
 
-This package has no Effect dependency. A capability returns a promise. Inputs are validated with any library that implements [Standard Schema](https://standardschema.dev), for example Zod, Valibot or ArkType. The application writes its own catalog.
+This package has no Effect dependency. A capability returns a promise. An event gives an async iterable. Inputs are validated with any library that implements [Standard Schema](https://standardschema.dev), for example Zod, Valibot or ArkType. The application writes its own catalog.
 
 ```sh
 pnpm add @acid-cat/core-ts
@@ -42,6 +42,38 @@ export const aircon = defineApp<{ unit: Unit }>({
 - `defineCapability` and `capabilitiesFor` keep the literal type of `id`, so that an application can type its ids. `run`, `availability` and `state` all get the same `Context`.
 - An application lists only capabilities that `defineCapability` or `capabilitiesFor` made. Each one has `decode`, which validates an input that is not trusted with the input schema and then gives the call of `run`. A session calls it, because there the type of the input is not known.
 
+## Write events
+
+An [event](../../spec/events.md) is a kind of thing that happens, and that clients can follow. `subscribe` gives an async iterable, for example an async generator, with one value for each occurrence.
+
+```ts
+import { eventsFor } from "@acid-cat/core-ts";
+
+const Status = z.object({ on: z.boolean(), celsius: z.number() }).meta({ id: "Status" });
+const event = eventsFor<{ unit: Unit }>();
+
+export const statusChanged = event({
+  id: "aircon.status.changed",
+  description: "The status of the unit changed. The occurrence gives the new status.",
+  audience: ["app", "mcp"],
+  input: z.object({}),
+  payload: Status,
+  async *subscribe(_input, { context, signal }) {
+    for await (const status of context.unit.changes(signal)) yield { data: status };
+  },
+});
+
+export const aircon = defineApp<{ unit: Unit }>({ targets, capabilities: [powerSet], events: [statusChanged] });
+```
+
+- `subscribe` gets the input, and `{ signal, context, cursor, maxAgeMs }`. The signal aborts when the subscription ends, in all ways. Stop the work and release the resources then.
+- Each value is `{ data }`, and optionally `eventId`, `timestamp`, `cursor` and `truncated`. Give the `eventId` of the source if it has one. With none, the session makes a unique id. With no `timestamp`, the session uses the time at which it gets the value.
+- `data` must agree with the payload schema. The session gives the client the output of the schema, as a copy. With no payload schema, `data` must be an empty object.
+- If `subscribe` throws before it gives an iterable, the subscription fails as `internal` before it starts. If the iterable throws, or gives data that does not agree with the payload schema, the subscription ends with `internal`. The details go to `onDefect`, not to the client.
+- When the iterable ends, the subscription is complete.
+- To resume, give a `cursor` with each value. A client can give a `cursor` and `maxAgeMs` when it subscribes. Start after the cursor, and send no occurrence older than `maxAgeMs`. If you skip occurrences, give `truncated: true` on the first value. An event that gives no cursors ignores them.
+- `defineEvent` and `eventsFor` keep the literal type of `id`. Capabilities and events share one set of ids.
+
 ## Write the catalog
 
 ```ts
@@ -51,22 +83,33 @@ const toJsonSchema = (schema) => z.toJSONSchema(schema, { target: "draft-2020-12
 await writeFile("acidcat.catalog.json", renderCatalog(aircon, { toJsonSchema })); // canonical form
 ```
 
-Standard Schema does not convert to JSON Schema. Give the converter of your schema library as `toJsonSchema`.
+Standard Schema does not convert to JSON Schema. Give the converter of your schema library as `toJsonSchema`. The catalog has an `events` member when the application has events.
 
-## Serve the capabilities
+## Serve the capabilities and the events
 
 | Function | Binding | Result |
 | --- | --- | --- |
-| `createSession(app, options)` | [TypeScript](../../spec/bindings/typescript.md) | A session with a handle for each capability in the view |
+| `createSession(app, options)` | [TypeScript](../../spec/bindings/typescript.md) | A session with a handle for each capability and an event handle for each event in the view |
 | `mcpHandler(app, options)` | [MCP](../../spec/bindings/mcp.md#http) through HTTP | `(request: Request) => Promise<Response>` |
 | `mcpHandshake(handler)` | [MCP](../../spec/bindings/mcp.md#earlier-revisions-through-http) through HTTP, for earlier revisions | The handler, which also serves the `initialize` handshake of earlier revisions. From [`@acid-cat/mcp-handshake`](../mcp-handshake) |
 | `mcpStdioMain(app, options)`, `runMcpStdio(…)` | [MCP](../../spec/bindings/mcp.md#stdio) through stdio | The MCP server of the process, or a promise that resolves when the input ends |
 | `httpHandler(app, options)` | [HTTP](../../spec/bindings/http.md) | `(request: Request) => Promise<Response>` |
 | `cliMain(app, options)`, `runCli(…)` | [CLI](../../spec/bindings/cli.md) | The command line of the process, or an exit code |
-| `installWebMcp(session)` | [WebMCP](../../spec/bindings/webmcp.md) | Tools in the page, with a status |
+| `installWebMcp(session)` | [WebMCP](../../spec/bindings/webmcp.md) | Tools in the page, with a status. WebMCP serves no events |
 | `serve(handler, options)`, from `@acid-cat/core-ts/node` | MCP and HTTP | A Node.js server for the web handlers. See [Serve on Node.js](#serve-on-nodejs) |
 
-When the signal of a request aborts, `mcpHandler` and `httpHandler` cancel the call of the request.
+When the signal of a request aborts, `mcpHandler` and `httpHandler` cancel the call or the subscription of the request.
+
+Each binding serves the events of its view:
+
+| Binding | Events |
+| --- | --- |
+| TypeScript | `session.eventHandle(event).subscribe(input)`. See [Event handles](#event-handles) |
+| HTTP | `GET {base}/events` lists them. `POST {base}/events/{id}` gives a stream of server-sent events: `event: next` for each occurrence, then `event: complete`, or `event: error` with `internal`. `Last-Event-ID` gives the cursor, and `?maxAgeMs=` gives `maxAgeMs`. The option `keepaliveMs` (15 seconds) sets the time after which an idle stream gets a comment line |
+| MCP | The MCP events extension, revision `2026-07-28` only: `events/list` and `events/stream`, with push delivery. Through HTTP, the answer to `events/stream` is a stream of server-sent events. The option `heartbeatMs` (15 seconds) sets the time after which an idle stream gets `notifications/events/heartbeat`. A client with the `initialize` handshake gets no events |
+| CLI | `watch <id>` writes each occurrence on one line. See [Command line](#command-line) |
+
+The options `bufferLimit` of `createSession`, `httpHandler`, `mcpHandler` and `runMcpStdio` set the number of occurrences that each subscription keeps for a client that reads slowly. The default is 256. When the limit is full, the oldest occurrence goes, and the next occurrence that the client reads has `truncated: true`.
 
 ### Serve on Node.js
 
@@ -97,7 +140,7 @@ For more, use a library for web handlers, for example [srvx](https://srvx.h3.dev
 
 ### MCP through stdio
 
-An MCP client, for example a coding agent, can start the server as a local process. `mcpStdioMain` serves the standard input and output of the process. The process is one session, with one `context`. The server serves revision `2026-07-28`, and the `initialize` handshake of revisions `2025-11-25` and `2025-06-18`. When the availability of a capability changes, the server sends `notifications/tools/list_changed`. `notifications/cancelled` cancels a call. When standard input ends, the session closes and the calls in progress are cancelled.
+An MCP client, for example a coding agent, can start the server as a local process. `mcpStdioMain` serves the standard input and output of the process. The process is one session, with one `context`. The server serves revision `2026-07-28`, and the `initialize` handshake of revisions `2025-11-25` and `2025-06-18`. When the availability of a capability changes, the server sends `notifications/tools/list_changed`. `notifications/cancelled` cancels a call or an `events/stream` request. When standard input ends, the session closes: the calls in progress are cancelled, and each subscription is complete.
 
 ```ts
 #!/usr/bin/env node
@@ -133,6 +176,29 @@ power.availability.subscribe(render);
 await power.execute({ on: true });
 ```
 
+### Event handles
+
+`session.eventHandle(event)` gives the event handle of an event (spec/bindings/typescript.md#event-handles), with the types of its schemas. `session.eventHandles` is the map of the event handles by id, for bindings. A handle of the map has the input type `never`: subscribe with `subscribeExternal`, which validates the input.
+
+```ts
+const status = session.eventHandle(statusChanged);
+for await (const occurrence of await status.subscribe({})) {
+  render(occurrence.data); // { on: boolean; celsius: number }
+}
+```
+
+- The promise of `subscribe` resolves when the subscription has started. Before that, it rejects with a `CallFailureError`: `unknown-capability` for an event that the session does not serve, `invalid-input` for an input that does not agree with the schema, and `cancelled` when the session closes or the signal aborts.
+- The result is an async iterator of occurrences: `eventId`, `name`, `timestamp`, `data`, and `cursor` and `truncated` if they are present. `return()` cancels the subscription, also while a `next()` waits: that `next()` resolves with `done: true`. `await using` also cancels it at the end of the block.
+- The options are `signal`, `cursor` and `maxAgeMs`.
+- When the session closes, each subscription is complete. With `internal`, `next()` rejects with a `CallFailureError`, then resolves with `done: true`.
+- A session can hold any number of subscriptions at the same time. To cancel one does not change the others.
+
+A GraphQL server can use an event handle as the source of a subscription. Return the promise of `subscribe` from the `subscribe` resolver of the field. GraphQL calls `return()` when the client ends the subscription, through WebSockets (graphql-ws) or server-sent events (graphql-sse, GraphQL Yoga):
+
+```ts
+subscription: { statusChanged: { subscribe: () => status.subscribe({}), resolve: (occurrence) => occurrence.data } }
+```
+
 ### Context for each request
 
 `mcpHandler` and `httpHandler` take `context` or `createContext`. With `context`, all requests share one context. With `createContext(request)`, the handler makes a new context for each request that passes the screening. Use it when a request must not use objects that an earlier request made, for example on Cloudflare Workers, or when a stateful service must not be shared between callers. When the context has `Symbol.asyncDispose` or `Symbol.dispose`, the handler calls it after the response:
@@ -157,11 +223,17 @@ node cli.ts aircon schedule set --days '[]'                                   # 
 node cli.ts list                                                             # the usage of each command
 ```
 
-`list` gives a usage line for each capability. The usage of a repeated flag ends with `...`, for example `--days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]`. See the [CLI binding](../../spec/bindings/cli.md#commands) for all the rules.
+`list` gives a usage line for each capability, then for each event. Each item has `kind`: `"capability"` or `"event"`. The usage of a repeated flag ends with `...`, for example `--days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]`. See the [CLI binding](../../spec/bindings/cli.md#commands) for all the rules.
+
+`watch <id>` subscribes to an event. The flags come from the input schema, with the same rules as for a capability. If the input schema has no top-level `properties` member, `watch <id> '<json>'` takes the input as JSON text. Each occurrence goes to standard output as JSON on one line. The exit code is 0 when the subscription is complete, 130 after an interrupt (`SIGINT`), and 5 after `internal`, with `{ "kind", "message" }` on standard error. A failure before the first occurrence has the exit code of a call.
+
+```sh
+node cli.ts watch aircon.status.changed
+```
 
 ### Commands of the application
 
-The option `commands` of `cliMain` and `runCli` adds commands of the application beside the commands of the capabilities, `call` and `list`. A command has a `name`, a `description` for the help, and `run(args, io)`. `run` gets the arguments after the name of the command, and `io` with `stdout`, `stderr`, `signal` and the `context`. It returns the exit code. The name must not be `call`, `list`, the name of another command of the application, or the first word of the command of a capability. If it is, `runCli` throws. The option `description` gives the text at the top of the help. The default is the description of the application, then its title, then the name of the program.
+The option `commands` of `cliMain` and `runCli` adds commands of the application beside the commands of the capabilities, `call`, `list` and `watch`. A command has a `name`, a `description` for the help, and `run(args, io)`. `run` gets the arguments after the name of the command, and `io` with `stdout`, `stderr`, `signal` and the `context`. It returns the exit code. The name must not be `call`, `list`, `watch`, the name of another command of the application, or the first word of the command of a capability. If it is, `runCli` throws. The option `description` gives the text at the top of the help. The default is the description of the application, then its title, then the name of the program.
 
 ```ts
 import { cliMain } from "@acid-cat/core-ts";
@@ -185,3 +257,4 @@ cliMain(aircon, { name: "aircon", version: "0.1.0", context: { unit }, toJsonSch
 - `moon run core-ts:test` tests sessions, handles and all bindings with a test application, and runs `acid-cat conform` against all bindings. Each test application is in `test/`:
   - [`test/fixture.ts`](test/fixture.ts) has one capability for each behavior that `acid-cat conform` tests.
   - [`test/kettle.ts`](test/kettle.ts) is an electric kettle, simulated in memory. Its tests examine the catalog that the core writes, named types, state, availability, typed handles and the command line.
+  - [`test/sensors.ts`](test/sensors.ts) is a set of temperature sensors, simulated in memory. Its tests examine events through each binding: occurrences, the ends of a subscription, slow clients, cursors, and a GraphQL subscription with graphql-js.

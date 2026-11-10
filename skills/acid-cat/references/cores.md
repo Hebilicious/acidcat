@@ -35,6 +35,30 @@ await writeFile("acidcat.catalog.json", renderCatalog(aircon, { toJsonSchema }))
 - `run` gets the decoded input, the `AbortSignal` of the call and the context. It returns `ok(value)` or `fail(failure)`.
 - `availability: (context) => observable` makes the capability available or not. `state: { schema, source }` gives a value that clients observe.
 
+### An event in core-ts
+
+```ts
+import { eventsFor } from "@acid-cat/core-ts";
+
+const event = eventsFor<{ unit: Unit }>();
+
+export const statusChanged = event({
+  id: "aircon.status.changed",
+  description: "The status of the unit changed. The occurrence gives the new status.",
+  audience: ["app", "mcp"],
+  payload: Status, // an object schema
+  async *subscribe(_input, { context, signal }) {
+    for await (const status of context.unit.changes(signal)) yield { data: status };
+  },
+});
+
+export const aircon = defineApp<{ unit: Unit }>({ targets, capabilities: [powerSet], events: [statusChanged] });
+```
+
+- `subscribe` gets the decoded input and `{ signal, context, cursor, maxAgeMs }`. It gives an async iterable of `{ data, eventId?, timestamp?, cursor?, truncated? }`. The signal aborts when the subscription ends: stop the work then.
+- The session checks each `data` against the payload schema. Data that does not agree, or an iterable that throws, ends the subscription with `internal`. When the iterable ends, the subscription is complete.
+- `session.eventHandle(statusChanged).subscribe({})` gives an async iterator of occurrences. Its `return()` cancels the subscription, also while a `next()` waits. A GraphQL `subscribe` resolver can return this promise.
+
 ## core-effect
 
 ```ts
