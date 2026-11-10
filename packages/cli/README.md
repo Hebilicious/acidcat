@@ -21,7 +21,7 @@ It needs Node.js 24 or later. `acid-cat conform --webmcp <url>` also needs [Play
 
 `check` tests a catalog against [`schemas/catalog.schema.json`](../../schemas/catalog.schema.json) and against the [catalog rules](../../spec/conformance.md#catalog) that the schema cannot express.
 
-- An **error** is a broken rule. Example: an audience that names an unknown target.
+- An **error** is a broken rule. Examples: an audience that names an unknown target, an event payload that is not an object, or an id that is both a capability and an event.
 - A **warning** is a broken recommendation. Examples: a file that is not in [canonical form](../../spec/catalog.md#canonical-form), or a member with no `x-` prefix.
 
 The exit code is 0 if there are no errors. It is 1 if there are errors. With `--strict`, warnings also give the exit code 1.
@@ -29,6 +29,10 @@ The exit code is 0 if there are no errors. It is 1 if there are errors. With `--
 ## format
 
 `format` writes a catalog in canonical form. Use it for catalogs that a catalog library did not write: Pkl output, generated files, or files that you edit by hand.
+
+## view
+
+`view` writes the [view](../../spec/catalog.md#views) of one target: the capabilities and the events that the target can use, and the types that they use. A view with no events has no `events` member.
 
 ## conform
 
@@ -55,6 +59,7 @@ The command line is an [Effect](https://effect.website) program that uses `effec
 | `src/conform/` | The conformance checks, and `serve`, which serves web handlers on a local port for the tests |
 | `conformance/` | The conformance fixture, in Pkl and in JSON |
 | `test/` | Tests. Run them with `moon run cli:test` |
-| `test/fixtures/` | The catalog of the tests: a bakery, in canonical form |
+| `test/fixtures/` | The catalog of the tests: a bakery, in canonical form, with capabilities and an event |
+| `test/fixtures/rejected/` | Catalogs that `check` must reject, written by hand |
 
 The canonical writer comes from [`@acid-cat/catalog`](../catalog/typescript).

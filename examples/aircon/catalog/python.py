@@ -123,6 +123,13 @@ def aircon_catalog() -> Catalog:
         audience=["app"],
         failures={"Offline": offline, "UpToDate": {"type": "object", "properties": {"version": {"type": "string"}}}},
     )
+    catalog.event(
+        "aircon.status.changed",
+        description="The status of the unit changed. The occurrence gives the new status.",
+        audience=everywhere,
+        input={"type": "object", "properties": {}},
+        payload=status,
+    )
     return catalog
 
 

@@ -1,0 +1,8 @@
+{
+  "acidcat": "0.1",
+  "targets": { "shop": { "bindings": ["typescript"] } },
+  "capabilities": {},
+  "events": {
+    "shop.order.ready": { "description": "An order is ready.", "audience": ["till"] }
+  }
+}

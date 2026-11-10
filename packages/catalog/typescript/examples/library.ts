@@ -96,6 +96,12 @@ export function libraryCatalog(): Catalog {
       output: { type: "array", items: loan },
       readOnly: true,
       state: { type: "array", items: loan },
+    })
+    .event("library.book.returned", {
+      description: "A member returned a book. The occurrence gives the book. Give an ISBN to follow one book only.",
+      audience: ["members", "agents"],
+      input: { type: "object", properties: { isbn } },
+      payload: book,
     });
 }
 

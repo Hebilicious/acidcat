@@ -37,10 +37,14 @@ types: Mapping<TypeName, Schema>
 /// The capabilities, keyed by id. Every audience entry must be one of [targets].
 capabilities: Mapping<Id, Capability>(audiencesAreDeclared(this))
 
+/// The events, keyed by id (spec/events.md). Every audience entry must be one of [targets]. An id must not also be
+/// the id of a capability.
+events: Mapping<Id, Event>(audiencesAreDeclared(this), idsAreNotCapabilities(this))
+
 /// Members that this specification does not define, rendered with an `x-` prefix.
 extensions: Mapping<String, Any>
 
-/// A capability id: dotted kebab-case segments, the first of which is the namespace.
+/// A capability or event id: dotted kebab-case segments, the first of which is the namespace.
 typealias Id = String(length <= 128, matches(Regex(#"[a-z][a-z0-9]*(-[a-z0-9]+)*(\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+"#)))
 
 /// A target or binding name, optionally `prefix:name`.
@@ -53,8 +57,8 @@ typealias TypeName = String(matches(Regex(#"[A-Za-z][A-Za-z0-9_]*"#)))
 /// Reference a shared type with [ref].
 typealias Schema = Dynamic
 
-/// An input schema: its top level states that the input is an object, or it references a shared type.
-typealias ObjectSchema = Dynamic(this.getPropertyOrNull("type") == "object" || this.containsKey("$ref"))
+/// An input or payload schema: its top level states that the value is an object, or it references a shared type.
+typealias ObjectSchema = Dynamic(this.getPropertyOrNull("type") == "object" || this.toMap().containsKey("$ref"))
 
 /// A reference to the shared type [name], which must be one of [types].
 function ref(name: TypeName): Dynamic =
@@ -101,13 +105,33 @@ class Capability {
   extensions: Mapping<String, Any>
 }
 
-local function audiencesAreDeclared(capabilities: Mapping<Id, Capability>): Boolean =
-  capabilities.toMap().values.every((capability) ->
-    capability.audience.toList().every((target) -> targets.containsKey(target))
+class Event {
+  /// What happens, and when the provider sends an occurrence, written for people and agents.
+  description: String(!isBlank)
+
+  /// The targets the event is offered to. Empty means no target.
+  audience: Listing<TargetName>(isDistinct)
+
+  /// The input schema of a subscription, for example a filter. Absent means an empty object.
+  input: ObjectSchema?
+
+  /// The schema of the data of each occurrence. Absent means an empty object.
+  payload: ObjectSchema?
+
+  /// Members that this specification does not define, rendered with an `x-` prefix.
+  extensions: Mapping<String, Any>
+}
+
+local function audiencesAreDeclared(entries: Mapping<Id, Capability|Event>): Boolean =
+  entries.toMap().values.every((entry) ->
+    entry.audience.toList().every((target) -> targets.containsKey(target))
   )
 
-/// Turns an object into the map it renders as: absent members dropped, empty `types`, `failures` and `extensions`
-/// dropped, `types` renamed `$defs`, and extensions merged in under their `x-` names.
+local function idsAreNotCapabilities(entries: Mapping<Id, Event>): Boolean =
+  entries.keys.every((id) -> !capabilities.containsKey(id))
+
+/// Turns an object into the map it renders as: absent members dropped, empty `types`, `events`, `failures` and
+/// `extensions` dropped, `types` renamed `$defs`, and extensions merged in under their `x-` names.
 local function rendered(value: Typed): Map<String, Any> =
   let (members = value.toMap())
     members
@@ -120,6 +144,7 @@ output {
     converters {
       [Target] = (target) -> rendered(target)
       [Capability] = (capability) -> rendered(capability)
+      [Event] = (event) -> rendered(event)
     }
   }
   value = rendered(module)

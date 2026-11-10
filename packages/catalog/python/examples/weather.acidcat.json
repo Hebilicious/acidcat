@@ -179,5 +179,41 @@
         }
       }
     }
+  },
+  "events": {
+    "weather.alert.raised": {
+      "description": "A reading passed a limit. The occurrence gives the sensor and the reading. Give sensors to follow those sensors only.",
+      "audience": [
+        "dashboard",
+        "agents"
+      ],
+      "input": {
+        "properties": {
+          "sensors": {
+            "items": {
+              "$ref": "#/$defs/Sensor"
+            },
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "type": "object"
+      },
+      "payload": {
+        "properties": {
+          "reading": {
+            "$ref": "#/$defs/Reading"
+          },
+          "sensor": {
+            "$ref": "#/$defs/Sensor"
+          }
+        },
+        "required": [
+          "sensor",
+          "reading"
+        ],
+        "type": "object"
+      }
+    }
   }
 }

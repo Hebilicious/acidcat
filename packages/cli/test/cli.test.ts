@@ -40,12 +40,15 @@ test("a view keeps one target, its capabilities, and only the types they reach",
   assert.deepEqual(Object.keys(till.capabilities).sort(), ["bakery.menu.list", "bakery.order.get", "bakery.price.set"]);
   assert.deepEqual(Object.keys(till.$defs ?? {}).sort(), ["Loaf", "Order", "OrderStatus"]);
   assert.deepEqual(till.capabilities["bakery.order.get"]?.audience, ["till"]);
+  assert.deepEqual(Object.keys(till.events ?? {}), ["bakery.order.ready"]);
+  assert.deepEqual(till.events?.["bakery.order.ready"]?.audience, ["till"]);
   assert.deepEqual(check(till), { errors: [], warnings: [] });
 
   const mcp = viewOf(bakery, "mcp");
   assert.ok("bakery.order.place" in mcp.capabilities);
   assert.ok(!("bakery.price.set" in mcp.capabilities));
   assert.ok(!("bakery.oven.start" in mcp.capabilities));
+  assert.equal(mcp.events, undefined);
   assert.deepEqual(Object.keys(mcp.$defs ?? {}).sort(), ["Loaf", "Order", "OrderStatus", "SoldOut"]);
 });
 
@@ -54,6 +57,19 @@ test("a view of a target whose capabilities use no type has no $defs", () => {
   assert.deepEqual(Object.keys(kitchen.capabilities), ["bakery.oven.start"]);
   assert.equal(kitchen.$defs, undefined);
   assert.deepEqual(check(kitchen), { errors: [], warnings: [] });
+});
+
+test("a view keeps the types that only an event reaches", () => {
+  const types = { Order: { type: "object" }, Loaf: { enum: ["rye"] } };
+  const catalog: Catalog = {
+    ...bakery,
+    $defs: types,
+    capabilities: {},
+    events: { "bakery.order.ready": { description: "x", audience: ["shop"], payload: { $ref: "#/$defs/Order" } } },
+  };
+  const shop = viewOf(catalog, "shop");
+  assert.deepEqual(Object.keys(shop.$defs ?? {}), ["Order"]);
+  assert.deepEqual(Object.keys(shop.events ?? {}), ["bakery.order.ready"]);
 });
 
 test("bundling copies every type a schema reaches, and inlines a bare reference", () => {
@@ -78,6 +94,32 @@ test("bundling keeps a schema that is not a bare reference, and adds the types i
 test("a catalog that breaks a rule gets an error", () => {
   const broken = { ...bakery, capabilities: { "a.b": { description: "x", audience: ["nowhere"] } } };
   assert.deepEqual(check(broken).errors, ["a.b: the audience names nowhere, which is not a target"]);
+});
+
+/** The catalogs that `check` rejects (test/fixtures/rejected), with the errors that each one gets. */
+const rejected: Readonly<Record<string, readonly string[]>> = {
+  "event-audience.json": ["shop.order.ready: the audience names till, which is not a target"],
+  "event-id-is-a-capability.json": ["shop.order.ready: the id is both a capability and an event"],
+  "event-input-not-object.json": ["shop.loaf.baked: the input is not an object"],
+  "event-own-defs.json": [
+    "shop.order.ready payload has its own $defs; put shared types in the catalog's $defs",
+    "shop.order.ready payload references #/$defs/Id, which is not a type",
+  ],
+  "event-payload-not-object.json": ["shop.loaf.baked: the payload is not an object"],
+  "event-payload-schema.json": ['["events"]["shop.order.ready"]["payload"]["$ref"]: Missing key'],
+  "event-reference.json": ["shop.order.ready payload references #/$defs/Order, which is not a type"],
+};
+
+for (const [file, errors] of Object.entries(rejected)) {
+  test(`check rejects ${file}`, () => {
+    const document: unknown = JSON.parse(readFileSync(new URL(`./fixtures/rejected/${file}`, import.meta.url), "utf-8"));
+    assert.deepEqual(check(document).errors, errors);
+  });
+}
+
+test("an unknown member of an event without an x- prefix gets a warning", () => {
+  const events = { "bakery.order.ready": { description: "x", audience: ["shop"], "x-icon": "bell", icon: "bell" } };
+  assert.deepEqual(check({ ...bakery, events }).warnings, ["bakery.order.ready: unknown member icon; give extensions an x- prefix"]);
 });
 
 test("a catalog that does not match the catalog schema gets an error with its path", () => {

@@ -212,5 +212,25 @@
         "type": "object"
       }
     }
+  },
+  "events": {
+    "bakery.order.ready": {
+      "description": "An order is ready to collect. The occurrence gives the order. Give an order id to follow one order only.",
+      "audience": [
+        "shop",
+        "till"
+      ],
+      "input": {
+        "properties": {
+          "orderId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "payload": {
+        "$ref": "#/$defs/Order"
+      }
+    }
   }
 }

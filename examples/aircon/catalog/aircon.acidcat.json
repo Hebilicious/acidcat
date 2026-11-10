@@ -312,5 +312,24 @@
         }
       }
     }
+  },
+  "events": {
+    "aircon.status.changed": {
+      "description": "The status of the unit changed. The occurrence gives the new status.",
+      "audience": [
+        "app",
+        "taskbar",
+        "cli",
+        "mcp",
+        "api"
+      ],
+      "input": {
+        "properties": {},
+        "type": "object"
+      },
+      "payload": {
+        "$ref": "#/$defs/Status"
+      }
+    }
   }
 }

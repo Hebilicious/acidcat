@@ -172,5 +172,37 @@
         }
       }
     }
+  },
+  "events": {
+    "garage.door.moved": {
+      "description": "The door started or stopped. The occurrence gives the door and the control that moved it.",
+      "audience": [
+        "phone",
+        "assistant"
+      ],
+      "input": {
+        "properties": {},
+        "type": "object"
+      },
+      "payload": {
+        "properties": {
+          "by": {
+            "enum": [
+              "phone",
+              "keypad",
+              "assistant",
+              "button"
+            ]
+          },
+          "door": {
+            "$ref": "#/$defs/Door"
+          }
+        },
+        "required": [
+          "door"
+        ],
+        "type": "object"
+      }
+    }
   }
 }

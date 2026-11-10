@@ -1,0 +1,9 @@
+{
+  "acidcat": "0.1",
+  "targets": { "shop": { "bindings": ["typescript"] } },
+  "$defs": { "Loaf": { "enum": ["rye", "brioche"] } },
+  "capabilities": {},
+  "events": {
+    "shop.loaf.baked": { "description": "A loaf came out of the oven.", "audience": ["shop"], "input": { "$ref": "#/$defs/Loaf" } }
+  }
+}

@@ -17,12 +17,25 @@ capabilities {
     audience { "panel" }
   }
 }
+
+events {
+  ["greenhouse.tank.low"] {
+    description = "The rain-water tank fell below a level. The occurrence gives the litres that are left."
+    audience { "panel" }
+    payload {
+      type = "object"
+      properties { litres { type = "number" } }
+    }
+  }
+}
 ```
 
 ```sh
 pkl eval greenhouse.pkl --output-path greenhouse.acidcat.json
 acid-cat format --write greenhouse.acidcat.json
 ```
+
+`events` declares the [events](../../../spec/events.md) that clients can subscribe to. The module checks that each audience names a target, that each input and payload is an object or a reference, and that no id is also the id of a capability.
 
 The full example is [`examples/greenhouse.pkl`](examples/greenhouse.pkl), a greenhouse. It amends [`Catalog.pkl`](Catalog.pkl) by its path. Its canonical JSON is [`examples/greenhouse.acidcat.json`](examples/greenhouse.acidcat.json). The root `moon run check` renders each `.pkl` catalog that has an `.acidcat.json` file beside it, and compares the two. It also checks that each committed catalog file is in [canonical form](../../../spec/catalog.md#canonical-form).
 

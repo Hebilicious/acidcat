@@ -20,12 +20,13 @@ Use these libraries at build time, to write `acidcat.catalog.json`. At run time,
 | Declare a target | `targets { ["cli"] { bindings { "cli" } } }` | `.target("cli", { bindings: ["cli"] })` | `.target("cli", bindings=["cli"])` | `.Target("cli", catalog.Target{…})` | `.target("cli", Target { … })` |
 | Share a type | `types { ["Status"] { … } }`, then `module.ref("Status")` | `const status = c.type("Status", {…})` | `status = c.type("Status", {…})` | `status := c.Type("Status", …)` | `let status = c.r#type("Status", json!({…}))` |
 | Declare a capability | `capabilities { ["aircon.power.set"] { … } }` | `.capability(id, { description, audience, … })` | `.capability(id, description=…, …)` | `.Capability(id, catalog.Capability{…})` | `.capability(id, Capability { … })` |
+| Declare an event | `events { ["aircon.status.changed"] { … } }` | `.event(id, { description, audience, input, payload })` | `.event(id, description=…, payload=…)` | `.Event(id, catalog.Event{…})` | `.event(id, Event { … })` |
 | Check the rules | while writing | `.validate()` | `.validate()` | `.Validate()` | `.validate()` |
 | Render canonical JSON | `pkl eval`, then `acid-cat format` | `.render()` | `.render()` | `.Render()` | `.render()` |
 
 In all languages, a schema is a plain JSON Schema object. When you declare a shared type, you get the schema that refers to it. Thus a reference always refers to a type that exists.
 
-The libraries check the [catalog rules](../../spec/conformance.md#catalog) that need no schema validator: the form of ids and names, audiences, inputs, references, and nested `$defs`. Then `acid-cat check` from [`@acid-cat/cli`](../cli/README.md) does the full check.
+The libraries check the [catalog rules](../../spec/conformance.md#catalog) that need no schema validator: the form of ids and names, audiences, inputs and payloads, ids that are both a capability and an event, references, and nested `$defs`. Then `acid-cat check` from [`@acid-cat/cli`](../cli/README.md) does the full check.
 
 ## Identical output
 
@@ -49,4 +50,4 @@ Each library tests its own catalogs, with files in its own directory:
 
 Pkl writes JSON in its own order. Thus `moon run examples` sends the Pkl output through `acid-cat format`.
 
-To add a language, use the same five steps and the same rules, and write the canonical form. Add an example catalog in a new domain and an edge-case catalog with new values, both in the directory of the library, and test the output of the library against them.
+To add a language, use the same steps and the same rules, and write the canonical form. Add an example catalog in a new domain and an edge-case catalog with new values, both in the directory of the library, and test the output of the library against them.

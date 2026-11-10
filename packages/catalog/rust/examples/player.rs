@@ -2,7 +2,7 @@
 //!
 //! Run it with `cargo run --example player` to print the catalog.
 
-use acid_cat_catalog::{Capability, Catalog, Target};
+use acid_cat_catalog::{Capability, Catalog, Event, Target};
 use serde_json::json;
 
 pub fn player_catalog() -> Catalog {
@@ -116,6 +116,16 @@ pub fn player_catalog() -> Catalog {
                 "properties": { "level": { "type": "integer", "minimum": 0, "maximum": 100 } }
             })),
             ..Capability::default()
+        })
+        .event("player.track.started", Event {
+            description: "The speaker started to play a track. The occurrence gives the track and the time it started.".into(),
+            audience: strings(&["desktop", "assistant"]),
+            input: Some(json!({ "type": "object", "properties": {} })),
+            payload: Some(json!({
+                "type": "object",
+                "required": ["track", "at"],
+                "properties": { "track": track, "at": { "type": "string", "format": "date-time" } }
+            })),
         });
     catalog
 }

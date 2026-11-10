@@ -27,7 +27,7 @@ A language-neutral specification. Describe what your application can do one time
 
 ## ✨ What is AcidCat?
 
-**AcidCat** (Application Capability IDentification Category) is a specification. It does not depend on a language or a library. An application writes one **catalog**: a JSON document that lists its capabilities, their inputs, outputs and failures, and the **targets** that can use each one. Each surface comes from the catalog through a **binding**:
+**AcidCat** (Application Capability IDentification Category) is a specification. It does not depend on a language or a library. An application writes one **catalog**: a JSON document that lists its capabilities, their inputs, outputs and failures, the **events** that clients can follow, and the **targets** that can use each one. Each surface comes from the catalog through a **binding**:
 
 | Surface | `aircon.temperature.set` becomes |
 | --- | --- |
@@ -36,6 +36,17 @@ A language-neutral specification. Describe what your application can do one time
 | 🌐 WebMCP | an in-page tool for browser agents |
 | 🔌 HTTP | `POST /capabilities/aircon.temperature.set` |
 | 🧩 Your language | a typed function, for example `execute({ celsius: 22 })` in TypeScript |
+
+An event, such as `aircon.status.changed`, gives a stream of **occurrences** to each client that subscribes:
+
+| Surface | `aircon.status.changed` becomes |
+| --- | --- |
+| 💻 Command line | `aircon watch aircon.status.changed`, one JSON line for each occurrence |
+| 🤖 MCP server | the event `aircon.status.changed` of the MCP events extension |
+| 🔌 HTTP | `POST /events/aircon.status.changed`, a stream of server-sent events |
+| 🧩 Your language | an event handle, for example `subscribe({})` in TypeScript |
+
+The HTTP stream uses the framing of the GraphQL over server-sent events protocol. The WebMCP binding does not serve events.
 
 On the command line, each input property is a flag. An array of simple values takes one flag for each item, `aircon schedule set --days mon --days fri --hours 7`, or the whole array as JSON text, `--days '["mon","fri"]'`.
 
@@ -87,8 +98,9 @@ The best way to write a catalog is in Pkl, with a catalog library, or from the c
 | Document | Contents |
 | --- | --- |
 | [Overview and vocabulary](spec/README.md) | The terms and the documents |
-| [Catalog](spec/catalog.md) | Targets, capabilities, types, views, canonical form |
+| [Catalog](spec/catalog.md) | Targets, capabilities, events, types, views, canonical form |
 | [Invocation](spec/invocation.md) | Outcomes, availability, sessions, cancellation |
+| [Events](spec/events.md) | Events, subscriptions, occurrences, resuming |
 | [Bindings](spec/bindings/README.md) | TypeScript, WebMCP, MCP, CLI, HTTP |
 | [Extensions](spec/extensions/README.md) | Attachments, pagination |
 | [Conformance](spec/conformance.md) | How to test a catalog and an implementation |

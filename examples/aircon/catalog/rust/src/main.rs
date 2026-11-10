@@ -1,7 +1,7 @@
 //! The air-conditioner catalog of `aircon.pkl`, written with the Rust catalog library. Run it with `cargo run` to
 //! write the catalog.
 
-use acid_cat_catalog::{Capability, Catalog, Schema, Target};
+use acid_cat_catalog::{Capability, Catalog, Event, Schema, Target};
 use serde_json::json;
 
 fn aircon_catalog() -> Catalog {
@@ -111,12 +111,12 @@ fn aircon_catalog() -> Catalog {
             output: Some(status.clone()),
             failures: offline_only(),
             read_only: true,
-            state: Some(status),
+            state: Some(status.clone()),
             ..Capability::default()
         })
         .capability("aircon.power.set", Capability {
             description: "Turn the unit on or off.".into(),
-            audience: everywhere,
+            audience: everywhere.clone(),
             input: Some(setting("on", json!({ "type": "boolean" }))),
             failures: offline_only(),
             ..Capability::default()
@@ -171,6 +171,12 @@ fn aircon_catalog() -> Catalog {
                 ("UpToDate".into(), json!({ "type": "object", "properties": { "version": { "type": "string" } } })),
             ],
             ..Capability::default()
+        })
+        .event("aircon.status.changed", Event {
+            description: "The status of the unit changed. The occurrence gives the new status.".into(),
+            audience: everywhere,
+            input: Some(json!({ "type": "object", "properties": {} })),
+            payload: Some(status),
         });
     catalog
 }

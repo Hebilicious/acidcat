@@ -12,9 +12,10 @@ import (
 // every tool and every catalog library produces the same bytes for the same catalog.
 
 var (
-	catalogOrder    = []string{"acidcat", "title", "description", "targets", "$defs", "capabilities"}
+	catalogOrder    = []string{"acidcat", "title", "description", "targets", "$defs", "capabilities", "events"}
 	targetOrder     = []string{"bindings", "description", "options"}
 	capabilityOrder = []string{"description", "audience", "input", "output", "failures", "readOnly", "state"}
+	eventOrder      = []string{"description", "audience", "input", "payload"}
 )
 
 // CanonicalText writes a catalog, given as JSON values (maps, slices, strings, numbers, booleans, nil), in
@@ -51,6 +52,10 @@ func canonicalCatalog(catalog map[string]any) ordered {
 					}
 					return sorted(inner)
 				})
+			})
+		case "events":
+			return byKey(value, func(event any) any {
+				return orderedBy(asObject(event), eventOrder, func(_ string, inner any) any { return sorted(inner) })
 			})
 		}
 		return sorted(value)

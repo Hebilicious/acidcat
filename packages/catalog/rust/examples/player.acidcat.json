@@ -176,5 +176,34 @@
         "type": "object"
       }
     }
+  },
+  "events": {
+    "player.track.started": {
+      "description": "The speaker started to play a track. The occurrence gives the track and the time it started.",
+      "audience": [
+        "desktop",
+        "assistant"
+      ],
+      "input": {
+        "properties": {},
+        "type": "object"
+      },
+      "payload": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "track": {
+            "$ref": "#/$defs/Track"
+          }
+        },
+        "required": [
+          "track",
+          "at"
+        ],
+        "type": "object"
+      }
+    }
   }
 }

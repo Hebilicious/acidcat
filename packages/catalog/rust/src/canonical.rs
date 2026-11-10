@@ -3,13 +3,14 @@
 
 use serde_json::{Map, Number, Value};
 
-const CATALOG_ORDER: [&str; 6] = [
+const CATALOG_ORDER: [&str; 7] = [
     "acidcat",
     "title",
     "description",
     "targets",
     "$defs",
     "capabilities",
+    "events",
 ];
 const TARGET_ORDER: [&str; 3] = ["bindings", "description", "options"];
 const CAPABILITY_ORDER: [&str; 7] = [
@@ -21,6 +22,7 @@ const CAPABILITY_ORDER: [&str; 7] = [
     "readOnly",
     "state",
 ];
+const EVENT_ORDER: [&str; 4] = ["description", "audience", "input", "payload"];
 
 /// A catalog in canonical form, as text.
 pub fn canonical_text(catalog: &Value) -> String {
@@ -44,6 +46,9 @@ fn canonical_catalog(catalog: &Value) -> Value {
                     sorted(inner)
                 }
             })
+        }),
+        "events" => by_key(value, |event| {
+            ordered(event, &EVENT_ORDER, |_, inner| sorted(inner))
         }),
         _ => sorted(value),
     })

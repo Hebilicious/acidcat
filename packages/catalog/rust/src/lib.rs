@@ -55,6 +55,20 @@ pub struct Capability {
     pub state: Option<Schema>,
 }
 
+/// One event (spec/events.md).
+#[derive(Clone, Debug, Default)]
+pub struct Event {
+    /// What happens, and when the provider sends an occurrence, written for people and agents.
+    pub description: String,
+    /// The targets the event is offered to. Empty means no target.
+    pub audience: Vec<String>,
+    /// The input schema of a subscription, for example a filter. It must describe an object. `None` means an empty
+    /// object.
+    pub input: Option<Schema>,
+    /// The schema of the data of each occurrence. It must describe an object. `None` means an empty object.
+    pub payload: Option<Schema>,
+}
+
 /// A catalog being written.
 #[derive(Debug, Default)]
 pub struct Catalog {
@@ -63,6 +77,7 @@ pub struct Catalog {
     targets: Vec<(String, Target)>,
     types: Vec<(String, Schema)>,
     capabilities: Vec<(String, Capability)>,
+    events: Vec<(String, Event)>,
     duplicates: Vec<String>,
 }
 
@@ -106,6 +121,16 @@ impl Catalog {
         self
     }
 
+    /// Declare an event.
+    pub fn event(&mut self, id: &str, event: Event) -> &mut Self {
+        if self.events.iter().any(|(existing, _)| existing == id) {
+            self.duplicates
+                .push(format!("the event {id} is declared twice"));
+        }
+        self.events.push((id.to_owned(), event));
+        self
+    }
+
     /// The catalog rules this catalog breaks. Empty when it conforms.
     pub fn validate(&self) -> Vec<String> {
         let mut problems = self.duplicates.clone();
@@ -138,25 +163,12 @@ impl Catalog {
             }
         }
         for (id, capability) in &self.capabilities {
-            if id.len() > 128 || !ID.is_match(id) {
-                problems.push(format!("the id {id} is malformed"));
-            }
-            if capability.description.trim().is_empty() {
-                problems.push(format!("{id} has no description"));
-            }
-            if has_repeat(&capability.audience) {
-                problems.push(format!("{id} repeats a target in its audience"));
-            }
-            for target in &capability.audience {
-                if !self.targets.iter().any(|(name, _)| name == target) {
-                    problems.push(format!("{id} names the undeclared target {target}"));
-                }
-            }
-            if let Some(input) = &capability.input
-                && self.resolve(input).get("type") != Some(&json!("object"))
-            {
-                problems.push(format!("{id} input does not describe an object"));
-            }
+            problems.extend(self.entry_problems(
+                id,
+                &capability.description,
+                &capability.audience,
+                capability.input.as_ref(),
+            ));
             let schemas = [&capability.input, &capability.output, &capability.state];
             let failures = capability.failures.iter().map(|(_, schema)| schema);
             for schema in schemas.into_iter().flatten().chain(failures) {
@@ -165,7 +177,64 @@ impl Catalog {
                 }
             }
         }
+        for (id, event) in &self.events {
+            if self.capabilities.iter().any(|(existing, _)| existing == id) {
+                problems.push(format!("{id} is both a capability and an event"));
+            }
+            problems.extend(self.entry_problems(
+                id,
+                &event.description,
+                &event.audience,
+                event.input.as_ref(),
+            ));
+            if let Some(payload) = &event.payload
+                && !self.is_object(payload)
+            {
+                problems.push(format!("{id} payload does not describe an object"));
+            }
+            for schema in [&event.input, &event.payload].into_iter().flatten() {
+                for problem in self.reference_problems(schema) {
+                    problems.push(format!("{id} {problem}"));
+                }
+            }
+        }
         problems
+    }
+
+    /// The problems of the id, the description, the audience and the input of a capability or an event.
+    fn entry_problems(
+        &self,
+        id: &str,
+        description: &str,
+        audience: &[String],
+        input: Option<&Schema>,
+    ) -> Vec<String> {
+        let mut problems = Vec::new();
+        if id.len() > 128 || !ID.is_match(id) {
+            problems.push(format!("the id {id} is malformed"));
+        }
+        if description.trim().is_empty() {
+            problems.push(format!("{id} has no description"));
+        }
+        if has_repeat(audience) {
+            problems.push(format!("{id} repeats a target in its audience"));
+        }
+        for target in audience {
+            if !self.targets.iter().any(|(name, _)| name == target) {
+                problems.push(format!("{id} names the undeclared target {target}"));
+            }
+        }
+        if let Some(input) = input
+            && !self.is_object(input)
+        {
+            problems.push(format!("{id} input does not describe an object"));
+        }
+        problems
+    }
+
+    /// `true` when the schema, or the type that it refers to, describes an object.
+    fn is_object(&self, schema: &Schema) -> bool {
+        self.resolve(schema).get("type") == Some(&json!("object"))
     }
 
     /// The catalog as a JSON value, or the rules it breaks.
@@ -228,6 +297,19 @@ impl Catalog {
             capabilities.insert(id.clone(), Value::Object(out));
         }
         document.insert("capabilities".into(), Value::Object(capabilities));
+
+        if !self.events.is_empty() {
+            let mut events = Map::new();
+            for (id, event) in &self.events {
+                let mut out = Map::new();
+                out.insert("description".into(), json!(event.description));
+                out.insert("audience".into(), json!(event.audience));
+                insert_some(&mut out, "input", event.input.clone());
+                insert_some(&mut out, "payload", event.payload.clone());
+                events.insert(id.clone(), Value::Object(out));
+            }
+            document.insert("events".into(), Value::Object(events));
+        }
         Ok(Value::Object(document))
     }
 

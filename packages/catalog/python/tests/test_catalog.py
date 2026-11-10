@@ -6,7 +6,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE.parent / "examples"))
 
-from acid_cat_catalog import Catalog, CatalogError  # noqa: E402
+from acid_cat_catalog import Catalog, CatalogError, canonical_text  # noqa: E402
 from weather import weather_catalog  # noqa: E402
 
 PACKAGE = HERE.parent
@@ -66,6 +66,49 @@ class CatalogTest(unittest.TestCase):
         )
         with self.assertRaises(CatalogError):
             catalog.render()
+
+    def test_reports_the_rules_an_event_breaks(self) -> None:
+        catalog = Catalog().target("cli", bindings=["cli"])
+        catalog.type("Name", {"type": "string"})
+        catalog.capability("a.b", description="x")
+        catalog.event("a.b", description="y")
+        catalog.event("a.c", description="z", audience=["clii"], input={"type": "string"})
+        catalog.event("a.d", description="w", payload={"$ref": "#/$defs/Name"})
+        catalog.event("a.e", description="v", payload={"type": "object", "$defs": {}})
+        self.assertEqual(
+            catalog.validate(),
+            [
+                "a.b is both a capability and an event",
+                "a.c names the undeclared target clii",
+                "a.c input does not describe an object",
+                "a.d payload does not describe an object",
+                "a.e carries its own $defs; declare shared types with type()",
+            ],
+        )
+
+    def test_puts_events_after_capabilities_and_the_members_of_an_event_in_order(self) -> None:
+        text = canonical_text(
+            {
+                "events": {
+                    "z.b.changed": {"payload": {"type": "object"}, "input": {"type": "object"}, "description": "b"},
+                    "z.a.changed": {"description": "a"},
+                },
+                "capabilities": {},
+                "targets": {},
+                "acidcat": "0.1",
+            }
+        )
+        expected = (
+            '{\n  "acidcat": "0.1",\n  "targets": {},\n  "capabilities": {},\n  "events": {\n'
+            '    "z.a.changed": {\n      "description": "a"\n    },\n'
+            '    "z.b.changed": {\n      "description": "b",\n      "input": {\n        "type": "object"\n      },\n'
+            '      "payload": {\n        "type": "object"\n      }\n    }\n  }\n}\n'
+        )
+        self.assertEqual(text, expected)
+
+    def test_a_catalog_with_no_events_has_no_events_member(self) -> None:
+        catalog = Catalog().target("cli", bindings=["cli"]).capability("a.b", description="x", audience=["cli"])
+        self.assertNotIn("events", catalog.to_json())
 
 
 if __name__ == "__main__":

@@ -102,3 +102,21 @@ capabilities {
     }
   }
 }
+
+events {
+  ["greenhouse.tank.low"] {
+    description = "The rain-water tank fell below a level. The occurrence gives the litres that are left."
+    audience { "panel"; "assistant" }
+    input {
+      type = "object"
+      properties {}
+    }
+    payload {
+      type = "object"
+      required { "litres" }
+      properties {
+        litres { type = "number"; minimum = 0 }
+      }
+    }
+  }
+}

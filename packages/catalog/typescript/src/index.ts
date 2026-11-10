@@ -37,6 +37,17 @@ export interface CapabilityOptions {
   readonly state?: Schema;
 }
 
+export interface EventOptions {
+  /** What happens, and when the provider sends an occurrence, written for people and agents. */
+  readonly description: string;
+  /** The targets the event is offered to. Empty means no target. */
+  readonly audience?: readonly string[];
+  /** The input schema of a subscription, for example a filter. It must describe an object. Absent means an empty object. */
+  readonly input?: Schema;
+  /** The schema of the data of each occurrence. It must describe an object. Absent means an empty object. */
+  readonly payload?: Schema;
+}
+
 const ID = /^[a-z][a-z0-9]*(-[a-z0-9]+)*(\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$/;
 const NAME = /^[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?$/;
 const TYPE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
@@ -48,6 +59,7 @@ export class Catalog {
   readonly #targets = new Map<string, TargetOptions>();
   readonly #types = new Map<string, Schema>();
   readonly #capabilities = new Map<string, CapabilityOptions>();
+  readonly #events = new Map<string, EventOptions>();
 
   constructor(options: { readonly title?: string; readonly description?: string } = {}) {
     this.#title = options.title;
@@ -75,6 +87,13 @@ export class Catalog {
     return this;
   }
 
+  /** Declare an event (spec/events.md). */
+  event(id: string, options: EventOptions): this {
+    if (this.#events.has(id)) throw new Error(`The event ${id} is declared twice`);
+    this.#events.set(id, options);
+    return this;
+  }
+
   /** The catalog rules this catalog breaks. Empty when it conforms. */
   validate(): string[] {
     const problems: string[] = [];
@@ -91,20 +110,37 @@ export class Catalog {
       problems.push(...this.#referenceProblems(schema).map((problem) => `the type ${name} ${problem}`));
     }
     for (const [id, capability] of this.#capabilities) {
-      if (id.length > 128 || !ID.test(id)) problems.push(`the id ${id} is malformed`);
-      if (capability.description.trim() === "") problems.push(`${id} has no description`);
-      const audience = capability.audience ?? [];
-      if (new Set(audience).size !== audience.length) problems.push(`${id} repeats a target in its audience`);
-      for (const target of audience) {
-        if (!this.#targets.has(target)) problems.push(`${id} names the undeclared target ${target}`);
-      }
-      if (capability.input !== undefined && this.#resolve(capability.input).type !== "object") {
-        problems.push(`${id} input does not describe an object`);
-      }
+      problems.push(...this.#entryProblems(id, capability));
       const schemas = [capability.input, capability.output, capability.state, ...Object.values(capability.failures ?? {})];
       for (const schema of schemas) {
         if (schema !== undefined) problems.push(...this.#referenceProblems(schema).map((problem) => `${id} ${problem}`));
       }
+    }
+    for (const [id, event] of this.#events) {
+      if (this.#capabilities.has(id)) problems.push(`${id} is both a capability and an event`);
+      problems.push(...this.#entryProblems(id, event));
+      if (event.payload !== undefined && this.#resolve(event.payload).type !== "object") {
+        problems.push(`${id} payload does not describe an object`);
+      }
+      for (const schema of [event.input, event.payload]) {
+        if (schema !== undefined) problems.push(...this.#referenceProblems(schema).map((problem) => `${id} ${problem}`));
+      }
+    }
+    return problems;
+  }
+
+  /** The problems of the id, the description, the audience and the input of a capability or an event. */
+  #entryProblems(id: string, entry: { readonly description: string; readonly audience?: readonly string[]; readonly input?: Schema }): string[] {
+    const problems: string[] = [];
+    if (id.length > 128 || !ID.test(id)) problems.push(`the id ${id} is malformed`);
+    if (entry.description.trim() === "") problems.push(`${id} has no description`);
+    const audience = entry.audience ?? [];
+    if (new Set(audience).size !== audience.length) problems.push(`${id} repeats a target in its audience`);
+    for (const target of audience) {
+      if (!this.#targets.has(target)) problems.push(`${id} names the undeclared target ${target}`);
+    }
+    if (entry.input !== undefined && this.#resolve(entry.input).type !== "object") {
+      problems.push(`${id} input does not describe an object`);
     }
     return problems;
   }
@@ -138,6 +174,15 @@ export class Catalog {
           }),
         ]),
       ),
+      events:
+        this.#events.size === 0
+          ? undefined
+          : Object.fromEntries(
+              [...this.#events].map(([id, event]) => [
+                id,
+                compact({ description: event.description, audience: event.audience ?? [], input: event.input, payload: event.payload }),
+              ]),
+            ),
     });
   }
 

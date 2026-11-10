@@ -33,6 +33,7 @@ class Catalog:
         self._targets: dict[str, dict[str, Any]] = {}
         self._types: dict[str, Schema] = {}
         self._capabilities: dict[str, dict[str, Any]] = {}
+        self._events: dict[str, dict[str, Any]] = {}
 
     def target(
         self,
@@ -79,6 +80,20 @@ class Catalog:
         }
         return self
 
+    def event(
+        self,
+        id: str,
+        description: str,
+        audience: Sequence[str] = (),
+        input: Schema | None = None,
+        payload: Schema | None = None,
+    ) -> Catalog:
+        """Declare an event (spec/events.md). An event with no audience reaches no target."""
+        if id in self._events:
+            raise CatalogError(f"The event {id} is declared twice")
+        self._events[id] = {"description": description, "audience": list(audience), "input": input, "payload": payload}
+        return self
+
     def validate(self) -> list[str]:
         """The catalog rules this catalog breaks. Empty when it conforms."""
         problems: list[str] = []
@@ -96,20 +111,35 @@ class Catalog:
                 problems.append(f"the type name {name} is malformed")
             problems += [f"the type {name} {problem}" for problem in self._reference_problems(schema)]
         for id, capability in self._capabilities.items():
-            audience = capability["audience"]
-            if len(id) > 128 or not _ID.fullmatch(id):
-                problems.append(f"the id {id} is malformed")
-            if not capability["description"].strip():
-                problems.append(f"{id} has no description")
-            if len(set(audience)) != len(audience):
-                problems.append(f"{id} repeats a target in its audience")
-            problems += [f"{id} names the undeclared target {t}" for t in audience if t not in self._targets]
-            if capability["input"] is not None and self._resolve(capability["input"]).get("type") != "object":
-                problems.append(f"{id} input does not describe an object")
+            problems += self._entry_problems(id, capability)
             schemas = [capability["input"], capability["output"], capability["state"], *(capability["failures"] or {}).values()]
             for schema in schemas:
                 if schema is not None:
                     problems += [f"{id} {problem}" for problem in self._reference_problems(schema)]
+        for id, event in self._events.items():
+            if id in self._capabilities:
+                problems.append(f"{id} is both a capability and an event")
+            problems += self._entry_problems(id, event)
+            if event["payload"] is not None and self._resolve(event["payload"]).get("type") != "object":
+                problems.append(f"{id} payload does not describe an object")
+            for schema in (event["input"], event["payload"]):
+                if schema is not None:
+                    problems += [f"{id} {problem}" for problem in self._reference_problems(schema)]
+        return problems
+
+    def _entry_problems(self, id: str, entry: dict[str, Any]) -> list[str]:
+        """The problems of the id, the description, the audience and the input of a capability or an event."""
+        problems: list[str] = []
+        audience = entry["audience"]
+        if len(id) > 128 or not _ID.fullmatch(id):
+            problems.append(f"the id {id} is malformed")
+        if not entry["description"].strip():
+            problems.append(f"{id} has no description")
+        if len(set(audience)) != len(audience):
+            problems.append(f"{id} repeats a target in its audience")
+        problems += [f"{id} names the undeclared target {t}" for t in audience if t not in self._targets]
+        if entry["input"] is not None and self._resolve(entry["input"]).get("type") != "object":
+            problems.append(f"{id} input does not describe an object")
         return problems
 
     def to_json(self) -> dict[str, Any]:
@@ -125,6 +155,7 @@ class Catalog:
                 "targets": {name: _compact(target) for name, target in self._targets.items()},
                 "$defs": dict(self._types) or None,
                 "capabilities": {id: _compact(capability) for id, capability in self._capabilities.items()},
+                "events": {id: _compact(event) for id, event in self._events.items()} or None,
             }
         )
 
