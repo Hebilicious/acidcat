@@ -71,6 +71,7 @@ export const aircon = defineApp<{ unit: Unit }>({ targets, capabilities: [powerS
 - `data` must agree with the payload schema. The session gives the client the output of the schema, as a copy. With no payload schema, `data` must be an empty object.
 - If `subscribe` throws before it gives an iterable, the subscription fails as `internal` before it starts. If the iterable throws, or gives data that does not agree with the payload schema, the subscription ends with `internal`. The details go to `onDefect`, not to the client.
 - When the iterable ends, the subscription is complete.
+- The session asks for the first value before the promise of `subscribe` resolves. Thus the body of an async generator runs until its first `await` or `yield` before the client gets the iterable. Register a listener on the source before that point, and the subscription gets each change after `subscribe` resolves.
 - To resume, give a `cursor` with each value. A client can give a `cursor` and `maxAgeMs` when it subscribes. Start after the cursor, and send no occurrence older than `maxAgeMs`. If you skip occurrences, give `truncated: true` on the first value. An event that gives no cursors ignores them.
 - `defineEvent` and `eventsFor` keep the literal type of `id`. Capabilities and events share one set of ids.
 
