@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.9.0...@acid-cat/core-effect@0.10.0) (2026-11-10)
+
+
+### Features
+
+* **cli:** test events with acid-cat conform, and follow aircon.status.changed from every API of the example ([#109](https://github.com/Hebilicious/acidcat/issues/109)) ([f6b4ca4](https://github.com/Hebilicious/acidcat/commit/f6b4ca4fa3869502d24f183628cc7e2ca6405f67))
+* **core-effect:** serve events through the TypeScript, HTTP, CLI and MCP bindings ([#108](https://github.com/Hebilicious/acidcat/issues/108)) ([b485d08](https://github.com/Hebilicious/acidcat/commit/b485d08318c4123ec63520977654a55f4d1a6e5d))
+* **mcp:** serve the initialize handshake of earlier revisions through @acid-cat/mcp-handshake ([#97](https://github.com/Hebilicious/acidcat/issues/97)) ([2db2231](https://github.com/Hebilicious/acidcat/commit/2db2231042a448b405d46bd5bc8c96172d6258fa))
+
+
+### Bug Fixes
+
+* **core-effect:** tell each change of the tools through stdio, update effect to 4.1.0, and make CI deterministic ([#92](https://github.com/Hebilicious/acidcat/issues/92)) ([df9e18b](https://github.com/Hebilicious/acidcat/commit/df9e18b9469b8e7f7cc1f620ca3ae4f3b8e6624f))
+
 ## [0.9.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.8.0...@acid-cat/core-effect@0.9.0) (2026-10-28)
 
 
