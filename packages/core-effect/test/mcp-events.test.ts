@@ -255,3 +255,16 @@ test("through stdio, a client of the initialize handshake gets no events", async
   assert.equal(capabilities.extensions?.[EXTENSION], undefined);
   assert.equal(listed.error?.code, -32601);
 });
+
+test("through HTTP with the handshake, initialize gives no events extension", async () => {
+  const handler = Mcp.withHandshake(Mcp.toWebHandler(events, feedLayer, { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN] }));
+  const response = await handler(
+    new Request(`${ORIGIN}/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "test", version: "0" } } }),
+    }),
+  );
+  const capabilities = Schema.decodeUnknownSync(Discovery)((await json(response)).result).capabilities;
+  assert.equal(capabilities.extensions?.[EXTENSION], undefined);
+});
