@@ -105,7 +105,7 @@ export const aircon = App.make({ targets, capabilities: [powerSet], events: [sta
 - Each value of the stream is an `Emitted`: `data`, and optionally `eventId`, `timestamp`, `cursor` and `truncated`. The session makes the `eventId` and the `timestamp` when the provider gives none. Give the `eventId` of the source when it has one.
 - The stream has no error channel. Put the problems of the source in the payload, for example as a union with a `_tag`. A defect of the stream, or a payload that does not agree with the payload schema, ends the subscription with the call failure `internal`. Its details go to the log, not to the client.
 - A subscription ends when the stream ends (complete), when the client cancels it (the fiber of the stream is interrupted), or when the session closes (complete). Release the resources of the source with `Stream.ensuring` or a scoped resource.
-- The stream starts in a fiber of the session, a short time after the subscription starts. A source such as a `PubSub` gives a subscriber only the values after it subscribes.
+- The stream starts in a fiber of the session before `subscribe` returns, and runs until it first waits. Thus a stream that subscribes to a `PubSub` without waiting gets each value that is published after `subscribe` returns. A stream that waits before it subscribes, for example for an asynchronous effect, misses the values before it subscribes.
 - Capabilities and events share one set of ids. `App.document` throws when an id is both, or when a payload is not an object.
 
 ## Write the catalog
