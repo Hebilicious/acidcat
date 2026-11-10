@@ -1,9 +1,9 @@
 /** A test application with one capability for each behavior that the tests examine. */
 import { unavailable, AVAILABLE } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
-import { Context, Deferred, Effect, Layer, Schema, SubscriptionRef } from "effect";
+import { Context, Deferred, Effect, Layer, PubSub, Schema, Stream, SubscriptionRef } from "effect";
 
-import { App, Capability } from "../src/index.ts";
+import { App, Capability, Event } from "../src/index.ts";
 
 /** A switch that the tests turn on and off. It holds the availability of `fixture.toggle`. */
 export class Switch extends Context.Service<Switch, SubscriptionRef.SubscriptionRef<Availability>>()("fixture/Switch") {}
@@ -49,8 +49,59 @@ export const holdsLayer = (mark?: (path: string) => Effect.Effect<void>) =>
     };
   });
 
-/** The services of the fixture: the switch, which is on, and the holds. */
-export const fixtureLayer = Layer.merge(switchLayer, holdsLayer());
+/** The subscriptions to `fixture.watch` that are active now, for all the sessions of one provider. */
+export class Watchers extends Context.Service<
+  Watchers,
+  {
+    /**
+     * The values that `signal` gives for the key, while the stream runs. The watch starts before the stream first
+     * waits. With a marker, the stream writes its file after the watch starts.
+     */
+    readonly watch: (key: string, marker: string | undefined) => Stream.Stream<string>;
+    readonly watching: Effect.Effect<ReadonlyArray<string>>;
+    /** Give the value to each watch of the key. Give the number of these watches. */
+    readonly signal: (key: string, value: string) => Effect.Effect<number>;
+  }
+>()("fixture/Watchers") {}
+
+/** The watchers of one provider. `mark` writes the file of a marker, as for `holdsLayer`. */
+export const watchersLayer = (mark?: (path: string) => Effect.Effect<void>) =>
+  Layer.effect(
+    Watchers,
+    Effect.gen(function* () {
+      const signals = yield* PubSub.unbounded<{ readonly key: string; readonly value: string }>();
+      const watching = new Set<{ readonly key: string }>();
+      return {
+        watch: (key, marker) =>
+          Stream.unwrap(
+            Effect.gen(function* () {
+              const subscription = yield* Effect.acquireRelease(
+                Effect.map(PubSub.subscribe(signals), (subscription) => {
+                  const entry = { key };
+                  watching.add(entry);
+                  return { subscription, entry };
+                }),
+                ({ entry }) => Effect.sync(() => watching.delete(entry)),
+              );
+              if (marker !== undefined && mark !== undefined) yield* mark(marker);
+              return Stream.fromSubscription(subscription.subscription).pipe(
+                Stream.filter((signal) => signal.key === key),
+                Stream.map((signal) => signal.value),
+              );
+            }),
+          ),
+        watching: Effect.sync(() => [...watching].map((entry) => entry.key)),
+        signal: (key, value) =>
+          Effect.as(
+            PubSub.publish(signals, { key, value }),
+            [...watching].filter((entry) => entry.key === key).length,
+          ),
+      };
+    }),
+  );
+
+/** The services of the fixture: the switch, which is on, the holds and the watchers. */
+export const fixtureLayer = Layer.mergeAll(switchLayer, holdsLayer(), watchersLayer());
 
 /** The services of the fixture, which count how many times the switch is built and released, to test when a host builds the services. */
 export function countedFixtureLayer() {
@@ -62,12 +113,21 @@ export function countedFixtureLayer() {
       () => Effect.sync(() => counts.released++),
     ),
   );
-  return { counts, layer: Layer.merge(counted, holdsLayer()) };
+  return { counts, layer: Layer.mergeAll(counted, holdsLayer(), watchersLayer()) };
 }
 
 const Text = Schema.Struct({ text: Schema.String });
 const Key = Schema.Struct({ key: Schema.String });
 const Refused = Schema.TaggedStruct("Refused", { reason: Schema.String });
+const Keys = Schema.Struct({ keys: Schema.Array(Schema.String) });
+const Tick = Schema.Struct({ n: Schema.Int });
+const Watched = Schema.Struct({ key: Schema.String, value: Schema.String });
+
+/** The position after a cursor of `fixture.ticks`. A cursor that is not a count starts at the first tick. */
+const after = (cursor: string | undefined): number => {
+  const position = Number(cursor);
+  return Number.isInteger(position) && position >= 0 ? position + 1 : 1;
+};
 
 const Flags = Schema.Struct({
   mode: Schema.Literals(["fast", "slow"]),
@@ -109,7 +169,7 @@ export const hidden = Capability.make({
 
 export const fixture = App.make({
   title: "Fixture",
-  description: "One capability for each behavior that acid-cat conform tests.",
+  description: "One capability or event for each behavior that acid-cat conform tests.",
   targets: {
     app: { bindings: ["typescript", "webmcp"] },
     mcp: { bindings: ["mcp"] },
@@ -139,7 +199,7 @@ export const fixture = App.make({
       description: "Return the keys of the calls to fixture.hold that hold now.",
       audience: everywhere,
       readOnly: true,
-      output: Schema.Struct({ keys: Schema.Array(Schema.String) }),
+      output: Keys,
       run: () => Holds.use((holds) => Effect.map(holds.held, (keys) => ({ keys }))),
     }),
     Capability.make({
@@ -176,6 +236,55 @@ export const fixture = App.make({
       input: Flags,
       output: Flags,
       run: (input) => Effect.succeed(input),
+    }),
+    Capability.make({
+      id: "fixture.signal",
+      description: "Give an occurrence of fixture.watch to each subscription that watches the key. Return the number of these subscriptions.",
+      audience: everywhere,
+      input: Watched,
+      output: Schema.Struct({ delivered: Schema.Int }),
+      run: ({ key, value }) => Watchers.use((watchers) => Effect.map(watchers.signal(key, value), (delivered) => ({ delivered }))),
+    }),
+    Capability.make({
+      id: "fixture.watching",
+      description: "Return the keys of the subscriptions to fixture.watch that are active now.",
+      audience: everywhere,
+      readOnly: true,
+      output: Keys,
+      run: () => Watchers.use((watchers) => Effect.map(watchers.watching, (keys) => ({ keys }))),
+    }),
+  ],
+  events: [
+    Event.make({
+      id: "fixture.ticks",
+      description: "Give the occurrences n = 1 to count, with the eventId and the cursor String(n), then end. With a cursor c, start at c + 1.",
+      audience: everywhere,
+      input: Schema.Struct({ count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })) }),
+      payload: Tick,
+      subscribe: ({ count }, { cursor }) =>
+        Stream.range(after(cursor), count).pipe(Stream.map((n) => ({ data: { n }, eventId: String(n), cursor: String(n) }))),
+    }),
+    Event.make({
+      id: "fixture.watch",
+      description: "Give an occurrence each time that fixture.signal gets the key. Never end. With a marker, write a file at that path when the subscription starts.",
+      audience: everywhere,
+      input: Schema.Struct({ key: Schema.String, marker: Schema.optionalKey(Schema.String) }),
+      payload: Watched,
+      subscribe: ({ key, marker }) =>
+        Stream.unwrap(Watchers.use((watchers) => Effect.succeed(watchers.watch(key, marker)))).pipe(Stream.map((value) => ({ data: { key, value } }))),
+    }),
+    Event.make({
+      id: "fixture.broken",
+      description: "Give the occurrence n = 1, then fail with a defect.",
+      audience: everywhere,
+      payload: Tick,
+      subscribe: () => Stream.concat(Stream.make({ data: { n: 1 } }), Stream.die(new Error("secret internal detail"))),
+    }),
+    Event.make({
+      id: "fixture.secret",
+      description: "Only the app target can follow this event. It never gives an occurrence.",
+      audience: ["app"],
+      subscribe: () => Stream.never,
     }),
   ],
 });

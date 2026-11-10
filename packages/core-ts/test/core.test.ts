@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, httpHandler, installWebMcp, mcpHandler, ok, renderCatalog, runCli } from "../src/index.ts";
 import type { App, CliCommand, CliOptions, ModelContextTool, Outcome } from "../src/index.ts";
-import { fixture, heldApp, Holds, options, readJson, Switch, toJsonSchema } from "./fixture.ts";
+import { fixture, heldApp, Holds, options, readJson, Switch, toJsonSchema, Watchers } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
 
 test("the application writes a catalog that conforms", () => {
@@ -136,7 +136,7 @@ test("MCP gives the view and each outcome", async () => {
       Reply,
     );
   const tools = (await rpc("tools/list")).result?.tools ?? [];
-  assert.deepEqual(tools.map((tool) => tool.name).sort(), ["fixture.crash", "fixture.echo", "fixture.held", "fixture.hold", "fixture.refuse", "fixture.release", "fixture.switch.set", "fixture.toggle"]);
+  assert.deepEqual(tools.map((tool) => tool.name).sort(), ["fixture.crash", "fixture.echo", "fixture.held", "fixture.hold", "fixture.refuse", "fixture.release", "fixture.signal", "fixture.switch.set", "fixture.toggle", "fixture.watching"]);
   assert.equal(tools.find((tool) => tool.name === "fixture.echo")?.annotations.readOnlyHint, true);
   const value = await rpc("tools/call", { name: "fixture.echo", arguments: { text: "hi" } });
   assert.deepEqual(value.result?.structuredContent, { text: "hi" });
@@ -182,7 +182,7 @@ function countedContexts() {
   const counts = { created: 0, released: 0 };
   const createContext = (): Context & AsyncDisposable => {
     counts.created += 1;
-    return { switch: new Switch(), holds: new Holds(), [Symbol.asyncDispose]: async () => void (counts.released += 1) };
+    return { switch: new Switch(), holds: new Holds(), watchers: new Watchers(), [Symbol.asyncDispose]: async () => void (counts.released += 1) };
   };
   return { counts, createContext };
 }
@@ -335,7 +335,7 @@ test("a command of the application runs beside the commands of the capabilities,
   const run = (...args: string[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options(), commands: [position] }, ...args);
   assert.deepEqual(await run("position", "switch"), { code: 0, stdout: "switch: on", stderr: "" });
   assert.equal((await run("fixture", "echo", "--text", "hi")).code, 0);
-  assert.match((await run("--help")).stdout, /\n {2}list\n {2}position {2}Write the position of the switch\.$/);
+  assert.match((await run("--help")).stdout, /\n {2}list\n {2}watch <id> \[flags\]\n {2}position {2}Write the position of the switch\.$/);
 });
 
 test("the help gives the description of the options, else the description of the application, else its title", async () => {

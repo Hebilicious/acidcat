@@ -1,7 +1,7 @@
 {
   "acidcat": "0.1",
   "title": "AcidCat conformance fixture",
-  "description": "One capability for each behavior that acid-cat conform tests.",
+  "description": "One capability or event for each behavior that acid-cat conform tests.",
   "targets": {
     "api": {
       "bindings": [
@@ -268,6 +268,41 @@
         "type": "object"
       }
     },
+    "fixture.signal": {
+      "description": "Give an occurrence of fixture.watch to each subscription that watches the key. Return the number of these subscriptions.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "input": {
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "delivered": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "delivered"
+        ],
+        "type": "object"
+      }
+    },
     "fixture.switch.set": {
       "description": "Turn the switch on or off. The switch controls the availability of fixture.toggle.",
       "audience": [
@@ -298,6 +333,129 @@
       ],
       "input": {
         "properties": {},
+        "type": "object"
+      }
+    },
+    "fixture.watching": {
+      "description": "Return the keys of the subscriptions to fixture.watch that are active now.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "output": {
+        "properties": {
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "type": "object"
+      },
+      "readOnly": true
+    }
+  },
+  "events": {
+    "fixture.broken": {
+      "description": "Give the occurrence n = 1, then fail with a defect.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "payload": {
+        "properties": {
+          "n": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n"
+        ],
+        "type": "object"
+      }
+    },
+    "fixture.secret": {
+      "description": "Only the app target can follow this event. It never gives an occurrence.",
+      "audience": [
+        "app"
+      ]
+    },
+    "fixture.ticks": {
+      "description": "Give the occurrences n = 1 to count, with the eventId and the cursor String(n), then end. With a cursor c, start at c + 1.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "input": {
+        "properties": {
+          "count": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "type": "object"
+      },
+      "payload": {
+        "properties": {
+          "n": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n"
+        ],
+        "type": "object"
+      }
+    },
+    "fixture.watch": {
+      "description": "Give an occurrence each time that fixture.signal gets the key. Never end. With a marker, write a file at that path when the subscription starts.",
+      "audience": [
+        "app",
+        "mcp",
+        "cli",
+        "api"
+      ],
+      "input": {
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "marker": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "payload": {
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
         "type": "object"
       }
     }

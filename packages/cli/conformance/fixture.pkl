@@ -3,7 +3,7 @@
 amends "../../catalog/pkl/Catalog.pkl"
 
 title = "AcidCat conformance fixture"
-description = "One capability for each behavior that acid-cat conform tests."
+description = "One capability or event for each behavior that acid-cat conform tests."
 
 targets {
   ["app"] { bindings { "typescript"; "webmcp" } }
@@ -24,6 +24,18 @@ local key = new Dynamic {
   type = "object"
   required { "key" }
   properties { key { type = "string" } }
+}
+
+local keys = new Dynamic {
+  type = "object"
+  required { "keys" }
+  properties { keys { type = "array"; items { type = "string" } } }
+}
+
+local tick = new Dynamic {
+  type = "object"
+  required { "n" }
+  properties { n { type = "integer" } }
 }
 
 local flags = new Dynamic {
@@ -84,11 +96,7 @@ capabilities {
     description = "Return the keys of the calls to fixture.hold that hold now."
     audience = allTargets
     readOnly = true
-    output {
-      type = "object"
-      required { "keys" }
-      properties { keys { type = "array"; items { type = "string" } } }
-    }
+    output = keys
   }
   ["fixture.release"] {
     description = "Release the calls to fixture.hold that hold the key."
@@ -121,5 +129,70 @@ capabilities {
     audience { "cli" }
     input = flags
     output = flags
+  }
+  ["fixture.signal"] {
+    description = "Give an occurrence of fixture.watch to each subscription that watches the key. Return the number of these subscriptions."
+    audience = allTargets
+    input {
+      type = "object"
+      required { "key"; "value" }
+      properties {
+        key { type = "string" }
+        value { type = "string" }
+      }
+    }
+    output {
+      type = "object"
+      required { "delivered" }
+      properties { delivered { type = "integer" } }
+    }
+  }
+  ["fixture.watching"] {
+    description = "Return the keys of the subscriptions to fixture.watch that are active now."
+    audience = allTargets
+    readOnly = true
+    output = keys
+  }
+}
+
+events {
+  ["fixture.ticks"] {
+    description = "Give the occurrences n = 1 to count, with the eventId and the cursor String(n), then end. With a cursor c, start at c + 1."
+    audience = allTargets
+    input {
+      type = "object"
+      required { "count" }
+      properties { count { type = "integer"; minimum = 0; maximum = 100 } }
+    }
+    payload = tick
+  }
+  ["fixture.watch"] {
+    description = "Give an occurrence each time that fixture.signal gets the key. Never end. With a marker, write a file at that path when the subscription starts."
+    audience = allTargets
+    input {
+      type = "object"
+      required { "key" }
+      properties {
+        key { type = "string" }
+        marker { type = "string" }
+      }
+    }
+    payload {
+      type = "object"
+      required { "key"; "value" }
+      properties {
+        key { type = "string" }
+        value { type = "string" }
+      }
+    }
+  }
+  ["fixture.broken"] {
+    description = "Give the occurrence n = 1, then fail with a defect."
+    audience = allTargets
+    payload = tick
+  }
+  ["fixture.secret"] {
+    description = "Only the app target can follow this event. It never gives an occurrence."
+    audience { "app" }
   }
 }

@@ -14,7 +14,8 @@ import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { isObject, memberOf } from "../json.ts";
 import type { JsonObject } from "../json.ts";
 import { abortable, Checks, expect, expectEqual, until } from "./check.ts";
-import { checkTools } from "./mcp.ts";
+import { checkEvents, checkTools, META, subscriptionOf } from "./mcp.ts";
+import type { Channel, EventStream, Message } from "./mcp.ts";
 import { checkProperties, clientInvoke, heldKeys } from "./properties.ts";
 
 const RULE = "spec/bindings/mcp.md#stdio";
@@ -66,7 +67,65 @@ export async function checkMcpStdio(command: readonly string[], options: { reado
     }
   }
   all.push(await checkLines(command, options));
+  all.push(await checkStdioEvents(command, options));
   return all;
+}
+
+/**
+ * The checks of the events extension through one server process. The requests have revision 2026-07-28 in `_meta`, with
+ * no handshake. `cancel` sends `notifications/cancelled` with the id of the `events/stream` request.
+ */
+async function checkStdioEvents(command: readonly string[], options: { readonly deadline: number }): Promise<Checks> {
+  const checks = new Checks("mcp-stdio events", options.deadline);
+  const controller = new AbortController();
+  const server = startRaw(command, controller.signal);
+  try {
+    await checkEvents(checks, stdioChannel(server));
+  } finally {
+    controller.abort();
+  }
+  return checks;
+}
+
+/** A channel to a server process. Each wait stops when the signal of the check aborts. */
+function stdioChannel(server: ReturnType<typeof startRaw>): Channel {
+  let next = 0;
+  const send = (id: string, method: string, params: JsonObject) =>
+    server.write(JSON.stringify({ jsonrpc: "2.0", id, method, params: { ...params, _meta: META } }));
+  return {
+    async request(method, params, signal) {
+      const id = `conform-request-${(next += 1)}`;
+      send(id, method, params);
+      return until(`the response to ${method}`, async () => server.messages.find((message) => memberOf(message, "id") === id), isObject, signal);
+    },
+    async stream(id, params, signal): Promise<EventStream> {
+      send(id, "events/stream", params);
+      const belongs = (message: unknown): message is Message => isObject(message) && (message.id === id || subscriptionOf(message) === id);
+      let position = 0;
+      let ended = false;
+      return {
+        async next() {
+          if (ended) return undefined;
+          const found = await until(
+            "the next message of the subscription",
+            async () => server.messages.slice(position).findIndex(belongs),
+            (index) => index >= 0,
+            signal,
+          );
+          const message = server.messages[position + found];
+          position += found + 1;
+          if (!belongs(message)) throw new Error("the message of the subscription is not a JSON-RPC message");
+          if (message.id === id) ended = true;
+          return message;
+        },
+        async cancel() {
+          if (ended) return;
+          ended = true;
+          server.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: id } }));
+        },
+      };
+    },
+  };
 }
 
 /** The server tells the client each change of the set of available tools. */

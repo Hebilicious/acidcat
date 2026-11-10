@@ -1,6 +1,11 @@
 #!/usr/bin/env node
-/** The fixture as a command line whose calls to fixture.hold write no marker file, for the conformance tests. */
-import { cliMain } from "../src/index.ts";
-import { fixture, options } from "./fixture.ts";
+/**
+ * The fixture as a command line whose calls to fixture.hold write no marker file, for the conformance tests. Its
+ * subscriptions to fixture.watch write their marker files.
+ */
+import { writeFile } from "node:fs/promises";
 
-cliMain(fixture, { name: "fixture", version: "0.0.0", ...options() });
+import { cliMain } from "../src/index.ts";
+import { fixture, Holds, options, Watchers } from "./fixture.ts";
+
+cliMain(fixture, { name: "fixture", version: "0.0.0", ...options(new Holds(), new Watchers((path) => writeFile(path, ""))) });

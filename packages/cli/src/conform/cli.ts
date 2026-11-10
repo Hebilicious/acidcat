@@ -8,7 +8,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { isArrayOf, isObject, memberOf, parseJson } from "../json.ts";
 import type { JsonObject } from "../json.ts";
-import { Checks, expect, expectEqual, idsOf, sorted, until } from "./check.ts";
+import { Checks, eventIdsOf, expect, expectEqual, expectOccurrence, idsOf, sorted, until } from "./check.ts";
 
 const RULE = "spec/bindings/cli.md";
 
@@ -23,6 +23,15 @@ const USAGES: { readonly [id: string]: string } = {
   "fixture.release": "fixture release --key <string>",
   "fixture.switch.set": "fixture switch set --on",
   "fixture.toggle": "fixture toggle",
+  "fixture.signal": "fixture signal --key <string> --value <string>",
+  "fixture.watching": "fixture watching",
+};
+
+/** The `usage` of each event in the view of the fixture, after the name of the program. */
+const EVENT_USAGES: { readonly [id: string]: string } = {
+  "fixture.broken": "watch fixture.broken",
+  "fixture.ticks": "watch fixture.ticks --count <integer>",
+  "fixture.watch": "watch fixture.watch --key <string> [--marker <string>]",
 };
 
 /** An entry of the list that the `list` command gives. */
@@ -136,19 +145,82 @@ export async function checkCli(command: readonly string[], options: { readonly d
     expectEqual(result.code, 0, "exit code");
     expectEqual(parseJson(result.stdout), { text: "hello" }, "standard output");
   });
-  await checks.run("list gives the view", `${RULE}#commands`, async (signal) => {
-    const result = await run(signal, "list");
-    expectEqual(sorted(entriesOf(result.stdout).map((entry) => entry.id)), idsOf("cli"), "ids");
-  });
-  await checks.run("list gives the usage of each capability, with its flags", `${RULE}#commands`, async (signal) => {
+  await checks.run("list gives the view: the capabilities, then the events", `${RULE}#commands`, async (signal) => {
     const entries = entriesOf((await run(signal, "list")).stdout);
-    for (const { id, usage } of entries) {
+    const ids = (kind: string) => entries.filter((entry) => entry.kind === kind).map((entry) => entry.id);
+    expectEqual(sorted(ids("capability")), idsOf("cli"), "the ids of the items with kind: capability");
+    expectEqual(sorted(ids("event")), eventIdsOf("cli"), "the ids of the items with kind: event");
+    expectEqual(entries.length, ids("capability").length + ids("event").length, "the number of items with a kind");
+    const firstEvent = entries.findIndex((entry) => entry.kind === "event");
+    expect(firstEvent === -1 || entries.slice(firstEvent).every((entry) => entry.kind === "event"), "the events must come after the capabilities");
+  });
+  await checks.run("list gives the usage of each capability and each event, with its flags", `${RULE}#commands`, async (signal) => {
+    const entries = entriesOf((await run(signal, "list")).stdout);
+    for (const { id, kind, usage } of entries) {
       expect(typeof usage === "string", `${id} must have a usage`);
       const [program, ...rest] = usage.split(" ");
       expect(program !== "" && rest.length > 0, `the usage of ${id} must start with the name of the program, got ${JSON.stringify(usage)}`);
-      expectEqual(rest.join(" "), USAGES[id], `usage of ${id} after the name of the program`);
+      expectEqual(rest.join(" "), kind === "event" ? EVENT_USAGES[id] : USAGES[id], `usage of ${id} after the name of the program`);
     }
   });
+  await checkWatch(checks, command);
 
   return checks;
+}
+
+const EVENTS = `${RULE}#events`;
+
+/** The checks of `watch` (spec/bindings/cli.md#events). */
+async function checkWatch(checks: Checks, command: readonly string[]): Promise<void> {
+  const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
+  /** The lines of standard output, each one an occurrence of the event. */
+  const occurrences = (stdout: string, id: string) =>
+    stdout
+      .split("\n")
+      .filter((line) => line !== "")
+      .map((line) => expectOccurrence(parseJson(line), id));
+
+  await checks.run("watch writes each occurrence as one line of JSON, and exits with 0 when the subscription is complete", EVENTS, async (signal) => {
+    const result = await run(signal, "watch", "fixture.ticks", "--count", "2");
+    expectEqual(result.code, 0, "exit code");
+    expectEqual(
+      occurrences(result.stdout, "fixture.ticks").map((occurrence) => occurrence.data),
+      [{ n: 1 }, { n: 2 }],
+      "the data of the occurrences",
+    );
+    expectEqual(result.stderr, "", "standard error");
+  });
+  await checks.run("watch writes internal to standard error with exit code 5 after a defect", EVENTS, async (signal) => {
+    const result = await run(signal, "watch", "fixture.broken");
+    expectEqual(result.code, 5, "exit code");
+    expectEqual(occurrences(result.stdout, "fixture.broken").map((occurrence) => occurrence.data), [{ n: 1 }], "the data of the occurrences");
+    expect(/"kind":"internal"/.test(result.stderr), `standard error must contain the call failure internal, got ${JSON.stringify(result.stderr)}`);
+  });
+  for (const [name, args, code] of [
+    ["watch with invalid input has exit code 3", ["watch", "fixture.ticks", "--count", "101"], 3],
+    ["watch with a missing required flag has exit code 3", ["watch", "fixture.ticks"], 3],
+    ["watch of an event outside the view has exit code 2", ["watch", "fixture.secret"], 2],
+  ] as const) {
+    await checks.run(name, EVENTS, async (signal) => {
+      expectEqual((await run(signal, ...args)).code, code, "exit code");
+    });
+  }
+  await checks.run("an interrupt cancels watch with exit code 130", EVENTS, async (signal) => {
+    const directory = await mkdtemp(join(tmpdir(), "acid-cat-conform-"));
+    const marker = join(directory, "watching");
+    try {
+      const { child, run: watched } = start(command, ["watch", "fixture.watch", "--key", "interrupt", "--marker", marker], signal);
+      const ended = () => child.exitCode !== null || child.signalCode !== null;
+      await until("the subscription writes its marker file", async () => existsSync(marker) || ended(), (ready) => ready, signal);
+      if (!ended()) child.kill("SIGINT");
+      const result = await watched;
+      expect(existsSync(marker), `the subscription must start before the interrupt, but the command line ended with ${result.code}: ${result.stderr}`);
+      expect(result.signal === null, `the process must exit, not end by the signal ${result.signal}`);
+      expectEqual(result.code, 130, "exit code");
+      expectEqual(result.stdout, "", "standard output");
+      expectEqual(result.stderr, "", "standard error");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 }

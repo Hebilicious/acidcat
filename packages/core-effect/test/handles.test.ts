@@ -6,7 +6,7 @@ import type { Availability, Result } from "@acid-cat/spec-ts";
 import { Context, Effect, Layer, Option, Schema, SchemaGetter, SchemaTransformation, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability, Handles, Session } from "../src/index.ts";
-import { fixture, fixtureLayer, holdsLayer, position, Switch } from "./fixture.ts";
+import { fixture, fixtureLayer, holdsLayer, position, Switch, watchersLayer } from "./fixture.ts";
 import { Burnt, Lamp, lamp, lampLayer, Light, lightGet, pair, powerSet, sceneSet, Unreachable } from "./lamp.ts";
 
 /** The error that a promise rejects with. */
@@ -58,7 +58,7 @@ test("handles give results, and reject call failures with their kind", async () 
 test("a handle reads its availability when it is asked, and follows it only while it has listeners", async () => {
   const switchRef = Effect.runSync(SubscriptionRef.make(position(true)));
   const turn = (on: boolean) => Effect.runSync(SubscriptionRef.set(switchRef, position(on)));
-  const session = await Handles.open(fixture, Layer.merge(Layer.succeed(Switch, switchRef), holdsLayer()), { target: "app" });
+  const session = await Handles.open(fixture, Layer.mergeAll(Layer.succeed(Switch, switchRef), holdsLayer(), watchersLayer()), { target: "app" });
   const toggle = handleOf(session.handles, "fixture.toggle");
   assert.equal(switchRef.pubsub.subscribers.size, 0);
 

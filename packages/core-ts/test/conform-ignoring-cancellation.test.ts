@@ -59,8 +59,14 @@ test("acid-cat conform fails the interrupt check of a command line that never wr
       "passed: each flag gives the value of its property, and a repeated flag gives one item for each occurrence",
       "passed: a repeated flag that occurs once with JSON text of an array gives that array",
       "passed: call gives the value of a capability",
-      "passed: list gives the view",
-      "passed: list gives the usage of each capability, with its flags",
+      "passed: list gives the view: the capabilities, then the events",
+      "passed: list gives the usage of each capability and each event, with its flags",
+      "passed: watch writes each occurrence as one line of JSON, and exits with 0 when the subscription is complete",
+      "passed: watch writes internal to standard error with exit code 5 after a defect",
+      "passed: watch with invalid input has exit code 3",
+      "passed: watch with a missing required flag has exit code 3",
+      "passed: watch of an event outside the view has exit code 2",
+      "passed: an interrupt cancels watch with exit code 130",
     ],
   );
   assert.deepEqual(results.filter((result) => !result.passed), [interrupt]);

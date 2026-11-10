@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { Command } from "effect/cli";
 
 import { Cli } from "../src/index.ts";
-import { decodeText, Listing } from "./decode.ts";
+import { CliListing, decodeText } from "./decode.ts";
 import { fixture } from "./fixture.ts";
 
 const program = (file: string) => (...args: string[]) => {
@@ -28,7 +28,10 @@ const cliWithCommand = program("./fixture-cli-commands.ts");
 /** The command line with a required repeated flag and an optional repeated flag. */
 const cliWithRepeated = program("./fixture-cli-repeated.ts");
 
-const toggle = (stdout: string) => decodeText(Listing, stdout).find((entry) => entry.id === "fixture.toggle");
+const toggle = (stdout: string) =>
+  decodeText(CliListing, stdout)
+    .flatMap((entry) => (entry.kind === "capability" ? [entry] : []))
+    .find((entry) => entry.id === "fixture.toggle");
 
 test("a value goes to standard output with exit code 0", () => {
   const run = cli("fixture", "echo", "--text", "hi");
@@ -68,9 +71,11 @@ test("a repeated flag gives its items in order, or JSON text of the array, and a
 });
 
 test("list gives the capabilities of the view", () => {
-  const ids = decodeText(Listing, cli("list").stdout).map((entry) => entry.id);
-  assert.ok(ids.includes("fixture.echo"));
-  assert.ok(!ids.includes("fixture.hidden"));
+  const entries = decodeText(CliListing, cli("list").stdout);
+  const ids = (kind: string) => entries.filter((entry) => entry.kind === kind).map((entry) => entry.id);
+  assert.ok(ids("capability").includes("fixture.echo"));
+  assert.ok(!ids("capability").includes("fixture.hidden"));
+  assert.deepEqual(ids("event"), ["fixture.ticks", "fixture.watch", "fixture.broken"]);
 });
 
 test("a flag of the application decides the services of the capabilities", () => {
