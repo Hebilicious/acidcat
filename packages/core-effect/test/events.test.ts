@@ -325,3 +325,22 @@ test("a GraphQL subscription uses an event handle, and ends the subscription whe
     await session.dispose();
   }
 });
+
+test("the WebMCP binding registers the capabilities of a view with events, and no tool for an event", async () => {
+  const names = new Set<string>();
+  const host = {
+    registerTool(tool: { readonly name: string }, options: { signal: AbortSignal }) {
+      names.add(tool.name);
+      options.signal.addEventListener("abort", () => names.delete(tool.name));
+      return { unregister() {} };
+    },
+  };
+  const session = await Handles.open(events, feedLayer, { target: "app", webmcp: host });
+  try {
+    for (let attempt = 0; attempt < 100 && session.webmcp?.status.getSnapshot().phase !== "ready"; attempt++) await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.deepEqual([...names], ["feed.publish"]);
+    assert.ok(session.events.has("feed.ticked"));
+  } finally {
+    await session.dispose();
+  }
+});

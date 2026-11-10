@@ -1,13 +1,16 @@
 /**
  * The HTTP binding (spec/bindings/http.md): JSON through HTTP, and the occurrences of events as server-sent events.
  */
-import { callFailure, HTTP_STATUS, httpEventMessage, httpStatus, isCallFailure, KEEPALIVE_MS, readBounded, screenRequest, SSE_MEDIA_TYPE } from "@acid-cat/spec-ts";
+import { callFailure, HTTP_STATUS, httpEventMessage, httpStatus, isCallFailure, KEEPALIVE_MS, readBounded, screenRequest } from "@acid-cat/spec-ts";
 import type { Rejection } from "@acid-cat/spec-ts";
-import { Effect, Exit, Layer, ManagedRuntime, Scope, Stream } from "effect";
+import { Effect, Exit, Scope, Stream } from "effect";
+import type { Layer } from "effect";
 
 import type * as App from "./App.ts";
 import { cancelOnAbort } from "./internal/cancel.ts";
 import { withHeartbeat } from "./internal/idle.ts";
+import { answerWith, closeUnlessStreaming, eventStream } from "./internal/web.ts";
+import type { Streaming } from "./internal/web.ts";
 import * as Session from "./Session.ts";
 
 export interface Options {
@@ -44,19 +47,11 @@ export interface Options {
  * subscription, and its services with `"per-request"`, stay open until the stream of server-sent events ends.
  */
 export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Options) {
-  const runtime = options.services === "per-request" ? undefined : ManagedRuntime.make(layer);
+  const answer = answerWith(layer, options.services);
   return async (request: Request): Promise<Response> => {
     const admitted = await admit(request, options);
     if (admitted instanceof Response) return admitted;
-    const scope = Effect.runSync(Scope.make());
-    const answer = respond(app, request, admitted.text, options, scope);
-    if (runtime !== undefined) return runtime.runPromise(answer);
-    const built = await Effect.runPromiseExit(Layer.buildWithScope(layer, scope));
-    if (Exit.isFailure(built)) {
-      await Effect.runPromise(Scope.close(scope, built));
-      return Effect.runPromise(Effect.failCause(built.cause));
-    }
-    return Effect.runPromise(Effect.provideContext(answer, built.value));
+    return answer((scope) => respond(app, request, admitted.text, options, scope));
   };
 }
 
@@ -86,11 +81,6 @@ async function admit(request: Request, options: Options): Promise<Response | { r
   if (screened !== undefined) return rejection(screened);
   const body = await readBounded(request, maximumBytes);
   return "rejection" in body ? rejection(body.rejection) : body;
-}
-
-/** A response whose body is a stream. The stream closes the scope of the request when it ends. */
-interface Streaming {
-  readonly streaming: Response;
 }
 
 /**
@@ -129,10 +119,7 @@ const respond = <R>(app: App.App<R>, request: Request, body: string, options: Op
     if (route.kind === "event") return yield* subscribe(session, route.id, input, request, url, options, scope);
     const outcome = yield* session.invoke(route.id, input).pipe(cancelOnAbort(request.signal));
     return json(httpStatus(outcome), isCallFailure(outcome) ? { kind: outcome.kind, message: outcome.message } : outcome);
-  }).pipe(
-    Effect.onExit((exit) => (Exit.isSuccess(exit) && typeof exit.value === "object" && "streaming" in exit.value ? Effect.void : Scope.close(scope, Exit.void))),
-    Effect.map((answer) => ("streaming" in answer ? answer.streaming : answer)),
-  );
+  }).pipe(closeUnlessStreaming(scope));
 
 /** The capability or the event of a `POST` path. */
 function routeOf(path: string): { readonly kind: "capability" | "event"; readonly id: string } | undefined {
@@ -170,19 +157,15 @@ const subscribe = <R>(
       const { kind, message } = started.failure;
       return json(HTTP_STATUS[kind], { kind, message });
     }
-    const close = Scope.close(scope, Exit.void);
-    // The client closes the stream: the scope closes, also if the body was never read.
-    request.signal.addEventListener("abort", () => Effect.runFork(close), { once: true });
     const messages = Stream.concat(Stream.map(started.success, httpEventMessage.next), Stream.make(httpEventMessage.complete())).pipe(
       Stream.catchTag("CallFailed", (failure) => Stream.make(httpEventMessage.error(failure))),
     );
     const body = withHeartbeat(messages, options.keepaliveMs ?? KEEPALIVE_MS, httpEventMessage.keepalive).pipe(
       Stream.encodeText,
-      Stream.ensuring(close),
+      Stream.ensuring(Scope.close(scope, Exit.void)),
       Stream.toReadableStreamWith(yield* Effect.context<never>(), { signal: request.signal }),
     );
-    const streaming = new Response(body, { status: 200, headers: { "Content-Type": SSE_MEDIA_TYPE, "Cache-Control": "no-store" } });
-    return { streaming };
+    return eventStream(body, request, scope);
   });
 
 const json = (status: number, body: unknown) =>

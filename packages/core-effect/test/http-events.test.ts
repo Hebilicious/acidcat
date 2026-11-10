@@ -14,7 +14,7 @@ const ORIGIN = "https://fixture.example";
 function setup(options: Partial<Http.Options> = {}) {
   const feed = feedForPromises();
   const handler = Http.toWebHandler(events, feed.layer, { allowedOrigins: [ORIGIN], base: "/api", ...options });
-  const subscribe = (id: string, body: unknown, init: { readonly headers?: HeadersInit; readonly query?: string; readonly signal?: AbortSignal } = {}) =>
+  const subscribe = (id: string, body: unknown, init: { readonly headers?: Record<string, string>; readonly query?: string; readonly signal?: AbortSignal } = {}) =>
     handler(
       new Request(`${ORIGIN}/api/events/${id}${init.query ?? ""}`, {
         method: "POST",
@@ -80,7 +80,7 @@ test("GET /events lists the events of the view", async () => {
 
 test("a subscription that cannot start is a JSON call failure with its status", async () => {
   const { subscribe, handler } = setup();
-  const failure = async (response: Response) => ({ status: response.status, body: await response.json() });
+  const failure = async (response: Response) => ({ status: response.status, body: await decodeBody(Schema.Struct({ kind: Schema.String, message: Schema.String }), response) });
   assert.deepEqual(await failure(await subscribe("feed.hidden", {})), {
     status: 404,
     body: { kind: "unknown-capability", message: "There is no event feed.hidden." },
