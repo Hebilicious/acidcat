@@ -29,8 +29,8 @@ export function listEvents(session: Session): JsonObject[] {
   );
 }
 
-/** The error of `events/poll` and `events/subscribe`: the server serves only push delivery. */
-export function unsupportedDelivery(method: "events/poll" | "events/subscribe"): JsonRpcError {
+/** The error of `events/poll`, `events/subscribe` and `events/unsubscribe`: the server serves only push delivery. */
+export function unsupportedDelivery(method: "events/poll" | "events/subscribe" | "events/unsubscribe"): JsonRpcError {
   return { code: MCP_EVENT_ERRORS.unsupported, message: "Unsupported", data: { feature: "deliveryMode", value: method === "events/poll" ? "poll" : "webhook" } };
 }
 

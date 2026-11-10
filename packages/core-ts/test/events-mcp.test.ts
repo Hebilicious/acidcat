@@ -76,6 +76,7 @@ test("MCP through HTTP: events/poll and events/subscribe are Unsupported", async
   const { rpc } = httpServer();
   assert.deepEqual((await rpc("events/poll", { name: "sensor.ticks" }))["error"], { code: -32026, message: "Unsupported", data: { feature: "deliveryMode", value: "poll" } });
   assert.deepEqual((await rpc("events/subscribe", { name: "sensor.ticks" }))["error"], { code: -32026, message: "Unsupported", data: { feature: "deliveryMode", value: "webhook" } });
+  assert.deepEqual((await rpc("events/unsubscribe", { name: "sensor.ticks" }))["error"], { code: -32026, message: "Unsupported", data: { feature: "deliveryMode", value: "webhook" } });
 });
 
 test("MCP through HTTP: a server whose view has no events serves no events methods and no extension", async () => {

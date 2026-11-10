@@ -227,6 +227,7 @@ class StdioServer {
         case "events/list":
           return complete({ events: listEvents(this.#session) }, true);
         case "events/poll":
+        case "events/unsubscribe":
         case "events/subscribe": {
           const { code, message: text, data } = unsupportedDelivery(method);
           return this.#error(id, code, text, data);

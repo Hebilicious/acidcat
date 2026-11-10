@@ -168,6 +168,7 @@ async function answer(session: Session, message: JsonRpcRequest, options: McpSet
       if (!servesEvents(session)) break;
       return complete({ events: listEvents(session) }, true);
     case "events/poll":
+    case "events/unsubscribe":
     case "events/subscribe": {
       if (!servesEvents(session)) break;
       const unsupported = unsupportedDelivery(message.method);
