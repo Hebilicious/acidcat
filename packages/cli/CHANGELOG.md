@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.10.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/cli@0.9.0...@acid-cat/cli@0.10.0) (2026-11-10)
+
+
+### Features
+
+* **cli:** test events with acid-cat conform, and follow aircon.status.changed from every API of the example ([#109](https://github.com/Hebilicious/acidcat/issues/109)) ([f6b4ca4](https://github.com/Hebilicious/acidcat/commit/f6b4ca4fa3869502d24f183628cc7e2ca6405f67))
+* **mcp:** serve the initialize handshake of earlier revisions through @acid-cat/mcp-handshake ([#97](https://github.com/Hebilicious/acidcat/issues/97)) ([2db2231](https://github.com/Hebilicious/acidcat/commit/2db2231042a448b405d46bd5bc8c96172d6258fa))
+* **spec:** add events, subscriptions and occurrences, with catalog support in every library ([#106](https://github.com/Hebilicious/acidcat/issues/106)) ([3391fb3](https://github.com/Hebilicious/acidcat/commit/3391fb3ef683c4cb0cc5a252fe4bd4c70eee25bf))
+
 ## [0.9.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/cli@0.8.0...@acid-cat/cli@0.9.0) (2026-10-28)
 
 
