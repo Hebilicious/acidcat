@@ -57,6 +57,8 @@ export const aircon = defineApp<{ unit: Unit }>({ targets, capabilities: [powerS
 
 - `subscribe` gets the decoded input and `{ signal, context, cursor, maxAgeMs }`. It gives an async iterable of `{ data, eventId?, timestamp?, cursor?, truncated? }`. The signal aborts when the subscription ends: stop the work then.
 - The session checks each `data` against the payload schema. Data that does not agree, or an iterable that throws, ends the subscription with `internal`. When the iterable ends, the subscription is complete.
+- When the source can replay, give each occurrence a `cursor`, and start after `cursor` when it is given. Poll leases, webhook subscriptions and `watch --cursor` resume with it. With no cursor, a client that comes back gets only new occurrences: for example, the first poll after a lease ended gets `truncated: true`.
+- A poll lease or a webhook subscription holds its subscription in a session of its own, with the context of the request that started it. With `createContext`, that context lives as long as the lease or the subscription.
 - `session.eventHandle(statusChanged).subscribe({})` gives an async iterator of occurrences. Its `return()` cancels the subscription, also while a `next()` waits. A GraphQL `subscribe` resolver can return this promise.
 
 ## core-effect

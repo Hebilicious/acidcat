@@ -107,10 +107,70 @@ Each binding serves the events of its view:
 | --- | --- |
 | TypeScript | `session.eventHandle(event).subscribe(input)`. See [Event handles](#event-handles) |
 | HTTP | `GET {base}/events` lists them. `POST {base}/events/{id}` gives a stream of server-sent events: `event: next` for each occurrence, then `event: complete`, or `event: error` with `internal`. `Last-Event-ID` gives the cursor, and `?maxAgeMs=` gives `maxAgeMs`. The option `keepaliveMs` (15 seconds) sets the time after which an idle stream gets a comment line |
-| MCP | The MCP events extension, revision `2026-07-28` only: `events/list` and `events/stream`, with push delivery. Through HTTP, the answer to `events/stream` is a stream of server-sent events. The option `heartbeatMs` (15 seconds) sets the time after which an idle stream gets `notifications/events/heartbeat`. A client with the `initialize` handshake gets no events |
+| MCP | The MCP events extension, revision `2026-07-28` only: `events/list`, push delivery with `events/stream`, poll delivery with `events/poll`, and webhook delivery with `events/subscribe` and `events/unsubscribe` through HTTP if the deployment turns it on. Through HTTP, the answer to `events/stream` is a stream of server-sent events. The option `heartbeatMs` (15 seconds) sets the time after which an idle stream gets `notifications/events/heartbeat`. A client with the `initialize` handshake gets no events. See [MCP poll and webhook delivery](#mcp-poll-and-webhook-delivery) |
 | CLI | `watch <id>` writes each occurrence on one line. See [Command line](#command-line) |
 
 The options `bufferLimit` of `createSession`, `httpHandler`, `mcpHandler` and `runMcpStdio` set the number of occurrences that each subscription keeps for a client that reads slowly. The default is 256. When the limit is full, the oldest occurrence goes, and the next occurrence that the client reads has `truncated: true`.
+
+### MCP poll and webhook delivery
+
+A poll lease and a webhook subscription continue after the request that started them. Each one holds its subscription in a session of its own. Through HTTP, that session has the context of the request that started it: the shared `context`, or a new one from `createContext`. Through stdio, it has the `context` of the process. The session closes when the lease or the webhook subscription ends. This state is in memory: when the process stops, it is lost, and clients start again with their cursors.
+
+`handler.close()` of `mcpHandler` ends all leases and webhook subscriptions. `await using handler = mcpHandler(…)` calls it at the end of the block. Through stdio, the end of standard input ends them.
+
+**Poll.** `events/poll` reads the occurrences of a lease (spec/bindings/mcp.md#poll). Both `mcpHandler` and `runMcpStdio` serve it. The key of a lease is the principal, the id and the input, so two polls of the same client with the same input read one lease. The option `poll` sets the limits:
+
+| Option of `poll` | Default | Use |
+| --- | --- | --- |
+| `leaseMs` | 5 minutes | A lease that gets no poll for this time ends, and its subscription is cancelled |
+| `bufferLimit` | 1000 | The number of occurrences that each lease keeps. When the buffer is full, the oldest occurrence goes. A cursor older than the buffer gets `truncated: true` |
+| `maxEvents` | 100 | The number of occurrences in a result when the request gives no `maxEvents` |
+| `nextPollMs` | 2000 | The `nextPollMs` of each result |
+
+The cursor of a poll tells the lease, the position in its buffer, and the last cursor of the provider. When a lease ended, a poll with its cursor starts a new lease that resumes after that cursor of the provider, with `maxAgeMs`.
+
+**Principal.** The option `principal(request)` of `mcpHandler` gives the identity of the client of a request, for example the subject of a verified token, or `undefined` when the request has none. It is part of the key of a lease and of a webhook subscription, so that one client cannot read the lease of another. Through stdio, the process serves one client, and leases have no principal.
+
+**Webhook.** Webhook delivery is off by default, and only through HTTP. Turn it on with the option `webhooks`, and `webhookDelivery(options)` from `@acid-cat/core-ts/node`. It sends each occurrence in a signed `POST` request to the URL of the client (spec/bindings/mcp.md#webhook). It needs `principal`: a request with no principal gets `Forbidden`.
+
+```ts
+import { mcpHandler } from "@acid-cat/core-ts";
+import { serve, webhookDelivery } from "@acid-cat/core-ts/node";
+
+const mcp = mcpHandler(aircon, {
+  name: "aircon",
+  version: "1.0.0",
+  allowedOrigins: [],
+  toJsonSchema,
+  context: { unit },
+  principal: (request) => verifiedSubject(request), // string | undefined
+  webhooks: webhookDelivery({ maxTtlMs: 3_600_000 }),
+});
+await serve({ "/mcp": mcp });
+```
+
+| Option of `webhookDelivery` | Default | Use |
+| --- | --- | --- |
+| `allow(url)` | None | The allowlist. A URL for which it gives `true` gets deliveries with no verification |
+| `allowPrivateNetworks` | `false` | Connect also to addresses that are not globally routable. Only for tests and private networks |
+| `ca` | None | Certificates of authorities, in PEM form, to trust beside the default ones |
+| `maxTtlMs`, `minTtlMs` | 1 hour, 1 minute | The limits of the lifetime that the server grants for `ttlMs` |
+| `maxSubscriptions` | 100 | The maximum number of webhook subscriptions of one principal. Over it, `ResourceExhausted` |
+| `attempts`, `retryWindowMs` | 5, 15 minutes | The attempts of one delivery, and the time in which the server makes them |
+| `retryDelayMs(attempt)` | 10 s, 30 s, 90 s, 270 s | The wait before the next attempt |
+| `timeoutMs` | 5 seconds | The time that the server waits for each answer |
+| `rotationGraceMs` | 5 minutes | After a new secret, the time in which the server signs with the old secret and the new secret |
+
+Each pair of principal and URL must agree to get deliveries before the first delivery: the URL is in the allowlist, or the endpoint answers the `verification` message with its challenge. The server keeps each verification while the process runs. A refresh with the same key grants a new lifetime and replaces the secret. The server sends the deliveries of a subscription one at a time, in order. The `cursor` of each delivery is the watermark: the last cursor of an occurrence whose delivery succeeded or was abandoned.
+
+Security of webhook delivery:
+
+- The URL must use `https`. The server checks the certificate of the endpoint.
+- For each request, the server resolves the host name, and connects only to an address that is globally routable, unless `allowPrivateNetworks` is `true`. It connects to the address that it checked, with the host name in the `Host` header and in TLS, so a change of DNS between the check and the connection has no effect. It does not follow redirects.
+- `lastError` and the reason of `CallbackEndpointError` are categories, for example `http_4xx` or `tls_error`. The server gives no text of the answer of the endpoint.
+- The server never logs or returns a secret.
+
+The option `clock` of `mcpHandler`, `runMcpStdio` and `webhookDelivery` gives the time and the timers of leases, lifetimes and retries. The default is the clock of the system. Tests give a clock that they control.
 
 ### Serve on Node.js
 
@@ -226,10 +286,13 @@ node cli.ts list                                                             # t
 
 `list` gives a usage line for each capability, then for each event. Each item has `kind`: `"capability"` or `"event"`. The usage of a repeated flag ends with `...`, for example `--days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]`. See the [CLI binding](../../spec/bindings/cli.md#commands) for all the rules.
 
-`watch <id>` subscribes to an event. The flags come from the input schema, with the same rules as for a capability. If the input schema has no top-level `properties` member, `watch <id> '<json>'` takes the input as JSON text. Each occurrence goes to standard output as JSON on one line. The exit code is 0 when the subscription is complete, 130 after an interrupt (`SIGINT`), and 5 after `internal`, with `{ "kind", "message" }` on standard error. A failure before the first occurrence has the exit code of a call.
+`watch <id>` subscribes to an event. The flags come from the input schema, with the same rules as for a capability. If the input schema has no top-level `properties` member, `watch <id> '<json>'` takes the input as JSON text. Each occurrence goes to standard output as JSON on one line, with its cursor. The exit code is 0 when the subscription is complete, 130 after an interrupt (`SIGINT`), and 5 after `internal`, with `{ "kind", "message" }` on standard error. A failure before the first occurrence has the exit code of a call.
+
+`--cursor <cursor>` and `--max-age-ms <integer>` resume the subscription after a cursor, in the flags form and in the JSON form. A script can keep the last cursor, and resume with it after the program stops. A `--max-age-ms` that is not a whole number exits with 3. These two flags are not properties of the input: if the input schema of an event has a top-level property `cursor` or `max-age-ms`, `runCli` throws when it starts.
 
 ```sh
 node cli.ts watch aircon.status.changed
+node cli.ts watch aircon.status.changed --cursor 41 --max-age-ms 300000
 ```
 
 ### Commands of the application
