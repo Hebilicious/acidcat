@@ -124,11 +124,12 @@ The catalog has an `events` member when the application has events.
 | --- | --- | --- |
 | `Session` | [Invocation](../../spec/invocation.md), [Events](../../spec/events.md) | `Session.make(app, { target })` gives a `Session<R>`, where `R` is the services of the application: `invoke` for untrusted input by id, typed calls (see [Typed calls](#typed-calls)), and subscriptions (see [Follow events](#follow-events)) |
 | `Handles` | [TypeScript](../../spec/bindings/typescript.md) | `Handles.make(app, session)`: handles with promises and observables, for code that does not use Effect, such as a user interface. `Handles.makeEvents(app, session)`: event handles with async iterables. `Handles.open(app, layer, { target, webmcp })` opens a session from code that does not use Effect |
-| `Mcp` | [MCP](../../spec/bindings/mcp.md) | Through HTTP: `Mcp.toWebHandler(app, layer, options)`. `Mcp.withHandshake(handler)` also serves the [`initialize` handshake of earlier revisions](../../spec/bindings/mcp.md#earlier-revisions-through-http), from [`@acid-cat/mcp-handshake`](../mcp-handshake). Through stdio: `Mcp.serveStdio(app, options)`, and `NodeMcp.main(app, layer, options)` from `@acid-cat/core-effect/node` (see [MCP through stdio](#mcp-through-stdio)). Both on `effect/ai/McpServer` |
+| `Mcp` | [MCP](../../spec/bindings/mcp.md) | Through HTTP: `Mcp.toWebHandler(app, layer, options)`, or `Mcp.makeHandle(app, options)` for a host that builds the services itself. `Mcp.withHandshake(handler)` also serves the [`initialize` handshake of earlier revisions](../../spec/bindings/mcp.md#earlier-revisions-through-http), from [`@acid-cat/mcp-handshake`](../mcp-handshake). Through stdio: `Mcp.serveStdio(app, options)`, and `NodeMcp.main(app, layer, options)` from `@acid-cat/core-effect/node` (see [MCP through stdio](#mcp-through-stdio)). Both on `effect/ai/McpServer` |
 | `Http` | [HTTP](../../spec/bindings/http.md) | `Http.toWebHandler(app, layer, options)` |
 | `Cli` | [CLI](../../spec/bindings/cli.md) | `Cli.run(app, options)`, on `effect/cli`. `NodeCli.main(app, layer, options)` from `@acid-cat/core-effect/node` runs it as the main program of a Node.js process |
 | `WebMcp` | [WebMCP](../../spec/bindings/webmcp.md) | `WebMcp.install(session)`. WebMCP serves no events |
 | `NodeServer` | MCP and HTTP | `NodeServer.serve(handler, options)` and `NodeServer.layer(handler, options)` serve web handlers on Node.js. See [Serve on Node.js](#serve-on-nodejs) |
+| `NodeWebhook` | MCP | `NodeWebhook.sender(options)` sends the requests of webhook delivery from Node.js. See [Webhook delivery](#webhook-delivery) |
 
 `layer` gives the services that the capabilities need. A web handler is `(request: Request) => Promise<Response>`. It works in Node, Bun, Deno and Cloudflare Workers. When the signal of a request aborts, the handler cancels the call of the request.
 
@@ -176,7 +177,7 @@ NodeMcp.main(aircon, unitLayer, { name: "aircon", version: "1.0.0" });
 - When the availability of a capability changes, the server sends `notifications/tools/list_changed`. `notifications/cancelled` interrupts the call.
 - `Mcp.serveStdio(app, options)` is the server on the `Stdio` service of `effect`, for any runtime. It completes when standard input ends. Then the session closes, and the calls in progress are interrupted. `Mcp.layerStdio(app, options)` is the same server as a layer, which serves while its scope is open.
 - Standard output carries only MCP messages, so the server sends the logs of Effect to standard error. Do not write to standard output from a capability.
-- When the view has events, the server serves the events extension to clients of revision `2026-07-28` (see [Follow events](#follow-events)). `notifications/cancelled` with the id of an `events/stream` request cancels that subscription.
+- When the view has events, the server serves the events extension to clients of revision `2026-07-28` (see [Follow events](#follow-events)), with push and poll delivery. `notifications/cancelled` with the id of an `events/stream` request cancels that subscription. The option `poll` sets the poll leases (see [Poll delivery](#poll-delivery)). The process has no principal. Webhook delivery is only through HTTP, so `events/subscribe` and `events/unsubscribe` answer with `Unsupported`.
 
 ### Typed calls
 
@@ -269,7 +270,67 @@ const Subscription = new GraphQLObjectType({
 
 **HTTP.** `GET {base}/events` lists the events of the view. `POST {base}/events/{id}` with the input as the body gives a stream of server-sent events: `event: next` for each occurrence, with the cursor as `id:`, then `event: complete`, or `event: error` with the call failure `internal`. A call failure before the stream is a JSON answer with its status. The `Last-Event-ID` header gives the cursor, and the query parameter `maxAgeMs` gives `maxAgeMs`. When nothing goes on the stream for `keepaliveMs` (15 000 by default), the binding sends a comment line. When the client closes the stream, the subscription is cancelled.
 
-**MCP.** When the view has events, the server serves the events extension, `io.modelcontextprotocol/events`, with push delivery, to clients of revision `2026-07-28`: `server/discover` declares it, `events/list` lists the events, and `events/stream` subscribes. The messages of a subscription are `notifications/events/active`, `notifications/events/event` for each occurrence, `notifications/events/heartbeat` when nothing goes on the stream for `heartbeatMs` (15 000 by default), `notifications/events/terminated` for `internal`, and the result of `events/stream` at the end. Through HTTP, the answer to `events/stream` is a stream of server-sent events, and closing the request cancels the subscription. Through stdio, the messages go to standard output, and `notifications/cancelled` cancels the subscription. `events/poll` and `events/subscribe` answer with `Unsupported`. A client of the `initialize` handshake gets no events. The server of `effect/ai` has no way to add methods, so the binding answers the requests of the extension before they reach that server.
+**MCP.** When the view has events, the server serves the events extension, `io.modelcontextprotocol/events`, to clients of revision `2026-07-28`: `server/discover` declares it, and `events/list` lists the events, each with its delivery modes. A client of the `initialize` handshake gets no events. The server of `effect/ai` has no way to add methods, so the binding answers the requests of the extension before they reach that server.
+
+- **Push.** `events/stream` subscribes. The messages of a subscription are `notifications/events/active`, `notifications/events/event` for each occurrence, `notifications/events/heartbeat` when nothing goes on the stream for `heartbeatMs` (15 000 by default), `notifications/events/terminated` for `internal`, and the result of `events/stream` at the end. Through HTTP, the answer to `events/stream` is a stream of server-sent events, and closing the request cancels the subscription. Through stdio, the messages go to standard output, and `notifications/cancelled` cancels the subscription.
+- **Poll.** `events/poll` reads a poll lease, through HTTP and stdio. See [Poll delivery](#poll-delivery).
+- **Webhook.** `events/subscribe` sends the occurrences to a URL of the client, only through HTTP, and only when the option `webhooks` is set. See [Webhook delivery](#webhook-delivery).
+
+#### Poll delivery
+
+A poll lease holds one subscription, in a session of its own, and a buffer of its occurrences. The key of a lease is the principal, the id and the input. Two polls with the same key read the same lease. The first poll with no cursor starts the lease, and gives no occurrences and a cursor. Each next poll gives the occurrences after its cursor, and a new cursor. The cursor tells the lease, the position in its buffer, and the last cursor of the provider. When the lease ended, a poll with its cursor starts a new lease, which resumes after that cursor of the provider, with `maxAgeMs`. See [Poll](../../spec/bindings/mcp.md#poll) for all the rules.
+
+| Option of `poll` | Default | Use |
+| --- | --- | --- |
+| `leaseMs` | `300000` | A lease that gets no poll for this time ends, and its subscription is cancelled |
+| `bufferLimit` | `1000` | The number of occurrences that a lease keeps. When the buffer is full, the lease removes the oldest one, and a poll with an older cursor gets `truncated: true` |
+| `maxEvents` | `100` | The number of occurrences in a result when the request has no `maxEvents`. With more, the result has `hasMore: true` |
+| `nextPollMs` | `2000` | The `nextPollMs` of each result |
+
+The option `principal` of `Mcp.toWebHandler` gives the identity of the client of each request: `(request: Request) => Effect<Option<string>>`. Check the credentials of the request in it, for example a bearer token. A lease belongs to the principal of the request that started it, so a client cannot read the lease of another principal. With no principal, all clients with the same id and input read the same lease.
+
+The leases live in the memory of the process. A lease opens its session with the services of the request that started it. With `services: "per-request"`, these services stay open until the lease ends. `handler.dispose()` of `Mcp.toWebHandler` ends all the leases and the webhook subscriptions, and releases the shared services. `Mcp.makeHandle(app, options)` gives a function that answers each request, as `Mcp.handle`, and keeps the leases and the webhook subscriptions in its scope. `Mcp.handle` keeps no state between requests, so it delivers only with push: `events/poll` and the webhook methods answer with `Unsupported`. Through stdio, the leases live while the server runs. A server that restarts loses its leases. Clients poll again with their cursors.
+
+#### Webhook delivery
+
+With the option `webhooks`, the server sends each occurrence in an HTTP `POST` request to a URL of the client, signed with the [Standard Webhooks](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md) scheme. Webhook delivery is off by default. It is only through HTTP. It needs the option `principal`: a request with no principal gets `Forbidden`.
+
+```ts
+import * as NodeWebhook from "@acid-cat/core-effect/NodeWebhook";
+
+const mcp = Mcp.toWebHandler(aircon, unitLayer, {
+  ...mcpOptions,
+  principal: (request) => verifyBearerToken(request), // Effect<Option<string>>
+  webhooks: { sender: NodeWebhook.sender() },
+});
+```
+
+- **Subscribe.** `events/subscribe` with `delivery: { mode: "webhook", url, secret }` starts a subscription in a session of its own, or renews the subscription with the same principal, URL, id and input. The URL must use `https`. The secret must be `whsec_` and the base64 of 24 to 64 bytes. The server grants `ttlMs` between `minTtlMs` and `maxTtlMs`. A renewal grants a new lifetime and replaces the secret. For `rotationGraceMs`, the server signs with the old and the new secret. A subscription that gets no renewal before `refreshBefore` ends. `events/unsubscribe` ends a subscription at once.
+- **Verification.** Before the first subscription of a principal to a URL, the server sends `{ "type": "verification", "challenge" }`. The endpoint agrees when it answers with a `2xx` status and `{ "challenge" }` with the same text. If not, `events/subscribe` fails with `CallbackEndpointError` (`-32027`), with `data.reason`. The server keeps each verification while the process runs. A URL for which `allow` gives `true` needs no verification.
+- **Delivery.** The server sends the occurrences of one subscription one at a time, in order. The body is the occurrence, with the watermark as its `cursor`: the cursor of the last occurrence whose delivery succeeded or was abandoned. `{ "type": "gap", "cursor" }` comes before an occurrence with `truncated: true`, and `{ "type": "terminated", "error" }` ends a subscription that fails with `internal`. Each request has the headers `webhook-id`, `webhook-timestamp`, `webhook-signature` and `X-MCP-Subscription-Id`. After a status that is not `2xx`, the server sends the request again, with the same `webhook-id`, up to `attempts` times in `retryWindowMs`. `410` and `413` abandon the delivery at once. The result of each `events/subscribe` has `deliveryStatus`, with `lastDeliveryAt` and the category of the last failure in `lastError`.
+
+| Option of `webhooks` | Default | Use |
+| --- | --- | --- |
+| `sender` | Required | Sends the requests. `NodeWebhook.sender(options)` for Node.js. A sender for another runtime is a function `(request) => Effect<WebhookResponse, WebhookSendError>` that follows the same network rules |
+| `allow` | None | `(url: URL) => boolean`. The URLs that need no verification |
+| `maxTtlMs` | `3600000` | The maximum lifetime of a subscription |
+| `minTtlMs` | `60000` | The minimum lifetime of a subscription |
+| `maxSubscriptions` | `100` | The maximum number of subscriptions of one principal. A new subscription over it gets `ResourceExhausted` (`-32025`) |
+| `attempts` | `5` | The maximum number of attempts of one delivery |
+| `retryWindowMs` | `900000` | The time after the first attempt of a delivery after which the server makes no more attempts |
+| `retryDelays` | 5 s, then 4 times longer each time | A `Schedule` of the waits between the attempts |
+| `timeoutMs` | `5000` | The time that the server waits for each answer |
+| `rotationGraceMs` | `300000` | The time after a change of the secret during which the server signs with both secrets |
+
+**Network safety.** A webhook URL comes from the client, so a request to it can reach the private network of the server. `NodeWebhook.sender` resolves the host name of the URL for each request, and connects only to an address that is globally routable. It connects to the address that it checked, with the host name in the `Host` header and in TLS, so that a second answer of the DNS cannot change the address. It does not follow redirects. It reads at most `maxResponseBytes` of each answer (65 536 by default).
+
+| Option of `NodeWebhook.sender` | Default | Use |
+| --- | --- | --- |
+| `allowPrivateNetworks` | `false` | Connect also to loopback, private, link-local and other addresses that are not globally routable. Use it only for tests, or when all the endpoints are in a network that you control |
+| `ca` | None | Certificate authorities in PEM that the sender trusts in addition to those of Node.js, for example the certificate authority of a test endpoint |
+| `maxResponseBytes` | `65536` | The maximum number of bytes of an answer that the sender reads |
+
+Keep the principal of each client separate: the key of a subscription and each verification include it, so a client cannot renew, read the secret of, or end the subscription of another principal. The subscriptions, the verifications and the counts for the limit live in the memory of the process. A server that restarts loses them. Clients subscribe again with their last cursor.
 
 **Command line.** `watch <id>` follows an event. See [Command line](#command-line).
 
@@ -283,7 +344,7 @@ By default, a web handler builds the services from `layer` once, for the first r
 const handler = Mcp.toWebHandler(app, makeLayer(env), { ...options, services: "per-request" });
 ```
 
-`Mcp.handle(app, request, options)` and `Http.handle(app, request, options)` screen one request and answer it. A host that builds the services itself provides them to this Effect.
+`Mcp.handle(app, request, options)` and `Http.handle(app, request, options)` screen one request and answer it. A host that builds the services itself provides them to this Effect. `Mcp.handle` keeps no state between requests, so it serves no poll leases and no webhook subscriptions. `Mcp.makeHandle(app, options)` keeps them in its scope (see [Poll delivery](#poll-delivery)).
 
 ### Command line
 
@@ -305,13 +366,21 @@ node cli.ts list                                                             # t
 node cli.ts watch aircon.status.changed | jq .data.celsius
 ```
 
+`--cursor <string>` gives the cursor, and `--max-age-ms <integer>` gives `maxAgeMs`, in both forms. Each occurrence on standard output has its cursor, so a script can keep the last cursor, and resume after it:
+
+```sh
+node cli.ts watch aircon.status.changed --cursor "$(tail -n 1 status.jsonl | jq -r .cursor)" --max-age-ms 600000 >> status.jsonl
+```
+
+These two flags are not properties of the input. If the input schema of an event in the view has a top-level property `cursor` or `max-age-ms`, `Cli.command` throws, so the program stops with an error when it starts. A `--max-age-ms` that is not an integer, or that is negative, exits with 3.
+
 | End | Standard error | Exit code |
 | --- | --- | --- |
 | Complete | Nothing | 0 |
 | Cancelled (`SIGINT`) | Nothing | 130 |
 | `internal` | `{ "kind", "message" }` | 5 |
 
-A subscription that cannot start has the exit code of its call failure. Each item of `list` has `kind`: `"capability"` or `"event"`. The items of the events come after the items of the capabilities, with their `usage`. Standard output carries only JSON, so the logs of Effect go to standard error.
+A subscription that cannot start has the exit code of its call failure. Each item of `list` has `kind`: `"capability"` or `"event"`. The items of the events come after the items of the capabilities, with their `usage`, which ends with `[--cursor <string>] [--max-age-ms <integer>]`. Standard output carries only JSON, so the logs of Effect go to standard error.
 
 ### Flags of the application
 

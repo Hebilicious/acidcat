@@ -10,8 +10,10 @@ The documents of the bindings are at https://github.com/Hebilicious/acidcat/tree
 - Events use the MCP events extension, only in revision `2026-07-28`, and only when the view has events. A client with the `initialize` handshake gets no events.
   - Push: the answer to `events/stream` is a stream of server-sent events.
   - Poll: `events/poll` reads a lease, which holds the subscription between polls in a session of its own. A lease ends when it gets no poll for 5 minutes. Keep the cursor of each result, and give it to the next poll.
-  - Webhook: off by default. The deployment turns it on, and gives the identity of each client (the principal). In core-ts: the options `webhooks: webhookDelivery(…)` (from `@acid-cat/core-ts/node`) and `principal(request)` of `mcpHandler`. With webhook delivery off, `events/subscribe` and `events/unsubscribe` answer `Unsupported`. The callback URL must use `https`, must agree to get deliveries (a `verification` message, or the allowlist), and must resolve to a globally routable address. In tests with a local receiver, set `allowPrivateNetworks` and give its certificate in `ca`.
+  - Webhook: off by default. The deployment turns it on, and gives the identity of each client (the principal). In core-ts: the options `webhooks: webhookDelivery(…)` (from `@acid-cat/core-ts/node`) and `principal(request)` of `mcpHandler`. In core-effect: the options `webhooks: { sender: NodeWebhook.sender(…) }` and `principal` of the MCP binding. With webhook delivery off, `events/subscribe` and `events/unsubscribe` answer `Unsupported`. The callback URL must use `https`, must agree to get deliveries (a `verification` message, or the allowlist), and must resolve to a globally routable address. In tests with a local receiver, set `allowPrivateNetworks` and give its certificate in `ca`.
 - The principal is part of the key of a poll lease and of a webhook subscription. Give it from a verified identity, never from a header that the client chooses.
+- Poll leases and webhook subscriptions are the only state between requests. They are soft: after a restart, clients start again with their cursors.
+- Keep the network safety of the webhook sender on: it connects only to globally routable addresses. Allow private networks only in tests.
 
 ## Serve MCP and HTTP on a network
 

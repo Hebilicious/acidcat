@@ -110,3 +110,4 @@ export const aircon = App.make({ targets, capabilities: [powerSet], events: [sta
 - The stream has no error channel. Put the problems of the source in the payload. A defect ends the subscription with `internal`.
 - The client cancels by interruption. Release the source with `Stream.ensuring` or a scoped resource.
 - `session.follow(event, input)` gives a typed `Stream` of occurrences in a scope. `session.event(event).subscribe(input)` of `Handles.open` gives an async iterable, which a GraphQL `subscribe` resolver can return.
+- `Mcp.toWebHandler` serves push and poll. Set `principal: (request) => Effect<Option<string>>` so that each client has its own poll leases. For webhooks, add `webhooks: { sender: NodeWebhook.sender() }` from `@acid-cat/core-effect/NodeWebhook`; it needs `principal`. Call `handler.dispose()` to end the leases and the webhook subscriptions. `Mcp.handle` keeps no state, so it serves only push; use `Mcp.makeHandle` in its place.
