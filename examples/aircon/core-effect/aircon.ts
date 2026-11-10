@@ -3,9 +3,9 @@
  */
 import { AVAILABLE } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer, Ref, Schema, SubscriptionRef } from "effect";
+import { Context, Effect, Layer, Ref, Schema, Stream, SubscriptionRef } from "effect";
 
-import { App, Capability } from "@acid-cat/core-effect";
+import { App, Capability, Event } from "@acid-cat/core-effect";
 
 // --- Types -------------------------------------------------------------------------------------------------------
 
@@ -156,6 +156,26 @@ export const firmwareUpdate = Capability.make({
   run: () => Effect.flatMap(Unit, (unit) => Effect.fail(UpToDate.make({ version: unit.firmware }))),
 });
 
+// --- The events --------------------------------------------------------------------------------------------------
+
+/** True if two statuses are the same. */
+const sameStatus = (a: typeof Status.Type, b: typeof Status.Type) => JSON.stringify(a) === JSON.stringify(b);
+
+export const statusChanged = Event.make({
+  id: "aircon.status.changed",
+  description: "The status of the unit changed. The occurrence gives the new status.",
+  audience: everywhere,
+  input: Schema.Struct({}),
+  payload: Status,
+  // The changes of the ref start with the status of now. Each later status that is not the same is an occurrence.
+  subscribe: () =>
+    Stream.unwrap(Unit.useSync((unit) => SubscriptionRef.changes(unit.status))).pipe(
+      Stream.changesWith(sameStatus),
+      Stream.drop(1),
+      Stream.map((status) => ({ data: status })),
+    ),
+});
+
 // --- The application ---------------------------------------------------------------------------------------------
 
 export const aircon = App.make({
@@ -169,4 +189,5 @@ export const aircon = App.make({
     api: { description: "Home-automation systems and scripts.", bindings: ["http"] },
   },
   capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, scheduleSet, firmwareUpdate],
+  events: [statusChanged],
 });
