@@ -8,9 +8,13 @@
  * - at `/capabilities/mcp`, with revision 2026-07-28 only. Use this form when your clients support this revision.
  * - at `/capabilities/mcp-legacy`, wrapped in `Mcp.withHandshake`, for clients that still open the session with the
  *   `initialize` handshake of revision 2025-11-25 or 2025-06-18.
+ *
+ * The server of the application also serves the event `aircon.status.changed` through the MCP events extension:
+ * `Mcp.withEvents` answers the requests of the extension with push and poll delivery, and gives each other request to
+ * the server of `effect/ai`.
  */
 import { Mcp, Session } from "@acid-cat/core-effect";
-import { Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Schema, SubscriptionRef } from "effect";
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/ai";
 import { HttpRouter } from "effect/http";
 
@@ -90,22 +94,33 @@ export interface McpApiOptions {
 }
 
 /**
- * A web request handler: the MCP server of the application at `/mcp`, and the MCP binding at `/capabilities/mcp` and
- * `/capabilities/mcp-legacy`. All use the same unit. `dispose` stops the server of the application.
+ * A web request handler: the MCP server of the application at `/mcp`, with the events of the application, and the MCP
+ * binding at `/capabilities/mcp` and `/capabilities/mcp-legacy`. All use the same unit. `dispose` stops the server of
+ * the application, and ends its poll leases.
  */
 export function mcpApi(options: McpApiOptions = {}) {
   const allowedOrigins = [...(options.allowedOrigins ?? [])];
   // Build the unit once, so that both servers use it.
-  const unit = Layer.succeedContext(Effect.runSync(Effect.scoped(Layer.build(unitLayer))));
+  const built = Effect.runSync(Effect.scoped(Layer.build(unitLayer)));
+  const unit = Layer.succeedContext(built);
 
   const server = McpServer.toolkit(AirconTools).pipe(
     Layer.provide(handlers),
     Layer.provideMerge(
-      McpServer.layerHttp({ name: "aircon", version: "0.1.0", path: "/mcp", protocols: [McpProtocol.v2026_07_28], allowedOrigins }),
+      McpServer.layerHttp({
+        name: "aircon",
+        version: "0.1.0",
+        path: "/mcp",
+        protocols: [McpProtocol.v2026_07_28],
+        allowedOrigins,
+        extensions: Mcp.eventsExtensions,
+      }),
     ),
     Layer.provide(unit),
   );
   const application = HttpRouter.toWebHandler(server, { disableLogger: true });
+  // The events of the application, beside its own tools, at the same URL.
+  const withEvents = Mcp.withEvents(aircon, unit, application.handler, { allowedOrigins });
   const binding = Mcp.toWebHandler(aircon, unit, { name: "aircon", version: "0.1.0", allowedOrigins, path: "/capabilities/mcp" });
   const legacy = Mcp.withHandshake(
     Mcp.toWebHandler(aircon, unit, { name: "aircon", version: "0.1.0", allowedOrigins, path: "/capabilities/mcp-legacy" }),
@@ -115,8 +130,13 @@ export function mcpApi(options: McpApiOptions = {}) {
     handler: (request: Request): Promise<Response> => {
       const path = new URL(request.url).pathname;
       if (path === "/capabilities/mcp-legacy") return legacy(request);
-      return path.startsWith("/capabilities/") ? binding(request) : application.handler(request);
+      return path.startsWith("/capabilities/") ? binding(request) : withEvents(request);
     },
-    dispose: application.dispose,
+    /** The number of subscriptions to `aircon.status.changed` that follow the status now. */
+    statusListeners: () => SubscriptionRef.getUnsafe(Context.get(built, Unit).statusListeners),
+    dispose: async () => {
+      await withEvents.dispose();
+      await application.dispose();
+    },
   };
 }

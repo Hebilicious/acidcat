@@ -57,7 +57,7 @@ The HTTP and MCP bindings give generic access to the capabilities: one route or 
 | [`apis/graphql.ts`](apis/graphql.ts) | [Pothos](https://pothos-graphql.dev), [GraphQL Yoga](https://the-guild.dev/graphql/yoga-server) and [graphql-ws](https://the-guild.dev/graphql/ws) | `query { status }`, mutations that return the new status, and `subscription { statusChanged }`, which follows the event `aircon.status.changed`. The subscription works through server-sent events (Yoga, with the graphql-sse client) and through WebSockets (graphql-ws on a [`ws`](https://github.com/websockets/ws) server). The schema is in [`apis/schema.graphql`](apis/schema.graphql) | Data: each field returns a union of `Status` and the failures of its capability, for example `Status \| Offline \| PoweredOff` |
 | [`apis/capnweb.ts`](apis/capnweb.ts) | [Cap'n Web](https://github.com/cloudflare/capnweb) | A class with typed methods. A client sends many calls in one request through HTTP, or calls them over time through WebSockets ([`ws`](https://github.com/websockets/ws)). `followStatus(listener)` follows the event `aircon.status.changed`: the server calls the function of the client with each new status, until the client disposes the result. It works through WebSockets | A result value: `{ ok: false, error }` |
 | [`apis/elysia.ts`](apis/elysia.ts) | [Elysia](https://elysiajs.com) | `GET /status`, `PATCH /status` that changes many settings, and `GET /status/changes`, a stream of server-sent events from a generator route with `sse`, which follows the event `aircon.status.changed`. The HTTP binding is mounted with `.mount("/api", …)` | Status 409 with the failure |
-| [`apis/mcp.ts`](apis/mcp.ts) | [Effect](https://effect.website) `effect/ai` | MCP tools `get_status` and `set_controls`, which changes many settings in one call | A tool error with the failure |
+| [`apis/mcp.ts`](apis/mcp.ts) | [Effect](https://effect.website) `effect/ai` | MCP tools `get_status` and `set_controls`, which changes many settings in one call, at `/mcp`. The same URL serves the event `aircon.status.changed` through the [MCP events extension](../../spec/bindings/mcp.md#events), with push and poll delivery: `Mcp.withEvents` of `@acid-cat/core-effect` wraps the server of `effect/ai` | A tool error with the failure |
 
 The first three APIs use the application on `@acid-cat/core-ts`, and serve the HTTP binding at `/api`. [`apis/shared.ts`](apis/shared.ts) has what they share. The MCP server uses the application on `@acid-cat/core-effect`, and serves the MCP binding at two URLs:
 
@@ -76,6 +76,7 @@ Each API calls the capabilities through a session, so it gets the same outcomes 
   - GraphQL: the `subscribe` resolver of `statusChanged` returns the promise of `subscribe`, and its `resolve` gives the data of each occurrence. GraphQL calls `return()` of the iterator when the client ends the subscription.
   - Cap'n Web: `followStatus` subscribes with a signal, and calls the listener of the client with each occurrence. It returns a `Following` object. When the client disposes it, when the connection breaks, or when the listener throws, the signal aborts.
   - Elysia: the generator of `GET /status/changes` subscribes with the signal of the request, which aborts when the client goes away. Its first event, `retry: 1000`, makes Elysia send the response before the first change. Each change is an event `aircon.status.changed` with the status as its data.
+  - MCP: the server of `effect/ai` has no way to add methods. So `Mcp.withEvents(aircon, unit, application.handler, options)` takes each request of the events extension before the server of `effect/ai` gets it, and answers it as the MCP binding does. The server declares the extension with `extensions: Mcp.eventsExtensions`. `events/stream` follows the event until the client closes the request. `events/poll` reads it from a lease, which ends when `dispose` runs or after five minutes with no poll.
 - **Three outcomes.** A value and a failure are results: each API gives them in its own form, as data, as a union member, or as a status code. A call failure rejects as a `CallFailureError`, and each API turns it into an error of its protocol.
 
 ## Run
@@ -98,6 +99,11 @@ curl http://127.0.0.1:3000/graphql -H 'Content-Type: application/json' -d '{"que
 # Elysia
 curl -N http://127.0.0.1:3000/status/changes
 curl -X PATCH http://127.0.0.1:3000/status -H 'Content-Type: application/json' -d '{"power":true}'
+
+# MCP, with events/stream of revision 2026-07-28
+curl -N http://127.0.0.1:3000/mcp -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: events/stream' -H 'Mcp-Name: aircon.status.changed' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"events/stream","params":{"name":"aircon.status.changed","arguments":{},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
 
 A Cap'n Web client follows the status through WebSockets:

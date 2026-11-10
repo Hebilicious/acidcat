@@ -46,6 +46,8 @@ export class Unit extends Context.Service<
     readonly firmware: string;
     /** The days and hours when the unit turns on. */
     readonly schedule: Ref.Ref<typeof Schedule.Type>;
+    /** The number of subscriptions to `aircon.status.changed` that follow the status now. The tests read it. */
+    readonly statusListeners: SubscriptionRef.SubscriptionRef<number>;
   }
 >()("aircon/Unit") {}
 
@@ -57,6 +59,7 @@ export const unitLayer = Layer.effect(
       connection: yield* SubscriptionRef.make<Availability>(AVAILABLE),
       firmware: "1.0.0",
       schedule: yield* Ref.make<typeof Schedule.Type>({ days: [], hours: [] }),
+      statusListeners: yield* SubscriptionRef.make(0),
     };
   }),
 );
@@ -167,9 +170,18 @@ export const statusChanged = Event.make({
   audience: everywhere,
   input: Schema.Struct({}),
   payload: Status,
-  // The changes of the ref start with the status of now. Each later status that is not the same is an occurrence.
+  // The changes of the ref start with the status of now. Each later status that is not the same is an occurrence. The
+  // count of listeners goes up when the stream starts, and down when it ends.
   subscribe: () =>
-    Stream.unwrap(Unit.useSync((unit) => SubscriptionRef.changes(unit.status))).pipe(
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const unit = yield* Unit;
+        yield* Effect.acquireRelease(SubscriptionRef.update(unit.statusListeners, (count) => count + 1), () =>
+          SubscriptionRef.update(unit.statusListeners, (count) => count - 1),
+        );
+        return SubscriptionRef.changes(unit.status);
+      }),
+    ).pipe(
       Stream.changesWith(sameStatus),
       Stream.drop(1),
       Stream.map((status) => ({ data: status })),
