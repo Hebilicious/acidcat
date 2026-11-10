@@ -254,7 +254,7 @@ for await (const occurrence of await status.subscribe({})) {
 - When the session closes, each subscription is complete. With `internal`, `next()` rejects with a `CallFailureError`, then resolves with `done: true`.
 - A session can hold any number of subscriptions at the same time. To cancel one does not change the others.
 
-A GraphQL server can use an event handle as the source of a subscription. Return the promise of `subscribe` from the `subscribe` resolver of the field. GraphQL calls `return()` when the client ends the subscription, through WebSockets (graphql-ws) or server-sent events (graphql-sse, GraphQL Yoga). With `serve` from `@acid-cat/core-ts/node`, give Yoga the web streams of the platform with its `fetchAPI` option, as `examples/aircon/apis/graphql.ts` does. The default ponyfill of Yoga does not cancel the source when the client cancels the stream:
+A GraphQL server can use an event handle as the source of a subscription. Return the promise of `subscribe` from the `subscribe` resolver of the field. GraphQL calls `return()` when the client ends the subscription, through WebSockets (graphql-ws) or server-sent events (graphql-sse, GraphQL Yoga):
 
 ```ts
 subscription: { statusChanged: { subscribe: () => status.subscribe({}), resolve: (occurrence) => occurrence.data } }

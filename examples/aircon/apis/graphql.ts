@@ -160,15 +160,8 @@ function maskError(error: unknown, message: string): GraphQLError {
   });
 }
 
-/**
- * The web API of the platform. Yoga 5 uses a ponyfill by default (`@whatwg-node/node-fetch` 0.8). When a client cancels
- * a stream of the ponyfill while a read waits, the ponyfill does not cancel the source, so Yoga does not stop the
- * subscription. The web streams of the
- * platform cancel the source at once, and Yoga then calls `return()` of the iterator of the event handle.
- */
-const fetchAPI = { Request, Response, Headers, ReadableStream, WritableStream, TransformStream, TextEncoder, TextDecoder, URL, URLSearchParams, fetch, FormData, Blob, File };
-
-export const yoga = createYoga<Context>({ schema, graphiql: false, maskedErrors: { maskError }, fetchAPI });
+/** Yoga logs one line for each request at the level `info`. The level `warn` keeps the logs of masked errors. */
+export const yoga = createYoga<Context>({ schema, graphiql: false, maskedErrors: { maskError }, logging: "warn" });
 
 /**
  * A response whose body closes the session when it ends: when the stream is done, or when the client cancels it. A
