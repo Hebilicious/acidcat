@@ -234,9 +234,13 @@ export function cliUsage(program: string, id: string, input: JsonObject | undefi
  * when the event has no input.
  */
 export function cliEventUsage(program: string, id: string, input: JsonObject | undefined): string {
-  if (input !== undefined && input.properties === undefined) return `${program} watch ${id} '<json>'`;
-  return [program, "watch", id, ...(input === undefined ? [] : cliFlags(input))].join(" ");
+  const resume = "[--cursor <string>] [--max-age-ms <integer>]";
+  if (input !== undefined && input.properties === undefined) return `${program} watch ${id} '<json>' ${resume}`;
+  return [program, "watch", id, ...(input === undefined ? [] : cliFlags(input)), resume].join(" ");
 }
+
+/** The flags of `watch` that give the cursor and `maxAgeMs`. No input property of an event can have these names. */
+export const CLI_RESUME_FLAGS = ["cursor", "max-age-ms"] as const;
 
 /** The exit code for each end of a subscription through the CLI (spec/bindings/cli.md#events). */
 export const CLI_WATCH_EXIT_CODES = { complete: 0, cancelled: 130, internal: 5 } as const;
@@ -365,7 +369,10 @@ export const MCP_SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId";
 /** The JSON-RPC errors of the MCP events extension. Their numbers are not final in SEP-3415. */
 export const MCP_EVENT_ERRORS = {
   notFound: -32023,
+  forbidden: -32024,
+  resourceExhausted: -32025,
   unsupported: -32026,
+  callbackEndpoint: -32027,
   invalidParams: -32602,
   internal: -32603,
 } as const;
@@ -378,11 +385,17 @@ export function mcpSubscribeError(failure: CallFailure): { readonly code: number
 }
 
 /** An entry of `events/list`. `input` and `payload` are the bundled schemas. */
-export function mcpEventEntry(id: string, description: string, input: JsonObject | undefined, payload: JsonObject | undefined): JsonObject {
+export function mcpEventEntry(
+  id: string,
+  description: string,
+  input: JsonObject | undefined,
+  payload: JsonObject | undefined,
+  webhook = false,
+): JsonObject {
   return {
     name: id,
     description,
-    delivery: ["push"],
+    delivery: webhook ? ["push", "poll", "webhook"] : ["push", "poll"],
     inputSchema: input ?? { type: "object" },
     payloadSchema: payload ?? { type: "object" },
   };
@@ -392,6 +405,195 @@ export function mcpEventEntry(id: string, description: string, input: JsonObject
 export function mcpEventParams(occurrence: Occurrence, subscriptionId: string | number): JsonObject {
   const { truncated: _, ...rest } = occurrence;
   return { ...rest, _meta: { [MCP_SUBSCRIPTION_ID]: subscriptionId } };
+}
+
+/** The canonical JSON of a value (spec/bindings/mcp.md#canonical-json): no spaces, and the keys of each object in code point order. */
+export function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (isJsonObject(value)) {
+    const keys = Object.keys(value).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+/** The defaults of poll delivery (spec/bindings/mcp.md#poll). */
+export const MCP_POLL_DEFAULTS = { leaseMs: 300_000, bufferLimit: 1000, maxEvents: 100, nextPollMs: 2000 } as const;
+
+/** Where a poll cursor points: a lease, a position in its buffer, and the last cursor of the provider. */
+export interface PollPosition {
+  readonly lease: string;
+  readonly position: number;
+  readonly provider?: string;
+}
+
+/** The cursor of a poll position. Only the server reads it. */
+export function encodePollCursor(position: PollPosition): string {
+  const parts = position.provider === undefined ? [position.lease, position.position] : [position.lease, position.position, position.provider];
+  return `p1.${base64UrlOfText(JSON.stringify(parts))}`;
+}
+
+/** The position of a poll cursor, or `undefined` when the text is not a poll cursor. */
+export function decodePollCursor(cursor: string): PollPosition | undefined {
+  if (!cursor.startsWith("p1.")) return undefined;
+  let parts: unknown;
+  try {
+    parts = JSON.parse(textOfBase64Url(cursor.slice(3)));
+  } catch {
+    return undefined;
+  }
+  if (!Array.isArray(parts) || parts.length < 2 || parts.length > 3) return undefined;
+  const items: readonly unknown[] = parts;
+  const [lease, position, provider] = items;
+  if (typeof lease !== "string" || typeof position !== "number" || !Number.isSafeInteger(position) || position < 0) return undefined;
+  if (provider !== undefined && typeof provider !== "string") return undefined;
+  return provider === undefined ? { lease, position } : { lease, position, provider };
+}
+
+function base64UrlOfText(text: string): string {
+  let binary = "";
+  for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+
+function textOfBase64Url(text: string): string {
+  const binary = atob(text.replaceAll("-", "+").replaceAll("_", "/"));
+  return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
+}
+
+/** The defaults of webhook delivery (spec/bindings/mcp.md#webhook). */
+export const MCP_WEBHOOK_DEFAULTS = {
+  maxTtlMs: 3_600_000,
+  minTtlMs: 60_000,
+  maxSubscriptions: 100,
+  attempts: 5,
+  retryWindowMs: 900_000,
+  timeoutMs: 5000,
+  rotationGraceMs: 300_000,
+} as const;
+
+/** The reasons of a `CallbackEndpointError`, and the values of `lastError` (spec/bindings/mcp.md#webhook). */
+export const WEBHOOK_ERRORS = ["challenge_failed", "connection_refused", "timeout", "tls_error", "http_4xx", "http_5xx"] as const;
+
+export type WebhookError = (typeof WEBHOOK_ERRORS)[number];
+
+/** The bytes of a Standard Webhooks secret: `whsec_` and the base64 of 24 to 64 bytes. `undefined` when it is not valid. */
+export function webhookSecretBytes(secret: string): Uint8Array<ArrayBuffer> | undefined {
+  if (!secret.startsWith("whsec_")) return undefined;
+  const text = secret.slice(6);
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(text) || text.length % 4 !== 0) return undefined;
+  let binary: string;
+  try {
+    binary = atob(text);
+  } catch {
+    return undefined;
+  }
+  return binary.length >= 24 && binary.length <= 64 ? Uint8Array.from(binary, (character) => character.charCodeAt(0)) : undefined;
+}
+
+/** The lifetime that the server grants for a suggested `ttlMs` (spec/bindings/mcp.md#webhook). */
+export function webhookGrantMs(ttlMs: number | null | undefined, limits: { readonly maxTtlMs: number; readonly minTtlMs: number }): number {
+  if (ttlMs === null || ttlMs === undefined) return limits.maxTtlMs;
+  return Math.min(limits.maxTtlMs, Math.max(limits.minTtlMs, ttlMs));
+}
+
+/** The text that a Standard Webhooks signature covers. */
+export const webhookSignedText = (webhookId: string, timestamp: number, body: string): string => `${webhookId}.${timestamp}.${body}`;
+
+/** The `webhook-signature` header: one `v1,` signature for each secret, with a space between them. */
+export async function webhookSignature(secrets: readonly string[], webhookId: string, timestamp: number, body: string): Promise<string> {
+  const content = new TextEncoder().encode(webhookSignedText(webhookId, timestamp, body));
+  const signatures: string[] = [];
+  for (const secret of secrets) {
+    const bytes = webhookSecretBytes(secret);
+    if (bytes === undefined) throw new TypeError("A webhook secret is not valid.");
+    const key = await crypto.subtle.importKey("raw", bytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, content));
+    let binary = "";
+    for (const byte of mac) binary += String.fromCharCode(byte);
+    signatures.push(`v1,${btoa(binary)}`);
+  }
+  return signatures.join(" ");
+}
+
+/** The subscription id of a webhook subscription: `sub_` and 16 hexadecimal digits of the SHA-256 of its key. */
+export async function webhookSubscriptionId(principal: string, url: string, id: string, input: unknown): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonicalJson([principal, url, id, input]))));
+  return `sub_${Array.from(digest.slice(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/**
+ * Tell if an IP address is globally routable: not in a special-purpose range of the IANA IPv4 and IPv6 registries that
+ * is not global, for example loopback, private, link-local, shared, documentation or multicast addresses.
+ */
+export function isGloballyRoutable(address: string): boolean {
+  const ipv4 = ipv4Bytes(address);
+  if (ipv4 !== undefined) return isGlobalIpv4(ipv4);
+  const ipv6 = ipv6Words(address);
+  if (ipv6 === undefined) return false;
+  const [a = 0, b = 0, c = 0, d = 0, e = 0, f = 0, g = 0, h = 0] = ipv6;
+  // IPv4-mapped (::ffff:a.b.c.d): check the IPv4 address.
+  if (a === 0 && b === 0 && c === 0 && d === 0 && e === 0 && f === 0xffff) return isGlobalIpv4([g >> 8, g & 255, h >> 8, h & 255]);
+  if (ipv6.every((word) => word === 0)) return false; // ::
+  if (a === 0 && b === 0 && c === 0 && d === 0 && e === 0 && f === 0 && g === 0 && h === 1) return false; // ::1
+  if (a === 0x64 && b === 0xff9b) return false; // 64:ff9b::/96 and 64:ff9b:1::/48
+  if (a === 0x100 && b === 0 && c === 0 && d === 0) return false; // 100::/64
+  if (a === 0x2001 && b < 0x200) return false; // 2001::/23
+  if (a === 0x2001 && b === 0xdb8) return false; // 2001:db8::/32
+  if (a === 0x2002) return false; // 2002::/16
+  if (a === 0x3fff && b < 0x1000) return false; // 3fff::/20
+  if (a === 0x5f00) return false; // 5f00::/16
+  if ((a & 0xfe00) === 0xfc00) return false; // fc00::/7
+  if ((a & 0xffc0) === 0xfe80) return false; // fe80::/10
+  if ((a & 0xff00) === 0xff00) return false; // ff00::/8
+  return (a & 0xe000) === 0x2000; // 2000::/3 is the global unicast range.
+}
+
+function isGlobalIpv4([a = 0, b = 0, c = 0]: readonly number[]): boolean {
+  if (a === 0 || a === 10 || a === 127) return false;
+  if (a === 100 && b >= 64 && b <= 127) return false;
+  if (a === 169 && b === 254) return false;
+  if (a === 172 && b >= 16 && b <= 31) return false;
+  if (a === 192 && b === 0 && (c === 0 || c === 2)) return false;
+  if (a === 192 && b === 88 && c === 99) return false;
+  if (a === 192 && b === 168) return false;
+  if (a === 198 && (b === 18 || b === 19)) return false;
+  if (a === 198 && b === 51 && c === 100) return false;
+  if (a === 203 && b === 0 && c === 113) return false;
+  return a < 224;
+}
+
+function ipv4Bytes(address: string): number[] | undefined {
+  const parts = address.split(".");
+  if (parts.length !== 4 || !parts.every((part) => /^(0|[1-9][0-9]{0,2})$/.test(part))) return undefined;
+  const bytes = parts.map(Number);
+  return bytes.every((byte) => byte <= 255) ? bytes : undefined;
+}
+
+function ipv6Words(input: string): number[] | undefined {
+  let address = input.startsWith("[") && input.endsWith("]") ? input.slice(1, -1) : input;
+  const zone = address.indexOf("%");
+  if (zone !== -1) address = address.slice(0, zone);
+  const tail: number[] = [];
+  const lastColon = address.lastIndexOf(":");
+  const ipv4 = lastColon === -1 ? undefined : ipv4Bytes(address.slice(lastColon + 1));
+  if (ipv4 !== undefined) {
+    const [w = 0, x = 0, y = 0, z = 0] = ipv4;
+    tail.push((w << 8) | x, (y << 8) | z);
+    // Keep the "::" before an embedded IPv4 address, and remove a single ":".
+    address = address.slice(0, lastColon + 1);
+    if (!address.endsWith("::")) address = address.slice(0, -1);
+  }
+  const halves = address.split("::");
+  if (halves.length > 2) return undefined;
+  const words = (text: string) => (text === "" ? [] : text.split(":"));
+  const head = words(halves[0] ?? "");
+  const rest = halves.length === 2 ? words(halves[1] ?? "") : [];
+  if (![...head, ...rest].every((word) => /^[0-9a-fA-F]{1,4}$/.test(word))) return undefined;
+  const count = head.length + rest.length + tail.length;
+  if (halves.length === 1 ? count !== 8 : count > 7) return undefined;
+  const zeros = halves.length === 2 ? Array.from({ length: 8 - count }, () => 0) : [];
+  return [...head.map((word) => parseInt(word, 16)), ...zeros, ...rest.map((word) => parseInt(word, 16)), ...tail];
 }
 
 export interface McpToolResult {

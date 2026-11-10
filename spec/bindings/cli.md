@@ -49,9 +49,9 @@ An application MAY add its own commands and flags. The name of a command of the 
 
 - **Names.** `watch <id>` subscribes to the event with that id.
 - **Input.** If the input schema of the event has a top-level `properties` member, each property is a flag, with the rules of [Commands](#commands): `aircon watch aircon.status.changed --room kitchen`. If not, `watch <id> [input]` takes the input as JSON text. The default input is `{}`.
-- **Usage.** The `usage` of an event is the name of the program, `watch`, the id, and then the flags as for a capability. If the input schema has no top-level `properties` member, it is the name of the program and `watch <id> '<json>'`.
+- **Cursor.** `--cursor <cursor>` gives the cursor, and `--max-age-ms <integer>` gives `maxAgeMs`. Each occurrence on standard output has its cursor, so a script can keep the last cursor, and resume with it after the program stops. These two flags are not properties of the input. If the input schema of an event has a top-level property `cursor` or `max-age-ms`, the program MUST stop with an error when it starts.
+- **Usage.** The `usage` of an event is the name of the program, `watch`, the id, the flags as for a capability, and then `[--cursor <string>] [--max-age-ms <integer>]`. If the input schema has no top-level `properties` member, it is the name of the program, `watch <id> '<json>'`, and the same two flags.
 - **Occurrences.** Each occurrence goes to standard output as its JSON on one line, as soon as it comes.
-- **Cursor.** The CLI binding gives no cursor. Each subscription starts now.
 - **Cancellation.** An interrupt (`SIGINT`) cancels the subscription.
 
 | End | Standard error | Exit code |

@@ -3,6 +3,15 @@ import { test } from "node:test";
 
 import {
   bundle,
+  canonicalJson,
+  decodePollCursor,
+  encodePollCursor,
+  isGloballyRoutable,
+  mcpEventEntry,
+  webhookGrantMs,
+  webhookSecretBytes,
+  webhookSignature,
+  webhookSubscriptionId,
   CallFailureError,
   cliEventUsage,
   cliExitCode,
@@ -185,10 +194,64 @@ test("occurrences become server-sent events, MCP notifications and CLI usage", (
   });
   assert.deepEqual(mcpSubscribeError({ kind: "unknown-capability", message: "m" }), { code: -32023, message: "m", data: { kind: "event" } });
   assert.equal(mcpSubscribeError({ kind: "invalid-input", message: "m" }).code, -32602);
-  assert.equal(cliEventUsage("aircon", "aircon.status.changed", { type: "object", properties: {} }), "aircon watch aircon.status.changed");
-  assert.equal(cliEventUsage("x", "a.b", { type: "object" }), "x watch a.b '<json>'");
+  assert.equal(cliEventUsage("aircon", "aircon.status.changed", { type: "object", properties: {} }), "aircon watch aircon.status.changed [--cursor <string>] [--max-age-ms <integer>]");
+  assert.equal(cliEventUsage("x", "a.b", { type: "object" }), "x watch a.b '<json>' [--cursor <string>] [--max-age-ms <integer>]");
   assert.equal(
     cliEventUsage("x", "a.b", { type: "object", required: ["room"], properties: { room: { type: "string" } } }),
-    "x watch a.b --room <string>",
+    "x watch a.b --room <string> [--cursor <string>] [--max-age-ms <integer>]",
   );
+});
+
+test("canonical JSON sorts keys at all levels and has no spaces", () => {
+  assert.equal(canonicalJson({ b: [1, { d: 0.5, c: "x" }], a: null }), '{"a":null,"b":[1,{"c":"x","d":0.5}]}');
+  assert.equal(canonicalJson("é"), '"é"');
+});
+
+test("a poll cursor keeps its lease, position and provider cursor, and other text is not a poll cursor", () => {
+  const position = { lease: "l1", position: 7, provider: "c/9" };
+  assert.deepEqual(decodePollCursor(encodePollCursor(position)), position);
+  assert.deepEqual(decodePollCursor(encodePollCursor({ lease: "l1", position: 0 })), { lease: "l1", position: 0 });
+  assert.equal(decodePollCursor("7"), undefined);
+  assert.equal(decodePollCursor("p1.!!"), undefined);
+  assert.equal(decodePollCursor(`p1.${btoa(JSON.stringify(["l", -1]))}`), undefined);
+});
+
+test("events/list gives the delivery modes", () => {
+  assert.deepEqual(mcpEventEntry("a.b", "d", undefined, undefined).delivery, ["push", "poll"]);
+  assert.deepEqual(mcpEventEntry("a.b", "d", undefined, undefined, true).delivery, ["push", "poll", "webhook"]);
+});
+
+test("webhook secrets, grants, signatures and subscription ids follow Standard Webhooks and the MCP binding", async () => {
+  const secret = `whsec_${btoa(String.fromCharCode(...Array.from({ length: 24 }, () => 7)))}`;
+  assert.equal(webhookSecretBytes(secret)?.length, 24);
+  assert.equal(webhookSecretBytes(`whsec_${btoa("short")}`), undefined);
+  assert.equal(webhookSecretBytes("secret"), undefined);
+  assert.equal(webhookSecretBytes("whsec_not base64!"), undefined);
+  const limits = { maxTtlMs: 3_600_000, minTtlMs: 60_000 };
+  assert.equal(webhookGrantMs(undefined, limits), 3_600_000);
+  assert.equal(webhookGrantMs(null, limits), 3_600_000);
+  assert.equal(webhookGrantMs(1000, limits), 60_000);
+  assert.equal(webhookGrantMs(120_000, limits), 120_000);
+  assert.equal(webhookGrantMs(10 ** 9, limits), 3_600_000);
+
+  // The example of the Standard Webhooks specification.
+  const signature = await webhookSignature(["whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw"], "msg_p5jXN8AQM9LWM0D4loKWxJek", 1614265330, '{"test": 2432232314}');
+  assert.equal(signature, "v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=");
+  assert.equal((await webhookSignature([secret, secret], "msg_x", 1, "{}")).split(" ").length, 2);
+
+  const id = await webhookSubscriptionId("p", "https://h/x", "a.b", { y: 1, x: 2 });
+  assert.match(id, /^sub_[0-9a-f]{16}$/);
+  assert.equal(await webhookSubscriptionId("p", "https://h/x", "a.b", { x: 2, y: 1 }), id);
+  assert.notEqual(await webhookSubscriptionId("q", "https://h/x", "a.b", { x: 2, y: 1 }), id);
+});
+
+test("only globally routable addresses are allowed for webhooks", () => {
+  for (const address of ["8.8.8.8", "1.1.1.1", "2606:4700:4700::1111", "::ffff:8.8.8.8"]) assert.ok(isGloballyRoutable(address), address);
+  for (const address of [
+    "127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "224.0.0.1", "255.255.255.255",
+    "192.0.2.1", "198.51.100.1", "203.0.113.1", "198.18.0.1", "::1", "::", "fe80::1", "fc00::1", "fd12::1", "ff02::1", "2001:db8::1",
+    "::ffff:127.0.0.1", "::ffff:10.0.0.1", "64:ff9b::a00:1", "localhost", "1.2.3", "1.2.3.256",
+  ]) {
+    assert.equal(isGloballyRoutable(address), false, address);
+  }
 });
