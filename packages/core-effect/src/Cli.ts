@@ -5,6 +5,7 @@
 import {
   bundle,
   CLI_EXIT_CODES,
+  CLI_RESUME_FLAGS,
   CLI_WATCH_EXIT_CODES,
   cliEventUsage,
   cliExitCode,
@@ -16,7 +17,7 @@ import {
   isCallFailure,
   isJsonObject,
 } from "@acid-cat/spec-ts";
-import type { CallFailure, CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec-ts";
+import type { CallFailure, CatalogDocument, JsonObject, Outcome, Resume } from "@acid-cat/spec-ts";
 import { Console, Effect, Logger, Option, Predicate, Schema, Stream } from "effect";
 import { Argument, CliError, Command, Flag, Primitive } from "effect/cli";
 
@@ -172,13 +173,13 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
 
   /**
    * Follow an event (spec/bindings/cli.md#events): each occurrence goes to standard output as one line of JSON. An
-   * interrupt cancels the subscription.
+   * interrupt cancels the subscription. `resume` gives the cursor and `maxAgeMs`.
    */
-  const follow = (id: string, input: unknown) =>
+  const follow = (id: string, input: unknown, resume: Resume) =>
     Effect.scoped(
       Effect.gen(function* () {
         const session = yield* view;
-        const started = yield* Effect.result(session.subscribe(id, input));
+        const started = yield* Effect.result(session.subscribe(id, input, resume));
         if (started._tag === "Failure") return yield* printFailure(started.failure, CLI_EXIT_CODES[started.failure.kind]);
         const ended = yield* Effect.result(Stream.runForEach(started.success, (occurrence) => Console.log(JSON.stringify(occurrence))));
         if (ended._tag === "Failure") return yield* printFailure(ended.failure, CLI_WATCH_EXIT_CODES.internal);
@@ -186,18 +187,45 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
       }),
     ).pipe(Effect.onInterrupt(() => Effect.sync(() => (process.exitCode = CLI_WATCH_EXIT_CODES.cancelled))));
 
+  /** The flags that give the cursor and `maxAgeMs`. They are not properties of the input. */
+  const resumeFlags = {
+    cursor: Flag.String("cursor").pipe(Flag.withDescription("Resume after this cursor of an occurrence."), Flag.optional),
+    "max-age-ms": Flag.Int("max-age-ms").pipe(Flag.withDescription("Do not replay occurrences older than this number of milliseconds."), Flag.optional),
+  };
+
+  /** Follow an event with the cursor and `maxAgeMs` of the flags. `maxAgeMs` must not be negative. */
+  const followWith = (id: string, input: unknown, cursor: Option.Option<string>, maxAgeMs: Option.Option<number>) =>
+    Effect.suspend(() => {
+      if (Option.isSome(maxAgeMs) && maxAgeMs.value < 0) {
+        return printFailure({ kind: "invalid-input", message: "--max-age-ms must not be negative." }, CLI_EXIT_CODES["invalid-input"]);
+      }
+      return follow(id, input, {
+        ...(Option.isSome(cursor) ? { cursor: cursor.value } : {}),
+        ...(Option.isSome(maxAgeMs) ? { maxAgeMs: maxAgeMs.value } : {}),
+      });
+    });
+
   const watchers = Object.entries(catalogView.events ?? {}).map(([id, event]) => {
     const schema = event.input === undefined ? undefined : bundle(event.input, types);
+    const properties = schema === undefined ? {} : schemasIn(schema.properties);
+    for (const name of CLI_RESUME_FLAGS) {
+      if (name in properties) throw new Error(`The input of the event ${id} has a property ${name}, which is a flag of watch.`);
+    }
     if (schema !== undefined && schema.properties === undefined) {
       return Command.make(
         id,
-        { input: Argument.String("input").pipe(Argument.withDescription("The input as JSON"), Argument.withDefault("{}")) },
-        ({ input }) => Effect.suspend(() => (isJsonText(input) ? follow(id, JSON.parse(input)) : printFailure({ kind: "invalid-input", message: "The input is not JSON." }, CLI_EXIT_CODES["invalid-input"]))),
+        { input: Argument.String("input").pipe(Argument.withDescription("The input as JSON"), Argument.withDefault("{}")), ...resumeFlags },
+        ({ input, cursor, "max-age-ms": maxAgeMs }) =>
+          Effect.suspend(() =>
+            isJsonText(input)
+              ? followWith(id, JSON.parse(input), cursor, maxAgeMs)
+              : printFailure({ kind: "invalid-input", message: "The input is not JSON." }, CLI_EXIT_CODES["invalid-input"]),
+          ),
       ).pipe(Command.withDescription(event.description));
     }
-    return Command.make(id, flagsOf(event.input), (parsed: Record<string, unknown>) => follow(id, inputFrom(parsed))).pipe(
-      Command.withDescription(event.description),
-    );
+    return Command.make(id, { input: flagsOf(event.input), ...resumeFlags }, ({ input, cursor, "max-age-ms": maxAgeMs }) =>
+      followWith(id, inputFrom(input), cursor, maxAgeMs),
+    ).pipe(Command.withDescription(event.description));
   });
   const watch = Command.make("watch").pipe(
     Command.withDescription("Follow an event by its id. Each occurrence goes to standard output as one line of JSON."),

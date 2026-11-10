@@ -38,10 +38,11 @@ test("list gives the capabilities, then the events, each with its kind and its u
     ["capability feed.publish", "event feed.ticked", "event feed.counted", "event feed.timed", "event feed.resumed", "event feed.crashing", "event feed.disagreeing"],
   );
   const usage = Object.fromEntries(entries.map((entry) => [entry.id, entry.usage]));
-  assert.equal(usage["feed.ticked"], "feed watch feed.ticked [--room <string>]");
-  assert.equal(usage["feed.counted"], "feed watch feed.counted '<json>'");
-  assert.equal(usage["feed.timed"], "feed watch feed.timed --every <integer> [--count <integer>]");
-  assert.equal(usage["feed.crashing"], "feed watch feed.crashing");
+  const resume = "[--cursor <string>] [--max-age-ms <integer>]";
+  assert.equal(usage["feed.ticked"], `feed watch feed.ticked [--room <string>] ${resume}`);
+  assert.equal(usage["feed.counted"], `feed watch feed.counted '<json>' ${resume}`);
+  assert.equal(usage["feed.timed"], `feed watch feed.timed --every <integer> [--count <integer>] ${resume}`);
+  assert.equal(usage["feed.crashing"], `feed watch feed.crashing ${resume}`);
   assert.equal(entries.find((entry) => entry.kind === "event")?.available, undefined);
 });
 
@@ -93,4 +94,34 @@ test("an interrupt cancels the subscription, and exits with 130 and nothing on s
   assert.deepEqual({ code, signal }, { code: 130, signal: null });
   assert.equal(stderr, "");
   assert.ok(occurrences(stdout).length >= 1);
+});
+
+test("--cursor and --max-age-ms give where the subscription resumes, in the flags form and in the JSON form", () => {
+  const flags = cli("watch", "feed.resumed", "--cursor", "abc", "--max-age-ms", "50");
+  assert.equal(flags.code, 0, flags.stderr);
+  const [occurrence] = occurrences(flags.stdout);
+  assert.deepEqual(occurrence?.data, { cursor: "abc", maxAgeMs: 50 });
+  assert.deepEqual(occurrences(cli("watch", "feed.resumed").stdout)[0]?.data, {});
+
+  const jsonForm = cli("watch", "feed.counted", '{"a":1}', "--cursor", "x", "--max-age-ms", "0");
+  assert.equal(jsonForm.code, 0, jsonForm.stderr);
+  assert.equal(occurrences(jsonForm.stdout).length, 1);
+});
+
+test("a --max-age-ms that is not a non-negative integer exits with 3", () => {
+  for (const value of ["nope", "1.5", "-1"]) assert.equal(cli("watch", "feed.resumed", "--max-age-ms", value).code, 3, value);
+  const negative = cli("watch", "feed.resumed", "--max-age-ms", "-1");
+  assert.equal(negative.stdout, "");
+  assert.deepEqual(JSON.parse(negative.stderr), { kind: "invalid-input", message: "--max-age-ms must not be negative." });
+  assert.equal(cli("watch", "feed.counted", "{}", "--max-age-ms", "x").code, 3);
+});
+
+test("the program stops with an error when it starts if an input property of an event is named cursor or max-age-ms", () => {
+  const reserved = new URL("./events-cli-reserved.ts", import.meta.url).pathname;
+  for (const name of ["cursor", "max-age-ms"]) {
+    const run = spawnSync(process.execPath, [reserved, name, "list"], { encoding: "utf-8", timeout: 20_000 });
+    assert.notEqual(run.status, 0);
+    assert.equal(run.stdout, "");
+    assert.match(run.stderr, new RegExp(`has a property ${name}, which is a flag of watch`));
+  }
 });
