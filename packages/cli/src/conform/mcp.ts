@@ -432,6 +432,22 @@ export async function checkEvents(checks: Checks, channel: Channel, options: Eve
       await stream.cancel();
     }
   });
+  await checks.run("before an occurrence after a gap, notifications/events/active has truncated: true and its cursor", RULE_EVENTS, async (signal) => {
+    const id = streamId();
+    const stream = await channel.stream(id, { name: "fixture.ticks", arguments: { count: 3, gap: 2 } }, signal);
+    try {
+      await active(stream, id);
+      expectEqual((await occurrence(stream, id, "fixture.ticks")).data, { n: 1 }, "data");
+      expectEqual(paramsOf(await notification(stream, id, "notifications/events/active")), { truncated: true, cursor: "2" }, "the params of notifications/events/active before the gap");
+      const after = paramsOf(await notification(stream, id, "notifications/events/event"));
+      expect(!("truncated" in after), `the params of notifications/events/event must have no truncated, got ${JSON.stringify(after)}`);
+      expectEqual(expectOccurrence(after, "fixture.ticks").data, { n: 2 }, "data");
+      expectEqual((await occurrence(stream, id, "fixture.ticks")).data, { n: 3 }, "data");
+      await complete(stream, id);
+    } finally {
+      await stream.cancel();
+    }
+  });
   await checks.run("events/stream with a cursor starts after it", RULE_EVENTS, async (signal) => {
     const id = streamId();
     const stream = await channel.stream(id, { name: "fixture.ticks", arguments: { count: 3 }, cursor: "1" }, signal);

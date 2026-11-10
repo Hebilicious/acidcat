@@ -7,7 +7,7 @@ import { Effect, Exit, Layer, Option, Schedule, Scope } from "effect";
 import { Http, Mcp, Session, WebMcp } from "../src/index.ts";
 import * as NodeServer from "../src/NodeServer.ts";
 import * as NodeWebhook from "../src/NodeWebhook.ts";
-import { fixture, fixtureLayer, POLL } from "./fixture.ts";
+import { fixture, fixtureLayer, POLL, WEBHOOK_LIMITS } from "./fixture.ts";
 import { testCertificate } from "./webhook-receiver.ts";
 
 /** The principal of a request in the conformance tests: the token of the header `Authorization: Bearer <principal>`. */
@@ -23,7 +23,7 @@ test("the Effect core passes acid-cat conform through all its bindings", async (
     poll: POLL,
     principal: principalOf,
     // A short wait before each new attempt of a delivery, so that the check of retries ends soon.
-    webhooks: { sender: NodeWebhook.sender({ allowPrivateNetworks: true, ca: certificate.cert }), retryDelays: Schedule.spaced("50 millis") },
+    webhooks: { sender: NodeWebhook.sender({ allowPrivateNetworks: true, ca: certificate.cert }), retryDelays: Schedule.spaced("50 millis"), ...WEBHOOK_LIMITS },
   });
   const server = Effect.runSync(Scope.make());
   const served = await Effect.runPromise(
@@ -40,7 +40,7 @@ test("the Effect core passes acid-cat conform through all its bindings", async (
       mcp: `${served.url}/mcp`,
       mcpHandshake: true,
       poll: POLL,
-      webhook: { principal: "conform", ...certificate },
+      webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS },
       mcpStdio: [process.execPath, new URL("./fixture-mcp-stdio.ts", import.meta.url).pathname],
       http: `${served.url}/api`,
       cli: [process.execPath, new URL("./fixture-cli.ts", import.meta.url).pathname],

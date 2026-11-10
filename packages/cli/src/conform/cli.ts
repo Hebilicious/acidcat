@@ -30,7 +30,7 @@ const USAGES: { readonly [id: string]: string } = {
 /** The `usage` of each event in the view of the fixture, after the name of the program. */
 const EVENT_USAGES: { readonly [id: string]: string } = {
   "fixture.broken": "watch fixture.broken [--cursor <string>] [--max-age-ms <integer>]",
-  "fixture.ticks": "watch fixture.ticks --count <integer> [--key <string>] [--cursor <string>] [--max-age-ms <integer>]",
+  "fixture.ticks": "watch fixture.ticks --count <integer> [--gap <integer>] [--key <string>] [--cursor <string>] [--max-age-ms <integer>]",
   "fixture.watch": "watch fixture.watch --key <string> [--marker <string>] [--cursor <string>] [--max-age-ms <integer>]",
 };
 
@@ -197,6 +197,15 @@ async function checkWatch(checks: Checks, command: readonly string[]): Promise<v
       occurrences(result.stdout, "fixture.ticks").map((occurrence) => [occurrence.data, occurrence.cursor]),
       [[{ n: 2 }, "2"], [{ n: 3 }, "3"]],
       "the data and the cursor of the occurrences",
+    );
+  });
+  await checks.run("watch writes an occurrence after a gap with truncated: true", EVENTS, async (signal) => {
+    const result = await run(signal, "watch", "fixture.ticks", "--count", "3", "--gap", "2");
+    expectEqual(result.code, 0, "exit code");
+    expectEqual(
+      occurrences(result.stdout, "fixture.ticks").map((occurrence) => [occurrence.data, occurrence.truncated ?? null]),
+      [[{ n: 1 }, null], [{ n: 2 }, true], [{ n: 3 }, null]],
+      "the data and truncated of the occurrences",
     );
   });
   await checks.run("watch writes internal to standard error with exit code 5 after a defect", EVENTS, async (signal) => {

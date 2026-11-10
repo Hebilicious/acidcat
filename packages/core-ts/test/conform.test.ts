@@ -5,14 +5,14 @@ import { conform } from "@acid-cat/cli";
 
 import { createSession, httpHandler, installWebMcp, mcpHandler, mcpHandshake } from "../src/index.ts";
 import { serve, webhookDelivery } from "../src/node.ts";
-import { fixture, options, POLL, principalOf } from "./fixture.ts";
+import { fixture, options, POLL, principalOf, WEBHOOK_LIMITS } from "./fixture.ts";
 import { testCertificate } from "./webhook-receiver.ts";
 
 test("the TypeScript core passes acid-cat conform through all its bindings", async () => {
   const shared = options();
   const certificate = testCertificate();
   // A short wait before each new attempt of a delivery, so that the check of retries ends soon.
-  const webhooks = webhookDelivery({ allowPrivateNetworks: true, ca: certificate.cert, retryDelayMs: () => 50 });
+  const webhooks = webhookDelivery({ allowPrivateNetworks: true, ca: certificate.cert, retryDelayMs: () => 50, ...WEBHOOK_LIMITS });
   const mcp = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...shared, poll: POLL, principal: principalOf, webhooks });
   const served = await serve({
     "/mcp": mcpHandshake(mcp),
@@ -23,7 +23,7 @@ test("the TypeScript core passes acid-cat conform through all its bindings", asy
       mcp: `${served.url}/mcp`,
       mcpHandshake: true,
       poll: POLL,
-      webhook: { principal: "conform", ...certificate },
+      webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS },
       mcpStdio: [process.execPath, new URL("./fixture-mcp-stdio.ts", import.meta.url).pathname],
       http: `${served.url}/api`,
       cli: [process.execPath, new URL("./fixture-cli.ts", import.meta.url).pathname],

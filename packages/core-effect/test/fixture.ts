@@ -107,6 +107,12 @@ export const watchersLayer = (mark?: (path: string) => Effect.Effect<void>) =>
  */
 export const POLL = { bufferLimit: 5, leaseMs: 2000 } as const;
 
+/**
+ * The limits of webhook delivery of the MCP server of the fixture in the conformance tests: short lifetimes and a small
+ * number of subscriptions, so that conform can test them. The tests give the same limits to conform.
+ */
+export const WEBHOOK_LIMITS = { minTtlMs: 1000, maxTtlMs: 5000, maxSubscriptions: 3 } as const;
+
 export const fixtureLayer = Layer.mergeAll(switchLayer, holdsLayer(), watchersLayer());
 
 /** The services of the fixture, which count how many times the switch is built and released, to test when a host builds the services. */
@@ -263,12 +269,21 @@ export const fixture = App.make({
   events: [
     Event.make({
       id: "fixture.ticks",
-      description: "Give the occurrences n = 1 to count, with the eventId and the cursor String(n), then end. With a cursor c, start at c + 1. The key changes nothing: it gives the subscriptions of each test their own input.",
+      description: "Give the occurrences n = 1 to count, with the eventId and the cursor String(n), then end. With a cursor c, start at c + 1. With a gap g, the occurrence n = g has truncated: true, as if the source skipped occurrences before it. The key changes nothing: it gives the subscriptions of each test their own input.",
       audience: everywhere,
-      input: Schema.Struct({ count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })), key: Schema.optionalKey(Schema.String) }),
+      input: Schema.Struct({
+        count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
+        gap: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))),
+        key: Schema.optionalKey(Schema.String),
+      }),
       payload: Tick,
-      subscribe: ({ count }, { cursor }) =>
-        Stream.range(after(cursor), count).pipe(Stream.map((n) => ({ data: { n }, eventId: String(n), cursor: String(n) }))),
+      subscribe: ({ count, gap }, { cursor }) =>
+        Stream.range(after(cursor), count).pipe(
+          Stream.map((n) => {
+            const tick = { data: { n }, eventId: String(n), cursor: String(n) };
+            return n === gap ? { ...tick, truncated: true as const } : tick;
+          }),
+        ),
     }),
     Event.make({
       id: "fixture.watch",

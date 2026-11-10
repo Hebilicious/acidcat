@@ -115,6 +115,16 @@ const conformCommand = Command.make(
     ),
     webhookCert: url("webhook-cert", "The PEM file of the certificate of the HTTPS receiver of the webhook tests. It must be valid for 127.0.0.1, and the deployment must trust it"),
     webhookKey: url("webhook-key", "The PEM file of the private key of --webhook-cert"),
+    webhookOtherPrincipal: url("webhook-other-principal", "A second principal that the deployment gives to a request with Authorization: Bearer <principal>, for the check of the limit"),
+    webhookMaxTtlMs: Flag.Int("webhook-max-ttl-ms").pipe(Flag.withDescription("The maximum lifetime of a webhook subscription in the deployment. The default is 3600000"), Flag.optional),
+    webhookMinTtlMs: Flag.Int("webhook-min-ttl-ms").pipe(
+      Flag.withDescription("The minimum lifetime of a webhook subscription in the deployment, shorter than the deadline. With it, conform tests that a subscription with no renewal ends"),
+      Flag.optional,
+    ),
+    webhookMaxSubscriptions: Flag.Int("webhook-max-subscriptions").pipe(
+      Flag.withDescription("The maximum number of webhook subscriptions of one principal in the deployment. With it, conform tests the limit"),
+      Flag.optional,
+    ),
     maximumBytes: Flag.Int("max-bytes").pipe(Flag.withDescription("The body limit of the remote bindings"), Flag.withDefault(1_048_576)),
     deadline: Flag.Int("deadline").pipe(
       Flag.withDescription("The time, in milliseconds, that each check has to settle. A check that does not settle in this time fails"),
@@ -124,6 +134,7 @@ const conformCommand = Command.make(
   Effect.fn(function* (options) {
     const value = (option: Option.Option<string>) => (Option.isSome(option) ? option.value : undefined);
     const words = (option: Option.Option<string>) => value(option)?.split(/\s+/).filter((word) => word !== "");
+    const optionalInt = (option: Option.Option<number>) => (Option.isSome(option) ? option.value : undefined);
     const fs = yield* FileSystem.FileSystem;
     const webhookOptions = [options.webhookPrincipal, options.webhookCert, options.webhookKey];
     const given = webhookOptions.filter(Option.isSome).length;
@@ -131,11 +142,23 @@ const conformCommand = Command.make(
       yield* Console.error("Give --webhook-principal, --webhook-cert and --webhook-key together.");
       return yield* fail;
     }
+    const settings = [Option.isSome(options.webhookOtherPrincipal), Option.isSome(options.webhookMaxTtlMs), Option.isSome(options.webhookMinTtlMs), Option.isSome(options.webhookMaxSubscriptions)];
+    if (given === 0 && settings.includes(true)) {
+      yield* Console.error("The other --webhook-* options need --webhook-principal, --webhook-cert and --webhook-key.");
+      return yield* fail;
+    }
     const webhook =
       Option.isSome(options.webhookPrincipal) && Option.isSome(options.webhookCert) && Option.isSome(options.webhookKey)
-        ? { principal: options.webhookPrincipal.value, cert: yield* fs.readFileString(options.webhookCert.value), key: yield* fs.readFileString(options.webhookKey.value) }
+        ? {
+            principal: options.webhookPrincipal.value,
+            cert: yield* fs.readFileString(options.webhookCert.value),
+            key: yield* fs.readFileString(options.webhookKey.value),
+            otherPrincipal: value(options.webhookOtherPrincipal),
+            maxTtlMs: optionalInt(options.webhookMaxTtlMs),
+            minTtlMs: optionalInt(options.webhookMinTtlMs),
+            maxSubscriptions: optionalInt(options.webhookMaxSubscriptions),
+          }
         : undefined;
-    const optionalInt = (option: Option.Option<number>) => (Option.isSome(option) ? option.value : undefined);
     const results = yield* Effect.promise(() =>
       conform({
         mcp: value(options.mcp),

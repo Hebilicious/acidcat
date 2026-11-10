@@ -177,6 +177,18 @@ async function checkEvents(checks: Checks, base: string): Promise<void> {
       stream.close();
     }
   });
+  await checks.run("an occurrence after a gap has truncated: true, and the other occurrences have no truncated", EVENTS, async (signal) => {
+    const stream = await open(signal, "fixture.ticks", { count: 3, gap: 2 });
+    try {
+      for (const n of [1, 2, 3]) {
+        const occurrence = await nextOccurrence(stream, "fixture.ticks");
+        expectEqual([occurrence.data, occurrence.truncated], [{ n }, n === 2 ? true : undefined], "the data and truncated");
+      }
+      await expectComplete(stream);
+    } finally {
+      stream.close();
+    }
+  });
   await checks.run("Last-Event-ID gives the cursor, and the subscription starts after it", EVENTS, async (signal) => {
     const stream = await open(signal, "fixture.ticks", { count: 3 }, { "Last-Event-ID": "1" });
     try {

@@ -157,13 +157,14 @@ capabilities {
 
 events {
   ["fixture.ticks"] {
-    description = "Give the occurrences n = 1 to count, with the eventId and the cursor String(n), then end. With a cursor c, start at c + 1. The key changes nothing: it gives the subscriptions of each test their own input."
+    description = "Give the occurrences n = 1 to count, with the eventId and the cursor String(n), then end. With a cursor c, start at c + 1. With a gap g, the occurrence n = g has truncated: true, as if the source skipped occurrences before it. The key changes nothing: it gives the subscriptions of each test their own input."
     audience = allTargets
     input {
       type = "object"
       required { "count" }
       properties {
         count { type = "integer"; minimum = 0; maximum = 100 }
+        gap { type = "integer"; minimum = 1; maximum = 100 }
         key { type = "string" }
       }
     }

@@ -180,6 +180,16 @@ export async function checkPoll(checks: Checks, channel: Channel, settings: Poll
     expectEqual(polled.truncated, false, "truncated");
   });
 
+  await checks.run("an occurrence after a gap gives a result with truncated: true, and its item has no truncated", RULE, async (signal) => {
+    const input = { count: 3, gap: 2, key: randomUUID() };
+    const start = await poll("fixture.ticks", input, {}, signal);
+    expectStart(start, false);
+    const before = await pollUntil("the lease has the first tick", "fixture.ticks", input, { cursor: start.cursor, maxEvents: 1 }, (each) => each.events.length > 0, signal);
+    expectEqual([dataOf(before), before.truncated], [ticks(1, 1), false], "the data and truncated of the result before the gap");
+    const after = await pollUntil("the lease has the last tick", "fixture.ticks", input, { cursor: before.cursor }, (each) => each.events.some((event) => memberOf(event.data, "n") === 3), signal);
+    expectEqual([dataOf(after), after.truncated], [ticks(2, 3), true], "the data and truncated of the result with the gap");
+  });
+
   if (settings.bufferLimit !== undefined) {
     const limit = settings.bufferLimit;
     await checks.run("a cursor older than the buffer gives the occurrences in the buffer, and truncated: true", RULE, async (signal) => {

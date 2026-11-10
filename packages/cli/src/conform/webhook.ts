@@ -11,13 +11,13 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import { createServer } from "node:https";
 
-import { isOccurrence, webhookSignature, webhookSubscriptionId } from "@acid-cat/spec-ts";
+import { isOccurrence, MCP_WEBHOOK_DEFAULTS, webhookSignature, webhookSubscriptionId } from "@acid-cat/spec-ts";
 
 import { isObject, memberOf, parseJson } from "../json.ts";
 import type { JsonObject } from "../json.ts";
 import { Checks, expect, expectEqual, expectOccurrence, until } from "./check.ts";
 import { count, eventRequests, httpChannel } from "./mcp.ts";
-import type { Message } from "./mcp.ts";
+import type { Channel, Message } from "./mcp.ts";
 
 const RULE = "spec/bindings/mcp.md#webhook";
 
@@ -29,6 +29,22 @@ export interface WebhookSettings {
   readonly cert: string;
   /** The private key of the certificate, in PEM. */
   readonly key: string;
+  /**
+   * A second principal, given to a request with the header `Authorization: Bearer <otherPrincipal>`. With it, the check
+   * of the limit fills the subscriptions of this principal, which no other check uses, and checks that the first
+   * principal can still subscribe.
+   */
+  readonly otherPrincipal?: string | undefined;
+  /** The maximum lifetime of a subscription in the deployment, in milliseconds. The default is the default of the specification, 3 600 000. */
+  readonly maxTtlMs?: number | undefined;
+  /**
+   * The minimum lifetime of a subscription in the deployment, in milliseconds. The default is the default of the
+   * specification, 60 000. With it, conform also tests that a subscription with no renewal ends: it must be shorter
+   * than the deadline.
+   */
+  readonly minTtlMs?: number | undefined;
+  /** The maximum number of subscriptions of one principal in the deployment. With it, conform tests the limit. */
+  readonly maxSubscriptions?: number | undefined;
 }
 
 /** One request that the receiver got. */
@@ -165,10 +181,16 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
     return result;
   };
   /** Subscribe, and check the form of the result (spec/bindings/mcp.md#webhook). */
-  const subscribe = async (name: string, input: JsonObject, hook: string, secret: string, signal: AbortSignal, extra: JsonObject = {}) => {
-    const result = resultOf(await channel.request("events/subscribe", subscribeParams(name, input, hook, secret, extra), signal), "events/subscribe");
+  /** A client with its own principal. */
+  interface Client {
+    readonly channel: Channel;
+    readonly principal: string;
+  }
+  const main: Client = { channel, principal };
+  const subscribe = async (name: string, input: JsonObject, hook: string, secret: string, signal: AbortSignal, extra: JsonObject = {}, client: Client = main) => {
+    const result = resultOf(await client.channel.request("events/subscribe", subscribeParams(name, input, hook, secret, extra), signal), "events/subscribe");
     expectEqual(result.resultType, "complete", "resultType");
-    expectEqual(result.id, await webhookSubscriptionId(principal, hook, name, input), "the subscription id");
+    expectEqual(result.id, await webhookSubscriptionId(client.principal, hook, name, input), "the subscription id");
     const refreshBefore = result.refreshBefore;
     expect(typeof refreshBefore === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(refreshBefore), `refreshBefore must be an RFC 3339 date and time, got ${JSON.stringify(refreshBefore)}`);
     expect(Date.parse(refreshBefore) > Date.now(), `refreshBefore must be in the future, got ${refreshBefore}`);
@@ -181,14 +203,18 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
     expect(isObject(status) && "lastError" in status, `deliveryStatus must have lastError, got ${JSON.stringify(status)}`);
     return { id: String(result.id), refreshBefore: Date.parse(refreshBefore) };
   };
-  const unsubscribe = (name: string, input: JsonObject, hook: string, signal: AbortSignal) => channel.request("events/unsubscribe", unsubscribeParams(name, input, hook), signal);
+  const unsubscribe = (name: string, input: JsonObject, hook: string, signal: AbortSignal, client: Client = main) =>
+    client.channel.request("events/unsubscribe", unsubscribeParams(name, input, hook), signal);
   /** End a subscription at the end of a check. It can be gone already. */
-  const cleanup = (name: string, input: JsonObject, hook: string) => unsubscribe(name, input, hook, AbortSignal.timeout(checks.deadline)).catch(() => undefined);
+  const cleanup = (name: string, input: JsonObject, hook: string, client: Client = main) =>
+    unsubscribe(name, input, hook, AbortSignal.timeout(checks.deadline), client).catch(() => undefined);
   /** The requests of a URL that are not verifications. */
   const deliveries = (hook: { readonly received: () => readonly Received[] }) => hook.received().filter((each) => !isVerification(each));
   const atLeast = (hook: { readonly received: () => readonly Received[] }, number: number, signal: AbortSignal) =>
     until(`the receiver gets ${number} deliveries`, async () => deliveries(hook), (list) => list.length >= number, signal);
   const watchedKey = (key: string) => (keys: readonly string[]) => keys.includes(key);
+  const minTtlMs = settings.minTtlMs ?? MCP_WEBHOOK_DEFAULTS.minTtlMs;
+  const maxTtlMs = settings.maxTtlMs ?? MCP_WEBHOOK_DEFAULTS.maxTtlMs;
 
   await checks.run("events/subscribe and events/unsubscribe with no principal are Forbidden", RULE, async (signal) => {
     const hook = receiver.url();
@@ -263,7 +289,7 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
     const input = { key: randomUUID() };
     const [first, second] = [newSecret(), newSecret()];
     try {
-      const started = await subscribe("fixture.watch", input, hook.url, first, signal, { ttlMs: 60_000 });
+      const started = await subscribe("fixture.watch", input, hook.url, first, signal, { ttlMs: minTtlMs });
       await until("fixture.watching gives the key", () => watching(signal), watchedKey(input.key), signal);
       expectEqual(await signalKey(input.key, "a", signal), 1, "the subscriptions that fixture.signal reached");
       const [a] = await atLeast(hook, 1, signal);
@@ -275,7 +301,7 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
 
       const renewed = await subscribe("fixture.watch", input, hook.url, second, signal);
       expectEqual(renewed.id, started.id, "the subscription id of the renewal");
-      expect(renewed.refreshBefore >= started.refreshBefore, "the renewal must not grant a shorter lifetime than the first grant of 60 000 ms");
+      expect(renewed.refreshBefore >= started.refreshBefore, "a renewal with no ttlMs, which grants the maximum lifetime, must not grant a shorter lifetime than the first grant of the minimum lifetime");
       expectEqual(count(await watching(signal), input.key), 1, "the subscriptions of the key after the renewal");
       expectEqual(await signalKey(input.key, "b", signal), 1, "the subscriptions that fixture.signal reached after the renewal");
       const [, b] = await atLeast(hook, 2, signal);
@@ -346,4 +372,110 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
       await cleanup("fixture.broken", {}, hook.url);
     }
   });
+
+  await checks.run("before an occurrence after a gap, the server sends the control message gap with the watermark", RULE, async (signal) => {
+    const hook = receiver.url();
+    const input = { count: 3, gap: 2, key: randomUUID() };
+    const secret = newSecret();
+    try {
+      const { id } = await subscribe("fixture.ticks", input, hook.url, secret, signal);
+      const [first, gap, second, third] = await atLeast(hook, 4, signal);
+      if (first === undefined || gap === undefined || second === undefined || third === undefined) throw new Error("the receiver got less than four requests");
+      expectEqual(expectDelivered(first, "fixture.ticks").data, { n: 1 }, "the data of the first delivery");
+      expectEqual(gap.body, { type: "gap", cursor: "1" }, "the control message gap, with the watermark after the first delivery");
+      await expectSigned(gap, id, [secret], "gap");
+      const after = expectDelivered(second, "fixture.ticks");
+      expectEqual([after.data, after.cursor], [{ n: 2 }, "2"], "the data and the cursor of the delivery after the gap");
+      expectEqual(expectDelivered(third, "fixture.ticks").data, { n: 3 }, "the data of the last delivery");
+    } finally {
+      await cleanup("fixture.ticks", input, hook.url);
+    }
+  });
+
+  await checks.run("the server grants ttlMs between the minimum and the maximum lifetime, and the maximum with no ttlMs", RULE, async (signal) => {
+    const hook = receiver.url();
+    const cases = [
+      ["a ttlMs below the minimum", { ttlMs: Math.floor(minTtlMs / 2) }, minTtlMs],
+      ["a ttlMs above the maximum", { ttlMs: maxTtlMs * 2 }, maxTtlMs],
+      ["ttlMs: null", { ttlMs: null }, maxTtlMs],
+      ["no ttlMs", {}, maxTtlMs],
+    ] as const;
+    // One subscription at a time, so that the check stays under the limit of subscriptions of the principal.
+    for (const [what, extra, granted] of cases) {
+      const input = { key: randomUUID() };
+      try {
+        const before = Date.now();
+        const { refreshBefore } = await subscribe("fixture.watch", input, hook.url, newSecret(), signal, extra);
+        const after = Date.now();
+        // refreshBefore has a precision of one millisecond.
+        expect(
+          refreshBefore >= before + granted - 1 && refreshBefore <= after + granted + 1,
+          `for ${what}, refreshBefore must be ${granted} ms after the request, got ${refreshBefore - before} ms after its start`,
+        );
+      } finally {
+        await cleanup("fixture.watch", input, hook.url);
+      }
+    }
+  });
+
+  if (settings.minTtlMs !== undefined) {
+    await checks.run("a subscription with no renewal ends at the end of its lifetime, and gets no more deliveries", RULE, async (signal) => {
+      const hook = receiver.url();
+      const input = { key: randomUUID() };
+      try {
+        const before = Date.now();
+        await subscribe("fixture.watch", input, hook.url, newSecret(), signal, { ttlMs: minTtlMs });
+        await until("fixture.watching gives the key", () => watching(signal), watchedKey(input.key), signal);
+        await until("the lifetime ends, and the key leaves fixture.watching", () => watching(signal), (keys) => !keys.includes(input.key), signal);
+        const elapsed = Date.now() - before;
+        expect(elapsed >= minTtlMs, `the subscription ended ${elapsed} ms after the request, before its lifetime of ${minTtlMs} ms`);
+        expectEqual(await signalKey(input.key, "late", signal), 0, "the subscriptions that fixture.signal reached after the end");
+        expectEqual(deliveries(hook).length, 0, "the deliveries that the receiver got");
+        const ended = errorOf(await unsubscribe("fixture.watch", input, hook.url, signal));
+        expectEqual([ended.code, memberOf(ended.data, "kind")], [-32023, "subscription"], "the error of events/unsubscribe after the end");
+      } finally {
+        await cleanup("fixture.watch", input, hook.url);
+      }
+    });
+  }
+
+  if (settings.maxSubscriptions !== undefined) {
+    const max = settings.maxSubscriptions;
+    const other = settings.otherPrincipal;
+    const name = `a new subscription over the limit of a principal is ResourceExhausted, and a renewal still works${other === undefined ? "" : ", and another principal can still subscribe"}`;
+    await checks.run(name, RULE, async (signal) => {
+      // The other principal has no subscription of another check, so the check knows its count. The first principal
+      // can have subscriptions of other checks that did not end yet.
+      const client: Client = other === undefined ? main : { channel: httpChannel(url, { Authorization: `Bearer ${other}` }), principal: other };
+      const hook = receiver.url();
+      const created: JsonObject[] = [];
+      const extra = { key: randomUUID() };
+      try {
+        let refused: JsonObject | undefined;
+        while (refused === undefined && created.length <= max) {
+          const input = { key: randomUUID() };
+          const message = await client.channel.request("events/subscribe", subscribeParams("fixture.watch", input, hook.url, newSecret()), signal);
+          if (memberOf(message, "error") === undefined) {
+            resultOf(message, "events/subscribe");
+            created.push(input);
+          } else {
+            refused = errorOf(message);
+          }
+        }
+        if (refused === undefined) throw new Error(`the server granted ${created.length} subscriptions to one principal, over the limit of ${max}`);
+        expectEqual(refused.code, -32025, "the JSON-RPC error code");
+        expectEqual(refused.data, { limit: "subscriptions", max }, "data");
+        if (other !== undefined) expectEqual(created.length, max, "the subscriptions that the server granted before the limit");
+        const [first] = created;
+        if (first === undefined) throw new Error("the principal had no free subscription, so the check cannot renew one");
+        await subscribe("fixture.watch", first, hook.url, newSecret(), signal, {}, client);
+        if (other !== undefined) {
+          await subscribe("fixture.watch", extra, hook.url, newSecret(), signal);
+        }
+      } finally {
+        for (const input of created) await cleanup("fixture.watch", input, hook.url, client);
+        await cleanup("fixture.watch", extra, hook.url);
+      }
+    });
+  }
 }
