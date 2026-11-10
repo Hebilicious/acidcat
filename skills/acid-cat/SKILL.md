@@ -58,7 +58,7 @@ An **event** is a thing that happens in the application, that clients follow, fo
 3. Implement it in the core: in core-ts, `defineEvent` with a `subscribe` that gives an async iterable; in core-effect, `Event.make` with a `subscribe` that gives a `Stream`. See [references/cores.md](references/cores.md).
 4. Write the JSON of the catalog again, and run `acid-cat check --strict <catalog>`. A view has the events whose audience has its target.
 
-To keep old clients working, add members to a payload, and do not remove or change members. [spec/events.md](https://github.com/Hebilicious/acidcat/blob/main/spec/events.md) tells how subscriptions, occurrences and cursors work. The document of each binding tells how it serves them. The WebMCP binding does not serve events. To follow an event with a GraphQL subscription in your own API, see [references/bindings.md](references/bindings.md#graphql-subscription-from-an-event).
+To keep old clients working, add members to a payload, and do not remove or change members. [spec/events.md](https://github.com/Hebilicious/acidcat/blob/main/spec/events.md) tells how subscriptions, occurrences and cursors work. The document of each binding tells how it serves them. The WebMCP binding does not serve events. To follow an event in your own API, with a GraphQL subscription, a Cap'n Web callback or an Elysia stream of server-sent events, see [references/bindings.md](references/bindings.md#graphql-subscription-from-an-event).
 
 ## Serve a binding
 

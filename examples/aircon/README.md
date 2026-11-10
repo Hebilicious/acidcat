@@ -55,8 +55,8 @@ The HTTP and MCP bindings give generic access to the capabilities: one route or 
 | File | Library | API | Failures |
 | --- | --- | --- | --- |
 | [`apis/graphql.ts`](apis/graphql.ts) | [Pothos](https://pothos-graphql.dev), [GraphQL Yoga](https://the-guild.dev/graphql/yoga-server) and [graphql-ws](https://the-guild.dev/graphql/ws) | `query { status }`, mutations that return the new status, and `subscription { statusChanged }`, which follows the event `aircon.status.changed`. The subscription works through server-sent events (Yoga, with the graphql-sse client) and through WebSockets (graphql-ws on a [`ws`](https://github.com/websockets/ws) server). The schema is in [`apis/schema.graphql`](apis/schema.graphql) | Data: each field returns a union of `Status` and the failures of its capability, for example `Status \| Offline \| PoweredOff` |
-| [`apis/capnweb.ts`](apis/capnweb.ts) | [Cap'n Web](https://github.com/cloudflare/capnweb) | A class with typed methods. A client sends many calls in one request | A result value: `{ ok: false, error }` |
-| [`apis/elysia.ts`](apis/elysia.ts) | [Elysia](https://elysiajs.com) | `GET /status`, and `PATCH /status` that changes many settings. The HTTP binding is mounted with `.mount("/api", …)` | Status 409 with the failure |
+| [`apis/capnweb.ts`](apis/capnweb.ts) | [Cap'n Web](https://github.com/cloudflare/capnweb) | A class with typed methods. A client sends many calls in one request through HTTP, or calls them over time through WebSockets ([`ws`](https://github.com/websockets/ws)). `followStatus(listener)` follows the event `aircon.status.changed`: the server calls the function of the client with each new status, until the client disposes the result. It works through WebSockets | A result value: `{ ok: false, error }` |
+| [`apis/elysia.ts`](apis/elysia.ts) | [Elysia](https://elysiajs.com) | `GET /status`, `PATCH /status` that changes many settings, and `GET /status/changes`, a stream of server-sent events from a generator route with `sse`, which follows the event `aircon.status.changed`. The HTTP binding is mounted with `.mount("/api", …)` | Status 409 with the failure |
 | [`apis/mcp.ts`](apis/mcp.ts) | [Effect](https://effect.website) `effect/ai` | MCP tools `get_status` and `set_controls`, which changes many settings in one call | A tool error with the failure |
 
 The first three APIs use the application on `@acid-cat/core-ts`, and serve the HTTP binding at `/api`. [`apis/shared.ts`](apis/shared.ts) has what they share. The MCP server uses the application on `@acid-cat/core-effect`, and serves the MCP binding at two URLs:
@@ -70,9 +70,12 @@ All APIs reject origins that they do not allow.
 
 Each API calls the capabilities through a session, so it gets the same outcomes as all other surfaces:
 
-- **One session for each client.** A session serves one client (see [Sessions](../../spec/invocation.md#sessions)). Each request, or each Cap'n Web batch, opens its own session with `await using session = openSession(options)`. The session closes when the block ends. The unit is a service in the context, so all sessions share it.
+- **One session for each client.** A session serves one client (see [Sessions](../../spec/invocation.md#sessions)). Each request, or each Cap'n Web batch, opens its own session with `await using session = openSession(options)`. A WebSocket connection, of GraphQL or of Cap'n Web, is one session. The session closes when the block ends. The unit is a service in the context, so all sessions share it.
 - **Typed calls.** An API gets input that is not trusted. `session.call(powerSet, input)` checks it with the input schema of the capability, and gives a result with the types of the capability, with no cast. The MCP server checks the parameters of its tools with Effect Schema, then calls the session of `@acid-cat/core-effect`.
-- **Subscriptions.** The `subscribe` resolver of `statusChanged` returns `session.eventHandle(statusChanged).subscribe({})`, and its `resolve` gives the data of each occurrence. GraphQL calls `return()` of the iterator when the client ends the subscription. A request with a stream of server-sent events keeps its session open until the stream ends. A WebSocket connection is one session: it opens when the client connects, and closes when the connection closes, which ends each subscription of the connection.
+- **Subscriptions.** Each API follows the event through `session.eventHandle(statusChanged).subscribe(…)`, and stops the subscription when its client stops or goes away. A request with a stream of server-sent events keeps its session open until the stream ends. A WebSocket connection opens its session when the client connects, and closes it when the connection closes, which ends each subscription of the connection.
+  - GraphQL: the `subscribe` resolver of `statusChanged` returns the promise of `subscribe`, and its `resolve` gives the data of each occurrence. GraphQL calls `return()` of the iterator when the client ends the subscription.
+  - Cap'n Web: `followStatus` subscribes with a signal, and calls the listener of the client with each occurrence. It returns a `Following` object. When the client disposes it, when the connection breaks, or when the listener throws, the signal aborts.
+  - Elysia: the generator of `GET /status/changes` subscribes with the signal of the request, which aborts when the client goes away. Its first event, `retry: 1000`, makes Elysia send the response before the first change. Each change is an event `aircon.status.changed` with the status as its data.
 - **Three outcomes.** A value and a failure are results: each API gives them in its own form, as data, as a union member, or as a status code. A call failure rejects as a `CallFailureError`, and each API turns it into an error of its protocol.
 
 ## Run
@@ -82,6 +85,30 @@ node apis/main.ts graphql   # or capnweb, elysia, mcp
 moon run example-aircon:test
 ```
 
-`apis/main.ts` serves the API on `http://127.0.0.1:3000`, with `serve` from `@acid-cat/core-ts/node`. The GraphQL API also serves WebSockets on `ws://127.0.0.1:3001/graphql`.
+`apis/main.ts` serves the API on `http://127.0.0.1:3000`, with `serve` from `@acid-cat/core-ts/node`. The GraphQL API also serves WebSockets on `ws://127.0.0.1:3001/graphql`, and the Cap'n Web API on `ws://127.0.0.1:3001/rpc`.
+
+To follow the status, start an API, follow the event in one terminal, and change the unit in another:
+
+```sh
+# GraphQL, through server-sent events
+curl -N http://127.0.0.1:3000/graphql -H 'Accept: text/event-stream' -H 'Content-Type: application/json' \
+  -d '{"query":"subscription { statusChanged { power mode } }"}'
+curl http://127.0.0.1:3000/graphql -H 'Content-Type: application/json' -d '{"query":"mutation { setPower(on: true) { __typename } }"}'
+
+# Elysia
+curl -N http://127.0.0.1:3000/status/changes
+curl -X PATCH http://127.0.0.1:3000/status -H 'Content-Type: application/json' -d '{"power":true}'
+```
+
+A Cap'n Web client follows the status through WebSockets:
+
+```ts
+import { newWebSocketRpcSession } from "capnweb";
+import type { AirconApi } from "./apis/capnweb.ts";
+
+using api = newWebSocketRpcSession<AirconApi>("ws://127.0.0.1:3001/rpc");
+using following = await api.followStatus((status) => console.log(status));
+await api.setPower(true);
+```
 
 The test runs the Python, Go and Rust programs of `catalog/`, so it needs `python`, `go` and `cargo`. proto installs them from [`.prototools`](../../.prototools).

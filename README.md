@@ -132,7 +132,7 @@ These packages show one way to implement the specification. They serve the TypeS
 
 Reference implementations in more languages will follow. You do not need a package from this repository to implement AcidCat. A program that serves the bindings as the specification tells is an implementation. You, or an agent, can write a core for your language from [the specification](spec/README.md), and test it with `acid-cat conform`.
 
-To build your own API, for example in GraphQL, see [the APIs of the air conditioner](examples/aircon/README.md#apis): GraphQL, Cap'n Web and Elysia APIs, each beside the HTTP binding, and an MCP server in Effect beside the MCP binding. The GraphQL API follows the event `aircon.status.changed` with a subscription, through WebSockets and through server-sent events.
+To build your own API, for example in GraphQL, see [the APIs of the air conditioner](examples/aircon/README.md#apis): GraphQL, Cap'n Web and Elysia APIs, each beside the HTTP binding, and an MCP server in Effect beside the MCP binding. Each of these three APIs follows the event `aircon.status.changed`: GraphQL with a subscription, through WebSockets and through server-sent events, Cap'n Web with a function of the client that the server calls, through WebSockets, and Elysia with a stream of server-sent events.
 
 ## 🤖 Agent skill
 
