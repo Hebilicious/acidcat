@@ -367,6 +367,9 @@ importers:
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
+      graphql:
+        specifier: 'catalog:'
+        version: 17.0.2
       playwright:
         specifier: 'catalog:'
         version: 1.64.0

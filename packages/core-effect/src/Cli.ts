@@ -2,9 +2,23 @@
  * The CLI binding (spec/bindings/cli.md): a command line made from the catalog, with `effect/cli`. This module works
  * in all runtimes. `NodeCli` in `@acid-cat/core-effect/node` runs it in Node.js.
  */
-import { bundle, CLI_EXIT_CODES, cliExitCode, cliJsonArray, cliRepeatedItems, cliResolve, cliUsage, commandPath, isCallFailure, isJsonObject } from "@acid-cat/spec-ts";
-import type { CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec-ts";
-import { Console, Effect, Option, Predicate, Schema } from "effect";
+import {
+  bundle,
+  CLI_EXIT_CODES,
+  CLI_RESUME_FLAGS,
+  CLI_WATCH_EXIT_CODES,
+  cliEventUsage,
+  cliExitCode,
+  cliJsonArray,
+  cliRepeatedItems,
+  cliResolve,
+  cliUsage,
+  commandPath,
+  isCallFailure,
+  isJsonObject,
+} from "@acid-cat/spec-ts";
+import type { CallFailure, CatalogDocument, JsonObject, Outcome, Resume } from "@acid-cat/spec-ts";
+import { Console, Effect, Logger, Option, Predicate, Schema, Stream } from "effect";
 import { Argument, CliError, Command, Flag, Primitive } from "effect/cli";
 
 import * as App from "./App.ts";
@@ -25,9 +39,9 @@ export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = r
    */
   readonly description?: string | undefined;
   /**
-   * The commands of the application, beside the commands of the capabilities, `call` and `list`. The name of each one
-   * must not be `call`, `list`, the name of another command of the application, or the first word of the command of a
-   * capability (spec/bindings/cli.md#commands).
+   * The commands of the application, beside the commands of the capabilities, `call`, `list` and `watch`. The name of
+   * each one must not be `call`, `list`, `watch`, the name of another command of the application, or the first word of
+   * the command of a capability (spec/bindings/cli.md#commands).
    */
   readonly commands?: Commands | undefined;
 }
@@ -42,7 +56,8 @@ export const run = <R, const Commands extends ReadonlyArray<Command.Command.Any>
 /**
  * Run a command that `command` made, after the application changed it: for example with its own flags
  * (`Command.withGlobalFlags`), or with services that depend on them (`Command.provide`). Usage errors set the exit
- * code with `exitCodeOf`. Other failures of the command stay in the error channel.
+ * code with `exitCodeOf`. Other failures of the command stay in the error channel. Standard output carries only JSON,
+ * so the logs go to standard error.
  */
 export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   command: Command.Command<Name, Input, ContextInput, E, R>,
@@ -53,7 +68,7 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
     CliError.isCliError,
     (error) => Effect.sync(() => (process.exitCode = exitCodeOf(error))),
     Effect.fail,
-  );
+  ).pipe(Effect.provideService(Logger.LogToStderr, true));
 
 /**
  * The exit code for a usage error (spec/bindings/cli.md#exit-codes). `effect/cli` shows the help for each usage error,
@@ -74,8 +89,9 @@ export function exitCodeOf(error: CliError.CliError): number {
 export type AppCommand<R, E = never> = Command.Command<string, {}, {}, E, R>;
 
 /**
- * The root command: one command for each capability in the view, `call`, `list`, and the commands of the application.
- * It throws if the name of a command of the application is not allowed (see `Options.commands`).
+ * The root command: one command for each capability in the view, `call`, `list`, `watch` with one command for each
+ * event in the view, and the commands of the application. It throws if the name of a command of the application is not
+ * allowed (see `Options.commands`).
  */
 export function command<R, const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(
   app: App.App<R>,
@@ -87,6 +103,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   const catalogView: CatalogDocument = {
     ...document,
     capabilities: Object.fromEntries(Object.entries(document.capabilities).filter(([, c]) => (c.audience ?? []).includes(target))),
+    events: Object.fromEntries(Object.entries(document.events ?? {}).filter(([, e]) => (e.audience ?? []).includes(target))),
   };
   const types = catalogView.$defs ?? {};
 
@@ -96,14 +113,19 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
       Effect.onInterrupt(() => Effect.sync(() => (process.exitCode = CLI_EXIT_CODES.cancelled))),
     );
 
-  const leaves = Object.entries(catalogView.capabilities).map(([id, capability]) => {
-    const schema = bundle(capability.input ?? { type: "object" }, types);
+  /** The flags of an input schema, one for each top-level property. */
+  const flagsOf = (input: JsonObject | undefined) => {
+    const schema = bundle(input ?? { type: "object" }, types);
     const properties = schemasIn(schema.properties);
     const required = new Set(isStrings(schema.required) ? schema.required : []);
     const definitions = isJsonObject(schema.$defs) ? schema.$defs : {};
-    const flags = Object.fromEntries(
+    return Object.fromEntries(
       Object.entries(properties).map(([name, property]) => [name, flagFor(name, cliResolve(property, definitions), definitions, required.has(name))]),
     );
+  };
+
+  const leaves = Object.entries(catalogView.capabilities).map(([id, capability]) => {
+    const flags = flagsOf(capability.input);
     const path = commandPath(id);
     const name = path.at(-1);
     if (name === undefined) throw new Error(`The capability id ${id} has no words.`);
@@ -138,14 +160,79 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
         const entries = [];
         for (const [id, capability] of Object.entries(catalogView.capabilities)) {
           const usage = cliUsage(options.name, id, capability.input === undefined ? undefined : bundle(capability.input, types));
-          entries.push({ id, description: capability.description, ...(yield* session.availability(id)), usage });
+          entries.push({ kind: "capability", id, description: capability.description, ...(yield* session.availability(id)), usage });
+        }
+        for (const [id, event] of Object.entries(catalogView.events ?? {})) {
+          const usage = cliEventUsage(options.name, id, event.input === undefined ? undefined : bundle(event.input, types));
+          entries.push({ kind: "event", id, description: event.description, usage });
         }
         yield* Console.log(JSON.stringify(entries, null, 2));
       }),
     ),
-  ).pipe(Command.withDescription("List the capabilities, with their availability."));
+  ).pipe(Command.withDescription("List the capabilities, with their availability, and the events."));
 
-  const reserved = new Set(["call", "list"]);
+  /**
+   * Follow an event (spec/bindings/cli.md#events): each occurrence goes to standard output as one line of JSON. An
+   * interrupt cancels the subscription. `resume` gives the cursor and `maxAgeMs`.
+   */
+  const follow = (id: string, input: unknown, resume: Resume) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* view;
+        const started = yield* Effect.result(session.subscribe(id, input, resume));
+        if (started._tag === "Failure") return yield* printFailure(started.failure, CLI_EXIT_CODES[started.failure.kind]);
+        const ended = yield* Effect.result(Stream.runForEach(started.success, (occurrence) => Console.log(JSON.stringify(occurrence))));
+        if (ended._tag === "Failure") return yield* printFailure(ended.failure, CLI_WATCH_EXIT_CODES.internal);
+        process.exitCode = CLI_WATCH_EXIT_CODES.complete;
+      }),
+    ).pipe(Effect.onInterrupt(() => Effect.sync(() => (process.exitCode = CLI_WATCH_EXIT_CODES.cancelled))));
+
+  /** The flags that give the cursor and `maxAgeMs`. They are not properties of the input. */
+  const resumeFlags = {
+    cursor: Flag.String("cursor").pipe(Flag.withDescription("Resume after this cursor of an occurrence."), Flag.optional),
+    "max-age-ms": Flag.Int("max-age-ms").pipe(Flag.withDescription("Do not replay occurrences older than this number of milliseconds."), Flag.optional),
+  };
+
+  /** Follow an event with the cursor and `maxAgeMs` of the flags. `maxAgeMs` must not be negative. */
+  const followWith = (id: string, input: unknown, cursor: Option.Option<string>, maxAgeMs: Option.Option<number>) =>
+    Effect.suspend(() => {
+      if (Option.isSome(maxAgeMs) && maxAgeMs.value < 0) {
+        return printFailure({ kind: "invalid-input", message: "--max-age-ms must not be negative." }, CLI_EXIT_CODES["invalid-input"]);
+      }
+      return follow(id, input, {
+        ...(Option.isSome(cursor) ? { cursor: cursor.value } : {}),
+        ...(Option.isSome(maxAgeMs) ? { maxAgeMs: maxAgeMs.value } : {}),
+      });
+    });
+
+  const watchers = Object.entries(catalogView.events ?? {}).map(([id, event]) => {
+    const schema = event.input === undefined ? undefined : bundle(event.input, types);
+    const properties = schema === undefined ? {} : schemasIn(schema.properties);
+    for (const name of CLI_RESUME_FLAGS) {
+      if (name in properties) throw new Error(`The input of the event ${id} has a property ${name}, which is a flag of watch.`);
+    }
+    if (schema !== undefined && schema.properties === undefined) {
+      return Command.make(
+        id,
+        { input: Argument.String("input").pipe(Argument.withDescription("The input as JSON"), Argument.withDefault("{}")), ...resumeFlags },
+        ({ input, cursor, "max-age-ms": maxAgeMs }) =>
+          Effect.suspend(() =>
+            isJsonText(input)
+              ? followWith(id, JSON.parse(input), cursor, maxAgeMs)
+              : printFailure({ kind: "invalid-input", message: "The input is not JSON." }, CLI_EXIT_CODES["invalid-input"]),
+          ),
+      ).pipe(Command.withDescription(event.description));
+    }
+    return Command.make(id, { input: flagsOf(event.input), ...resumeFlags }, ({ input, cursor, "max-age-ms": maxAgeMs }) =>
+      followWith(id, inputFrom(input), cursor, maxAgeMs),
+    ).pipe(Command.withDescription(event.description));
+  });
+  const watch = Command.make("watch").pipe(
+    Command.withDescription("Follow an event by its id. Each occurrence goes to standard output as one line of JSON."),
+    Command.withSubcommands(watchers),
+  );
+
+  const reserved = new Set(["call", "list", "watch"]);
   const taken = new Set(reserved);
   for (const { path } of leaves) {
     const [first] = path;
@@ -160,7 +247,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
 
   return Command.make(options.name).pipe(
     Command.withDescription(options.description ?? app.description ?? app.title ?? options.name),
-    Command.withSubcommands([call, list, ...group(leaves, []), ...(options.commands ?? [])]),
+    Command.withSubcommands([call, list, watch, ...group(leaves, []), ...(options.commands ?? [])]),
   );
 }
 
@@ -268,6 +355,23 @@ function inputFrom(parsed: Record<string, unknown>): Record<string, unknown> {
   }
   return input;
 }
+
+/** `true` if a text is JSON. */
+function isJsonText(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Write a call failure to standard error, and set the exit code. */
+const printFailure = (failure: CallFailure, code: number) =>
+  Effect.gen(function* () {
+    yield* Console.error(JSON.stringify({ kind: failure.kind, message: failure.message }));
+    process.exitCode = code;
+  });
 
 /** Write an outcome and set the exit code (spec/bindings/cli.md#outcomes). */
 const print = (outcome: Outcome<unknown, unknown>) =>

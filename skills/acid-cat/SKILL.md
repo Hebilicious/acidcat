@@ -55,7 +55,7 @@ An **event** is a thing that happens in the application, that clients follow, fo
 
 1. Add it to `events` in the source of the catalog: id, description, audience, input, payload. In Pkl: `events { ["aircon.status.changed"] { … } }`. In a catalog library: `event(id, …)`.
 2. Obey the rules: the id is not also the id of a capability. The input and the payload are objects: `"type": "object"`, or a `$ref` to a type that is an object. Put a filter in the input, for example `{ "room": … }`. Put a failure of the source in the payload, as a union with a `_tag`.
-3. Implement it in the core: `subscribe` gives an async iterable of occurrences (core-ts). See [references/cores.md](references/cores.md).
+3. Implement it in the core: in core-ts, `defineEvent` with a `subscribe` that gives an async iterable; in core-effect, `Event.make` with a `subscribe` that gives a `Stream`. See [references/cores.md](references/cores.md).
 4. Write the JSON of the catalog again, and run `acid-cat check --strict <catalog>`. A view has the events whose audience has its target.
 
 To keep old clients working, add members to a payload, and do not remove or change members. [spec/events.md](https://github.com/Hebilicious/acidcat/blob/main/spec/events.md) tells how subscriptions, occurrences and cursors work. The document of each binding tells how it serves them. The WebMCP binding does not serve events.
@@ -66,7 +66,7 @@ Each target of the catalog lists its bindings. Each binding serves the **view** 
 
 | Binding | Surface | core-ts | core-effect |
 | --- | --- | --- | --- |
-| `typescript` | Handles in code, for a user interface | `createSession` | `Session.make`, `Handles.make` |
+| `typescript` | Handles in code, for a user interface | `createSession` | `Session.make`, `Handles.make`, `Handles.makeEvents` |
 | `mcp` through HTTP | An MCP server at `/mcp` | `mcpHandler` | `Mcp.toWebHandler` |
 | `mcp` through stdio | A local MCP server that a client starts | `mcpStdioMain` | `NodeMcp.main` |
 | `http` | JSON at `POST /capabilities/<id>` | `httpHandler` | `Http.toWebHandler` |

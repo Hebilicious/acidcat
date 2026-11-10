@@ -28,6 +28,7 @@
     ".": "./src/index.ts",
     "./App": "./src/App.ts",
     "./Capability": "./src/Capability.ts",
+    "./Event": "./src/Event.ts",
     "./Session": "./src/Session.ts",
     "./Handles": "./src/Handles.ts",
     "./Mcp": "./src/Mcp.ts",
@@ -35,6 +36,7 @@
     "./Cli": "./src/Cli.ts",
     "./WebMcp": "./src/WebMcp.ts",
     "./NodeServer": "./src/NodeServer.ts",
+    "./NodeWebhook": "./src/NodeWebhook.ts",
     "./node": "./src/node.ts"
   },
   "publishConfig": {
@@ -51,6 +53,10 @@
       "./Capability": {
         "types": "./dist/Capability.d.ts",
         "default": "./dist/Capability.js"
+      },
+      "./Event": {
+        "types": "./dist/Event.d.ts",
+        "default": "./dist/Event.js"
       },
       "./Session": {
         "types": "./dist/Session.d.ts",
@@ -80,6 +86,10 @@
         "types": "./dist/NodeServer.d.ts",
         "default": "./dist/NodeServer.js"
       },
+      "./NodeWebhook": {
+        "types": "./dist/NodeWebhook.d.ts",
+        "default": "./dist/NodeWebhook.js"
+      },
       "./node": {
         "types": "./dist/node.d.ts",
         "default": "./dist/node.js"
@@ -106,6 +116,7 @@
     "@types/node": "catalog:",
     "effect": "catalog:",
     "esbuild": "catalog:",
+    "graphql": "catalog:",
     "playwright": "catalog:",
     "typescript": "catalog:"
   }

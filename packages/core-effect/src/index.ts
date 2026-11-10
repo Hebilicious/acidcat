@@ -1,5 +1,6 @@
 export * as App from "./App.ts";
 export * as Capability from "./Capability.ts";
+export * as Event from "./Event.ts";
 export * as Session from "./Session.ts";
 export * as Handles from "./Handles.ts";
 export * as Mcp from "./Mcp.ts";

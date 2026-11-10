@@ -89,3 +89,25 @@ await writeFile("acidcat.catalog.json", App.render(aircon));
 - A failure is a `Schema.TaggedStruct`. Use `Schema.Finite` or `Schema.Int` for numbers, because `Schema.Number` accepts `Infinity` and `NaN`.
 - Services are layers. Make each `SubscriptionRef` of availability or state in a layer, so that all sessions share it.
 - Give a shared type an `identifier` annotation. It becomes a named type in `$defs`.
+
+An event is a `Stream` of the things that happen:
+
+```ts
+import { Event } from "@acid-cat/core-effect";
+import { Schema, Stream } from "effect";
+
+export const statusChanged = Event.make({
+  id: "aircon.status.changed",
+  description: "The status of the unit changed. The occurrence gives the new status.",
+  audience: ["app", "mcp"],
+  payload: Status, // a Schema.Struct
+  subscribe: (_input, resume) => Unit.statusChanges.pipe(Stream.map((status) => ({ data: status }))),
+});
+
+export const aircon = App.make({ targets, capabilities: [powerSet], events: [statusChanged] });
+```
+
+- The stream has no error channel. Put the problems of the source in the payload. A defect ends the subscription with `internal`.
+- The client cancels by interruption. Release the source with `Stream.ensuring` or a scoped resource.
+- `session.follow(event, input)` gives a typed `Stream` of occurrences in a scope. `session.event(event).subscribe(input)` of `Handles.open` gives an async iterable, which a GraphQL `subscribe` resolver can return.
+- `Mcp.toWebHandler` serves push and poll. Set `principal: (request) => Effect<Option<string>>` so that each client has its own poll leases. For webhooks, add `webhooks: { sender: NodeWebhook.sender() }` from `@acid-cat/core-effect/NodeWebhook`; it needs `principal`. Call `handler.dispose()` to end the leases and the webhook subscriptions. `Mcp.handle` keeps no state, so it serves only push; use `Mcp.makeHandle` in its place.

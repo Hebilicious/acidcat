@@ -1,5 +1,6 @@
 /**
- * The WebMCP binding (spec/bindings/webmcp.md): register capabilities as WebMCP tools in a web page.
+ * The WebMCP binding (spec/bindings/webmcp.md): register capabilities as WebMCP tools in a web page. The binding serves
+ * no events (spec/bindings/webmcp.md#events): the page follows them through the event handles of `Handles`.
  */
 import { bundle, callFailure, CallFailureError, isCallFailure } from "@acid-cat/spec-ts";
 import { Effect, Fiber, Option, Predicate, Queue, Scope, Stream, SubscriptionRef } from "effect";
