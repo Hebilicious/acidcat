@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acid-cat.dev/schemas/0.1/occurrence.schema.json",
+  "title": "AcidCat occurrence",
+  "description": "The JSON form of one occurrence of an event. See spec/events.md.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "name",
+    "timestamp",
+    "data"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "data": {
+      "type": "object"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "truncated": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}

@@ -18,6 +18,10 @@ The binding MUST NOT use the return value of `registerTool`. To remove a tool, t
 - **Cancellation.** The signal that the host gives to `execute` cancels the call. When the binding closes, it cancels all calls in progress.
 - **Removal.** The binding SHOULD let the page remove all tools while the session stays open. After a removal, the binding registers no more tools. A removal does not cancel the calls through the handles of the session.
 
+## Events
+
+The WebMCP binding does not serve events. WebMCP has no way to send a message to an agent that the agent did not ask for. The page uses the [TypeScript binding](typescript.md) to follow events.
+
 ## Status
 
 The binding SHOULD give a status that the page can observe:

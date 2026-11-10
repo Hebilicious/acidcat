@@ -1,6 +1,6 @@
 # TypeScript binding
 
-A language binding for TypeScript and JavaScript. A session gives a **handle** for each capability in its view. Code in the same process uses handles. Protocol bindings, such as WebMCP, MCP and the command line, use the same handles.
+A language binding for TypeScript and JavaScript. A session gives a **handle** for each capability in its view, and an **event handle** for each event in its view. Code in the same process uses handles. Protocol bindings, such as WebMCP, MCP and the command line, use the same handles.
 
 ## Handles
 
@@ -32,5 +32,53 @@ interface Handle<Input, Value, Failure, State = never> {
 - **Cancellation.** `options.signal` cancels one call. The session has its own signal. It cancels all the work of the session.
 - **State.** `snapshot` observes the [state](../invocation.md#state) of the capability. It is present when the capability has `state`. A handle MAY have a `snapshot` for code in the same process when the catalog has no `state`. Each value from `getSnapshot` or from a listener is a copy. It is not the data of the provider.
 - **Types.** Each type in `$defs` becomes a named TypeScript type. `Input`, `Value`, `Failure` and `State` come from the schemas of the capability. You can also write them by hand and check them against the catalog.
+
+## Event handles
+
+```ts
+interface Occurrence<Payload> {
+  readonly eventId: string;
+  readonly name: string;
+  readonly timestamp: string;
+  readonly data: Payload;
+  readonly cursor?: string;
+  readonly truncated?: true;
+}
+
+interface SubscribeOptions {
+  readonly signal?: AbortSignal;
+  readonly cursor?: string;
+  readonly maxAgeMs?: number;
+}
+
+interface EventHandle<Input, Payload> {
+  readonly id: string;
+  readonly description: string;
+  readonly audience: readonly string[];
+  /** A subscription with an input that is already decoded. */
+  subscribe(input: Input, options?: SubscribeOptions): Promise<AsyncIterable<Occurrence<Payload>>>;
+  /** A subscription with an input that is not trusted. The handle validates it first. Each `data` is in its JSON form. */
+  subscribeExternal(input: unknown, options?: SubscribeOptions): Promise<AsyncIterable<Occurrence<unknown>>>;
+}
+```
+
+- **Names.** A session gives each event handle by id, apart from the handles of capabilities. It MAY also put them in a tree of objects. No name comes from the tree.
+- **Subscribing.** The promise resolves when the subscription has started. A call failure before the first occurrence rejects the promise with an `Error` that has a `kind` property, as for a call.
+- **Occurrences.** Each value of the iterable is an occurrence. Each one is a copy. It is not the data of the provider.
+- **Ending.**
+
+  | End | The iterator |
+  | --- | --- |
+  | Complete | `next()` resolves with `done: true` |
+  | Cancelled | `next()` resolves with `done: true` |
+  | `internal` | `next()` rejects with an `Error` whose `kind` is `internal`. After that, `next()` resolves with `done: true` |
+
+- **Cancellation.** `return()` of the iterator cancels the subscription. It MUST work while a `next()` waits: that `next()` then resolves with `done: true`. `options.signal` also cancels the subscription, and so does the signal of the session. A `for await` loop that stops early calls `return()`.
+- **Listing.** A session gives all its event handles. A subscription to an event that is not in the view of the target fails as `unknown-capability`.
+- **Types.** `Input` and `Payload` come from the schemas of the event.
+
+A GraphQL server can use an event handle as the source of a subscription. The `subscribe` resolver of a field returns the promise of `subscribe`. GraphQL calls `return()` when the client ends the subscription, through WebSockets or through server-sent events.
+
+## Sessions
 
 `dispose(): Promise<void>` closes a session. It follows the [session lifecycle](../invocation.md#sessions).

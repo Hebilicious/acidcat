@@ -21,33 +21,38 @@ These terms have these meanings in all documents.
 | --- | --- |
 | **Catalog** | The JSON document that lists the capabilities and the targets of an application. See [Catalog](catalog.md) |
 | **Capability** | One operation that a client can do, for example `aircon.power.set` |
-| **Id** | The name of a capability, with dots between its segments. Each surface name comes from the id |
+| **Event** | A kind of thing that happens in the application, and that clients can follow, for example `aircon.status.changed`. See [Events](events.md) |
+| **Id** | The name of a capability or an event, with dots between its segments. Each surface name comes from the id |
 | **Namespace** | The first segment of an id |
 | **Failure** | A result that tells why a capability did not do the operation, for example `Offline` |
 | **Target** | A group of clients that can use a set of capabilities, for example `app`, `cli` or `mcp` |
-| **Audience** | The targets that can use a capability. A capability with no audience is not available to any target |
+| **Audience** | The targets that can use a capability or an event. A capability or an event with no audience is not available to any target |
 | **View** | The part of the catalog that one target can see. A view is a catalog |
 | **Binding** | The rules that make one kind of surface from a view. A **protocol binding** makes a surface on the network or in a terminal, for example MCP or a command line. A **language binding** makes a surface in code, for example TypeScript. See [Bindings](bindings/README.md) |
 | **Transport** | How a protocol binding carries messages between a client and a server, for example HTTP, or the standard input and output of a process (stdio) |
 | **Provider** | The code that does the operations |
 | **Client** | A program or a person that calls capabilities through a binding |
-| **Session** | One period in which one client calls the capabilities of one target. It holds the identity of the client. It opens, and later it closes |
+| **Session** | One period in which one client calls the capabilities of one target, and follows its events. It holds the identity of the client. It opens, and later it closes |
 | **Invocation** | One call: an id and an input go in, one outcome comes out. See [Invocation](invocation.md) |
 | **Outcome** | The end of a call: a **value**, a **failure** or a **call failure** |
 | **Availability** | If a capability can run now in a session. If it cannot, the availability gives a reason |
+| **Subscription** | One client following one event with one input. It ends one time: complete, cancelled, or with a call failure |
+| **Occurrence** | One thing that happened, which a subscription gives to its client. Its `data` agrees with the payload schema of the event |
+| **Cursor** | A string that tells a position in the occurrences of an event. A client gives it to resume a subscription |
 | **State** | A value of a capability that clients can observe, for example the temperature of a room |
 
 ## Documents
 
 | Document | Contents |
 | --- | --- |
-| [Catalog](catalog.md) | Targets, capabilities, ids, schemas, types, views, canonical form |
+| [Catalog](catalog.md) | Targets, capabilities, events, ids, schemas, types, views, canonical form |
 | [Invocation](invocation.md) | Outcomes, availability, sessions, cancellation, concurrency, state |
+| [Events](events.md) | Subscriptions, occurrences, ending, resuming |
 | [Bindings](bindings/README.md) | The rules for all bindings, and the bindings in this specification |
 | [Extensions](extensions/README.md) | Optional conventions: attachments, pagination |
 | [Conformance](conformance.md) | The rules for a conforming catalog, provider and binding |
 
-[`examples/aircon/catalog/aircon.pkl`](../examples/aircon/catalog/aircon.pkl) is a full catalog for an air conditioner. [`schemas/`](../schemas) has the JSON Schemas for the catalog and for outcomes.
+[`examples/aircon/catalog/aircon.pkl`](../examples/aircon/catalog/aircon.pkl) is a full catalog for an air conditioner. [`schemas/`](../schemas) has the JSON Schemas for the catalog, for outcomes and for occurrences.
 
 ## Conventions
 

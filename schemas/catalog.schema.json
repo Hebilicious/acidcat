@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://acid-cat.dev/schemas/0.1/catalog.schema.json",
   "title": "AcidCat catalog",
-  "description": "One document that states what an application can do and which targets see it. See spec/catalog.md.",
+  "description": "One document that states what an application can do, which events it gives, and which targets see each one. See spec/catalog.md.",
   "type": "object",
   "required": [
     "acidcat",
@@ -48,6 +48,16 @@
       },
       "additionalProperties": {
         "$ref": "#/$defs/capability"
+      }
+    },
+    "events": {
+      "description": "The events, keyed by id. See spec/events.md.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/event"
       }
     }
   },
@@ -99,7 +109,7 @@
       ]
     },
     "objectSchema": {
-      "description": "An input schema: it states that the input is an object, or it references a type.",
+      "description": "An input or payload schema: it states that the value is an object, or it references a type.",
       "type": "object",
       "anyOf": [
         {
@@ -163,6 +173,32 @@
         },
         "state": {
           "$ref": "#/$defs/schema"
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "description"
+      ],
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "audience": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/targetName"
+          },
+          "uniqueItems": true
+        },
+        "input": {
+          "$ref": "#/$defs/objectSchema"
+        },
+        "payload": {
+          "$ref": "#/$defs/objectSchema"
         }
       }
     }
