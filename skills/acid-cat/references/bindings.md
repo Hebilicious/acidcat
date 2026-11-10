@@ -65,5 +65,6 @@ subscription: {
 
 - Return the promise of `subscribe`. It rejects with a `CallFailureError` when the subscription cannot start. GraphQL calls `return()` of the iterator when the client ends the subscription. In core-effect, use `session.event(statusChanged).subscribe({})` of `Handles.open`.
 - Through server-sent events (GraphQL Yoga, the graphql-sse client), the request has one session. Keep it open until the stream ends, and close it when the client cancels the stream: then each subscription of the session is complete.
+- Give GraphQL Yoga the web streams of the platform: `createYoga({ fetchAPI: { Request, Response, Headers, ReadableStream, … } })`. Behind a server other than its own Node.js adapter, the default ponyfill of Yoga does not cancel the source when the client cancels a stream while a read waits. Then Yoga does not call `return()`, and the subscription continues until the session closes.
 - Through WebSockets (graphql-ws on a `ws` server), make each connection one session: open it in `onConnect`, and close it in `onClose`. Refuse a connection from an origin that the API does not allow.
 - `examples/aircon/apis/graphql.ts` does both, with Pothos and one schema.

@@ -160,12 +160,19 @@ function maskError(error: unknown, message: string): GraphQLError {
   });
 }
 
-const yoga = createYoga<Context>({ schema, graphiql: false, maskedErrors: { maskError } });
+/**
+ * The web API of the platform. Yoga uses a ponyfill by default. When a client cancels a stream of the ponyfill while a
+ * read waits, the ponyfill does not cancel the source, so Yoga does not stop the subscription. The web streams of the
+ * platform cancel the source at once, and Yoga then calls `return()` of the iterator of the event handle.
+ */
+const fetchAPI = { Request, Response, Headers, ReadableStream, WritableStream, TransformStream, TextEncoder, TextDecoder, URL, URLSearchParams, fetch, FormData, Blob, File };
+
+export const yoga = createYoga<Context>({ schema, graphiql: false, maskedErrors: { maskError }, fetchAPI });
 
 /**
  * A response whose body closes the session when it ends: when the stream is done, or when the client cancels it. A
- * stream of server-sent events uses the session until its subscription ends. When the client cancels the stream, the
- * session closes first, so its subscription is complete even while Yoga waits for the next occurrence.
+ * stream of server-sent events uses the session until its subscription ends. When the client cancels the stream, Yoga
+ * cancels the subscription first, then the session closes.
  */
 function closingSession(response: Response, session: Session<AirconContext>): Response {
   const body = response.body;
@@ -179,8 +186,8 @@ function closingSession(response: Response, session: Session<AirconContext>): Re
       await session.dispose();
     },
     async cancel(reason) {
-      await session.dispose();
       await reader.cancel(reason);
+      await session.dispose();
     },
   });
   return new Response(stream, { status: response.status, statusText: response.statusText, headers: response.headers });

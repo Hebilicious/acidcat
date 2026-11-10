@@ -10,8 +10,9 @@ import { createClient as createWsClient } from "graphql-ws";
 import { WebSocket as NodeWebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
 
-import { Unit } from "../core-ts/aircon.ts";
-import { graphqlApi, graphqlWebSocket, schema } from "../apis/graphql.ts";
+import { statusGet, Unit } from "../core-ts/aircon.ts";
+import { graphqlApi, graphqlWebSocket, schema, yoga } from "../apis/graphql.ts";
+import { openSession } from "../apis/shared.ts";
 
 /** A GraphQL response. Each error has the `code` of the call failure in its extensions. */
 const GraphQLResponse = z.object({
@@ -112,6 +113,32 @@ test("a subscription through server-sent events, with the graphql-sse client, ge
     await followThenEnd(unit, api, client.iterate({ query: SUBSCRIPTION }));
   } finally {
     client.dispose();
+  }
+});
+
+test("when the client cancels a stream of server-sent events, Yoga ends the subscription, and the session stays open", async () => {
+  const unit = new Unit();
+  const session = openSession({ unit });
+  try {
+    const before = unit.statusListeners;
+    const request = new Request("http://localhost/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify({ query: SUBSCRIPTION }),
+    });
+    const response = await yoga.fetch(request, { session });
+    assert.ok(response.body !== null);
+    const reader = response.body.getReader();
+    await reader.read();
+    await until("the subscription listens to the unit", () => unit.statusListeners > before);
+    const waiting = reader.read();
+    await reader.cancel();
+    assert.equal((await waiting).done, true);
+    await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
+    const status = await session.call(statusGet, {});
+    assert.equal(status.ok, true);
+  } finally {
+    await session.dispose();
   }
 });
 
