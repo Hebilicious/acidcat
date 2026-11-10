@@ -98,3 +98,17 @@ test("requests that are not of a revision with a handshake go to the handler unc
   assert.deepEqual(seen.map(({ headers }) => headers.get("MCP-Protocol-Version")), ["2026-07-28", null, "2000-01-01"]);
   assert.deepEqual(seen.map(({ body }) => body["id"]), [1, 2, 3]);
 });
+
+test("initialize gives no events extension, and keeps the other extensions", async () => {
+  const discover = (extensions: JsonObject) =>
+    mcpHandshake(async (request) => {
+      const body: unknown = await request.json();
+      const id = isJsonObject(body) ? body["id"] : null;
+      return Response.json({ jsonrpc: "2.0", id, result: { _meta: SERVER_INFO, resultType: "complete", capabilities: { tools: { listChanged: false }, extensions } } });
+    });
+  const initialize = post({ id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } });
+  const only = await bodyOf(await discover({ "io.modelcontextprotocol/events": {} })(initialize.clone()));
+  assert.deepEqual(isJsonObject(only["result"]) ? only["result"]["capabilities"] : undefined, { tools: { listChanged: false } });
+  const both = await bodyOf(await discover({ "io.modelcontextprotocol/events": {}, "example.com/other": { on: true } })(initialize));
+  assert.deepEqual(isJsonObject(both["result"]) ? both["result"]["capabilities"] : undefined, { tools: { listChanged: false }, extensions: { "example.com/other": { on: true } } });
+});
