@@ -1,6 +1,6 @@
 # Catalog
 
-A **catalog** is a JSON document. It tells what an application can do, and which targets can use each capability. Each application has one catalog.
+A **catalog** is a JSON document. It tells what an application can do, which events it gives, and which targets can use each capability and each event. Each application has one catalog.
 
 [`schemas/catalog.schema.json`](../schemas/catalog.schema.json) defines the structure of a catalog. This page gives the rules that the schema cannot express.
 
@@ -65,6 +65,7 @@ A source is better than JSON by hand because the JSON document is long, and it h
 | `targets` | Yes | The targets, by name. See [Targets](#targets) |
 | `$defs` | No | The shared types, by name. See [Types](#types) |
 | `capabilities` | Yes | The capabilities, by id. See [Capabilities](#capabilities) |
+| `events` | No | The events, by id. See [Events](#events) |
 
 ## Targets
 
@@ -94,11 +95,37 @@ A **capability** is one operation that a client can do. Each key of `capabilitie
 | `readOnly` | No | `true` if a call changes nothing that a client can see. This is a hint for clients. It does not change the behavior of a call |
 | `state` | No | The schema of a value that clients can observe. See [State](invocation.md#state) |
 
+## Events
+
+An **event** is a kind of thing that happens in the application, and that clients can follow. Each key of `events` is the [id](#ids) of an event. [Events](events.md) tells how a client subscribes to an event.
+
+| Member | Required | Value |
+| --- | --- | --- |
+| `description` | Yes | What happens, and when the provider sends an occurrence. Write it for people and for agents |
+| `audience` | No | The targets that can use the event. Each entry MUST be a key of `targets`. If there is no audience, no target can use the event |
+| `input` | No | The schema of the input of a subscription, for example a filter. The rules for the input of a capability apply |
+| `payload` | No | The schema of the `data` of each occurrence. It MUST be an object: `"type": "object"`, or a `$ref` to a type that is an object. If there is no payload schema, the data is an empty object |
+
+```json
+{
+  "events": {
+    "aircon.status.changed": {
+      "description": "The status of the unit changed. The occurrence gives the new status.",
+      "audience": ["app", "mcp"],
+      "input": { "type": "object", "properties": {} },
+      "payload": { "$ref": "#/$defs/Status" }
+    }
+  }
+}
+```
+
 ## Ids
 
 An id has two or more segments, with a dot between them. Each segment matches `[a-z][a-z0-9]*(-[a-z0-9]+)*`. An id has a maximum of 128 characters.
 
-The first segment is the **namespace** of the capability.
+The first segment is the **namespace** of the capability or the event.
+
+Capabilities and events share one set of ids. An id MUST NOT be both the id of a capability and the id of an event.
 
 Each binding makes its surface names from the id. For example, `aircon.power.set` becomes the command `aircon power set` and the HTTP route `POST /capabilities/aircon.power.set`.
 
@@ -110,7 +137,7 @@ A failure value is a JSON object. Its `_tag` member is equal to the tag. The val
 
 ## Schemas
 
-Each schema in a catalog is a JSON Schema 2020-12 schema. Each input, output, failure and state value MUST agree with its schema.
+Each schema in a catalog is a JSON Schema 2020-12 schema. Each input, output, failure, state and payload value MUST agree with its schema.
 
 ## Types
 
@@ -129,7 +156,7 @@ Put a type that you use in more than one location in `$defs`. Then refer to it b
 
 - A type name matches `[A-Za-z][A-Za-z0-9_]*`. Use PascalCase.
 - Each `$ref` has the form `#/$defs/<Name>`. It MUST refer to a type in `$defs`. Types can refer to other types.
-- A schema in a capability MUST NOT have its own `$defs`.
+- A schema in a capability or in an event MUST NOT have its own `$defs`.
 - Give an inline schema a `title`. Code generators use it as the name of the type.
 
 ## Bundling
@@ -147,17 +174,19 @@ After bundling, each `$ref` has the same form and refers to the same type.
 The **view** of a target is the part of the catalog that the target can see. A view is a catalog that contains:
 
 - only that target in `targets`;
-- only the capabilities whose audience includes that target;
-- only that target in the audience of each capability;
-- only the types that these capabilities use.
+- only the capabilities and the events whose audience includes that target;
+- only that target in the audience of each capability and each event;
+- only the types that these capabilities and events use.
 
-A binding serves the view of its target. A client MUST NOT get information about a capability that is not in its view. A call to such a capability fails as a call to an unknown id ([Invocation](invocation.md#call-failures)).
+If no event is in the view, the view has no `events` member.
+
+A binding serves the view of its target. A client MUST NOT get information about a capability or an event that is not in its view. A call to such a capability fails as a call to an unknown id ([Invocation](invocation.md#call-failures)). A subscription to such an event fails in the same way ([Events](events.md#subscribing)).
 
 ## Changes
 
-A catalog has no version. A capability has no version. The catalog agrees with the build of the application. When the build changes, the catalog changes.
+A catalog has no version. A capability and an event have no version. The catalog agrees with the build of the application. When the build changes, the catalog changes.
 
-To keep old clients working, do not change the meaning of an id. For a new meaning, add a new id.
+To keep old clients working, do not change the meaning of an id. For a new meaning, add a new id. For an event, add members to the payload, and do not remove or change members.
 
 The `acidcat` member is the version of this specification. It is not the version of the catalog.
 
@@ -165,8 +194,8 @@ The `acidcat` member is the version of this specification. It is not the version
 
 The **canonical form** is the one correct text for a catalog. All tools and catalog libraries write the same bytes for the same catalog. A committed catalog SHOULD be in canonical form. `acid-cat format` writes this form.
 
-- **Member order.** The catalog: `acidcat`, `title`, `description`, `targets`, `$defs`, `capabilities`. A target: `bindings`, `description`, `options`. A capability: `description`, `audience`, `input`, `output`, `failures`, `readOnly`, `state`. Other members come after these members, in sorted order.
-- **Sorted keys.** Sort the keys of `targets`, `$defs`, `capabilities` and `failures`. Sort the keys of all objects in schemas and in `options`, at all levels. Sort by Unicode code point. Do not sort arrays.
+- **Member order.** The catalog: `acidcat`, `title`, `description`, `targets`, `$defs`, `capabilities`, `events`. A target: `bindings`, `description`, `options`. A capability: `description`, `audience`, `input`, `output`, `failures`, `readOnly`, `state`. An event: `description`, `audience`, `input`, `payload`. Other members come after these members, in sorted order.
+- **Sorted keys.** Sort the keys of `targets`, `$defs`, `capabilities`, `events` and `failures`. Sort the keys of all objects in schemas and in `options`, at all levels. Sort by Unicode code point. Do not sort arrays.
 - **Values.** Write strings and numbers as `JSON.stringify` in ECMAScript writes them. For example: `16`, `0.5`, `1e-7`, `1e+21`. Escape only `"`, `\` and control characters.
 - **Layout.** Use UTF-8. Indent with two spaces. Put each member and each item on its own line. Write an empty object as `{}` and an empty array as `[]`. End the text with one line feed.
 
@@ -181,4 +210,5 @@ A tool ignores members that it does not know. A member that this specification d
 - **Why JSON.** All languages and tools can read JSON. The schemas in a catalog are JSON Schema. Thus the contract is JSON. Pkl and the catalog libraries help you write it.
 - **Why build time.** If a program read the catalog at run time, it would read a file and compile schemas to learn what its own code already says. A check at build time costs nothing at run time, and an error stops the build, not a request.
 - **Why no default audience.** A new capability does not go to an agent by accident. A target gets a capability only when the catalog says so.
+- **Why the payload is an object.** An object can get new members, and old clients still read it. MCP also requires an object as the data of an event.
 - **Why shared types.** Large catalogs use the same types many times. Shared types make the catalog smaller, and code generators make one named type for each.

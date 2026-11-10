@@ -72,6 +72,78 @@ func TestReportsTheRulesACatalogBreaks(t *testing.T) {
 	}
 }
 
+func TestReportsTheRulesAnEventBreaks(t *testing.T) {
+	c := catalog.New("", "").Target("cli", catalog.Target{Bindings: []string{"cli"}})
+	name := c.Type("Name", catalog.Schema{"type": "string"})
+	c.
+		Capability("a.b", catalog.Capability{Description: "x"}).
+		Event("a.b", catalog.Event{Description: "y"}).
+		Event("a.c", catalog.Event{Description: "z", Audience: []string{"clii"}, Input: catalog.Schema{"type": "string"}}).
+		Event("a.d", catalog.Event{Description: "w", Payload: name}).
+		Event("a.e", catalog.Event{Description: "v", Payload: catalog.Schema{"type": "object", "$defs": catalog.Schema{}}})
+	want := []string{
+		"a.b is both a capability and an event",
+		"a.c names the undeclared target clii",
+		"a.c input does not describe an object",
+		"a.d payload does not describe an object",
+		"a.e carries its own $defs; declare shared types with Type",
+	}
+	if got := c.Validate(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestPutsEventsAfterCapabilitiesAndTheMembersOfAnEventInOrder(t *testing.T) {
+	text, err := catalog.CanonicalText(map[string]any{
+		"events": map[string]any{
+			"z.b.changed": map[string]any{"payload": map[string]any{"type": "object"}, "input": map[string]any{"type": "object"}, "description": "b"},
+			"z.a.changed": map[string]any{"description": "a"},
+		},
+		"capabilities": map[string]any{},
+		"targets":      map[string]any{},
+		"acidcat":      "0.1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{
+  "acidcat": "0.1",
+  "targets": {},
+  "capabilities": {},
+  "events": {
+    "z.a.changed": {
+      "description": "a"
+    },
+    "z.b.changed": {
+      "description": "b",
+      "input": {
+        "type": "object"
+      },
+      "payload": {
+        "type": "object"
+      }
+    }
+  }
+}
+`
+	if text != want {
+		t.Fatalf("got\n%s", text)
+	}
+}
+
+func TestACatalogWithNoEventsHasNoEventsMember(t *testing.T) {
+	text, err := catalog.New("", "").
+		Target("cli", catalog.Target{Bindings: []string{"cli"}}).
+		Capability("a.b", catalog.Capability{Description: "x", Audience: []string{"cli"}}).
+		Render()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(text, `"events"`) {
+		t.Fatalf("the catalog has an events member:\n%s", text)
+	}
+}
+
 func expectBytes(t *testing.T, rendered, path string) {
 	t.Helper()
 	expected, err := os.ReadFile(path)

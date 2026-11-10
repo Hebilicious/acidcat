@@ -231,5 +231,26 @@
         "type": "array"
       }
     }
+  },
+  "events": {
+    "library.book.returned": {
+      "description": "A member returned a book. The occurrence gives the book. Give an ISBN to follow one book only.",
+      "audience": [
+        "members",
+        "agents"
+      ],
+      "input": {
+        "properties": {
+          "isbn": {
+            "pattern": "^97[89][0-9]{10}$",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "payload": {
+        "$ref": "#/$defs/Book"
+      }
+    }
   }
 }

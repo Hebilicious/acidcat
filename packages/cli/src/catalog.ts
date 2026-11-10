@@ -3,8 +3,8 @@
  * See spec/catalog.md and spec/conformance.md.
  */
 import { canonicalText } from "@acid-cat/catalog";
-import { bundle, REFERENCE, schemasOf, viewOf, visitObjects } from "@acid-cat/spec-ts";
-import type { CatalogCapability, CatalogDocument as Catalog } from "@acid-cat/spec-ts";
+import { bundle, eventSchemasOf, REFERENCE, schemasOf, viewOf, visitObjects } from "@acid-cat/spec-ts";
+import type { CatalogCapability, CatalogDocument as Catalog, CatalogEvent } from "@acid-cat/spec-ts";
 import { Result, Schema, SchemaIssue, SchemaRepresentation } from "effect";
 import type { JsonSchema } from "effect";
 
@@ -22,9 +22,10 @@ export interface Report {
 }
 
 const KNOWN_MEMBERS = {
-  catalog: ["acidcat", "title", "description", "targets", "$defs", "capabilities"],
+  catalog: ["acidcat", "title", "description", "targets", "$defs", "capabilities", "events"],
   target: ["bindings", "description", "options"],
   capability: ["description", "audience", "input", "output", "failures", "readOnly", "state"],
+  event: ["description", "audience", "input", "payload"],
 };
 
 /** The catalog schema (schemas/catalog.schema.json), imported as an Effect schema. */
@@ -58,6 +59,13 @@ const isCapability = (value: unknown): value is CatalogCapability =>
   optional(value, "failures", (failures) => isRecordOf(failures, isObject)) &&
   optional(value, "readOnly", (readOnly) => typeof readOnly === "boolean");
 
+const isEvent = (value: unknown): value is CatalogEvent =>
+  isObject(value) &&
+  typeof value.description === "string" &&
+  optional(value, "audience", isStringArray) &&
+  optional(value, "input", isObject) &&
+  optional(value, "payload", isObject);
+
 /**
  * True if the value has the members and the member types of a catalog. It does not check the catalog rules: `check`
  * does that.
@@ -69,7 +77,8 @@ export const isCatalog = (value: unknown): value is Catalog =>
   optional(value, "description", isString) &&
   isRecordOf(value.targets, isTarget) &&
   optional(value, "$defs", (types) => isRecordOf(types, isObject)) &&
-  isRecordOf(value.capabilities, isCapability);
+  isRecordOf(value.capabilities, isCapability) &&
+  optional(value, "events", (events) => isRecordOf(events, isEvent));
 
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
 
@@ -102,19 +111,34 @@ function ruleErrors(catalog: Catalog): string[] {
   for (const [name, type] of Object.entries(types)) {
     errors.push(...referenceErrors(type, types).map((error) => `type ${name} ${error}`));
   }
-  for (const [id, capability] of Object.entries(catalog.capabilities)) {
-    for (const target of capability.audience ?? []) {
+  const entries = [
+    ...Object.entries(catalog.capabilities).map(([id, capability]) => ({ id, entry: capability, schemas: schemasOf(capability) })),
+    ...Object.entries(catalog.events ?? {}).map(([id, event]) => ({ id, entry: event, schemas: eventSchemasOf(event) })),
+  ];
+  for (const id of Object.keys(catalog.events ?? {})) {
+    if (id in catalog.capabilities) errors.push(`${id}: the id is both a capability and an event`);
+  }
+  for (const { id, entry, schemas } of entries) {
+    for (const target of entry.audience ?? []) {
       if (!(target in catalog.targets)) errors.push(`${id}: the audience names ${target}, which is not a target`);
     }
-    for (const [member, schema] of schemasOf(capability)) {
+    for (const [member, schema] of schemas) {
       const references = referenceErrors(schema, types);
       errors.push(...references.map((error) => `${id} ${member} ${error}`));
-      if (member === "input" && references.length === 0 && bundle(schema, types).type !== "object") {
-        errors.push(`${id}: the input is not an object`);
+      if ((member === "input" || member === "payload") && references.length === 0 && bundle(schema, types).type !== "object") {
+        errors.push(`${id}: the ${member} is not an object`);
       }
     }
   }
   return errors;
+}
+
+/** The schemas of each capability and each event, with the id that holds them. */
+function catalogSchemas(catalog: Catalog): readonly (readonly [string, string, JsonObject])[] {
+  return [
+    ...Object.entries(catalog.capabilities).flatMap(([id, capability]) => schemasOf(capability).map(([member, schema]) => [id, member, schema] as const)),
+    ...Object.entries(catalog.events ?? {}).flatMap(([id, event]) => eventSchemasOf(event).map(([member, schema]) => [id, member, schema] as const)),
+  ];
 }
 
 /** Members that the specification does not define and that have no `x-` prefix. */
@@ -131,6 +155,7 @@ function unknownMembers(catalog: Catalog): string[] {
     ...Object.entries(catalog.capabilities).flatMap(([id, capability]) =>
       unknown(id, capability, KNOWN_MEMBERS.capability),
     ),
+    ...Object.entries(catalog.events ?? {}).flatMap(([id, event]) => unknown(id, event, KNOWN_MEMBERS.event)),
   ];
 }
 
@@ -138,16 +163,14 @@ function unknownMembers(catalog: Catalog): string[] {
 function schemaWarnings(catalog: Catalog): string[] {
   const definitions: JsonSchema.Definitions = catalog.$defs ?? {};
   const warnings: string[] = [];
-  for (const [id, capability] of Object.entries(catalog.capabilities)) {
-    for (const [member, schema] of schemasOf(capability)) {
-      try {
-        SchemaRepresentation.fromJsonSchemaMultiDocument(
-          { dialect: "draft-2020-12", schemas: [schema], definitions },
-          { patterns: "ignore" },
-        );
-      } catch (cause) {
-        warnings.push(`${id} ${member}: cannot check this schema: ${cause instanceof Error ? cause.message : String(cause)}`);
-      }
+  for (const [id, member, schema] of catalogSchemas(catalog)) {
+    try {
+      SchemaRepresentation.fromJsonSchemaMultiDocument(
+        { dialect: "draft-2020-12", schemas: [schema], definitions },
+        { patterns: "ignore" },
+      );
+    } catch (cause) {
+      warnings.push(`${id} ${member}: cannot check this schema: ${cause instanceof Error ? cause.message : String(cause)}`);
     }
   }
   return warnings;

@@ -10,9 +10,10 @@ import math
 from decimal import Decimal
 from typing import Any, Callable
 
-_CATALOG_ORDER = ["acidcat", "title", "description", "targets", "$defs", "capabilities"]
+_CATALOG_ORDER = ["acidcat", "title", "description", "targets", "$defs", "capabilities", "events"]
 _TARGET_ORDER = ["bindings", "description", "options"]
 _CAPABILITY_ORDER = ["description", "audience", "input", "output", "failures", "readOnly", "state"]
+_EVENT_ORDER = ["description", "audience", "input", "payload"]
 
 
 def canonical_text(catalog: dict[str, Any]) -> str:
@@ -28,6 +29,8 @@ def _catalog(catalog: dict[str, Any]) -> dict[str, Any]:
             return _by_key(value, _sorted)
         if key == "capabilities":
             return _by_key(value, lambda capability: _ordered(capability, _CAPABILITY_ORDER, _capability_member))
+        if key == "events":
+            return _by_key(value, lambda event: _ordered(event, _EVENT_ORDER, lambda _, inner: _sorted(inner)))
         return _sorted(value)
 
     return _ordered(catalog, _CATALOG_ORDER, member)

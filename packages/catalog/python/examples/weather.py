@@ -91,6 +91,17 @@ def weather_catalog() -> Catalog:
             "Busy": {"type": "object", "description": "The station is sending a reading. Try again in a few seconds."},
         },
     )
+    catalog.event(
+        "weather.alert.raised",
+        description="A reading passed a limit. The occurrence gives the sensor and the reading. Give sensors to follow those sensors only.",
+        audience=["dashboard", "agents"],
+        input={"type": "object", "properties": {"sensors": {"type": "array", "items": sensor, "uniqueItems": True}}},
+        payload={
+            "type": "object",
+            "required": ["sensor", "reading"],
+            "properties": {"sensor": sensor, "reading": reading},
+        },
+    )
     return catalog
 
 

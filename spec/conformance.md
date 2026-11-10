@@ -10,9 +10,10 @@ A catalog conforms if:
 
 - it agrees with [`schemas/catalog.schema.json`](../schemas/catalog.schema.json);
 - each target in each audience is in `targets`;
-- each input is an object, directly or through the type that it refers to;
+- no id is both the id of a capability and the id of an event;
+- each input and each payload is an object, directly or through the type that it refers to;
 - each `$ref` refers to a type in `$defs`;
-- no schema in a capability has its own `$defs`;
+- no schema in a capability or in an event has its own `$defs`;
 - each schema is a valid JSON Schema 2020-12 schema.
 
 A catalog that is not in [canonical form](catalog.md#canonical-form) gets a warning. A member that this specification does not define and that does not start with `x-` gets a warning.
@@ -25,6 +26,10 @@ A provider and its bindings conform for a target if, through each binding of the
 - a call to an id that is not in the view fails as a call to an unknown id;
 - an input that does not agree with its schema fails as `invalid-input`, and the operation does not start;
 - values, failures and state agree with their schemas;
+- a list of events shows only events in the view of the target, and a subscription to an id that is not in the view fails as an unknown id;
+- a subscription with an input that does not agree with its schema fails as `invalid-input`;
+- occurrences have the form that the binding defines, and their data agrees with the payload schema;
+- each end of a subscription has the form that the binding defines;
 - each outcome and each kind of call failure has the form that the binding defines;
 - a remote binding rejects requests as [Remote bindings](bindings/README.md#remote-bindings) tells.
 

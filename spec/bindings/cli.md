@@ -1,6 +1,6 @@
 # CLI binding
 
-A protocol binding that serves a view as a command line. The commands come from the catalog. Thus a new capability gets its command with no change to the binding.
+A protocol binding that serves a view as a command line. The commands come from the catalog. Thus a new capability or a new event gets its command with no change to the binding.
 
 ## Commands
 
@@ -23,7 +23,7 @@ A protocol binding that serves a view as a command line. The commands come from 
 
   A required repeated flag MUST occur at least once. If an optional repeated flag does not occur, the input does not have the property. An `array` with other items, or with no `items` schema, takes JSON text.
 
-- **Generic commands.** `call <id> [input]` calls a capability with its input as JSON text. The default input is `{}`. Use `call` when the input schema has no top-level `properties` member. `list` writes the capabilities of the view as JSON: `id`, `description`, `available` and `usage`.
+- **Generic commands.** `call <id> [input]` calls a capability with its input as JSON text. The default input is `{}`. Use `call` when the input schema has no top-level `properties` member. `list` writes a JSON array: one item for each capability of the view, then one item for each event of the view. A capability has `kind: "capability"`, `id`, `description`, `available` and `usage`. An event has `kind: "event"`, `id`, `description` and `usage`.
 - **Usage.** The `usage` of a capability is one line of text that tells how to call it. Each part has one space before it:
 
   1. The name of the program.
@@ -43,7 +43,24 @@ A protocol binding that serves a view as a command line. The commands come from 
   If a property schema or an `items` schema is a `$ref`, use the type that it refers to. A capability with no input schema, or with `"properties": {}`, has no flags. For example, with the program name `aircon`: `aircon power set --on`, `aircon fan set --speed <auto|low|medium|high>`, `aircon schedule set --days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]` and `aircon status get`.
 - **Cancellation.** An interrupt (`SIGINT`) cancels the call.
 
-An application MAY add its own commands and flags. The name of a command of the application is one word. This name MUST NOT be `call`, `list`, the name of a different command of the application, or the first word of the path of a capability. If a name breaks this rule, if two commands have the same path, or if two flags have the same name, the program MUST stop with an error when it starts.
+An application MAY add its own commands and flags. The name of a command of the application is one word. This name MUST NOT be `call`, `list`, `watch`, the name of a different command of the application, or the first word of the path of a capability. If a name breaks this rule, if two commands have the same path, or if two flags have the same name, the program MUST stop with an error when it starts.
+
+## Events
+
+- **Names.** `watch <id>` subscribes to the event with that id.
+- **Input.** If the input schema of the event has a top-level `properties` member, each property is a flag, with the rules of [Commands](#commands): `aircon watch aircon.status.changed --room kitchen`. If not, `watch <id> [input]` takes the input as JSON text. The default input is `{}`.
+- **Cursor.** `--cursor <cursor>` gives the cursor, and `--max-age-ms <integer>` gives `maxAgeMs`. Each occurrence on standard output has its cursor, so a script can keep the last cursor, and resume with it after the program stops. These two flags are not properties of the input. If the input schema of an event has a top-level property `cursor` or `max-age-ms`, the program MUST stop with an error when it starts.
+- **Usage.** The `usage` of an event is the name of the program, `watch`, the id, the flags as for a capability, and then `[--cursor <string>] [--max-age-ms <integer>]`. If the input schema has no top-level `properties` member, it is the name of the program, `watch <id> '<json>'`, and the same two flags.
+- **Occurrences.** Each occurrence goes to standard output as its JSON on one line, as soon as it comes.
+- **Cancellation.** An interrupt (`SIGINT`) cancels the subscription.
+
+| End | Standard error | Exit code |
+| --- | --- | --- |
+| Complete | Nothing | 0 |
+| Cancelled | Nothing | 130 |
+| `internal` | `{ "kind", "message" }` | 5 |
+
+A call failure before the first occurrence has the exit code of the table in [Outcomes](#outcomes), and goes to standard error.
 
 ## Outcomes
 
@@ -64,6 +81,8 @@ All output is JSON. A result goes to standard output. A call failure goes to sta
 *This section is not normative.*
 
 Different exit codes let a script or an agent know if "the capability said no" or "the call did not run", without reading text.
+
+One line of JSON for each occurrence lets a script read occurrences one at a time, for example with `jq`, while the subscription continues.
 
 A repeated flag is easier to type than JSON text, and it needs fewer quotes in a shell. A repeated flag also takes JSON text of the whole array. Thus a script can give JSON text to each array flag, with simple items or not.
 

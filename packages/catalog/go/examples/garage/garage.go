@@ -85,5 +85,18 @@ func Catalog() *catalog.Catalog {
 			Failures: map[string]schema{
 				"TooSimple": {"type": "object", "description": "The code repeats one digit or counts up or down."},
 			},
+		}).
+		Event("garage.door.moved", catalog.Event{
+			Description: "The door started or stopped. The occurrence gives the door and the control that moved it.",
+			Audience:    []string{"phone", "assistant"},
+			Input:       schema{"type": "object", "properties": schema{}},
+			Payload: schema{
+				"type":     "object",
+				"required": []any{"door"},
+				"properties": schema{
+					"door": door,
+					"by":   schema{"enum": []any{"phone", "keypad", "assistant", "button"}},
+				},
+			},
 		})
 }

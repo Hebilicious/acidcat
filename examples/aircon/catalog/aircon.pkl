@@ -136,3 +136,15 @@ capabilities {
     }
   }
 }
+
+events {
+  ["aircon.status.changed"] {
+    description = "The status of the unit changed. The occurrence gives the new status."
+    audience = everywhere
+    input {
+      type = "object"
+      properties {}
+    }
+    payload = module.ref("Status")
+  }
+}

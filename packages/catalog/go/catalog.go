@@ -41,6 +41,19 @@ type Capability struct {
 	State Schema
 }
 
+// Event describes one event (spec/events.md).
+type Event struct {
+	// Description says what happens, and when the provider sends an occurrence, written for people and agents.
+	Description string
+	// Audience lists the targets the event is offered to. Empty means no target.
+	Audience []string
+	// Input is the input schema of a subscription, for example a filter. It must describe an object. Nil means an
+	// empty object.
+	Input Schema
+	// Payload describes the data of each occurrence. It must describe an object. Nil means an empty object.
+	Payload Schema
+}
+
 var (
 	idPattern        = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*(\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$`)
 	namePattern      = regexp.MustCompile(`^[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?$`)
@@ -60,6 +73,7 @@ type Catalog struct {
 	targets      []named[Target]
 	types        []named[Schema]
 	capabilities []named[Capability]
+	events       []named[Event]
 	duplicates   []string
 }
 
@@ -97,6 +111,17 @@ func (c *Catalog) Capability(id string, capability Capability) *Catalog {
 	return c
 }
 
+// Event declares an event.
+func (c *Catalog) Event(id string, event Event) *Catalog {
+	for _, existing := range c.events {
+		if existing.name == id {
+			c.duplicates = append(c.duplicates, fmt.Sprintf("the event %s is declared twice", id))
+		}
+	}
+	c.events = append(c.events, named[Event]{id, event})
+	return c
+}
+
 // Validate returns the catalog rules this catalog breaks. It is empty when the catalog conforms.
 func (c *Catalog) Validate() []string {
 	problems := append([]string{}, c.duplicates...)
@@ -126,23 +151,7 @@ func (c *Catalog) Validate() []string {
 	}
 	for _, entry := range c.capabilities {
 		id, capability := entry.name, entry.value
-		if len(id) > 128 || !idPattern.MatchString(id) {
-			problems = append(problems, fmt.Sprintf("the id %s is malformed", id))
-		}
-		if strings.TrimSpace(capability.Description) == "" {
-			problems = append(problems, fmt.Sprintf("%s has no description", id))
-		}
-		if hasRepeat(capability.Audience) {
-			problems = append(problems, fmt.Sprintf("%s repeats a target in its audience", id))
-		}
-		for _, target := range capability.Audience {
-			if c.target(target) == nil {
-				problems = append(problems, fmt.Sprintf("%s names the undeclared target %s", id, target))
-			}
-		}
-		if capability.Input != nil && c.resolve(capability.Input)["type"] != "object" {
-			problems = append(problems, fmt.Sprintf("%s input does not describe an object", id))
-		}
+		problems = append(problems, c.entryProblems(id, capability.Description, capability.Audience, capability.Input)...)
 		schemas := []Schema{capability.Input, capability.Output, capability.State}
 		for _, tag := range sortedKeys(capability.Failures) {
 			schemas = append(schemas, capability.Failures[tag])
@@ -155,6 +164,48 @@ func (c *Catalog) Validate() []string {
 				problems = append(problems, fmt.Sprintf("%s %s", id, problem))
 			}
 		}
+	}
+	for _, entry := range c.events {
+		id, event := entry.name, entry.value
+		if c.capability(id) {
+			problems = append(problems, fmt.Sprintf("%s is both a capability and an event", id))
+		}
+		problems = append(problems, c.entryProblems(id, event.Description, event.Audience, event.Input)...)
+		if event.Payload != nil && c.resolve(event.Payload)["type"] != "object" {
+			problems = append(problems, fmt.Sprintf("%s payload does not describe an object", id))
+		}
+		for _, schema := range []Schema{event.Input, event.Payload} {
+			if schema == nil {
+				continue
+			}
+			for _, problem := range c.referenceProblems(schema) {
+				problems = append(problems, fmt.Sprintf("%s %s", id, problem))
+			}
+		}
+	}
+	return problems
+}
+
+// entryProblems returns the problems of the id, the description, the audience and the input of a capability or an
+// event.
+func (c *Catalog) entryProblems(id, description string, audience []string, input Schema) []string {
+	var problems []string
+	if len(id) > 128 || !idPattern.MatchString(id) {
+		problems = append(problems, fmt.Sprintf("the id %s is malformed", id))
+	}
+	if strings.TrimSpace(description) == "" {
+		problems = append(problems, fmt.Sprintf("%s has no description", id))
+	}
+	if hasRepeat(audience) {
+		problems = append(problems, fmt.Sprintf("%s repeats a target in its audience", id))
+	}
+	for _, target := range audience {
+		if c.target(target) == nil {
+			problems = append(problems, fmt.Sprintf("%s names the undeclared target %s", id, target))
+		}
+	}
+	if input != nil && c.resolve(input)["type"] != "object" {
+		problems = append(problems, fmt.Sprintf("%s input does not describe an object", id))
 	}
 	return problems
 }
@@ -197,11 +248,7 @@ func (c *Catalog) Render() (string, error) {
 	capabilities := map[string]any{}
 	for _, entry := range c.capabilities {
 		capability := entry.value
-		audience := capability.Audience
-		if audience == nil {
-			audience = []string{}
-		}
-		out := map[string]any{"description": capability.Description, "audience": audience}
+		out := map[string]any{"description": capability.Description, "audience": orEmpty(capability.Audience)}
 		for key, schema := range map[string]Schema{"input": capability.Input, "output": capability.Output, "state": capability.State} {
 			if schema != nil {
 				out[key] = schema
@@ -217,6 +264,21 @@ func (c *Catalog) Render() (string, error) {
 	}
 	document["capabilities"] = capabilities
 
+	if len(c.events) > 0 {
+		events := map[string]any{}
+		for _, entry := range c.events {
+			event := entry.value
+			out := map[string]any{"description": event.Description, "audience": orEmpty(event.Audience)}
+			for key, schema := range map[string]Schema{"input": event.Input, "payload": event.Payload} {
+				if schema != nil {
+					out[key] = schema
+				}
+			}
+			events[entry.name] = out
+		}
+		document["events"] = events
+	}
+
 	return CanonicalText(document)
 }
 
@@ -227,6 +289,15 @@ func (c *Catalog) target(name string) *Target {
 		}
 	}
 	return nil
+}
+
+func (c *Catalog) capability(id string) bool {
+	for _, entry := range c.capabilities {
+		if entry.name == id {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Catalog) typeNamed(name string) Schema {
@@ -281,6 +352,14 @@ func visit(value any, onObject func(map[string]any)) {
 		}
 	case []string, string, bool, nil, float64, int:
 	}
+}
+
+// orEmpty returns the values, or an empty list when there are none, so that the catalog writes [] and not null.
+func orEmpty(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
 }
 
 func hasRepeat(values []string) bool {

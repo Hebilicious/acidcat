@@ -19,7 +19,17 @@ Each binding document MUST tell:
 
 It MAY also tell how a client observes [state](../invocation.md#state), how the binding uses `readOnly`, and which [extensions](../extensions/README.md) it supports.
 
-A binding serves the view of its target and nothing more. A binding has no list of capabilities of its own. It gets all information from the definitions of the application. Thus a new capability needs no change to the binding. A binding does not read the catalog file at run time (see [Build time and run time](../catalog.md#build-time-and-run-time)).
+A binding SHOULD serve [events](../events.md) if its protocol can send messages that the client did not ask for one at a time, for example a stream. A binding that serves events MUST tell:
+
+1. **Listing.** How a client finds the events of the target.
+2. **Subscribing.** How a client gives the id, the input and the cursor, and how each call failure before the first occurrence looks.
+3. **Occurrences.** How each occurrence looks.
+4. **Ending.** How the client sees each [end](../events.md#ending) of a subscription.
+5. **Cancellation.** How a client cancels a subscription.
+
+A binding that does not serve events MUST say so.
+
+A binding serves the view of its target and nothing more. A binding has no list of capabilities of its own. It gets all information from the definitions of the application. Thus a new capability or a new event needs no change to the binding. A binding does not read the catalog file at run time (see [Build time and run time](../catalog.md#build-time-and-run-time)).
 
 ## Remote bindings
 
@@ -35,14 +45,14 @@ Each remote binding tells its status codes. It also tells if it accepts requests
 
 ## Bindings in this specification
 
-| Name | Kind | Surface |
-| --- | --- | --- |
-| [`typescript`](typescript.md) | Language | Handles in TypeScript and JavaScript |
-| [`webmcp`](webmcp.md) | Protocol | WebMCP tools in a web page |
-| [`mcp`](mcp.md) | Protocol | An MCP server through HTTP, or through standard input and output |
-| [`cli`](cli.md) | Protocol | A command line |
-| [`http`](http.md) | Protocol | JSON through HTTP |
+| Name | Kind | Surface | Events |
+| --- | --- | --- | --- |
+| [`typescript`](typescript.md) | Language | Handles in TypeScript and JavaScript | Async iterables |
+| [`webmcp`](webmcp.md) | Protocol | WebMCP tools in a web page | None |
+| [`mcp`](mcp.md) | Protocol | An MCP server through HTTP, or through standard input and output | The MCP events extension |
+| [`cli`](cli.md) | Protocol | A command line | `watch`, with one line of JSON for each occurrence |
+| [`http`](http.md) | Protocol | JSON through HTTP | Server-sent events |
 
 You can write other bindings to the same rules, for example for Swift, Kotlin or gRPC. Give a new binding a name with a prefix, as in `acme:swift`.
 
-An API whose design you want to control, for example a GraphQL API, is application code. Build it on a language binding, with the library that you prefer. The HTTP binding gives generic access to the capabilities. [`examples/aircon`](../../examples/aircon/README.md#apis) builds APIs with GraphQL, Cap'n Web and Elysia, each beside the HTTP binding, and an MCP server beside the MCP binding.
+An API whose design you want to control, for example a GraphQL API, is application code. Build it on a language binding, with the library that you prefer. A GraphQL subscription comes from an event: the TypeScript binding gives an async iterable, which is the source of a subscription in GraphQL, through WebSockets or server-sent events. The HTTP binding gives generic access to the capabilities. [`examples/aircon`](../../examples/aircon/README.md#apis) builds APIs with GraphQL, Cap'n Web and Elysia, each beside the HTTP binding, and an MCP server beside the MCP binding. Its GraphQL API has a subscription to `aircon.status.changed`.

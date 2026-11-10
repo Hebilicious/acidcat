@@ -8,9 +8,10 @@ type JsonObject = { readonly [key: string]: unknown };
 
 const isObject = (value: unknown): value is JsonObject => value !== null && typeof value === "object";
 
-const CATALOG_ORDER = ["acidcat", "title", "description", "targets", "$defs", "capabilities"];
+const CATALOG_ORDER = ["acidcat", "title", "description", "targets", "$defs", "capabilities", "events"];
 const TARGET_ORDER = ["bindings", "description", "options"];
 const CAPABILITY_ORDER = ["description", "audience", "input", "output", "failures", "readOnly", "state"];
+const EVENT_ORDER = ["description", "audience", "input", "payload"];
 
 /** A catalog in canonical form, as text. */
 export function canonicalText(catalog: unknown): string {
@@ -27,6 +28,7 @@ export function canonicalCatalog(catalog: unknown): unknown {
         ordered(capability, CAPABILITY_ORDER, (member, inner) => (member === "failures" ? byKey(inner, sorted) : sortedMember(member, inner))),
       );
     }
+    if (key === "events") return byKey(value, (event) => ordered(event, EVENT_ORDER, sortedMember));
     return sortedMember(key, value);
   });
 }

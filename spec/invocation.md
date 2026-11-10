@@ -42,11 +42,11 @@ Availability can change at any time. A session MUST decide each call on the avai
 
 ## Sessions
 
-A **session** is one period in which one client calls the capabilities of one target. Each binding decides when its sessions open and close. For example, the MCP binding through HTTP opens one session for each request, and the MCP binding through stdio opens one session for each process.
+A **session** is one period in which one client calls the capabilities of one target, and follows its [events](events.md). Each binding decides when its sessions open and close. For example, the MCP binding through HTTP opens one session for each request, and the MCP binding through stdio opens one session for each process.
 
 - A session serves one client. A provider MUST NOT give the calls of two clients the same session. When a session closes, it cancels all its calls, and each client must keep its calls when a different client goes away.
 - An input MUST NOT contain identity data, credentials or tokens. The session holds the identity of its client.
-- A session is **open**, then **closing**, then **closed**. When a session starts to close, it accepts no new calls and cancels its work. A call after this time fails as `cancelled`.
+- A session is **open**, then **closing**, then **closed**. When a session starts to close, it accepts no new calls and cancels its work. A call after this time fails as `cancelled`. Its subscriptions end as [Events](events.md#sessions-and-concurrency) tells.
 - A provider MAY give sessions the services that it needs, for example authentication or storage. This specification does not define these services.
 
 ## Cancellation and concurrency
@@ -67,7 +67,7 @@ A call ends when its work is complete. There is no polling and no time limit.
 
 ## State
 
-A capability with `state` has a value that a client can read and follow. Examples are the status of a device, or the progress of long work. Each language binding tells how to read state and how to get its changes. A protocol binding MAY omit state.
+A capability with `state` has a value that a client can read and follow. A discrete thing that happens is an [event](events.md), not state. Examples are the status of a device, or the progress of long work. Each language binding tells how to read state and how to get its changes. A protocol binding MAY omit state.
 
 ## Design notes
 

@@ -162,5 +162,30 @@
         }
       }
     }
+  },
+  "events": {
+    "greenhouse.tank.low": {
+      "description": "The rain-water tank fell below a level. The occurrence gives the litres that are left.",
+      "audience": [
+        "panel",
+        "assistant"
+      ],
+      "input": {
+        "properties": {},
+        "type": "object"
+      },
+      "payload": {
+        "properties": {
+          "litres": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "litres"
+        ],
+        "type": "object"
+      }
+    }
   }
 }

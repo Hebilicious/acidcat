@@ -1,4 +1,4 @@
-use acid_cat_catalog::{Capability, Catalog, Target};
+use acid_cat_catalog::{Capability, Catalog, Event, Target, canonical_text};
 use serde_json::json;
 
 #[path = "../examples/player.rs"]
@@ -101,4 +101,124 @@ fn reports_the_rules_a_catalog_breaks() {
         ]
     );
     assert!(catalog.render().is_err());
+}
+
+#[test]
+fn reports_the_rules_an_event_breaks() {
+    let mut catalog = Catalog::new(None, None);
+    catalog.target(
+        "cli",
+        Target {
+            bindings: vec!["cli".into()],
+            ..Target::default()
+        },
+    );
+    let name = catalog.r#type("Name", json!({ "type": "string" }));
+    catalog
+        .capability(
+            "a.b",
+            Capability {
+                description: "x".into(),
+                ..Capability::default()
+            },
+        )
+        .event(
+            "a.b",
+            Event {
+                description: "y".into(),
+                ..Event::default()
+            },
+        )
+        .event(
+            "a.c",
+            Event {
+                description: "z".into(),
+                audience: vec!["clii".into()],
+                input: Some(json!({ "type": "string" })),
+                ..Event::default()
+            },
+        )
+        .event(
+            "a.d",
+            Event {
+                description: "w".into(),
+                payload: Some(name),
+                ..Event::default()
+            },
+        )
+        .event(
+            "a.e",
+            Event {
+                description: "v".into(),
+                payload: Some(json!({ "type": "object", "$defs": {} })),
+                ..Event::default()
+            },
+        );
+    assert_eq!(
+        catalog.validate(),
+        [
+            "a.b is both a capability and an event",
+            "a.c names the undeclared target clii",
+            "a.c input does not describe an object",
+            "a.d payload does not describe an object",
+            "a.e carries its own $defs; declare shared types with r#type()",
+        ]
+    );
+}
+
+#[test]
+fn puts_events_after_capabilities_and_the_members_of_an_event_in_order() {
+    let text = canonical_text(&json!({
+        "events": {
+            "z.b.changed": { "payload": { "type": "object" }, "input": { "type": "object" }, "description": "b" },
+            "z.a.changed": { "description": "a" }
+        },
+        "capabilities": {},
+        "targets": {},
+        "acidcat": "0.1"
+    }));
+    let expected = r#"{
+  "acidcat": "0.1",
+  "targets": {},
+  "capabilities": {},
+  "events": {
+    "z.a.changed": {
+      "description": "a"
+    },
+    "z.b.changed": {
+      "description": "b",
+      "input": {
+        "type": "object"
+      },
+      "payload": {
+        "type": "object"
+      }
+    }
+  }
+}
+"#;
+    assert_eq!(text, expected);
+}
+
+#[test]
+fn a_catalog_with_no_events_has_no_events_member() {
+    let mut catalog = Catalog::new(None, None);
+    catalog
+        .target(
+            "cli",
+            Target {
+                bindings: vec!["cli".into()],
+                ..Target::default()
+            },
+        )
+        .capability(
+            "a.b",
+            Capability {
+                description: "x".into(),
+                audience: vec!["cli".into()],
+                ..Capability::default()
+            },
+        );
+    let document = catalog.to_json().expect("the catalog conforms");
+    assert!(document.get("events").is_none());
 }
