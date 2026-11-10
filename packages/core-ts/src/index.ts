@@ -23,7 +23,11 @@ export type { EventHandle, EventHandleOf, Handle, HandleOf, Session, SessionOpti
 export { DEFAULT_BUFFER_LIMIT } from "./subscription.ts";
 export type { Occurrences } from "./subscription.ts";
 export { mcpHandler } from "./mcp.ts";
-export type { McpOptions, McpSettings } from "./mcp.ts";
+export type { McpHandler, McpOptions, McpSettings } from "./mcp.ts";
+export type { PollOptions } from "./mcp-poll.ts";
+export type { JsonRpcError, OpenSession, OwnSession, RpcAnswer, WebhookDelivery } from "./mcp-events.ts";
+export { systemClock } from "./clock.ts";
+export type { Clock } from "./clock.ts";
 export { mcpHandshake } from "@acid-cat/mcp-handshake";
 export type { McpHandshakeOptions } from "@acid-cat/mcp-handshake";
 export { main as mcpStdioMain, runMcpStdio } from "./mcp-stdio.ts";

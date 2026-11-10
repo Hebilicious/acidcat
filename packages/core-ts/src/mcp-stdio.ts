@@ -7,7 +7,11 @@ import type { JsonObject } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
 import { hasObjectOutput, listTools } from "./mcp.ts";
-import { eventCapabilities, listEvents, servesEvents, startEventStream, unsupportedDelivery } from "./mcp-events.ts";
+import type { Clock } from "./clock.ts";
+import { eventCapabilities, listEvents, servesEvents, startEventStream, unsupportedWebhook } from "./mcp-events.ts";
+import type { OpenSession } from "./mcp-events.ts";
+import { PollLeases } from "./mcp-poll.ts";
+import type { PollOptions } from "./mcp-poll.ts";
 import { createSession } from "./session.ts";
 import type { Session } from "./session.ts";
 
@@ -25,6 +29,13 @@ export interface McpStdioOptions<Context> {
   readonly heartbeatMs?: number | undefined;
   /** The number of occurrences that each subscription keeps for a client that reads slowly. The default is 256. */
   readonly bufferLimit?: number | undefined;
+  /**
+   * The settings of poll delivery: the lease time, the size of the buffer, `maxEvents` and `nextPollMs`. Each lease
+   * has a session of its own with `context`. The leases have no identity, because the process serves one client.
+   */
+  readonly poll?: PollOptions | undefined;
+  /** The clock of the poll leases. The default is the clock of the system. Tests give a clock that they control. */
+  readonly clock?: Clock | undefined;
 }
 
 export interface McpStdioIo {
@@ -77,7 +88,17 @@ export async function runMcpStdio<Context>(app: App<Context>, options: McpStdioO
     ...(options.bufferLimit === undefined ? {} : { bufferLimit: options.bufferLimit }),
   });
   const instructions = options.instructions ?? app.description;
-  const server = new StdioServer(session, { name: options.name, version: options.version, instructions, heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS }, io.write);
+  const open: OpenSession = () => {
+    const own = createSession(app, {
+      target: options.target ?? "mcp",
+      context: options.context,
+      toJsonSchema: options.toJsonSchema,
+      ...(options.bufferLimit === undefined ? {} : { bufferLimit: options.bufferLimit }),
+    });
+    return Promise.resolve({ session: own, close: own.dispose });
+  };
+  const leases = new PollLeases(options.poll, options.clock);
+  const server = new StdioServer(session, { name: options.name, version: options.version, instructions, heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS }, io.write, { leases, open });
   try {
     for await (const line of lines(io.input)) server.receive(line);
   } finally {
@@ -135,9 +156,11 @@ class StdioServer {
   #initialized = false;
   #listed: string;
   readonly #changes: { unsubscribe(): void };
+  readonly #poll: { readonly leases: PollLeases; readonly open: OpenSession };
 
-  constructor(session: Session, options: ServerInfo, write: (text: string) => void) {
+  constructor(session: Session, options: ServerInfo, write: (text: string) => void, poll: { readonly leases: PollLeases; readonly open: OpenSession }) {
     this.#session = session;
+    this.#poll = poll;
     this.#options = options;
     this.#write = write;
     this.#listed = this.#availableIds();
@@ -165,9 +188,10 @@ class StdioServer {
     void this.#request({ ...message, id: message.id ?? null });
   }
 
-  /** Close the session: stop the subscriptions, and cancel the calls in progress. */
+  /** Close the session: stop the subscriptions and the poll leases, and cancel the calls in progress. */
   async close(): Promise<void> {
     this.#changes.unsubscribe();
+    await this.#poll.leases.close();
     this.#subscriptions.clear();
     for (const controller of this.#calls.values()) controller.abort();
     await this.#session.dispose();
@@ -226,10 +250,14 @@ class StdioServer {
       switch (method) {
         case "events/list":
           return complete({ events: listEvents(this.#session) }, true);
-        case "events/poll":
+        case "events/poll": {
+          const answered = await this.#poll.leases.poll(undefined, message.params, this.#poll.open);
+          if ("error" in answered) return this.#error(id, answered.error.code, answered.error.message, answered.error.data);
+          return complete(answered.result);
+        }
         case "events/unsubscribe":
         case "events/subscribe": {
-          const { code, message: text, data } = unsupportedDelivery(method);
+          const { code, message: text, data } = unsupportedWebhook;
           return this.#error(id, code, text, data);
         }
         case "events/stream":

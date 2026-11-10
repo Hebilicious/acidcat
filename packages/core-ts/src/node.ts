@@ -1,12 +1,17 @@
 /**
  * The functions that need Node.js. The main entry point, `@acid-cat/core-ts`, works in all runtimes.
  *
+ * `webhookDelivery` sends the occurrences of webhook subscriptions of the MCP server through HTTP, with `node:https`.
+ *
  * `serve` serves web request handlers, `(request: Request) => Promise<Response>`, such as the handlers of `mcpHandler`
  * and `httpHandler`, on Node.js, with only `node:http`. The server serves plain HTTP/1.1. For HTTPS, HTTP/2 or
  * middleware, use a library for web handlers.
  */
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
+
+export { webhookDelivery } from "./webhook.ts";
+export type { WebhookOptions } from "./webhook.ts";
 
 /** A web request handler. */
 export type WebHandler = (request: Request) => Promise<Response> | Response;

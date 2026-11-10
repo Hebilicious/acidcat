@@ -64,7 +64,7 @@ test("MCP through HTTP: server/discover gives the events extension, and events/l
     {
       name: "sensor.reading.changed",
       description: "A sensor gave a new reading. The occurrence gives the room and the temperature.",
-      delivery: ["push"],
+      delivery: ["push", "poll"],
       inputSchema: { type: "object", properties: { room: { type: "string" } }, additionalProperties: false },
       payloadSchema: { type: "object", properties: { room: { type: "string" }, celsius: { type: "number" } }, required: ["room", "celsius"], additionalProperties: false },
     },
@@ -72,9 +72,8 @@ test("MCP through HTTP: server/discover gives the events extension, and events/l
   assert.deepEqual(member(events.find((entry) => isJsonObject(entry) && entry["name"] === "sensor.ticks"), "payloadSchema"), { type: "object" });
 });
 
-test("MCP through HTTP: events/poll and events/subscribe are Unsupported", async () => {
+test("MCP through HTTP: events/subscribe and events/unsubscribe are Unsupported when webhook delivery is off", async () => {
   const { rpc } = httpServer();
-  assert.deepEqual((await rpc("events/poll", { name: "sensor.ticks" }))["error"], { code: -32026, message: "Unsupported", data: { feature: "deliveryMode", value: "poll" } });
   assert.deepEqual((await rpc("events/subscribe", { name: "sensor.ticks" }))["error"], { code: -32026, message: "Unsupported", data: { feature: "deliveryMode", value: "webhook" } });
   assert.deepEqual((await rpc("events/unsubscribe", { name: "sensor.ticks" }))["error"], { code: -32026, message: "Unsupported", data: { feature: "deliveryMode", value: "webhook" } });
 });
@@ -259,11 +258,11 @@ test("MCP through stdio: events/stream writes its messages to standard output, a
   assert.equal(sensors.listeners, 0);
 });
 
-test("MCP through stdio: discover, list, heartbeat, Unsupported and the handshake", async () => {
+test("MCP through stdio: discover, list, heartbeat, Unsupported webhook delivery and the handshake", async () => {
   const io = stdio(new Sensors(), 20);
   io.send({ id: 1, method: "server/discover", params: { _meta: META } });
   io.send({ id: 2, method: "events/list", params: { _meta: META } });
-  io.send({ id: 3, method: "events/poll", params: { name: "sensor.ticks", _meta: META } });
+  io.send({ id: 3, method: "events/subscribe", params: { name: "sensor.ticks", _meta: META } });
   io.send({ id: 4, method: "events/stream", params: { name: "sensor.reading.changed", _meta: META } });
   io.send({ id: 5, method: "events/stream", params: { name: "sensor.reading.changed" } });
   io.send({ id: 6, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } });

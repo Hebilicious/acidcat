@@ -1,6 +1,6 @@
 /**
- * Events through MCP (spec/bindings/mcp.md#events): the MCP events extension, with push delivery. The HTTP and the stdio
- * transports share these functions.
+ * Events through MCP (spec/bindings/mcp.md#events): the MCP events extension. This module serves push delivery, and
+ * declares the parts that poll and webhook delivery share. The HTTP and the stdio transports share these functions.
  */
 import { bundle, CallFailureError, MCP_EVENT_ERRORS, MCP_EVENTS_EXTENSION, MCP_SUBSCRIPTION_ID, mcpEventEntry, mcpEventParams, mcpSubscribeError } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
@@ -21,18 +21,77 @@ export const servesEvents = (session: Session): boolean => Object.keys(session.v
 /** The members that the capabilities of `server/discover` get for events: the extension, if the view has events. */
 export const eventCapabilities = (session: Session): JsonObject => (servesEvents(session) ? { extensions: { [MCP_EVENTS_EXTENSION]: {} } } : {});
 
-/** The entries of `events/list`: one for each event in the view. */
-export function listEvents(session: Session): JsonObject[] {
+/** The entries of `events/list`: one for each event in the view. `webhook` is true when webhook delivery is on. */
+export function listEvents(session: Session, webhook = false): JsonObject[] {
   const types = session.view.$defs ?? {};
   return Object.entries(session.view.events ?? {}).map(([id, event]) =>
-    mcpEventEntry(id, event.description, event.input === undefined ? undefined : bundle(event.input, types), event.payload === undefined ? undefined : bundle(event.payload, types)),
+    mcpEventEntry(
+      id,
+      event.description,
+      event.input === undefined ? undefined : bundle(event.input, types),
+      event.payload === undefined ? undefined : bundle(event.payload, types),
+      webhook,
+    ),
   );
 }
 
-/** The error of `events/poll`, `events/subscribe` and `events/unsubscribe`: the server serves only push delivery. */
-export function unsupportedDelivery(method: "events/poll" | "events/subscribe" | "events/unsubscribe"): JsonRpcError {
-  return { code: MCP_EVENT_ERRORS.unsupported, message: "Unsupported", data: { feature: "deliveryMode", value: method === "events/poll" ? "poll" : "webhook" } };
+/** The error of `events/subscribe` and `events/unsubscribe` when webhook delivery is off, or through stdio. */
+export const unsupportedWebhook: JsonRpcError = { code: MCP_EVENT_ERRORS.unsupported, message: "Unsupported", data: { feature: "deliveryMode", value: "webhook" } };
+
+/** The answer to a request: its result, with no `resultType` and no `_meta`, or a JSON-RPC error. */
+export type RpcAnswer = { readonly result: JsonObject } | { readonly error: JsonRpcError };
+
+/**
+ * A session of its own for a poll lease or a webhook subscription (spec/bindings/mcp.md#subscriptions-that-outlive-a-request).
+ * `close` closes the session, and releases its context. A second call does nothing more.
+ */
+export interface OwnSession {
+  readonly session: Session;
+  readonly close: () => Promise<void>;
 }
+
+/** Open a session of its own, with the identity and the services of the request that starts the lease or the subscription. */
+export type OpenSession = () => Promise<OwnSession>;
+
+/**
+ * Webhook delivery (spec/bindings/mcp.md#webhook), as the MCP server through HTTP uses it. `webhookDelivery` of
+ * `@acid-cat/core-ts/node` makes one. The server checks the principal before it calls these functions.
+ */
+export interface WebhookDelivery {
+  /** Answer `events/subscribe`. */
+  readonly subscribe: (principal: string, params: JsonObject, open: OpenSession) => Promise<RpcAnswer>;
+  /** Answer `events/unsubscribe`. */
+  readonly unsubscribe: (principal: string, params: JsonObject) => Promise<RpcAnswer>;
+  /** End all webhook subscriptions. */
+  readonly close: () => Promise<void>;
+}
+
+/** The error `Forbidden`: a request to `events/subscribe` or `events/unsubscribe` with no principal. */
+export const forbidden: JsonRpcError = { code: MCP_EVENT_ERRORS.forbidden, message: "Forbidden" };
+
+/** The error `-32602` with a message. */
+export const invalidParams = (message: string): { readonly error: JsonRpcError } => ({ error: { code: MCP_EVENT_ERRORS.invalidParams, message } });
+
+/**
+ * Read the subscription parameters (spec/bindings/mcp.md#events): the id, the input, the cursor and `maxAgeMs`. An
+ * absent cursor and a `null` cursor are the same. The input is `{}` when `arguments` is absent.
+ */
+export function subscriptionParams(params: JsonObject): { readonly error: JsonRpcError } | { readonly name: string; readonly input: unknown; readonly cursor: string | undefined; readonly maxAgeMs: number | undefined } {
+  const { name, arguments: input, cursor, maxAgeMs } = params;
+  if (cursor !== undefined && cursor !== null && typeof cursor !== "string") return invalidParams("cursor must be a string or null.");
+  if (maxAgeMs !== undefined && maxAgeMs !== null && (typeof maxAgeMs !== "number" || !Number.isFinite(maxAgeMs) || maxAgeMs < 0)) {
+    return invalidParams("maxAgeMs must be a number of milliseconds.");
+  }
+  return {
+    name: typeof name === "string" ? name : "",
+    input: input ?? {},
+    cursor: typeof cursor === "string" ? cursor : undefined,
+    maxAgeMs: typeof maxAgeMs === "number" ? maxAgeMs : undefined,
+  };
+}
+
+/** The message of the call failure that ends a subscription. A subscription ends only with `internal`. */
+export const endMessage = (error: unknown): string => (error instanceof CallFailureError ? error.message : "The event failed.");
 
 /**
  * The messages of one `events/stream` request, as a function that gives the next messages each time that it is called,
@@ -54,15 +113,13 @@ export interface StreamSettings {
  * result. `cancel` cancels the subscription.
  */
 export async function startEventStream(session: Session, id: string | number, params: JsonObject, settings: StreamSettings): Promise<{ readonly error: JsonRpcError } | { readonly messages: StreamMessages; readonly cancel: () => void }> {
-  const { name, arguments: input, cursor, maxAgeMs } = params;
-  if (cursor !== undefined && cursor !== null && typeof cursor !== "string") return { error: { code: MCP_EVENT_ERRORS.invalidParams, message: "cursor must be a string or null." } };
-  if (maxAgeMs !== undefined && maxAgeMs !== null && (typeof maxAgeMs !== "number" || !Number.isFinite(maxAgeMs) || maxAgeMs < 0)) {
-    return { error: { code: MCP_EVENT_ERRORS.invalidParams, message: "maxAgeMs must be a number of milliseconds." } };
-  }
-  const subscribed = await session.subscribe(typeof name === "string" ? name : "", input ?? {}, {
+  const read = subscriptionParams(params);
+  if ("error" in read) return read;
+  const { cursor, maxAgeMs } = read;
+  const subscribed = await session.subscribe(read.name, read.input, {
     signal: settings.signal,
-    ...(typeof cursor === "string" ? { cursor } : {}),
-    ...(typeof maxAgeMs === "number" ? { maxAgeMs } : {}),
+    ...(cursor === undefined ? {} : { cursor }),
+    ...(maxAgeMs === undefined ? {} : { maxAgeMs }),
   });
   if ("kind" in subscribed) return { error: mcpSubscribeError(subscribed) };
 
@@ -83,8 +140,7 @@ export async function startEventStream(session: Session, id: string | number, pa
     if ("idle" in pulled) return [notification("heartbeat", { cursor: lastCursor })];
     if ("error" in pulled) {
       state = "ended";
-      const message = pulled.error instanceof CallFailureError ? pulled.error.message : "The event failed.";
-      return [notification("terminated", { error: { code: MCP_EVENT_ERRORS.internal, message } }), result];
+      return [notification("terminated", { error: { code: MCP_EVENT_ERRORS.internal, message: endMessage(pulled.error) } }), result];
     }
     if (pulled.step.done === true) {
       state = "ended";

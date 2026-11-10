@@ -1,6 +1,6 @@
 /**
- * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP, revision 2026-07-28, with no state on the
- * server between requests.
+ * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP, revision 2026-07-28. The server keeps no state
+ * between requests, except poll leases and webhook subscriptions.
  */
 import { bundle, isJsonObject, KEEPALIVE_MS, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage } from "@acid-cat/spec-ts";
 import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
@@ -8,7 +8,11 @@ import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
 import type { App, ToJsonSchema } from "./app.ts";
 import { openContext } from "./context.ts";
 import type { ContextOption } from "./context.ts";
-import { eventCapabilities, listEvents, servesEvents, startEventStream, unsupportedDelivery } from "./mcp-events.ts";
+import type { Clock } from "./clock.ts";
+import { eventCapabilities, forbidden, listEvents, servesEvents, startEventStream, unsupportedWebhook } from "./mcp-events.ts";
+import type { OpenSession, RpcAnswer, WebhookDelivery } from "./mcp-events.ts";
+import { PollLeases } from "./mcp-poll.ts";
+import type { PollOptions } from "./mcp-poll.ts";
 import { createSession } from "./session.ts";
 import type { Session } from "./session.ts";
 import { textStream } from "./stream.ts";
@@ -35,6 +39,31 @@ export interface McpSettings {
   readonly heartbeatMs?: number | undefined;
   /** The number of occurrences that each subscription keeps for a client that reads slowly. The default is 256. */
   readonly bufferLimit?: number | undefined;
+  /**
+   * The identity of the client of a request: the principal (spec/bindings/mcp.md#webhook). It is part of the key of a
+   * poll lease and of a webhook subscription. `undefined` means that the request has no identity. With no function, no
+   * request has an identity.
+   */
+  readonly principal?: ((request: Request) => string | undefined | Promise<string | undefined>) | undefined;
+  /** The settings of poll delivery: the lease time, the size of the buffer, `maxEvents` and `nextPollMs`. */
+  readonly poll?: PollOptions | undefined;
+  /**
+   * Webhook delivery. It is off when this member is absent. `webhookDelivery` of `@acid-cat/core-ts/node` makes it.
+   * A request to `events/subscribe` or `events/unsubscribe` with no principal gets `Forbidden`.
+   */
+  readonly webhooks?: WebhookDelivery | undefined;
+  /** The clock of the poll leases. The default is the clock of the system. Tests give a clock that they control. */
+  readonly clock?: Clock | undefined;
+}
+
+/**
+ * The web request handler of an MCP server through HTTP. `close` ends the poll leases and the webhook subscriptions.
+ * `await using` calls it at the end of its block.
+ */
+export interface McpHandler {
+  (request: Request): Promise<Response>;
+  readonly close: () => Promise<void>;
+  readonly [Symbol.asyncDispose]: () => Promise<void>;
 }
 
 /** The members of a JSON-RPC request that the server reads. A request with no `id` is a notification. */
@@ -65,10 +94,18 @@ function readRequest(body: unknown): JsonRpcRequest {
   };
 }
 
-/** A web request handler for the MCP server. Each request has its own session, and with `createContext` its own context. */
-export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Context>) {
+/**
+ * A web request handler for the MCP server. Each request has its own session, and with `createContext` its own
+ * context. Each poll lease and each webhook subscription also has its own session, opened with the context of the
+ * request that started it.
+ */
+export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Context>): McpHandler {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
-  return async (request: Request): Promise<Response> => {
+  const leases = new PollLeases(options.poll, options.clock);
+  const closeAll = async () => {
+    await Promise.allSettled([leases.close(), options.webhooks?.close()]);
+  };
+  const handle = async (request: Request): Promise<Response> => {
     const screened = screenRequest(request, {
       methods: ["POST"],
       allowedOrigins: options.allowedOrigins,
@@ -97,17 +134,24 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
     if (metaVersion === undefined) return error(400, id, -32602, "Required request metadata is missing");
     if (metaVersion !== version) return error(400, id, -32020, "MCP-Protocol-Version header does not match request metadata");
 
-    const opened = await openContext<Context>(options, request);
-    const session = createSession(app, {
-      target: options.target ?? "mcp",
-      context: opened.context,
-      toJsonSchema: options.toJsonSchema,
-      ...(options.bufferLimit === undefined ? {} : { bufferLimit: options.bufferLimit }),
-    });
-    const close = async () => {
-      await session.dispose();
-      await opened.release();
+    // The session of the request. A poll lease or a webhook subscription opens one more, with the same context.
+    const open: OpenSession = async () => {
+      const opened = await openContext<Context>(options, request);
+      const session = createSession(app, {
+        target: options.target ?? "mcp",
+        context: opened.context,
+        toJsonSchema: options.toJsonSchema,
+        ...(options.bufferLimit === undefined ? {} : { bufferLimit: options.bufferLimit }),
+      });
+      let closing: Promise<void> | undefined;
+      const close = () =>
+        (closing ??= (async () => {
+          await session.dispose();
+          await opened.release();
+        })());
+      return { session, close };
     };
+    const { session, close } = await open();
     // The stream of `events/stream` closes the session and releases the context when it ends.
     let streaming = false;
     try {
@@ -124,11 +168,29 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
         streaming = true;
         return new Response(body, { status: 200, headers: { "Content-Type": SSE_MEDIA_TYPE, "Cache-Control": "no-store" } });
       }
+      if (servesEvents(session) && message.method !== undefined && LONG_LIVED.has(message.method)) {
+        const principal = await options.principal?.(request);
+        const answered = await longLived(message.method, message.params, principal, open, leases, options.webhooks);
+        if ("error" in answered) return error(200, id, answered.error.code, answered.error.message, answered.error.data);
+        return reply(id, { _meta: serverInfoOf(options), resultType: "complete", ...answered.result });
+      }
       return await answer(session, message, { ...options, instructions: options.instructions ?? app.description }, request.signal);
     } finally {
       if (!streaming) await close();
     }
   };
+  return Object.assign(handle, { close: closeAll, [Symbol.asyncDispose]: closeAll });
+}
+
+/** The methods whose state outlives the request (spec/bindings/mcp.md#subscriptions-that-outlive-a-request). */
+const LONG_LIVED: ReadonlySet<string> = new Set(["events/poll", "events/subscribe", "events/unsubscribe"]);
+
+/** Answer `events/poll`, `events/subscribe` or `events/unsubscribe`. */
+async function longLived(method: string, params: JsonObject, principal: string | undefined, open: OpenSession, leases: PollLeases, webhooks: WebhookDelivery | undefined): Promise<RpcAnswer> {
+  if (method === "events/poll") return leases.poll(principal, params, open);
+  if (webhooks === undefined) return { error: unsupportedWebhook };
+  if (principal === undefined) return { error: forbidden };
+  return method === "events/subscribe" ? webhooks.subscribe(principal, params, open) : webhooks.unsubscribe(principal, params);
 }
 
 /** The `_meta` of a result: the information about the server. */
@@ -166,14 +228,7 @@ async function answer(session: Session, message: JsonRpcRequest, options: McpSet
     }
     case "events/list":
       if (!servesEvents(session)) break;
-      return complete({ events: listEvents(session) }, true);
-    case "events/poll":
-    case "events/unsubscribe":
-    case "events/subscribe": {
-      if (!servesEvents(session)) break;
-      const unsupported = unsupportedDelivery(message.method);
-      return error(200, id, unsupported.code, unsupported.message, unsupported.data);
-    }
+      return complete({ events: listEvents(session, options.webhooks !== undefined) }, true);
   }
   return error(404, id, -32601, `Method not found: ${message.method}`);
 }
