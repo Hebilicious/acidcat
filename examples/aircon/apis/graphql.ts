@@ -9,15 +9,27 @@
  * - a call failure is a GraphQL error whose `code` is the kind of the call failure. Yoga masks all other errors.
  *
  * Each request has its own session. `session.call` checks the arguments with the input schema of the capability.
+ *
+ * The subscription `statusChanged` follows the event `aircon.status.changed`. Its `subscribe` resolver returns the
+ * promise of `subscribe` of the event handle, and GraphQL calls `return()` of the iterator when the client ends the
+ * subscription. It is served two ways, with one schema:
+ *
+ * - through server-sent events, by GraphQL Yoga at `/graphql` (the "distinct connections" mode of the GraphQL over
+ *   server-sent events protocol, which the graphql-sse client uses). The session of the request stays open until the
+ *   stream ends;
+ * - through WebSockets, by graphql-ws on a `ws` server (`graphqlWebSocket`). Each connection is one session: it opens
+ *   when the client connects, and closes when the connection closes. Its errors are masked as Yoga masks them.
  */
 import SchemaBuilder from "@pothos/core";
 import { CallFailureError } from "@acid-cat/core-ts";
 import type { Session } from "@acid-cat/core-ts";
 import { GraphQLError } from "graphql";
+import { useServer } from "graphql-ws/use/ws";
 import { createYoga } from "graphql-yoga";
+import type { WebSocketServer } from "ws";
 import type { z } from "zod";
 
-import { fanSet, FanSpeed, Mode, modeSet, powerSet, statusGet, temperatureSet } from "../core-ts/aircon.ts";
+import { fanSet, FanSpeed, Mode, modeSet, powerSet, statusChanged, statusGet, temperatureSet } from "../core-ts/aircon.ts";
 import type { Context as AirconContext, Offline, PoweredOff, Status } from "../core-ts/aircon.ts";
 import { forbidden, foreignOrigin, httpBinding, openSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
@@ -125,10 +137,21 @@ builder.mutationType({
   }),
 });
 
+builder.subscriptionType({
+  fields: (t) => ({
+    statusChanged: t.field({
+      type: StatusType,
+      description: statusChanged.description,
+      subscribe: (_, __, { session }) => session.eventHandle(statusChanged).subscribe({}),
+      resolve: (occurrence) => occurrence.data,
+    }),
+  }),
+});
+
 export const schema = builder.toSchema();
 
 /** A call failure becomes a GraphQL error with its kind as `code`. Yoga masks all other errors. */
-function maskError(error: unknown, message: string): Error {
+function maskError(error: unknown, message: string): GraphQLError {
   const cause = error instanceof GraphQLError ? error.originalError : error;
   if (!(cause instanceof CallFailureError)) return new GraphQLError(message);
   return new GraphQLError(cause.message, {
@@ -137,14 +160,79 @@ function maskError(error: unknown, message: string): Error {
   });
 }
 
-/** A web request handler: GraphQL at `/graphql`, and the HTTP binding at `/api`. */
+const yoga = createYoga<Context>({ schema, graphiql: false, maskedErrors: { maskError } });
+
+/**
+ * A response whose body closes the session when it ends: when the stream is done, or when the client cancels it. A
+ * stream of server-sent events uses the session until its subscription ends. When the client cancels the stream, the
+ * session closes first, so its subscription is complete even while Yoga waits for the next occurrence.
+ */
+function closingSession(response: Response, session: Session<AirconContext>): Response {
+  const body = response.body;
+  if (body === null) return response;
+  const reader = body.getReader();
+  const stream = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const chunk = await reader.read();
+      if (!chunk.done) return controller.enqueue(chunk.value);
+      controller.close();
+      await session.dispose();
+    },
+    async cancel(reason) {
+      await session.dispose();
+      await reader.cancel(reason);
+    },
+  });
+  return new Response(stream, { status: response.status, statusText: response.statusText, headers: response.headers });
+}
+
+/** A web request handler: GraphQL at `/graphql`, with subscriptions through server-sent events, and the HTTP binding at `/api`. */
 export function graphqlApi(options: ApiOptions): (request: Request) => Promise<Response> {
   const http = httpBinding(options, "/api");
-  const yoga = createYoga<Context>({ schema, graphiql: false, maskedErrors: { maskError } });
   return async (request) => {
     if (foreignOrigin(request, options)) return forbidden();
     if (new URL(request.url).pathname.startsWith("/api/")) return http(request);
-    await using session = openSession(options);
-    return await yoga.fetch(request, { session });
+    const session = openSession(options);
+    let response: Response;
+    try {
+      response = await yoga.fetch(request, { session });
+    } catch (error) {
+      await session.dispose();
+      throw error;
+    }
+    if (response.headers.get("Content-Type")?.startsWith("text/event-stream") === true) return closingSession(response, session);
+    await session.dispose();
+    return response;
   };
+}
+
+/**
+ * Serve GraphQL through WebSockets on a `ws` server, with the graphql-ws protocol, the same schema, and the same masked
+ * errors. Each connection is one session. A connection from an origin that the API does not allow is refused.
+ * The result stops the server from taking new connections: call `dispose()` on it.
+ */
+export function graphqlWebSocket(options: ApiOptions, server: WebSocketServer) {
+  return useServer<Record<string, unknown> | undefined, { session: Session<AirconContext> }>(
+    {
+      onConnect: (context) => {
+        const origin = context.extra.request.headers.origin;
+        if (origin !== undefined && !(options.allowedOrigins ?? []).includes(origin)) return false;
+        context.extra.session = openSession(options);
+        return true;
+      },
+      onClose: async (context) => {
+        await context.extra.session?.dispose();
+      },
+      schema,
+      context: (context): Context => {
+        const session = context.extra.session;
+        if (session === undefined) throw new GraphQLError("The connection has no session.");
+        return { session };
+      },
+      // The errors of each result are masked as Yoga masks them.
+      onNext: (_context, _id, _payload, _args, { data, errors }) =>
+        errors === undefined ? undefined : { data: data ?? null, errors: errors.map((error) => maskError(error, "Unexpected error.").toJSON()) },
+    },
+    server,
+  );
 }

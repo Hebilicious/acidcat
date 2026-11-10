@@ -16,12 +16,16 @@
     "effect": "catalog:",
     "elysia": "catalog:",
     "graphql": "catalog:",
+    "graphql-sse": "catalog:",
+    "graphql-ws": "catalog:",
     "graphql-yoga": "catalog:",
+    "ws": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "catalog:",
     "@types/node": "catalog:",
+    "@types/ws": "catalog:",
     "typescript": "catalog:"
   }
 }
