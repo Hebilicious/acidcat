@@ -3,17 +3,25 @@
  */
 import { bundle, isJsonObject, KEEPALIVE_MS, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, mcpToolResult, readBounded, screenRequest, sseMessage, viewOf } from "@acid-cat/spec-ts";
 import type { JsonObject, Outcome, Rejection } from "@acid-cat/spec-ts";
-import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberMap, Layer, Logger, Queue, Schema, Scope, Semaphore, Sink, Stdio, Stream, SubscriptionRef } from "effect";
+import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberMap, Layer, Logger, Option, Queue, Schema, Scope, Semaphore, Sink, Stdio, Stream, SubscriptionRef } from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
 import * as App from "./App.ts";
 import { cancelOnAbort } from "./internal/cancel.ts";
 import * as McpEvents from "./internal/mcpEvents.ts";
+import { makePolls } from "./internal/poll.ts";
+import type { Opener, Polls, PollOptions } from "./internal/poll.ts";
 import { refsOf } from "./internal/served.ts";
-import { answerWith, closeUnlessStreaming, eventStream } from "./internal/web.ts";
-import type { Streaming } from "./internal/web.ts";
+import { makeWebhooks } from "./internal/webhooks.ts";
+import type { WebhookOptions, Webhooks } from "./internal/webhooks.ts";
+import { answerWith, closeUnlessStreaming, eventStream, keepNothing } from "./internal/web.ts";
+import type { Keep, Streaming } from "./internal/web.ts";
 import * as Session from "./Session.ts";
+
+export type { PollOptions } from "./internal/poll.ts";
+export { WebhookSendError } from "./internal/webhooks.ts";
+export type { WebhookOptions, WebhookRequest, WebhookResponse, WebhookSender } from "./internal/webhooks.ts";
 
 /**
  * Wrap the web handler of `toWebHandler` so that it also serves MCP clients of revisions 2025-11-25 and 2025-06-18,
@@ -54,30 +62,101 @@ export interface Options {
   readonly heartbeatMs?: number | undefined;
   /** The number of occurrences of one subscription that the session keeps for a slow client. See `Session.Options`. */
   readonly eventBuffer?: number | undefined;
+  /**
+   * The identity of the client of a request: the principal. A poll lease belongs to the principal of the request that
+   * started it. Webhook delivery needs a principal. With no function, or with `Option.none()`, the request has no
+   * principal. Check the credentials of the request here, for example a bearer token.
+   */
+  readonly principal?: ((request: Request) => Effect.Effect<Option.Option<string>>) | undefined;
+  /** The settings of poll delivery (spec/bindings/mcp.md#poll). */
+  readonly poll?: PollOptions | undefined;
+  /**
+   * The settings of webhook delivery (spec/bindings/mcp.md#webhook). Webhook delivery is off when this member is
+   * absent. `NodeWebhook.sender` from `@acid-cat/core-effect/node` gives a sender for Node.js.
+   */
+  readonly webhooks?: WebhookOptions | undefined;
 }
+
+/** A web request handler for the MCP server, with `dispose`. */
+export interface WebHandler {
+  (request: Request): Promise<Response>;
+  /** End the poll leases and the webhook subscriptions, and release the shared services. */
+  readonly dispose: () => Promise<void>;
+}
+
+/** The state that a server keeps between requests: the poll leases, and the webhook subscriptions if they are on. */
+interface Deliveries {
+  readonly polls: Polls | undefined;
+  readonly webhooks: Webhooks | undefined;
+}
+
+/** The poll leases and the webhook subscriptions of a server, while the scope is open. */
+const makeDeliveries = (options: Options): Effect.Effect<Deliveries, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const polls = yield* makePolls(options.poll);
+    const webhooks = options.webhooks === undefined ? undefined : yield* makeWebhooks(options.webhooks);
+    return { polls, webhooks };
+  });
 
 /**
  * A web request handler for the MCP server: `(request) => Promise<Response>`. Each request has its own session.
  * `layer` gives the services that the capabilities need. `options.services` tells when the handler builds them.
+ *
+ * The handler keeps the poll leases and the webhook subscriptions between requests, in the memory of the process.
+ * Each one holds a subscription in a session of its own, with the services of the request that started it. With
+ * `"per-request"`, these services stay open until the lease or the subscription ends. `dispose` ends them all.
  */
-export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Options) {
-  const answer = answerWith(layer, options.services);
-  return async (request: Request): Promise<Response> => {
+export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Options): WebHandler {
+  const { answer, dispose: release } = answerWith(layer, options.services);
+  const scope = Effect.runSync(Scope.make());
+  const deliveries = Effect.runSync(makeDeliveries(options).pipe(Scope.provide(scope)));
+  const handler = async (request: Request): Promise<Response> => {
     const admitted = await admit(request, options);
     if (admitted instanceof Response) return admitted;
-    return answer((scope) => respond(app, admitted, options, scope));
+    return answer((requestScope, keep) => respond(app, admitted, options, requestScope, { ...deliveries, keep }));
   };
+  const dispose = async () => {
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+    await release();
+  };
+  return Object.assign(handler, { dispose });
 }
 
 /**
  * Answer one MCP request with a new session. The request is screened and its body is bounded, as in `toWebHandler`.
  * A host that builds the services itself provides them to this Effect. The services must stay open until the stream
  * of `events/stream` ends.
+ *
+ * This function keeps no state between requests. So it delivers events only with push: `events/poll` and the
+ * webhook methods answer `Unsupported`. Use `makeHandle` for a server that also delivers with poll and webhooks.
  */
 export const handle = <R>(app: App.App<R>, request: Request, options: Options) =>
   Effect.flatMap(
     Effect.promise(() => admit(request, options)),
-    (admitted) => (admitted instanceof Response ? Effect.succeed(admitted) : Effect.flatMap(Scope.make(), (scope) => respond(app, admitted, options, scope))),
+    (admitted) =>
+      admitted instanceof Response
+        ? Effect.succeed(admitted)
+        : Effect.flatMap(Scope.make(), (scope) => respond(app, admitted, options, scope, { polls: undefined, webhooks: undefined, keep: keepNothing })),
+  );
+
+/**
+ * A function that answers MCP requests, as `handle`, and keeps the poll leases and the webhook subscriptions in the
+ * scope. When the scope closes, they end. A host that builds the services itself provides them to each answer. The
+ * services of a request must stay open until the stream of `events/stream` ends, and until each lease and webhook
+ * subscription that the request started ends.
+ */
+export const makeHandle = <R>(app: App.App<R>, options: Options) =>
+  Effect.map(
+    makeDeliveries(options),
+    (deliveries) =>
+      (request: Request) =>
+        Effect.flatMap(
+          Effect.promise(() => admit(request, options)),
+          (admitted) =>
+            admitted instanceof Response
+              ? Effect.succeed(admitted)
+              : Effect.flatMap(Scope.make(), (scope) => respond(app, admitted, options, scope, { ...deliveries, keep: keepNothing })),
+        ),
   );
 
 /** A request that passed the screening: the request with the body that was read, and the JSON of the body. */
@@ -114,13 +193,27 @@ async function admit(request: Request, options: Options): Promise<Admitted | Res
  * Answer one MCP request that passed the screening, with a new session in `scope`. The binding answers the requests of
  * the events extension itself, when the view has events. The server of `effect/ai` answers the other requests.
  */
-const respond = <R>(app: App.App<R>, admitted: Admitted, options: Options, scope: Scope.Closeable) =>
+const respond = <R>(app: App.App<R>, admitted: Admitted, options: Options, scope: Scope.Closeable, state: Deliveries & { readonly keep: Keep }) =>
   Effect.gen(function* () {
-    const session = yield* Session.make(app, { target: options.target ?? "mcp", eventBuffer: options.eventBuffer }).pipe(Scope.provide(scope));
+    const sessionOptions = { target: options.target ?? "mcp", eventBuffer: options.eventBuffer };
+    const session = yield* Session.make(app, sessionOptions).pipe(Scope.provide(scope));
     const hasEvents = session.view.events !== undefined;
     const request = admitted.request;
     const events = hasEvents && request.headers.get("MCP-Protocol-Version") === MCP_PROTOCOL_VERSION ? McpEvents.eventsRequestOf(admitted.message) : undefined;
-    if (events !== undefined) return yield* respondToEvents(session, events, request, options, scope);
+    if (events !== undefined) {
+      const context = yield* Effect.context<R>();
+      const open: Opener<R> = (holder) =>
+        Effect.andThen(state.keep(holder), Session.make(app, sessionOptions).pipe(Scope.provide(holder), Effect.provideContext(context)));
+      const principal = options.principal === undefined ? Option.none() : yield* options.principal(request);
+      const answerOptions: McpEvents.AnswerOptions<R> = {
+        heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
+        principal,
+        polls: state.polls,
+        webhooks: state.webhooks,
+        open,
+      };
+      return yield* respondToEvents(session, events, request, answerOptions, scope);
+    }
     const server = McpServer.layerHttp({
       name: options.name,
       version: options.version,
@@ -145,7 +238,7 @@ const respondToEvents = <R>(
   session: Session.Session<R>,
   request: McpEvents.EventsRequest,
   http: Request,
-  options: Options,
+  options: McpEvents.AnswerOptions<R>,
   scope: Scope.Closeable,
 ): Effect.Effect<Response | Streaming> =>
   Effect.gen(function* () {
@@ -160,7 +253,7 @@ const respondToEvents = <R>(
       const body = McpEvents.errorMessage(request.id, { code: McpSchema.HEADER_MISMATCH_ERROR_CODE, message: "The Mcp-Method or Mcp-Name header does not agree with the body." });
       return jsonResponse(400, body);
     }
-    const answer = yield* McpEvents.answer(session, request, { heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS }).pipe(Scope.provide(scope));
+    const answer = yield* McpEvents.answer(session, request, options).pipe(Scope.provide(scope));
     if (answer._tag === "Message") return jsonResponse(200, answer.message);
     const body = answer.messages.pipe(
       Stream.map((each) => sseMessage({ data: JSON.stringify(each) })),
@@ -234,6 +327,8 @@ export interface StdioOptions {
   readonly heartbeatMs?: number | undefined;
   /** The number of occurrences of one subscription that the session keeps for a slow client. See `Session.Options`. */
   readonly eventBuffer?: number | undefined;
+  /** The settings of poll delivery (spec/bindings/mcp.md#poll). The process has no principal. */
+  readonly poll?: PollOptions | undefined;
 }
 
 /** A message of standard input for the events of the session: a request of the extension, or a cancellation. */
@@ -262,9 +357,20 @@ export const layerStdio = <R>(app: App.App<R>, options: StdioOptions) =>
       const events: EventsInput | undefined = hasEvents ? { inbox: yield* Queue.unbounded<Inbound>(), initializes: new Set() } : undefined;
       return Layer.effectDiscard(
         Effect.gen(function* () {
-          const session = yield* Session.make(app, { target, eventBuffer: options.eventBuffer });
+          const sessionOptions = { target, eventBuffer: options.eventBuffer };
+          const session = yield* Session.make(app, sessionOptions);
           yield* serveTools(session);
-          if (events !== undefined) yield* serveEvents(session, events.inbox, options);
+          if (events === undefined) return;
+          // The poll leases live while the layer is open. Each one opens a session of its own, with the services of the layer.
+          const context = yield* Effect.context<R>();
+          const answerOptions: McpEvents.AnswerOptions<R> = {
+            heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
+            principal: Option.none(),
+            polls: yield* makePolls(options.poll),
+            webhooks: undefined,
+            open: (holder) => Session.make(app, sessionOptions).pipe(Scope.provide(holder), Effect.provideContext(context)),
+          };
+          yield* serveEvents(session, events.inbox, answerOptions);
         }),
       ).pipe(
         Layer.provideMerge(
@@ -354,14 +460,13 @@ function withoutEventsExtension(chunk: string, initializes: Set<McpEvents.Reques
  * runs in its own fiber, by the id of its request. `notifications/cancelled` with that id interrupts the fiber. The
  * messages go to standard output, one at a time.
  */
-const serveEvents = <R>(session: Session.Session<R>, inbox: Queue.Queue<Inbound>, options: StdioOptions) =>
+const serveEvents = <R>(session: Session.Session<R>, inbox: Queue.Queue<Inbound>, answerOptions: McpEvents.AnswerOptions<R>) =>
   Effect.gen(function* () {
     const stdio = yield* Stdio.Stdio;
     const lock = yield* Semaphore.make(1);
     const write = (message: JsonObject) => lock.withPermit(Effect.ignore(Stream.run(Stream.make(`${JSON.stringify(message)}\n`), stdio.stdout())));
     const subscriptions = yield* FiberMap.make<string>();
     const keyOf = (id: McpEvents.RequestId) => `${typeof id}:${id}`;
-    const answerOptions = { heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS };
     yield* Queue.take(inbox).pipe(
       Effect.flatMap((inbound) => {
         if (inbound._tag === "Cancel") return FiberMap.remove(subscriptions, keyOf(inbound.id));

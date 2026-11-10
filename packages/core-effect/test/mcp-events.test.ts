@@ -90,18 +90,22 @@ test("through HTTP, server/discover declares the extension only when the view ha
   assert.equal((await json(notFound)).error?.code, -32601);
 });
 
-test("through HTTP, events/list gives the events of the view, and poll and webhook are unsupported", async () => {
+test("through HTTP, events/list gives the events of the view, and Mcp.handle, which keeps no state, does not deliver with poll", async () => {
   const handler = Mcp.toWebHandler(events, feedLayer, { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN] });
   const list = Schema.decodeUnknownSync(EventList)((await json(await handler(mcpRequest("events/list")))).result);
   assert.deepEqual(list.events.map((each) => each.name).sort(), ["feed.counted", "feed.crashing", "feed.disagreeing", "feed.resumed", "feed.ticked", "feed.timed"]);
   const crashing = list.events.find((each) => each.name === "feed.crashing");
-  assert.deepEqual(crashing?.delivery, ["push"]);
+  assert.deepEqual(crashing?.delivery, ["push", "poll"]);
   assert.deepEqual(crashing?.payloadSchema, { type: "object" });
-  const poll = await json(await handler(mcpRequest("events/poll", { name: "feed.ticked" })));
-  assert.deepEqual(poll.error?.data, { feature: "deliveryMode", value: "poll" });
-  assert.equal(poll.error?.code, -32026);
   const webhook = await json(await handler(mcpRequest("events/subscribe", { name: "feed.ticked" })));
   assert.deepEqual(webhook.error?.data, { feature: "deliveryMode", value: "webhook" });
+
+  const stateless = (request: Request) => Effect.runPromise(Mcp.handle(events, request, { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN] }).pipe(Effect.provide(feedLayer)));
+  const statelessList = Schema.decodeUnknownSync(EventList)((await json(await stateless(mcpRequest("events/list")))).result);
+  assert.deepEqual(statelessList.events[0]?.delivery, ["push"]);
+  const poll = await json(await stateless(mcpRequest("events/poll", { name: "feed.ticked" })));
+  assert.deepEqual(poll.error?.data, { feature: "deliveryMode", value: "poll" });
+  assert.equal(poll.error?.code, -32026);
 });
 
 test("through HTTP, a subscription that cannot start is a JSON-RPC error, and the headers must agree with the body", async () => {

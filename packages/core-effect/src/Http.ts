@@ -47,7 +47,7 @@ export interface Options {
  * subscription, and its services with `"per-request"`, stay open until the stream of server-sent events ends.
  */
 export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Options) {
-  const answer = answerWith(layer, options.services);
+  const { answer } = answerWith(layer, options.services);
   return async (request: Request): Promise<Response> => {
     const admitted = await admit(request, options);
     if (admitted instanceof Response) return admitted;

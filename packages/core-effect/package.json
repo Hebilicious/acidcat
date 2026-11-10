@@ -36,6 +36,7 @@
     "./Cli": "./src/Cli.ts",
     "./WebMcp": "./src/WebMcp.ts",
     "./NodeServer": "./src/NodeServer.ts",
+    "./NodeWebhook": "./src/NodeWebhook.ts",
     "./node": "./src/node.ts"
   },
   "publishConfig": {
@@ -84,6 +85,10 @@
       "./NodeServer": {
         "types": "./dist/NodeServer.d.ts",
         "default": "./dist/NodeServer.js"
+      },
+      "./NodeWebhook": {
+        "types": "./dist/NodeWebhook.d.ts",
+        "default": "./dist/NodeWebhook.js"
       },
       "./node": {
         "types": "./dist/node.d.ts",
