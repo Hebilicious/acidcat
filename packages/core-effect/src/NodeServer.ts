@@ -52,6 +52,8 @@ export class ServeError extends Data.TaggedError("ServeError")<{ readonly cause:
  * - A path that no prefix matches gets `404`. A handler that throws or rejects gets `500`. A request that is not valid
  *   HTTP for a URL gets `400`.
  * - The body of a request is a stream that reads from the connection only when the handler reads it.
+ * - The headers of a response with a body go to the client before the first chunk of the body, so that a client of a
+ *   stream, for example of server-sent events, gets the status before the first message.
  */
 export const serve = Effect.fnUntraced(function* (handler: WebHandler | Routes, options: ServeOptions = {}) {
   const route = router(handler);
@@ -170,6 +172,8 @@ const send = (response: Response, outgoing: ServerResponse) =>
       outgoing.end();
       return;
     }
+    // Send the headers now. The first chunk of a stream, for example of server-sent events, can come much later.
+    outgoing.flushHeaders();
     yield* Effect.acquireUseRelease(
       Effect.sync(() => {
         const reader = body.getReader();

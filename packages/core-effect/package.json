@@ -28,6 +28,7 @@
     ".": "./src/index.ts",
     "./App": "./src/App.ts",
     "./Capability": "./src/Capability.ts",
+    "./Event": "./src/Event.ts",
     "./Session": "./src/Session.ts",
     "./Handles": "./src/Handles.ts",
     "./Mcp": "./src/Mcp.ts",
@@ -51,6 +52,10 @@
       "./Capability": {
         "types": "./dist/Capability.d.ts",
         "default": "./dist/Capability.js"
+      },
+      "./Event": {
+        "types": "./dist/Event.d.ts",
+        "default": "./dist/Event.js"
       },
       "./Session": {
         "types": "./dist/Session.d.ts",
@@ -106,6 +111,7 @@
     "@types/node": "catalog:",
     "effect": "catalog:",
     "esbuild": "catalog:",
+    "graphql": "catalog:",
     "playwright": "catalog:",
     "typescript": "catalog:"
   }

@@ -5,11 +5,12 @@
  * The handles use a session of Effect. The program that opens the session keeps its services and its scope.
  */
 import { AVAILABLE, CallFailureError, callFailure } from "@acid-cat/spec-ts";
-import type { Availability, Outcome, Result } from "@acid-cat/spec-ts";
-import { Cause, Context, Effect, Exit, Fiber, FiberSet, Layer, Option, Schema, Scope, Stream } from "effect";
+import type { Availability, Occurrence, Outcome, Result } from "@acid-cat/spec-ts";
+import { Cause, Context, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schema, Scope, Stream } from "effect";
 
 import type * as App from "./App.ts";
 import type * as Capability from "./Capability.ts";
+import type * as Event from "./Event.ts";
 import { changesAfter, readable } from "./internal/changes.ts";
 import { refsOf } from "./internal/served.ts";
 import * as Session from "./Session.ts";
@@ -49,6 +50,38 @@ export type HandleOf<C extends Capability.Any> = Handle<
   NonNullable<C["failures"]>[number]["Type"],
   NonNullable<C["state"]>["schema"]["Encoded"]
 >;
+
+export type { Occurrence } from "@acid-cat/spec-ts";
+
+export interface SubscribeOptions {
+  /** Cancel the subscription. */
+  readonly signal?: AbortSignal | undefined;
+  /** Start after this position (spec/events.md#resuming). */
+  readonly cursor?: string | undefined;
+  /** Send no occurrence that is older than this number of milliseconds. */
+  readonly maxAgeMs?: number | undefined;
+}
+
+/**
+ * The handle of an event (spec/bindings/typescript.md#event-handles). `Input` and `Payload` are the types of the
+ * schemas of the event. `event` gives a handle with these types.
+ *
+ * The promise of `subscribe` resolves when the subscription has started, and rejects with a `CallFailureError` before
+ * the first occurrence. `return()` of the iterator cancels the subscription, also while a `next()` waits: that `next()`
+ * then resolves with `done: true`. A GraphQL server can return the promise from the `subscribe` resolver of a field.
+ */
+export interface EventHandle<Input = unknown, Payload = unknown> {
+  readonly id: string;
+  readonly description: string;
+  readonly audience: readonly string[];
+  /** A subscription with an input that is already decoded. Each `data` is a copy, in the type of the payload. */
+  subscribe(input: Input, options?: SubscribeOptions): Promise<AsyncIterable<Occurrence<Payload>>>;
+  /** A subscription with an input that is not trusted. The handle validates it first. Each `data` is in its JSON form. */
+  subscribeExternal(input: unknown, options?: SubscribeOptions): Promise<AsyncIterable<Occurrence<unknown>>>;
+}
+
+/** The handle of an event, with the types of its schemas. */
+export type EventHandleOf<E extends Event.Any> = EventHandle<NonNullable<E["input"]>["Type"], NonNullable<E["payload"]>["Type"]>;
 
 /** The typed handle of a capability that a session serves, from its handle by id and its typed call. */
 function typedHandle<
@@ -102,6 +135,11 @@ function outsideView(capability: Capability.Any): Handle<never, never, never, ne
     execute: reject,
     invokeExternal: reject,
   };
+}
+
+function eventOutsideView(event: { readonly id: string; readonly description: string }): EventHandle<never, never> {
+  const reject = () => Promise.reject(new CallFailureError(callFailure("unknown-capability", `There is no event ${event.id}.`)));
+  return { id: event.id, description: event.description, audience: [], subscribe: reject, subscribeExternal: reject };
 }
 
 /** A value that never changes. */
@@ -208,6 +246,116 @@ export const make = <R>(app: App.App<R>, session: Session.Session): Effect.Effec
     return handles;
   });
 
+/**
+ * The handles of the events of a session, by id. A subscription works while the scope is open. When the scope closes,
+ * each subscription ends: its `next()` resolves with `done: true`. The session must come from `Session.make`.
+ */
+export const makeEvents = <R>(app: App.App<R>, session: Session.Session): Effect.Effect<ReadonlyMap<string, EventHandle>, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const scope = yield* Effect.scope;
+    const lifetime = new AbortController();
+    yield* Scope.addFinalizer(scope, Effect.sync(() => lifetime.abort()));
+    const handles = new Map<string, EventHandle>();
+    for (const event of app.events ?? []) {
+      if (!event.audience.includes(session.target)) continue;
+      const subscribeExternal = (input: unknown, options?: SubscribeOptions) =>
+        iterate(session.subscribe(event.id, input, resumeOf(options)), lifetime.signal, options);
+      handles.set(event.id, {
+        id: event.id,
+        description: event.description,
+        audience: [session.target],
+        subscribe: subscribeExternal,
+        subscribeExternal,
+      });
+    }
+    return handles;
+  });
+
+const resumeOf = (options: SubscribeOptions | undefined): Session.SubscribeOptions => ({
+  ...(options?.cursor === undefined ? {} : { cursor: options.cursor }),
+  ...(options?.maxAgeMs === undefined ? {} : { maxAgeMs: options.maxAgeMs }),
+});
+
+const cancelledError = () => new CallFailureError(callFailure("cancelled", "The subscription was cancelled."));
+
+/**
+ * Start a subscription, and give its occurrences as an async iterable. The promise rejects with a `CallFailureError`
+ * when the subscription does not start. `lifetime` and the signal of the options cancel the subscription.
+ *
+ * The iterator runs each `next()` in its own fiber, one at a time. `return()` interrupts the fiber of a `next()` that
+ * waits, so that `next()` resolves with `done: true`, and closes the scope of the subscription. `Stream.toAsyncIterable`
+ * does not do this: its `return()` waits for the `next()` in progress.
+ */
+async function iterate<P>(
+  start: Effect.Effect<Session.Subscription<P>, Session.CallFailed, Scope.Scope>,
+  lifetime: AbortSignal,
+  options: SubscribeOptions | undefined,
+): Promise<AsyncIterable<Occurrence<P>>> {
+  const signal = AbortSignal.any([lifetime, ...(options?.signal ? [options.signal] : [])]);
+  if (signal.aborted) throw cancelledError();
+  const scope = Effect.runSync(Scope.make());
+  const started = await Effect.runPromiseExit(Effect.flatMap(start, Stream.toPull).pipe(Scope.provide(scope)), { signal });
+  if (Exit.isFailure(started)) {
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+    if (Cause.hasInterruptsOnly(started.cause)) throw cancelledError();
+    const failure = Cause.findErrorOption(started.cause);
+    if (failure._tag === "Some") throw new CallFailureError(failure.value);
+    throw Cause.squash(started.cause);
+  }
+  const pull = started.value;
+
+  const ready: Occurrence<P>[] = [];
+  let finished = false;
+  let waiting: Fiber.Fiber<readonly Occurrence<P>[], Session.CallFailed | Cause.Done> | undefined;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    signal.removeEventListener("abort", finish);
+    waiting?.interruptUnsafe();
+    ready.length = 0;
+    Effect.runFork(Scope.close(scope, Exit.void));
+  };
+  signal.addEventListener("abort", finish, { once: true });
+
+  const done = (): IteratorResult<Occurrence<P>> => ({ done: true, value: undefined });
+  /** One `next()`: an occurrence that is ready, or the next pull. */
+  const step = (): Promise<IteratorResult<Occurrence<P>>> => {
+    const value = ready.shift();
+    if (value !== undefined) return Promise.resolve({ done: false, value });
+    if (finished) return Promise.resolve(done());
+    return new Promise((resolve, reject) => {
+      const fiber = Effect.runFork(pull);
+      waiting = fiber;
+      fiber.addObserver((exit) => {
+        waiting = undefined;
+        if (Exit.isSuccess(exit)) {
+          ready.push(...exit.value);
+          return resolve(step());
+        }
+        const ended = finished || Pull.isDoneCause(exit.cause) || Cause.hasInterruptsOnly(exit.cause);
+        finish();
+        if (ended) return resolve(done());
+        const failure = Cause.findErrorOption(exit.cause);
+        reject(failure._tag === "Some" && !Cause.isDone(failure.value) ? new CallFailureError(failure.value) : Cause.squash(exit.cause));
+      });
+    });
+  };
+  // Each `next()` waits for the one before it.
+  let last: Promise<unknown> = Promise.resolve();
+  const iterator: AsyncIterator<Occurrence<P>> = {
+    next: () => {
+      const result = last.then(step, step);
+      last = result.catch(() => undefined);
+      return result;
+    },
+    return: () => {
+      finish();
+      return Promise.resolve(done());
+    },
+  };
+  return { [Symbol.asyncIterator]: () => iterator };
+}
+
 /** The result of an outcome. A call failure is a defect, which rejects the promise of the call with a `CallFailureError`. */
 const resultOf = <Value, Failure>(outcome: Effect.Effect<Outcome<Value, Failure>>): Effect.Effect<Result<Value, Failure>> =>
   Effect.flatMap(outcome, (each) => ("kind" in each ? Effect.die(new CallFailureError(each)) : Effect.succeed(each)));
@@ -247,6 +395,8 @@ export interface WebMcpRegistration {
 
 export interface OpenOptions {
   readonly target: string;
+  /** The number of occurrences of one subscription that the session keeps for a slow client. See `Session.Options`. */
+  readonly eventBuffer?: number | undefined;
   /** The WebMCP host that gets the tools of the session. Without a host, the session registers no tool. */
   readonly webmcp?: WebMcp.ModelContext | undefined;
 }
@@ -285,6 +435,16 @@ export interface PromiseSession<R = never> {
     input: unknown,
     options?: CallOptions,
   ) => Promise<Result<Value, Failure>>;
+  /** The handles of the events in the view, by id. */
+  readonly events: ReadonlyMap<string, EventHandle>;
+  /**
+   * The handle of an event, with the types of the event. Only the event object that the session serves gets a handle
+   * that subscribes to it. Any other event, also one with the same id, gets a handle whose subscriptions reject as
+   * `unknown-capability`. Each call of `event` gives a new handle.
+   */
+  readonly event: <Input extends Capability.AnySchema, Payload extends Capability.AnySchema, Id extends string>(
+    event: Event.Event<Input, Payload, R, Id>,
+  ) => EventHandle<Input["Type"], Payload["Type"]>;
   /** The tools of the session on the WebMCP host of `open`, or `undefined` if `open` got no host. */
   readonly webmcp: WebMcpRegistration | undefined;
   /** The signal of the session. It aborts when the session closes. */
@@ -307,8 +467,9 @@ export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, opti
     Effect.gen(function* () {
       // The services live as long as the session.
       const services = yield* Layer.buildWithScope(layer, scope);
-      const session = yield* Session.make(app, { target: options.target }).pipe(Effect.provideContext(services));
+      const session = yield* Session.make(app, { target: options.target, eventBuffer: options.eventBuffer }).pipe(Effect.provideContext(services));
       const handles = yield* make(app, session);
+      const events = yield* makeEvents(app, session);
       const installation = options.webmcp === undefined ? Option.none<WebMcp.Installation>() : yield* WebMcp.install(session, { host: options.webmcp });
       const follow = yield* FiberSet.runtime(yield* FiberSet.make<void>())();
       const webmcp = Option.getOrUndefined(
@@ -318,14 +479,14 @@ export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, opti
           remove: () => Effect.runPromise(remove),
         })),
       );
-      return { services, session, handles, webmcp };
+      return { services, session, handles, events, webmcp };
     }).pipe(Scope.provide(scope)),
   );
   if (Exit.isFailure(opened)) {
     await Effect.runPromise(Scope.close(scope, opened));
     throw Cause.squash(opened.cause);
   }
-  const { services, session, handles, webmcp } = opened.value;
+  const { services, session, handles, events, webmcp } = opened.value;
   const refs = refsOf(session);
   const run = runner(lifetime.signal, Context.empty());
   /** A program of a capability, with the services of the session. */
@@ -348,6 +509,18 @@ export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, opti
     },
     call: (capability, input, callOptions) =>
       run(resultOf(refs.perform(capability, Effect.map(capability.prepare(input), withServices))), callOptions),
+    events,
+    event: (event) => {
+      const handle = events.get(event.id);
+      if (handle === undefined || !refs.servesEvent(event)) return eventOutsideView(event);
+      return {
+        id: handle.id,
+        description: handle.description,
+        audience: handle.audience,
+        subscribe: (input, subscribeOptions) => iterate(session.follow(event, input, resumeOf(subscribeOptions)), lifetime.signal, subscribeOptions),
+        subscribeExternal: (input, subscribeOptions) => handle.subscribeExternal(input, subscribeOptions),
+      };
+    },
     webmcp,
     signal: lifetime.signal,
     dispose,

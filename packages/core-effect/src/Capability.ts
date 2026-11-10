@@ -3,10 +3,11 @@
  * the operation. See spec/catalog.md#capabilities.
  */
 import type { Availability } from "@acid-cat/spec-ts";
-import { Effect, Schema, SchemaIssue } from "effect";
+import { Effect, Schema } from "effect";
 import type { Stream, SubscriptionRef } from "effect";
 
 import { readable } from "./internal/changes.ts";
+import { describe } from "./internal/issues.ts";
 
 /** A schema that needs no services to decode or encode. */
 export type AnySchema = Schema.Codec<unknown, unknown, never, never>;
@@ -297,15 +298,3 @@ function pipeline<In, Value, Error, R, RState>(parts: {
     state: parts.state,
   };
 }
-
-const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
-
-/** The message of an input that does not decode: each issue, with its path. */
-const describe = (issue: SchemaIssue.Issue): string =>
-  formatIssues(issue)
-    .issues.map((each) => `${pathText(each.path) || "input"}: ${each.message}`)
-    .join("; ");
-
-/** The path of an issue, for example `light.brightness`. */
-const pathText = (path: ReadonlyArray<PropertyKey | { readonly key: PropertyKey }> | undefined): string =>
-  (path ?? []).map((segment) => String(typeof segment === "object" ? segment.key : segment)).join(".");

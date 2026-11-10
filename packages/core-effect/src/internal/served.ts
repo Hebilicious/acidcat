@@ -15,6 +15,8 @@ export interface ServedRefs {
   readonly execute: (id: string, input: unknown) => Effect.Effect<Outcome<unknown, unknown>>;
   /** `true` if the session serves this capability object. */
   readonly serves: (capability: { readonly id: string }) => boolean;
+  /** `true` if the session serves this event object. */
+  readonly servesEvent: (event: { readonly id: string }) => boolean;
   /**
    * Admit a typed call of a capability object, prepare its program, and run it. A program that needs services gets
    * them from its caller. This effect never fails.
