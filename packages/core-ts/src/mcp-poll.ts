@@ -106,10 +106,8 @@ export class PollLeases {
     this.#renew(lease);
     if (read.cursor === undefined) return this.#result([], this.#cursorOf(lease, lease.newest), false, false);
     if (position?.lease === lease.id) return this.#read(lease, position.position, maxEvents, read.cursor);
-    // A cursor of another lease, while a lease with this key exists. The occurrences after the cursor of the provider
-    // follow if the buffer still has that occurrence. If not, the client can have missed occurrences.
-    const resumed = position?.provider === undefined ? undefined : lease.entries.findLast((entry) => entry.occurrence.cursor === position.provider);
-    if (resumed !== undefined) return this.#read(lease, resumed.position, maxEvents, this.#cursorOf(lease, resumed.position));
+    // A cursor of another lease, while a lease with this key exists: the newest position, and the client can have missed
+    // occurrences (spec/bindings/mcp.md#poll).
     return this.#result([], this.#cursorOf(lease, lease.newest), true, false);
   }
 
