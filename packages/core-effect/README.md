@@ -332,6 +332,22 @@ const mcp = Mcp.toWebHandler(aircon, unitLayer, {
 
 Keep the principal of each client separate: the key of a subscription and each verification include it, so a client cannot renew, read the secret of, or end the subscription of another principal. The subscriptions, the verifications and the counts for the limit live in the memory of the process. A server that restarts loses them. Clients subscribe again with their last cursor.
 
+#### Events beside an MCP server of your own
+
+An MCP server whose tools you design, written with `effect/ai/McpServer`, can serve the events of the application too. `Mcp.withEvents(app, layer, server, options)` wraps the web handler of your server. It screens each request as `Mcp.toWebHandler` does. It answers each request of the events extension of revision `2026-07-28` itself, with push, poll and, with the option `webhooks`, webhook delivery. It gives each other request to your server. Give your server `Mcp.eventsExtensions` as its `extensions`, so that `server/discover` declares the extension.
+
+```ts
+const server = McpServer.toolkit(MyTools).pipe(
+  Layer.provide(handlers),
+  Layer.provideMerge(McpServer.layerHttp({ name: "aircon", version: "0.1.0", path: "/mcp", protocols: [McpProtocol.v2026_07_28], extensions: Mcp.eventsExtensions })),
+  Layer.provide(unit),
+);
+const application = HttpRouter.toWebHandler(server);
+const mcp = Mcp.withEvents(aircon, unit, application.handler, { allowedOrigins: [] });
+```
+
+The options of `Mcp.withEvents` are the options of `Mcp.toWebHandler` that screen a request and serve events: `allowedOrigins`, `target`, `maximumBytes`, `services`, `heartbeatMs`, `eventBuffer`, `principal`, `poll` and `webhooks`. `mcp.dispose()` ends the poll leases and the webhook subscriptions. It does not dispose your server.
+
 **Command line.** `watch <id>` follows an event. See [Command line](#command-line).
 
 **WebMCP.** WebMCP serves no events. The page follows them through the event handles.

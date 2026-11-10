@@ -108,6 +108,43 @@ test("through HTTP, events/list gives the events of the view, and Mcp.handle, wh
   assert.equal(poll.error?.code, -32026);
 });
 
+test("withEvents answers the requests of the events extension beside an MCP server of your own, and gives it each other request", async () => {
+  const seen: string[] = [];
+  // A stand-in for a server of your own: it records the method of each request that it gets.
+  const server = async (request: Request) => {
+    const body = decodeMessage(await request.text());
+    seen.push(body.method ?? "");
+    return Response.json({ jsonrpc: "2.0", id: body.id ?? null, result: { tools: [] } });
+  };
+  const feed = feedForPromises();
+  const handler = Mcp.withEvents(events, feed.layer, server, { allowedOrigins: [ORIGIN] });
+  try {
+    assert.deepEqual((await json(await handler(mcpRequest("tools/list")))).result, { tools: [] });
+    const list = Schema.decodeUnknownSync(EventList)((await json(await handler(mcpRequest("events/list")))).result);
+    assert.deepEqual(list.events.find((each) => each.name === "feed.ticked")?.delivery, ["push", "poll"]);
+    assert.deepEqual(seen, ["tools/list"]);
+    assert.equal((await handler(new Request(`${ORIGIN}/mcp`, { method: "GET" }))).status, 405);
+    assert.deepEqual(Mcp.eventsExtensions, { [EXTENSION]: {} });
+
+    const controller = new AbortController();
+    const response = await handler(mcpRequest("events/stream", { name: "feed.ticked", arguments: { room: "hall" } }, { id: 3, signal: controller.signal }));
+    const next = sseMessages(response);
+    assert.equal((await next())?.method, "notifications/events/active");
+    await feed.following(1);
+    await feed.publish({ room: "hall", count: 1 });
+    const event = await next();
+    assert.deepEqual(event?.params?.data, { room: "hall", count: 1 });
+    controller.abort();
+    await feed.following(0);
+
+    const started = await json(await handler(mcpRequest("events/poll", { name: "feed.ticked", arguments: { room: "hall" } })));
+    assert.deepEqual(started.result?.events, []);
+    assert.deepEqual(seen, ["tools/list"]);
+  } finally {
+    await handler.dispose();
+  }
+});
+
 test("through HTTP, a subscription that cannot start is a JSON-RPC error, and the headers must agree with the body", async () => {
   const handler = Mcp.toWebHandler(events, feedLayer, { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN] });
   const hidden = await json(await handler(mcpRequest("events/stream", { name: "feed.hidden" })));

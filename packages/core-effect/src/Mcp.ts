@@ -91,7 +91,7 @@ interface Deliveries {
 }
 
 /** The poll leases and the webhook subscriptions of a server, while the scope is open. */
-const makeDeliveries = (options: Options): Effect.Effect<Deliveries, never, Scope.Scope> =>
+const makeDeliveries = (options: Pick<Options, "poll" | "webhooks">): Effect.Effect<Deliveries, never, Scope.Scope> =>
   Effect.gen(function* () {
     const polls = yield* makePolls(options.poll);
     const webhooks = options.webhooks === undefined ? undefined : yield* makeWebhooks(options.webhooks);
@@ -169,7 +169,7 @@ interface Admitted {
  * Screen a request and read its body (spec/bindings/mcp.md). The result is the rejection, or the request with the body
  * that was read and the signal of the request.
  */
-async function admit(request: Request, options: Options): Promise<Admitted | Response> {
+async function admit(request: Request, options: Pick<Options, "allowedOrigins" | "maximumBytes">): Promise<Admitted | Response> {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
   const screened = screenRequest(request, {
     methods: ["POST"],
@@ -199,21 +199,8 @@ const respond = <R>(app: App.App<R>, admitted: Admitted, options: Options, scope
     const session = yield* Session.make(app, sessionOptions).pipe(Scope.provide(scope));
     const hasEvents = session.view.events !== undefined;
     const request = admitted.request;
-    const events = hasEvents && request.headers.get("MCP-Protocol-Version") === MCP_PROTOCOL_VERSION ? McpEvents.eventsRequestOf(admitted.message) : undefined;
-    if (events !== undefined) {
-      const context = yield* Effect.context<R>();
-      const open: Opener<R> = (holder) =>
-        Effect.andThen(state.keep(holder), Session.make(app, sessionOptions).pipe(Scope.provide(holder), Effect.provideContext(context)));
-      const principal = options.principal === undefined ? Option.none() : yield* options.principal(request);
-      const answerOptions: McpEvents.AnswerOptions<R> = {
-        heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
-        principal,
-        polls: state.polls,
-        webhooks: state.webhooks,
-        open,
-      };
-      return yield* respondToEvents(session, events, request, answerOptions, scope);
-    }
+    const events = hasEvents ? eventsRequestOf(admitted) : undefined;
+    if (events !== undefined) return yield* answerEvents(app, session, events, request, options, scope, state);
     const server = McpServer.layerHttp({
       name: options.name,
       version: options.version,
@@ -228,6 +215,89 @@ const respond = <R>(app: App.App<R>, admitted: Admitted, options: Options, scope
     const response = yield* answer.pipe(Effect.provideService(HttpServerRequest.HttpServerRequest, HttpServerRequest.fromWeb(request)), Scope.provide(scope));
     return HttpServerResponse.toWeb(response);
   }).pipe(closeUnlessStreaming(scope));
+
+/** The request of the events extension in a request of revision 2026-07-28 through HTTP, or `undefined`. */
+const eventsRequestOf = (admitted: Admitted): McpEvents.EventsRequest | undefined =>
+  admitted.request.headers.get("MCP-Protocol-Version") === MCP_PROTOCOL_VERSION ? McpEvents.eventsRequestOf(admitted.message) : undefined;
+
+/**
+ * Answer a request of the events extension with the session of the request. A poll lease or a webhook subscription opens
+ * a session of its own, with the services of the request.
+ */
+const answerEvents = <R>(
+  app: App.App<R>,
+  session: Session.Session<R>,
+  events: McpEvents.EventsRequest,
+  request: Request,
+  options: EventsOptions,
+  scope: Scope.Closeable,
+  state: Deliveries & { readonly keep: Keep },
+) =>
+  Effect.gen(function* () {
+    const sessionOptions = { target: options.target ?? "mcp", eventBuffer: options.eventBuffer };
+    const context = yield* Effect.context<R>();
+    const open: Opener<R> = (holder) => Effect.andThen(state.keep(holder), Session.make(app, sessionOptions).pipe(Scope.provide(holder), Effect.provideContext(context)));
+    const principal = options.principal === undefined ? Option.none() : yield* options.principal(request);
+    const answerOptions: McpEvents.AnswerOptions<R> = {
+      heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
+      principal,
+      polls: state.polls,
+      webhooks: state.webhooks,
+      open,
+    };
+    return yield* respondToEvents(session, events, request, answerOptions, scope);
+  });
+
+/**
+ * The options of `withEvents`: the options of `Options` that tell how the binding screens a request and serves the
+ * events extension.
+ */
+export type EventsOptions = Pick<
+  Options,
+  "allowedOrigins" | "target" | "maximumBytes" | "services" | "heartbeatMs" | "eventBuffer" | "principal" | "poll" | "webhooks"
+>;
+
+/**
+ * The `extensions` of the capabilities of a server that serves the events extension. Give them to the server of
+ * `effect/ai` that `withEvents` wraps: `McpServer.layerHttp({ …, extensions: Mcp.eventsExtensions })`.
+ */
+export const eventsExtensions: { readonly [name: string]: JsonObject } = McpEvents.EXTENSIONS;
+
+/**
+ * Serve the events of an application beside an MCP server of your own, through HTTP (spec/bindings/mcp.md#events).
+ * `server` is the web handler of your server, for example a server of `effect/ai` with your own tools. The result is a
+ * web handler for the same URL. It screens each request as `toWebHandler` does. It answers each request of the events
+ * extension of revision 2026-07-28 itself, with push, poll and, if `options.webhooks` turns it on, webhook delivery,
+ * for the events in the view of `options.target`. It gives each other request to `server`.
+ *
+ * Your server declares the extension: give it `eventsExtensions` as the `extensions` of its capabilities, so that
+ * `server/discover` tells clients that the server serves events. `dispose` ends the poll leases and the webhook
+ * subscriptions, and releases the shared services. It does not dispose `server`.
+ */
+export function withEvents<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, server: (request: Request) => Promise<Response>, options: EventsOptions): WebHandler {
+  const target = options.target ?? "mcp";
+  const hasEvents = viewOf(App.document(app), target).events !== undefined;
+  const { answer, dispose: release } = answerWith(layer, options.services);
+  const scope = Effect.runSync(Scope.make());
+  const deliveries = Effect.runSync(makeDeliveries(options).pipe(Scope.provide(scope)));
+  const handler = async (request: Request): Promise<Response> => {
+    const admitted = await admit(request, options);
+    if (admitted instanceof Response) return admitted;
+    const events = hasEvents ? eventsRequestOf(admitted) : undefined;
+    if (events === undefined) return server(admitted.request);
+    return answer((requestScope, keep) =>
+      Effect.gen(function* () {
+        const session = yield* Session.make(app, { target, eventBuffer: options.eventBuffer }).pipe(Scope.provide(requestScope));
+        return yield* answerEvents(app, session, events, admitted.request, options, requestScope, { ...deliveries, keep });
+      }).pipe(closeUnlessStreaming(requestScope)),
+    );
+  };
+  const dispose = async () => {
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+    await release();
+  };
+  return Object.assign(handler, { dispose });
+}
 
 /**
  * Answer a request of the events extension through HTTP. The headers follow the rules of the transport of revision
