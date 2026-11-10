@@ -11,6 +11,7 @@
     "@acid-cat/core-effect": "workspace:*",
     "@acid-cat/core-ts": "workspace:*",
     "@acid-cat/spec-ts": "workspace:*",
+    "@elysiajs/node": "catalog:",
     "@pothos/core": "catalog:",
     "capnweb": "catalog:",
     "effect": "catalog:",

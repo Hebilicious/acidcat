@@ -1,7 +1,9 @@
 /**
  * An Elysia server for the air conditioner. It mounts the HTTP binding at `/api`, and adds its own routes:
- * `GET /status`, `PATCH /status`, which changes more than one setting in one request, and `GET /status/changes`, a
- * stream of server-sent events that follows the event `aircon.status.changed`.
+ * `GET /status`, `PATCH /status`, which changes more than one setting in one request, `GET /status/changes`, a
+ * stream of server-sent events that follows the event `aircon.status.changed`, and the WebSocket `/status/follow`,
+ * which follows the same event. The WebSocket needs a server adapter that serves WebSockets, for example
+ * `@elysiajs/node` on Node.js: give it as `adapter`, then call `listen`.
  *
  * Each request has its own session. `PATCH /status` checks the shape of its body with Zod, and `session.call` checks
  * each setting with the input schema of its capability. The application chooses the status codes: a failure gives
@@ -11,6 +13,7 @@ import { CallFailureError, ok } from "@acid-cat/core-ts";
 import type { Result, Session } from "@acid-cat/core-ts";
 import { HTTP_STATUS } from "@acid-cat/spec-ts";
 import { Elysia, sse } from "elysia";
+import type { ElysiaConfig } from "elysia";
 import { z } from "zod";
 
 import { fanSet, FanSpeed, Mode, modeSet, powerSet, statusChanged, statusGet, temperatureSet } from "../core-ts/aircon.ts";
@@ -42,8 +45,16 @@ async function change(session: Session<Context>, { power, mode, fan, targetCelsi
   return result;
 }
 
-export function elysiaApi(options: ApiOptions) {
-  return new Elysia()
+/** A WebSocket that follows the event: its session, and the signal that cancels its subscription. */
+interface Following {
+  readonly session: Session<Context>;
+  readonly abort: AbortController;
+}
+
+export function elysiaApi(options: ApiOptions, adapter?: ElysiaConfig<"">["adapter"]) {
+  // Each WebSocket is one session. The id of the WebSocket finds its session when the connection closes.
+  const following = new Map<string, Following>();
+  return new Elysia(adapter === undefined ? {} : { adapter })
     .onRequest(({ request }) => (foreignOrigin(request, options) ? forbidden() : undefined))
     .error({ CallFailureError })
     .onError(({ code, error, set }) => {
@@ -79,5 +90,28 @@ export function elysiaApi(options: ApiOptions) {
       // to wait before it connects again, and sends the response before the first change.
       yield sse({ retry: 1000 });
       for await (const occurrence of occurrences) yield sse({ event: statusChanged.id, data: occurrence.data });
+    })
+    .ws("/status/follow", {
+      // `onRequest` refuses the upgrade request of a foreign origin with 403, so no WebSocket opens for it.
+      async open(ws) {
+        const session = openSession(options);
+        const abort = new AbortController();
+        following.set(ws.id, { session, abort });
+        try {
+          const occurrences = await session.eventHandle(statusChanged).subscribe({}, { signal: abort.signal });
+          ws.send(JSON.stringify({ event: "following" }));
+          for await (const occurrence of occurrences) ws.send(JSON.stringify({ event: statusChanged.id, data: occurrence.data }));
+        } catch (error) {
+          // A subscription that ends with a call failure closes the WebSocket with its kind.
+          if (error instanceof CallFailureError && !abort.signal.aborted) ws.close(1011, error.kind);
+        } finally {
+          following.delete(ws.id);
+          await session.dispose();
+        }
+      },
+      close(ws) {
+        // When the client closes the WebSocket, the subscription is cancelled, and its session closes.
+        following.get(ws.id)?.abort.abort();
+      },
     });
 }

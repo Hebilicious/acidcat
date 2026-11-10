@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
+import { createServer } from "node:net";
 import { test } from "node:test";
 
 import { serve } from "@acid-cat/core-ts/node";
+import { node } from "@elysiajs/node";
+import { WebSocket } from "ws";
 import { z } from "zod";
 
 import { Status, Unit } from "../core-ts/aircon.ts";
@@ -108,4 +112,96 @@ test("when the signal of the request aborts, the stream ends and the subscriptio
   abort.abort();
   assert.equal((await waiting).done, true);
   await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
+});
+
+/** A free port on 127.0.0.1. */
+async function freePort(): Promise<number> {
+  const server = createServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  const port = typeof address === "object" && address !== null ? address.port : 0;
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
+
+/**
+ * Serve an app on the Node.js adapter of Elysia, on a free port. The adapter gives its server to the callback of
+ * `listen`, and starts to listen a short time later: wait until the port answers.
+ */
+async function listenOnNode(app: ReturnType<typeof elysiaApi>): Promise<{ readonly port: number; readonly stop: () => Promise<void> }> {
+  const port = await freePort();
+  let stop: () => Promise<void> = async () => undefined;
+  app.listen({ hostname: "127.0.0.1", port }, (server: unknown) => {
+    if (isStoppable(server)) {
+      stop = async () => {
+        await server.stop();
+      };
+    }
+  });
+  const end = Date.now() + 5000;
+  for (;;) {
+    try {
+      await fetch(`http://127.0.0.1:${port}/status`);
+      return { port, stop };
+    } catch (error) {
+      if (Date.now() > end) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+}
+
+/** Tell if a server has a `stop` method, as the server of the Node.js adapter has. */
+const isStoppable = (server: unknown): server is { stop(): unknown } =>
+  typeof server === "object" && server !== null && "stop" in server && typeof server.stop === "function";
+
+/** The text of a message of a WebSocket. */
+const textOf = (data: Buffer | ArrayBuffer | Buffer[]): string =>
+  Array.isArray(data) ? Buffer.concat(data).toString("utf8") : data instanceof ArrayBuffer ? Buffer.from(data).toString("utf8") : data.toString("utf8");
+
+const Message = z.object({ event: z.string(), data: Status.optional() });
+
+test("the WebSocket /status/follow, on the Node.js adapter of Elysia, gets each change, and closing it ends the subscription", async () => {
+  const unit = new Unit();
+  const { port, stop } = await listenOnNode(elysiaApi({ unit }, node()));
+  const socket = new WebSocket(`ws://127.0.0.1:${port}/status/follow`);
+  try {
+    const messages: z.infer<typeof Message>[] = [];
+    socket.on("message", (data) => messages.push(Message.parse(JSON.parse(textOf(data)))));
+    await until("the subscription has started", () => messages.some((message) => message.event === "following"));
+    assert.equal(unit.statusListeners, 1);
+    // The routes of the application run on the same server.
+    const changed = await fetch(`http://127.0.0.1:${port}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ power: true }),
+    });
+    assert.equal(changed.status, 200);
+    await until("the change arrives", () => messages.some((message) => message.event === "aircon.status.changed"));
+    assert.equal(messages.find((message) => message.event === "aircon.status.changed")?.data?.power, true);
+    socket.close();
+    await until("closing the WebSocket ends the subscription", () => unit.statusListeners === 0);
+  } finally {
+    socket.close();
+    await stop();
+  }
+});
+
+test("the WebSocket /status/follow refuses the upgrade of a foreign origin with 403", async () => {
+  const unit = new Unit();
+  const { port, stop } = await listenOnNode(elysiaApi({ unit, allowedOrigins: [] }, node()));
+  try {
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/status/follow`, { origin: "https://example.com" });
+    const status = await new Promise<number | undefined>((resolve) => {
+      socket.on("unexpected-response", (upgrade, response) => {
+        // With a listener of "unexpected-response", the client ends the request itself.
+        upgrade.destroy();
+        resolve(response.statusCode);
+      });
+    });
+    assert.equal(status, 403);
+    assert.equal(unit.statusListeners, 0);
+  } finally {
+    await stop();
+  }
 });
