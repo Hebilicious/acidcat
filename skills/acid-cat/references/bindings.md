@@ -49,3 +49,21 @@ The documents of the bindings are at https://github.com/Hebilicious/acidcat/tree
 - The page registers one tool for each available capability, on `document.modelContext` or `navigator.modelContext`. With no host, the binding does nothing.
 - The page can remove all tools while the session stays open.
 - WebMCP serves no events. The page follows events through the TypeScript binding.
+
+## GraphQL subscription from an event
+
+A GraphQL API is application code, beside the bindings. A subscription field can follow an event through an event handle:
+
+```ts
+subscription: {
+  statusChanged: {
+    subscribe: (_, __, { session }) => session.eventHandle(statusChanged).subscribe({}), // core-ts
+    resolve: (occurrence) => occurrence.data,
+  },
+}
+```
+
+- Return the promise of `subscribe`. It rejects with a `CallFailureError` when the subscription cannot start. GraphQL calls `return()` of the iterator when the client ends the subscription. In core-effect, use `session.event(statusChanged).subscribe({})` of `Handles.open`.
+- Through server-sent events (GraphQL Yoga, the graphql-sse client), the request has one session. Keep it open until the stream ends, and close it when the client cancels the stream: then each subscription of the session is complete.
+- Through WebSockets (graphql-ws on a `ws` server), make each connection one session: open it in `onConnect`, and close it in `onClose`. Refuse a connection from an origin that the API does not allow.
+- `examples/aircon/apis/graphql.ts` does both, with Pothos and one schema.
