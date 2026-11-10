@@ -1,7 +1,7 @@
 /** A test application with one capability for each behavior that the tests examine. */
 import { z } from "zod";
 
-import { AVAILABLE, capabilitiesFor, defineApp, defineCapability, fail, ok, unavailable } from "../src/index.ts";
+import { AVAILABLE, capabilitiesFor, defineApp, defineCapability, eventsFor, fail, ok, unavailable } from "../src/index.ts";
 import type { Availability, Observable } from "../src/index.ts";
 
 /** A switch that the tests turn on and off, to change the availability of `fixture.toggle`. */
@@ -81,9 +81,105 @@ export class HoldsThatIgnoreCancellation extends Holds {
   }
 }
 
+/**
+ * The subscriptions to `fixture.watch` that are active now, for all the sessions of one provider. `mark` writes the file
+ * of a marker, as for `Holds`.
+ */
+export class Watchers {
+  readonly #watching = new Set<{ readonly key: string; readonly push: (value: string) => void }>();
+  readonly #mark: ((path: string) => Promise<void>) | undefined;
+  readonly #keepAlive: boolean;
+
+  /**
+   * With `keepAlive`, the default, each watch keeps the Node.js process running while it is active, so that the command
+   * line runs until the subscription ends.
+   */
+  constructor(mark?: (path: string) => Promise<void>, keepAlive = true) {
+    this.#mark = mark;
+    this.#keepAlive = keepAlive;
+  }
+
+  /**
+   * The values that `signal` gives for the key, from now until the signal aborts or the client returns. The watch starts
+   * when this function returns, before the first read, so that it gets each value from that time.
+   */
+  watch(key: string, signal: AbortSignal): AsyncIterable<string> {
+    const queue: string[] = [];
+    let wake = () => {};
+    const entry = {
+      key,
+      push: (value: string) => {
+        queue.push(value);
+        wake();
+      },
+    };
+    // A promise alone does not keep a Node.js process running. The timer keeps the command line running while the watch is active.
+    const running = setInterval(() => undefined, 2 ** 30);
+    if (!this.#keepAlive) running.unref();
+    const stop = () => {
+      this.#watching.delete(entry);
+      clearInterval(running);
+      signal.removeEventListener("abort", stop);
+      wake();
+    };
+    this.#watching.add(entry);
+    signal.addEventListener("abort", stop, { once: true });
+    if (signal.aborted) stop();
+    const iterator: AsyncIterator<string, undefined> = {
+      next: async () => {
+        for (;;) {
+          if (!this.#watching.has(entry)) return { done: true, value: undefined };
+          const value = queue.shift();
+          if (value !== undefined) return { done: false, value };
+          await new Promise<void>((resolve) => (wake = resolve));
+        }
+      },
+      return: async () => {
+        stop();
+        return { done: true, value: undefined };
+      },
+    };
+    return { [Symbol.asyncIterator]: () => iterator };
+  }
+
+  /** Write the file of a marker, if this provider writes markers. */
+  async mark(path: string): Promise<void> {
+    await this.#mark?.(path);
+  }
+
+  watching(): string[] {
+    return [...this.#watching].map((entry) => entry.key);
+  }
+
+  /** Give the value to each watch of the key. Return the number of these watches. */
+  signal(key: string, value: string): number {
+    const watches = [...this.#watching].filter((entry) => entry.key === key);
+    for (const entry of watches) entry.push(value);
+    return watches.length;
+  }
+}
+
+/**
+ * Watchers whose subscriptions ignore cancellation: a watch stays active when its signal aborts, and when the
+ * subscription returns. The tests use them to see conform fail. A watch keeps a command line running, but not the
+ * process of the tests, unless `keepAlive` is `true`.
+ */
+export class WatchersThatIgnoreCancellation extends Watchers {
+  constructor(mark?: (path: string) => Promise<void>, keepAlive = false) {
+    super(mark, keepAlive);
+  }
+
+  override watch(key: string): AsyncIterable<string> {
+    const values = super.watch(key, new AbortController().signal)[Symbol.asyncIterator]();
+    // An iterator with no `return`: a `for await` loop that ends does not stop the watch.
+    return { [Symbol.asyncIterator]: () => ({ next: () => values.next() }) };
+  }
+}
+
 export interface Context {
   readonly switch: Switch;
   readonly holds: Holds;
+  readonly watchers: Watchers;
 }
 
 /** The JSON Schema of a Zod schema. The fixtures use only Zod schemas. */
@@ -99,6 +195,8 @@ const Text = z.object({ text: z.string() });
 const Key = z.object({ key: z.string() });
 const Hold = z.object({ key: z.string(), marker: z.string().optional() });
 const Keys = z.object({ keys: z.array(z.string()) });
+const Tick = z.object({ n: z.number().int() });
+const Watched = z.object({ key: z.string(), value: z.string() });
 const Flags = z.object({
   mode: z.enum(["fast", "slow"]),
   count: z.number().int().optional(),
@@ -112,10 +210,17 @@ const Flags = z.object({
 
 const everywhere = ["app", "mcp", "cli", "api"];
 const capability = capabilitiesFor<Context>();
+const event = eventsFor<Context>();
+
+/** The position after a cursor of `fixture.ticks`. A cursor that is not a count starts at the first tick. */
+const after = (cursor: string | undefined): number => {
+  const position = Number(cursor);
+  return Number.isInteger(position) && position >= 0 ? position + 1 : 1;
+};
 
 export const fixture = defineApp<Context>({
   title: "Fixture",
-  description: "One capability for each behavior that acid-cat conform tests.",
+  description: "One capability or event for each behavior that acid-cat conform tests.",
   targets: {
     app: { bindings: ["typescript", "webmcp"] },
     mcp: { bindings: ["mcp"] },
@@ -209,11 +314,96 @@ export const fixture = defineApp<Context>({
       output: Flags,
       run: (input) => ok(input),
     }),
+    capability({
+      id: "fixture.signal",
+      description: "Give an occurrence of fixture.watch to each subscription that watches the key. Return the number of these subscriptions.",
+      audience: everywhere,
+      input: Watched,
+      output: z.object({ delivered: z.number().int() }),
+      run: ({ key, value }, { context }) => ok({ delivered: context.watchers.signal(key, value) }),
+    }),
+    capability({
+      id: "fixture.watching",
+      description: "Return the keys of the subscriptions to fixture.watch that are active now.",
+      audience: everywhere,
+      readOnly: true,
+      output: Keys,
+      run: (_, { context }) => ok({ keys: context.watchers.watching() }),
+    }),
+  ],
+  events: [
+    event({
+      id: "fixture.ticks",
+      description: "Give the occurrences n = 1 to count, with the eventId and the cursor String(n), then end. With a cursor c, start at c + 1. With a gap g, the occurrence n = g has truncated: true, as if the source skipped occurrences before it. The key changes nothing: it gives the subscriptions of each test their own input.",
+      audience: everywhere,
+      input: z.object({ count: z.number().int().min(0).max(100), gap: z.number().int().min(1).max(100).optional(), key: z.string().optional() }),
+      payload: Tick,
+      async *subscribe({ count, gap }, { cursor }) {
+        for (let n = after(cursor); n <= count; n += 1) {
+          const tick = { data: { n }, eventId: String(n), cursor: String(n) };
+          yield n === gap ? { ...tick, truncated: true } : tick;
+        }
+      },
+    }),
+    event({
+      id: "fixture.watch",
+      description: "Give an occurrence each time that fixture.signal gets the key. Never end. With a marker, write a file at that path when the subscription starts.",
+      audience: everywhere,
+      input: z.object({ key: z.string(), marker: z.string().optional() }),
+      payload: Watched,
+      async *subscribe({ key, marker }, { context, signal }) {
+        // The watch starts before the first await, so the subscription gets each signal after subscribe resolves.
+        const values = context.watchers.watch(key, signal);
+        if (marker !== undefined) await context.watchers.mark(marker);
+        for await (const value of values) yield { data: { key, value } };
+      },
+    }),
+    event({
+      id: "fixture.broken",
+      description: "Give the occurrence n = 1, then fail with a defect.",
+      audience: everywhere,
+      payload: Tick,
+      async *subscribe() {
+        yield { data: { n: 1 } };
+        throw new Error("secret internal detail");
+      },
+    }),
+    event({
+      id: "fixture.secret",
+      description: "Only the app target can follow this event. It never gives an occurrence.",
+      audience: ["app"],
+      // An iterator whose next() waits until the subscription ends, and gives no value.
+      subscribe: (_, { signal }) => ({
+        [Symbol.asyncIterator]: () => ({
+          next: () =>
+            new Promise<IteratorResult<never, undefined>>((resolve) => {
+              const end = () => resolve({ done: true, value: undefined });
+              if (signal.aborted) end();
+              else signal.addEventListener("abort", end, { once: true });
+            }),
+        }),
+      }),
+    }),
   ],
 });
 
+/**
+ * The poll settings of the MCP servers of the fixture in the conformance tests: a small buffer and a short lease time, so
+ * that conform can test both. The tests give the same settings to conform.
+ */
+export const POLL = { bufferLimit: 5, leaseMs: 2000 } as const;
+
+/**
+ * The limits of webhook delivery of the MCP server of the fixture in the conformance tests: short lifetimes and a small
+ * number of subscriptions, so that conform can test them. The tests give the same limits to conform.
+ */
+export const WEBHOOK_LIMITS = { minTtlMs: 1000, maxTtlMs: 5000, maxSubscriptions: 3 } as const;
+
+/** The principal of a request in the conformance tests: the token of the header `Authorization: Bearer <principal>`. */
+export const principalOf = (request: Request): string | undefined => /^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")?.[1];
+
 /** The options of a session or a binding of the fixture. */
-export const options = (holds = new Holds()) => ({ context: { switch: new Switch(), holds }, toJsonSchema, onDefect: () => undefined });
+export const options = (holds = new Holds(), watchers = new Watchers()) => ({ context: { switch: new Switch(), holds, watchers }, toJsonSchema, onDefect: () => undefined });
 
 /**
  * An application with one capability, `held.wait`, that runs until its signal aborts. `started` resolves when the call

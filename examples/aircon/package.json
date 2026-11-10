@@ -11,17 +11,22 @@
     "@acid-cat/core-effect": "workspace:*",
     "@acid-cat/core-ts": "workspace:*",
     "@acid-cat/spec-ts": "workspace:*",
+    "@elysiajs/node": "catalog:",
     "@pothos/core": "catalog:",
     "capnweb": "catalog:",
     "effect": "catalog:",
     "elysia": "catalog:",
     "graphql": "catalog:",
+    "graphql-sse": "catalog:",
+    "graphql-ws": "catalog:",
     "graphql-yoga": "catalog:",
+    "ws": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "catalog:",
     "@types/node": "catalog:",
+    "@types/ws": "catalog:",
     "typescript": "catalog:"
   }
 }

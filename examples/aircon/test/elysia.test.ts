@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
+import { createServer } from "node:net";
 import { test } from "node:test";
 
+import { serve } from "@acid-cat/core-ts/node";
+import { node } from "@elysiajs/node";
+import { WebSocket } from "ws";
 import { z } from "zod";
 
-import { Unit } from "../core-ts/aircon.ts";
+import { Status, Unit } from "../core-ts/aircon.ts";
 import { elysiaApi } from "../apis/elysia.ts";
 
 const request = (path: string, init: { method?: string; body?: unknown; origin?: string } = {}) =>
@@ -43,4 +48,167 @@ test("the HTTP binding is mounted at /api, and a foreign origin is rejected", as
   assert.deepEqual(await response.json(), { ok: true, value: null });
   assert.equal(unit.state.power, true);
   assert.equal((await app.handle(request("/status", { origin: "https://example.com" }))).status, 403);
+});
+
+/** Wait until a condition is true, or fail after five seconds. */
+async function until(what: string, condition: () => boolean): Promise<void> {
+  const end = Date.now() + 5000;
+  while (!condition()) {
+    if (Date.now() > end) throw new Error(`waiting until ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+/** Read the events of a stream of server-sent events, one at a time. Each event is a map from field to value. */
+function sseEvents(body: ReadableStream<Uint8Array>) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  return async (): Promise<Map<string, string>> => {
+    while (!text.includes("\n\n")) {
+      const chunk = await reader.read();
+      if (chunk.done) throw new Error("the stream ended before the next event");
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    const end = text.indexOf("\n\n");
+    const lines = text.slice(0, end).split("\n");
+    text = text.slice(end + 2);
+    return new Map(lines.map((line) => [line.slice(0, line.indexOf(":")), line.slice(line.indexOf(":") + 1).trim()]));
+  };
+}
+
+test("GET /status/changes streams each new status as a server-sent event, and a client that goes away ends the subscription", async () => {
+  const unit = new Unit();
+  const app = elysiaApi({ unit });
+  await using served = await serve({ "/status": async (incoming) => app.handle(incoming) }, { port: 0 });
+  const before = unit.statusListeners;
+  const disconnect = new AbortController();
+  const response = await fetch(`${served.url}/status/changes`, { signal: disconnect.signal });
+  assert.equal(response.headers.get("Content-Type"), "text/event-stream");
+  assert.ok(response.body !== null);
+  assert.equal(unit.statusListeners, before + 1, "the subscription has started when the response arrives");
+  const next = sseEvents(response.body);
+  assert.equal((await next()).get("retry"), "1000");
+  await app.handle(request("/status", { method: "PATCH", body: { power: true, fan: "high" } }));
+  const changes = [await next(), await next()];
+  assert.deepEqual(changes.map((event) => event.get("event")), ["aircon.status.changed", "aircon.status.changed"]);
+  const last = Status.parse(JSON.parse(changes[1]?.get("data") ?? "null"));
+  assert.deepEqual({ power: last.power, fan: last.fan }, { power: true, fan: "high" });
+  disconnect.abort();
+  await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
+});
+
+test("when the signal of the request aborts, the stream ends and the subscription with it", async () => {
+  const unit = new Unit();
+  const app = elysiaApi({ unit });
+  const before = unit.statusListeners;
+  const abort = new AbortController();
+  const response = await app.handle(new Request("http://localhost/status/changes", { signal: abort.signal }));
+  assert.ok(response.body !== null);
+  const reader = response.body.getReader();
+  await reader.read();
+  assert.equal(unit.statusListeners, before + 1);
+  const waiting = reader.read();
+  abort.abort();
+  assert.equal((await waiting).done, true);
+  await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
+});
+
+/** A free port on 127.0.0.1. */
+async function freePort(): Promise<number> {
+  const server = createServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  const port = typeof address === "object" && address !== null ? address.port : 0;
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
+
+/**
+ * Serve an app on the Node.js adapter of Elysia, on a free port, and give the function that stops it.
+ *
+ * `@elysiajs/node` 1.4.5 takes `stop` from the web standard adapter of Elysia. That `stop` reads `app.server`, but the
+ * `listen` of `@elysiajs/node` does not set `app.server`. Thus `app.server` stays `null`, and `app.stop()` throws
+ * "Elysia isn't running" for a server that runs. The adapter gives its server to the callback of `listen`, and that
+ * server has its own `stop`: the function stops that server. When a release of `@elysiajs/node` sets `app.server` in
+ * `listen`, use `app.stop()`, and remove the callback and `isStoppable`.
+ *
+ * The adapter starts to listen a short time after `listen` returns, so wait until the port answers.
+ */
+async function listenOnNode(app: ReturnType<typeof elysiaApi>): Promise<{ readonly port: number; readonly stop: () => Promise<void> }> {
+  const port = await freePort();
+  let stop: () => Promise<void> = async () => undefined;
+  app.listen({ hostname: "127.0.0.1", port }, (server: unknown) => {
+    if (isStoppable(server)) {
+      stop = async () => {
+        await server.stop();
+      };
+    }
+  });
+  const end = Date.now() + 5000;
+  for (;;) {
+    try {
+      await fetch(`http://127.0.0.1:${port}/status`);
+      return { port, stop };
+    } catch (error) {
+      if (Date.now() > end) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+}
+
+/** Tell if a server has a `stop` method, as the server of the Node.js adapter has. */
+const isStoppable = (server: unknown): server is { stop(): unknown } =>
+  typeof server === "object" && server !== null && "stop" in server && typeof server.stop === "function";
+
+/** The text of a message of a WebSocket. */
+const textOf = (data: Buffer | ArrayBuffer | Buffer[]): string =>
+  Array.isArray(data) ? Buffer.concat(data).toString("utf8") : data instanceof ArrayBuffer ? Buffer.from(data).toString("utf8") : data.toString("utf8");
+
+const Message = z.object({ event: z.string(), data: Status.optional() });
+
+test("the WebSocket /status/follow, on the Node.js adapter of Elysia, gets each change, and closing it ends the subscription", async () => {
+  const unit = new Unit();
+  const { port, stop } = await listenOnNode(elysiaApi({ unit }, node()));
+  const socket = new WebSocket(`ws://127.0.0.1:${port}/status/follow`);
+  try {
+    const messages: z.infer<typeof Message>[] = [];
+    socket.on("message", (data) => messages.push(Message.parse(JSON.parse(textOf(data)))));
+    await until("the subscription has started", () => messages.some((message) => message.event === "following"));
+    assert.equal(unit.statusListeners, 1);
+    // The routes of the application run on the same server.
+    const changed = await fetch(`http://127.0.0.1:${port}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ power: true }),
+    });
+    assert.equal(changed.status, 200);
+    await until("the change arrives", () => messages.some((message) => message.event === "aircon.status.changed"));
+    assert.equal(messages.find((message) => message.event === "aircon.status.changed")?.data?.power, true);
+    socket.close();
+    await until("closing the WebSocket ends the subscription", () => unit.statusListeners === 0);
+  } finally {
+    socket.close();
+    await stop();
+  }
+});
+
+test("the WebSocket /status/follow refuses the upgrade of a foreign origin with 403", async () => {
+  const unit = new Unit();
+  const { port, stop } = await listenOnNode(elysiaApi({ unit, allowedOrigins: [] }, node()));
+  try {
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/status/follow`, { origin: "https://example.com" });
+    const status = await new Promise<number | undefined>((resolve) => {
+      socket.on("unexpected-response", (upgrade, response) => {
+        // With a listener of "unexpected-response", the client ends the request itself.
+        upgrade.destroy();
+        resolve(response.statusCode);
+      });
+    });
+    assert.equal(status, 403);
+    assert.equal(unit.statusListeners, 0);
+  } finally {
+    await stop();
+  }
 });

@@ -3,9 +3,9 @@
  */
 import { AVAILABLE } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer, Ref, Schema, SubscriptionRef } from "effect";
+import { Context, Effect, Layer, Ref, Schema, Stream, SubscriptionRef } from "effect";
 
-import { App, Capability } from "@acid-cat/core-effect";
+import { App, Capability, Event } from "@acid-cat/core-effect";
 
 // --- Types -------------------------------------------------------------------------------------------------------
 
@@ -46,6 +46,8 @@ export class Unit extends Context.Service<
     readonly firmware: string;
     /** The days and hours when the unit turns on. */
     readonly schedule: Ref.Ref<typeof Schedule.Type>;
+    /** The number of subscriptions to `aircon.status.changed` that follow the status now. The tests read it. */
+    readonly statusListeners: SubscriptionRef.SubscriptionRef<number>;
   }
 >()("aircon/Unit") {}
 
@@ -57,6 +59,7 @@ export const unitLayer = Layer.effect(
       connection: yield* SubscriptionRef.make<Availability>(AVAILABLE),
       firmware: "1.0.0",
       schedule: yield* Ref.make<typeof Schedule.Type>({ days: [], hours: [] }),
+      statusListeners: yield* SubscriptionRef.make(0),
     };
   }),
 );
@@ -156,6 +159,35 @@ export const firmwareUpdate = Capability.make({
   run: () => Effect.flatMap(Unit, (unit) => Effect.fail(UpToDate.make({ version: unit.firmware }))),
 });
 
+// --- The events --------------------------------------------------------------------------------------------------
+
+/** True if two statuses are the same. */
+const sameStatus = (a: typeof Status.Type, b: typeof Status.Type) => JSON.stringify(a) === JSON.stringify(b);
+
+export const statusChanged = Event.make({
+  id: "aircon.status.changed",
+  description: "The status of the unit changed. The occurrence gives the new status.",
+  audience: everywhere,
+  input: Schema.Struct({}),
+  payload: Status,
+  // The changes of the ref start with the status of now. Each later status that is not the same is an occurrence. The
+  // count of listeners goes up when the stream starts, and down when it ends.
+  subscribe: () =>
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const unit = yield* Unit;
+        yield* Effect.acquireRelease(SubscriptionRef.update(unit.statusListeners, (count) => count + 1), () =>
+          SubscriptionRef.update(unit.statusListeners, (count) => count - 1),
+        );
+        return SubscriptionRef.changes(unit.status);
+      }),
+    ).pipe(
+      Stream.changesWith(sameStatus),
+      Stream.drop(1),
+      Stream.map((status) => ({ data: status })),
+    ),
+});
+
 // --- The application ---------------------------------------------------------------------------------------------
 
 export const aircon = App.make({
@@ -169,4 +201,5 @@ export const aircon = App.make({
     api: { description: "Home-automation systems and scripts.", bindings: ["http"] },
   },
   capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, scheduleSet, firmwareUpdate],
+  events: [statusChanged],
 });

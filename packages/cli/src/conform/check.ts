@@ -2,8 +2,10 @@
 import { setTimeout as pause } from "node:timers/promises";
 
 import fixtureJson from "../../conformance/fixture.acidcat.json" with { type: "json" };
-import { CALL_FAILURE_KINDS, viewOf } from "@acid-cat/spec-ts";
-import type { CatalogDocument, Outcome } from "@acid-cat/spec-ts";
+import { CALL_FAILURE_KINDS, isOccurrence, viewOf } from "@acid-cat/spec-ts";
+import type { CatalogDocument, Occurrence, Outcome } from "@acid-cat/spec-ts";
+import { Schema, SchemaRepresentation } from "effect";
+import type { JsonSchema } from "effect";
 
 import { isObject } from "../json.ts";
 
@@ -13,6 +15,8 @@ export interface Check {
   /** The part of the specification that the check tests, for example `spec/bindings/mcp.md#tools`. */
   readonly rule: string;
   readonly passed: boolean;
+  /** `true` when the check tests a recommendation (SHOULD) that the implementation does not follow. The check still passes. */
+  readonly warning?: boolean | undefined;
   readonly detail?: string | undefined;
 }
 
@@ -32,6 +36,40 @@ export const isOutcome = (value: unknown): value is Outcome<unknown, unknown> =>
 
 /** The ids of the capabilities in the view of a target of the fixture. */
 export const idsOf = (target: string): string[] => Object.keys(viewOf(fixture, target).capabilities).sort();
+
+/** The ids of the events in the view of a target of the fixture. */
+export const eventIdsOf = (target: string): string[] => Object.keys(viewOf(fixture, target).events ?? {}).sort();
+
+/** A check of a payload against the payload schema of an event of the fixture, made once for each event. */
+const payloadChecks = new Map<string, (data: unknown) => boolean>();
+
+/** True if the data agrees with the payload schema of the event. With no payload schema, the data is an empty object. */
+function agreesWithPayload(id: string, data: unknown): boolean {
+  let agrees = payloadChecks.get(id);
+  if (agrees === undefined) {
+    const payload = fixture.events?.[id]?.payload;
+    if (payload === undefined) {
+      agrees = (value) => isObject(value) && Object.keys(value).length === 0;
+    } else {
+      const definitions: JsonSchema.Definitions = fixture.$defs ?? {};
+      const schema = SchemaRepresentation.fromJsonSchemaDocument({ dialect: "draft-2020-12", schema: payload, definitions }, { patterns: "apply" });
+      agrees = Schema.is(Schema.toType(schema));
+    }
+    payloadChecks.set(id, agrees);
+  }
+  return agrees(data);
+}
+
+/**
+ * The value as an occurrence of the event `id`: an occurrence in its JSON form (schemas/occurrence.schema.json), with
+ * the id as its name, and data that agrees with the payload schema. The check fails when the value is not one.
+ */
+export function expectOccurrence(value: unknown, id: string): Occurrence {
+  expect(isOccurrence(value), `expected an occurrence, got ${JSON.stringify(value)}`);
+  expectEqual(value.name, id, "the name of the occurrence");
+  expect(agreesWithPayload(id, value.data), `the data of the occurrence must agree with the payload schema of ${id}, got ${JSON.stringify(value.data)}`);
+  return value;
+}
 
 /** The time, in milliseconds, that each check has to settle when `conform` gets no other time. */
 export const DEADLINE = 30_000;
@@ -53,15 +91,26 @@ export class Checks {
   }
 
   async run(name: string, rule: string, body: (signal: AbortSignal) => Promise<void> | void): Promise<void> {
+    const failure = await this.#settle(body);
+    this.results.push(failure === undefined ? { binding: this.binding, name, rule, passed: true } : { binding: this.binding, name, rule, passed: false, detail: failure });
+  }
+
+  /** Run a check of a recommendation (SHOULD). When it fails, the result is a warning, and the check passes. */
+  async should(name: string, rule: string, body: (signal: AbortSignal) => Promise<void> | void): Promise<void> {
+    const failure = await this.#settle(body);
+    this.results.push(failure === undefined ? { binding: this.binding, name, rule, passed: true } : { binding: this.binding, name, rule, passed: true, warning: true, detail: failure });
+  }
+
+  /** Run the body of a check with its deadline. The result is the detail of the failure, or `undefined`. */
+  async #settle(body: (signal: AbortSignal) => Promise<void> | void): Promise<string | undefined> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.deadline);
     try {
       await body(controller.signal);
-      this.results.push({ binding: this.binding, name, rule, passed: true });
+      return undefined;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const detail = controller.signal.aborted ? `did not settle within ${this.deadline} ms: ${message}` : message;
-      this.results.push({ binding: this.binding, name, rule, passed: false, detail });
+      return controller.signal.aborted ? `did not settle within ${this.deadline} ms: ${message}` : message;
     } finally {
       clearTimeout(timer);
     }

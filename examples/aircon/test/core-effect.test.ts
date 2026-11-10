@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { check } from "@acid-cat/cli";
 import { Effect, Fiber, Layer, Schema, Stream } from "effect";
 
-import { aircon, unitLayer } from "../core-effect/aircon.ts";
+import { aircon, statusChanged, unitLayer } from "../core-effect/aircon.ts";
 import { App, Mcp, Session } from "@acid-cat/core-effect";
 import { shape, writtenText } from "./shape.ts";
 
@@ -31,6 +31,24 @@ test("the unit works through a session", () =>
         assert.deepEqual(state, { power: true, mode: "heat", fan: "auto", targetCelsius: 22, roomCelsius: 25 });
         const status = yield* session.invoke("aircon.status.get", {});
         assert.deepEqual(status, { ok: true, value: { power: true, mode: "heat", fan: "auto", targetCelsius: 22, roomCelsius: 25 } });
+      }),
+    ).pipe(Effect.provide(Layer.fresh(unitLayer))),
+  ));
+
+test("aircon.status.changed gives the new status after each change, and nothing for a change to the same status", () =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make(aircon, { target: "app" });
+        const changes = yield* session.follow(statusChanged, {});
+        const occurrences = yield* changes.pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }));
+        yield* session.invoke("aircon.power.set", { on: true });
+        yield* session.invoke("aircon.power.set", { on: true });
+        yield* session.invoke("aircon.fan.set", { speed: "high" });
+        const [power, fan] = yield* Fiber.join(occurrences);
+        assert.equal(power?.name, "aircon.status.changed");
+        assert.deepEqual(power?.data, { power: true, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 });
+        assert.deepEqual(fan?.data, { power: true, mode: "cool", fan: "high", targetCelsius: 22, roomCelsius: 25 });
       }),
     ).pipe(Effect.provide(Layer.fresh(unitLayer))),
   ));

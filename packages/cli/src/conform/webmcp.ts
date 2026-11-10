@@ -239,6 +239,11 @@ export async function checkWebMcp(driver: WebMcpDriver, options: { readonly dead
   await checks.run("each available capability of the view is a tool", `${RULE}#tools`, async (signal) => {
     await until(`the tools are ${expected.join(", ")}`, () => names(driver, signal), (tools) => JSON.stringify(tools) === JSON.stringify(expected), signal);
   });
+  await checks.run("an event is not a tool", `${RULE}#events`, async (signal) => {
+    const tools = await names(driver, signal);
+    const events = Object.keys(fixture.events ?? {}).filter((id) => tools.includes(id));
+    expectEqual(events, [], "the tools that have the id of an event");
+  });
   await checks.run("a tool has the description and the bundled input schema of its capability", `${RULE}#tools`, async (signal) => {
     for (const tool of await driver.tools(signal)) {
       expectEqual(tool.description, view[tool.name]?.description, `description of ${tool.name}`);

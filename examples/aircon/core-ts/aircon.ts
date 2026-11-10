@@ -3,7 +3,7 @@
  */
 import { z } from "zod";
 
-import { AVAILABLE, capabilitiesFor, defineApp, fail, ok, unavailable } from "@acid-cat/core-ts";
+import { AVAILABLE, capabilitiesFor, defineApp, eventsFor, fail, ok, unavailable } from "@acid-cat/core-ts";
 import type { Availability, Observable, ToJsonSchema } from "@acid-cat/core-ts";
 
 // --- Types -------------------------------------------------------------------------------------------------------
@@ -54,6 +54,53 @@ export class Unit {
     },
   };
 
+  /**
+   * Each new status of the unit, from now until the signal aborts or the client returns. A change that keeps the same
+   * status gives nothing. The listener is registered when this function returns, before the first read.
+   */
+  statusChanges(signal: AbortSignal): AsyncIterable<z.infer<typeof Status>> {
+    const queue: z.infer<typeof Status>[] = [];
+    let last = JSON.stringify(this.status.getSnapshot());
+    let wake = () => {};
+    let open = true;
+    const listener = (status: z.infer<typeof Status>) => {
+      const text = JSON.stringify(status);
+      if (text === last) return;
+      last = text;
+      queue.push(status);
+      wake();
+    };
+    const stop = () => {
+      open = false;
+      this.#statusListeners.delete(listener);
+      signal.removeEventListener("abort", stop);
+      wake();
+    };
+    this.#statusListeners.add(listener);
+    signal.addEventListener("abort", stop, { once: true });
+    if (signal.aborted) stop();
+    const iterator: AsyncIterator<z.infer<typeof Status>, undefined> = {
+      next: async () => {
+        for (;;) {
+          const status = queue.shift();
+          if (status !== undefined) return { done: false, value: status };
+          if (!open) return { done: true, value: undefined };
+          await new Promise<void>((resolve) => (wake = resolve));
+        }
+      },
+      return: async () => {
+        stop();
+        return { done: true, value: undefined };
+      },
+    };
+    return { [Symbol.asyncIterator]: () => iterator };
+  }
+
+  /** The number of listeners of the status, to see when a subscription stops. */
+  get statusListeners(): number {
+    return this.#statusListeners.size;
+  }
+
   change(update: Partial<State>) {
     this.state = { ...this.state, ...update };
     this.#listeners.forEach((listener) => listener(this.online.getSnapshot()));
@@ -66,6 +113,7 @@ export interface Context {
 }
 
 const capability = capabilitiesFor<Context>();
+const event = eventsFor<Context>();
 
 /** Change the unit if it is online. */
 const change = (unit: Unit, update: Partial<State>) => {
@@ -153,6 +201,20 @@ export const firmwareUpdate = capability({
   run: (_, { context }) => fail({ _tag: "UpToDate", version: context.unit.state.firmware }),
 });
 
+// --- The events --------------------------------------------------------------------------------------------------
+
+export const statusChanged = event({
+  id: "aircon.status.changed",
+  description: "The status of the unit changed. The occurrence gives the new status.",
+  audience: everywhere,
+  input: z.object({}),
+  payload: Status,
+  async *subscribe(_, { context, signal }) {
+    // The listener is registered before the first await, so the subscription gets each change after subscribe resolves.
+    for await (const status of context.unit.statusChanges(signal)) yield { data: status };
+  },
+});
+
 // --- The application ---------------------------------------------------------------------------------------------
 
 export const aircon = defineApp<Context>({
@@ -166,6 +228,7 @@ export const aircon = defineApp<Context>({
     api: { description: "Home-automation systems and scripts.", bindings: ["http"] },
   },
   capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, scheduleSet, firmwareUpdate],
+  events: [statusChanged],
 });
 
 /** Converts a Zod schema to JSON Schema, for the catalog. */

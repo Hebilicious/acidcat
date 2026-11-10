@@ -61,3 +61,8 @@ type Status {
 
 """The status of the unit, or the failure that stops the call."""
 union StatusResult = Offline | Status
+
+type Subscription {
+  """The status of the unit changed. The occurrence gives the new status."""
+  statusChanged: Status!
+}

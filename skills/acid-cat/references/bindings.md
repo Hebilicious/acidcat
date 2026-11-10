@@ -49,3 +49,27 @@ The documents of the bindings are at https://github.com/Hebilicious/acidcat/tree
 - The page registers one tool for each available capability, on `document.modelContext` or `navigator.modelContext`. With no host, the binding does nothing.
 - The page can remove all tools while the session stays open.
 - WebMCP serves no events. The page follows events through the TypeScript binding.
+
+## GraphQL subscription from an event
+
+A GraphQL API is application code, beside the bindings. A subscription field can follow an event through an event handle:
+
+```ts
+subscription: {
+  statusChanged: {
+    subscribe: (_, __, { session }) => session.eventHandle(statusChanged).subscribe({}), // core-ts
+    resolve: (occurrence) => occurrence.data,
+  },
+}
+```
+
+- Return the promise of `subscribe`. It rejects with a `CallFailureError` when the subscription cannot start. GraphQL calls `return()` of the iterator when the client ends the subscription. In core-effect, use `session.event(statusChanged).subscribe({})` of `Handles.open`.
+- Through server-sent events (GraphQL Yoga, the graphql-sse client), the request has one session. Keep it open until the stream ends, and close it when the client cancels the stream: then each subscription of the session is complete.
+- Through WebSockets (graphql-ws on a `ws` server), make each connection one session: open it in `onConnect`, and close it in `onClose`. Refuse a connection from an origin that the API does not allow.
+- `examples/aircon/apis/graphql.ts` does both, with Pothos and one schema.
+
+## Other APIs that follow an event
+
+- **Cap'n Web.** Take a function of the client: `followStatus(listener: RpcStub<(status: Status) => void>)`. Subscribe with a signal, keep `listener.dup()`, because Cap'n Web disposes the stubs of the parameters when the call returns, and call it with the data of each occurrence. Return an `RpcTarget` whose `[Symbol.dispose]()` aborts the signal: the client disposes it to stop. Also abort when `onRpcBroken` fires or a call to the listener rejects. A call back to the client needs a connection that stays open: serve it through WebSockets, with one session for each connection. Do not return a `ReadableStream` for this: when the client cancels it while the server waits for the next occurrence, Cap'n Web does not cancel the source.
+- **Elysia.** Use a generator route and `sse`. Pass `request.signal` to `subscribe`: Elysia calls `return()` of the generator when the client goes away, but that call waits until the `await` of the loop ends. Elysia sends the response after the first value of the generator, so yield a first event at once, for example `sse({ retry: 1000 })`. Open the session in the generator with `await using`: it closes when the stream ends. For a WebSocket, use `.ws()` on a server adapter that serves WebSockets, for example `@elysiajs/node` on Node.js: open a session and subscribe in `open`, and abort the subscription in `close`. The `listen` callback of `@elysiajs/node` gives the server, with `stop()`.
+- `examples/aircon/apis/capnweb.ts` and `examples/aircon/apis/elysia.ts` do this, with their tests.

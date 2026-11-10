@@ -17,20 +17,25 @@ catalog:
   "@modelcontextprotocol/client": 2.3.1
   "@effect/platform-node": ^4.1.1
   "@effect/platform-node-shared": ^4.1.1
+  "@elysiajs/node": 1.4.5
   "@pothos/core": 4.15.1
   "@types/node": 26.6.5
+  "@types/ws": 8.18.2
   capnweb: 0.12.0
   effect: ^4.1.1
   esbuild: 0.28.2
   elysia: 1.4.30
   fast-check: 4.10.2
   graphql: 17.0.2
-  graphql-yoga: 5.24.4
+  graphql-sse: 2.6.3
+  graphql-ws: 6.4.1
+  graphql-yoga: 6.0.1
   oxlint: 1.89.0
   oxlint-tsgolint: 7.0.2005
   playwright: 1.64.0
   rolldown: 1.2.13
   typescript: 7.0.2
+  ws: 8.22.2
   zod: 4.6.7
 
 # The ranges that published packages accept for their peer dependencies. The packages test against `catalog`.

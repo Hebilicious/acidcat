@@ -58,7 +58,7 @@ An **event** is a thing that happens in the application, that clients follow, fo
 3. Implement it in the core: in core-ts, `defineEvent` with a `subscribe` that gives an async iterable; in core-effect, `Event.make` with a `subscribe` that gives a `Stream`. See [references/cores.md](references/cores.md).
 4. Write the JSON of the catalog again, and run `acid-cat check --strict <catalog>`. A view has the events whose audience has its target.
 
-To keep old clients working, add members to a payload, and do not remove or change members. [spec/events.md](https://github.com/Hebilicious/acidcat/blob/main/spec/events.md) tells how subscriptions, occurrences and cursors work. The document of each binding tells how it serves them. The WebMCP binding does not serve events.
+To keep old clients working, add members to a payload, and do not remove or change members. [spec/events.md](https://github.com/Hebilicious/acidcat/blob/main/spec/events.md) tells how subscriptions, occurrences and cursors work. The document of each binding tells how it serves them. The WebMCP binding does not serve events. To follow an event in your own API, with a GraphQL subscription, a Cap'n Web callback or an Elysia stream of server-sent events, see [references/bindings.md](references/bindings.md#graphql-subscription-from-an-event).
 
 ## Serve a binding
 
@@ -84,7 +84,7 @@ acid-cat conform --mcp http://127.0.0.1:3000/mcp --http http://127.0.0.1:3000/ap
   --cli "node cli.ts" --mcp-stdio "node mcp.ts"  # each binding of a running implementation
 ```
 
-`acid-cat` is the npm package `@acid-cat/cli`. `acid-cat conform` tests an implementation of the conformance fixture, not of your catalog. Run it in the tests of a new core or a new binding. For an application, test the capabilities through a session, and the surfaces through the bindings.
+`acid-cat` is the npm package `@acid-cat/cli`. `acid-cat conform` tests an implementation of the conformance fixture, not of your catalog. It tests the capabilities and the events of the fixture through each binding: outcomes, call failures, occurrences, the ends of a subscription, and cancellation. Through MCP, it also tests poll delivery, and with `--webhook-principal`, `--webhook-cert` and `--webhook-key`, webhook delivery. Give the deployment under test a small poll buffer, a short lease time, short webhook lifetimes and a small limit of webhook subscriptions, and the same values to `--poll-buffer`, `--poll-lease-ms`, `--webhook-min-ttl-ms`, `--webhook-max-ttl-ms` and `--webhook-max-subscriptions`, so that conform tests them too. For webhooks, the deployment trusts the test certificate, allows private networks, and takes the principal from `Authorization: Bearer <principal>`. Run it in the tests of a new core or a new binding. For an application, test the capabilities through a session, and the surfaces through the bindings.
 
 ## Common mistakes
 

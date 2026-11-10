@@ -18,11 +18,20 @@ const Catalog = z.looseObject({
       state: z.looseObject({}).optional(),
     }),
   ),
+  events: z
+    .record(
+      z.string(),
+      z.looseObject({ audience: z.array(z.string()).optional(), input: z.looseObject({}).optional(), payload: z.looseObject({}).optional() }),
+    )
+    .optional(),
 });
 
-/** The targets of a catalog, and for each capability its audience, its failure tags, and if it is read-only or has state. */
+/**
+ * The targets of a catalog, for each capability its audience, its failure tags, and if it is read-only or has state, and
+ * for each event its audience, if it has an input, and the type that its payload refers to.
+ */
 export function shape(catalog: unknown) {
-  const { targets, capabilities } = Catalog.parse(catalog);
+  const { targets, capabilities, events = {} } = Catalog.parse(catalog);
   return {
     targets,
     capabilities: Object.fromEntries(
@@ -34,6 +43,12 @@ export function shape(catalog: unknown) {
           failures: Object.keys(capability.failures ?? {}).sort(),
           state: capability.state !== undefined,
         },
+      ]),
+    ),
+    events: Object.fromEntries(
+      Object.entries(events).map(([id, event]) => [
+        id,
+        { audience: event.audience, input: event.input !== undefined, payload: event.payload?.["$ref"] ?? event.payload !== undefined },
       ]),
     ),
   };

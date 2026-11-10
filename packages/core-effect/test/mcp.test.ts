@@ -83,8 +83,10 @@ test("tools/list gives the available capabilities of the view, with their schema
     "fixture.hold",
     "fixture.refuse",
     "fixture.release",
+    "fixture.signal",
     "fixture.switch.set",
     "fixture.toggle",
+    "fixture.watching",
   ]);
   const echo = tools.find((tool) => tool.name === "fixture.echo");
   assert.ok(echo !== undefined);

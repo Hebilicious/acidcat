@@ -73,7 +73,12 @@ async function answer(
       outgoing.end();
       return;
     }
-    for await (const chunk of response.body) outgoing.write(chunk);
+    // Send the headers before the first chunk, so that the client of a stream of server-sent events gets the status
+    // before the first message. When the client closes the connection, the body is cancelled.
+    outgoing.flushHeaders();
+    const reader = response.body.getReader();
+    abort.signal.addEventListener("abort", () => void reader.cancel().catch(() => undefined), { once: true });
+    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) outgoing.write(chunk.value);
     outgoing.end();
   } catch {
     if (!outgoing.headersSent) outgoing.writeHead(500);

@@ -4,6 +4,14 @@ import { Schema } from "effect";
 /** The list of `GET /capabilities` of the HTTP binding. */
 export const Listing = Schema.Array(Schema.Struct({ id: Schema.String, available: Schema.Boolean }));
 
+/** The list of the CLI binding: the capabilities, with their availability, then the events. */
+export const CliListing = Schema.Array(
+  Schema.Union([
+    Schema.Struct({ id: Schema.String, kind: Schema.Literal("capability"), available: Schema.Boolean }),
+    Schema.Struct({ id: Schema.String, kind: Schema.Literal("event") }),
+  ]),
+);
+
 /** A catalog, with only the members that the tests read. */
 export const CatalogShape = Schema.Struct({
   targets: Schema.Record(Schema.String, Schema.Unknown),

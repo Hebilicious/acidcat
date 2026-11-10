@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { check } from "@acid-cat/cli";
 import type { z } from "zod";
 
-import { aircon, firmwareUpdate, modeSet, Offline, PoweredOff, powerSet, Status, statusGet, toJsonSchema, Unit } from "../core-ts/aircon.ts";
+import { aircon, fanSet, firmwareUpdate, modeSet, Offline, PoweredOff, powerSet, Status, statusChanged, statusGet, toJsonSchema, Unit } from "../core-ts/aircon.ts";
 import { CallFailureError, catalogOf, createSession, renderCatalog, runCli } from "@acid-cat/core-ts";
 import type { Result } from "@acid-cat/core-ts";
 import { shape, writtenText } from "./shape.ts";
@@ -14,6 +14,24 @@ test("the code writes a catalog that conforms and agrees with the Pkl catalog", 
   const text = renderCatalog(aircon, { toJsonSchema });
   assert.deepEqual(check(JSON.parse(text), text).errors, []);
   assert.deepEqual(shape(catalogOf(aircon, { toJsonSchema })), shape(JSON.parse(writtenText)));
+});
+
+test("aircon.status.changed gives the new status after each change, and nothing for a change to the same status", async () => {
+  const unit = new Unit();
+  await using session = createSession(aircon, { target: "app", context: { unit }, toJsonSchema });
+  const before = unit.statusListeners;
+  const occurrences = await session.eventHandle(statusChanged).subscribe({});
+  await session.call(powerSet, { on: true });
+  await session.call(powerSet, { on: true });
+  await session.call(fanSet, { speed: "high" });
+  const power = await occurrences.next();
+  const fan = await occurrences.next();
+  assert.equal(power.done, false);
+  assert.equal(power.value?.name, "aircon.status.changed");
+  assert.deepEqual(power.value?.data, { power: true, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 });
+  assert.deepEqual(fan.value?.data, { power: true, mode: "cool", fan: "high", targetCelsius: 22, roomCelsius: 25 });
+  await occurrences.return();
+  assert.equal(unit.statusListeners, before, "the subscription stops listening when it ends");
 });
 
 test("the unit works through a session and the command line", async () => {

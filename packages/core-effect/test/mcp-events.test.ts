@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Cause, Effect, Exit, Fiber, Queue, Schema, Scope, Sink, Stdio, Stream } from "effect";
+import { Cause, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Sink, Stdio, Stream } from "effect";
 
 import { Mcp } from "../src/index.ts";
 import * as NodeServer from "../src/NodeServer.ts";
 import { events, feedForPromises, feedLayer, following, publish } from "./events-fixture.ts";
-import { fixture, fixtureLayer } from "./fixture.ts";
+import { recordingApp } from "./fixture.ts";
 
 const ORIGIN = "https://fixture.example";
 const SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId";
@@ -83,7 +83,7 @@ test("through HTTP, server/discover declares the extension only when the view ha
   const handler = Mcp.toWebHandler(events, feedLayer, { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN] });
   const discovered = Schema.decodeUnknownSync(Discovery)((await json(await handler(mcpRequest("server/discover")))).result);
   assert.deepEqual(discovered.capabilities.extensions?.[EXTENSION], {});
-  const without = Mcp.toWebHandler(fixture, fixtureLayer, { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] });
+  const without = Mcp.toWebHandler(recordingApp().app, Layer.empty, { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] });
   const plain = Schema.decodeUnknownSync(Discovery)((await json(await without(mcpRequest("server/discover")))).result);
   assert.equal(plain.capabilities.extensions?.[EXTENSION], undefined);
   const notFound = await without(mcpRequest("events/list"));
