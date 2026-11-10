@@ -335,7 +335,7 @@ test("a command of the application runs beside the commands of the capabilities,
   const run = (...args: string[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options(), commands: [position] }, ...args);
   assert.deepEqual(await run("position", "switch"), { code: 0, stdout: "switch: on", stderr: "" });
   assert.equal((await run("fixture", "echo", "--text", "hi")).code, 0);
-  assert.match((await run("--help")).stdout, /\n {2}list\n {2}watch <id> \[flags\]\n {2}position {2}Write the position of the switch\.$/);
+  assert.match((await run("--help")).stdout, /\n {2}list\n {2}watch <id> \[flags\] \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}position {2}Write the position of the switch\.$/);
 });
 
 test("the help gives the description of the options, else the description of the application, else its title", async () => {
