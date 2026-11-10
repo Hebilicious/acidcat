@@ -270,7 +270,7 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
     ): Effect.Effect<WebhookAnswer> =>
       Effect.gen(function* () {
         const input = params.arguments ?? {};
-        const id = yield* Effect.promise(() => webhookSubscriptionId(principal, url.href, params.name, input));
+        const id = yield* Effect.promise(() => webhookSubscriptionId(principal, params.delivery.url, params.name, input));
         const scope = yield* Scope.make();
         const resume: Resume = {
           ...(typeof params.cursor === "string" ? { cursor: params.cursor } : {}),
@@ -282,7 +282,7 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
           yield* Scope.close(scope, Exit.void);
           return { error: mcpSubscribeError({ kind: started.failure.kind, message: started.failure.message }) };
         }
-        const pair = canonicalJson([principal, url.href]);
+        const pair = canonicalJson([principal, params.delivery.url]);
         if (!verified.has(pair) && options.allow?.(url) !== true) {
           const reason = yield* verify(url, id, params.delivery.secret);
           if (reason !== undefined) {
@@ -328,7 +328,8 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
         const url = parseUrl(params.delivery.url);
         if (url === undefined || url.protocol !== "https:") return invalidParams("The URL of a webhook must use https.");
         if (webhookSecretBytes(params.delivery.secret) === undefined) return invalidParams("The secret of a webhook must be whsec_ and the base64 of 24 to 64 bytes.");
-        const key = canonicalJson([principal, url.href, params.name, params.arguments ?? {}]);
+        // The key and the subscription id use the URL as the client sent it, so that the client can compute the id.
+        const key = canonicalJson([principal, params.delivery.url, params.name, params.arguments ?? {}]);
         return yield* withKey(
           key,
           Effect.gen(function* () {
@@ -365,8 +366,7 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
         const decoded = yield* Effect.result(Schema.decodeUnknownEffect(UnsubscribeParams)(input));
         if (decoded._tag === "Failure") return invalidParams(`The params of events/unsubscribe are not valid: ${decoded.failure.message}`);
         const params = decoded.success;
-        const url = parseUrl(params.delivery.url);
-        const key = canonicalJson([principalOption.value, url?.href ?? params.delivery.url, params.name, params.arguments ?? {}]);
+        const key = canonicalJson([principalOption.value, params.delivery.url, params.name, params.arguments ?? {}]);
         const hook = hooks.get(key);
         if (hook === undefined) return { error: { code: MCP_EVENT_ERRORS.notFound, message: "There is no webhook subscription with this key.", data: { kind: "subscription" } } };
         if (hook.worker !== undefined) yield* Fiber.interrupt(hook.worker);
