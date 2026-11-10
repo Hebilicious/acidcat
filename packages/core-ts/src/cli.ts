@@ -5,6 +5,7 @@ import {
   bundle,
   CallFailureError,
   CLI_EXIT_CODES,
+  CLI_RESUME_FLAGS,
   CLI_WATCH_EXIT_CODES,
   cliEventUsage,
   cliExitCode,
@@ -89,6 +90,11 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   for (const { path } of commands) {
     if (path[0] !== undefined && GENERIC_COMMANDS.includes(path[0])) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
   }
+  for (const [id, event] of Object.entries(session.view.events ?? {})) {
+    const properties = event.input === undefined ? undefined : bundle(event.input, types).properties;
+    const taken = CLI_RESUME_FLAGS.find((flag) => isJsonObject(properties) && flag in properties);
+    if (taken !== undefined) throw new Error(`The input of the event ${id} has a property ${taken}, which is a flag of watch.`);
+  }
   const added = options.commands ?? [];
   const taken = new Set([...GENERIC_COMMANDS, ...commands.flatMap(({ path }) => path.slice(0, 1))]);
   for (const command of added) {
@@ -105,7 +111,8 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
 
   /** Subscribe to an event, and write each occurrence on one line (spec/bindings/cli.md#events). */
   const watch = async (rest: readonly string[]): Promise<number> => {
-    const [id, ...flagArgs] = rest;
+    const [id, ...args] = rest;
+    const { flagArgs, resume } = resumeFlags(args);
     if (id === undefined) throw new UsageError("Give the id of an event.", CLI_EXIT_CODES["invalid-input"]);
     const event = session.view.events?.[id];
     let input: unknown = {};
@@ -127,8 +134,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
         }
       }
     }
-    // The CLI binding gives no cursor: each subscription starts now.
-    const subscribed = await session.subscribe(id, input, { signal: io.signal });
+    const subscribed = await session.subscribe(id, input, { signal: io.signal, ...resume });
     if ("kind" in subscribed) return print(subscribed);
     try {
       for await (const occurrence of subscribed) io.stdout(JSON.stringify(occurrence));
@@ -214,6 +220,33 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   }
 }
 
+/**
+ * Take `--cursor` and `--max-age-ms` out of the arguments of `watch` (spec/bindings/cli.md#events). The result is the
+ * other arguments, and the cursor and `maxAgeMs` of the subscription.
+ */
+function resumeFlags(args: readonly string[]): { readonly flagArgs: string[]; readonly resume: { cursor?: string; maxAgeMs?: number } } {
+  const flagArgs: string[] = [];
+  const resume: { cursor?: string; maxAgeMs?: number } = {};
+  const remaining = args.values();
+  for (const arg of remaining) {
+    const [name = "", inline] = arg.startsWith("--") ? arg.slice(2).split(/=(.*)/s, 2) : [];
+    if (name !== "cursor" && name !== "max-age-ms") {
+      flagArgs.push(arg);
+      continue;
+    }
+    const text = inline ?? remaining.next().value;
+    if (text === undefined) throw new UsageError(`The flag --${name} needs a value.`, CLI_EXIT_CODES["invalid-input"]);
+    if (name === "cursor") {
+      resume.cursor = text;
+      continue;
+    }
+    const maxAgeMs = Number(text);
+    if (!/^[0-9]+$/.test(text) || !Number.isSafeInteger(maxAgeMs)) throw new UsageError("The flag --max-age-ms must be a whole number of milliseconds.", CLI_EXIT_CODES["invalid-input"]);
+    resume.maxAgeMs = maxAgeMs;
+  }
+  return { flagArgs, resume };
+}
+
 /** Make the input from the flags (spec/bindings/cli.md#commands). */
 function parseFlags(args: readonly string[], schema: JsonObject): Record<string, unknown> {
   const properties = objectOrEmpty(schema.properties);
@@ -295,7 +328,7 @@ function help(name: string, description: string, paths: readonly string[], hasEv
     ...paths.map((path) => `  ${path}`),
     "  call <id> [input]",
     "  list",
-    ...(hasEvents ? ["  watch <id> [flags]"] : []),
+    ...(hasEvents ? ["  watch <id> [flags] [--cursor <string>] [--max-age-ms <integer>]"] : []),
     ...added.map((command) => `  ${command.name}  ${command.description}`),
   ].join("\n");
 }
