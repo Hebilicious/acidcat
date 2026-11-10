@@ -54,7 +54,7 @@ export interface Running<Payload> {
 export function runSubscription<Source, Payload>(parts: SubscriptionParts<Source, Payload>): Running<Payload> {
   const buffer: Occurrence<Payload>[] = [];
   const waiters: { readonly resolve: (result: IteratorResult<Occurrence<Payload>, undefined>) => void; readonly reject: (error: unknown) => void }[] = [];
-  /** True when the provider skipped occurrences, or the buffer removed some: the next occurrence has `truncated: true`. */
+  /** True when the buffer removed occurrences: the next occurrence that the client reads has `truncated: true`. */
   let dropped = false;
   /** How the source ended. The client still reads the occurrences in the buffer before it sees the end. */
   let ending: { readonly failure?: CallFailureError } | undefined;
@@ -113,8 +113,8 @@ export function runSubscription<Source, Payload>(parts: SubscriptionParts<Source
   };
 
   const push = (occurrence: Occurrence<Payload>) => {
-    if (occurrence.truncated === true) dropped = true;
-    buffer.push(occurrence.truncated === true ? withoutTruncated(occurrence) : occurrence);
+    // An occurrence that the provider marks keeps its mark. The occurrences before it in the buffer came before the gap.
+    buffer.push(occurrence);
     if (buffer.length > parts.limit) {
       buffer.shift();
       dropped = true;
@@ -163,11 +163,6 @@ export function runSubscription<Source, Payload>(parts: SubscriptionParts<Source
   return { occurrences, cancel, complete: () => end({}) };
 }
 
-/** An occurrence without `truncated`. The buffer sets `truncated` on the occurrence that the client reads next. */
-function withoutTruncated<Payload>(occurrence: Occurrence<Payload>): Occurrence<Payload> {
-  const { truncated: _, ...rest } = occurrence;
-  return rest;
-}
 
 /**
  * Check the members of a value that the provider gives, beside its data. The provider is code of the application, but

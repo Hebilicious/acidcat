@@ -140,6 +140,32 @@ test("a provider that throws when it starts fails as internal before the first o
   assert.deepEqual(defects, ["probe.throws"]);
 });
 
+test("an occurrence that the provider marks truncated keeps the mark, also when earlier occurrences wait in the buffer", async () => {
+  const app = defineApp({
+    targets: { app: { bindings: ["typescript"] } },
+    capabilities: [],
+    events: [
+      defineEvent({
+        id: "probe.gap",
+        description: "Give n = 1, then n = 2 after a gap, then n = 3.",
+        audience: ["app"],
+        async *subscribe() {
+          yield { data: {}, eventId: "1" };
+          yield { data: {}, eventId: "2", truncated: true as const };
+          yield { data: {}, eventId: "3" };
+        },
+      }),
+    ],
+  });
+  await using session = createSession(app, { target: "app", ...sensorOptions() });
+  const occurrences = await session.subscribe("probe.gap", {});
+  assert.ok(!("kind" in occurrences));
+  // The provider gives all three before the client reads the first.
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const read = [await nextOf(occurrences), await nextOf(occurrences), await nextOf(occurrences)];
+  assert.deepEqual(read.map((each) => [each.eventId, each.truncated]), [["1", undefined], ["2", true], ["3", undefined]]);
+});
+
 test("a payload that does not agree with its schema, or a provider that throws, ends the iterator with internal, then done", async () => {
   await using session = createSession(sensorsApp, { target: "app", ...sensorOptions() });
   for (const event of [broken, failing]) {
