@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { conform, serve } from "@acid-cat/cli";
 
 import { createSession, httpHandler, installWebMcp, mcpHandler } from "../src/index.ts";
-import { fixture, HoldsThatIgnoreCancellation, options } from "./fixture.ts";
+import { fixture, Holds, HoldsThatIgnoreCancellation, options, WatchersThatIgnoreCancellation } from "./fixture.ts";
 
 /** The checks that must fail end at this deadline. Each other check settles long before it. */
 const deadline = 10_000;
@@ -40,6 +40,35 @@ test("acid-cat conform fails only the cancellation checks of an implementation t
       "http properties: cancelling a call affects only that call",
       "mcp properties: cancelling a call affects only that call",
       "webmcp: the signal of the host cancels a call, as an AbortError",
+    ]);
+    for (const result of failed) assert.match(result.detail ?? "", /^did not settle within 10000 ms/);
+  } finally {
+    await served.close();
+  }
+});
+
+test("acid-cat conform fails only the cancellation checks of events of an implementation whose subscriptions ignore cancellation", async () => {
+  const watchersIgnoring = () => options(new Holds(), new WatchersThatIgnoreCancellation());
+  const served = await serve({
+    "/mcp": mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...watchersIgnoring() }),
+    "/api": httpHandler(fixture, { allowedOrigins: [], base: "/api", ...watchersIgnoring() }),
+  });
+  try {
+    const runs = await Promise.all([
+      conform({ mcp: `${served.url}/mcp`, deadline }),
+      conform({ mcpStdio: [process.execPath, new URL("./fixture-mcp-stdio-watch-ignoring-cancellation.ts", import.meta.url).pathname], deadline }),
+      conform({ http: `${served.url}/api`, deadline }),
+      conform({ cli: [process.execPath, new URL("./fixture-cli-watch-ignoring-cancellation.ts", import.meta.url).pathname], deadline }),
+    ]);
+    const failed = runs.flat().filter((result) => !result.passed);
+    assert.deepEqual(failed.map((result) => `${result.binding}: ${result.name}`).sort(), [
+      "cli: an interrupt cancels watch with exit code 130",
+      "http: a subscription gets the things that happen, and closing the stream cancels it",
+      "http: cancelling one subscription leaves the other subscriptions running",
+      "mcp-stdio events: events/stream gets the things that happen, and cancelling it ends the subscription",
+      "mcp-stdio events: two subscriptions at the same time each get their own messages, and cancelling one leaves the other",
+      "mcp: events/stream gets the things that happen, and cancelling it ends the subscription",
+      "mcp: two subscriptions at the same time each get their own messages, and cancelling one leaves the other",
     ]);
     for (const result of failed) assert.match(result.detail ?? "", /^did not settle within 10000 ms/);
   } finally {

@@ -88,9 +88,15 @@ export class HoldsThatIgnoreCancellation extends Holds {
 export class Watchers {
   readonly #watching = new Set<{ readonly key: string; readonly push: (value: string) => void }>();
   readonly #mark: ((path: string) => Promise<void>) | undefined;
+  readonly #keepAlive: boolean;
 
-  constructor(mark?: (path: string) => Promise<void>) {
+  /**
+   * With `keepAlive`, the default, each watch keeps the Node.js process running while it is active, so that the command
+   * line runs until the subscription ends.
+   */
+  constructor(mark?: (path: string) => Promise<void>, keepAlive = true) {
     this.#mark = mark;
+    this.#keepAlive = keepAlive;
   }
 
   /**
@@ -109,6 +115,7 @@ export class Watchers {
     };
     // A promise alone does not keep a Node.js process running. The timer keeps the command line running while the watch is active.
     const running = setInterval(() => undefined, 2 ** 30);
+    if (!this.#keepAlive) running.unref();
     const stop = () => {
       this.#watching.delete(entry);
       clearInterval(running);
@@ -149,6 +156,23 @@ export class Watchers {
     const watches = [...this.#watching].filter((entry) => entry.key === key);
     for (const entry of watches) entry.push(value);
     return watches.length;
+  }
+}
+
+/**
+ * Watchers whose subscriptions ignore cancellation: a watch stays active when its signal aborts, and when the
+ * subscription returns. The tests use them to see conform fail. A watch keeps a command line running, but not the
+ * process of the tests, unless `keepAlive` is `true`.
+ */
+export class WatchersThatIgnoreCancellation extends Watchers {
+  constructor(mark?: (path: string) => Promise<void>, keepAlive = false) {
+    super(mark, keepAlive);
+  }
+
+  override watch(key: string): AsyncIterable<string> {
+    const values = super.watch(key, new AbortController().signal)[Symbol.asyncIterator]();
+    // An iterator with no `return`: a `for await` loop that ends does not stop the watch.
+    return { [Symbol.asyncIterator]: () => ({ next: () => values.next() }) };
   }
 }
 
