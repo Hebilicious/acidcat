@@ -101,6 +101,12 @@ export const watchersLayer = (mark?: (path: string) => Effect.Effect<void>) =>
   );
 
 /** The services of the fixture: the switch, which is on, the holds and the watchers. */
+/**
+ * The poll settings of the MCP servers of the fixture in the conformance tests: a small buffer and a short lease time, so
+ * that conform can test both. The tests give the same settings to conform.
+ */
+export const POLL = { bufferLimit: 5, leaseMs: 2000 } as const;
+
 export const fixtureLayer = Layer.mergeAll(switchLayer, holdsLayer(), watchersLayer());
 
 /** The services of the fixture, which count how many times the switch is built and released, to test when a host builds the services. */
@@ -257,9 +263,9 @@ export const fixture = App.make({
   events: [
     Event.make({
       id: "fixture.ticks",
-      description: "Give the occurrences n = 1 to count, with the eventId and the cursor String(n), then end. With a cursor c, start at c + 1.",
+      description: "Give the occurrences n = 1 to count, with the eventId and the cursor String(n), then end. With a cursor c, start at c + 1. The key changes nothing: it gives the subscriptions of each test their own input.",
       audience: everywhere,
-      input: Schema.Struct({ count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })) }),
+      input: Schema.Struct({ count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })), key: Schema.optionalKey(Schema.String) }),
       payload: Tick,
       subscribe: ({ count }, { cursor }) =>
         Stream.range(after(cursor), count).pipe(Stream.map((n) => ({ data: { n }, eventId: String(n), cursor: String(n) }))),

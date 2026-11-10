@@ -11,6 +11,8 @@ import { checkMcpStdio } from "./mcp-stdio.ts";
 import { checkProperties, httpInvoke, mcpInvoke } from "./properties.ts";
 import { browserDriver, checkWebMcp, processDriver } from "./webmcp.ts";
 import type { WebMcpInstall } from "./webmcp.ts";
+import type { PollSettings } from "./poll.ts";
+import type { WebhookSettings } from "./webhook.ts";
 
 export type { Check } from "./check.ts";
 export { DEADLINE, fixture } from "./check.ts";
@@ -18,6 +20,8 @@ export { serve } from "./serve.ts";
 export type { Routes, Served, WebHandler } from "./serve.ts";
 export { createTestHost } from "./webmcp.ts";
 export type { TestHost, WebMcpInstall } from "./webmcp.ts";
+export type { PollSettings } from "./poll.ts";
+export type { WebhookSettings } from "./webhook.ts";
 
 export interface ConformOptions {
   /** The URL of the MCP server, for example `http://localhost:8787/mcp`. */
@@ -41,6 +45,17 @@ export interface ConformOptions {
    * on a host in the same process. A page runs in Chromium, through Playwright.
    */
   readonly webmcp?: string | WebMcpInstall | undefined;
+  /**
+   * The poll settings of the deployment, for MCP through HTTP and through stdio. With `bufferLimit`, conform tests a
+   * cursor older than the buffer. With `leaseMs`, it tests that a lease with no poll ends.
+   */
+  readonly poll?: PollSettings | undefined;
+  /**
+   * Test webhook delivery through `mcp`. conform runs an HTTPS receiver on 127.0.0.1 with this certificate and key. The
+   * deployment trusts the certificate, allows deliveries to 127.0.0.1, and gives the principal to each request with the
+   * header `Authorization: Bearer <principal>`.
+   */
+  readonly webhook?: WebhookSettings | undefined;
   /** The body limit of the remote bindings, in bytes. The default is 1 MiB. */
   readonly maximumBytes?: number | undefined;
   /**
@@ -54,9 +69,10 @@ export interface ConformOptions {
 export async function conform(options: ConformOptions): Promise<readonly Check[]> {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
   const deadline = options.deadline ?? DEADLINE;
+  const poll = options.poll ?? {};
   const results: Check[] = [];
   if (options.mcp !== undefined) {
-    results.push(...(await checkMcp(options.mcp, { maximumBytes, deadline, handshake: options.mcpHandshake === true })).results);
+    results.push(...(await checkMcp(options.mcp, { maximumBytes, deadline, handshake: options.mcpHandshake === true, poll, webhook: options.webhook })).results);
     const mcp = await mcpInvoke(options.mcp, AbortSignal.timeout(deadline)).catch(() => undefined);
     if (mcp !== undefined) {
       results.push(...(await checkProperties("mcp", mcp.invoke, deadline)).results);
@@ -64,7 +80,7 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
     }
   }
   if (options.mcpStdio !== undefined) {
-    for (const checks of await checkMcpStdio(options.mcpStdio, { deadline })) results.push(...checks.results);
+    for (const checks of await checkMcpStdio(options.mcpStdio, { deadline, poll })) results.push(...checks.results);
   }
   if (options.http !== undefined) {
     results.push(...(await checkHttp(options.http, { maximumBytes, deadline })).results);

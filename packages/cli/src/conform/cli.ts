@@ -29,9 +29,9 @@ const USAGES: { readonly [id: string]: string } = {
 
 /** The `usage` of each event in the view of the fixture, after the name of the program. */
 const EVENT_USAGES: { readonly [id: string]: string } = {
-  "fixture.broken": "watch fixture.broken",
-  "fixture.ticks": "watch fixture.ticks --count <integer>",
-  "fixture.watch": "watch fixture.watch --key <string> [--marker <string>]",
+  "fixture.broken": "watch fixture.broken [--cursor <string>] [--max-age-ms <integer>]",
+  "fixture.ticks": "watch fixture.ticks --count <integer> [--key <string>] [--cursor <string>] [--max-age-ms <integer>]",
+  "fixture.watch": "watch fixture.watch --key <string> [--marker <string>] [--cursor <string>] [--max-age-ms <integer>]",
 };
 
 /** An entry of the list that the `list` command gives. */
@@ -190,6 +190,15 @@ async function checkWatch(checks: Checks, command: readonly string[]): Promise<v
     );
     expectEqual(result.stderr, "", "standard error");
   });
+  await checks.run("watch with --cursor starts after the cursor", EVENTS, async (signal) => {
+    const result = await run(signal, "watch", "fixture.ticks", "--count", "3", "--cursor", "1", "--max-age-ms", "60000");
+    expectEqual(result.code, 0, "exit code");
+    expectEqual(
+      occurrences(result.stdout, "fixture.ticks").map((occurrence) => [occurrence.data, occurrence.cursor]),
+      [[{ n: 2 }, "2"], [{ n: 3 }, "3"]],
+      "the data and the cursor of the occurrences",
+    );
+  });
   await checks.run("watch writes internal to standard error with exit code 5 after a defect", EVENTS, async (signal) => {
     const result = await run(signal, "watch", "fixture.broken");
     expectEqual(result.code, 5, "exit code");
@@ -200,6 +209,8 @@ async function checkWatch(checks: Checks, command: readonly string[]): Promise<v
     ["watch with invalid input has exit code 3", ["watch", "fixture.ticks", "--count", "101"], 3],
     ["watch with a missing required flag has exit code 3", ["watch", "fixture.ticks"], 3],
     ["watch of an event outside the view has exit code 2", ["watch", "fixture.secret"], 2],
+    ["watch with a --max-age-ms that is not an integer has exit code 3", ["watch", "fixture.ticks", "--count", "1", "--max-age-ms", "soon"], 3],
+    ["watch with a --max-age-ms that is a fraction has exit code 3", ["watch", "fixture.ticks", "--count", "1", "--max-age-ms", "1.5"], 3],
   ] as const) {
     await checks.run(name, EVENTS, async (signal) => {
       expectEqual((await run(signal, ...args)).code, code, "exit code");

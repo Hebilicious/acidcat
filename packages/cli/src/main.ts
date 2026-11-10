@@ -101,6 +101,20 @@ const conformCommand = Command.make(
     http: url("http", "The base URL of the HTTP API, before /capabilities"),
     cli: url("cli", "The command that starts the command line, for example \"node fixture-cli.ts\""),
     webmcp: url("webmcp", "The URL of a web page that serves the app target. It runs in Chromium, through Playwright"),
+    pollBuffer: Flag.Int("poll-buffer").pipe(
+      Flag.withDescription("The number of occurrences that a poll lease of the deployment keeps, from 1 to 97. With it, conform tests a cursor older than the buffer"),
+      Flag.optional,
+    ),
+    pollLeaseMs: Flag.Int("poll-lease-ms").pipe(
+      Flag.withDescription("The lease time of the deployment, in milliseconds, shorter than the deadline. With it, conform tests that a lease with no poll ends"),
+      Flag.optional,
+    ),
+    webhookPrincipal: url(
+      "webhook-principal",
+      "Test webhook delivery through --mcp. The deployment gives this principal to a request with the header Authorization: Bearer <principal>",
+    ),
+    webhookCert: url("webhook-cert", "The PEM file of the certificate of the HTTPS receiver of the webhook tests. It must be valid for 127.0.0.1, and the deployment must trust it"),
+    webhookKey: url("webhook-key", "The PEM file of the private key of --webhook-cert"),
     maximumBytes: Flag.Int("max-bytes").pipe(Flag.withDescription("The body limit of the remote bindings"), Flag.withDefault(1_048_576)),
     deadline: Flag.Int("deadline").pipe(
       Flag.withDescription("The time, in milliseconds, that each check has to settle. A check that does not settle in this time fails"),
@@ -110,6 +124,18 @@ const conformCommand = Command.make(
   Effect.fn(function* (options) {
     const value = (option: Option.Option<string>) => (Option.isSome(option) ? option.value : undefined);
     const words = (option: Option.Option<string>) => value(option)?.split(/\s+/).filter((word) => word !== "");
+    const fs = yield* FileSystem.FileSystem;
+    const webhookOptions = [options.webhookPrincipal, options.webhookCert, options.webhookKey];
+    const given = webhookOptions.filter(Option.isSome).length;
+    if (given !== 0 && given !== 3) {
+      yield* Console.error("Give --webhook-principal, --webhook-cert and --webhook-key together.");
+      return yield* fail;
+    }
+    const webhook =
+      Option.isSome(options.webhookPrincipal) && Option.isSome(options.webhookCert) && Option.isSome(options.webhookKey)
+        ? { principal: options.webhookPrincipal.value, cert: yield* fs.readFileString(options.webhookCert.value), key: yield* fs.readFileString(options.webhookKey.value) }
+        : undefined;
+    const optionalInt = (option: Option.Option<number>) => (Option.isSome(option) ? option.value : undefined);
     const results = yield* Effect.promise(() =>
       conform({
         mcp: value(options.mcp),
@@ -118,6 +144,8 @@ const conformCommand = Command.make(
         http: value(options.http),
         cli: words(options.cli),
         webmcp: value(options.webmcp),
+        poll: { bufferLimit: optionalInt(options.pollBuffer), leaseMs: optionalInt(options.pollLeaseMs) },
+        webhook,
         maximumBytes: options.maximumBytes,
         deadline: options.deadline,
       }),
@@ -127,10 +155,11 @@ const conformCommand = Command.make(
       return yield* fail;
     }
     for (const result of results) {
-      yield* Console.log(`${result.passed ? "✓" : "✗"} ${result.binding}: ${result.name} (${result.rule})${result.detail ? `\n    ${result.detail}` : ""}`);
+      yield* Console.log(`${result.warning === true ? "!" : result.passed ? "✓" : "✗"} ${result.binding}: ${result.name} (${result.rule})${result.detail ? `\n    ${result.detail}` : ""}`);
     }
     const failed = results.filter((result) => !result.passed).length;
-    yield* Console.log(`\n${results.length - failed} passed, ${failed} failed.`);
+    const warnings = results.filter((result) => result.warning === true).length;
+    yield* Console.log(`\n${results.length - failed} passed, ${failed} failed${warnings === 0 ? "" : `, ${warnings} with a warning`}.`);
     if (failed > 0) return yield* fail;
   }),
 ).pipe(Command.withDescription("Test a running implementation of the conformance fixture through its bindings."));

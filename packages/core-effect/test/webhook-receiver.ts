@@ -34,7 +34,7 @@ export const agree: Responder = (received) => {
 };
 
 /** A self-signed certificate for `localhost` and `127.0.0.1`, made with OpenSSL in a temporary directory. */
-function certificate(): { readonly key: string; readonly cert: string } {
+export function testCertificate(): { readonly key: string; readonly cert: string } {
   const directory = mkdtempSync(join(tmpdir(), "acid-cat-webhook-"));
   try {
     const key = join(directory, "key.pem");
@@ -51,7 +51,7 @@ function certificate(): { readonly key: string; readonly cert: string } {
 }
 
 export async function startReceiver() {
-  const { key, cert } = certificate();
+  const { key, cert } = testCertificate();
   const received: Received[] = [];
   const waiters: Array<() => void> = [];
   let responder: Responder = agree;

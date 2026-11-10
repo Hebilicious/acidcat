@@ -16,6 +16,7 @@ import type { JsonObject } from "../json.ts";
 import { abortable, Checks, expect, expectEqual, until } from "./check.ts";
 import { checkEvents, checkTools, META, subscriptionOf } from "./mcp.ts";
 import type { Channel, EventStream, Message } from "./mcp.ts";
+import type { PollSettings } from "./poll.ts";
 import { checkProperties, clientInvoke, heldKeys } from "./properties.ts";
 
 const RULE = "spec/bindings/mcp.md#stdio";
@@ -44,7 +45,7 @@ async function connect(command: readonly string[], options: ClientOptions, chang
   return client;
 }
 
-export async function checkMcpStdio(command: readonly string[], options: { readonly deadline: number }): Promise<readonly Checks[]> {
+export async function checkMcpStdio(command: readonly string[], options: { readonly deadline: number; readonly poll: PollSettings }): Promise<readonly Checks[]> {
   const all: Checks[] = [];
   for (const era of ERAS) {
     const checks = new Checks(`mcp-stdio ${era.revision}`, options.deadline);
@@ -75,12 +76,12 @@ export async function checkMcpStdio(command: readonly string[], options: { reado
  * The checks of the events extension through one server process. The requests have revision 2026-07-28 in `_meta`, with
  * no handshake. `cancel` sends `notifications/cancelled` with the id of the `events/stream` request.
  */
-async function checkStdioEvents(command: readonly string[], options: { readonly deadline: number }): Promise<Checks> {
+async function checkStdioEvents(command: readonly string[], options: { readonly deadline: number; readonly poll: PollSettings }): Promise<Checks> {
   const checks = new Checks("mcp-stdio events", options.deadline);
   const controller = new AbortController();
   const server = startRaw(command, controller.signal);
   try {
-    await checkEvents(checks, stdioChannel(server));
+    await checkEvents(checks, stdioChannel(server), { transport: "stdio", poll: options.poll, webhook: false });
   } finally {
     controller.abort();
   }

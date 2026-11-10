@@ -15,6 +15,8 @@ export interface Check {
   /** The part of the specification that the check tests, for example `spec/bindings/mcp.md#tools`. */
   readonly rule: string;
   readonly passed: boolean;
+  /** `true` when the check tests a recommendation (SHOULD) that the implementation does not follow. The check still passes. */
+  readonly warning?: boolean | undefined;
   readonly detail?: string | undefined;
 }
 
@@ -89,15 +91,26 @@ export class Checks {
   }
 
   async run(name: string, rule: string, body: (signal: AbortSignal) => Promise<void> | void): Promise<void> {
+    const failure = await this.#settle(body);
+    this.results.push(failure === undefined ? { binding: this.binding, name, rule, passed: true } : { binding: this.binding, name, rule, passed: false, detail: failure });
+  }
+
+  /** Run a check of a recommendation (SHOULD). When it fails, the result is a warning, and the check passes. */
+  async should(name: string, rule: string, body: (signal: AbortSignal) => Promise<void> | void): Promise<void> {
+    const failure = await this.#settle(body);
+    this.results.push(failure === undefined ? { binding: this.binding, name, rule, passed: true } : { binding: this.binding, name, rule, passed: true, warning: true, detail: failure });
+  }
+
+  /** Run the body of a check with its deadline. The result is the detail of the failure, or `undefined`. */
+  async #settle(body: (signal: AbortSignal) => Promise<void> | void): Promise<string | undefined> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.deadline);
     try {
       await body(controller.signal);
-      this.results.push({ binding: this.binding, name, rule, passed: true });
+      return undefined;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const detail = controller.signal.aborted ? `did not settle within ${this.deadline} ms: ${message}` : message;
-      this.results.push({ binding: this.binding, name, rule, passed: false, detail });
+      return controller.signal.aborted ? `did not settle within ${this.deadline} ms: ${message}` : message;
     } finally {
       clearTimeout(timer);
     }

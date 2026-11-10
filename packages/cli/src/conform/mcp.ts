@@ -11,7 +11,11 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { isArrayOf, isObject, isStringArray, memberOf, parseJson, readJson } from "../json.ts";
 import type { JsonObject } from "../json.ts";
 import { Checks, eventIdsOf, expect, expectEqual, expectOccurrence, fixture, FORBIDDEN_ORIGIN, idsOf, sorted, until } from "./check.ts";
+import { checkPoll } from "./poll.ts";
+import type { PollSettings } from "./poll.ts";
 import { sseReader } from "./sse.ts";
+import { checkWebhook } from "./webhook.ts";
+import type { WebhookSettings } from "./webhook.ts";
 
 const RULE = "spec/bindings/mcp.md";
 
@@ -31,7 +35,17 @@ const textOf = (result: ToolResult): unknown => {
   return parseJson(first?.type === "text" ? first.text : "null");
 };
 
-export async function checkMcp(url: string, options: { readonly maximumBytes: number; readonly deadline: number; readonly handshake: boolean }): Promise<Checks> {
+export interface McpCheckOptions {
+  readonly maximumBytes: number;
+  readonly deadline: number;
+  readonly handshake: boolean;
+  /** The poll settings of the deployment, for the checks of the buffer and of the lease time. */
+  readonly poll: PollSettings;
+  /** The settings of the checks of webhook delivery. With none, conform does not test webhook delivery. */
+  readonly webhook: WebhookSettings | undefined;
+}
+
+export async function checkMcp(url: string, options: McpCheckOptions): Promise<Checks> {
   const checks = new Checks("mcp", options.deadline);
   let client: Client | undefined;
 
@@ -72,7 +86,8 @@ export async function checkMcp(url: string, options: { readonly maximumBytes: nu
     await rejection(await post(signal, { body: new Uint8Array([0x7b, 0xff, 0x7d]) }), 400);
   });
 
-  await checkEvents(checks, httpChannel(url));
+  await checkEvents(checks, httpChannel(url), { transport: "http", poll: options.poll, webhook: options.webhook !== undefined });
+  if (options.webhook !== undefined) await checkWebhook(checks, url, options.webhook);
   if (options.handshake) await checkHandshake(checks, url, options.deadline);
   return checks;
 }
@@ -216,12 +231,13 @@ export interface Channel {
   stream(id: string, params: JsonObject, signal: AbortSignal): Promise<EventStream>;
 }
 
-/** A channel to a server through HTTP. */
-function httpChannel(url: string): Channel {
+/** A channel to a server through HTTP. Each request has the `headers` too, for example the credentials of a principal. */
+export function httpChannel(url: string, headers: Readonly<Record<string, string>> = {}): Channel {
   const post = (id: string, method: string, params: JsonObject, signal: AbortSignal) =>
     fetch(url, {
       method: "POST",
       headers: {
+        ...headers,
         "Content-Type": "application/json",
         Accept: "application/json, text/event-stream",
         "Mcp-Method": method,
@@ -285,12 +301,21 @@ const paramsOf = (message: Message): JsonObject => {
   return rest;
 };
 
-/**
- * The checks of the events extension (spec/bindings/mcp.md#events), through a channel. Each transport runs them. Through
- * stdio, `cancel` sends `notifications/cancelled`; through HTTP, it closes the request.
- */
-export async function checkEvents(checks: Checks, channel: Channel): Promise<void> {
-  const RULE_EVENTS = `${RULE}#events`;
+/** How a server serves the events extension, as `checkEvents` tests it. */
+export interface EventsOptions {
+  /** The transport of the channel. Through stdio, the server never serves webhook delivery. */
+  readonly transport: "http" | "stdio";
+  /** The poll settings of the deployment. */
+  readonly poll: PollSettings;
+  /** `true` if conform tests webhook delivery through this server, so the server must serve it. */
+  readonly webhook: boolean;
+}
+
+/** The order of the delivery modes in `events/list` (spec/bindings/mcp.md#events). */
+const DELIVERY_ORDER = ["push", "poll", "webhook"];
+
+/** The requests that the checks of events send through a channel, and the capabilities of the fixture that they call. */
+export function eventRequests(channel: Channel) {
   const resultOf = async (method: string, params: JsonObject, signal: AbortSignal) => {
     const message = await channel.request(method, params, signal);
     const result = memberOf(message, "result");
@@ -303,13 +328,27 @@ export async function checkEvents(checks: Checks, channel: Channel): Promise<voi
     return error;
   };
   const tool = async (name: string, args: JsonObject, signal: AbortSignal) => memberOf(await resultOf("tools/call", { name, arguments: args }, signal), "structuredContent");
+  /** The keys of the subscriptions to `fixture.watch` that are active now. */
   const watching = async (signal: AbortSignal) => {
     const keys = memberOf(await tool("fixture.watching", {}, signal), "keys");
     expect(isStringArray(keys), `fixture.watching must give a list of keys, got ${JSON.stringify(keys)}`);
     return keys;
   };
-  const count = (keys: readonly string[], key: string) => keys.filter((each) => each === key).length;
+  /** Give a value to the subscriptions to `fixture.watch` that watch the key. The result is the number of these subscriptions. */
   const signalKey = async (key: string, value: string, signal: AbortSignal) => memberOf(await tool("fixture.signal", { key, value }, signal), "delivered");
+  return { resultOf, errorOf, tool, watching, signalKey };
+}
+
+/** The number of times that a key is in a list of keys. */
+export const count = (keys: readonly string[], key: string) => keys.filter((each) => each === key).length;
+
+/**
+ * The checks of the events extension (spec/bindings/mcp.md#events), through a channel. Each transport runs them. Through
+ * stdio, `cancel` sends `notifications/cancelled`; through HTTP, it closes the request.
+ */
+export async function checkEvents(checks: Checks, channel: Channel, options: EventsOptions): Promise<void> {
+  const RULE_EVENTS = `${RULE}#events`;
+  const { resultOf, errorOf, watching, signalKey } = eventRequests(channel);
   /** The next message of a stream, which must be a notification of the method for this subscription. */
   const notification = async (stream: EventStream, id: string, method: string) => {
     const message = await stream.next();
@@ -338,15 +377,24 @@ export async function checkEvents(checks: Checks, channel: Channel): Promise<voi
     const extensions = memberOf(memberOf(result, "capabilities"), "extensions");
     expect(isObject(memberOf(extensions, MCP_EVENTS_EXTENSION)), `the capabilities must have the extension ${MCP_EVENTS_EXTENSION}, got ${JSON.stringify(result)}`);
   });
-  await checks.run("events/list gives each event of the view, with push delivery and its schemas", RULE_EVENTS, async (signal) => {
+  /** The delivery modes that the server serves, from `events/list`. */
+  let delivery: readonly string[] = [];
+  await checks.run("events/list gives each event of the view, with the delivery modes of the server and its schemas", RULE_EVENTS, async (signal) => {
     const result = await resultOf("events/list", {}, signal);
     const entries = result.events;
     if (!isArrayOf(entries, isObject)) throw new Error(`events/list must give a list of events, got ${JSON.stringify(result)}`);
     expectEqual(sorted(entries.map((entry) => String(entry.name))), eventIdsOf("mcp"), "names");
+    const first = entries[0]?.delivery;
+    expect(isStringArray(first), `the delivery of each event must be a list of modes, got ${JSON.stringify(first)}`);
+    expectEqual(first, DELIVERY_ORDER.filter((mode) => first.includes(mode)), "the delivery modes, in the order push, poll, webhook, each once");
+    expect(first.includes("push"), `the server must serve push delivery, got ${JSON.stringify(first)}`);
+    if (options.transport === "stdio") expect(!first.includes("webhook"), "through stdio, the server must not serve webhook delivery");
+    if (options.webhook) expect(first.includes("webhook"), `webhook delivery is on, so the delivery must have webhook, got ${JSON.stringify(first)}`);
+    delivery = first;
     for (const entry of entries) {
       const name = String(entry.name);
       expectEqual(entry.description, fixture.events?.[name]?.description, `description of ${name}`);
-      expectEqual(entry.delivery, ["push"], `delivery of ${name}`);
+      expectEqual(entry.delivery, first, `delivery of ${name}`);
       expectEqual(memberOf(entry.inputSchema, "type"), "object", `the type of the inputSchema of ${name}`);
       expectEqual(memberOf(entry.payloadSchema, "type"), "object", `the type of the payloadSchema of ${name}`);
     }
@@ -445,9 +493,27 @@ export async function checkEvents(checks: Checks, channel: Channel): Promise<voi
       await second.cancel();
     }
   });
-  await checks.run("events/poll is Unsupported, with the delivery mode poll", RULE_EVENTS, async (signal) => {
-    const error = errorOf(await channel.request("events/poll", { name: "fixture.ticks", arguments: { count: 1 } }, signal));
-    expectEqual(error.code, -32026, "the JSON-RPC error code");
-    expectEqual(error.data, { feature: "deliveryMode", value: "poll" }, "data");
-  });
+  if (delivery.includes("poll")) {
+    await checkPoll(checks, channel, options.poll);
+  } else {
+    await checks.should("the server serves poll delivery", `${RULE}#events`, () => {
+      throw new Error("events/list gives no poll delivery. A server that keeps no state between requests serves push only.");
+    });
+    await checks.run("events/poll is Unsupported, with the delivery mode poll", RULE_EVENTS, async (signal) => {
+      const error = errorOf(await channel.request("events/poll", { name: "fixture.ticks", arguments: { count: 1 } }, signal));
+      expectEqual(error.code, -32026, "the JSON-RPC error code");
+      expectEqual(error.data, { feature: "deliveryMode", value: "poll" }, "data");
+    });
+  }
+  if (!delivery.includes("webhook")) {
+    await checks.run("events/subscribe and events/unsubscribe are Unsupported, with the delivery mode webhook", `${RULE}#webhook`, async (signal) => {
+      const url = "https://webhook.acid-cat.invalid/hook";
+      const subscribe = { name: "fixture.ticks", arguments: { count: 1 }, delivery: { mode: "webhook", url, secret: `whsec_${"A".repeat(32)}` } };
+      for (const [method, params] of [["events/subscribe", subscribe], ["events/unsubscribe", { name: "fixture.ticks", arguments: { count: 1 }, delivery: { url } }]] as const) {
+        const error = errorOf(await channel.request(method, params, signal));
+        expectEqual(error.code, -32026, `the JSON-RPC error code of ${method}`);
+        expectEqual(error.data, { feature: "deliveryMode", value: "webhook" }, `the data of ${method}`);
+      }
+    });
+  }
 }

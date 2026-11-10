@@ -310,9 +310,9 @@ export const fixture = defineApp<Context>({
   events: [
     event({
       id: "fixture.ticks",
-      description: "Give the occurrences n = 1 to count, with the eventId and the cursor String(n), then end. With a cursor c, start at c + 1.",
+      description: "Give the occurrences n = 1 to count, with the eventId and the cursor String(n), then end. With a cursor c, start at c + 1. The key changes nothing: it gives the subscriptions of each test their own input.",
       audience: everywhere,
-      input: z.object({ count: z.number().int().min(0).max(100) }),
+      input: z.object({ count: z.number().int().min(0).max(100), key: z.string().optional() }),
       payload: Tick,
       async *subscribe({ count }, { cursor }) {
         for (let n = after(cursor); n <= count; n += 1) yield { data: { n }, eventId: String(n), cursor: String(n) };
@@ -359,6 +359,15 @@ export const fixture = defineApp<Context>({
     }),
   ],
 });
+
+/**
+ * The poll settings of the MCP servers of the fixture in the conformance tests: a small buffer and a short lease time, so
+ * that conform can test both. The tests give the same settings to conform.
+ */
+export const POLL = { bufferLimit: 5, leaseMs: 2000 } as const;
+
+/** The principal of a request in the conformance tests: the token of the header `Authorization: Bearer <principal>`. */
+export const principalOf = (request: Request): string | undefined => /^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")?.[1];
 
 /** The options of a session or a binding of the fixture. */
 export const options = (holds = new Holds(), watchers = new Watchers()) => ({ context: { switch: new Switch(), holds, watchers }, toJsonSchema, onDefect: () => undefined });
