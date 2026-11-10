@@ -1,7 +1,27 @@
-export { capabilitiesFor, catalogOf, defineApp, defineCapability, renderCatalog } from "./app.ts";
-export type { AnyCapability, App, Call, Capability, CapabilityDeclaration, CapabilityFactory, EmptyInput, FailureOf, Observable, Target, ToJsonSchema } from "./app.ts";
+export { capabilitiesFor, catalogOf, defineApp, defineCapability, defineEvent, eventsFor, renderCatalog } from "./app.ts";
+export type {
+  AnyCapability,
+  AnyEventDefinition,
+  App,
+  Call,
+  Capability,
+  CapabilityDeclaration,
+  CapabilityFactory,
+  EmptyInput,
+  EventDeclaration,
+  EventDefinition,
+  EventFactory,
+  FailureOf,
+  Observable,
+  Subscribe,
+  Subscription,
+  Target,
+  ToJsonSchema,
+} from "./app.ts";
 export { createSession } from "./session.ts";
-export type { Handle, HandleOf, Session, SessionOptions } from "./session.ts";
+export type { EventHandle, EventHandleOf, Handle, HandleOf, Session, SessionOptions, SubscribeOptions } from "./session.ts";
+export { DEFAULT_BUFFER_LIMIT } from "./subscription.ts";
+export type { Occurrences } from "./subscription.ts";
 export { mcpHandler } from "./mcp.ts";
 export type { McpOptions, McpSettings } from "./mcp.ts";
 export { mcpHandshake } from "@acid-cat/mcp-handshake";
@@ -17,4 +37,4 @@ export { findHost, installWebMcp } from "./webmcp.ts";
 export type { Installation, ModelContext, ModelContextTool, Phase, Status } from "./webmcp.ts";
 export type { StandardSchemaV1 } from "./standard-schema.ts";
 export { AVAILABLE, CallFailureError, fail, ok, unavailable } from "@acid-cat/spec-ts";
-export type { Availability, CallFailure, CallFailureKind, Outcome, Result } from "@acid-cat/spec-ts";
+export type { Availability, CallFailure, CallFailureKind, Emitted, Occurrence, Outcome, Result } from "@acid-cat/spec-ts";

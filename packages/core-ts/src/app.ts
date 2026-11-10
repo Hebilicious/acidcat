@@ -4,7 +4,7 @@
  */
 import { canonicalText } from "@acid-cat/catalog";
 import { isJsonObject, objectInput } from "@acid-cat/spec-ts";
-import type { Availability, CatalogCapability, CatalogDocument, JsonObject, Result } from "@acid-cat/spec-ts";
+import type { Availability, CatalogCapability, CatalogDocument, CatalogEvent, Emitted, JsonObject, Result } from "@acid-cat/spec-ts";
 
 import type { StandardSchemaV1 } from "./standard-schema.ts";
 
@@ -173,6 +173,112 @@ export interface CapabilityFactory<Context> {
  */
 export const capabilitiesFor = <Context>(): CapabilityFactory<Context> => defineCapability;
 
+/**
+ * What `subscribe` receives beside the input: the signal of the subscription, the context, and where the subscription
+ * starts (spec/events.md#resuming). The signal aborts when the subscription ends, in all ways.
+ */
+export interface Subscription<Context> {
+  readonly signal: AbortSignal;
+  readonly context: Context;
+  /** The cursor of the client. With none, the subscription starts now. */
+  readonly cursor?: string | undefined;
+  /** The client wants no occurrence that is older than this number of milliseconds. */
+  readonly maxAgeMs?: number | undefined;
+}
+
+/**
+ * The function of an event. It gives one value for each occurrence, in order, until the signal aborts or the source
+ * has no more occurrences. Each `data` must agree with the payload schema.
+ */
+export type Subscribe<Context, Input, Payload> = (input: Input, subscription: Subscription<Context>) => AsyncIterable<Emitted<NoInfer<Payload>>>;
+
+/** The members of an event that do not depend on its input. */
+export interface EventParts<Payload, Id extends string> {
+  readonly id: Id;
+  readonly description: string;
+  /** The targets that can use the event. With no audience, no target can use it. */
+  readonly audience: readonly string[];
+  /** The schema of the `data` of each occurrence: an object schema. With no payload schema, the data is an empty object. */
+  readonly payload?: StandardSchemaV1<unknown, Payload> | undefined;
+}
+
+/** An event with an input schema. `subscribe` receives the output of the schema. */
+export interface EventWithInput<Context, Input, Payload> {
+  readonly input: StandardSchemaV1<unknown, Input>;
+  readonly subscribe: Subscribe<Context, Input, Payload>;
+}
+
+/** An event with no input schema. `subscribe` receives an empty object. */
+export interface EventWithoutInput<Context, Payload> {
+  readonly input?: undefined;
+  readonly subscribe: Subscribe<Context, EmptyInput, Payload>;
+}
+
+/** An event as an application declares it (spec/events.md). `Input` and `Payload` are the outputs of its schemas. */
+export type EventDeclaration<Context, Input, Payload, Id extends string> = EventParts<Payload, Id> &
+  (EventWithInput<Context, Input, Payload> | EventWithoutInput<Context, Payload>);
+
+/** The result of `decode` of an event: the issues of an input that is not valid, or the start of the subscription. */
+export type DecodedEvent<Context> =
+  | { readonly issues: readonly StandardSchemaV1.Issue[] }
+  | { readonly start: (subscription: Subscription<Context>) => AsyncIterable<Emitted<unknown>> };
+
+/** An event that `defineEvent` or `eventsFor` made: its declaration, and `decode`. */
+export type EventDefinition<Context = unknown, Input = EmptyInput, Payload = EmptyInput, Id extends string = string> = EventDeclaration<Context, Input, Payload, Id> & {
+  readonly decode: (input: unknown) => Promise<DecodedEvent<Context>>;
+};
+
+/** Any event whose services the context `Context` gives, whatever its schemas are. */
+export interface AnyEventDefinition<Context = never> {
+  readonly id: string;
+  readonly description: string;
+  readonly audience: readonly string[];
+  readonly input?: StandardSchemaV1 | undefined;
+  readonly payload?: StandardSchemaV1 | undefined;
+  readonly decode: (input: unknown) => Promise<DecodedEvent<Context>>;
+}
+
+/**
+ * Declare an event. `Context` is the type of the services that `subscribe` receives. The other types come from the
+ * schemas, and the id keeps its literal type.
+ */
+export function defineEvent<Context = unknown, Input = EmptyInput, Payload = EmptyInput, const Id extends string = string>(
+  declaration: EventParts<Payload, Id> & EventWithInput<Context, Input, Payload>,
+): EventDefinition<Context, Input, Payload, Id>;
+export function defineEvent<Context = unknown, Payload = EmptyInput, const Id extends string = string>(
+  declaration: EventParts<Payload, Id> & EventWithoutInput<Context, Payload>,
+): EventDefinition<Context, EmptyInput, Payload, Id>;
+// The two signatures exist so that `subscribe` gets the type of its input from `input`, as for `defineCapability`.
+export function defineEvent<Context, Input, Payload, Id extends string>(
+  declaration: EventDeclaration<Context, Input, Payload, Id>,
+): EventDefinition<Context, Input, Payload, Id> {
+  if (declaration.input === undefined) {
+    const { subscribe } = declaration;
+    return { ...declaration, decode: () => Promise.resolve({ start: (subscription) => subscribe({}, subscription) }) };
+  }
+  const { input: schema, subscribe } = declaration;
+  return {
+    ...declaration,
+    decode: async (input) => {
+      const validated = await schema["~standard"].validate(input);
+      if (validated.issues !== undefined) return { issues: validated.issues };
+      const { value } = validated;
+      return { start: (subscription) => subscribe(value, subscription) };
+    },
+  };
+}
+
+/** The function that `eventsFor` gives: `defineEvent`, with one context type. */
+export interface EventFactory<Context> {
+  <Input, Payload = EmptyInput, const Id extends string = string>(
+    declaration: EventParts<Payload, Id> & EventWithInput<Context, Input, Payload>,
+  ): EventDefinition<Context, Input, Payload, Id>;
+  <Payload = EmptyInput, const Id extends string = string>(declaration: EventParts<Payload, Id> & EventWithoutInput<Context, Payload>): EventDefinition<Context, EmptyInput, Payload, Id>;
+}
+
+/** Declare events for one context type, as `capabilitiesFor` does for capabilities. */
+export const eventsFor = <Context>(): EventFactory<Context> => defineEvent;
+
 export interface Target {
   readonly bindings: readonly string[];
   readonly description?: string | undefined;
@@ -184,6 +290,8 @@ export interface App<Context = unknown> {
   readonly description?: string | undefined;
   readonly targets: { readonly [name: string]: Target };
   readonly capabilities: readonly AnyCapability<Context>[];
+  /** The events (spec/events.md). Capabilities and events share one set of ids. */
+  readonly events?: readonly AnyEventDefinition<Context>[] | undefined;
 }
 
 /** Declare an application. */
@@ -245,6 +353,17 @@ function write(app: App<never>, toJsonSchema: ToJsonSchema): CatalogDocument {
     };
   }
 
+  const events: Record<string, CatalogEvent> = {};
+  for (const event of app.events ?? []) {
+    if (event.id in capabilities || event.id in events) throw new Error(`The id ${event.id} is declared two times.`);
+    events[event.id] = {
+      description: event.description,
+      audience: event.audience,
+      ...(event.input === undefined ? {} : { input: objectInput(toJson(event.input, event.id), types) }),
+      ...(event.payload === undefined ? {} : { payload: objectInput(toJson(event.payload, event.id), types) }),
+    };
+  }
+
   return {
     acidcat: "0.1",
     ...(app.title === undefined ? {} : { title: app.title }),
@@ -261,6 +380,7 @@ function write(app: App<never>, toJsonSchema: ToJsonSchema): CatalogDocument {
     ),
     ...(Object.keys(types).length === 0 ? {} : { $defs: types }),
     capabilities,
+    ...(Object.keys(events).length === 0 ? {} : { events }),
   };
 }
 

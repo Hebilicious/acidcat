@@ -2,11 +2,50 @@
  * Sessions and handles (spec/invocation.md, spec/bindings/typescript.md).
  */
 import { AVAILABLE, CallFailureError, callFailure, isCallFailure, viewOf } from "@acid-cat/spec-ts";
-import type { Availability, CallFailure, CatalogDocument, Outcome, Result } from "@acid-cat/spec-ts";
+import type { Availability, CallFailure, CatalogDocument, Emitted, Outcome, Result } from "@acid-cat/spec-ts";
 
 import { catalogOf } from "./app.ts";
-import type { AnyCapability, App, Call, Capability, FailureOf, FailureSchemas, Observable, ToJsonSchema } from "./app.ts";
+import type { AnyCapability, AnyEventDefinition, App, Call, Capability, EventDefinition, FailureOf, FailureSchemas, Observable, Subscription, ToJsonSchema } from "./app.ts";
 import type { StandardSchemaV1 } from "./standard-schema.ts";
+import { DEFAULT_BUFFER_LIMIT, runSubscription } from "./subscription.ts";
+import type { Occurrences } from "./subscription.ts";
+
+/** The options of a subscription (spec/bindings/typescript.md#event-handles). */
+export interface SubscribeOptions {
+  /** Cancel the subscription. */
+  readonly signal?: AbortSignal | undefined;
+  /** Start after this position (spec/events.md#resuming). */
+  readonly cursor?: string | undefined;
+  /** Send no occurrence that is older than this number of milliseconds. */
+  readonly maxAgeMs?: number | undefined;
+}
+
+/**
+ * The handle of an event (spec/bindings/typescript.md#event-handles). `session.eventHandle` gives a handle with the
+ * types of the event. A handle of `session.eventHandles` has the input type `never`: only `subscribeExternal` can
+ * subscribe with it, because it decodes the input.
+ */
+export interface EventHandle<Input = never, Payload = unknown> {
+  readonly id: string;
+  readonly description: string;
+  readonly audience: readonly string[];
+  /**
+   * A subscription with an input that is already valid. The promise resolves when the subscription has started. A call
+   * failure before the first occurrence rejects with a `CallFailureError`.
+   */
+  subscribe(input: Input, options?: SubscribeOptions): Promise<Occurrences<Payload>>;
+  /** A subscription with an input that is not trusted. The handle validates it first. */
+  subscribeExternal(input: unknown, options?: SubscribeOptions): Promise<Occurrences<unknown>>;
+}
+
+/** The handle of an event, with the types of its schemas. `session.eventHandle` gives it. */
+export type EventHandleOf<E> = E extends EventDefinition<never, infer Input, infer Payload, string> ? EventHandle<Input, Payload> : never;
+
+/** The handle of an event that the session does not serve. Each subscription rejects as `unknown-capability`. */
+function eventOutsideView<Input, Payload>(event: { readonly id: string; readonly description: string }): EventHandle<Input, Payload> {
+  const reject = () => Promise.reject(new CallFailureError(callFailure("unknown-capability", `There is no event ${event.id}.`)));
+  return { id: event.id, description: event.description, audience: [], subscribe: reject, subscribeExternal: reject };
+}
 
 /**
  * The handle of a capability (spec/bindings/typescript.md#handles). `Input`, `Value`, `Failure` and `State` are the
@@ -73,6 +112,19 @@ export interface Session<Context = unknown> {
     input: unknown,
     options?: { readonly signal?: AbortSignal | undefined },
   ) => Promise<Result<Value, FailureOf<Failures>>>;
+  /** The handles of the events in the view, by id. Bindings use them. */
+  readonly eventHandles: ReadonlyMap<string, EventHandle>;
+  /**
+   * The handle of an event, with the types of the event. Only the event object that the session serves gets a handle
+   * that subscribes to it. Any other event, also one with the same id, gets a handle whose subscriptions reject as
+   * `unknown-capability`.
+   */
+  readonly eventHandle: <Input, Payload, Id extends string>(event: EventDefinition<Context, Input, Payload, Id>) => EventHandle<Input, Payload>;
+  /**
+   * A subscription with an input that is not trusted. The promise never rejects: it gives the occurrences, or the call
+   * failure before the first occurrence.
+   */
+  readonly subscribe: (id: string, input: unknown, options?: SubscribeOptions) => Promise<Occurrences<unknown> | CallFailure>;
   /** A call with an input that is not trusted. The outcome is in its JSON form. The promise never rejects. */
   readonly invoke: (id: string, input: unknown, options?: { readonly signal?: AbortSignal | undefined }) => Promise<Outcome<unknown, unknown>>;
   /**
@@ -82,7 +134,10 @@ export interface Session<Context = unknown> {
   readonly onChange: (listener: () => void) => { unsubscribe(): void };
   /** The signal of the session. It aborts when the session closes. */
   readonly signal: AbortSignal;
-  /** Close the session: accept no new calls, cancel the calls in progress, and wait for them. */
+  /**
+   * Close the session: accept no new calls and subscriptions, cancel the calls in progress, end each subscription as
+   * complete, and wait for the calls.
+   */
   readonly dispose: () => Promise<void>;
   /** Close the session, as `dispose` does, at the end of the block of `await using session = createSession(…)`. */
   readonly [Symbol.asyncDispose]: () => Promise<void>;
@@ -95,6 +150,11 @@ export interface SessionOptions<Context> {
   readonly toJsonSchema: ToJsonSchema;
   /** Record a defect. The default writes it to the console. */
   readonly onDefect?: ((id: string, cause: unknown) => void) | undefined;
+  /**
+   * The number of occurrences that each subscription keeps for a client that reads slowly. When the limit is full, the
+   * oldest occurrence goes, and the next occurrence that the client reads has `truncated: true`. The default is 256.
+   */
+  readonly bufferLimit?: number | undefined;
 }
 
 /** A capability that the session serves, and its availability. */
@@ -242,6 +302,113 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     });
   }
 
+  // --- Events (spec/events.md) ----------------------------------------------------------------------------------
+
+  const servedEvents = new Map<string, AnyEventDefinition<Context>>();
+  for (const event of app.events ?? []) {
+    if (!event.audience.includes(options.target)) continue;
+    if (served.has(event.id) || servedEvents.has(event.id)) throw new Error(`The id ${event.id} is declared two times.`);
+    servedEvents.set(event.id, event);
+  }
+  const bufferLimit = options.bufferLimit ?? DEFAULT_BUFFER_LIMIT;
+
+  /**
+   * Start a subscription to an event that the session serves: the decoded input, then the provider, with cancellation.
+   * The result is the occurrences, or the call failure before the first occurrence.
+   */
+  async function start<Source, Payload>(
+    id: string,
+    prepare: () => Promise<{ readonly issues: readonly StandardSchemaV1.Issue[] } | { readonly start: (subscription: Subscription<Context>) => AsyncIterable<Emitted<Source>> }>,
+    check: (data: Source) => Promise<Payload>,
+    subscribeOptions: SubscribeOptions = {},
+  ): Promise<Occurrences<Payload> | CallFailure> {
+    const { signal } = subscribeOptions;
+    const cancelled = () => lifetime.signal.aborted || signal?.aborted === true;
+    if (cancelled()) return callFailure("cancelled", "The subscription was cancelled.");
+    let prepared;
+    try {
+      prepared = await prepare();
+    } catch (cause) {
+      onDefect(id, cause);
+      return callFailure("internal", "The event failed.");
+    }
+    if (cancelled()) return callFailure("cancelled", "The subscription was cancelled.");
+    if ("issues" in prepared) return callFailure("invalid-input", issueMessage(prepared.issues));
+
+    const controller = new AbortController();
+    let source: AsyncIterable<Emitted<Source>>;
+    try {
+      source = prepared.start({
+        signal: controller.signal,
+        context: options.context,
+        ...(subscribeOptions.cursor === undefined ? {} : { cursor: subscribeOptions.cursor }),
+        ...(subscribeOptions.maxAgeMs === undefined ? {} : { maxAgeMs: subscribeOptions.maxAgeMs }),
+      });
+      if (!isAsyncIterable(source)) throw new TypeError("subscribe did not give an async iterable.");
+    } catch (cause) {
+      onDefect(id, cause);
+      return callFailure("internal", "The event failed.");
+    }
+
+    const complete = () => running.complete();
+    const cancel = () => running.cancel();
+    const running = runSubscription({
+      name: id,
+      source,
+      check,
+      controller,
+      limit: bufferLimit,
+      onDefect: (cause) => onDefect(id, cause),
+      onEnd: () => {
+        lifetime.signal.removeEventListener("abort", complete);
+        signal?.removeEventListener("abort", cancel);
+      },
+    });
+    lifetime.signal.addEventListener("abort", complete);
+    signal?.addEventListener("abort", cancel);
+    return running.occurrences;
+  }
+
+  /** A subscription with an input that is not trusted. The data of each occurrence is a copy in its JSON form. */
+  async function subscribe(id: string, input: unknown, subscribeOptions?: SubscribeOptions): Promise<Occurrences<unknown> | CallFailure> {
+    if (lifetime.signal.aborted || subscribeOptions?.signal?.aborted === true) return callFailure("cancelled", "The subscription was cancelled.");
+    const event = servedEvents.get(id);
+    if (event === undefined) return callFailure("unknown-capability", `There is no event ${id}.`);
+    return start(id, () => event.decode(input), (data: unknown) => checkPayload(event.payload, data, (value) => value), subscribeOptions);
+  }
+
+  /** Reject a call failure, as an event handle does. */
+  const opened = async <Payload>(subscription: Promise<Occurrences<Payload> | CallFailure>): Promise<Occurrences<Payload>> => {
+    const settled = await subscription;
+    if ("kind" in settled) throw new CallFailureError(settled);
+    return settled;
+  };
+
+  /** The typed handle of an event that the session serves, or the handle outside the view. */
+  function eventHandle<Input, Payload, Id extends string>(event: EventDefinition<Context, Input, Payload, Id>): EventHandle<Input, Payload> {
+    if (servedEvents.get(event.id) !== event) return eventOutsideView(event);
+    const source = (input: Input, subscription: Subscription<Context>) => (event.input === undefined ? event.subscribe({}, subscription) : event.subscribe(input, subscription));
+    const check = (data: Payload): Promise<Payload> => checkPayload(event.payload, data, () => data);
+    return {
+      id: event.id,
+      description: event.description,
+      audience: [options.target],
+      subscribe: (input, subscribeOptions) => {
+        if (lifetime.signal.aborted || subscribeOptions?.signal?.aborted === true) {
+          return Promise.reject(new CallFailureError(callFailure("cancelled", "The subscription was cancelled.")));
+        }
+        return opened(start(event.id, () => Promise.resolve({ start: (subscription: Subscription<Context>) => source(input, subscription) }), check, subscribeOptions));
+      },
+      subscribeExternal: (input, subscribeOptions) => opened(subscribe(event.id, input, subscribeOptions)),
+    };
+  }
+
+  const eventHandles = new Map<string, EventHandle>();
+  for (const [id, event] of servedEvents) {
+    const subscribeExternal = (input: unknown, subscribeOptions?: SubscribeOptions) => opened(subscribe(id, input, subscribeOptions));
+    eventHandles.set(id, { id, description: event.description, audience: [options.target], subscribe: subscribeExternal, subscribeExternal });
+  }
+
   const unsubscribeAll = () => {
     subscriptions.forEach((subscription) => subscription.unsubscribe());
     subscriptions = [];
@@ -263,6 +430,9 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     },
     handles,
     handle,
+    eventHandles,
+    eventHandle,
+    subscribe,
     call: (capability, input, callOptions) => call(capability, input, callOptions?.signal),
     signal: lifetime.signal,
     invoke: (id, input, callOptions) => invoke(id, input, callOptions?.signal),
@@ -289,6 +459,27 @@ function issueMessage(issues: readonly StandardSchemaV1.Issue[]): string {
   return issues
     .map((issue) => `${(issue.path ?? []).map((key) => (typeof key === "object" ? String(key.key) : String(key))).join(".") || "input"}: ${issue.message}`)
     .join("; ");
+}
+
+/** True if a value is an async iterable. */
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
+  return typeof value === "object" && value !== null && Symbol.asyncIterator in value && typeof value[Symbol.asyncIterator] === "function";
+}
+
+/**
+ * Check the data of an occurrence against the payload schema, and give a copy of the output of the schema. With no
+ * payload schema, the data must be an empty object, and `empty` gives the value. Data that does not agree is a defect.
+ */
+async function checkPayload<Payload>(schema: StandardSchemaV1<unknown, Payload> | undefined, data: unknown, empty: (value: unknown) => Payload): Promise<Payload> {
+  if (schema === undefined) {
+    if (typeof data !== "object" || data === null || Array.isArray(data) || Object.keys(data).length > 0) {
+      throw new Error("The data of an occurrence of an event with no payload schema is not an empty object.");
+    }
+    return structuredClone(empty(data));
+  }
+  const checked = await schema["~standard"].validate(data);
+  if (checked.issues !== undefined) throw new Error(`The data of an occurrence does not agree with the payload schema: ${checked.issues[0]?.message}`);
+  return structuredClone(checked.value);
 }
 
 /** An observable whose values are copies, so that a client cannot change the data of the provider. */

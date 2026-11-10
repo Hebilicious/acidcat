@@ -48,6 +48,7 @@
     "@acid-cat/cli": "workspace:*",
     "@types/node": "catalog:",
     "esbuild": "catalog:",
+    "graphql": "catalog:",
     "playwright": "catalog:",
     "typescript": "catalog:",
     "zod": "catalog:"
