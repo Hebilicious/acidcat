@@ -126,8 +126,15 @@ async function freePort(): Promise<number> {
 }
 
 /**
- * Serve an app on the Node.js adapter of Elysia, on a free port. The adapter gives its server to the callback of
- * `listen`, and starts to listen a short time later: wait until the port answers.
+ * Serve an app on the Node.js adapter of Elysia, on a free port, and give the function that stops it.
+ *
+ * `@elysiajs/node` 1.4.5 takes `stop` from the web standard adapter of Elysia. That `stop` reads `app.server`, but the
+ * `listen` of `@elysiajs/node` does not set `app.server`. Thus `app.server` stays `null`, and `app.stop()` throws
+ * "Elysia isn't running" for a server that runs. The adapter gives its server to the callback of `listen`, and that
+ * server has its own `stop`: the function stops that server. When a release of `@elysiajs/node` sets `app.server` in
+ * `listen`, use `app.stop()`, and remove the callback and `isStoppable`.
+ *
+ * The adapter starts to listen a short time after `listen` returns, so wait until the port answers.
  */
 async function listenOnNode(app: ReturnType<typeof elysiaApi>): Promise<{ readonly port: number; readonly stop: () => Promise<void> }> {
   const port = await freePort();
