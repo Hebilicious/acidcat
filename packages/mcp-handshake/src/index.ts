@@ -4,7 +4,7 @@
  * a handshake goes to that handler as a request of revision 2026-07-28, so the handler screens it. The wrapper keeps no
  * state.
  */
-import { isJsonObject, MCP_PROTOCOL_VERSION, readBounded } from "@acid-cat/spec-ts";
+import { isJsonObject, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, readBounded } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
 /** A web request handler. */
@@ -86,7 +86,8 @@ function current(request: Request, method: string, params: JsonObject): Request 
 
 /**
  * The result of `initialize`, from the result of `server/discover`. The wrapper keeps no session, so it cannot send
- * `notifications/tools/list_changed`.
+ * `notifications/tools/list_changed`. The events extension is only for revision 2026-07-28, so the capabilities do not
+ * have it (spec/bindings/mcp.md#events).
  */
 function initializeResult(offered: unknown, discovered: JsonObject): JsonObject {
   const info = metaOf({ params: discovered })[SERVER_INFO_KEY];
@@ -97,10 +98,18 @@ function initializeResult(offered: unknown, discovered: JsonObject): JsonObject 
   return {
     // The revision of the client if the wrapper serves it, or else the latest revision with a handshake.
     protocolVersion: HANDSHAKE_VERSIONS.find((each) => each === offered) ?? HANDSHAKE_VERSIONS[0],
-    capabilities: { ...capabilities, tools: { listChanged: false } },
+    capabilities: { ...withoutEvents(capabilities), tools: { listChanged: false } },
     serverInfo: { name, version },
     ...(instructions === undefined ? {} : { instructions }),
   };
+}
+
+/** Capabilities without the events extension. A capability object with no other extension has no `extensions` member. */
+function withoutEvents(capabilities: JsonObject): JsonObject {
+  const { extensions, ...rest } = capabilities;
+  if (!isJsonObject(extensions)) return capabilities;
+  const { [MCP_EVENTS_EXTENSION]: _, ...others } = extensions;
+  return Object.keys(others).length === 0 ? rest : { ...rest, extensions: others };
 }
 
 /** The `params._meta` of a message, or an empty object. */

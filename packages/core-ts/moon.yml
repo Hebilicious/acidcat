@@ -3,7 +3,7 @@ layer: "library"
 
 project:
   title: "@acid-cat/core-ts"
-  description: "Serve AcidCat capabilities in plain TypeScript, with no Effect dependency. npm package: @acid-cat/core-ts."
+  description: "Serve AcidCat capabilities and events in plain TypeScript, with no Effect dependency. npm package: @acid-cat/core-ts."
 
 toolchains:
   default: ["javascript", "node", "pnpm"]
@@ -18,7 +18,7 @@ tasks:
 
   test:
     deps: ["cli:browser"]
-    description: "Test sessions, handles and the MCP, HTTP, CLI and WebMCP bindings, with the test application, the kettle and the air conditioner. WebMCP also runs in Chromium."
+    description: "Test sessions, handles, event handles and the MCP, HTTP, CLI and WebMCP bindings, with the test application, the kettle, the sensors and the air conditioner. WebMCP also runs in Chromium."
     command: "node"
     args: ["--test", "--test-timeout=60000", "test/"]
     inputs: ["src/**/*.ts", "test/**/*.ts", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/cli/src/**/*.ts", "/packages/cli/conformance/*.acidcat.json"]

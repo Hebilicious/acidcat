@@ -2,7 +2,7 @@
 name: acid-cat
 license: MIT
 description: |
-  Build an application with AcidCat: write its catalog (in Pkl, with a catalog library, or from the code of a core), implement its capabilities with a core (@acid-cat/core-ts, @acid-cat/core-effect), serve them through bindings (MCP through HTTP or stdio, HTTP, command line, WebMCP), and test them with acid-cat check and acid-cat conform. Use when a repository depends on @acid-cat/*, has a *.acidcat.json catalog or a Pkl module that amends Catalog.pkl, or when the user asks to add a capability, a target or a binding, to expose an application to agents through MCP or WebMCP, or to give it a command line or an HTTP API.
+  Build an application with AcidCat: write its catalog (in Pkl, with a catalog library, or from the code of a core), implement its capabilities and events with a core (@acid-cat/core-ts, @acid-cat/core-effect), serve them through bindings (MCP through HTTP or stdio, HTTP, command line, WebMCP), and test them with acid-cat check and acid-cat conform. Use when a repository depends on @acid-cat/*, has a *.acidcat.json catalog or a Pkl module that amends Catalog.pkl, or when the user asks to add a capability, a target or a binding, to expose an application to agents through MCP or WebMCP, or to give it a command line or an HTTP API.
 ---
 
 # AcidCat
@@ -55,7 +55,8 @@ An **event** is a thing that happens in the application, that clients follow, fo
 
 1. Add it to `events` in the source of the catalog: id, description, audience, input, payload. In Pkl: `events { ["aircon.status.changed"] { … } }`. In a catalog library: `event(id, …)`.
 2. Obey the rules: the id is not also the id of a capability. The input and the payload are objects: `"type": "object"`, or a `$ref` to a type that is an object. Put a filter in the input, for example `{ "room": … }`. Put a failure of the source in the payload, as a union with a `_tag`.
-3. Write the JSON of the catalog again, and run `acid-cat check --strict <catalog>`. A view has the events whose audience has its target.
+3. Implement it in the core: `subscribe` gives an async iterable of occurrences (core-ts). See [references/cores.md](references/cores.md).
+4. Write the JSON of the catalog again, and run `acid-cat check --strict <catalog>`. A view has the events whose audience has its target.
 
 To keep old clients working, add members to a payload, and do not remove or change members. [spec/events.md](https://github.com/Hebilicious/acidcat/blob/main/spec/events.md) tells how subscriptions, occurrences and cursors work. The document of each binding tells how it serves them. The WebMCP binding does not serve events.
 
