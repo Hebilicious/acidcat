@@ -45,6 +45,8 @@ export function idlePuller<Payload>(occurrences: Occurrences<Payload>, idleMs: n
 export function textStream(produce: () => Promise<readonly string[] | undefined>, cancel: () => void, release: () => Promise<void>): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   let released = false;
+  // A pull can still wait for `produce` when the client cancels. Its messages then go nowhere.
+  let cancelled = false;
   const releaseOnce = async () => {
     if (released) return;
     released = true;
@@ -57,10 +59,11 @@ export function textStream(produce: () => Promise<readonly string[] | undefined>
         try {
           messages = await produce();
         } catch (error) {
-          controller.error(error);
+          if (!cancelled) controller.error(error);
           await releaseOnce();
           return;
         }
+        if (cancelled) return;
         if (messages === undefined) {
           controller.close();
           await releaseOnce();
@@ -69,6 +72,7 @@ export function textStream(produce: () => Promise<readonly string[] | undefined>
         controller.enqueue(encoder.encode(messages.join("")));
       },
       async cancel() {
+        cancelled = true;
         cancel();
         await releaseOnce();
       },
