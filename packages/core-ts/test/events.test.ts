@@ -3,8 +3,8 @@ import { test } from "node:test";
 
 import { isOccurrence } from "@acid-cat/spec-ts";
 
-import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, defineEvent, ok, renderCatalog } from "../src/index.ts";
-import type { Occurrences } from "../src/index.ts";
+import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, defineEvent, installWebMcp, ok, renderCatalog } from "../src/index.ts";
+import type { ModelContextTool, Occurrences } from "../src/index.ts";
 import { broken, clock, failing, hidden, read, readingChanged, sensorOptions, Sensors, sensorsApp, ticks, toJsonSchema } from "./sensors.ts";
 
 /** Wait until a condition is true, or fail after one second. */
@@ -261,4 +261,21 @@ test("an event with no payload schema must give an empty object", async () => {
   const filled = await session.subscribe("probe.filled", {});
   assert.ok(!("kind" in filled));
   await assert.rejects(filled.next(), (error) => error instanceof CallFailureError && error.kind === "internal");
+});
+
+test("WebMCP serves no events: it registers only the tools of the capabilities", async () => {
+  const tools = new Map<string, ModelContextTool>();
+  const host = {
+    registerTool(tool: ModelContextTool) {
+      tools.set(tool.name, tool);
+      return undefined;
+    },
+  };
+  await using session = createSession(sensorsApp, { target: "app", ...sensorOptions() });
+  const installed = installWebMcp(session, { host });
+  assert.ok(installed !== undefined);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(installed.status.getSnapshot().phase, "ready");
+  assert.deepEqual([...tools.keys()], ["sensor.read"]);
+  await installed.dispose();
 });

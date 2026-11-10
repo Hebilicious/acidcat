@@ -2,11 +2,12 @@
  * The MCP binding through standard input and standard output (spec/bindings/mcp.md#stdio). The process is one session.
  * The server serves revision 2026-07-28, and the `initialize` handshake of revisions 2025-11-25 and 2025-06-18.
  */
-import { isJsonObject, MCP_PROTOCOL_VERSION, MCP_UNKNOWN_TOOL, mcpToolResult } from "@acid-cat/spec-ts";
+import { isJsonObject, KEEPALIVE_MS, MCP_PROTOCOL_VERSION, MCP_UNKNOWN_TOOL, mcpToolResult } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
 import { hasObjectOutput, listTools } from "./mcp.ts";
+import { eventCapabilities, listEvents, servesEvents, startEventStream, unsupportedDelivery } from "./mcp-events.ts";
 import { createSession } from "./session.ts";
 import type { Session } from "./session.ts";
 
@@ -20,6 +21,10 @@ export interface McpStdioOptions<Context> {
   readonly toJsonSchema: ToJsonSchema;
   /** The target that the server serves. The default is `"mcp"`. */
   readonly target?: string | undefined;
+  /** The time with nothing sent on an `events/stream` request after which the server sends a heartbeat, in milliseconds. The default is 15 seconds. */
+  readonly heartbeatMs?: number | undefined;
+  /** The number of occurrences that each subscription keeps for a client that reads slowly. The default is 256. */
+  readonly bufferLimit?: number | undefined;
 }
 
 export interface McpStdioIo {
@@ -65,9 +70,14 @@ function readMessage(body: JsonObject): Message {
  * are cancelled, and the promise resolves. This function works in all runtimes.
  */
 export async function runMcpStdio<Context>(app: App<Context>, options: McpStdioOptions<Context>, io: McpStdioIo): Promise<void> {
-  const session = createSession(app, { target: options.target ?? "mcp", context: options.context, toJsonSchema: options.toJsonSchema });
+  const session = createSession(app, {
+    target: options.target ?? "mcp",
+    context: options.context,
+    toJsonSchema: options.toJsonSchema,
+    ...(options.bufferLimit === undefined ? {} : { bufferLimit: options.bufferLimit }),
+  });
   const instructions = options.instructions ?? app.description;
-  const server = new StdioServer(session, { ...options, instructions }, io.write);
+  const server = new StdioServer(session, { name: options.name, version: options.version, instructions, heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS }, io.write);
   try {
     for await (const line of lines(io.input)) server.receive(line);
   } finally {
@@ -102,6 +112,7 @@ interface ServerInfo {
   readonly name: string;
   readonly version: string;
   readonly instructions: string | undefined;
+  readonly heartbeatMs: number;
 }
 
 /** The state of the one session of the process: the requests in progress, the subscriptions, and the handshake. */
@@ -111,6 +122,13 @@ class StdioServer {
   readonly #write: (text: string) => void;
   /** The calls in progress, by request id. `notifications/cancelled` aborts them. */
   readonly #calls = new Map<Id, AbortController>();
+  /**
+   * The `events/stream` requests in progress, by request id. `notifications/cancelled` aborts them. When the session
+   * closes, their subscriptions end as complete, so they are not aborted then.
+   */
+  readonly #streams = new Map<Id, AbortController>();
+  /** The work of each `events/stream` request. `close` waits for it, so that the last result is written. */
+  readonly #streaming = new Set<Promise<void>>();
   /** The open `subscriptions/listen` requests of revision 2026-07-28 that asked for tool list changes. */
   readonly #subscriptions = new Set<Id>();
   /** True after the `initialize` handshake: the client then gets `notifications/tools/list_changed` with no subscription. */
@@ -153,6 +171,7 @@ class StdioServer {
     this.#subscriptions.clear();
     for (const controller of this.#calls.values()) controller.abort();
     await this.#session.dispose();
+    await Promise.allSettled(this.#streaming);
   }
 
   #notification(message: Message): void {
@@ -160,6 +179,7 @@ class StdioServer {
     const requestId = message.params["requestId"];
     if (typeof requestId !== "string" && typeof requestId !== "number") return;
     this.#calls.get(requestId)?.abort();
+    this.#streams.get(requestId)?.abort();
     this.#subscriptions.delete(requestId);
   }
 
@@ -177,7 +197,7 @@ class StdioServer {
         id,
         modern
           ? {
-              _meta: { "io.modelcontextprotocol/serverInfo": { name: this.#options.name, version: this.#options.version } },
+              _meta: this.#serverInfo(),
               resultType: "complete",
               ...(list ? { ttlMs: 0, cacheScope: "private" } : {}),
               ...result,
@@ -189,7 +209,7 @@ class StdioServer {
         return complete(
           {
             supportedVersions: SUPPORTED_VERSIONS,
-            capabilities: { tools: { listChanged: true } },
+            capabilities: { tools: { listChanged: true }, ...eventCapabilities(this.#session) },
             ...(this.#options.instructions === undefined ? {} : { instructions: this.#options.instructions }),
           },
           true,
@@ -200,9 +220,51 @@ class StdioServer {
         return complete({ tools: listTools(this.#session) }, true);
       case "tools/call":
         return this.#call(id, message.params, complete);
-      default:
-        return this.#error(id, -32601, `Method not found: ${method}`);
     }
+    // The events extension is only for revision 2026-07-28, and only when the view has events.
+    if (modern && servesEvents(this.#session)) {
+      switch (method) {
+        case "events/list":
+          return complete({ events: listEvents(this.#session) }, true);
+        case "events/poll":
+        case "events/subscribe": {
+          const { code, message: text, data } = unsupportedDelivery(method);
+          return this.#error(id, code, text, data);
+        }
+        case "events/stream":
+          if (id !== null) {
+            const work = this.#stream(id, message.params).finally(() => this.#streaming.delete(work));
+            this.#streaming.add(work);
+            return work;
+          }
+      }
+    }
+    return this.#error(id, -32601, `Method not found: ${method}`);
+  }
+
+  /**
+   * An `events/stream` request: the messages of the subscription go to standard output. `notifications/cancelled` with
+   * the id of the request cancels it, and then the server sends nothing more for it.
+   */
+  async #stream(id: Id, params: JsonObject): Promise<void> {
+    const controller = new AbortController();
+    this.#streams.set(id, controller);
+    try {
+      const started = await startEventStream(this.#session, id, params, { heartbeatMs: this.#options.heartbeatMs, resultMeta: this.#serverInfo(), signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if ("error" in started) return this.#error(id, started.error.code, started.error.message, started.error.data);
+      for (let messages = await started.messages(); messages !== undefined; messages = await started.messages()) {
+        if (controller.signal.aborted) return;
+        messages.forEach((message) => this.#send(message));
+      }
+    } finally {
+      if (this.#streams.get(id) === controller) this.#streams.delete(id);
+    }
+  }
+
+  /** The `_meta` of a result of revision 2026-07-28: the information about the server. */
+  #serverInfo(): JsonObject {
+    return { "io.modelcontextprotocol/serverInfo": { name: this.#options.name, version: this.#options.version } };
   }
 
   /** The `initialize` handshake. The server selects the revision of the client if it serves it, or else its latest. */

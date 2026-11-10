@@ -2,14 +2,16 @@
  * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP, revision 2026-07-28, with no state on the
  * server between requests.
  */
-import { bundle, isJsonObject, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpToolResult, readBounded, screenRequest } from "@acid-cat/spec-ts";
-import type { Rejection } from "@acid-cat/spec-ts";
+import { bundle, isJsonObject, KEEPALIVE_MS, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage } from "@acid-cat/spec-ts";
+import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
-import { withContext } from "./context.ts";
+import { openContext } from "./context.ts";
 import type { ContextOption } from "./context.ts";
+import { eventCapabilities, listEvents, servesEvents, startEventStream, unsupportedDelivery } from "./mcp-events.ts";
 import { createSession } from "./session.ts";
 import type { Session } from "./session.ts";
+import { textStream } from "./stream.ts";
 
 /** The options of `mcpHandler`. Give `context` to share one context, or `createContext` to make one for each request. */
 export type McpOptions<Context> = McpSettings & ContextOption<Context>;
@@ -29,6 +31,10 @@ export interface McpSettings {
   readonly target?: string | undefined;
   /** The maximum size of a request body, in bytes. The default is 1 MiB. */
   readonly maximumBytes?: number | undefined;
+  /** The time with nothing sent on an `events/stream` response after which the server sends a heartbeat, in milliseconds. The default is 15 seconds. */
+  readonly heartbeatMs?: number | undefined;
+  /** The number of occurrences that each subscription keeps for a client that reads slowly. The default is 256. */
+  readonly bufferLimit?: number | undefined;
 }
 
 /** The members of a JSON-RPC request that the server reads. A request with no `id` is a notification. */
@@ -37,6 +43,7 @@ interface JsonRpcRequest {
   readonly method?: string | undefined;
   readonly name?: string | undefined;
   readonly arguments?: unknown;
+  readonly params: JsonObject;
   readonly protocolVersion?: unknown;
 }
 
@@ -45,7 +52,7 @@ interface JsonRpcRequest {
  * `id` that is not a string or a number is `null`.
  */
 function readRequest(body: unknown): JsonRpcRequest {
-  if (!isJsonObject(body)) return {};
+  if (!isJsonObject(body)) return { params: {} };
   const { id, method, params } = body;
   const meta = isJsonObject(params) ? params["_meta"] : undefined;
   return {
@@ -53,6 +60,7 @@ function readRequest(body: unknown): JsonRpcRequest {
     method: typeof method === "string" ? method : undefined,
     name: isJsonObject(params) && typeof params["name"] === "string" ? params["name"] : undefined,
     arguments: isJsonObject(params) ? params["arguments"] : undefined,
+    params: isJsonObject(params) ? params : {},
     protocolVersion: isJsonObject(meta) ? meta["io.modelcontextprotocol/protocolVersion"] : undefined,
   };
 }
@@ -89,22 +97,48 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
     if (metaVersion === undefined) return error(400, id, -32602, "Required request metadata is missing");
     if (metaVersion !== version) return error(400, id, -32020, "MCP-Protocol-Version header does not match request metadata");
 
-    return withContext<Context, Response>(options, request, async (context) => {
-      const session = createSession(app, { target: options.target ?? "mcp", context, toJsonSchema: options.toJsonSchema });
-      try {
-        return await answer(session, message, { ...options, instructions: options.instructions ?? app.description }, request.signal);
-      } finally {
-        await session.dispose();
-      }
+    const opened = await openContext<Context>(options, request);
+    const session = createSession(app, {
+      target: options.target ?? "mcp",
+      context: opened.context,
+      toJsonSchema: options.toJsonSchema,
+      ...(options.bufferLimit === undefined ? {} : { bufferLimit: options.bufferLimit }),
     });
+    const close = async () => {
+      await session.dispose();
+      await opened.release();
+    };
+    // The stream of `events/stream` closes the session and releases the context when it ends.
+    let streaming = false;
+    try {
+      if (message.method === "events/stream" && message.id !== null && servesEvents(session)) {
+        const started = await startEventStream(session, message.id, message.params, {
+          heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
+          resultMeta: serverInfoOf(options),
+          signal: request.signal,
+        });
+        if ("error" in started) return error(200, id, started.error.code, started.error.message, started.error.data);
+        const { messages, cancel } = started;
+        const produce = async () => (await messages())?.map((each) => sseMessage({ data: JSON.stringify(each) }));
+        const body = textStream(produce, cancel, close);
+        streaming = true;
+        return new Response(body, { status: 200, headers: { "Content-Type": SSE_MEDIA_TYPE, "Cache-Control": "no-store" } });
+      }
+      return await answer(session, message, { ...options, instructions: options.instructions ?? app.description }, request.signal);
+    } finally {
+      if (!streaming) await close();
+    }
   };
 }
+
+/** The `_meta` of a result: the information about the server. */
+const serverInfoOf = (options: McpSettings): JsonObject => ({ "io.modelcontextprotocol/serverInfo": { name: options.name, version: options.version } });
 
 async function answer(session: Session, message: JsonRpcRequest, options: McpSettings, signal: AbortSignal): Promise<Response> {
   const id = message.id ?? null;
   const complete = (result: object, list = false) =>
     reply(id, {
-      _meta: { "io.modelcontextprotocol/serverInfo": { name: options.name, version: options.version } },
+      _meta: serverInfoOf(options),
       resultType: "complete",
       ...(list ? { ttlMs: 0, cacheScope: "private" } : {}),
       ...result,
@@ -114,7 +148,7 @@ async function answer(session: Session, message: JsonRpcRequest, options: McpSet
       return complete(
         {
           supportedVersions: [MCP_PROTOCOL_VERSION],
-          capabilities: { tools: { listChanged: false } },
+          capabilities: { tools: { listChanged: false }, ...eventCapabilities(session) },
           ...(options.instructions === undefined ? {} : { instructions: options.instructions }),
         },
         true,
@@ -130,9 +164,17 @@ async function answer(session: Session, message: JsonRpcRequest, options: McpSet
       const outcome = await session.invoke(name, message.arguments ?? {}, { signal });
       return complete(mcpToolResult(outcome, hasObjectOutput(session, name)));
     }
-    default:
-      return error(404, id, -32601, `Method not found: ${message.method}`);
+    case "events/list":
+      if (!servesEvents(session)) break;
+      return complete({ events: listEvents(session) }, true);
+    case "events/poll":
+    case "events/subscribe": {
+      if (!servesEvents(session)) break;
+      const unsupported = unsupportedDelivery(message.method);
+      return error(200, id, unsupported.code, unsupported.message, unsupported.data);
+    }
   }
+  return error(404, id, -32601, `Method not found: ${message.method}`);
 }
 
 /** The tools of the available capabilities in the view of a session (spec/bindings/mcp.md#tools). */

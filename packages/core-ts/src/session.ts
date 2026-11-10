@@ -174,7 +174,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
   const running = new Set<Promise<unknown>>();
   const listeners = new Set<() => void>();
   let subscriptions: { unsubscribe(): void }[] = [];
-  const onDefect = options.onDefect ?? ((id, cause) => console.error(`A capability failed with a defect: ${id}`, cause));
+  const onDefect = options.onDefect ?? ((id, cause) => console.error(`A capability or an event failed with a defect: ${id}`, cause));
 
   const served = new Map<string, Served<Context>>();
   for (const capability of app.capabilities) {

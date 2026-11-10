@@ -3,7 +3,10 @@
  */
 import {
   bundle,
+  CallFailureError,
   CLI_EXIT_CODES,
+  CLI_WATCH_EXIT_CODES,
+  cliEventUsage,
   cliExitCode,
   cliFlags,
   cliJsonArray,
@@ -14,7 +17,7 @@ import {
   isCallFailure,
   isJsonObject,
 } from "@acid-cat/spec-ts";
-import type { CatalogCapability, CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec-ts";
+import type { CallFailure, CatalogCapability, CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
 import { createSession } from "./session.ts";
@@ -31,9 +34,9 @@ export interface CliOptions<Context> {
    */
   readonly description?: string | undefined;
   /**
-   * The commands of the application, beside the commands of the capabilities, `call` and `list`. The name of each one
-   * must not be `call`, `list`, the name of another command of the application, or the first word of the command of a
-   * capability (spec/bindings/cli.md#commands).
+   * The commands of the application, beside the commands of the capabilities, `call`, `list` and `watch`. The name of
+   * each one must not be `call`, `list`, `watch`, the name of another command of the application, or the first word of
+   * the command of a capability (spec/bindings/cli.md#commands).
    */
   readonly commands?: readonly CliCommand<Context>[] | undefined;
 }
@@ -53,6 +56,9 @@ export interface CliCommand<Context> {
   run(args: readonly string[], io: CliIo & { readonly context: Context }): number | Promise<number>;
 }
 
+/** The commands of the command line itself. No other command can have their names. */
+const GENERIC_COMMANDS: readonly string[] = ["call", "list", "watch"];
+
 class UsageError extends Error {
   readonly exitCode: number;
 
@@ -62,7 +68,7 @@ class UsageError extends Error {
   }
 }
 
-/** Run the command line as the main program of the process. An interrupt (`SIGINT`) cancels the call. */
+/** Run the command line as the main program of the process. An interrupt (`SIGINT`) cancels the call or the subscription. */
 export function main<Context>(app: App<Context>, options: CliOptions<Context>): void {
   const interrupt = new AbortController();
   process.once("SIGINT", () => interrupt.abort());
@@ -81,26 +87,63 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   const types = session.view.$defs ?? {};
   const commands = Object.keys(session.view.capabilities).map((id) => ({ id, path: commandPath(id) }));
   for (const { path } of commands) {
-    if (path[0] === "call" || path[0] === "list") throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
+    if (path[0] !== undefined && GENERIC_COMMANDS.includes(path[0])) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
   }
   const added = options.commands ?? [];
-  const taken = new Set(["call", "list", ...commands.flatMap(({ path }) => path.slice(0, 1))]);
+  const taken = new Set([...GENERIC_COMMANDS, ...commands.flatMap(({ path }) => path.slice(0, 1))]);
   for (const command of added) {
     if (taken.has(command.name)) throw new Error(`The command ${command.name} of the application has the same name as another command.`);
     taken.add(command.name);
   }
 
+  const printFailure = (failure: CallFailure) => io.stderr(JSON.stringify({ kind: failure.kind, message: failure.message }));
   const print = (outcome: Outcome<unknown, unknown>): number => {
-    if (isCallFailure(outcome)) io.stderr(JSON.stringify({ kind: outcome.kind, message: outcome.message }));
+    if (isCallFailure(outcome)) printFailure(outcome);
     else io.stdout(JSON.stringify(outcome.ok ? outcome.value : outcome.error, null, 2));
     return cliExitCode(outcome);
+  };
+
+  /** Subscribe to an event, and write each occurrence on one line (spec/bindings/cli.md#events). */
+  const watch = async (rest: readonly string[]): Promise<number> => {
+    const [id, ...flagArgs] = rest;
+    if (id === undefined) throw new UsageError("Give the id of an event.", CLI_EXIT_CODES["invalid-input"]);
+    const event = session.view.events?.[id];
+    let input: unknown = {};
+    if (event !== undefined) {
+      const schema = bundle(event.input ?? { type: "object" }, types);
+      if (flagArgs.includes("--help") || flagArgs.includes("-h")) {
+        io.stdout([`Usage: ${cliEventUsage(options.name, id, event.input === undefined ? undefined : schema)}`, "", event.description].join("\n"));
+        return CLI_EXIT_CODES.value;
+      }
+      if (schema.properties !== undefined) {
+        input = parseFlags(flagArgs, schema);
+      } else {
+        const [text = "{}", extra] = flagArgs;
+        if (extra !== undefined) throw new UsageError(`Unexpected argument ${extra}.`, CLI_EXIT_CODES["invalid-input"]);
+        try {
+          input = JSON.parse(text);
+        } catch {
+          return print({ kind: "invalid-input", message: "The input is not JSON." });
+        }
+      }
+    }
+    // The CLI binding gives no cursor: each subscription starts now.
+    const subscribed = await session.subscribe(id, input, { signal: io.signal });
+    if ("kind" in subscribed) return print(subscribed);
+    try {
+      for await (const occurrence of subscribed) io.stdout(JSON.stringify(occurrence));
+    } catch (error) {
+      printFailure(error instanceof CallFailureError ? { kind: error.kind, message: error.message } : { kind: "internal", message: "The event failed." });
+      return CLI_WATCH_EXIT_CODES.internal;
+    }
+    return io.signal?.aborted === true ? CLI_WATCH_EXIT_CODES.cancelled : CLI_WATCH_EXIT_CODES.complete;
   };
 
   try {
     const [first, ...rest] = args;
     if (first === undefined || first === "--help" || first === "-h") {
       const description = options.description ?? app.description ?? app.title ?? options.name;
-      io.stdout(help(options.name, description, commands.map(({ path }) => path.join(" ")), added));
+      io.stdout(help(options.name, description, commands.map(({ path }) => path.join(" ")), Object.keys(session.view.events ?? {}).length > 0, added));
       return CLI_EXIT_CODES.value;
     }
     if (first === "--version" || first === "-v") {
@@ -110,15 +153,24 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     if (first === "list") {
       io.stdout(
         JSON.stringify(
-          [...session.handles.values()].map((handle) => {
+          [
+            ...[...session.handles.values()].map((handle) => {
             const input = viewCapability(session.view, handle.id).input;
             return {
+              kind: "capability",
               id: handle.id,
               description: handle.description,
               ...handle.availability.getSnapshot(),
               usage: cliUsage(options.name, handle.id, input === undefined ? undefined : bundle(input, types)),
             };
           }),
+          ...Object.entries(session.view.events ?? {}).map(([id, event]) => ({
+            kind: "event",
+            id,
+            description: event.description,
+            usage: cliEventUsage(options.name, id, event.input === undefined ? undefined : bundle(event.input, types)),
+          })),
+        ],
           null,
           2,
         ),
@@ -136,6 +188,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       }
       return print(await session.invoke(id, input, { signal: io.signal }));
     }
+    if (first === "watch") return await watch(rest);
     const command = added.find(({ name }) => name === first);
     if (command !== undefined) return await command.run(rest, { ...io, context: options.context });
 
@@ -232,7 +285,7 @@ function viewCapability(view: CatalogDocument, id: string): CatalogCapability {
   return capability;
 }
 
-function help(name: string, description: string, paths: readonly string[], added: readonly CliCommand<unknown>[]): string {
+function help(name: string, description: string, paths: readonly string[], hasEvents: boolean, added: readonly CliCommand<unknown>[]): string {
   return [
     description,
     "",
@@ -242,6 +295,7 @@ function help(name: string, description: string, paths: readonly string[], added
     ...paths.map((path) => `  ${path}`),
     "  call <id> [input]",
     "  list",
+    ...(hasEvents ? ["  watch <id> [flags]"] : []),
     ...added.map((command) => `  ${command.name}  ${command.description}`),
   ].join("\n");
 }

@@ -24,13 +24,22 @@ export async function withContext<Context, A>(
   request: Request,
   use: (context: Context) => Promise<A>,
 ): Promise<A> {
-  if (option.createContext === undefined) return use(option.context);
-  const context = await option.createContext(request);
+  const opened = await openContext(option, request);
   try {
-    return await use(context);
+    return await use(opened.context);
   } finally {
-    await release(context);
+    await opened.release();
   }
+}
+
+/**
+ * The context of one request, and the function that releases it if the handler made it. A response with a stream, such
+ * as the stream of a subscription, releases the context when the stream ends.
+ */
+export async function openContext<Context>(option: ContextOption<Context>, request: Request): Promise<{ readonly context: Context; readonly release: () => Promise<void> }> {
+  if (option.createContext === undefined) return { context: option.context, release: () => Promise.resolve() };
+  const context = await option.createContext(request);
+  return { context, release: () => release(context) };
 }
 
 /** Call `Symbol.asyncDispose` or `Symbol.dispose` of a value, if it has one. */

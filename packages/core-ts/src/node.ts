@@ -136,6 +136,9 @@ async function send(response: Response, outgoing: ServerResponse): Promise<void>
     outgoing.end();
     return;
   }
+  // Send the headers at once, so that the client gets the response before the first chunk, for example a stream of
+  // server-sent events that waits for its first event.
+  outgoing.flushHeaders();
   const reader = response.body.getReader();
   const cancel = () => void reader.cancel().catch(() => undefined);
   outgoing.on("close", cancel);
