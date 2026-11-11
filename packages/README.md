@@ -79,14 +79,7 @@ The workflows authenticate with trusted publishing. They hold no tokens.
 
 The release workflow publishes every version of every npm package, with trusted publishing and provenance. Do not publish a version from a computer.
 
-npm accepts a trusted publisher only for a package that exists. When you add an npm package, reserve its name before its first release:
-
-```sh
-npm login --auth-type=web
-node scripts/reserve-npm-package.ts <package>
-```
-
-The script publishes an empty placeholder, version `0.0.0`, with no code, and adds `release-npm.yml` as the trusted publisher. The release workflow then publishes the first real version. If a package is not on npm, the release workflow publishes nothing, and names this command.
+npm accepts a trusted publisher only for a package that exists. So a new npm package gets its name on npm before its first release: an empty placeholder, version `0.0.0`, and the trusted publisher. If a package is not on npm, the release workflow publishes nothing. The skill [`npm-release`](../.agents/skills/npm-release/SKILL.md) gives the steps for a release, a new package, a trusted publisher and a failed release.
 
 ### PyPI
 

@@ -6,8 +6,7 @@
  * adds provenance. On a computer, log in first with `npm login --auth-type=web`.
  *
  * npm accepts a trusted publisher only for a package that exists. Before it publishes anything, the script checks that
- * each package is on npm. If one is not, it stops and names the command that reserves the name:
- * `node scripts/reserve-npm-package.ts <package>`.
+ * each package is on npm. If one is not, it stops. The skill `.agents/skills/npm-release` tells how to add a package.
  *
  * Usage: node scripts/publish-npm.ts [--dry-run] [--version <version>] [<package> ...]
  *
@@ -63,8 +62,8 @@ if (missing.length > 0 && !values["dry-run"]) {
   console.error(
     [
       "These packages are not on npm, so they have no trusted publisher yet. Nothing was published.",
-      ...missing.map((npmPackage) => `  node scripts/reserve-npm-package.ts ${npmPackage.name}`),
-      "Run each command on a computer, then run this workflow again.",
+      ...missing.map((npmPackage) => `  ${npmPackage.name}`),
+      "Reserve each name and add its trusted publisher, as .agents/skills/npm-release tells. Then run this workflow again.",
     ].join("\n"),
   );
   process.exit(1);

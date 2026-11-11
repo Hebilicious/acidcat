@@ -45,7 +45,7 @@ When a design decision is made for something that does not exist yet, build it. 
 - A feature reaches every surface of the examples: each API in `examples/` uses it, with a test. Do not list a surface as not done because no one named it.
 - The skill [`skills/acid-cat`](skills/acid-cat/SKILL.md) tells agents how to build with AcidCat. When a change adds or changes a rule of the catalog, a core, a binding or a command of `acid-cat`, change the skill in the same pull request. `gh skill publish --dry-run .` validates it.
 - Release by merging the release pull request of release-please. Do not change a version or a `CHANGELOG.md` by hand. See [Publishing](packages/README.md#publishing).
-- The release workflows publish every version of every package. Never publish a version from a computer. When you add an npm package, reserve its name in the same pull request with `node scripts/reserve-npm-package.ts <package>`.
+- The release workflows publish every version of every package. For a release, a new npm package, or a failed npm release, follow the skill [`npm-release`](.agents/skills/npm-release/SKILL.md).
 
 ## Branches and pull requests
 
