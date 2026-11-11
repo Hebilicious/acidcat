@@ -77,11 +77,9 @@ The workflows authenticate with trusted publishing. They hold no tokens.
 - `node scripts/publish-npm.ts [--dry-run] [<package> ...]` publishes in dependency order, and skips versions that are on npm already.
 - Peer dependency ranges come from the `peers` catalog in `pnpm-workspace.yaml`. The packages test against the versions in the lockfile. `effect` and its platform packages have `^` ranges in the default catalog, so that a published package does not hold `effect` back while a platform package moves on.
 
-npm accepts a trusted publisher only for a package that exists. To publish a new package for the first time, log in with `npm login --auth-type=web`, run `node scripts/publish-npm.ts <package>`, and then connect the package to the workflow:
+The release workflow publishes every version of every npm package, with trusted publishing and provenance. Do not publish a version from a computer.
 
-```sh
-npm trust github <package> --repo Hebilicious/acidcat --file release-npm.yml --allow-publish --yes
-```
+npm accepts a trusted publisher only for a package that exists. So a new npm package gets its name on npm before its first release: an empty placeholder, version `0.0.0`, and the trusted publisher. If a package is not on npm, the release workflow publishes nothing. The skill [`npm-release`](../.agents/skills/npm-release/SKILL.md) gives the steps for a release, a new package, a trusted publisher and a failed release.
 
 ### PyPI
 

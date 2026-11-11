@@ -5,6 +5,9 @@
  * npm, so it is safe to run again after a failure. In GitHub Actions, npm authenticates with trusted publishing and
  * adds provenance. On a computer, log in first with `npm login --auth-type=web`.
  *
+ * npm accepts a trusted publisher only for a package that exists. Before it publishes anything, the script checks that
+ * each package is on npm. If one is not, it stops. The skill `.agents/skills/npm-release` tells how to add a package.
+ *
  * Usage: node scripts/publish-npm.ts [--dry-run] [--version <version>] [<package> ...]
  *
  * - `<package>`: publish only these packages, for example `@acid-cat/cli`. The default is all packages.
@@ -43,6 +46,28 @@ const isPublished = (name: string, version: string) => {
     return false; // npm view fails when the package does not exist yet.
   }
 };
+
+/** True if the package is on npm, at any version. */
+const exists = (name: string) => {
+  try {
+    execFileSync("npm", ["view", name, "name"], { stdio: ["ignore", "ignore", "ignore"] });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const missing = selected.filter((npmPackage) => !exists(npmPackage.name));
+if (missing.length > 0 && !values["dry-run"]) {
+  console.error(
+    [
+      "These packages are not on npm, so they have no trusted publisher yet. Nothing was published.",
+      ...missing.map((npmPackage) => `  ${npmPackage.name}`),
+      "Reserve each name and add its trusted publisher, as .agents/skills/npm-release tells. Then run this workflow again.",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
 
 const destination = mkdtempSync(path.join(tmpdir(), "acid-cat-publish-"));
 try {
