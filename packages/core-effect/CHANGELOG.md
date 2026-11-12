@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.10.0...@acid-cat/core-effect@0.10.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **core-effect:** check maxAgeMs in the session, order call failures, check the HTTP base and CLI prefixes ([#114](https://github.com/Hebilicious/acidcat/issues/114)) ([439ac68](https://github.com/Hebilicious/acidcat/commit/439ac68b104dd33faa99b0ec059b8d0534bade83))
+
 ## [0.10.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.9.0...@acid-cat/core-effect@0.10.0) (2026-11-10)
 
 
