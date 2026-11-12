@@ -111,6 +111,7 @@ export const aircon = App.make({ targets, capabilities: [powerSet], events: [sta
 ## Write the catalog
 
 ```ts
+import { writeFile } from "node:fs/promises";
 import { App } from "@acid-cat/core-effect";
 
 await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
