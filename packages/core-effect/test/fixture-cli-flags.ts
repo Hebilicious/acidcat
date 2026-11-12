@@ -5,8 +5,8 @@
 import { Effect, Layer, SubscriptionRef } from "effect";
 import { Command, Flag, GlobalFlag } from "effect/cli";
 
-import { Cli } from "../src/index.ts";
-import { NodeCli } from "../src/node.ts";
+import * as Cli from "../src/Cli.ts";
+import * as NodeCli from "../src/NodeCli.ts";
 import { fixture, holdsLayer, position, Switch, watchersLayer } from "./fixture.ts";
 
 const switchFlag = GlobalFlag.Setting("switch")({

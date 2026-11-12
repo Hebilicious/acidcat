@@ -4,8 +4,9 @@
  */
 import { Effect, Layer, Schema } from "effect";
 
-import { App, Capability } from "../src/index.ts";
-import { NodeCli } from "../src/node.ts";
+import * as App from "../src/App.ts";
+import * as Capability from "../src/Capability.ts";
+import * as NodeCli from "../src/NodeCli.ts";
 
 const Day = Schema.Literals(["mon", "tue"]).annotate({ identifier: "Day" });
 const Plan = Schema.Struct({ days: Schema.Array(Day), hours: Schema.optionalKey(Schema.Array(Schema.Int)) });

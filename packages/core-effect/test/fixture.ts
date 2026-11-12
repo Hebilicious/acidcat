@@ -3,7 +3,9 @@ import { unavailable, AVAILABLE } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
 import { Context, Deferred, Effect, Layer, PubSub, Schema, Stream, SubscriptionRef } from "effect";
 
-import { App, Capability, Event } from "../src/index.ts";
+import * as App from "../src/App.ts";
+import * as Capability from "../src/Capability.ts";
+import * as Event from "../src/Event.ts";
 
 /** A switch that the tests turn on and off. It holds the availability of `fixture.toggle`. */
 export class Switch extends Context.Service<Switch, SubscriptionRef.SubscriptionRef<Availability>>()("fixture/Switch") {}

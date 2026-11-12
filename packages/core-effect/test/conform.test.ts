@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, before, test } from "node:test";
+import { after, before, describe, test } from "node:test";
 
 import { conform } from "@acid-cat/cli";
 import type { Check } from "@acid-cat/cli";
@@ -22,11 +22,12 @@ function assertConforms(results: readonly Check[], minimum: number) {
   assert.ok(results.length >= minimum, `${results.length} checks, expected ${minimum} or more`);
 }
 
-// One server serves the MCP and HTTP bindings to every test below. Each binding has its own test, so that each one
-// has the whole test timeout, and a slow binding shows in the test report.
+// One server serves the MCP and HTTP bindings to the tests below. Each binding has its own test, so that each one has
+// the whole test timeout, and a slow binding shows in the test report. The tests run at the same time, so the file
+// takes the time of the slowest binding. Each binding has its own services of the fixture, so that the checks of one
+// binding do not change the state of another.
 const certificate = testCertificate();
-const services = Layer.fresh(fixtureLayer);
-const mcp = Mcp.toWebHandler(fixture, services, {
+const mcp = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), {
   name: "fixture",
   version: "0.0.0",
   allowedOrigins: [],
@@ -43,7 +44,7 @@ before(async () => {
     NodeServer.serve(
       {
         "/mcp": Mcp.withHandshake(mcp),
-        "/api": Http.toWebHandler(fixture, services, { allowedOrigins: [], base: "/api" }),
+        "/api": Http.toWebHandler(fixture, Layer.fresh(fixtureLayer), { allowedOrigins: [], base: "/api" }),
       },
       { port: 0 },
     ).pipe(Scope.provide(server)),
@@ -56,34 +57,36 @@ after(async () => {
   await mcp.dispose();
 });
 
-test("the Effect core passes acid-cat conform through MCP over HTTP, with the handshake, poll and webhook delivery", async () => {
-  assertConforms(await conform({ mcp: `${url}/mcp`, mcpHandshake: true, poll: POLL, webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS } }), 60);
-});
-
-test("the Effect core passes acid-cat conform through MCP over stdio", async () => {
-  assertConforms(await conform({ mcpStdio: [process.execPath, new URL("./fixture-mcp-stdio.ts", import.meta.url).pathname], poll: POLL }), 50);
-});
-
-test("the Effect core passes acid-cat conform through HTTP", async () => {
-  assertConforms(await conform({ http: `${url}/api` }), 20);
-});
-
-test("the Effect core passes acid-cat conform through the command line", async () => {
-  assertConforms(await conform({ cli: [process.execPath, new URL("./fixture-cli.ts", import.meta.url).pathname] }), 20);
-});
-
-test("the Effect core passes acid-cat conform through WebMCP, on a model context in Node.js", async () => {
-  const results = await conform({
-    webmcp: async (modelContext) => {
-      const scope = Effect.runSync(Scope.make());
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const session = yield* Session.make(fixture, { target: "app" });
-          yield* WebMcp.install(session, { host: modelContext });
-        }).pipe(Scope.provide(scope), Effect.provide(Layer.fresh(fixtureLayer))),
-      );
-      return () => Effect.runPromise(Scope.close(scope, Exit.void));
-    },
+describe("the Effect core passes acid-cat conform", { concurrency: true }, () => {
+  test("through MCP over HTTP, with the handshake, poll and webhook delivery", async () => {
+    assertConforms(await conform({ mcp: `${url}/mcp`, mcpHandshake: true, poll: POLL, webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS } }), 60);
   });
-  assertConforms(results, 5);
+
+  test("through MCP over stdio", async () => {
+    assertConforms(await conform({ mcpStdio: [process.execPath, new URL("./fixture-mcp-stdio.ts", import.meta.url).pathname], poll: POLL }), 50);
+  });
+
+  test("through HTTP", async () => {
+    assertConforms(await conform({ http: `${url}/api` }), 20);
+  });
+
+  test("through the command line", async () => {
+    assertConforms(await conform({ cli: [process.execPath, new URL("./fixture-cli.ts", import.meta.url).pathname] }), 20);
+  });
+
+  test("through WebMCP, on a model context in Node.js", async () => {
+    const results = await conform({
+      webmcp: async (modelContext) => {
+        const scope = Effect.runSync(Scope.make());
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const session = yield* Session.make(fixture, { target: "app" });
+            yield* WebMcp.install(session, { host: modelContext });
+          }).pipe(Scope.provide(scope), Effect.provide(Layer.fresh(fixtureLayer))),
+        );
+        return () => Effect.runPromise(Scope.close(scope, Exit.void));
+      },
+    });
+    assertConforms(results, 5);
+  });
 });

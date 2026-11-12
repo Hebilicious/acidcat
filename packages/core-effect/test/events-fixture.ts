@@ -1,7 +1,9 @@
 /** A test application with one event for each behavior of subscriptions that the tests examine. */
 import { Context, Effect, Layer, PubSub, Schema, Stream, SubscriptionRef } from "effect";
 
-import { App, Capability, Event } from "../src/index.ts";
+import * as App from "../src/App.ts";
+import * as Capability from "../src/Capability.ts";
+import * as Event from "../src/Event.ts";
 
 /** One tick that a test publishes. */
 export interface Tick {

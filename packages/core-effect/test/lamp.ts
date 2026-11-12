@@ -6,7 +6,8 @@ import { AVAILABLE, unavailable } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
 import { Context, Effect, Layer, Schema, SubscriptionRef } from "effect";
 
-import { App, Capability } from "../src/index.ts";
+import * as App from "../src/App.ts";
+import * as Capability from "../src/Capability.ts";
 
 // --- Types -------------------------------------------------------------------------------------------------------
 
