@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.10.1...@acid-cat/core-effect@0.10.2) (2026-11-12)
+
+
+### Performance Improvements
+
+* **cores:** start the core-effect command line faster, and run the test suites in about one minute ([#121](https://github.com/Hebilicious/acidcat/issues/121)) ([0318ef7](https://github.com/Hebilicious/acidcat/commit/0318ef796d9f820e5d5bf8466a8efc68ea0ea8d3))
+
 ## [0.10.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.10.0...@acid-cat/core-effect@0.10.1) (2026-11-12)
 
 
