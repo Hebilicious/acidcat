@@ -73,13 +73,16 @@ export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Con
       const route = request.method === "POST" ? postRoute(path) : undefined;
       if (route === undefined) return json(404, callFailure("unknown-capability", "There is no such route."));
 
+      const id = decodedId(route.id);
+      // An id with a malformed escape names no capability and no event.
+      if (id === undefined) return json(404, callFailure("unknown-capability", "There is no such route."));
       let input: unknown;
       try {
         input = body.text === "" ? {} : JSON.parse(body.text);
       } catch {
-        return json(422, callFailure("invalid-input", "The request body is not JSON."));
+        const failure = notJson(session, route.kind, id, request.signal);
+        return json(httpStatus(failure), failureBody(failure));
       }
-      const id = decodeURIComponent(route.id);
       if (route.kind === "capability") {
         const outcome = await session.invoke(id, input, { signal: request.signal });
         return json(httpStatus(outcome), isCallFailure(outcome) ? failureBody(outcome) : outcome);
@@ -100,6 +103,33 @@ function postRoute(path: string): { readonly kind: "capability" | "event"; reado
   return undefined;
 }
 
+/** The id of a route with its escapes decoded, or `undefined` if an escape is malformed, as in `%E0`. */
+function decodedId(encoded: string): string | undefined {
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The call failure of a request whose body is not JSON. The kinds before `invalid-input` apply first
+ * (spec/invocation.md#call-failures, spec/events.md#subscribing): `cancelled`, `unknown-capability`, then `unavailable`
+ * for a capability.
+ */
+function notJson(session: Session, kind: "capability" | "event", id: string, signal: AbortSignal): CallFailure {
+  if (session.signal.aborted || signal.aborted) return callFailure("cancelled", "The call was cancelled.");
+  if (kind === "event") {
+    if (!session.eventHandles.has(id)) return callFailure("unknown-capability", `There is no event ${id}.`);
+  } else {
+    const handle = session.handles.get(id);
+    if (handle === undefined) return callFailure("unknown-capability", `There is no capability ${id}.`);
+    const availability = handle.availability.getSnapshot();
+    if (!availability.available) return callFailure("unavailable", availability.reason);
+  }
+  return callFailure("invalid-input", "The request body is not JSON.");
+}
+
 /**
  * Subscribe to an event (spec/bindings/http.md#events). A call failure before the first occurrence is a JSON answer.
  * After that, the answer is a stream of server-sent events, which closes the session when it ends.
@@ -112,11 +142,9 @@ async function subscribe(
   request: Request,
   stream: { readonly keepaliveMs: number; readonly close: () => Promise<void> },
 ): Promise<{ readonly response: Response; readonly streaming: boolean }> {
+  // The session checks maxAgeMs after the id of the event (spec/events.md#subscribing). A text that is not only digits is NaN.
   const maxAge = url.searchParams.get("maxAgeMs");
-  const maxAgeMs = maxAge === null ? undefined : Number(maxAge);
-  if (maxAgeMs !== undefined && (maxAge?.trim() === "" || !Number.isInteger(maxAgeMs) || maxAgeMs < 0)) {
-    return { response: json(422, callFailure("invalid-input", "maxAgeMs must be a whole number of milliseconds.")), streaming: false };
-  }
+  const maxAgeMs = maxAge === null ? undefined : /^[0-9]+$/.test(maxAge) ? Number(maxAge) : Number.NaN;
   const cursor = request.headers.get("Last-Event-ID") ?? undefined;
   const subscribed = await session.subscribe(id, input, {
     signal: request.signal,

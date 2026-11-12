@@ -29,6 +29,7 @@ import { sleep, systemClock } from "./clock.ts";
 import type { Clock } from "./clock.ts";
 import { endMessage, invalidParams, subscriptionParams } from "./mcp-events.ts";
 import type { JsonRpcError, OpenSession, OwnSession, RpcAnswer, WebhookDelivery } from "./mcp-events.ts";
+import { isMaxAgeMs } from "./session.ts";
 import type { Occurrences } from "./subscription.ts";
 
 /** The settings of webhook delivery. Each limit has the default of spec/bindings/mcp.md#webhook. */
@@ -206,6 +207,8 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     const body = JSON.stringify({ type: "verification", challenge });
     const posted = await post(url, await headersOf({ id, secrets: [secret] }, webhookIdOf("verification"), body), body, network);
     if ("failure" in posted) return posted.failure;
+    // A 3xx status is http_4xx for a delivery, but challenge_failed for a verification (spec/bindings/mcp.md#webhook).
+    if (posted.status >= 300 && posted.status < 400) return "challenge_failed";
     if (posted.status < 200 || posted.status >= 300) return statusError(posted.status);
     if (!sameText(challengeOf(posted.text), challenge)) return "challenge_failed";
     verified.add(pair);
@@ -228,7 +231,7 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     if (count >= settings.maxSubscriptions) {
       return { error: { code: MCP_EVENT_ERRORS.resourceExhausted, message: "Too many webhook subscriptions.", data: { limit: "subscriptions", max: settings.maxSubscriptions } } };
     }
-    const id = await webhookSubscriptionId(principal, url.href, request.name, request.input);
+    const id = await webhookSubscriptionId(principal, request.rawUrl, request.name, request.input);
     const own = await open();
     const subscribed = await own.session.subscribe(request.name, request.input, {
       ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
@@ -272,10 +275,13 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       const read = readSubscribe(params);
       if ("error" in read) return read;
       const { url, secret } = read;
-      const key = canonicalJson([principal, url.href, read.name, read.input]);
+      // The key has the URL as the client sent it, not the parsed URL (spec/bindings/mcp.md#webhook).
+      const key = subscriptionKey(principal, read.rawUrl, read.name, read.input);
       await starting.get(key);
       const existing = subscriptions.get(key);
       if (existing !== undefined) {
+        // A subscription with this key exists, so the event exists: an invalid maxAgeMs is the next failure that applies.
+        if (!isMaxAgeMs(read.maxAgeMs)) return invalidParams("maxAgeMs must be an integer that is 0 or more.");
         // Renew: a new lifetime and the new secret. The cursor of the request changes nothing.
         if (existing.secret !== secret) {
           existing.previous = { secret: existing.secret, until: clock.now() + settings.rotationGraceMs };
@@ -293,8 +299,7 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       const { name, arguments: input = {}, delivery } = params;
       const url = isJsonObject(delivery) ? delivery["url"] : undefined;
       if (typeof name !== "string" || typeof url !== "string") return Promise.resolve(invalidParams("events/unsubscribe needs name and delivery.url."));
-      const parsed = URL.canParse(url) ? new URL(url).href : url;
-      const subscription = subscriptions.get(canonicalJson([principal, parsed, name, input]));
+      const subscription = subscriptions.get(subscriptionKey(principal, url, name, input));
       if (subscription === undefined) return Promise.resolve({ error: { code: MCP_EVENT_ERRORS.notFound, message: "There is no such subscription.", data: { kind: "subscription" } } });
       return end(subscription).then(() => ({ result: {} }));
     },
@@ -315,9 +320,15 @@ interface WebhookRequest {
   readonly cursor: string | undefined;
   readonly maxAgeMs: number | undefined;
   readonly ttlMs: number | null | undefined;
+  /** The URL to post to and to verify. */
   readonly url: URL;
+  /** `delivery.url` as the client sent it. The subscription key and the subscription id use it. */
+  readonly rawUrl: string;
   readonly secret: string;
 }
+
+/** The key of a webhook subscription: the principal, `delivery.url` as the client sent it, the id, and the input. */
+const subscriptionKey = (principal: string, rawUrl: string, name: string, input: unknown): string => canonicalJson([principal, rawUrl, name, input]);
 
 /** Read and check the parameters of `events/subscribe`. */
 function readSubscribe(params: JsonObject): WebhookRequest | { readonly error: JsonRpcError } {
@@ -329,7 +340,7 @@ function readSubscribe(params: JsonObject): WebhookRequest | { readonly error: J
   if (typeof url !== "string" || !URL.canParse(url) || new URL(url).protocol !== "https:") return invalidParams("delivery.url must be an https URL.");
   if (typeof secret !== "string" || webhookSecretBytes(secret) === undefined) return invalidParams("delivery.secret must be whsec_ and the base64 of 24 to 64 bytes.");
   if (ttlMs !== undefined && ttlMs !== null && (typeof ttlMs !== "number" || !Number.isFinite(ttlMs) || ttlMs < 0)) return invalidParams("ttlMs must be a number of milliseconds or null.");
-  return { ...read, ttlMs, url: new URL(url), secret };
+  return { ...read, ttlMs, url: new URL(url), rawUrl: url, secret };
 }
 
 /** The error `CallbackEndpointError`. */

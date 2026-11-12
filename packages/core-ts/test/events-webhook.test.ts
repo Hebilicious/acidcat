@@ -175,6 +175,45 @@ test("webhook: an endpoint that does not agree gives CallbackEndpointError, and 
   await handler.close();
 });
 
+test("webhook: a 3xx answer to a verification is challenge_failed, not http_4xx", async () => {
+  const { handler, subscribe, sensors } = server();
+  receiver.answer(() => ({ status: 302 }));
+  assert.deepEqual(member(member(await subscribe({}), "error"), "data"), { reason: "challenge_failed" });
+  receiver.answer(() => ({ status: 399 }));
+  assert.deepEqual(member(member(await subscribe({}), "error"), "data"), { reason: "challenge_failed" });
+  assert.equal(sensors.listeners, 0);
+  await handler.close();
+});
+
+test("webhook: the subscription id and key use delivery.url as the client sent it, not the parsed URL", async () => {
+  const { handler, rpc, subscribe, sensors } = server();
+  const sent = `https://127.0.0.1:${receiver.port}/other/../hook`;
+  assert.notEqual(new URL(sent).href, sent);
+  const result = member(await subscribe({ arguments: { room: "hall" }, url: sent }), "result");
+  assert.equal(result["id"], await webhookSubscriptionId("alice", sent, "sensor.reading.changed", { room: "hall" }));
+  await until(() => sensors.listeners === 1);
+  // The parsed URL is a different key.
+  const parsed = { name: "sensor.reading.changed", arguments: { room: "hall" }, delivery: { url: new URL(sent).href } };
+  assert.equal(member(member(await rpc("events/unsubscribe", parsed), "error"), "data")["kind"], "subscription");
+  const done = await rpc("events/unsubscribe", { ...parsed, delivery: { url: sent } });
+  assert.equal(member(done, "result")["resultType"], "complete");
+  await until(() => sensors.listeners === 0);
+  await handler.close();
+});
+
+test("webhook: maxAgeMs that is not an integer of 0 or more is -32602, after the id of the event", async () => {
+  const { handler, subscribe, sensors } = server();
+  for (const maxAgeMs of [1.5, -1, "soon"]) {
+    assert.equal(member(await subscribe({ maxAgeMs }), "error")["code"], -32602, String(maxAgeMs));
+    assert.equal(member(await subscribe({ name: "sensor.hidden", maxAgeMs }), "error")["code"], -32023, String(maxAgeMs));
+  }
+  // A renewal checks maxAgeMs too.
+  member(await subscribe({ arguments: { room: "hall" } }), "result");
+  assert.equal(member(await subscribe({ arguments: { room: "hall" }, maxAgeMs: 1.5 }), "error")["code"], -32602);
+  await until(() => sensors.listeners === 1);
+  await handler.close();
+});
+
 test("webhook: a certificate that the server does not trust is tls_error", async () => {
   const { handler, subscribe } = server({ ca: undefined });
   assert.deepEqual(member(member(await subscribe({}), "error"), "data"), { reason: "tls_error" });

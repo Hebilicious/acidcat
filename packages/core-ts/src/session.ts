@@ -166,6 +166,12 @@ interface Served<Context> {
 /** The input of a call, decoded: the issues, or the start of the work, which gives the checked result. */
 type Prepared<Context, T> = { readonly issues: readonly StandardSchemaV1.Issue[] } | { readonly start: (call: Call<Context>) => Promise<T> };
 
+/**
+ * True if `maxAgeMs` is absent, or an integer that is 0 or more (spec/events.md#resuming). A session rejects another
+ * value as `invalid-input`, after it checks the id of the event.
+ */
+export const isMaxAgeMs = (maxAgeMs: number | undefined): boolean => maxAgeMs === undefined || (Number.isSafeInteger(maxAgeMs) && maxAgeMs >= 0);
+
 const always: Observable<Availability> = { getSnapshot: () => AVAILABLE, subscribe: () => ({ unsubscribe() {} }) };
 
 /** Open a session for a target. */
@@ -192,7 +198,14 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     if (lifetime.signal.aborted || signal?.aborted) return callFailure("cancelled", "The call was cancelled.");
     const availability = entry.availability.getSnapshot();
     if (!availability.available) return callFailure("unavailable", availability.reason);
-    const prepared = await prepare();
+    let prepared;
+    try {
+      prepared = await prepare();
+    } catch (cause) {
+      // An input schema that throws is a defect, as a run that throws is.
+      onDefect(id, cause);
+      return callFailure("internal", "The capability failed.");
+    }
     if ("issues" in prepared) return callFailure("invalid-input", issueMessage(prepared.issues));
 
     const controller = new AbortController();
@@ -325,6 +338,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     const { signal } = subscribeOptions;
     const cancelled = () => lifetime.signal.aborted || signal?.aborted === true;
     if (cancelled()) return callFailure("cancelled", "The subscription was cancelled.");
+    if (!isMaxAgeMs(subscribeOptions.maxAgeMs)) return callFailure("invalid-input", "maxAgeMs must be an integer that is 0 or more.");
     let prepared;
     try {
       prepared = await prepare();

@@ -141,6 +141,25 @@ test("poll: maxEvents that is not a positive integer is -32602, and failures bef
   await handler.close();
 });
 
+test("poll: maxAgeMs that is not an integer of 0 or more is -32602, after an unknown event, with a lease or not", async () => {
+  const { handler, rpc, poll, sensors } = httpServer();
+  const error = async (params: object) => {
+    const answer = await rpc("events/poll", params);
+    return isJsonObject(answer["error"]) ? answer["error"]["code"] : undefined;
+  };
+  const resume = { cursor: encodePollCursor({ lease: "gone", position: 0, provider: "0" }) };
+  for (const maxAgeMs of [1.5, -1, "soon"]) {
+    assert.equal(await error({ ...READINGS, maxAgeMs }), -32602, String(maxAgeMs));
+    assert.equal(await error({ ...READINGS, ...resume, maxAgeMs }), -32602, String(maxAgeMs));
+    assert.equal(await error({ name: "sensor.hidden", maxAgeMs }), -32023, String(maxAgeMs));
+  }
+  assert.equal(sensors.listeners, 0);
+  const start = await poll(READINGS);
+  await until(() => sensors.listeners === 1);
+  assert.equal(await error({ ...READINGS, cursor: start.cursor, maxAgeMs: 1.5 }), -32602);
+  await handler.close();
+});
+
 test("poll: a cursor older than the buffer gives the occurrences in the buffer, and truncated", async () => {
   const { handler, poll, sensors } = httpServer({ poll: { bufferLimit: 2 } });
   const start = await poll(READINGS);

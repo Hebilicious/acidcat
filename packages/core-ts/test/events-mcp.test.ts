@@ -143,6 +143,15 @@ test("MCP through HTTP: failures before the first occurrence are JSON-RPC errors
   assert.equal(member(await rpc("events/stream", { name: "sensor.ticks", cursor: 5 }), "error")["code"], -32602);
 });
 
+test("MCP through HTTP: maxAgeMs that is not an integer of 0 or more is -32602, after an unknown event", async () => {
+  const { rpc, sensors } = httpServer();
+  for (const maxAgeMs of [1.5, -1, "soon"]) {
+    assert.equal(member(await rpc("events/stream", { name: "sensor.reading.changed", maxAgeMs }), "error")["code"], -32602, String(maxAgeMs));
+    assert.equal(member(await rpc("events/stream", { name: "sensor.hidden", maxAgeMs }), "error")["code"], -32023, String(maxAgeMs));
+  }
+  assert.equal(sensors.listeners, 0);
+});
+
 test("MCP through HTTP: heartbeats, a truncated occurrence, and the cursor", async () => {
   const sensors = new Sensors();
   const old = new Date(Date.now() - 60_000).toISOString();

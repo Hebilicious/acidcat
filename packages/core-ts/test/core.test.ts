@@ -79,6 +79,27 @@ test("availability, cancellation and closing", async () => {
   assert.equal(kindOf(await session.invoke("fixture.echo", { text: "x" })), "cancelled");
 });
 
+test("an input schema that throws is internal, with no internal data, and the call does not reject", async () => {
+  const defects: string[] = [];
+  const app = defineApp({
+    targets: { mcp: { bindings: ["mcp"] } },
+    capabilities: [
+      defineCapability({
+        id: "probe.throws",
+        description: "The input schema throws.",
+        audience: ["mcp"],
+        input: z.object({ n: z.number() }).refine(() => {
+          throw new Error("secret");
+        }),
+        run: () => ok(null),
+      }),
+    ],
+  });
+  await using session = createSession(app, { target: "mcp", toJsonSchema, context: {}, onDefect: (id) => defects.push(id) });
+  assert.deepEqual(await session.invoke("probe.throws", { n: 1 }), { kind: "internal", message: "The capability failed." });
+  assert.deepEqual(defects, ["probe.throws"]);
+});
+
 test("a session subscribes to the availabilities only while it has listeners", async () => {
   const context = options();
   const switcher = context.context.switch;
@@ -173,8 +194,32 @@ test("HTTP gives each outcome its status code", async () => {
   assert.equal((await post("fixture.echo", { text: 1 })).status, 422);
   assert.equal((await post("fixture.hidden", {})).status, 404);
   assert.equal((await post("fixture.crash", {})).status, 500);
+  // A malformed escape in the id names no capability.
+  const malformed = await post("%E0", {});
+  assert.equal(malformed.status, 404);
+  assert.equal((await readJson(malformed, z.object({ kind: z.string() }))).kind, "unknown-capability");
   const list = await readJson(await handler(new Request("https://fixture.example/api/capabilities")), z.array(z.object({ id: z.string() })));
   assert.ok(!list.some((entry) => entry.id === "fixture.hidden"));
+});
+
+test("HTTP: a body that is not JSON is invalid-input only after cancelled, unknown-capability and unavailable", async () => {
+  const context = options();
+  const handler = httpHandler(fixture, { allowedOrigins: [], base: "/api", ...context });
+  const post = (id: string, signal?: AbortSignal) =>
+    handler(new Request(`https://fixture.example/api/capabilities/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{not json", ...(signal === undefined ? {} : { signal }) }));
+  const kind = async (response: Response) => (await readJson(response, z.object({ kind: z.string() }))).kind;
+  const invalid = await post("fixture.echo");
+  assert.equal(invalid.status, 422);
+  assert.equal(await kind(invalid), "invalid-input");
+  const unknown = await post("fixture.hidden");
+  assert.equal(unknown.status, 404);
+  assert.equal(await kind(unknown), "unknown-capability");
+  assert.equal(await kind(await post("%E0")), "unknown-capability");
+  context.context.switch.set(false);
+  const unavailable = await post("fixture.toggle");
+  assert.equal(unavailable.status, 503);
+  assert.equal(await kind(unavailable), "unavailable");
+  assert.equal(await kind(await post("fixture.hidden", AbortSignal.abort())), "cancelled");
 });
 
 /** A `createContext` that counts the contexts it makes and the contexts that the handler releases. */

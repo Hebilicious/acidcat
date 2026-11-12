@@ -248,7 +248,7 @@ for await (const occurrence of await status.subscribe({})) {
 }
 ```
 
-- The promise of `subscribe` resolves when the subscription has started. Before that, it rejects with a `CallFailureError`: `unknown-capability` for an event that the session does not serve, `invalid-input` for an input that does not agree with the schema, and `cancelled` when the session closes or the signal aborts.
+- The promise of `subscribe` resolves when the subscription has started. Before that, it rejects with a `CallFailureError`: `unknown-capability` for an event that the session does not serve, `invalid-input` for an input that does not agree with the schema or a `maxAgeMs` that is not an integer of 0 or more, and `cancelled` when the session closes or the signal aborts.
 - The result is an async iterator of occurrences: `eventId`, `name`, `timestamp`, `data`, and `cursor` and `truncated` if they are present. `return()` cancels the subscription, also while a `next()` waits: that `next()` resolves with `done: true`. `await using` also cancels it at the end of the block.
 - The options are `signal`, `cursor` and `maxAgeMs`.
 - When the session closes, each subscription is complete. With `internal`, `next()` rejects with a `CallFailureError`, then resolves with `done: true`.

@@ -23,6 +23,9 @@ async function nextOf<Payload>(occurrences: Occurrences<Payload>) {
   return step.value;
 }
 
+/** The kind of a call failure, or `undefined` for the occurrences of a subscription that started. */
+const kindOf = (started: Occurrences<unknown> | { readonly kind: string }) => ("kind" in started ? started.kind : undefined);
+
 /** The kind of the call failure of a promise that rejects. */
 async function failureKind(promise: Promise<unknown>): Promise<string> {
   try {
@@ -116,6 +119,21 @@ test("start failures reject before the first occurrence: unknown-capability, inv
   await session.dispose();
   assert.equal(await failureKind(handle.subscribeExternal({ room: 7 })), "cancelled");
   assert.equal(await failureKind(session.eventHandle(ticks).subscribe({})), "cancelled");
+});
+
+test("maxAgeMs that is not an integer of 0 or more fails as invalid-input, after unknown-capability, in each way to subscribe", async () => {
+  const sensors = new Sensors();
+  await using session = createSession(sensorsApp, { target: "app", ...sensorOptions(sensors) });
+  for (const maxAgeMs of [-5, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(kindOf(await session.subscribe("sensor.reading.changed", {}, { maxAgeMs })), "invalid-input", String(maxAgeMs));
+    assert.equal(kindOf(await session.subscribe("sensor.hidden", {}, { maxAgeMs })), "unknown-capability", String(maxAgeMs));
+    assert.equal(await failureKind(session.eventHandle(readingChanged).subscribe({}, { maxAgeMs })), "invalid-input", String(maxAgeMs));
+  }
+  assert.equal(kindOf(await session.subscribe("sensor.reading.changed", {}, { maxAgeMs: -5, signal: AbortSignal.abort() })), "cancelled");
+  assert.equal(sensors.listeners, 0);
+  const started = await session.subscribe("sensor.reading.changed", {}, { maxAgeMs: 0 });
+  assert.ok(!("kind" in started));
+  await started.return();
 });
 
 test("a provider that throws when it starts fails as internal before the first occurrence", async () => {
