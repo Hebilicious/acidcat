@@ -248,7 +248,7 @@ for await (const occurrence of await status.subscribe({})) {
 }
 ```
 
-- The promise of `subscribe` resolves when the subscription has started. Before that, it rejects with a `CallFailureError`: `unknown-capability` for an event that the session does not serve, `invalid-input` for an input that does not agree with the schema, and `cancelled` when the session closes or the signal aborts.
+- The promise of `subscribe` resolves when the subscription has started. Before that, it rejects with a `CallFailureError`: `unknown-capability` for an event that the session does not serve, `invalid-input` for an input that does not agree with the schema or a `maxAgeMs` that is not an integer of 0 or more, and `cancelled` when the session closes or the signal aborts.
 - The result is an async iterator of occurrences: `eventId`, `name`, `timestamp`, `data`, and `cursor` and `truncated` if they are present. `return()` cancels the subscription, also while a `next()` waits: that `next()` resolves with `done: true`. `await using` also cancels it at the end of the block.
 - The options are `signal`, `cursor` and `maxAgeMs`.
 - When the session closes, each subscription is complete. With `internal`, `next()` rejects with a `CallFailureError`, then resolves with `done: true`.
@@ -274,7 +274,7 @@ const handler = httpHandler(aircon, {
 
 ### Command line
 
-The command line has one command for each capability in the view of the `cli` target. Each top-level property of the input is a flag with the same name, for example `--celsius 22` or `--celsius=22`. A boolean property is a switch, for example `--on`. A property with an array of strings, numbers or values of a string enum is a repeated flag: each occurrence gives one item, in the order of the flags. A repeated flag that occurs once can also give the whole array as JSON text. Other properties take JSON text. For example, with the command line of the air conditioner, [`examples/aircon/core-ts/cli.ts`](../../examples/aircon/core-ts/cli.ts):
+The command line has one command for each capability in the view of the `cli` target. The words of the id give the path of the command. A shared prefix only contains other commands: if the path of a capability is the start of the path of another capability, for example `aircon.status` and `aircon.status.get`, `runCli` rejects and `cliMain` stops the program with an error when it starts. Each top-level property of the input is a flag with the same name, for example `--celsius 22` or `--celsius=22`. A boolean property is a switch, for example `--on`. A property with an array of strings, numbers or values of a string enum is a repeated flag: each occurrence gives one item, in the order of the flags. A repeated flag that occurs once can also give the whole array as JSON text. Other properties take JSON text. For example, with the command line of the air conditioner, [`examples/aircon/core-ts/cli.ts`](../../examples/aircon/core-ts/cli.ts):
 
 ```sh
 node cli.ts aircon temperature set --celsius 22

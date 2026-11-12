@@ -10,6 +10,7 @@ import { systemClock } from "./clock.ts";
 import type { Clock } from "./clock.ts";
 import { endMessage, invalidParams, subscriptionParams } from "./mcp-events.ts";
 import type { JsonRpcError, OpenSession, OwnSession, RpcAnswer } from "./mcp-events.ts";
+import { isMaxAgeMs } from "./session.ts";
 import type { Occurrences } from "./subscription.ts";
 
 /** The settings of poll delivery. Each one has the default of spec/bindings/mcp.md#poll. */
@@ -96,13 +97,17 @@ export class PollLeases {
     if (lease === undefined) {
       // A cursor that is not of a lease that exists: resume after the cursor of the provider, if the cursor has one.
       const provider = read.cursor === undefined ? undefined : position?.provider;
-      const started = this.#start(key, read.name, read.input, provider, provider === undefined ? undefined : read.maxAgeMs, open);
+      // With no cursor of the provider, a valid maxAgeMs changes nothing. The session still rejects one that is not valid.
+      const maxAgeMs = provider === undefined && isMaxAgeMs(read.maxAgeMs) ? undefined : read.maxAgeMs;
+      const started = this.#start(key, read.name, read.input, provider, maxAgeMs, open);
       this.#starting.set(key, started);
       const answer = await started.finally(() => this.#starting.delete(key));
       if ("error" in answer) return answer;
       return this.#result([], this.#cursorOf(answer, 0), read.cursor !== undefined && provider === undefined, false);
     }
 
+    // A lease with this key exists, so the event exists: an invalid maxAgeMs is the next failure that applies.
+    if (!isMaxAgeMs(read.maxAgeMs)) return invalidParams("maxAgeMs must be an integer that is 0 or more.");
     this.#renew(lease);
     if (read.cursor === undefined) return this.#result([], this.#cursorOf(lease, lease.newest), false, false);
     if (position?.lease === lease.id) return this.#read(lease, position.position, maxEvents, read.cursor);

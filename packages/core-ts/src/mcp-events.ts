@@ -75,18 +75,18 @@ export const invalidParams = (message: string): { readonly error: JsonRpcError }
 /**
  * Read the subscription parameters (spec/bindings/mcp.md#events): the id, the input, the cursor and `maxAgeMs`. An
  * absent cursor and a `null` cursor are the same. The input is `{}` when `arguments` is absent.
+ *
+ * This function does not check `maxAgeMs`: an unknown id comes before an invalid `maxAgeMs` (spec/events.md#subscribing),
+ * so the session checks it after the id. A `maxAgeMs` that is not a number is `NaN`, which the session rejects.
  */
 export function subscriptionParams(params: JsonObject): { readonly error: JsonRpcError } | { readonly name: string; readonly input: unknown; readonly cursor: string | undefined; readonly maxAgeMs: number | undefined } {
   const { name, arguments: input, cursor, maxAgeMs } = params;
   if (cursor !== undefined && cursor !== null && typeof cursor !== "string") return invalidParams("cursor must be a string or null.");
-  if (maxAgeMs !== undefined && maxAgeMs !== null && (typeof maxAgeMs !== "number" || !Number.isFinite(maxAgeMs) || maxAgeMs < 0)) {
-    return invalidParams("maxAgeMs must be a number of milliseconds.");
-  }
   return {
     name: typeof name === "string" ? name : "",
     input: input ?? {},
     cursor: typeof cursor === "string" ? cursor : undefined,
-    maxAgeMs: typeof maxAgeMs === "number" ? maxAgeMs : undefined,
+    maxAgeMs: maxAgeMs === undefined || maxAgeMs === null ? undefined : typeof maxAgeMs === "number" ? maxAgeMs : Number.NaN,
   };
 }
 
