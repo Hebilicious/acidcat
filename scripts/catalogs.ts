@@ -9,7 +9,8 @@ import path from "node:path";
 
 export const root = path.resolve(import.meta.dirname, "..");
 
-const ignored = ["**/node_modules/**", ".worktrees/**", ".moon/**", "**/target/**", "**/dist/**", "**/.out/**"];
+/** Directories that hold no catalog of the repository. A `rejected` directory holds test inputs that a tool must reject. */
+const ignored = ["**/node_modules/**", ".worktrees/**", ".moon/**", "**/target/**", "**/dist/**", "**/.out/**", "**/rejected/**"];
 
 /** The Pkl files that amend the catalog module, relative to the root. */
 export const pklSources = (): string[] =>

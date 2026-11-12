@@ -1,0 +1,5 @@
+/// A catalog that `pkl eval` must reject: the output schema is the boolean `true`, not an object.
+amends "../Catalog.pkl"
+
+targets { ["cli"] { bindings { "cli" } } }
+capabilities { ["shop.item.get"] { description = "Get an item."; audience { "cli" }; output = true } }

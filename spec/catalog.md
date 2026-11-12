@@ -139,6 +139,8 @@ A failure value is a JSON object. Its `_tag` member is equal to the tag. The val
 
 Each schema in a catalog is a JSON Schema 2020-12 schema. Each input, output, failure, state and payload value MUST agree with its schema.
 
+Each input, output, failure, state and payload schema, and each type in `$defs`, MUST be a JSON object. JSON Schema 2020-12 also accepts `true` and `false` as a schema. A catalog does not use them at these locations: write `{}` for a schema that accepts all values, and `{ "not": {} }` for a schema that accepts no value. A schema can contain boolean subschemas, for example `"additionalProperties": false` or `"items": true`.
+
 ## Types
 
 Put a type that you use in more than one location in `$defs`. Then refer to it by name:

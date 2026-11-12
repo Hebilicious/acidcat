@@ -53,7 +53,9 @@ typealias TargetName = String(matches(Regex(#"[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?
 /// A shared type's name.
 typealias TypeName = String(matches(Regex(#"[A-Za-z][A-Za-z0-9_]*"#)))
 
-/// A JSON Schema 2020-12 schema, written as a Pkl object. Write `{}` for "any value" and `{ not {} }` for "no value".
+/// A JSON Schema 2020-12 schema, written as a Pkl object. A schema in a catalog is an object, never `true` or `false`.
+/// Write `{}` for "any value" and `{ not {} }` for "no value". A boolean inside a schema, such as
+/// `additionalProperties = false`, is allowed.
 /// Reference a shared type with [ref].
 typealias Schema = Dynamic
 

@@ -89,6 +89,7 @@ acid-cat conform --mcp http://127.0.0.1:3000/mcp --http http://127.0.0.1:3000/ap
 ## Common mistakes
 
 - A JSON catalog that has a source, changed by hand, so that the source no longer writes it.
+- A schema that is `true` or `false`. Each input, output, failure, state, payload and type in `$defs` is a JSON object, and `acid-cat check` rejects a boolean schema there. Write `{}` for any value and `{ "not": {} }` for no value. A boolean inside a schema, such as `"additionalProperties": false`, is allowed.
 - An event payload that is a string or an array. Wrap it in an object, so that it can get new members.
 - A capability for agents with no `failures`: the agent cannot tell "the unit is offline" from a defect.
 - A number schema with no limits for a value that has limits. The agent sends values that the operation cannot use.

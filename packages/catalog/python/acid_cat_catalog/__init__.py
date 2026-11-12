@@ -109,18 +109,27 @@ class Catalog:
         for name, schema in self._types.items():
             if not _TYPE_NAME.fullmatch(name):
                 problems.append(f"the type name {name} is malformed")
+            if not isinstance(schema, dict):
+                problems.append(f"the type {name} is not a JSON object")
             problems += [f"the type {name} {problem}" for problem in self._reference_problems(schema)]
         for id, capability in self._capabilities.items():
+            schemas = {
+                "input": capability["input"],
+                "output": capability["output"],
+                "state": capability["state"],
+                **{f"failure {tag}": schema for tag, schema in (capability["failures"] or {}).items()},
+            }
+            problems += self._schema_problems(id, schemas)
             problems += self._entry_problems(id, capability)
-            schemas = [capability["input"], capability["output"], capability["state"], *(capability["failures"] or {}).values()]
-            for schema in schemas:
+            for schema in schemas.values():
                 if schema is not None:
                     problems += [f"{id} {problem}" for problem in self._reference_problems(schema)]
         for id, event in self._events.items():
             if id in self._capabilities:
                 problems.append(f"{id} is both a capability and an event")
+            problems += self._schema_problems(id, {"input": event["input"], "payload": event["payload"]})
             problems += self._entry_problems(id, event)
-            if event["payload"] is not None and self._resolve(event["payload"]).get("type") != "object":
+            if isinstance(event["payload"], dict) and self._resolve(event["payload"]).get("type") != "object":
                 problems.append(f"{id} payload does not describe an object")
             for schema in (event["input"], event["payload"]):
                 if schema is not None:
@@ -138,9 +147,14 @@ class Catalog:
         if len(set(audience)) != len(audience):
             problems.append(f"{id} repeats a target in its audience")
         problems += [f"{id} names the undeclared target {t}" for t in audience if t not in self._targets]
-        if entry["input"] is not None and self._resolve(entry["input"]).get("type") != "object":
+        if isinstance(entry["input"], dict) and self._resolve(entry["input"]).get("type") != "object":
             problems.append(f"{id} input does not describe an object")
         return problems
+
+    @staticmethod
+    def _schema_problems(id: str, schemas: Mapping[str, Any]) -> list[str]:
+        """The schemas of a capability or an event that are not JSON objects, such as the boolean schema True."""
+        return [f"{id} {member} is not a JSON object" for member, schema in schemas.items() if schema is not None and not isinstance(schema, dict)]
 
     def to_json(self) -> dict[str, Any]:
         """The catalog as a JSON value. Raises CatalogError when the catalog breaks a rule."""
@@ -165,7 +179,8 @@ class Catalog:
 
     def _resolve(self, schema: Schema) -> Schema:
         match = _REFERENCE.fullmatch(str(schema.get("$ref", "")))
-        return self._types.get(match.group(1), schema) if match else schema
+        resolved = self._types.get(match.group(1), schema) if match else schema
+        return resolved if isinstance(resolved, dict) else {}
 
     def _reference_problems(self, schema: Any) -> list[str]:
         problems: list[str] = []

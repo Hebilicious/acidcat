@@ -86,6 +86,25 @@ class CatalogTest(unittest.TestCase):
             ],
         )
 
+    def test_reports_a_boolean_schema(self) -> None:
+        catalog = Catalog().target("cli", bindings=["cli"])
+        catalog.type("Anything", True)
+        catalog.capability("a.b", description="x", input=True, output=True, failures={"Gone": False}, state=True)
+        catalog.event("a.c", description="y", input=False, payload=True)
+        catalog.capability("a.d", description="z", output={"type": "object", "additionalProperties": False, "items": True})
+        self.assertEqual(
+            catalog.validate(),
+            [
+                "the type Anything is not a JSON object",
+                "a.b input is not a JSON object",
+                "a.b output is not a JSON object",
+                "a.b state is not a JSON object",
+                "a.b failure Gone is not a JSON object",
+                "a.c input is not a JSON object",
+                "a.c payload is not a JSON object",
+            ],
+        )
+
     def test_puts_events_after_capabilities_and_the_members_of_an_event_in_order(self) -> None:
         text = canonical_text(
             {

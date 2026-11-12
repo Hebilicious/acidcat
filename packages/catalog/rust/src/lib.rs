@@ -158,11 +158,27 @@ impl Catalog {
             if !TYPE_NAME.is_match(name) {
                 problems.push(format!("the type name {name} is malformed"));
             }
+            if !schema.is_object() {
+                problems.push(format!("the type {name} is not a JSON object"));
+            }
             for problem in self.reference_problems(schema) {
                 problems.push(format!("the type {name} {problem}"));
             }
         }
         for (id, capability) in &self.capabilities {
+            let members = [
+                ("input", &capability.input),
+                ("output", &capability.output),
+                ("state", &capability.state),
+            ];
+            let members = members.into_iter().filter_map(|(member, schema)| {
+                schema.as_ref().map(|schema| (member.to_owned(), schema))
+            });
+            let failures = capability
+                .failures
+                .iter()
+                .map(|(tag, schema)| (format!("failure {tag}"), schema));
+            problems.extend(schema_problems(id, members.chain(failures)));
             problems.extend(self.entry_problems(
                 id,
                 &capability.description,
@@ -181,6 +197,13 @@ impl Catalog {
             if self.capabilities.iter().any(|(existing, _)| existing == id) {
                 problems.push(format!("{id} is both a capability and an event"));
             }
+            let members = [("input", &event.input), ("payload", &event.payload)];
+            problems.extend(schema_problems(
+                id,
+                members.into_iter().filter_map(|(member, schema)| {
+                    schema.as_ref().map(|schema| (member.to_owned(), schema))
+                }),
+            ));
             problems.extend(self.entry_problems(
                 id,
                 &event.description,
@@ -188,6 +211,7 @@ impl Catalog {
                 event.input.as_ref(),
             ));
             if let Some(payload) = &event.payload
+                && payload.is_object()
                 && !self.is_object(payload)
             {
                 problems.push(format!("{id} payload does not describe an object"));
@@ -225,6 +249,7 @@ impl Catalog {
             }
         }
         if let Some(input) = input
+            && input.is_object()
             && !self.is_object(input)
         {
             problems.push(format!("{id} input does not describe an object"));
@@ -356,6 +381,17 @@ impl Catalog {
         });
         problems
     }
+}
+
+/// The schemas of a capability or an event that are not JSON objects, such as the boolean schema `true`.
+fn schema_problems<'a>(
+    id: &str,
+    schemas: impl Iterator<Item = (String, &'a Schema)>,
+) -> Vec<String> {
+    schemas
+        .filter(|(_, schema)| !schema.is_object())
+        .map(|(member, _)| format!("{id} {member} is not a JSON object"))
+        .collect()
 }
 
 fn insert_some(object: &mut Map<String, Value>, key: &str, value: Option<Value>) {

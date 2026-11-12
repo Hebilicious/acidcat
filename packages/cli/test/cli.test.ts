@@ -117,6 +117,7 @@ const rejected: Readonly<Record<string, readonly string[]>> = {
   "event-payload-not-object.json": ["shop.loaf.baked: the payload is not an object"],
   "event-payload-schema.json": ['["events"]["shop.order.ready"]["payload"]["$ref"]: Missing key'],
   "event-reference.json": ["shop.order.ready payload references #/$defs/Order, which is not a type"],
+  "output-boolean.json": ['["capabilities"]["shop.item.get"]["output"]: Expected schema'],
   "reference-inherited-name.json": ["shop.item.get output references #/$defs/toString, which is not a type"],
 };
 

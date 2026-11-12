@@ -30,11 +30,11 @@ func edgeCatalog() *catalog.Catalog {
 				"qKey": "q",
 				"cKey": "c",
 				"properties": catalog.Schema{
-					"ç": catalog.Schema{"type": "string"},
-					"Ç": catalog.Schema{"type": "string"},
-					"c": catalog.Schema{"type": "string"},
-					"_": catalog.Schema{"type": "string"},
-					"9": catalog.Schema{"type": "string"},
+					"ç":  catalog.Schema{"type": "string"},
+					"Ç":  catalog.Schema{"type": "string"},
+					"c":  catalog.Schema{"type": "string"},
+					"_":  catalog.Schema{"type": "string"},
+					"9":  catalog.Schema{"type": "string"},
 					"10": catalog.Schema{"type": "string"},
 				},
 				"examples": []any{map[string]any{
@@ -90,6 +90,16 @@ func TestReportsTheRulesAnEventBreaks(t *testing.T) {
 		"a.d payload does not describe an object",
 		"a.e carries its own $defs; declare shared types with Type",
 	}
+	if got := c.Validate(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestReportsATypeThatIsNotAnObject(t *testing.T) {
+	c := catalog.New("", "").Target("cli", catalog.Target{Bindings: []string{"cli"}})
+	c.Type("Nothing", nil)
+	c.Capability("a.d", catalog.Capability{Description: "z", Output: catalog.Schema{"type": "object", "additionalProperties": false, "items": true}})
+	want := []string{"the type Nothing is not a JSON object"}
 	if got := c.Validate(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
