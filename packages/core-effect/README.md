@@ -231,12 +231,12 @@ session.webmcp?.status.subscribe((status) => render(status.phase));
 
 ### Follow events
 
-A subscription starts, or fails with a call failure before the first occurrence: `cancelled` when the session is closing, `unknown-capability` when the event is not in the view, and `invalid-input` when the input does not agree with the input schema. Each binding follows the [events](../../spec/events.md) of the specification, and of its own document.
+A subscription starts, or fails with a call failure before the first occurrence: `cancelled` when the session is closing, `unknown-capability` when the event is not in the view, and `invalid-input` when the input does not agree with the input schema, or `maxAgeMs` is not an integer that is 0 or more. Each binding follows the [events](../../spec/events.md) of the specification, and of its own document.
 
 | Effect `Session` | Input | Result |
 | --- | --- | --- |
-| `session.subscribe(id, input, { cursor, maxAgeMs })` | not trusted: the input schema decodes it | `Effect<Subscription<unknown>, CallFailed, Scope>`. Each `data` is in its JSON form |
-| `session.follow(event, input, { cursor, maxAgeMs })` | already decoded, with the type of the input | `Effect<Subscription<Payload>, CallFailed, Scope>`. Each `data` is a copy, with the type of the payload |
+| `session.subscribe(id, input, { cursor, maxAgeMs })` | not trusted: the input schema decodes it | `Effect<Subscription<unknown>, CallFailed, Scope>`. Each `data` is in its JSON form. An input that does not decode, or a `maxAgeMs` that is not an integer that is 0 or more, is the call failure `invalid-input` |
+| `session.follow(event, input, { cursor, maxAgeMs })` | already decoded, with the type of the input | `Effect<Subscription<Payload>, CallFailed, Scope>`. Each `data` is a copy, with the type of the payload. A `maxAgeMs` that is not an integer that is 0 or more is the call failure `invalid-input` |
 
 A `Subscription<Payload>` is a `Stream<Occurrence<Payload>, CallFailed>`. The scope is the lifetime of the subscription: when it closes, the subscription is cancelled. Interrupt the stream to cancel it too. The stream ends when the provider has no more occurrences, or when the session closes. It fails with `internal` when the provider fails. Only the event object that the session serves can be followed.
 
@@ -364,7 +364,7 @@ const handler = Mcp.toWebHandler(app, makeLayer(env), { ...options, services: "p
 
 ### Command line
 
-The command line has one command for each capability in the view of the `cli` target. Each top-level property of the input is a flag with the same name, for example `--celsius 22` or `--celsius=22`. A boolean property is a switch, for example `--on`. A property with an array of strings, numbers or values of a string enum is a repeated flag: each occurrence gives one item, in the order of the flags. A repeated flag that occurs once can also give the whole array as JSON text. Other properties take JSON text. For example, with the command line of the air conditioner, [`examples/aircon/core-effect/cli.ts`](../../examples/aircon/core-effect/cli.ts):
+The command line has one command for each capability in the view of the `cli` target. The words of the id give the path of the command. A shared prefix only contains other commands: if the path of a capability is the start of the path of another capability, for example `aircon.status` and `aircon.status.get`, `Cli.command` throws, so the program stops with an error when it starts. Each top-level property of the input is a flag with the same name, for example `--celsius 22` or `--celsius=22`. A boolean property is a switch, for example `--on`. A property with an array of strings, numbers or values of a string enum is a repeated flag: each occurrence gives one item, in the order of the flags. A repeated flag that occurs once can also give the whole array as JSON text. Other properties take JSON text. For example, with the command line of the air conditioner, [`examples/aircon/core-effect/cli.ts`](../../examples/aircon/core-effect/cli.ts):
 
 ```sh
 node cli.ts aircon temperature set --celsius 22

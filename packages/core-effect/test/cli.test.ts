@@ -5,9 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { Effect } from "effect";
 import { Command } from "effect/cli";
 
-import { Cli } from "../src/index.ts";
+import { App, Capability, Cli } from "../src/index.ts";
 import { CliListing, decodeText } from "./decode.ts";
 import { fixture } from "./fixture.ts";
 
@@ -134,4 +135,13 @@ test("a command of the application must not have the name of another command", (
     assert.throws(() => Cli.command(fixture, { ...options, commands: [named(name)] }), new RegExp(`The command ${name} of the application`));
   }
   assert.throws(() => Cli.command(fixture, { ...options, commands: [named("report"), named("report")] }), /The command report of the application/);
+});
+
+test("the path of a capability must not be the start of the path of another capability", () => {
+  const capability = (id: string) => Capability.make({ id, description: id, audience: ["cli"], run: () => Effect.succeed(null) });
+  const appOf = (...ids: string[]) => App.make({ targets: { cli: { bindings: ["cli"] } }, capabilities: ids.map(capability) });
+  const options = { name: "aircon", version: "0.0.0" };
+  assert.throws(() => Cli.command(appOf("aircon.status", "aircon.status.get"), options), /The command aircon status is also the start of the command aircon status get/);
+  assert.throws(() => Cli.command(appOf("aircon.status.get", "aircon"), options), /The command aircon is also the start of the command aircon status get/);
+  assert.doesNotThrow(() => Cli.command(appOf("aircon.status.get", "aircon.statusbar.get", "aircon.power.set"), options));
 });

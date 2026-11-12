@@ -7,7 +7,7 @@ import { Effect, Exit, Fiber, Schema, Scope, Stream } from "effect";
 import { GraphQLInt, GraphQLObjectType, GraphQLSchema, GraphQLString, parse, subscribe } from "graphql";
 
 import { App, Event, Handles, Session } from "../src/index.ts";
-import { counted, events, Feed, feedForPromises, feedLayer, following, publish, ticked } from "./events-fixture.ts";
+import { counted, events, Feed, feedForPromises, feedLayer, following, publish, resumed, ticked } from "./events-fixture.ts";
 
 /** Run a program with the services of the fixture. */
 const run = <A, E>(program: Effect.Effect<A, E, Feed | Scope.Scope>) => Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(feedLayer)));
@@ -102,6 +102,27 @@ test("a subscription that cannot start fails with a call failure", async () => {
     }).pipe(Effect.scoped, Effect.provide(feedLayer)),
   );
   assert.equal(closed.kind, "cancelled");
+});
+
+test("a maxAgeMs that is not an integer that is 0 or more fails as invalid-input, after the check of the id", async () => {
+  const failures = await run(
+    Effect.gen(function* () {
+      const session = yield* Session.make(events, { target: "mcp" });
+      return {
+        negative: yield* startFailure(session.subscribe("feed.resumed", {}, { maxAgeMs: -1 })),
+        fraction: yield* startFailure(session.subscribe("feed.resumed", {}, { maxAgeMs: 1.5 })),
+        notANumber: yield* startFailure(session.subscribe("feed.resumed", {}, { maxAgeMs: Number.NaN })),
+        followed: yield* startFailure(session.follow(resumed, {}, { maxAgeMs: -1 })),
+        unknown: yield* startFailure(session.subscribe("feed.nope", {}, { maxAgeMs: -1 })),
+      };
+    }),
+  );
+  const invalid = { kind: "invalid-input", message: "maxAgeMs: Expected an integer that is 0 or more." };
+  assert.deepEqual(failures.negative, invalid);
+  assert.deepEqual(failures.fraction, invalid);
+  assert.deepEqual(failures.notANumber, invalid);
+  assert.deepEqual(failures.followed, invalid);
+  assert.equal(failures.unknown.kind, "unknown-capability");
 });
 
 test("concurrent subscriptions each get their own occurrences, and cancelling one leaves the other", async () => {
@@ -241,6 +262,8 @@ test("event handles give occurrences as an async iterable, and reject start fail
     const unknown = await rejected(eventHandle(session.events, "feed.ticked").subscribeExternal({ room: 1 }));
     assert.equal(unknown.kind, "invalid-input");
     assert.equal(unknown.name, "TypeError");
+    const maxAge = await rejected(eventHandle(session.events, "feed.resumed").subscribeExternal({}, { maxAgeMs: -1 }));
+    assert.equal(maxAge.kind, "invalid-input");
     const outside = await rejected(session.event(Event.make({ id: "feed.other", description: "", audience: ["app"], subscribe: () => Stream.never })).subscribe({}));
     assert.equal(outside.kind, "unknown-capability");
 

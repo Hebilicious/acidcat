@@ -91,7 +91,7 @@ export type AppCommand<R, E = never> = Command.Command<string, {}, {}, E, R>;
 /**
  * The root command: one command for each capability in the view, `call`, `list`, `watch` with one command for each
  * event in the view, and the commands of the application. It throws if the name of a command of the application is not
- * allowed (see `Options.commands`).
+ * allowed (see `Options.commands`), or if the path of a capability is the start of the path of another capability.
  */
 export function command<R, const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(
   app: App.App<R>,
@@ -239,6 +239,15 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     if (first === undefined) continue;
     if (reserved.has(first)) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
     taken.add(first);
+  }
+  // A shared prefix is a command that only contains other commands (spec/bindings/cli.md#commands), so the path of a
+  // capability must not be the start of the path of another capability. Ids are unique, so no two paths are the same.
+  // Each event is one command under `watch`, and no capability path starts with `watch`.
+  for (const { path } of leaves) {
+    const longer = leaves.find((other) => other.path.length > path.length && path.every((word, index) => other.path[index] === word));
+    if (longer !== undefined) {
+      throw new Error(`The command ${path.join(" ")} is also the start of the command ${longer.path.join(" ")}. A shared prefix only contains other commands.`);
+    }
   }
   for (const added of options.commands ?? []) {
     if (taken.has(added.name)) throw new Error(`The command ${added.name} of the application has the same name as another command.`);

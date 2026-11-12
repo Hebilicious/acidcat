@@ -4,6 +4,7 @@
  */
 import {
   bundle,
+  callFailure,
   isJsonObject,
   MCP_EVENT_ERRORS,
   MCP_EVENTS_EXTENSION,
@@ -20,6 +21,7 @@ import type { Option, Scope } from "effect";
 import type * as Session from "../Session.ts";
 import { withHeartbeat } from "./idle.ts";
 import type { Opener, Polls } from "./poll.ts";
+import { maxAgeOf, resumeIssue } from "./resume.ts";
 import type { Webhooks } from "./webhooks.ts";
 
 /** The methods of the events extension that the binding answers. */
@@ -87,7 +89,8 @@ const StreamParams = Schema.Struct({
   name: Schema.String,
   arguments: Schema.optionalKey(Schema.Unknown),
   cursor: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  maxAgeMs: Schema.optionalKey(Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)))),
+  // Any value: the session checks `maxAgeMs` after it looks up the name (spec/events.md#subscribing).
+  maxAgeMs: Schema.optionalKey(Schema.Unknown),
 });
 const decodeStreamParams = Schema.decodeUnknownEffect(StreamParams);
 
@@ -133,13 +136,22 @@ export const answer = <R>(session: Session.Session<R>, request: EventsRequest, o
         if (params._tag === "Failure") {
           return message(errorMessage(request.id, { code: MCP_EVENT_ERRORS.invalidParams, message: `The params of events/poll are not valid: ${params.failure.message}` }));
         }
-        const { name, cursor, maxAgeMs, maxEvents } = params.success;
+        const { name, cursor, maxEvents } = params.success;
+        const maxAgeMs = maxAgeOf(params.success.maxAgeMs);
+        // A poll does not always start a subscription, so the binding checks `maxAgeMs` here, after the name, in the
+        // order of the call failures.
+        const issue = maxAgeMs === undefined ? undefined : resumeIssue({ maxAgeMs });
+        if (issue !== undefined) {
+          const known = Object.hasOwn(view.events ?? {}, name);
+          const failure = known ? callFailure("invalid-input", issue) : callFailure("unknown-capability", `There is no event ${name}.`);
+          return message(errorMessage(request.id, mcpSubscribeError(failure)));
+        }
         const polled = yield* options.polls.poll(
           {
             name,
             input: params.success.arguments ?? {},
             cursor: typeof cursor === "string" ? cursor : undefined,
-            maxAgeMs: typeof maxAgeMs === "number" ? maxAgeMs : undefined,
+            maxAgeMs,
             maxEvents: typeof maxEvents === "number" ? maxEvents : undefined,
           },
           options.principal,
@@ -158,11 +170,12 @@ export const answer = <R>(session: Session.Session<R>, request: EventsRequest, o
     if (params._tag === "Failure") {
       return message(errorMessage(request.id, { code: MCP_EVENT_ERRORS.invalidParams, message: `The params of events/stream are not valid: ${params.failure.message}` }));
     }
-    const { name, cursor, maxAgeMs } = params.success;
+    const { name, cursor } = params.success;
+    const maxAgeMs = maxAgeOf(params.success.maxAgeMs);
     const started = yield* Effect.result(
       session.subscribe(name, params.success.arguments ?? {}, {
         ...(typeof cursor === "string" ? { cursor } : {}),
-        ...(typeof maxAgeMs === "number" ? { maxAgeMs } : {}),
+        ...(maxAgeMs === undefined ? {} : { maxAgeMs }),
       }),
     );
     if (started._tag === "Failure") {

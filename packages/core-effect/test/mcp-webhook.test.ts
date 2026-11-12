@@ -101,6 +101,26 @@ test("events/subscribe and events/unsubscribe need a principal, an https URL and
   }
 });
 
+test("events/subscribe checks the name before maxAgeMs, and a renewal checks maxAgeMs too", async () => {
+  const feed = feedForPromises();
+  const handler = webhookHandler(feed, { allow: () => true });
+  try {
+    for (const maxAgeMs of [-1, 1.5, "60"]) {
+      const unknown = await json(await handler(mcpRequest("events/subscribe", { ...subscription("/order"), name: "no.such", maxAgeMs }, as("alice"))));
+      assert.equal(unknown.error?.code, -32023, `maxAgeMs ${maxAgeMs}`);
+      assert.deepEqual(unknown.error?.data, { kind: "event" });
+      const invalid = await json(await handler(mcpRequest("events/subscribe", { ...subscription("/order"), maxAgeMs }, as("alice"))));
+      assert.equal(invalid.error?.code, -32602, `maxAgeMs ${maxAgeMs}`);
+    }
+    const started = await json(await handler(mcpRequest("events/subscribe", { ...subscription("/order"), maxAgeMs: null }, as("alice"))));
+    assert.equal(started.error, undefined);
+    const renewed = await json(await handler(mcpRequest("events/subscribe", { ...subscription("/order"), maxAgeMs: -1 }, as("alice"))));
+    assert.equal(renewed.error?.code, -32602);
+  } finally {
+    await handler.dispose();
+  }
+});
+
 test("a new subscription verifies the URL, then sends each occurrence signed, with the watermark as its cursor", async () => {
   const feed = feedForPromises();
   const handler = webhookHandler(feed);
