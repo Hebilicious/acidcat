@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
@@ -8,6 +7,7 @@ import type { z } from "zod";
 import { aircon, fanSet, firmwareUpdate, modeSet, Offline, PoweredOff, powerSet, Status, statusChanged, statusGet, toJsonSchema, Unit } from "../core-ts/aircon.ts";
 import { CallFailureError, catalogOf, createSession, renderCatalog, runCli } from "@acid-cat/core-ts";
 import type { Result } from "@acid-cat/core-ts";
+import { run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 
 test("the code writes a catalog that conforms and agrees with the Pkl catalog", () => {
@@ -113,27 +113,31 @@ test("session.handle gives an always unavailable handle for a capability outside
   await session.dispose();
 });
 
-test("the command line runs a capability, and a flag follows a $ref to its type", () => {
-  const cli = new URL("../core-ts/cli.ts", import.meta.url).pathname;
-  const run = (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { encoding: "utf-8", timeout: 20_000 });
-  const status = run("aircon", "status", "get");
-  assert.equal(status.status, 0);
+test("the command line runs a capability, and a flag follows a $ref to its type", async () => {
+  const cli = (...args: string[]) => run(new URL("../core-ts/cli.ts", import.meta.url).pathname, ...args);
+  const [status, poweredOff, unknownMode] = await Promise.all([cli("aircon", "status", "get"), cli("aircon", "mode", "set", "--mode", "heat"), cli("aircon", "mode", "set", "--mode", "boil")]);
+  assert.equal(status.code, 0);
   assert.deepEqual(JSON.parse(status.stdout), { power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 });
-  const poweredOff = run("aircon", "mode", "set", "--mode", "heat");
-  assert.equal(poweredOff.status, 1);
+  assert.equal(poweredOff.code, 1);
   assert.deepEqual(JSON.parse(poweredOff.stdout), { _tag: "PoweredOff" });
-  assert.equal(run("aircon", "mode", "set", "--mode", "boil").status, 3);
+  assert.equal(unknownMode.code, 3);
 });
 
-test("an array input takes one repeated flag for each item, or JSON text of the array", () => {
-  const cli = new URL("../core-ts/cli.ts", import.meta.url).pathname;
-  const run = (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { encoding: "utf-8", timeout: 20_000 });
-  const schedule = run("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours=18");
-  assert.equal(schedule.status, 0);
+test("an array input takes one repeated flag for each item, or JSON text of the array", async () => {
+  const cli = (...args: string[]) => run(new URL("../core-ts/cli.ts", import.meta.url).pathname, ...args);
+  const [schedule, once, jsonText, notADay, notAnHour, list] = await Promise.all([
+    cli("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours=18"),
+    cli("aircon", "schedule", "set", "--days", "sat"),
+    cli("aircon", "schedule", "set", "--days", '["tue","thu"]', "--hours", "[6]"),
+    cli("aircon", "schedule", "set", "--days", '["noon"]'),
+    cli("aircon", "schedule", "set", "--days", "mon", "--hours", "24"),
+    cli("list"),
+  ]);
+  assert.equal(schedule.code, 0);
   assert.deepEqual(JSON.parse(schedule.stdout), { days: ["mon", "fri"], hours: [7, 18] });
-  assert.deepEqual(JSON.parse(run("aircon", "schedule", "set", "--days", "sat").stdout), { days: ["sat"], hours: [7] });
-  assert.deepEqual(JSON.parse(run("aircon", "schedule", "set", "--days", '["tue","thu"]', "--hours", "[6]").stdout), { days: ["tue", "thu"], hours: [6] });
-  assert.equal(run("aircon", "schedule", "set", "--days", '["noon"]').status, 3);
-  assert.equal(run("aircon", "schedule", "set", "--days", "mon", "--hours", "24").status, 3);
-  assert.match(run("list").stdout, /"usage": "aircon aircon schedule set --days <mon\|tue\|wed\|thu\|fri\|sat\|sun>\.\.\. \[--hours <integer>\.\.\.\]"/);
+  assert.deepEqual(JSON.parse(once.stdout), { days: ["sat"], hours: [7] });
+  assert.deepEqual(JSON.parse(jsonText.stdout), { days: ["tue", "thu"], hours: [6] });
+  assert.equal(notADay.code, 3);
+  assert.equal(notAnHour.code, 3);
+  assert.match(list.stdout, /"usage": "aircon aircon schedule set --days <mon\|tue\|wed\|thu\|fri\|sat\|sun>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });

@@ -5,7 +5,7 @@
 import { Console, Effect, SubscriptionRef } from "effect";
 import { Argument, Command } from "effect/cli";
 
-import { NodeCli } from "../src/node.ts";
+import * as NodeCli from "../src/NodeCli.ts";
 import { fixture, fixtureLayer, Switch } from "./fixture.ts";
 
 const position = Command.make("position", { label: Argument.String("label") }, ({ label }) =>

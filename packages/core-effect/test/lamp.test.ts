@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
@@ -8,6 +7,7 @@ import { Effect, Fiber, Layer, Schema, Scope, Stream, SubscriptionRef } from "ef
 
 import { App, Mcp, Session } from "../src/index.ts";
 import { Lamp, lamp, lampLayer, makeLampLayer } from "./lamp.ts";
+import { run } from "./run.ts";
 
 /** Run a test with a session for a target, and a lamp of its own. */
 const withSession = <A, E>(
@@ -134,22 +134,25 @@ test("an agent sees the available capabilities of the mcp view through MCP", asy
   assert.deepEqual(await tools(), ["lamp.brightness.set", "lamp.light.get", "lamp.power.set", "lamp.scene.set", "lamp.temperature.set"]);
 });
 
-test("the command line of the lamp gives each outcome its exit code, and a flag follows a $ref to its type", () => {
-  const cli = (...args: string[]) => {
-    const run = spawnSync(process.execPath, [new URL("./lamp-cli.ts", import.meta.url).pathname, ...args], { encoding: "utf-8", timeout: 20_000 });
-    return { code: run.status, stdout: run.stdout };
-  };
+test("the command line of the lamp gives each outcome its exit code, and a flag follows a $ref to its type", async () => {
+  const cli = (...args: string[]) => run(new URL("./lamp-cli.ts", import.meta.url).pathname, ...args);
+  const [scene, unknownScene, power, brightness, temperature, pair] = await Promise.all([
+    cli("lamp", "scene", "set", "--scene", "night"),
+    cli("lamp", "scene", "set", "--scene", "disco"),
+    cli("lamp", "power", "set", "--on"),
+    cli("lamp", "brightness", "set", "--level", "50"),
+    cli("lamp", "temperature", "set", "--kelvin", "9000"),
+    cli("lamp", "pair"),
+  ]);
 
-  const scene = cli("lamp", "scene", "set", "--scene", "night");
   assert.equal(scene.code, 0);
   assert.equal(JSON.parse(scene.stdout), null);
-  assert.equal(cli("lamp", "scene", "set", "--scene", "disco").code, 3);
+  assert.equal(unknownScene.code, 3);
 
-  const power = cli("lamp", "power", "set", "--on");
   assert.equal(power.code, 1);
   assert.deepEqual(JSON.parse(power.stdout), { _tag: "Burnt", hours: 1200 });
 
-  assert.equal(cli("lamp", "brightness", "set", "--level", "50").code, 4);
-  assert.equal(cli("lamp", "temperature", "set", "--kelvin", "9000").code, 3);
-  assert.equal(cli("lamp", "pair").code, 2);
+  assert.equal(brightness.code, 4);
+  assert.equal(temperature.code, 3);
+  assert.equal(pair.code, 2);
 });

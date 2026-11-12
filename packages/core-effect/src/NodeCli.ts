@@ -1,7 +1,8 @@
 /**
  * Run the CLI binding as the main program of a Node.js process.
  */
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect, Layer } from "effect";
 import type { Command } from "effect/cli";
 

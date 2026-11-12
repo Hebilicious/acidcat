@@ -22,6 +22,10 @@ tasks:
     description: "Write the catalog in each language, run the application on both cores and their command lines, and call each API."
     command: "node"
     args: ["--test", "--test-timeout=60000", "test/"]
+    # The tests start the command lines and the MCP servers in Node.js processes. The compile cache lets each process
+    # reuse the compiled code.
+    env:
+      NODE_COMPILE_CACHE: "node_modules/.cache/node-compile-cache"
     inputs:
       - "catalog/**/*"
       - "core-ts/**/*.ts"

@@ -4,7 +4,7 @@ import { writeFile } from "node:fs/promises";
 
 import { Effect, Layer } from "effect";
 
-import { NodeCli } from "../src/node.ts";
+import * as NodeCli from "../src/NodeCli.ts";
 import { fixture, holdsLayer, switchLayer, watchersLayer } from "./fixture.ts";
 
 const writeMarker = (path: string) => Effect.promise(() => writeFile(path, ""));

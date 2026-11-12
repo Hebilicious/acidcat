@@ -2,8 +2,9 @@
 /** A command line with an event whose input has a property `cursor`, which is a flag of `watch`. It must not start. */
 import { Layer, Schema, Stream } from "effect";
 
-import { App, Event } from "../src/index.ts";
-import { NodeCli } from "../src/node.ts";
+import * as App from "../src/App.ts";
+import * as Event from "../src/Event.ts";
+import * as NodeCli from "../src/NodeCli.ts";
 
 // The first argument chooses the name of the property. The other arguments go to the command line.
 const name = process.argv[2] === "max-age-ms" ? "max-age-ms" : "cursor";
