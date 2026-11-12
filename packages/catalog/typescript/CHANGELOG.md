@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/catalog@0.10.0...@acid-cat/catalog@0.10.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **cli:** reject inherited names, sort integer-like keys by code point, and resolve a $ref with other keys ([#115](https://github.com/Hebilicious/acidcat/issues/115)) ([c690f83](https://github.com/Hebilicious/acidcat/commit/c690f8357cd4d47f32baa4d9aa02281f06a8339e))
+
 ## [0.10.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/catalog@0.9.0...@acid-cat/catalog@0.10.0) (2026-11-10)
 
 

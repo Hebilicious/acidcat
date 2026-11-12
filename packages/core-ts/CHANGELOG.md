@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.10.0...@acid-cat/core-ts@0.10.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **core-ts:** follow the webhook, maxAgeMs and error-precedence rules of the specification ([#116](https://github.com/Hebilicious/acidcat/issues/116)) ([09df3eb](https://github.com/Hebilicious/acidcat/commit/09df3eb686e08b96cb43b7e4ccbbb6b653de9184))
+
 ## [0.10.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.9.0...@acid-cat/core-ts@0.10.0) (2026-11-10)
 
 
