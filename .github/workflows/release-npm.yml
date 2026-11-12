@@ -32,7 +32,30 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm --dir packages/cli exec playwright install --with-deps chromium
+      # The caches that CI writes on `main`: the Rust and Go builds, and Chromium. The release only reads them.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            packages/catalog/rust
+            examples/aircon/catalog/rust
+          cache-workspace-crates: true
+          save-if: false
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/go-build
+          key: go-build-${{ runner.os }}-${{ hashFiles('.prototools') }}-${{ hashFiles('packages/catalog/go/**', 'examples/aircon/catalog/go/**') }}
+          restore-keys: go-build-${{ runner.os }}-${{ hashFiles('.prototools') }}-
+      - id: playwright
+        run: echo "version=$(pnpm --dir packages/cli exec playwright --version)" >> "$GITHUB_OUTPUT"
+      - id: browsers
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      # When the cache has no Chromium, install it with the system libraries that it needs. The runner image already has
+      # these libraries.
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --dir packages/cli exec playwright install --with-deps chromium
 
       # `verify` also builds the packages, and tests them as they are installed from their tarballs.
       - run: moon run verify
