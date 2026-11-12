@@ -274,7 +274,7 @@ const handler = httpHandler(aircon, {
 
 ### Command line
 
-The command line has one command for each capability in the view of the `cli` target. Each top-level property of the input is a flag with the same name, for example `--celsius 22` or `--celsius=22`. A boolean property is a switch, for example `--on`. A property with an array of strings, numbers or values of a string enum is a repeated flag: each occurrence gives one item, in the order of the flags. A repeated flag that occurs once can also give the whole array as JSON text. Other properties take JSON text. For example, with the command line of the air conditioner, [`examples/aircon/core-ts/cli.ts`](../../examples/aircon/core-ts/cli.ts):
+The command line has one command for each capability in the view of the `cli` target. The words of the id give the path of the command. A shared prefix only contains other commands: if the path of a capability is the start of the path of another capability, for example `aircon.status` and `aircon.status.get`, `runCli` rejects and `cliMain` stops the program with an error when it starts. Each top-level property of the input is a flag with the same name, for example `--celsius 22` or `--celsius=22`. A boolean property is a switch, for example `--on`. A property with an array of strings, numbers or values of a string enum is a repeated flag: each occurrence gives one item, in the order of the flags. A repeated flag that occurs once can also give the whole array as JSON text. Other properties take JSON text. For example, with the command line of the air conditioner, [`examples/aircon/core-ts/cli.ts`](../../examples/aircon/core-ts/cli.ts):
 
 ```sh
 node cli.ts aircon temperature set --celsius 22

@@ -90,6 +90,14 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   for (const { path } of commands) {
     if (path[0] !== undefined && GENERIC_COMMANDS.includes(path[0])) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
   }
+  // A shared prefix is a command that only contains other commands (spec/bindings/cli.md), so the path of a capability
+  // must not be the start of the path of another capability. Ids are unique, so no two paths are the same.
+  for (const { path } of commands) {
+    const longer = commands.find((other) => other.path.length > path.length && path.every((word, index) => other.path[index] === word));
+    if (longer !== undefined) {
+      throw new Error(`The command ${path.join(" ")} is also the start of the command ${longer.path.join(" ")}. A shared prefix only contains other commands.`);
+    }
+  }
   for (const [id, event] of Object.entries(session.view.events ?? {})) {
     const properties = event.input === undefined ? undefined : bundle(event.input, types).properties;
     const taken = CLI_RESUME_FLAGS.find((flag) => isJsonObject(properties) && flag in properties);

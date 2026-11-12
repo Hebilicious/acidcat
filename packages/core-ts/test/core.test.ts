@@ -400,6 +400,18 @@ test("a command of the application must not have the name of another command", a
   await assert.rejects(run([named("report"), named("report")]), /The command report of the application/);
 });
 
+test("the command line stops when it starts if the path of a capability is the start of the path of another", async () => {
+  const probe = (id: string) => defineCapability({ id, description: "A probe.", audience: ["cli"], run: () => ok(null) });
+  const app = (...ids: string[]) => defineApp<Context>({ targets: { cli: { bindings: ["cli"] } }, capabilities: ids.map(probe) });
+  const run = (...ids: string[]) => commandLine(app(...ids), { name: "probe", version: "0.0.0", ...options() }, "list");
+  await assert.rejects(run("aircon.status", "aircon.status.get"), {
+    message: "The command aircon status is also the start of the command aircon status get. A shared prefix only contains other commands.",
+  });
+  await assert.rejects(run("aircon.status.get", "aircon.status"), /The command aircon status is also the start of the command aircon status get\./);
+  // A shared first word with different paths is allowed.
+  assert.equal((await run("aircon.status.get", "aircon.statuses", "aircon.power.set")).code, 0);
+});
+
 test("WebMCP tools follow availability, and a failed update keeps the last tools", async () => {
   const tools = new Map<string, ModelContextTool>();
   const refuse = new Set<string>();
