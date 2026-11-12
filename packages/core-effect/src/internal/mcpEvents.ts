@@ -21,7 +21,7 @@ import type { Option, Scope } from "effect";
 import type * as Session from "../Session.ts";
 import { withHeartbeat } from "./idle.ts";
 import type { Opener, Polls } from "./poll.ts";
-import { resumeIssue } from "./resume.ts";
+import { maxAgeOf, resumeIssue } from "./resume.ts";
 import type { Webhooks } from "./webhooks.ts";
 
 /** The methods of the events extension that the binding answers. */
@@ -93,13 +93,6 @@ const StreamParams = Schema.Struct({
   maxAgeMs: Schema.optionalKey(Schema.Unknown),
 });
 const decodeStreamParams = Schema.decodeUnknownEffect(StreamParams);
-
-/**
- * The `maxAgeMs` of the params. An absent value and `null` give no `maxAgeMs`. A value that is not a number becomes
- * `NaN`, which the session rejects as `invalid-input`.
- */
-const maxAgeOf = (value: unknown): number | undefined =>
-  value === undefined || value === null ? undefined : typeof value === "number" ? value : Number.NaN;
 
 const PollParams = Schema.Struct({
   ...StreamParams.fields,

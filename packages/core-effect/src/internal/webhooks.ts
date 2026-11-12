@@ -4,11 +4,12 @@
  * The subscriptions live in the scope of the server, not in the scope of a request. The sender does the HTTP requests,
  * so this module works in all runtimes.
  */
-import { canonicalJson, isJsonObject, MCP_EVENT_ERRORS, MCP_WEBHOOK_DEFAULTS, mcpSubscribeError, webhookGrantMs, webhookSecretBytes, webhookSignature, webhookSubscriptionId } from "@acid-cat/spec-ts";
+import { callFailure, canonicalJson, isJsonObject, MCP_EVENT_ERRORS, MCP_WEBHOOK_DEFAULTS, mcpSubscribeError, webhookGrantMs, webhookSecretBytes, webhookSignature, webhookSubscriptionId } from "@acid-cat/spec-ts";
 import type { JsonObject, Occurrence, Resume, WebhookError } from "@acid-cat/spec-ts";
 import { Clock, Data, Effect, Exit, Fiber, Option, Schedule, Schema, Scope, Semaphore, Stream } from "effect";
 
 import type { Opener } from "./poll.ts";
+import { maxAgeOf, resumeIssue } from "./resume.ts";
 
 /** One HTTP `POST` to the URL of a webhook subscription. */
 export interface WebhookRequest {
@@ -84,7 +85,8 @@ const SubscribeParams = Schema.Struct({
   arguments: Schema.optionalKey(Schema.Unknown),
   delivery: Schema.Struct({ mode: Schema.Literal("webhook"), url: Schema.String, secret: Schema.String }),
   cursor: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  maxAgeMs: Schema.optionalKey(Schema.NullOr(nonNegative)),
+  // Any value: the session checks `maxAgeMs` after it looks up the name (spec/events.md#subscribing).
+  maxAgeMs: Schema.optionalKey(Schema.Unknown),
   ttlMs: Schema.optionalKey(Schema.NullOr(nonNegative)),
 });
 
@@ -272,9 +274,10 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
         const input = params.arguments ?? {};
         const id = yield* Effect.promise(() => webhookSubscriptionId(principal, params.delivery.url, params.name, input));
         const scope = yield* Scope.make();
+        const maxAgeMs = maxAgeOf(params.maxAgeMs);
         const resume: Resume = {
           ...(typeof params.cursor === "string" ? { cursor: params.cursor } : {}),
-          ...(typeof params.maxAgeMs === "number" ? { maxAgeMs: params.maxAgeMs } : {}),
+          ...(maxAgeMs === undefined ? {} : { maxAgeMs }),
         };
         const session = yield* open(scope);
         const started = yield* Effect.result(session.subscribe(params.name, input, resume).pipe(Scope.provide(scope)));
@@ -348,6 +351,11 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
                 Effect.ensuring(Effect.sync(() => void starting.set(principal, (starting.get(principal) ?? 1) - 1))),
               );
             }
+            // A renewal starts no subscription, so the binding checks `maxAgeMs` here. The subscription exists, so the
+            // name is known, and the failure is `invalid-input`.
+            const maxAgeMs = maxAgeOf(params.maxAgeMs);
+            const issue = maxAgeMs === undefined ? undefined : resumeIssue({ maxAgeMs });
+            if (issue !== undefined) return { error: mcpSubscribeError(callFailure("invalid-input", issue)) };
             // Renew: a new lifetime, and the new secret. The old secret signs too, for the grace time.
             const now = yield* Clock.currentTimeMillis;
             hook.expiresAt = now + webhookGrantMs(params.ttlMs, limits);
