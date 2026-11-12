@@ -12,8 +12,9 @@ const deadline = 10_000;
 const ignoring = () => options(new HoldsThatIgnoreCancellation());
 
 test("acid-cat conform fails only the cancellation checks of an implementation that ignores cancellation, and returns", async () => {
+  const mcp = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...ignoring() });
   const served = await serve({
-    "/mcp": mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...ignoring() }),
+    "/mcp": mcp,
     "/api": httpHandler(fixture, { allowedOrigins: [], base: "/api", ...ignoring() }),
   });
   try {
@@ -44,13 +45,16 @@ test("acid-cat conform fails only the cancellation checks of an implementation t
     for (const result of failed) assert.match(result.detail ?? "", /^did not settle within 10000 ms/);
   } finally {
     await served.close();
+    // The poll leases of the MCP handler have timers. Close them, so that the process can exit.
+    await mcp.close();
   }
 });
 
 test("acid-cat conform fails only the cancellation checks of events of an implementation whose subscriptions ignore cancellation", async () => {
   const watchersIgnoring = () => options(new Holds(), new WatchersThatIgnoreCancellation());
+  const mcp = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...watchersIgnoring() });
   const served = await serve({
-    "/mcp": mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...watchersIgnoring() }),
+    "/mcp": mcp,
     "/api": httpHandler(fixture, { allowedOrigins: [], base: "/api", ...watchersIgnoring() }),
   });
   try {
@@ -73,6 +77,8 @@ test("acid-cat conform fails only the cancellation checks of events of an implem
     for (const result of failed) assert.match(result.detail ?? "", /^did not settle within 10000 ms/);
   } finally {
     await served.close();
+    // The poll leases of the MCP handler have timers. Close them, so that the process can exit.
+    await mcp.close();
   }
 });
 
