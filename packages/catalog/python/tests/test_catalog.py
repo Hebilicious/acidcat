@@ -27,7 +27,7 @@ class CatalogTest(unittest.TestCase):
                 "type": "object",
                 "mKey": "middle",
                 "AKey": "upper",
-                "properties": {"ñ": {"type": "string"}, "n": {"type": "string"}, "N": {"type": "string"}, "ō": {"type": "string"}},
+                "properties": {"ñ": {"type": "string"}, "n": {"type": "string"}, "N": {"type": "string"}, "ō": {"type": "string"}, "9": {"type": "string"}, "10": {"type": "string"}},
                 "examples": [
                     {
                         "whole": 3.0,

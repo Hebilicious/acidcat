@@ -3,7 +3,12 @@ import { test } from "node:test";
 
 import {
   bundle,
+  byCodePoint,
   canonicalJson,
+  cliFlags,
+  ownMember,
+  resolveType,
+  typesUsedBy,
   decodePollCursor,
   encodePollCursor,
   isGloballyRoutable,
@@ -135,6 +140,30 @@ test("views keep one target, and bundles keep the types they use", () => {
   assert.deepEqual(Object.keys(bundled.$defs), ["Mode"]);
 });
 
+test("inherited names, such as constructor and toString, are not targets or types", () => {
+  const catalog: CatalogDocument = {
+    acidcat: "0.1",
+    targets: { app: { bindings: ["typescript"] } },
+    capabilities: { "a.status": { description: "x", audience: ["app"], output: { $ref: "#/$defs/toString" } } },
+  };
+  const view = viewOf(catalog, "constructor");
+  assert.deepEqual(view.targets, {});
+  assert.deepEqual(view.capabilities, {});
+  assert.equal(typesUsedBy({ $ref: "#/$defs/toString" }, {}).size, 0);
+  assert.equal(viewOf(catalog, "app").$defs, undefined);
+  assert.equal(ownMember({}, "constructor"), undefined);
+  assert.deepEqual(bundle({ $ref: "#/$defs/valueOf" }, {}), { $ref: "#/$defs/valueOf" });
+  assert.deepEqual(resolveType({ $ref: "#/$defs/hasOwnProperty" }, {}), { $ref: "#/$defs/hasOwnProperty" });
+});
+
+test("a schema resolves to the type that its $ref refers to, whatever other keys it has", () => {
+  const types = { Item: { type: "object" } };
+  assert.equal(resolveType({ $ref: "#/$defs/Item", title: "GetItemInput" }, types), types.Item);
+  assert.equal(resolveType({ $ref: "#/$defs/Item" }, types), types.Item);
+  const plain = { type: "string" };
+  assert.equal(resolveType(plain, types), plain);
+});
+
 test("an input that is a union of objects becomes an object schema", () => {
   const types = { ById: { type: "object", properties: { id: { type: "integer" } } }, Name: { type: "string" } };
   const union = { anyOf: [{ type: "object", properties: { name: { type: "string" } } }, { $ref: "#/$defs/ById" }] };
@@ -205,6 +234,10 @@ test("occurrences become server-sent events, MCP notifications and CLI usage", (
 test("canonical JSON sorts keys at all levels and has no spaces", () => {
   assert.equal(canonicalJson({ b: [1, { d: 0.5, c: "x" }], a: null }), '{"a":null,"b":[1,{"c":"x","d":0.5}]}');
   assert.equal(canonicalJson("é"), '"é"');
+  // U+FF61 is after U+1F408 in UTF-16 code units, and before it in code points.
+  assert.equal(canonicalJson({ "🐈": 1, "｡": 2, "10": 3, "9": 4 }), '{"10":3,"9":4,"｡":2,"🐈":1}');
+  assert.ok(byCodePoint("｡", "🐈") < 0);
+  assert.deepEqual(cliFlags({ type: "object", properties: { "🐈": { type: "boolean" }, "｡": { type: "boolean" } } }), ["[--｡]", "[--🐈]"]);
 });
 
 test("a poll cursor keeps its lease, position and provider cursor, and other text is not a poll cursor", () => {

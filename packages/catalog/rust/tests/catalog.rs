@@ -30,7 +30,7 @@ fn edge_catalog() -> Catalog {
                 "type": "object",
                 "xKey": "x",
                 "dKey": "d",
-                "properties": { "ø": { "type": "string" }, "Ø": { "type": "string" }, "o": { "type": "string" }, "0": { "type": "string" } },
+                "properties": { "ø": { "type": "string" }, "Ø": { "type": "string" }, "o": { "type": "string" }, "0": { "type": "string" }, "9": { "type": "string" }, "10": { "type": "string" } },
                 "examples": [{
                     "whole": 128.0, "tenth": 0.1, "tiny": 8.5e-12, "small": 0.0000099, "large": 4.4e23,
                     "big": 161803398874989500000.0, "negative": -3.5e-9, "zero": 0.0, "integer": 440

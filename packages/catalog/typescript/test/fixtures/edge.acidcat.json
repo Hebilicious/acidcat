@@ -29,6 +29,12 @@
           }
         ],
         "properties": {
+          "10": {
+            "type": "string"
+          },
+          "9": {
+            "type": "string"
+          },
           "U": {
             "type": "string"
           },

@@ -18,8 +18,11 @@ export function canonicalText(catalog: unknown): string {
   return `${write(canonicalCatalog(catalog), "")}\n`;
 }
 
-/** Put a catalog's members in canonical order. */
-export function canonicalCatalog(catalog: unknown): unknown {
+/**
+ * Put a catalog's members in canonical order. Each object becomes a `Map`, not a plain object, because a plain object
+ * puts integer-like keys such as "9" and "10" first, in numeric order, whatever order they were added in.
+ */
+function canonicalCatalog(catalog: unknown): unknown {
   return ordered(catalog, CATALOG_ORDER, (key, value) => {
     if (key === "targets") return byKey(value, (target) => ordered(target, TARGET_ORDER, sortedMember));
     if (key === "$defs") return byKey(value, sorted);
@@ -35,18 +38,18 @@ export function canonicalCatalog(catalog: unknown): unknown {
 
 /** The known members in their order, then every other member sorted by key. A value that is not an object is sorted. */
 function ordered(value: unknown, order: readonly string[], each: (key: string, value: unknown) => unknown): unknown {
-  if (!isObject(value)) return sorted(value);
-  const known = order.filter((key) => key in value);
+  if (!isObject(value) || Array.isArray(value)) return sorted(value);
+  const known = order.filter((key) => Object.hasOwn(value, key));
   const others = Object.keys(value)
     .filter((key) => !order.includes(key))
     .sort(byCodePoint);
-  return Object.fromEntries([...known, ...others].map((key) => [key, each(key, value[key])]));
+  return new Map([...known, ...others].map((key) => [key, each(key, value[key])]));
 }
 
 /** A map keyed by name or id: its keys sorted, each value shaped by `each`. A value that is not an object is sorted. */
 function byKey(value: unknown, each: (inner: unknown) => unknown): unknown {
-  if (!isObject(value)) return sorted(value);
-  return Object.fromEntries(
+  if (!isObject(value) || Array.isArray(value)) return sorted(value);
+  return new Map(
     Object.keys(value)
       .sort(byCodePoint)
       .map((key) => [key, each(value[key])]),
@@ -75,20 +78,21 @@ export function byCodePoint(left: string, right: string): number {
   return a.length - b.length;
 }
 
-/** Write a JSON value with two-space indentation, one member or item per line. */
+/** Write a JSON value with two-space indentation, one member or item per line. A `Map` keeps its order. */
 function write(value: unknown, indent: string): string {
   if (Array.isArray(value)) {
     if (value.length === 0) return "[]";
     const inner = `${indent}  `;
     return `[\n${value.map((item: unknown) => inner + write(item, inner)).join(",\n")}\n${indent}]`;
   }
-  if (isObject(value)) {
-    const keys = Object.keys(value);
-    if (keys.length === 0) return "{}";
+  if (value instanceof Map) {
+    const entries: [unknown, unknown][] = [...value];
+    if (entries.length === 0) return "{}";
     const inner = `${indent}  `;
-    const members = keys.map((key) => `${inner}${JSON.stringify(key)}: ${write(value[key], inner)}`);
+    const members = entries.map(([key, member]) => `${inner}${JSON.stringify(key)}: ${write(member, inner)}`);
     return `{\n${members.join(",\n")}\n${indent}}`;
   }
+  if (isObject(value)) return write(sorted(value), indent);
   if (typeof value === "number" && !Number.isFinite(value)) throw new TypeError("A catalog holds only finite numbers");
   return JSON.stringify(value);
 }

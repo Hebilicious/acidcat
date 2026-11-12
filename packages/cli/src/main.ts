@@ -78,7 +78,7 @@ const viewCommand = Command.make(
       yield* Console.error(`${file}: error: the file is not a catalog; run \`acid-cat check ${file}\``);
       return yield* fail;
     }
-    if (!(target in catalog.targets)) {
+    if (!Object.hasOwn(catalog.targets, target)) {
       yield* Console.error(`${file}: error: there is no target ${target}`);
       return yield* fail;
     }

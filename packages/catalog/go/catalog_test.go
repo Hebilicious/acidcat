@@ -34,6 +34,8 @@ func edgeCatalog() *catalog.Catalog {
 					"Ç": catalog.Schema{"type": "string"},
 					"c": catalog.Schema{"type": "string"},
 					"_": catalog.Schema{"type": "string"},
+					"9": catalog.Schema{"type": "string"},
+					"10": catalog.Schema{"type": "string"},
 				},
 				"examples": []any{map[string]any{
 					"whole": 42.0, "fifth": 0.2, "tiny": 1.25e-9, "small": 0.000015, "large": 3e25,

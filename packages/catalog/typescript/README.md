@@ -9,6 +9,8 @@ pnpm add -D @acid-cat/catalog
 ```
 
 ```ts
+import { writeFile } from "node:fs/promises";
+
 import { Catalog } from "@acid-cat/catalog";
 
 const catalog = new Catalog({ title: "Neighbourhood lending library" });

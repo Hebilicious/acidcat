@@ -30,6 +30,12 @@
         ],
         "mKey": "middle",
         "properties": {
+          "10": {
+            "type": "string"
+          },
+          "9": {
+            "type": "string"
+          },
           "N": {
             "type": "string"
           },

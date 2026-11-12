@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { canonicalText } from "@acid-cat/catalog";
 import { bundle, check, viewOf, type Catalog } from "../src/catalog.ts";
@@ -32,6 +34,12 @@ test("canonical form sorts members and keeps the order of arrays", () => {
   const { capabilities, targets, ...rest } = bakery;
   const text = canonicalText({ capabilities, ...rest, targets });
   assert.equal(text, bakeryText);
+});
+
+test("canonical form sorts integer-like keys by code point, as other keys", () => {
+  const options = { a: 1, "10": 2, "9": 3 };
+  const text = canonicalText({ ...bakery, targets: { shop: { bindings: ["typescript"], options } } });
+  assert.match(text, /"options": \{\n\s+"10": 2,\n\s+"9": 3,\n\s+"a": 1\n/);
 });
 
 test("a view keeps one target, its capabilities, and only the types they reach", () => {
@@ -98,6 +106,7 @@ test("a catalog that breaks a rule gets an error", () => {
 
 /** The catalogs that `check` rejects (test/fixtures/rejected), with the errors that each one gets. */
 const rejected: Readonly<Record<string, readonly string[]>> = {
+  "audience-inherited-name.json": ["shop.item.get: the audience names constructor, which is not a target"],
   "event-audience.json": ["shop.order.ready: the audience names till, which is not a target"],
   "event-id-is-a-capability.json": ["shop.order.ready: the id is both a capability and an event"],
   "event-input-not-object.json": ["shop.loaf.baked: the input is not an object"],
@@ -108,6 +117,7 @@ const rejected: Readonly<Record<string, readonly string[]>> = {
   "event-payload-not-object.json": ["shop.loaf.baked: the payload is not an object"],
   "event-payload-schema.json": ['["events"]["shop.order.ready"]["payload"]["$ref"]: Missing key'],
   "event-reference.json": ["shop.order.ready payload references #/$defs/Order, which is not a type"],
+  "reference-inherited-name.json": ["shop.item.get output references #/$defs/toString, which is not a type"],
 };
 
 for (const [file, errors] of Object.entries(rejected)) {
@@ -116,6 +126,25 @@ for (const [file, errors] of Object.entries(rejected)) {
     assert.deepEqual(check(document).errors, errors);
   });
 }
+
+test("an input that refers to an object type is an object, whatever other keys it has", () => {
+  const catalog = {
+    ...bakery,
+    $defs: { Item: { type: "object" } },
+    capabilities: { "shop.item.get": { description: "Get.", audience: ["shop"], input: { $ref: "#/$defs/Item", title: "GetItemInput" } } },
+    events: { "shop.item.changed": { description: "Changed.", audience: ["shop"], payload: { $ref: "#/$defs/Item", title: "ItemChanged" } } },
+  };
+  assert.deepEqual(check(catalog).errors, []);
+});
+
+test("view rejects a target name that only an object inherits, such as constructor", () => {
+  const main = fileURLToPath(new URL("../src/main.ts", import.meta.url));
+  const fixture = fileURLToPath(new URL("./fixtures/bakery.acidcat.json", import.meta.url));
+  const result = spawnSync(process.execPath, [main, "view", fixture, "constructor"], { encoding: "utf-8" });
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /there is no target constructor/);
+});
 
 test("an unknown member of an event without an x- prefix gets a warning", () => {
   const events = { "bakery.order.ready": { description: "x", audience: ["shop"], "x-icon": "bell", icon: "bell" } };
