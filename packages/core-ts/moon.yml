@@ -21,9 +21,13 @@ tasks:
     description: "Test sessions, handles, event handles and the MCP, HTTP, CLI and WebMCP bindings, with the test application, the kettle, the sensors and the air conditioner. WebMCP also runs in Chromium."
     command: "node"
     args: ["--test", "--test-timeout=60000", "test/"]
+    # The tests start the fixtures in many Node.js processes. The compile cache lets each process reuse the compiled code.
+    env:
+      NODE_COMPILE_CACHE: "node_modules/.cache/node-compile-cache"
     inputs: ["src/**/*.ts", "test/**/*.ts", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/cli/src/**/*.ts", "/packages/cli/conformance/*.acidcat.json"]
-    # The conformance tests start servers, command lines and Chromium. Two of them at the same time on a small CI runner
-    # take longer than the time of a test, so the tasks that run them share the mutex "conform".
+    # The conformance tests start servers, command lines and Chromium, and test the bindings at the same time. Two of
+    # these tasks at the same time on a small CI runner make checks that must settle miss their deadline, so the tasks
+    # that run them share the mutex "conform".
     options:
       mutex: "conform"
 
