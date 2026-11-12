@@ -11,7 +11,9 @@ import (
 	"strings"
 )
 
-// Schema is a JSON Schema 2020-12 schema, written as a plain map.
+// Schema is a JSON Schema 2020-12 schema, written as a plain map. A schema in a catalog is a JSON object, so the
+// boolean schemas true and false cannot be written. Write Schema{} for any value and Schema{"not": Schema{}} for no
+// value.
 type Schema = map[string]any
 
 // Target says how a target is served.
@@ -144,6 +146,10 @@ func (c *Catalog) Validate() []string {
 	for _, t := range c.types {
 		if !typeNamePattern.MatchString(t.name) {
 			problems = append(problems, fmt.Sprintf("the type name %s is malformed", t.name))
+		}
+		if t.value == nil {
+			// Schema is a map, so a type is never a boolean schema. A nil map would render as null.
+			problems = append(problems, fmt.Sprintf("the type %s is not a JSON object", t.name))
 		}
 		for _, problem := range c.referenceProblems(t.value) {
 			problems = append(problems, fmt.Sprintf("the type %s %s", t.name, problem))

@@ -107,19 +107,27 @@ export class Catalog {
     }
     for (const [name, schema] of this.#types) {
       if (!TYPE_NAME.test(name)) problems.push(`the type name ${name} is malformed`);
+      if (!isJsonObject(schema)) problems.push(`the type ${name} is not a JSON object`);
       problems.push(...this.#referenceProblems(schema).map((problem) => `the type ${name} ${problem}`));
     }
     for (const [id, capability] of this.#capabilities) {
+      const schemas: (readonly [string, Schema | undefined])[] = [
+        ["input", capability.input],
+        ["output", capability.output],
+        ["state", capability.state],
+        ...Object.entries(capability.failures ?? {}).map(([tag, schema]) => [`failure ${tag}`, schema] as const),
+      ];
+      problems.push(...schemaProblems(id, schemas));
       problems.push(...this.#entryProblems(id, capability));
-      const schemas = [capability.input, capability.output, capability.state, ...Object.values(capability.failures ?? {})];
-      for (const schema of schemas) {
+      for (const [, schema] of schemas) {
         if (schema !== undefined) problems.push(...this.#referenceProblems(schema).map((problem) => `${id} ${problem}`));
       }
     }
     for (const [id, event] of this.#events) {
       if (this.#capabilities.has(id)) problems.push(`${id} is both a capability and an event`);
+      problems.push(...schemaProblems(id, [["input", event.input], ["payload", event.payload]]));
       problems.push(...this.#entryProblems(id, event));
-      if (event.payload !== undefined && this.#resolve(event.payload).type !== "object") {
+      if (isJsonObject(event.payload) && this.#resolve(event.payload).type !== "object") {
         problems.push(`${id} payload does not describe an object`);
       }
       for (const schema of [event.input, event.payload]) {
@@ -139,7 +147,7 @@ export class Catalog {
     for (const target of audience) {
       if (!this.#targets.has(target)) problems.push(`${id} names the undeclared target ${target}`);
     }
-    if (entry.input !== undefined && this.#resolve(entry.input).type !== "object") {
+    if (isJsonObject(entry.input) && this.#resolve(entry.input).type !== "object") {
       problems.push(`${id} input does not describe an object`);
     }
     return problems;
@@ -193,7 +201,8 @@ export class Catalog {
 
   #resolve(schema: Schema): Schema {
     const name = typeof schema.$ref === "string" ? REFERENCE.exec(schema.$ref)?.[1] : undefined;
-    return name === undefined ? schema : (this.#types.get(name) ?? schema);
+    const resolved = name === undefined ? schema : (this.#types.get(name) ?? schema);
+    return isJsonObject(resolved) ? resolved : {};
   }
 
   #referenceProblems(schema: unknown): string[] {
@@ -208,12 +217,25 @@ export class Catalog {
   }
 }
 
+/**
+ * The schemas of a capability or an event that are not JSON objects. The types of this library allow only objects,
+ * but a JavaScript caller can still give a boolean schema such as `true`.
+ */
+function schemaProblems(id: string, schemas: readonly (readonly [string, unknown])[]): string[] {
+  return schemas
+    .filter(([, schema]) => schema !== undefined && !isJsonObject(schema))
+    .map(([member]) => `${id} ${member} is not a JSON object`);
+}
+
 function compact(value: Record<string, unknown>): Schema {
   return Object.fromEntries(Object.entries(value).filter(([, member]) => member !== undefined));
 }
 
 /** Tell if a value is an object that is not `null`. Each of its members is read as `unknown`. */
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => value !== null && typeof value === "object";
+
+/** Tell if a value is a JSON object: an object that is not `null` and not an array. */
+const isJsonObject = (value: unknown): value is Schema => isRecord(value) && !Array.isArray(value);
 
 function visit(value: unknown, onObject: (node: Readonly<Record<string, unknown>>) => void): void {
   if (Array.isArray(value)) {

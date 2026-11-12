@@ -1,0 +1,5 @@
+/// A catalog that `pkl eval` must reject: the type `Anything` is the boolean `true`, not an object.
+amends "../Catalog.pkl"
+
+targets { ["cli"] { bindings { "cli" } } }
+types { ["Anything"] = true }

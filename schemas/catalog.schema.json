@@ -102,11 +102,8 @@
       }
     },
     "schema": {
-      "description": "A JSON Schema 2020-12 schema. Its $refs point into the catalog's $defs.",
-      "type": [
-        "object",
-        "boolean"
-      ]
+      "description": "A JSON Schema 2020-12 schema in object form. A catalog does not use the boolean schemas true and false. Its $refs point into the catalog's $defs.",
+      "type": "object"
     },
     "objectSchema": {
       "description": "An input or payload schema: it states that the value is an object, or it references a type.",

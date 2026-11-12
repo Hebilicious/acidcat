@@ -75,6 +75,36 @@ test("the library reports the catalog rules an event breaks", () => {
   ]);
 });
 
+test("the library reports a boolean schema", () => {
+  const catalog = new Catalog().target("cli", { bindings: ["cli"] });
+  // @ts-expect-error A schema in a catalog is an object, not a boolean.
+  catalog.type("Anything", true);
+  catalog.capability("a.b", {
+    description: "x",
+    // @ts-expect-error A schema in a catalog is an object, not a boolean.
+    input: true,
+    // @ts-expect-error A schema in a catalog is an object, not a boolean.
+    output: true,
+    // @ts-expect-error A schema in a catalog is an object, not a boolean.
+    failures: { Gone: false },
+    // @ts-expect-error A schema in a catalog is an object, not a boolean.
+    state: true,
+  });
+  // @ts-expect-error A schema in a catalog is an object, not a boolean.
+  catalog.event("a.c", { description: "y", input: false, payload: true });
+  catalog.capability("a.d", { description: "z", output: { type: "object", additionalProperties: false, items: true } });
+  assert.deepEqual(catalog.validate(), [
+    "the type Anything is not a JSON object",
+    "a.b input is not a JSON object",
+    "a.b output is not a JSON object",
+    "a.b state is not a JSON object",
+    "a.b failure Gone is not a JSON object",
+    "a.c input is not a JSON object",
+    "a.c payload is not a JSON object",
+  ]);
+  assert.throws(() => catalog.render());
+});
+
 test("the canonical form puts events after capabilities, and the members of an event in order", () => {
   const text = canonicalText({
     events: { "z.b.changed": { payload: { type: "object" }, input: { type: "object" }, description: "b" }, "z.a.changed": { description: "a" } },

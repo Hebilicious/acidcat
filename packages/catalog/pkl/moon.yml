@@ -7,8 +7,8 @@ project:
 
 tasks:
   test:
-    description: "Package the module, then evaluate the greenhouse example. Packaging evaluates every module in the package."
-    script: "pkl project package --skip-publish-check && pkl eval examples/greenhouse.pkl > /dev/null"
-    inputs: ["*.pkl", "examples/*.pkl", "PklProject", "version.txt", "LICENSE"]
+    description: "Package the module, evaluate the greenhouse example, and check that each catalog in rejected/ fails because a schema is a boolean. Packaging evaluates every module in the package."
+    script: "pkl project package --skip-publish-check && pkl eval examples/greenhouse.pkl > /dev/null && for file in rejected/*.pkl; do pkl eval $file 2>&1 | grep -q 'but got type .Boolean.' || { echo \"$file is not rejected for a boolean schema\"; exit 1; }; done"
+    inputs: ["*.pkl", "examples/*.pkl", "rejected/*.pkl", "PklProject", "version.txt", "LICENSE"]
     outputs: [".out/**/*"]
     toolchains: ["system"]

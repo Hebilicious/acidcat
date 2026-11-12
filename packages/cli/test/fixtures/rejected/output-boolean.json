@@ -1,0 +1,7 @@
+{
+  "acidcat": "0.1",
+  "targets": { "shop": { "bindings": ["typescript"] } },
+  "capabilities": {
+    "shop.item.get": { "description": "Get an item.", "audience": ["shop"], "output": true }
+  }
+}

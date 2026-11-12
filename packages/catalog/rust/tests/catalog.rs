@@ -167,6 +167,63 @@ fn reports_the_rules_an_event_breaks() {
 }
 
 #[test]
+fn reports_a_boolean_schema() {
+    let mut catalog = Catalog::new(None, None);
+    catalog.target(
+        "cli",
+        Target {
+            bindings: vec!["cli".into()],
+            ..Target::default()
+        },
+    );
+    catalog.r#type("Anything", json!(true));
+    catalog
+        .capability(
+            "a.b",
+            Capability {
+                description: "x".into(),
+                input: Some(json!(true)),
+                output: Some(json!(true)),
+                failures: vec![("Gone".into(), json!(false))],
+                state: Some(json!(true)),
+                ..Capability::default()
+            },
+        )
+        .event(
+            "a.c",
+            Event {
+                description: "y".into(),
+                input: Some(json!(false)),
+                payload: Some(json!(true)),
+                ..Event::default()
+            },
+        )
+        .capability(
+            "a.d",
+            Capability {
+                description: "z".into(),
+                output: Some(
+                    json!({ "type": "object", "additionalProperties": false, "items": true }),
+                ),
+                ..Capability::default()
+            },
+        );
+    assert_eq!(
+        catalog.validate(),
+        [
+            "the type Anything is not a JSON object",
+            "a.b input is not a JSON object",
+            "a.b output is not a JSON object",
+            "a.b state is not a JSON object",
+            "a.b failure Gone is not a JSON object",
+            "a.c input is not a JSON object",
+            "a.c payload is not a JSON object",
+        ]
+    );
+    assert!(catalog.render().is_err());
+}
+
+#[test]
 fn puts_events_after_capabilities_and_the_members_of_an_event_in_order() {
     let text = canonical_text(&json!({
         "events": {

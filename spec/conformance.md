@@ -14,6 +14,7 @@ A catalog conforms if:
 - each input and each payload is an object, directly or through the type that it refers to;
 - each `$ref` refers to a type in `$defs`;
 - no schema in a capability or in an event has its own `$defs`;
+- each input, output, failure, state and payload schema, and each type in `$defs`, is a JSON object, not `true` or `false`;
 - each schema is a valid JSON Schema 2020-12 schema.
 
 A catalog that is not in [canonical form](catalog.md#canonical-form) gets a warning. A member that this specification does not define and that does not start with `x-` gets a warning.
