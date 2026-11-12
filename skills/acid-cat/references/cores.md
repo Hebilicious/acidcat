@@ -8,6 +8,7 @@ Each example is the same capability: `aircon.power.set` turns the unit on or off
 ## core-ts
 
 ```ts
+import { writeFile } from "node:fs/promises";
 import { capabilitiesFor, defineApp, fail, ok, renderCatalog } from "@acid-cat/core-ts";
 import { z } from "zod";
 
@@ -64,6 +65,7 @@ export const aircon = defineApp<{ unit: Unit }>({ targets, capabilities: [powerS
 ## core-effect
 
 ```ts
+import { writeFile } from "node:fs/promises";
 import { App, Capability } from "@acid-cat/core-effect";
 import { Schema } from "effect";
 

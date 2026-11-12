@@ -78,6 +78,7 @@ export const aircon = defineApp<{ unit: Unit }>({ targets, capabilities: [powerS
 ## Write the catalog
 
 ```ts
+import { writeFile } from "node:fs/promises";
 import { renderCatalog } from "@acid-cat/core-ts";
 
 const toJsonSchema = (schema) => z.toJSONSchema(schema, { target: "draft-2020-12" });
