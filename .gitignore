@@ -3,6 +3,7 @@ dist/
 .out/
 .moon/cache/
 .moon/docker/
+__pycache__/
 
 # Private working notes and tools, kept out of the repository.
 .local/
