@@ -67,8 +67,11 @@ const PoweredOffType = builder.objectRef<z.infer<typeof PoweredOff>>("PoweredOff
   fields: (t) => ({ _tag: t.exposeString("_tag") }),
 });
 
-/** The GraphQL type of a value or a failure: a failure has a `_tag`. */
-const typeOf = (value: z.infer<typeof Status> | z.infer<typeof Offline> | z.infer<typeof PoweredOff>) => {
+/** The GraphQL type of a status or of the failure `Offline`: a failure has a `_tag`. */
+const statusOrOffline = (value: z.infer<typeof Status> | z.infer<typeof Offline>) => ("_tag" in value ? OfflineType : StatusType);
+
+/** The GraphQL type of a status, or of the failure `Offline` or `PoweredOff`. */
+const statusOrFailure = (value: z.infer<typeof Status> | z.infer<typeof Offline> | z.infer<typeof PoweredOff>) => {
   if (!("_tag" in value)) return StatusType;
   return value._tag === "Offline" ? OfflineType : PoweredOffType;
 };
@@ -76,12 +79,12 @@ const typeOf = (value: z.infer<typeof Status> | z.infer<typeof Offline> | z.infe
 const StatusResult = builder.unionType("StatusResult", {
   description: "The status of the unit, or the failure that stops the call.",
   types: [StatusType, OfflineType],
-  resolveType: typeOf,
+  resolveType: statusOrOffline,
 });
 const SetModeResult = builder.unionType("SetModeResult", {
   description: "The status of the unit, or the failure that stops the change of mode.",
   types: [StatusType, OfflineType, PoweredOffType],
-  resolveType: typeOf,
+  resolveType: statusOrFailure,
 });
 
 /** The status of the unit, or the failure that stops the read. */
