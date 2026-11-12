@@ -95,6 +95,17 @@ test("a subscription that cannot start is a JSON call failure with its status", 
   assert.equal(origin.status, 403);
 });
 
+test("an unknown id comes before a maxAgeMs that is not valid, and before a body that is not JSON", async () => {
+  const { subscribe, handler } = setup();
+  assert.equal((await subscribe("no.such", {}, { query: "?maxAgeMs=-1" })).status, 404);
+  assert.equal((await subscribe("feed.hidden", {}, { query: "?maxAgeMs=abc" })).status, 404);
+  const notJson = await handler(new Request(`${ORIGIN}/api/events/no.such`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "nope" }));
+  assert.equal(notJson.status, 404);
+  for (const maxAgeMs of ["1.5", "abc", "", "01"]) {
+    assert.equal((await subscribe("feed.resumed", {}, { query: `?maxAgeMs=${maxAgeMs}` })).status, 422, `maxAgeMs=${maxAgeMs}`);
+  }
+});
+
 test("a subscription is a stream of server-sent events: next for each occurrence, then complete", async () => {
   const { subscribe } = setup();
   const response = await subscribe("feed.counted", { a: 1, b: 2 });

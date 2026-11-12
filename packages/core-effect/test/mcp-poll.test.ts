@@ -201,6 +201,23 @@ test("through HTTP, a poll that cannot start its subscription starts no lease", 
   }
 });
 
+test("through HTTP, events/poll checks the name before maxAgeMs", async () => {
+  const feed = feedForPromises();
+  const handler = pollHandler(feed);
+  try {
+    for (const maxAgeMs of [-1, 1.5, "60"]) {
+      const unknown = await pollMessage(handler, { name: "no.such", maxAgeMs });
+      assert.equal(unknown.error?.code, -32023, `maxAgeMs ${maxAgeMs}`);
+      assert.deepEqual(unknown.error?.data, { kind: "event" });
+      const invalid = await pollMessage(handler, { name: "feed.resumed", maxAgeMs });
+      assert.equal(invalid.error?.code, -32602, `maxAgeMs ${maxAgeMs}`);
+    }
+    assert.deepEqual((await poll(handler, { name: "feed.resumed", maxAgeMs: null })).events, []);
+  } finally {
+    await handler.dispose();
+  }
+});
+
 test("through HTTP, a lease with no poll for the lease time ends, and dispose ends the leases", async () => {
   const feed = feedForPromises();
   const handler = pollHandler(feed, { leaseMs: 150 });

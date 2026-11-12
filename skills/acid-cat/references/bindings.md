@@ -39,6 +39,7 @@ The documents of the bindings are at https://github.com/Hebilicious/acidcat/tree
 ## Command line
 
 - Each capability is a command: `aircon.power.set` gives `aircon power set`. Each input property is a flag.
+- A shared prefix only contains other commands. An id must not be the start of another id: with `aircon.status` and `aircon.status.get`, the command line stops with an error when it starts.
 - An array of simple items is a repeated flag: `--days mon --days fri`, or `--days '["mon","fri"]'`.
 - Exit codes: 0 for a value, 1 for a failure, 2 unknown, 3 invalid input, 4 unavailable, 5 internal, 130 cancelled.
 - `watch <id>` subscribes to an event, and writes each occurrence as JSON on one line. It exits with 0 when the subscription is complete, 130 after an interrupt, and 5 after `internal`. `list` gives each item a `kind`: `capability` or `event`. No command can have the name `watch`. Write logs to standard error, or they break the lines of JSON.

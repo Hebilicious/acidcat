@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Deferred, Effect, Layer } from "effect";
+import { Deferred, Effect, Layer, Schema, SubscriptionRef } from "effect";
 
 import { Http } from "../src/index.ts";
 import { CatalogShape, decodeBody, Listing } from "./decode.ts";
-import { countedFixtureLayer, fixture, fixtureLayer, heldApp, recordingApp } from "./fixture.ts";
+import { countedFixtureLayer, fixture, fixtureLayer, heldApp, position, recordingApp, Switch } from "./fixture.ts";
 
 const ORIGIN = "https://fixture.example";
 const handler = Http.toWebHandler(fixture, Layer.fresh(fixtureLayer), { allowedOrigins: [ORIGIN], base: "/api" });
@@ -33,6 +33,28 @@ test("POST gives each outcome its status code", async () => {
   assert.equal((await post("fixture.echo", { text: 1 })).status, 422);
   assert.equal((await post("fixture.hidden", {})).status, 404);
   assert.equal((await post("fixture.crash", {})).status, 500);
+});
+
+test("a body that is not JSON gives the failure of an unknown id, or of an unavailable capability, first", async () => {
+  const off = Layer.fresh(Layer.mergeAll(fixtureLayer, Layer.effect(Switch, SubscriptionRef.make(position(false)))));
+  const handler = Http.toWebHandler(fixture, off, { allowedOrigins: [ORIGIN], base: "/api" });
+  const postText = async (id: string, body: string) => {
+    const response = await handler(new Request(`${ORIGIN}/api/capabilities/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body }));
+    return { status: response.status, kind: (await decodeBody(Schema.Struct({ kind: Schema.String }), response)).kind };
+  };
+  assert.deepEqual(await postText("no.such", "nope"), { status: 404, kind: "unknown-capability" });
+  assert.deepEqual(await postText("fixture.hidden", "nope"), { status: 404, kind: "unknown-capability" });
+  assert.deepEqual(await postText("fixture.toggle", "nope"), { status: 503, kind: "unavailable" });
+  assert.deepEqual(await postText("fixture.echo", "nope"), { status: 422, kind: "invalid-input" });
+});
+
+test("a path that is not under base is an unknown route", async () => {
+  assert.equal((await handler(new Request(`${ORIGIN}/api/capabilities`))).status, 200);
+  for (const path of ["/zzz/capabilities", "/apix/capabilities", "/zzz/catalog", "/zzz/events"]) {
+    assert.equal((await handler(new Request(`${ORIGIN}${path}`))).status, 404, path);
+  }
+  const call = await handler(new Request(`${ORIGIN}/zzz/capabilities/fixture.echo`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }));
+  assert.equal(call.status, 404);
 });
 
 test("GET /catalog gives the view", async () => {

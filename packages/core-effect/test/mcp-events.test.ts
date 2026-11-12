@@ -159,6 +159,21 @@ test("through HTTP, a subscription that cannot start is a JSON-RPC error, and th
   assert.equal((await json(mismatch)).error?.code, -32020);
 });
 
+test("through HTTP, events/stream checks the name before maxAgeMs", async () => {
+  const handler = Mcp.toWebHandler(events, feedLayer, { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN] });
+  try {
+    for (const maxAgeMs of [-1, 1.5, "60"]) {
+      const unknown = await json(await handler(mcpRequest("events/stream", { name: "no.such", maxAgeMs })));
+      assert.equal(unknown.error?.code, -32023, `maxAgeMs ${maxAgeMs}`);
+      assert.deepEqual(unknown.error?.data, { kind: "event" });
+      const invalid = await json(await handler(mcpRequest("events/stream", { name: "feed.resumed", maxAgeMs })));
+      assert.equal(invalid.error?.code, -32602, `maxAgeMs ${maxAgeMs}`);
+    }
+  } finally {
+    await handler.dispose();
+  }
+});
+
 test("through HTTP, events/stream is a stream of server-sent events, with the subscription id in each message", async () => {
   const handler = Mcp.toWebHandler(events, feedLayer, { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN] });
   const response = await handler(mcpRequest("events/stream", { name: "feed.counted", arguments: { a: 1 } }, { id: 7 }));

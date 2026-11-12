@@ -10,6 +10,7 @@ import * as App from "./App.ts";
 import type * as Capability from "./Capability.ts";
 import type * as Event from "./Event.ts";
 import { changesAfter, readable } from "./internal/changes.ts";
+import { resumeIssue } from "./internal/resume.ts";
 import { register } from "./internal/served.ts";
 
 /** A call failure in the error channel of `execute`. */
@@ -110,7 +111,8 @@ export interface Session<R = never> {
    * Subscribe to an event with an input that is not trusted. Each `data` is in its JSON form. The effect succeeds when
    * the subscription has started. It fails with a call failure before the first occurrence: `cancelled` when the
    * session is closing, `unknown-capability` when the event is not in the view, and `invalid-input` when the input
-   * does not decode. The scope is the lifetime of the subscription: when it closes, the subscription is cancelled.
+   * does not decode or `maxAgeMs` is not an integer that is 0 or more. The scope is the lifetime of the subscription:
+   * when it closes, the subscription is cancelled.
    */
   readonly subscribe: (id: string, input: unknown, options?: SubscribeOptions) => Effect.Effect<Subscription<unknown>, CallFailed, Scope.Scope>;
   /**
@@ -258,6 +260,8 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
         if (event === undefined || (object !== undefined && event !== object)) {
           return yield* new CallFailed(callFailure("unknown-capability", `There is no event ${id}.`));
         }
+        const issue = resumeIssue(resume);
+        if (issue !== undefined) return yield* new CallFailed(callFailure("invalid-input", issue));
         const opener = yield* Effect.mapError(open(event), (message) => new CallFailed(callFailure("invalid-input", message)));
         const where: Resume = {
           ...(resume.cursor === undefined ? {} : { cursor: resume.cursor }),

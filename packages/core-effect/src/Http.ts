@@ -2,7 +2,7 @@
  * The HTTP binding (spec/bindings/http.md): JSON through HTTP, and the occurrences of events as server-sent events.
  */
 import { callFailure, HTTP_STATUS, httpEventMessage, httpStatus, isCallFailure, KEEPALIVE_MS, readBounded, screenRequest } from "@acid-cat/spec-ts";
-import type { Rejection } from "@acid-cat/spec-ts";
+import type { CallFailure, Rejection } from "@acid-cat/spec-ts";
 import { Effect, Exit, Scope, Stream } from "effect";
 import type { Layer } from "effect";
 
@@ -18,7 +18,10 @@ export interface Options {
   readonly allowedOrigins: readonly string[];
   /** The target that the API serves. The default is `"api"`. */
   readonly target?: string | undefined;
-  /** The path before `/capabilities`, `/events` and `/catalog`, for example `"/api"`. The default is `""`. */
+  /**
+   * The path before `/capabilities`, `/events` and `/catalog`, for example `"/api"`. The default is `""`. A path that is
+   * not `base` and does not start with `base` and `/` gets the `404` of an unknown route.
+   */
   readonly base?: string | undefined;
   /** Serve `GET {base}/catalog`. The default is `true`. */
   readonly serveCatalog?: boolean | undefined;
@@ -90,7 +93,9 @@ async function admit(request: Request, options: Options): Promise<Response | { r
 const respond = <R>(app: App.App<R>, request: Request, body: string, options: Options, scope: Scope.Closeable): Effect.Effect<Response, never, R> =>
   Effect.gen(function* () {
     const url = new URL(request.url);
-    const path = url.pathname.slice((options.base ?? "").length);
+    const base = options.base ?? "";
+    const underBase = url.pathname === base || url.pathname.startsWith(`${base}/`);
+    const path = underBase ? url.pathname.slice(base.length) : undefined;
     const session = yield* Session.make(app, { target: options.target ?? "api", eventBuffer: options.eventBuffer }).pipe(Scope.provide(scope));
 
     if (request.method === "GET" && path === "/capabilities") {
@@ -107,19 +112,42 @@ const respond = <R>(app: App.App<R>, request: Request, body: string, options: Op
     if (request.method === "GET" && path === "/catalog" && options.serveCatalog !== false) {
       return json(200, session.view);
     }
-    const route = request.method === "POST" ? routeOf(path) : undefined;
+    const route = request.method === "POST" && path !== undefined ? routeOf(path) : undefined;
     if (route === undefined) return json(404, callFailure("unknown-capability", "There is no such route."));
 
     let input: unknown;
     try {
       input = body === "" ? {} : JSON.parse(body);
     } catch {
+      // A body that is not JSON is `invalid-input`, the last kind in the order of the specification. An unknown id, or
+      // a capability that is not available, comes first.
+      const failure = yield* failureBeforeInput(app, session, route);
+      if (failure !== undefined) return json(HTTP_STATUS[failure.kind], failure);
       return json(422, callFailure("invalid-input", "The request body is not JSON."));
     }
     if (route.kind === "event") return yield* subscribe(session, route.id, input, request, url, options, scope);
     const outcome = yield* session.invoke(route.id, input).pipe(cancelOnAbort(request.signal));
     return json(httpStatus(outcome), isCallFailure(outcome) ? { kind: outcome.kind, message: outcome.message } : outcome);
   }).pipe(closeUnlessStreaming(scope));
+
+/**
+ * The call failure `unknown-capability` or `unavailable` of a route, if one applies (spec/invocation.md#call-failures).
+ * The session gives the same failures when it admits the call or the subscription.
+ */
+const failureBeforeInput = <R>(
+  app: App.App<R>,
+  session: Session.Session<R>,
+  route: { readonly kind: "capability" | "event"; readonly id: string },
+): Effect.Effect<CallFailure | undefined> =>
+  Effect.gen(function* () {
+    const served = (entry: { readonly id: string; readonly audience: readonly string[] }) => entry.id === route.id && entry.audience.includes(session.target);
+    if (route.kind === "event") {
+      return (app.events ?? []).some(served) ? undefined : callFailure("unknown-capability", `There is no event ${route.id}.`);
+    }
+    if (!app.capabilities.some(served)) return callFailure("unknown-capability", `There is no capability ${route.id}.`);
+    const availability = yield* session.availability(route.id);
+    return availability.available ? undefined : callFailure("unavailable", availability.reason);
+  });
 
 /** The capability or the event of a `POST` path. */
 function routeOf(path: string): { readonly kind: "capability" | "event"; readonly id: string } | undefined {
@@ -144,13 +172,13 @@ const subscribe = <R>(
 ): Effect.Effect<Response | Streaming> =>
   Effect.gen(function* () {
     const maxAge = url.searchParams.get("maxAgeMs");
-    if (maxAge !== null && !/^(0|[1-9][0-9]*)$/.test(maxAge)) {
-      return json(422, callFailure("invalid-input", "maxAgeMs: Expected a nonnegative integer."));
-    }
+    // The session checks `maxAgeMs` after it looks up the id. Text that is not the decimal form of an integer that is 0
+    // or more becomes `NaN`, which the session rejects as `invalid-input`.
+    const maxAgeMs = maxAge === null ? undefined : /^(0|[1-9][0-9]*)$/.test(maxAge) ? Number(maxAge) : Number.NaN;
     const cursor = request.headers.get("Last-Event-ID") ?? undefined;
     const started = yield* Effect.result(
       session
-        .subscribe(id, input, { ...(cursor === undefined ? {} : { cursor }), ...(maxAge === null ? {} : { maxAgeMs: Number(maxAge) }) })
+        .subscribe(id, input, { ...(cursor === undefined ? {} : { cursor }), ...(maxAgeMs === undefined ? {} : { maxAgeMs }) })
         .pipe(Scope.provide(scope)),
     );
     if (started._tag === "Failure") {
