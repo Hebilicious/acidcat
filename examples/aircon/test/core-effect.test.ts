@@ -6,6 +6,7 @@ import { Effect, Fiber, Layer, Schema, Stream } from "effect";
 
 import { aircon, statusChanged, unitLayer } from "../core-effect/aircon.ts";
 import { App, Mcp, Session } from "@acid-cat/core-effect";
+import { run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 
 /** The part of a `tools/list` response that the test reads. */
@@ -68,26 +69,30 @@ test("an agent sees the mcp view through MCP", async () => {
 });
 
 test("a flag follows a $ref to its type", async () => {
-  const { spawnSync } = await import("node:child_process");
-  const cli = new URL("../core-effect/cli.ts", import.meta.url).pathname;
-  const run = spawnSync(process.execPath, [cli, "aircon", "mode", "set", "--mode", "heat"], { encoding: "utf-8", timeout: 20_000 });
-  assert.equal(run.status, 1);
-  assert.deepEqual(JSON.parse(run.stdout), { _tag: "PoweredOff" });
-  assert.equal(spawnSync(process.execPath, [cli, "aircon", "mode", "set", "--mode", "boil"], { timeout: 20_000 }).status, 3);
+  const cli = (...args: string[]) => run(new URL("../core-effect/cli.ts", import.meta.url).pathname, ...args);
+  const [poweredOff, unknownMode] = await Promise.all([cli("aircon", "mode", "set", "--mode", "heat"), cli("aircon", "mode", "set", "--mode", "boil")]);
+  assert.equal(poweredOff.code, 1);
+  assert.deepEqual(JSON.parse(poweredOff.stdout), { _tag: "PoweredOff" });
+  assert.equal(unknownMode.code, 3);
 });
 
 test("an array input takes one repeated flag for each item, or JSON text of the array", async () => {
-  const { spawnSync } = await import("node:child_process");
-  const cli = new URL("../core-effect/cli.ts", import.meta.url).pathname;
-  const run = (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { encoding: "utf-8", timeout: 20_000 });
-  const schedule = run("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours=18");
-  assert.equal(schedule.status, 0);
+  const cli = (...args: string[]) => run(new URL("../core-effect/cli.ts", import.meta.url).pathname, ...args);
+  const [schedule, once, jsonText, notADay, notAnHour, list] = await Promise.all([
+    cli("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours=18"),
+    cli("aircon", "schedule", "set", "--days", "sat"),
+    cli("aircon", "schedule", "set", "--days", '["tue","thu"]', "--hours", "[6]"),
+    cli("aircon", "schedule", "set", "--days", '["noon"]'),
+    cli("aircon", "schedule", "set", "--days", "mon", "--hours", "24"),
+    cli("list"),
+  ]);
+  assert.equal(schedule.code, 0);
   assert.deepEqual(JSON.parse(schedule.stdout), { days: ["mon", "fri"], hours: [7, 18] });
-  assert.deepEqual(JSON.parse(run("aircon", "schedule", "set", "--days", "sat").stdout), { days: ["sat"], hours: [7] });
-  assert.deepEqual(JSON.parse(run("aircon", "schedule", "set", "--days", '["tue","thu"]', "--hours", "[6]").stdout), { days: ["tue", "thu"], hours: [6] });
-  assert.equal(run("aircon", "schedule", "set", "--days", '["noon"]').status, 3);
-  assert.equal(run("aircon", "schedule", "set", "--days", "mon", "--hours", "24").status, 3);
-  assert.match(run("list").stdout, /"usage": "aircon aircon schedule set --days <mon\|tue\|wed\|thu\|fri\|sat\|sun>\.\.\. \[--hours <integer>\.\.\.\]"/);
+  assert.deepEqual(JSON.parse(once.stdout), { days: ["sat"], hours: [7] });
+  assert.deepEqual(JSON.parse(jsonText.stdout), { days: ["tue", "thu"], hours: [6] });
+  assert.equal(notADay.code, 3);
+  assert.equal(notAnHour.code, 3);
+  assert.match(list.stdout, /"usage": "aircon aircon schedule set --days <mon\|tue\|wed\|thu\|fri\|sat\|sun>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });
 
 test("the state gives the current value, then each change", () =>
