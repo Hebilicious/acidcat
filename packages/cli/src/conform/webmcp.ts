@@ -215,7 +215,7 @@ function isBundled(schema: JsonObject): boolean {
   visitObjects(schema, (node) => {
     if (typeof node.$ref !== "string") return;
     const name = REFERENCE.exec(node.$ref)?.[1];
-    if (name === undefined || !(name in types)) bundled = false;
+    if (name === undefined || !Object.hasOwn(types, name)) bundled = false;
   });
   return bundled;
 }

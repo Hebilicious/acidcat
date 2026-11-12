@@ -167,8 +167,7 @@ export function cliFlags(input: JsonObject): string[] {
   const properties = objectOrEmpty(input.properties);
   const definitions = objectOrEmpty(input.$defs);
   const required = new Set(stringsOf(input.required));
-  const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-  const names = Object.keys(properties).sort(byName);
+  const names = Object.keys(properties).sort(byCodePoint);
   return [...names.filter((name) => required.has(name)), ...names.filter((name) => !required.has(name))].map((name) => {
     const property = cliResolve(objectOrEmpty(properties[name]), definitions);
     const items = cliRepeatedItems(property, definitions);
@@ -180,8 +179,8 @@ export function cliFlags(input: JsonObject): string[] {
 
 /** A property schema, or the type in `definitions` that its `$ref` refers to. */
 export function cliResolve(property: JsonObject, definitions: JsonObject): JsonObject {
-  const target = typeof property.$ref === "string" ? REFERENCE.exec(property.$ref)?.[1] : undefined;
-  return target === undefined ? property : objectOrEmpty(definitions[target] ?? property);
+  const target = referenceName(property);
+  return target === undefined ? property : objectOrEmpty(ownMember(definitions, target) ?? property);
 }
 
 /**
@@ -407,11 +406,25 @@ export function mcpEventParams(occurrence: Occurrence, subscriptionId: string | 
   return { ...rest, _meta: { [MCP_SUBSCRIPTION_ID]: subscriptionId } };
 }
 
+/**
+ * Order strings by Unicode code point. The `<` operator compares UTF-16 code units, which put a character after U+FFFF
+ * before a character from U+E000 to U+FFFF.
+ */
+export function byCodePoint(left: string, right: string): number {
+  const a = Array.from(left, (character) => character.codePointAt(0) ?? 0);
+  const b = Array.from(right, (character) => character.codePointAt(0) ?? 0);
+  for (let i = 0; i < Math.min(a.length, b.length); i += 1) {
+    const difference = (a[i] ?? 0) - (b[i] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return a.length - b.length;
+}
+
 /** The canonical JSON of a value (spec/bindings/mcp.md#canonical-json): no spaces, and the keys of each object in code point order. */
 export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (isJsonObject(value)) {
-    const keys = Object.keys(value).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    const keys = Object.keys(value).sort(byCodePoint);
     return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
   }
   return JSON.stringify(value) ?? "null";
@@ -647,8 +660,20 @@ export interface CatalogDocument extends JsonObject {
 
 export const REFERENCE = /^#\/\$defs\/([A-Za-z][A-Za-z0-9_]*)$/;
 
+/** The name of the type that a schema's `$ref` refers to, or `undefined` when it has no `$ref` of that form. */
+const referenceName = (schema: JsonObject): string | undefined =>
+  typeof schema.$ref === "string" ? REFERENCE.exec(schema.$ref)?.[1] : undefined;
+
 /** Tell if a value is a JSON object: an object that is not `null` and not an array. */
 export const isJsonObject = (value: unknown): value is JsonObject => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * The member of an object with this key, or `undefined` when the object does not have it. Inherited names, such as
+ * `constructor` or `toString`, are not members.
+ */
+export function ownMember<Value>(object: { readonly [key: string]: Value }, key: string): Value | undefined {
+  return Object.hasOwn(object, key) ? object[key] : undefined;
+}
 
 /** A value as a JSON object, or an empty object when it is not one. */
 const objectOrEmpty = (value: unknown): JsonObject => (isJsonObject(value) ? value : {});
@@ -692,8 +717,8 @@ export function typesUsedBy(schema: unknown, types: { readonly [name: string]: J
   const used = new Map<string, JsonObject>();
   const collect = (node: unknown) =>
     visitObjects(node, (inner) => {
-      const name = typeof inner.$ref === "string" ? REFERENCE.exec(inner.$ref)?.[1] : undefined;
-      const type = name === undefined ? undefined : types[name];
+      const name = referenceName(inner);
+      const type = name === undefined ? undefined : ownMember(types, name);
       if (name !== undefined && type !== undefined && !used.has(name)) {
         used.set(name, type);
         collect(type);
@@ -711,9 +736,8 @@ export function typesUsedBy(schema: unknown, types: { readonly [name: string]: J
 export function objectInput(schema: JsonObject, types: { readonly [name: string]: JsonObject }): JsonObject {
   const resolve = (node: unknown): JsonObject | undefined => {
     if (!isJsonObject(node)) return undefined;
-    const object = node;
-    const name = typeof object.$ref === "string" ? REFERENCE.exec(object.$ref)?.[1] : undefined;
-    return name === undefined ? object : types[name];
+    const name = referenceName(node);
+    return name === undefined ? node : ownMember(types, name);
   };
   const target = resolve(schema);
   if (schema.type !== undefined || target === undefined || target.type !== undefined) return schema;
@@ -722,10 +746,19 @@ export function objectInput(schema: JsonObject, types: { readonly [name: string]
   return union.every((member) => resolve(member)?.type === "object") ? { type: "object", ...schema } : schema;
 }
 
+/**
+ * The type that a schema's `$ref` refers to, whatever other keys the schema has, or the schema itself when it has no
+ * `$ref` to a type in `types`. A catalog uses it to tell if an input or a payload is an object
+ * (spec/catalog.md#capabilities).
+ */
+export function resolveType(schema: JsonObject, types: { readonly [name: string]: JsonObject }): JsonObject {
+  const name = referenceName(schema);
+  return (name === undefined ? undefined : ownMember(types, name)) ?? schema;
+}
+
 /** Bundle a schema (spec/catalog.md#bundling). */
 export function bundle(schema: JsonObject, types: { readonly [name: string]: JsonObject }): JsonObject {
-  const only = Object.keys(schema).length === 1 ? REFERENCE.exec(String(schema.$ref))?.[1] : undefined;
-  const base = only === undefined ? schema : (types[only] ?? schema);
+  const base = Object.keys(schema).length === 1 ? resolveType(schema, types) : schema;
   const used = typesUsedBy(base, types);
   return used.size === 0 ? base : { ...base, $defs: Object.fromEntries(used) };
 }
@@ -747,7 +780,7 @@ export function viewOf(catalog: CatalogDocument, target: string): CatalogDocumen
   const schemas = [...Object.values(capabilities).flatMap(schemasOf), ...Object.values(events).flatMap(eventSchemasOf)];
   for (const [, schema] of schemas) for (const [name, type] of typesUsedBy(schema, types)) used.set(name, type);
   const { $defs: _, events: __, ...rest } = catalog;
-  const declared = catalog.targets[target];
+  const declared = ownMember(catalog.targets, target);
   return {
     ...rest,
     targets: declared === undefined ? {} : { [target]: declared },

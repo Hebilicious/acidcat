@@ -3,7 +3,7 @@
  * See spec/catalog.md and spec/conformance.md.
  */
 import { canonicalText } from "@acid-cat/catalog";
-import { bundle, eventSchemasOf, REFERENCE, schemasOf, viewOf, visitObjects } from "@acid-cat/spec-ts";
+import { bundle, eventSchemasOf, REFERENCE, resolveType, schemasOf, viewOf, visitObjects } from "@acid-cat/spec-ts";
 import type { CatalogCapability, CatalogDocument as Catalog, CatalogEvent } from "@acid-cat/spec-ts";
 import { Result, Schema, SchemaIssue, SchemaRepresentation } from "effect";
 import type { JsonSchema } from "effect";
@@ -43,7 +43,7 @@ const decodeCatalog = (() => {
 
 /** True if `key` is absent from the object, or if `isMember` is true for its value. */
 const optional = (object: JsonObject, key: string, isMember: (value: unknown) => boolean): boolean =>
-  !(key in object) || isMember(object[key]);
+  !Object.hasOwn(object, key) || isMember(object[key]);
 
 const isString = (value: unknown): value is string => typeof value === "string";
 
@@ -116,16 +116,16 @@ function ruleErrors(catalog: Catalog): string[] {
     ...Object.entries(catalog.events ?? {}).map(([id, event]) => ({ id, entry: event, schemas: eventSchemasOf(event) })),
   ];
   for (const id of Object.keys(catalog.events ?? {})) {
-    if (id in catalog.capabilities) errors.push(`${id}: the id is both a capability and an event`);
+    if (Object.hasOwn(catalog.capabilities, id)) errors.push(`${id}: the id is both a capability and an event`);
   }
   for (const { id, entry, schemas } of entries) {
     for (const target of entry.audience ?? []) {
-      if (!(target in catalog.targets)) errors.push(`${id}: the audience names ${target}, which is not a target`);
+      if (!Object.hasOwn(catalog.targets, target)) errors.push(`${id}: the audience names ${target}, which is not a target`);
     }
     for (const [member, schema] of schemas) {
       const references = referenceErrors(schema, types);
       errors.push(...references.map((error) => `${id} ${member} ${error}`));
-      if ((member === "input" || member === "payload") && references.length === 0 && bundle(schema, types).type !== "object") {
+      if ((member === "input" || member === "payload") && references.length === 0 && resolveType(schema, types).type !== "object") {
         errors.push(`${id}: the ${member} is not an object`);
       }
     }
@@ -179,10 +179,10 @@ function schemaWarnings(catalog: Catalog): string[] {
 function referenceErrors(schema: unknown, types: { readonly [name: string]: JsonObject }): string[] {
   const errors: string[] = [];
   visitObjects(schema, (node) => {
-    if ("$defs" in node) errors.push("has its own $defs; put shared types in the catalog's $defs");
+    if (Object.hasOwn(node, "$defs")) errors.push("has its own $defs; put shared types in the catalog's $defs");
     if (node.$ref === undefined) return;
     const name = typeof node.$ref === "string" ? REFERENCE.exec(node.$ref)?.[1] : undefined;
-    if (name === undefined || !(name in types)) {
+    if (name === undefined || !Object.hasOwn(types, name)) {
       const reference = typeof node.$ref === "string" ? node.$ref : JSON.stringify(node.$ref);
       errors.push(`references ${reference}, which is not a type`);
     }

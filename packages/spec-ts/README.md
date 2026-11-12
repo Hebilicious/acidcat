@@ -17,5 +17,8 @@ pnpm add @acid-cat/spec-ts
 | `CALL_FAILURE_KINDS`, `CallFailureError` | The kinds of call failure, and the JavaScript error for one |
 | `AVAILABLE`, `unavailable` | Make [availability](../../spec/invocation.md#availability) values |
 | `viewOf`, `bundle` | The [view](../../spec/catalog.md#views) of a target, and a schema with its shared types |
+| `resolveType` | The type that the `$ref` of a schema refers to, whatever other keys the schema has |
+| `ownMember` | The member of an object with a key, or `undefined`. Inherited names, such as `constructor`, are not members |
+| `byCodePoint` | Order strings by Unicode code point, as the [canonical form](../../spec/catalog.md#canonical-form) sorts keys |
 
 The other exports give the names, flags, exit codes and tool shapes of each [binding](../../spec/bindings/README.md).

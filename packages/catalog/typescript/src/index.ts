@@ -199,7 +199,7 @@ export class Catalog {
   #referenceProblems(schema: unknown): string[] {
     const problems: string[] = [];
     visit(schema, (node) => {
-      if ("$defs" in node) problems.push("carries its own $defs; declare shared types with type()");
+      if (Object.hasOwn(node, "$defs")) problems.push("carries its own $defs; declare shared types with type()");
       if (node.$ref === undefined) return;
       const name = typeof node.$ref === "string" ? REFERENCE.exec(node.$ref)?.[1] : undefined;
       if (name === undefined || !this.#types.has(name)) problems.push(`references ${typeof node.$ref === "string" ? node.$ref : JSON.stringify(node.$ref)}, which is not a type`);

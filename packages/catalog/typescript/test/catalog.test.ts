@@ -22,7 +22,7 @@ test("the library writes the canonical form of every value", () => {
       type: "object",
       yLast: "y",
       bFirst: "b",
-      properties: { ü: { type: "string" }, Ü: { type: "string" }, u: { type: "string" }, U: { type: "string" } },
+      properties: { ü: { type: "string" }, Ü: { type: "string" }, u: { type: "string" }, U: { type: "string" }, "9": { type: "string" }, "10": { type: "string" } },
       examples: [
         {
           whole: 250.0,
