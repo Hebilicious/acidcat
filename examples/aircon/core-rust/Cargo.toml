@@ -1,0 +1,21 @@
+[package]
+name = "aircon-core-rust"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "The air conditioner, written with the Rust core: its command line and its MCP server through stdio."
+
+[[bin]]
+name = "aircon"
+path = "src/main.rs"
+
+[dependencies]
+acid-cat-core = { path = "../../../packages/core-rust" }
+futures = "0.3.32"
+schemars = "1.2.2"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.149", features = ["preserve_order"] }
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "sync"] }
+tokio-util = "0.7.19"
+
+[dev-dependencies]

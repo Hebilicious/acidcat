@@ -9,7 +9,7 @@ use serde_json::Value;
 use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
 
-use crate::app::{Application, ServedCapability, ServedEvent, call, subscription};
+use crate::app::{Application, ServedCapability, ServedEvent, StateWatch, call, subscription};
 use crate::outcome::{Availability, CallFailure, Defect, Kind, Outcome};
 use crate::subscription::{Occurrences, Parts, prepare};
 
@@ -165,6 +165,14 @@ impl<C: Send + Sync + 'static> Session<C> {
                     receiver.borrow().clone()
                 }),
         )
+    }
+
+    /// The state of a capability, or `None` when the capability has no state or is not in the view
+    /// (spec/invocation.md#state).
+    pub fn state(&self, id: &str) -> Option<StateWatch> {
+        let served = self.inner.capabilities.get(id)?;
+        let (_, source) = served.capability.definition.state.as_ref()?;
+        Some(StateWatch::new(source(&self.inner.context)))
     }
 
     /// The token that is cancelled when the session starts to close.

@@ -1,5 +1,4 @@
-//! The AcidCat core for Rust: serve the capabilities and the events of an application through the MCP, HTTP and CLI
-//! bindings (spec/bindings/README.md).
+#![doc = include_str!("../README.md")]
 
 mod app;
 mod outcome;
@@ -9,7 +8,7 @@ mod subscription;
 
 pub use app::{
     App, Application, Call, Capability, CapabilityDefinition, Emitted, Event, EventDefinition,
-    NoPayload, Subscription,
+    NoPayload, StateWatch, Subscription, Target,
 };
 pub use outcome::{
     Availability, CallFailure, Defect, Kind, NoFailure, Outcome, RunError, RunResult, fail,

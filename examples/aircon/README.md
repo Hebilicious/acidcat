@@ -7,6 +7,7 @@ One air conditioner, described once and served to every surface. The unit is sim
 | [`catalog/`](catalog) | The catalog, written in Pkl, TypeScript, Python, Go and Rust. Each language gives the same bytes |
 | [`core-ts/`](core-ts) | The application on [`@acid-cat/core-ts`](../../packages/core-ts), with Zod, its command line, and its MCP server through stdio |
 | [`core-effect/`](core-effect) | The application on [`@acid-cat/core-effect`](../../packages/core-effect), fully in Effect, its command line, and its MCP server through stdio |
+| [`core-rust/`](core-rust) | The application on [`acid-cat-core`](../../packages/core-rust), in Rust, its command line, and its MCP server through stdio |
 | [`apis/`](apis) | APIs whose design the application controls: GraphQL, Cap'n Web, Elysia and an MCP server |
 | [`test/`](test) | The tests of all parts |
 
@@ -20,13 +21,14 @@ Each catalog library writes the same catalog in its own language: [`typescript.t
 
 ## Application and command line
 
-Both applications serve the catalog: the test of each one compares its catalog with `aircon.acidcat.json`. Each one has a command line:
+Each application serves the catalog: the test of each one compares its catalog with `aircon.acidcat.json`. Each one has a command line:
 
 ```sh
 node core-ts/cli.ts aircon power set --on
 node core-effect/cli.ts aircon mode set --mode heat
 node core-ts/cli.ts aircon schedule set --days mon --days fri --hours 7 --hours 18
 node core-ts/cli.ts list
+cargo run --manifest-path core-rust/Cargo.toml -- cli aircon fan set --speed high
 ```
 
 The command line has one command for each capability in the view of the `cli` target. A flag of a shared type, for example `--mode`, accepts only the values of that type.
@@ -44,7 +46,10 @@ Each application also has an MCP server through [stdio](../../spec/bindings/mcp.
 ```sh
 node examples/aircon/core-ts/mcp-stdio.ts
 node examples/aircon/core-effect/mcp-stdio.ts
+examples/aircon/core-rust/target/debug/aircon mcp-stdio
 ```
+
+The Rust program is built with `cargo build` in `core-rust/`. The tests build it.
 
 The process is one session with one simulated unit. When standard input ends, the process exits.
 

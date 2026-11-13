@@ -10,6 +10,7 @@ projects:
   catalog-python: "packages/catalog/python"
   catalog-go: "packages/catalog/go"
   catalog-rust: "packages/catalog/rust"
+  core-rust: "packages/core-rust"
   catalog-pkl: "packages/catalog/pkl"
 
 defaultProject: "acid-cat"
@@ -24,6 +25,8 @@ hasher:
   ignorePatterns:
     - "**/node_modules/**"
     - "packages/catalog/rust/target/**"
+    - "packages/core-rust/target/**"
+    - "examples/aircon/core-rust/target/**"
 
 pipeline:
   installDependencies:

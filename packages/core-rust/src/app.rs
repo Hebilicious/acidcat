@@ -6,6 +6,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use acid_cat_catalog as catalog;
+pub use acid_cat_catalog::Target;
 use futures::future::BoxFuture;
 use futures::stream::{BoxStream, Stream, StreamExt};
 use schemars::JsonSchema;
@@ -128,6 +129,43 @@ pub struct NoPayload {}
 
 type AvailabilityFn<C> = Arc<dyn Fn(&C) -> watch::Receiver<Availability> + Send + Sync>;
 
+/// The state of a capability in a session, with its type erased.
+pub(crate) trait StateSource: Send + Sync {
+    fn snapshot(&self) -> Value;
+    fn changed(&mut self) -> BoxFuture<'_, bool>;
+}
+
+impl<T: Serialize + Send + Sync + 'static> StateSource for watch::Receiver<T> {
+    fn snapshot(&self) -> Value {
+        serde_json::to_value(&*self.borrow()).unwrap_or(Value::Null)
+    }
+
+    fn changed(&mut self) -> BoxFuture<'_, bool> {
+        Box::pin(async move { watch::Receiver::changed(self).await.is_ok() })
+    }
+}
+
+pub(crate) type StateFn<C> = Arc<dyn Fn(&C) -> Box<dyn StateSource> + Send + Sync>;
+
+/// The state of a capability that a client observes (spec/invocation.md#state). Each value is a copy in its JSON form.
+pub struct StateWatch(Box<dyn StateSource>);
+
+impl StateWatch {
+    pub(crate) fn new(source: Box<dyn StateSource>) -> Self {
+        StateWatch(source)
+    }
+
+    /// The value now.
+    pub fn snapshot(&self) -> Value {
+        self.0.snapshot()
+    }
+
+    /// Wait for the next change. The result is `false` when the source has no more changes.
+    pub async fn changed(&mut self) -> bool {
+        self.0.changed().await
+    }
+}
+
 /// The work of a capability on an input in its JSON form: the input is not valid (the message), or the future of the
 /// work, which gives a value or a failure in their JSON forms.
 pub(crate) type ErasedRun<C> = Arc<
@@ -165,6 +203,7 @@ pub struct Capability<C, I = (), O = (), F = NoFailure> {
     types: Map<String, Value>,
     problems: Vec<String>,
     availability: Option<AvailabilityFn<C>>,
+    state: Option<(Value, StateFn<C>)>,
     marker: PhantomData<fn(I) -> (O, F)>,
 }
 
@@ -182,6 +221,7 @@ impl<C> Capability<C> {
             types: Map::new(),
             problems: Vec::new(),
             availability: None,
+            state: None,
             marker: PhantomData,
         }
     }
@@ -200,6 +240,7 @@ impl<C, I, O, F> Capability<C, I, O, F> {
             types: self.types,
             problems: self.problems,
             availability: self.availability,
+            state: self.state,
             marker: PhantomData,
         }
     }
@@ -234,6 +275,19 @@ impl<C, I, O, F> Capability<C, I, O, F> {
         availability: impl Fn(&C) -> watch::Receiver<Availability> + Send + Sync + 'static,
     ) -> Self {
         self.availability = Some(Arc::new(availability));
+        self
+    }
+
+    /// The state of the capability: a value that clients can observe, from the services of the application. Its type
+    /// gives the state schema.
+    pub fn state<T: JsonSchema + Serialize + Send + Sync + 'static>(
+        mut self,
+        source: impl Fn(&C) -> watch::Receiver<T> + Send + Sync + 'static,
+    ) -> Self {
+        let (schema, types) = schema_of::<T>();
+        self.add_types(types);
+        let source: StateFn<C> = Arc::new(move |context: &C| Box::new(source(context)));
+        self.state = Some((schema, source));
         self
     }
 
@@ -331,6 +385,7 @@ where
             types: self.types,
             problems: self.problems,
             availability: self.availability,
+            state: self.state,
             run,
         }
     }
@@ -375,6 +430,7 @@ pub struct CapabilityDefinition<C> {
     types: Map<String, Value>,
     problems: Vec<String>,
     pub(crate) availability: Option<AvailabilityFn<C>>,
+    pub(crate) state: Option<(Value, StateFn<C>)>,
     pub(crate) run: ErasedRun<C>,
 }
 
@@ -545,7 +601,7 @@ type OnDefect = Arc<dyn Fn(&str, &Defect) + Send + Sync>;
 pub struct App<C> {
     title: Option<String>,
     description: Option<String>,
-    targets: Vec<(String, Vec<String>)>,
+    targets: Vec<(String, Target)>,
     types: Map<String, Value>,
     capabilities: Vec<CapabilityDefinition<C>>,
     events: Vec<EventDefinition<C>>,
@@ -588,8 +644,20 @@ impl<C: Send + Sync + 'static> App<C> {
         name: impl Into<String>,
         bindings: impl IntoIterator<Item = S>,
     ) -> Self {
-        self.targets
-            .push((name.into(), bindings.into_iter().map(Into::into).collect()));
+        let bindings = bindings.into_iter().map(Into::into).collect();
+        self.targets.push((
+            name.into(),
+            Target {
+                bindings,
+                ..Target::default()
+            },
+        ));
+        self
+    }
+
+    /// A target with all its members: its bindings, a description of its clients, and the options of its bindings.
+    pub fn target_with(mut self, name: impl Into<String>, target: Target) -> Self {
+        self.targets.push((name.into(), target));
         self
     }
 
@@ -617,7 +685,7 @@ impl<C: Send + Sync + 'static> App<C> {
 
     /// Check the application and write its catalog. The result is the application, ready to serve, or the rules
     /// that it breaks.
-    pub fn build(self) -> Result<Arc<Application<C>>, Vec<String>> {
+    pub fn build(mut self) -> Result<Arc<Application<C>>, Vec<String>> {
         let mut problems = Vec::new();
         let mut types = self.types;
         let mut merge = |more: &Map<String, Value>, problems: &mut Vec<String>| {
@@ -640,17 +708,12 @@ impl<C: Send + Sync + 'static> App<C> {
             problems.extend(event.problems.iter().cloned());
             merge(&event.types, &mut problems);
         }
+        share_types(&mut self.capabilities, &mut self.events, &mut types);
 
         let mut document =
             catalog::Catalog::new(self.title.as_deref(), self.description.as_deref());
-        for (name, bindings) in &self.targets {
-            document.target(
-                name,
-                catalog::Target {
-                    bindings: bindings.clone(),
-                    ..catalog::Target::default()
-                },
-            );
+        for (name, target) in &self.targets {
+            document.target(name, target.clone());
         }
         for (name, schema) in &types {
             document.r#type(name, schema.clone());
@@ -665,7 +728,7 @@ impl<C: Send + Sync + 'static> App<C> {
                     output: capability.output.clone(),
                     failures: capability.failures.clone(),
                     read_only: capability.read_only,
-                    state: None,
+                    state: capability.state.as_ref().map(|(schema, _)| schema.clone()),
                 },
             );
         }
@@ -822,5 +885,101 @@ pub(crate) fn subscription<C>(
         cursor,
         max_age_ms,
         cancel,
+    }
+}
+
+/// Move each named schema that the application uses in two or more places into the shared types, and refer to it
+/// there (spec/catalog.md#types). The name of a schema is its `title`, or the tag of a failure.
+fn share_types<C>(
+    capabilities: &mut [CapabilityDefinition<C>],
+    events: &mut [EventDefinition<C>],
+    types: &mut Map<String, Value>,
+) {
+    fn named(schema: &Value) -> Option<(String, Value)> {
+        let title = schema.get("title")?.as_str()?;
+        Some((title.to_owned(), schema.clone()))
+    }
+    let mut candidates: Vec<(String, Value, usize)> = Vec::new();
+    let mut note = |candidate: Option<(String, Value)>| {
+        let Some((name, schema)) = candidate else {
+            return;
+        };
+        match candidates
+            .iter_mut()
+            .find(|(each, value, _)| *each == name && *value == schema)
+        {
+            Some((_, _, count)) => *count += 1,
+            None => candidates.push((name, schema, 1)),
+        }
+    };
+    for capability in capabilities.iter() {
+        [&capability.input, &capability.output]
+            .into_iter()
+            .flatten()
+            .for_each(|schema| note(named(schema)));
+        if let Some((schema, _)) = &capability.state {
+            note(named(schema));
+        }
+        for (tag, schema) in &capability.failures {
+            note(Some((tag.clone(), schema.clone())));
+        }
+    }
+    for event in events.iter() {
+        [&event.input, &event.payload]
+            .into_iter()
+            .flatten()
+            .for_each(|schema| note(named(schema)));
+    }
+    let is_type_name = |name: &str| {
+        name.chars()
+            .next()
+            .is_some_and(|first| first.is_ascii_alphabetic())
+            && name
+                .chars()
+                .all(|each| each.is_ascii_alphanumeric() || each == '_')
+    };
+    let shared: Vec<(String, Value)> = candidates
+        .into_iter()
+        .filter(|(name, schema, count)| {
+            let mut stored = schema.clone();
+            if let Some(object) = stored.as_object_mut() {
+                object.remove("title");
+            }
+            *count >= 2
+                && is_type_name(name)
+                && types.get(name).is_none_or(|existing| *existing == stored)
+        })
+        .map(|(name, schema, _)| (name, schema))
+        .collect();
+    let reference = |schema: &mut Value| {
+        if let Some((name, _)) = shared.iter().find(|(_, value)| value == schema) {
+            *schema = serde_json::json!({ "$ref": format!("#/$defs/{name}") });
+        }
+    };
+    for (name, schema) in &shared {
+        let mut stored = schema.clone();
+        if let Some(object) = stored.as_object_mut() {
+            object.remove("title");
+        }
+        types.insert(name.clone(), stored);
+    }
+    for capability in capabilities.iter_mut() {
+        [&mut capability.input, &mut capability.output]
+            .into_iter()
+            .flatten()
+            .for_each(reference);
+        if let Some((schema, _)) = &mut capability.state {
+            reference(schema);
+        }
+        capability
+            .failures
+            .iter_mut()
+            .for_each(|(_, schema)| reference(schema));
+    }
+    for event in events.iter_mut() {
+        [&mut event.input, &mut event.payload]
+            .into_iter()
+            .flatten()
+            .for_each(reference);
     }
 }

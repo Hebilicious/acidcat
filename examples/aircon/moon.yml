@@ -3,7 +3,7 @@ layer: "application"
 
 project:
   title: "@acid-cat/example-aircon"
-  description: "An air conditioner, described once and served to every surface: its catalog in five languages, its application on both cores with a command line each, and APIs built on it. Not published."
+  description: "An air conditioner, described once and served to every surface: its catalog in five languages, its application on three cores with a command line each, and APIs built on it. Not published."
 
 toolchains:
   default: ["javascript", "node", "pnpm"]
@@ -19,7 +19,7 @@ tasks:
       runInCI: false
 
   test:
-    description: "Write the catalog in each language, run the application on both cores and their command lines, and call each API."
+    description: "Write the catalog in each language, run the application on each core and its command line, and call each API."
     command: "node"
     args: ["--test", "--test-timeout=60000", "test/"]
     # The tests start the command lines and the MCP servers in Node.js processes. The compile cache lets each process
@@ -30,12 +30,16 @@ tasks:
       - "catalog/**/*"
       - "core-ts/**/*.ts"
       - "core-effect/**/*.ts"
+      - "core-rust/src/**/*.rs"
+      - "core-rust/Cargo.toml"
+      - "core-rust/Cargo.lock"
       - "apis/**/*"
       - "test/**/*.ts"
       - "/packages/catalog/typescript/src/**/*.ts"
       - "/packages/catalog/python/acid_cat_catalog/**/*.py"
       - "/packages/catalog/go/**/*.go"
       - "/packages/catalog/rust/src/**/*.rs"
+      - "/packages/core-rust/src/**/*.rs"
       - "/packages/core-ts/src/**/*.ts"
       - "/packages/core-effect/src/**/*.ts"
       - "/packages/spec-ts/src/**/*.ts"
