@@ -39,7 +39,10 @@ pub struct CallFailure {
 
 impl CallFailure {
     pub fn new(kind: Kind, message: impl Into<String>) -> Self {
-        Self { kind, message: message.into() }
+        Self {
+            kind,
+            message: message.into(),
+        }
     }
 
     pub(crate) fn cancelled() -> Self {
@@ -91,7 +94,9 @@ pub enum Availability {
 
 impl Availability {
     pub fn unavailable(reason: impl Into<String>) -> Self {
-        Availability::Unavailable { reason: reason.into() }
+        Availability::Unavailable {
+            reason: reason.into(),
+        }
     }
 
     pub fn is_available(&self) -> bool {

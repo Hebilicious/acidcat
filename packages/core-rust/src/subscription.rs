@@ -67,7 +67,9 @@ struct Shared {
 
 impl Shared {
     fn lock(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     fn end(&self, how: Option<CallFailure>) {
@@ -141,7 +143,10 @@ impl Occurrences {
 
     /// The occurrences as a stream. The stream ends after the end of the subscription.
     pub fn into_stream(self) -> BoxStream<'static, Result<Occurrence, CallFailure>> {
-        futures::stream::unfold(self, |mut occurrences| async move { occurrences.next().await.map(|item| (item, occurrences)) }).boxed()
+        futures::stream::unfold(self, |mut occurrences| async move {
+            occurrences.next().await.map(|item| (item, occurrences))
+        })
+        .boxed()
     }
 }
 
@@ -151,12 +156,15 @@ impl Drop for Occurrences {
     }
 }
 
+/// Checks the data of one occurrence against the payload schema. The result is the problem, if any.
+pub(crate) type PayloadCheck = Box<dyn Fn(&Value) -> Option<String> + Send + Sync>;
+
 /// The parts of a subscription that starts.
 pub(crate) struct Parts {
     pub(crate) name: String,
     pub(crate) source: BoxStream<'static, Result<ErasedEmitted, Defect>>,
     /// Check the data of one occurrence against the payload schema. The result is the problem, if any.
-    pub(crate) check: Box<dyn Fn(&Value) -> Option<String> + Send + Sync>,
+    pub(crate) check: PayloadCheck,
     pub(crate) limit: usize,
     /// Cancelled when the session closes. The subscription then ends as complete.
     pub(crate) closing: CancellationToken,
@@ -169,7 +177,12 @@ pub(crate) fn prepare() -> (CancellationToken, impl FnOnce(Parts) -> Occurrences
     let token = stop.clone();
     let start = move |parts: Parts| {
         let shared = Arc::new(Shared {
-            state: Mutex::new(State { buffer: VecDeque::new(), dropped: false, ending: None, closed: false }),
+            state: Mutex::new(State {
+                buffer: VecDeque::new(),
+                dropped: false,
+                ending: None,
+                closed: false,
+            }),
             notify: Notify::new(),
             stop,
         });
@@ -181,7 +194,14 @@ pub(crate) fn prepare() -> (CancellationToken, impl FnOnce(Parts) -> Occurrences
 
 /// Read the occurrences of the provider into the buffer, until the subscription ends.
 async fn pump(shared: Arc<Shared>, parts: Parts) {
-    let Parts { name, mut source, check, limit, closing, on_defect } = parts;
+    let Parts {
+        name,
+        mut source,
+        check,
+        limit,
+        closing,
+        on_defect,
+    } = parts;
     let fail = |defect: Defect| {
         on_defect(&defect);
         shared.end(Some(CallFailure::new(Kind::Internal, INTERNAL_MESSAGE)));
@@ -203,12 +223,18 @@ async fn pump(shared: Arc<Shared>, parts: Parts) {
             return fail(Defect::new("The eventId of an occurrence is empty."));
         }
         if let Some(problem) = check(&emitted.data) {
-            return fail(Defect::new(format!("The data of an occurrence does not agree with the payload schema: {problem}")));
+            return fail(Defect::new(format!(
+                "The data of an occurrence does not agree with the payload schema: {problem}"
+            )));
         }
         let occurrence = Occurrence {
-            event_id: emitted.event_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+            event_id: emitted
+                .event_id
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
             name: name.clone(),
-            timestamp: emitted.timestamp.unwrap_or_else(|| humantime::format_rfc3339_millis(std::time::SystemTime::now()).to_string()),
+            timestamp: emitted.timestamp.unwrap_or_else(|| {
+                humantime::format_rfc3339_millis(std::time::SystemTime::now()).to_string()
+            }),
             data: emitted.data,
             cursor: emitted.cursor,
             truncated: emitted.truncated,

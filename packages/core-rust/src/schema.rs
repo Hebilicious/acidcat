@@ -18,7 +18,10 @@ pub(crate) fn schema_of<T: JsonSchema>() -> (Value, Map<String, Value>) {
         .with(|settings| settings.meta_schema = None)
         .into_generator();
     let mut schema = generator.root_schema_for::<T>().to_value();
-    let types = match schema.as_object_mut().and_then(|object| object.remove("$defs")) {
+    let types = match schema
+        .as_object_mut()
+        .and_then(|object| object.remove("$defs"))
+    {
         Some(Value::Object(types)) => types,
         _ => Map::new(),
     };
@@ -37,13 +40,22 @@ pub(crate) fn schema_of<T: JsonSchema>() -> (Value, Map<String, Value>) {
 fn tidy(schema: &mut Value) {
     match schema {
         Value::Object(object) => {
-            if matches!(object.get("type").and_then(Value::as_str), Some("integer" | "number")) {
+            if matches!(
+                object.get("type").and_then(Value::as_str),
+                Some("integer" | "number")
+            ) {
                 object.remove("format");
             }
             let required: Vec<String> = object
                 .get("required")
                 .and_then(Value::as_array)
-                .map(|names| names.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+                .map(|names| {
+                    names
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect()
+                })
                 .unwrap_or_default();
             if let Some(Value::Object(properties)) = object.get_mut("properties") {
                 for (name, property) in properties.iter_mut() {
@@ -64,14 +76,28 @@ fn tidy(schema: &mut Value) {
 /// Remove `null` from the values of an optional property: `"type": ["string", "null"]` becomes `"type": "string"`,
 /// and `{ "type": "null" }` leaves an `anyOf`.
 fn without_null(property: &mut Value) {
-    let Some(object) = property.as_object_mut() else { return };
+    let Some(object) = property.as_object_mut() else {
+        return;
+    };
     if let Some(Value::Array(types)) = object.get("type") {
-        let rest: Vec<Value> = types.iter().filter(|each| *each != "null").cloned().collect();
-        let replacement = if rest.len() == 1 { rest[0].clone() } else { Value::Array(rest) };
+        let rest: Vec<Value> = types
+            .iter()
+            .filter(|each| *each != "null")
+            .cloned()
+            .collect();
+        let replacement = if rest.len() == 1 {
+            rest[0].clone()
+        } else {
+            Value::Array(rest)
+        };
         object.insert("type".into(), replacement);
     }
     if let Some(Value::Array(members)) = object.get("anyOf") {
-        let rest: Vec<Value> = members.iter().filter(|each| **each != json!({ "type": "null" })).cloned().collect();
+        let rest: Vec<Value> = members
+            .iter()
+            .filter(|each| **each != json!({ "type": "null" }))
+            .cloned()
+            .collect();
         if rest.len() == 1 && object.len() == 1 {
             *property = rest[0].clone();
         } else {
@@ -87,7 +113,9 @@ pub(crate) fn reference_name(schema: &Value) -> Option<&str> {
 
 /// The type that a schema's `$ref` refers to, or the schema itself.
 pub(crate) fn resolve<'a>(schema: &'a Value, types: &'a Map<String, Value>) -> &'a Value {
-    reference_name(schema).and_then(|name| types.get(name)).unwrap_or(schema)
+    reference_name(schema)
+        .and_then(|name| types.get(name))
+        .unwrap_or(schema)
 }
 
 /// The types that a schema uses, directly or through other types, in the order in which it finds them.
@@ -102,7 +130,9 @@ pub(crate) fn types_used_by(schema: &Value, types: &Map<String, Value>) -> Map<S
                     used.insert(name.to_owned(), found.clone());
                     collect(found, types, used);
                 }
-                object.values().for_each(|value| collect(value, types, used));
+                object
+                    .values()
+                    .for_each(|value| collect(value, types, used));
             }
             Value::Array(items) => items.iter().for_each(|item| collect(item, types, used)),
             _ => {}
@@ -134,11 +164,18 @@ pub(crate) fn bundle(schema: &Value, types: &Map<String, Value>) -> Value {
 /// The view of a target (spec/catalog.md#views).
 pub(crate) fn view_of(catalog: &Value, target: &str) -> Value {
     let empty = Map::new();
-    let types = catalog.get("$defs").and_then(Value::as_object).unwrap_or(&empty);
+    let types = catalog
+        .get("$defs")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
     let mut used = Map::new();
     let mut filter = |member: &str, schemas: &dyn Fn(&Value) -> Vec<Value>| -> Map<String, Value> {
         let mut kept = Map::new();
-        for (id, entry) in catalog.get(member).and_then(Value::as_object).unwrap_or(&empty) {
+        for (id, entry) in catalog
+            .get(member)
+            .and_then(Value::as_object)
+            .unwrap_or(&empty)
+        {
             let audience = entry.get("audience").and_then(Value::as_array);
             if !audience.is_some_and(|names| names.iter().any(|name| name == target)) {
                 continue;
@@ -153,13 +190,21 @@ pub(crate) fn view_of(catalog: &Value, target: &str) -> Value {
         kept
     };
     let capabilities = filter("capabilities", &|capability| {
-        let mut schemas: Vec<Value> = ["input", "output", "state"].iter().filter_map(|member| capability.get(*member).cloned()).collect();
+        let mut schemas: Vec<Value> = ["input", "output", "state"]
+            .iter()
+            .filter_map(|member| capability.get(*member).cloned())
+            .collect();
         if let Some(failures) = capability.get("failures").and_then(Value::as_object) {
             schemas.extend(failures.values().cloned());
         }
         schemas
     });
-    let events = filter("events", &|event| ["input", "payload"].iter().filter_map(|member| event.get(*member).cloned()).collect());
+    let events = filter("events", &|event| {
+        ["input", "payload"]
+            .iter()
+            .filter_map(|member| event.get(*member).cloned())
+            .collect()
+    });
 
     let mut view = Map::new();
     for (member, value) in catalog.as_object().unwrap_or(&empty) {
@@ -193,12 +238,21 @@ pub(crate) fn view_of(catalog: &Value, target: &str) -> Value {
 /// code point order. Rust strings compare by bytes of UTF-8, which is the order of code points.
 pub(crate) fn canonical_json(value: &Value) -> String {
     match value {
-        Value::Array(items) => format!("[{}]", items.iter().map(canonical_json).collect::<Vec<_>>().join(",")),
+        Value::Array(items) => format!(
+            "[{}]",
+            items
+                .iter()
+                .map(canonical_json)
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
         Value::Object(object) => {
             let sorted: BTreeMap<&String, &Value> = object.iter().collect();
             let members: Vec<String> = sorted
                 .into_iter()
-                .map(|(key, value)| format!("{}:{}", Value::String(key.clone()), canonical_json(value)))
+                .map(|(key, value)| {
+                    format!("{}:{}", Value::String(key.clone()), canonical_json(value))
+                })
                 .collect();
             format!("{{{}}}", members.join(","))
         }
@@ -218,7 +272,9 @@ impl Validator {
         {
             object.insert("$defs".into(), Value::Object(used));
         }
-        jsonschema::draft202012::new(&bundled).map(Validator).map_err(|error| error.to_string())
+        jsonschema::draft202012::new(&bundled)
+            .map(Validator)
+            .map_err(|error| error.to_string())
     }
 
     /// The issues of a value, each with its path, or `None` when the value agrees with the schema.
@@ -228,9 +284,21 @@ impl Validator {
             .iter_errors(value)
             .map(|error| {
                 let path = error.instance_path().to_string();
-                format!("{}: {}", if path.is_empty() { "input".to_owned() } else { path }, error)
+                format!(
+                    "{}: {}",
+                    if path.is_empty() {
+                        "input".to_owned()
+                    } else {
+                        path
+                    },
+                    error
+                )
             })
             .collect();
-        if issues.is_empty() { None } else { Some(issues.join("; ")) }
+        if issues.is_empty() {
+            None
+        } else {
+            Some(issues.join("; "))
+        }
     }
 }

@@ -88,7 +88,13 @@ pub struct Emitted<P> {
 
 impl<P> Emitted<P> {
     pub fn new(data: P) -> Self {
-        Self { data, event_id: None, timestamp: None, cursor: None, truncated: false }
+        Self {
+            data,
+            event_id: None,
+            timestamp: None,
+            cursor: None,
+            truncated: false,
+        }
     }
 
     /// The id of the thing that happened, from its source.
@@ -124,13 +130,27 @@ type AvailabilityFn<C> = Arc<dyn Fn(&C) -> watch::Receiver<Availability> + Send 
 
 /// The work of a capability on an input in its JSON form: the input is not valid (the message), or the future of the
 /// work, which gives a value or a failure in their JSON forms.
-pub(crate) type ErasedRun<C> = Arc<dyn Fn(Value, Call<C>) -> Result<BoxFuture<'static, Result<Result<Value, Value>, Defect>>, String> + Send + Sync>;
+pub(crate) type ErasedRun<C> = Arc<
+    dyn Fn(
+            Value,
+            Call<C>,
+        ) -> Result<BoxFuture<'static, Result<Result<Value, Value>, Defect>>, String>
+        + Send
+        + Sync,
+>;
 
 pub(crate) type ErasedEmitted = Emitted<Value>;
 
 /// The provider of an event on an input in its JSON form: the input is not valid (the message), or the stream of
 /// occurrences.
-pub(crate) type ErasedSubscribe<C> = Arc<dyn Fn(Value, Subscription<C>) -> Result<BoxStream<'static, Result<ErasedEmitted, Defect>>, String> + Send + Sync>;
+pub(crate) type ErasedSubscribe<C> = Arc<
+    dyn Fn(
+            Value,
+            Subscription<C>,
+        ) -> Result<BoxStream<'static, Result<ErasedEmitted, Defect>>, String>
+        + Send
+        + Sync,
+>;
 
 /// A capability that is being declared. `I`, `O` and `F` are the types of the input, the value and the failures.
 /// Finish it with [`Capability::run`].
@@ -189,7 +209,8 @@ impl<C, I, O, F> Capability<C, I, O, F> {
             if let Some(existing) = self.types.get(&name)
                 && *existing != schema
             {
-                self.problems.push(format!("the type {name} has two different schemas"));
+                self.problems
+                    .push(format!("the type {name} has two different schemas"));
             }
             self.types.insert(name, schema);
         }
@@ -208,7 +229,10 @@ impl<C, I, O, F> Capability<C, I, O, F> {
     }
 
     /// The availability of the capability in each session, from the services of the application.
-    pub fn availability(mut self, availability: impl Fn(&C) -> watch::Receiver<Availability> + Send + Sync + 'static) -> Self {
+    pub fn availability(
+        mut self,
+        availability: impl Fn(&C) -> watch::Receiver<Availability> + Send + Sync + 'static,
+    ) -> Self {
         self.availability = Some(Arc::new(availability));
         self
     }
@@ -247,14 +271,22 @@ impl<C, I, O, F> Capability<C, I, O, F> {
         self.add_types(types);
         match failures_of(&schema) {
             Ok(failures) => self.failures = failures,
-            Err(problem) => self.problems.push(format!("the failures of {}: {problem}", self.id)),
+            Err(problem) => self
+                .problems
+                .push(format!("the failures of {}: {problem}", self.id)),
         }
         self.retype()
     }
 
     /// The failures, with a schema that you write for each tag. Each value of `T` is an object with its tag in `_tag`.
-    pub fn failure_schemas<T: Serialize, S: Into<String>>(mut self, failures: impl IntoIterator<Item = (S, Value)>) -> Capability<C, I, O, T> {
-        self.failures = failures.into_iter().map(|(tag, schema)| (tag.into(), schema)).collect();
+    pub fn failure_schemas<T: Serialize, S: Into<String>>(
+        mut self,
+        failures: impl IntoIterator<Item = (S, Value)>,
+    ) -> Capability<C, I, O, T> {
+        self.failures = failures
+            .into_iter()
+            .map(|(tag, schema)| (tag.into(), schema))
+            .collect();
         self.retype()
     }
 }
@@ -276,7 +308,8 @@ where
         let has_input = self.input.is_some();
         let has_output = self.output.is_some();
         let run: ErasedRun<C> = Arc::new(move |input: Value, call: Call<C>| {
-            let input: I = serde_json::from_value(if has_input { input } else { Value::Null }).map_err(|error| error.to_string())?;
+            let input: I = serde_json::from_value(if has_input { input } else { Value::Null })
+                .map_err(|error| error.to_string())?;
             let work = run(input, call);
             Ok(Box::pin(async move {
                 match work.await {
@@ -305,7 +338,11 @@ where
 
 /// The schema of each failure, from the schema of an enum with `#[serde(tag = "_tag")]`.
 fn failures_of(schema: &Value) -> Result<Vec<(String, Value)>, String> {
-    let variants: Vec<&Value> = match schema.get("oneOf").or_else(|| schema.get("anyOf")).and_then(Value::as_array) {
+    let variants: Vec<&Value> = match schema
+        .get("oneOf")
+        .or_else(|| schema.get("anyOf"))
+        .and_then(Value::as_array)
+    {
         Some(variants) => variants.iter().collect(),
         None => vec![schema],
     };
@@ -389,7 +426,8 @@ impl<C, I, P> Event<C, I, P> {
             if let Some(existing) = self.types.get(&name)
                 && *existing != schema
             {
-                self.problems.push(format!("the type {name} has two different schemas"));
+                self.problems
+                    .push(format!("the type {name} has two different schemas"));
             }
             self.types.insert(name, schema);
         }
@@ -445,20 +483,22 @@ where
         Occurrences: Stream<Item = Result<Emitted<P>, Defect>> + Send + 'static,
     {
         let has_input = self.input.is_some();
-        let subscribe: ErasedSubscribe<C> = Arc::new(move |input: Value, subscription: Subscription<C>| {
-            let input: I = serde_json::from_value(if has_input { input } else { Value::Null }).map_err(|error| error.to_string())?;
-            let stream = provider(input, subscription).map(|item| {
-                let emitted = item?;
-                Ok(Emitted {
-                    data: serde_json::to_value(emitted.data)?,
-                    event_id: emitted.event_id,
-                    timestamp: emitted.timestamp,
-                    cursor: emitted.cursor,
-                    truncated: emitted.truncated,
-                })
+        let subscribe: ErasedSubscribe<C> =
+            Arc::new(move |input: Value, subscription: Subscription<C>| {
+                let input: I = serde_json::from_value(if has_input { input } else { Value::Null })
+                    .map_err(|error| error.to_string())?;
+                let stream = provider(input, subscription).map(|item| {
+                    let emitted = item?;
+                    Ok(Emitted {
+                        data: serde_json::to_value(emitted.data)?,
+                        event_id: emitted.event_id,
+                        timestamp: emitted.timestamp,
+                        cursor: emitted.cursor,
+                        truncated: emitted.truncated,
+                    })
+                });
+                Ok(stream.boxed())
             });
-            Ok(stream.boxed())
-        });
         EventDefinition {
             id: self.id,
             description: self.description,
@@ -520,7 +560,15 @@ impl<C: Send + Sync + 'static> Default for App<C> {
 
 impl<C: Send + Sync + 'static> App<C> {
     pub fn new() -> Self {
-        App { title: None, description: None, targets: Vec::new(), types: Map::new(), capabilities: Vec::new(), events: Vec::new(), on_defect: None }
+        App {
+            title: None,
+            description: None,
+            targets: Vec::new(),
+            types: Map::new(),
+            capabilities: Vec::new(),
+            events: Vec::new(),
+            on_defect: None,
+        }
     }
 
     pub fn title(mut self, title: impl Into<String>) -> Self {
@@ -535,8 +583,13 @@ impl<C: Send + Sync + 'static> App<C> {
     }
 
     /// A target, and the bindings that serve it.
-    pub fn target<S: Into<String>>(mut self, name: impl Into<String>, bindings: impl IntoIterator<Item = S>) -> Self {
-        self.targets.push((name.into(), bindings.into_iter().map(Into::into).collect()));
+    pub fn target<S: Into<String>>(
+        mut self,
+        name: impl Into<String>,
+        bindings: impl IntoIterator<Item = S>,
+    ) -> Self {
+        self.targets
+            .push((name.into(), bindings.into_iter().map(Into::into).collect()));
         self
     }
 
@@ -570,7 +623,9 @@ impl<C: Send + Sync + 'static> App<C> {
         let mut merge = |more: &Map<String, Value>, problems: &mut Vec<String>| {
             for (name, schema) in more {
                 match types.get(name) {
-                    Some(existing) if existing != schema => problems.push(format!("the type {name} has two different schemas")),
+                    Some(existing) if existing != schema => {
+                        problems.push(format!("the type {name} has two different schemas"))
+                    }
                     _ => {
                         types.insert(name.clone(), schema.clone());
                     }
@@ -586,9 +641,16 @@ impl<C: Send + Sync + 'static> App<C> {
             merge(&event.types, &mut problems);
         }
 
-        let mut document = catalog::Catalog::new(self.title.as_deref(), self.description.as_deref());
+        let mut document =
+            catalog::Catalog::new(self.title.as_deref(), self.description.as_deref());
         for (name, bindings) in &self.targets {
-            document.target(name, catalog::Target { bindings: bindings.clone(), ..catalog::Target::default() });
+            document.target(
+                name,
+                catalog::Target {
+                    bindings: bindings.clone(),
+                    ..catalog::Target::default()
+                },
+            );
         }
         for (name, schema) in &types {
             document.r#type(name, schema.clone());
@@ -626,40 +688,84 @@ impl<C: Send + Sync + 'static> App<C> {
             }
         };
 
-        let validator = |what: &str, schema: &Option<Value>, problems: &mut Vec<String>| -> Option<Validator> {
-            let schema = schema.as_ref()?;
-            match Validator::new(schema, &types) {
-                Ok(validator) => Some(validator),
-                Err(error) => {
-                    problems.push(format!("{what} is not a valid JSON Schema: {error}"));
-                    None
+        let validator =
+            |what: &str, schema: &Option<Value>, problems: &mut Vec<String>| -> Option<Validator> {
+                let schema = schema.as_ref()?;
+                match Validator::new(schema, &types) {
+                    Ok(validator) => Some(validator),
+                    Err(error) => {
+                        problems.push(format!("{what} is not a valid JSON Schema: {error}"));
+                        None
+                    }
                 }
-            }
-        };
+            };
         let mut capabilities = Vec::new();
         for definition in self.capabilities {
-            let input = validator(&format!("the input schema of {}", definition.id), &definition.input, &mut problems);
-            let output = validator(&format!("the output schema of {}", definition.id), &definition.output, &mut problems);
+            let input = validator(
+                &format!("the input schema of {}", definition.id),
+                &definition.input,
+                &mut problems,
+            );
+            let output = validator(
+                &format!("the output schema of {}", definition.id),
+                &definition.output,
+                &mut problems,
+            );
             let mut failures = HashMap::new();
             for (tag, schema) in &definition.failures {
-                if let Some(checked) = validator(&format!("the failure {tag} of {}", definition.id), &Some(schema.clone()), &mut problems) {
+                if let Some(checked) = validator(
+                    &format!("the failure {tag} of {}", definition.id),
+                    &Some(schema.clone()),
+                    &mut problems,
+                ) {
                     failures.insert(tag.clone(), checked);
                 }
             }
-            capabilities.push(Arc::new(ServedCapability { definition, input, output, failures }));
+            capabilities.push(Arc::new(ServedCapability {
+                definition,
+                input,
+                output,
+                failures,
+            }));
         }
         let mut events = Vec::new();
         for definition in self.events {
-            let input = validator(&format!("the input schema of {}", definition.id), &definition.input, &mut problems);
-            let payload = validator(&format!("the payload schema of {}", definition.id), &definition.payload, &mut problems);
-            events.push(Arc::new(ServedEvent { definition, input, payload }));
+            let input = validator(
+                &format!("the input schema of {}", definition.id),
+                &definition.input,
+                &mut problems,
+            );
+            let payload = validator(
+                &format!("the payload schema of {}", definition.id),
+                &definition.payload,
+                &mut problems,
+            );
+            events.push(Arc::new(ServedEvent {
+                definition,
+                input,
+                payload,
+            }));
         }
         if !problems.is_empty() {
             return Err(problems);
         }
-        let views = self.targets.iter().map(|(name, _)| (name.clone(), Arc::new(view_of(&json, name)))).collect();
-        let on_defect = self.on_defect.unwrap_or_else(|| Arc::new(|id: &str, defect: &Defect| eprintln!("A capability or an event failed with a defect: {id}: {defect}")));
-        Ok(Arc::new(Application { catalog: json, views, capabilities, events, on_defect }))
+        let views = self
+            .targets
+            .iter()
+            .map(|(name, _)| (name.clone(), Arc::new(view_of(&json, name))))
+            .collect();
+        let on_defect = self.on_defect.unwrap_or_else(|| {
+            Arc::new(|id: &str, defect: &Defect| {
+                eprintln!("A capability or an event failed with a defect: {id}: {defect}")
+            })
+        });
+        Ok(Arc::new(Application {
+            catalog: json,
+            views,
+            capabilities,
+            events,
+            on_defect,
+        }))
     }
 }
 
@@ -685,7 +791,10 @@ impl<C> Application<C> {
 
     /// The view of a target (spec/catalog.md#views).
     pub fn view(&self, target: &str) -> Arc<Value> {
-        self.views.get(target).cloned().unwrap_or_else(|| Arc::new(view_of(&self.catalog, target)))
+        self.views
+            .get(target)
+            .cloned()
+            .unwrap_or_else(|| Arc::new(view_of(&self.catalog, target)))
     }
 
     /// The description of the application, which is the default MCP instructions.
@@ -702,6 +811,16 @@ pub(crate) fn call<C>(context: Arc<C>, cancel: CancellationToken) -> Call<C> {
     Call { context, cancel }
 }
 
-pub(crate) fn subscription<C>(context: Arc<C>, cursor: Option<String>, max_age_ms: Option<u64>, cancel: CancellationToken) -> Subscription<C> {
-    Subscription { context, cursor, max_age_ms, cancel }
+pub(crate) fn subscription<C>(
+    context: Arc<C>,
+    cursor: Option<String>,
+    max_age_ms: Option<u64>,
+    cancel: CancellationToken,
+) -> Subscription<C> {
+    Subscription {
+        context,
+        cursor,
+        max_age_ms,
+        cancel,
+    }
 }

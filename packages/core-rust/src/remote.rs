@@ -71,7 +71,10 @@ pub(crate) fn screen<B>(request: &Request<B>, rules: &Rules<'_>) -> Option<Rejec
         return Some(Rejection::Method);
     }
     if let Some(origin) = request.headers().get(header::ORIGIN)
-        && !rules.allowed_origins.iter().any(|allowed| allowed.as_bytes() == origin.as_bytes())
+        && !rules
+            .allowed_origins
+            .iter()
+            .any(|allowed| allowed.as_bytes() == origin.as_bytes())
     {
         return Some(Rejection::Origin);
     }
@@ -88,18 +91,47 @@ pub(crate) fn screen<B>(request: &Request<B>, rules: &Rules<'_>) -> Option<Rejec
     if media_type != "application/json" {
         return Some(Rejection::MediaType);
     }
-    let declared = header_text(request.headers(), header::CONTENT_LENGTH.as_str()).and_then(|text| text.parse::<u64>().ok());
+    let declared = header_text(request.headers(), header::CONTENT_LENGTH.as_str())
+        .and_then(|text| text.parse::<u64>().ok());
     if declared.is_some_and(|length| length > rules.maximum_bytes as u64) {
         return Some(Rejection::TooLarge);
     }
     None
 }
 
-/// Read a request body as UTF-8 text. Count the bytes as they arrive, and stop at the limit.
-pub(crate) async fn read_bounded(mut body: RequestBody, maximum_bytes: usize) -> Result<String, Rejection> {
+/// Screen a request, and read its body as UTF-8 text. Count the bytes as they arrive, and stop at the limit.
+///
+/// Before a rejection, the server discards the rest of the body, up to a second limit, so that the client reads the
+/// answer and does not see a connection that closes while it sends.
+pub(crate) async fn read_request(
+    request: Request<RequestBody>,
+    rules: &Rules<'_>,
+) -> Result<(http::request::Parts, String), Rejection> {
+    let rejection = screen(&request, rules);
+    let (parts, mut body) = request.into_parts();
+    let read = match rejection {
+        Some(rejection) => Err(rejection),
+        None => read_bounded(&mut body, rules.maximum_bytes).await,
+    };
+    match read {
+        Ok(text) => Ok((parts, text)),
+        Err(rejection) => {
+            discard(
+                &mut body,
+                rules.maximum_bytes.saturating_add(DEFAULT_MAXIMUM_BYTES),
+            )
+            .await;
+            Err(rejection)
+        }
+    }
+}
+
+async fn read_bounded(body: &mut RequestBody, maximum_bytes: usize) -> Result<String, Rejection> {
     let mut bytes = Vec::new();
     while let Some(frame) = body.frame().await {
-        let Ok(frame) = frame else { return Err(Rejection::NotUtf8) };
+        let Ok(frame) = frame else {
+            return Err(Rejection::NotUtf8);
+        };
         if let Ok(data) = frame.into_data() {
             if bytes.len() + data.len() > maximum_bytes {
                 return Err(Rejection::TooLarge);
@@ -108,6 +140,20 @@ pub(crate) async fn read_bounded(mut body: RequestBody, maximum_bytes: usize) ->
         }
     }
     String::from_utf8(bytes).map_err(|_| Rejection::NotUtf8)
+}
+
+/// Read and drop the rest of a body, up to `limit` bytes and for at most one second.
+async fn discard(body: &mut RequestBody, limit: usize) {
+    let drain = async {
+        let mut read = 0;
+        while read <= limit {
+            match body.frame().await {
+                Some(Ok(frame)) => read += frame.data_ref().map_or(0, Bytes::len),
+                _ => return,
+            }
+        }
+    };
+    let _ = tokio::time::timeout(Duration::from_secs(1), drain).await;
 }
 
 /// The text of a header, if the request has it and it is text.
@@ -120,24 +166,33 @@ pub(crate) fn json_response(status: u16, body: &Value) -> Response<ResponseBody>
     Response::builder()
         .status(status)
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Full::new(Bytes::from(body.to_string())).map_err(|never| match never {}).boxed_unsync())
+        .body(
+            Full::new(Bytes::from(body.to_string()))
+                .map_err(|never| match never {})
+                .boxed_unsync(),
+        )
         .unwrap_or_else(|_| empty_response(500))
 }
 
 /// A response with no body.
 pub(crate) fn empty_response(status: u16) -> Response<ResponseBody> {
     let mut response = Response::new(Empty::new().map_err(|never| match never {}).boxed_unsync());
-    *response.status_mut() = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    *response.status_mut() =
+        StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     response
 }
 
 /// A stream of server-sent events: status 200, `text/event-stream` and `Cache-Control: no-store`. When the client
 /// closes the response, the server drops the stream.
 pub(crate) fn sse_response(stream: BoxStream<'static, String>) -> Response<ResponseBody> {
-    let body = StreamBody::new(stream.map(|text| Ok::<_, Infallible>(Frame::data(Bytes::from(text)))));
+    let body =
+        StreamBody::new(stream.map(|text| Ok::<_, Infallible>(Frame::data(Bytes::from(text)))));
     let mut response = Response::new(BodyExt::boxed_unsync(body));
     let headers = response.headers_mut();
-    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("text/event-stream"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/event-stream"),
+    );
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
 }
@@ -152,7 +207,11 @@ pub(crate) fn sse_message(event: Option<&str>, id: Option<&str>, data: &str) -> 
         lines.push(format!("id: {id}"));
     }
     for line in data.split('\n') {
-        lines.push(if line.is_empty() { "data:".to_owned() } else { format!("data: {line}") });
+        lines.push(if line.is_empty() {
+            "data:".to_owned()
+        } else {
+            format!("data: {line}")
+        });
     }
     format!("{}\n\n", lines.join("\n"))
 }
@@ -210,11 +269,14 @@ pub async fn serve(address: SocketAddr, routes: Routes) -> std::io::Result<Serve
             let routes = routes.clone();
             let stopped = stopped.clone();
             tokio::spawn(async move {
-                let service = hyper::service::service_fn(move |request: Request<hyper::body::Incoming>| {
-                    let routes = routes.clone();
-                    async move { Ok::<_, Infallible>(route(&routes, request_body(request)).await) }
-                });
-                let connection = hyper::server::conn::http1::Builder::new().serve_connection(hyper_util::rt::TokioIo::new(stream), service);
+                let service = hyper::service::service_fn(
+                    move |request: Request<hyper::body::Incoming>| {
+                        let routes = routes.clone();
+                        async move { Ok::<_, Infallible>(route(&routes, request_body(request)).await) }
+                    },
+                );
+                let connection = hyper::server::conn::http1::Builder::new()
+                    .serve_connection(hyper_util::rt::TokioIo::new(stream), service);
                 tokio::pin!(connection);
                 tokio::select! {
                     _ = connection.as_mut() => {}
@@ -223,12 +285,21 @@ pub async fn serve(address: SocketAddr, routes: Routes) -> std::io::Result<Serve
             });
         }
     });
-    Ok(Served { address, stop, task })
+    Ok(Served {
+        address,
+        stop,
+        task,
+    })
 }
 
-fn route(routes: &Routes, request: Request<RequestBody>) -> Pin<Box<dyn Future<Output = Response<ResponseBody>> + Send>> {
+fn route(
+    routes: &Routes,
+    request: Request<RequestBody>,
+) -> Pin<Box<dyn Future<Output = Response<ResponseBody>> + Send>> {
     let path = request.uri().path().to_owned();
-    let found = routes.iter().find(|(prefix, _)| prefix == "/" || path == *prefix || path.starts_with(&format!("{prefix}/")));
+    let found = routes.iter().find(|(prefix, _)| {
+        prefix == "/" || path == *prefix || path.starts_with(&format!("{prefix}/"))
+    });
     match found {
         Some((_, handler)) => handler.handle(request),
         None => Box::pin(async { empty_response(404) }),

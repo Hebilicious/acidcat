@@ -12,8 +12,8 @@ use tokio_util::sync::CancellationToken;
 use crate::app::Application;
 use crate::outcome::{CallFailure, Kind, Outcome};
 use crate::remote::{
-    DEFAULT_MAXIMUM_BYTES, Handler, KEEPALIVE, OnDrop, Rejection, RequestBody, ResponseBody, Rules, empty_response, header_text, json_response,
-    read_bounded, screen, sse_message, sse_response,
+    DEFAULT_MAXIMUM_BYTES, Handler, KEEPALIVE, OnDrop, Rejection, RequestBody, ResponseBody, Rules,
+    empty_response, header_text, json_response, read_request, sse_message, sse_response,
 };
 use crate::session::{DEFAULT_BUFFER_LIMIT, Session, SubscribeOptions};
 
@@ -59,29 +59,47 @@ pub struct HttpBinding<C> {
 
 impl<C> Clone for HttpBinding<C> {
     fn clone(&self) -> Self {
-        HttpBinding { app: self.app.clone(), context: self.context.clone(), options: self.options.clone() }
+        HttpBinding {
+            app: self.app.clone(),
+            context: self.context.clone(),
+            options: self.options.clone(),
+        }
     }
 }
 
 impl<C: Send + Sync + 'static> HttpBinding<C> {
     pub fn new(app: Arc<Application<C>>, context: Arc<C>, options: HttpOptions) -> Self {
-        HttpBinding { app, context, options: Arc::new(options) }
+        HttpBinding {
+            app,
+            context,
+            options: Arc::new(options),
+        }
     }
 
     /// Answer one request.
     pub async fn handle(&self, request: Request<RequestBody>) -> Response<ResponseBody> {
         let options = &self.options;
-        let rules = Rules { methods: &[Method::GET, Method::POST], allowed_origins: &options.allowed_origins, maximum_bytes: options.maximum_bytes };
-        if let Some(rejection) = screen(&request, &rules) {
-            return rejected(rejection);
-        }
-        let (parts, body) = request.into_parts();
-        let text = match read_bounded(body, options.maximum_bytes).await {
-            Ok(text) => text,
+        let rules = Rules {
+            methods: &[Method::GET, Method::POST],
+            allowed_origins: &options.allowed_origins,
+            maximum_bytes: options.maximum_bytes,
+        };
+        let (parts, text) = match read_request(request, &rules).await {
+            Ok(read) => read,
             Err(rejection) => return rejected(rejection),
         };
-        let path = parts.uri.path().strip_prefix(options.base.as_str()).unwrap_or("").to_owned();
-        let session = Session::with_buffer_limit(&self.app, &options.target, self.context.clone(), options.buffer_limit);
+        let path = parts
+            .uri
+            .path()
+            .strip_prefix(options.base.as_str())
+            .unwrap_or("")
+            .to_owned();
+        let session = Session::with_buffer_limit(
+            &self.app,
+            &options.target,
+            self.context.clone(),
+            options.buffer_limit,
+        );
         // The session closes when the answer ends, or when a stream of a subscription ends.
         let close = session.clone();
         let guard = OnDrop(move || close.close());
@@ -95,13 +113,27 @@ impl<C: Send + Sync + 'static> HttpBinding<C> {
                         .map(|id| {
                             let mut entry = serde_json::Map::new();
                             entry.insert("id".into(), json!(id));
-                            entry.extend(session.availability(id).map(|availability| availability.members()).unwrap_or_default());
+                            entry.extend(
+                                session
+                                    .availability(id)
+                                    .map(|availability| availability.members())
+                                    .unwrap_or_default(),
+                            );
                             Value::Object(entry)
                         })
                         .collect();
                     json_response(200, &Value::Array(entries))
                 }
-                "/events" => json_response(200, &Value::Array(session.event_ids().iter().map(|id| json!({ "id": id })).collect())),
+                "/events" => json_response(
+                    200,
+                    &Value::Array(
+                        session
+                            .event_ids()
+                            .iter()
+                            .map(|id| json!({ "id": id }))
+                            .collect(),
+                    ),
+                ),
                 "/catalog" if options.serve_catalog => json_response(200, session.view()),
                 _ => no_route(),
             };
@@ -114,7 +146,9 @@ impl<C: Send + Sync + 'static> HttpBinding<C> {
             return no_route();
         };
         // An id with a malformed escape names no capability and no event.
-        let Some(id) = percent_decode(encoded) else { return no_route() };
+        let Some(id) = percent_decode(encoded) else {
+            return no_route();
+        };
         let input: Value = if text.is_empty() {
             json!({})
         } else {
@@ -134,12 +168,27 @@ impl<C: Send + Sync + 'static> HttpBinding<C> {
             }
             Route::Event => {
                 let max_age_ms = parts.uri.query().and_then(|query| {
-                    query.split('&').find_map(|pair| pair.strip_prefix("maxAgeMs=")).map(|text| {
-                        if !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit()) { text.parse::<f64>().unwrap_or(f64::NAN) } else { f64::NAN }
-                    })
+                    query
+                        .split('&')
+                        .find_map(|pair| pair.strip_prefix("maxAgeMs="))
+                        .map(|text| {
+                            if !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit()) {
+                                text.parse::<f64>().unwrap_or(f64::NAN)
+                            } else {
+                                f64::NAN
+                            }
+                        })
                 });
                 let cursor = header_text(&parts.headers, "last-event-id").map(str::to_owned);
-                let mut occurrences = match session.subscribe(&id, input, SubscribeOptions { cursor, max_age_ms, cancel: CancellationToken::new() }) {
+                let mut occurrences = match session.subscribe(
+                    &id,
+                    input,
+                    SubscribeOptions {
+                        cursor,
+                        max_age_ms,
+                        cancel: CancellationToken::new(),
+                    },
+                ) {
                     Ok(occurrences) => occurrences,
                     Err(failure) => return failure_response(&failure),
                 };
@@ -158,8 +207,14 @@ impl<C: Send + Sync + 'static> HttpBinding<C> {
                         };
                         let message = match next {
                             None => sse_message(Some("complete"), None, ""),
-                            Some(Err(failure)) => sse_message(Some("error"), None, &failure.to_json().to_string()),
-                            Some(Ok(occurrence)) => sse_message(Some("next"), occurrence.cursor.as_deref(), &occurrence.to_json().to_string()),
+                            Some(Err(failure)) => {
+                                sse_message(Some("error"), None, &failure.to_json().to_string())
+                            }
+                            Some(Ok(occurrence)) => sse_message(
+                                Some("next"),
+                                occurrence.cursor.as_deref(),
+                                &occurrence.to_json().to_string(),
+                            ),
                         };
                         let last = !message.starts_with("event: next");
                         if sender.send(message).await.is_err() || last {
@@ -190,7 +245,13 @@ where
     let (sender, receiver) = tokio::sync::mpsc::channel(1);
     let task = tokio::spawn(produce(sender));
     let abort = OnDrop(move || task.abort());
-    futures::stream::unfold((receiver, abort), |(mut receiver, abort)| async move { receiver.recv().await.map(|message| (message, (receiver, abort))) }).boxed()
+    futures::stream::unfold((receiver, abort), |(mut receiver, abort)| async move {
+        receiver
+            .recv()
+            .await
+            .map(|message| (message, (receiver, abort)))
+    })
+    .boxed()
 }
 
 #[derive(Clone, Copy)]
@@ -202,10 +263,17 @@ enum Route {
 /// The call failure of a request whose body is not JSON. The kinds before `invalid-input` apply first.
 fn not_json<C: Send + Sync + 'static>(session: &Session<C>, route: Route, id: &str) -> CallFailure {
     match route {
-        Route::Event if !session.has_event(id) => CallFailure::new(Kind::UnknownCapability, format!("There is no event {id}.")),
+        Route::Event if !session.has_event(id) => {
+            CallFailure::new(Kind::UnknownCapability, format!("There is no event {id}."))
+        }
         Route::Capability => match session.availability(id) {
-            None => CallFailure::new(Kind::UnknownCapability, format!("There is no capability {id}.")),
-            Some(crate::outcome::Availability::Unavailable { reason }) => CallFailure::new(Kind::Unavailable, reason),
+            None => CallFailure::new(
+                Kind::UnknownCapability,
+                format!("There is no capability {id}."),
+            ),
+            Some(crate::outcome::Availability::Unavailable { reason }) => {
+                CallFailure::new(Kind::Unavailable, reason)
+            }
             Some(_) => CallFailure::new(Kind::InvalidInput, "The request body is not JSON."),
         },
         Route::Event => CallFailure::new(Kind::InvalidInput, "The request body is not JSON."),
@@ -228,7 +296,10 @@ fn failure_response(failure: &CallFailure) -> Response<ResponseBody> {
 }
 
 fn no_route() -> Response<ResponseBody> {
-    failure_response(&CallFailure::new(Kind::UnknownCapability, "There is no such route."))
+    failure_response(&CallFailure::new(
+        Kind::UnknownCapability,
+        "There is no such route.",
+    ))
 }
 
 fn rejected(rejection: Rejection) -> Response<ResponseBody> {
@@ -240,9 +311,13 @@ fn rejected(rejection: Rejection) -> Response<ResponseBody> {
         Rejection::NotUtf8 => 400,
     };
     let mut response = empty_response(status);
-    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     if rejection == Rejection::Method {
-        response.headers_mut().insert(header::ALLOW, HeaderValue::from_static("GET, POST"));
+        response
+            .headers_mut()
+            .insert(header::ALLOW, HeaderValue::from_static("GET, POST"));
     }
     response
 }

@@ -15,8 +15,9 @@ use tokio_util::task::TaskTracker;
 
 use super::poll::{PollLeases, PollOptions};
 use super::{
-    EventStream, HANDSHAKE_VERSIONS, OpenSession, PROTOCOL_VERSION, PROTOCOL_VERSION_KEY, RpcError, SUBSCRIPTION_ID_KEY, call_tool, capabilities, codes,
-    list_events, list_tools, response, server_info, serves_events,
+    EventStream, HANDSHAKE_VERSIONS, OpenSession, PROTOCOL_VERSION, PROTOCOL_VERSION_KEY, RpcError,
+    SUBSCRIPTION_ID_KEY, call_tool, capabilities, codes, list_events, list_tools, response,
+    server_info, serves_events,
 };
 use crate::app::Application;
 use crate::remote::KEEPALIVE;
@@ -56,14 +57,30 @@ impl McpStdioOptions {
 
 /// Serve the MCP server on the standard input and output of the process, until standard input ends. The logs go to
 /// standard error.
-pub async fn serve_stdio<C: Send + Sync + 'static>(app: Arc<Application<C>>, context: Arc<C>, options: McpStdioOptions) {
-    run_stdio(app, context, options, tokio::io::stdin(), tokio::io::stdout()).await;
+pub async fn serve_stdio<C: Send + Sync + 'static>(
+    app: Arc<Application<C>>,
+    context: Arc<C>,
+    options: McpStdioOptions,
+) {
+    run_stdio(
+        app,
+        context,
+        options,
+        tokio::io::stdin(),
+        tokio::io::stdout(),
+    )
+    .await;
 }
 
 /// Serve the MCP server on the lines of `input` until the input ends. Then the session closes: the calls in progress
 /// are cancelled, and the function returns when the last messages are written.
-pub async fn run_stdio<C, R, W>(app: Arc<Application<C>>, context: Arc<C>, options: McpStdioOptions, input: R, mut output: W)
-where
+pub async fn run_stdio<C, R, W>(
+    app: Arc<Application<C>>,
+    context: Arc<C>,
+    options: McpStdioOptions,
+    input: R,
+    mut output: W,
+) where
     C: Send + Sync + 'static,
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin + Send + 'static,
@@ -76,12 +93,21 @@ where
             }
         }
     });
-    let session = Session::with_buffer_limit(&app, &options.target, context.clone(), options.buffer_limit);
+    let session =
+        Session::with_buffer_limit(&app, &options.target, context.clone(), options.buffer_limit);
     let open: OpenSession<C> = {
-        let (app, context, target, limit) = (app.clone(), context.clone(), options.target.clone(), options.buffer_limit);
+        let (app, context, target, limit) = (
+            app.clone(),
+            context.clone(),
+            options.target.clone(),
+            options.buffer_limit,
+        );
         Arc::new(move || Session::with_buffer_limit(&app, &target, context.clone(), limit))
     };
-    let instructions = options.instructions.clone().or_else(|| app.description().map(str::to_owned));
+    let instructions = options
+        .instructions
+        .clone()
+        .or_else(|| app.description().map(str::to_owned));
     let server = Arc::new(Server {
         listed: Mutex::new(available_ids(&session)),
         session,
@@ -116,8 +142,17 @@ where
 
     // Standard input ended: close the session, stop the leases, and cancel the calls in progress.
     server.leases.close();
-    server.listens.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clear();
-    for token in server.calls.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).values() {
+    server
+        .listens
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clear();
+    for token in server
+        .calls
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .values()
+    {
         token.cancel();
     }
     server.session.close();
@@ -130,7 +165,17 @@ where
 
 /// The ids of the available tools, as one string, to compare two sets.
 fn available_ids<C: Send + Sync + 'static>(session: &Session<C>) -> String {
-    session.capability_ids().iter().filter(|id| session.availability(id).is_some_and(|availability| availability.is_available())).cloned().collect::<Vec<_>>().join("\n")
+    session
+        .capability_ids()
+        .iter()
+        .filter(|id| {
+            session
+                .availability(id)
+                .is_some_and(|availability| availability.is_available())
+        })
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// The state of the one session of the process.
@@ -168,44 +213,96 @@ impl<C: Send + Sync + 'static> Server<C> {
             return;
         }
         let Ok(body) = serde_json::from_str::<Value>(line) else {
-            return self.answer(&Value::Null, Err(RpcError::new(-32700, "The line is not JSON.")));
+            return self.answer(
+                &Value::Null,
+                Err(RpcError::new(-32700, "The line is not JSON.")),
+            );
         };
         let Some(object) = body.as_object() else {
-            let message = if body.is_array() { "JSON-RPC batches are not supported." } else { "A message must be a JSON object." };
+            let message = if body.is_array() {
+                "JSON-RPC batches are not supported."
+            } else {
+                "A message must be a JSON object."
+            };
             return self.answer(&Value::Null, Err(RpcError::new(-32600, message)));
         };
-        let id = object.get("id").map(|id| if id.is_string() || id.is_number() { id.clone() } else { Value::Null });
-        let params = object.get("params").and_then(Value::as_object).cloned().unwrap_or_default();
-        let Some(method) = object.get("method").and_then(Value::as_str).map(str::to_owned) else {
+        let id = object.get("id").map(|id| {
+            if id.is_string() || id.is_number() {
+                id.clone()
+            } else {
+                Value::Null
+            }
+        });
+        let params = object
+            .get("params")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        let Some(method) = object
+            .get("method")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+        else {
             // A response of the client. The server sends no requests, so it reads none.
             if id.is_none() {
-                self.answer(&Value::Null, Err(RpcError::new(-32600, "A message must have a method.")));
+                self.answer(
+                    &Value::Null,
+                    Err(RpcError::new(-32600, "A message must have a method.")),
+                );
             }
             return;
         };
-        let Some(id) = id else { return self.notification(&method, &params) };
+        let Some(id) = id else {
+            return self.notification(&method, &params);
+        };
         let server = self.clone();
-        self.tasks.spawn(async move { server.request(id, method, params).await });
+        self.tasks
+            .spawn(async move { server.request(id, method, params).await });
     }
 
     fn notification(&self, method: &str, params: &Map<String, Value>) {
         if method != "notifications/cancelled" {
             return;
         }
-        let Some(request) = params.get("requestId").filter(|id| id.is_string() || id.is_number()) else { return };
+        let Some(request) = params
+            .get("requestId")
+            .filter(|id| id.is_string() || id.is_number())
+        else {
+            return;
+        };
         let key = request.to_string();
-        if let Some(token) = self.calls.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).get(&key) {
+        if let Some(token) = self
+            .calls
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(&key)
+        {
             token.cancel();
         }
-        if let Some(token) = self.streams.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).get(&key) {
+        if let Some(token) = self
+            .streams
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(&key)
+        {
             token.cancel();
         }
-        self.listens.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).remove(&key);
+        self.listens
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&key);
     }
 
     async fn request(self: Arc<Self>, id: Value, method: String, params: Map<String, Value>) {
-        let meta_version = params.get("_meta").and_then(|meta| meta.get(PROTOCOL_VERSION_KEY)).cloned();
-        let supported = json!([PROTOCOL_VERSION, HANDSHAKE_VERSIONS[0], HANDSHAKE_VERSIONS[1]]);
+        let meta_version = params
+            .get("_meta")
+            .and_then(|meta| meta.get(PROTOCOL_VERSION_KEY))
+            .cloned();
+        let supported = json!([
+            PROTOCOL_VERSION,
+            HANDSHAKE_VERSIONS[0],
+            HANDSHAKE_VERSIONS[1]
+        ]);
         match method.as_str() {
             "initialize" => return self.initialize(&id, &params),
             "ping" => return self.answer(&id, Ok(json!({}))),
@@ -215,7 +312,8 @@ impl<C: Send + Sync + 'static> Server<C> {
         if let Some(version) = &meta_version
             && version.as_str() != Some(PROTOCOL_VERSION)
         {
-            let error = RpcError::new(-32022, format!("Unsupported protocol version {version}")).with_data(json!({ "supported": supported }));
+            let error = RpcError::new(-32022, format!("Unsupported protocol version {version}"))
+                .with_data(json!({ "supported": supported }));
             return self.answer(&id, Err(error));
         }
         let meta = server_info(&self.options.name, &self.options.version);
@@ -243,15 +341,26 @@ impl<C: Send + Sync + 'static> Server<C> {
                 return self.answer(&id, Ok(complete(result, true)));
             }
             "subscriptions/listen" => return self.listen(&id, &params),
-            "tools/list" => return self.answer(&id, Ok(complete(json!({ "tools": list_tools(session) }), true))),
+            "tools/list" => {
+                return self.answer(
+                    &id,
+                    Ok(complete(json!({ "tools": list_tools(session) }), true)),
+                );
+            }
             "tools/call" => {
                 let token = CancellationToken::new();
                 let key = id.to_string();
                 if !id.is_null() {
-                    self.calls.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).insert(key.clone(), token.clone());
+                    self.calls
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .insert(key.clone(), token.clone());
                 }
                 let answer = call_tool(session, &params, &token).await;
-                self.calls.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).remove(&key);
+                self.calls
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .remove(&key);
                 // The server does not answer a cancelled request.
                 if !token.is_cancelled() {
                     self.answer(&id, answer.map(|result| complete(result, false)));
@@ -263,17 +372,38 @@ impl<C: Send + Sync + 'static> Server<C> {
         // The events extension is only for revision 2026-07-28, and only when the view has events.
         if modern && serves_events(session) {
             match method.as_str() {
-                "events/list" => return self.answer(&id, Ok(complete(json!({ "events": list_events(session, false) }), true))),
+                "events/list" => {
+                    return self.answer(
+                        &id,
+                        Ok(complete(
+                            json!({ "events": list_events(session, false) }),
+                            true,
+                        )),
+                    );
+                }
                 "events/poll" => {
                     let answer = self.leases.poll(None, &params, &self.open);
-                    return self.answer(&id, answer.map(|result| complete(Value::Object(result), false)));
+                    return self.answer(
+                        &id,
+                        answer.map(|result| complete(Value::Object(result), false)),
+                    );
                 }
-                "events/subscribe" | "events/unsubscribe" => return self.answer(&id, Err(RpcError::unsupported_webhook())),
-                "events/stream" if !id.is_null() => return self.stream(id, &params, meta.clone()).await,
+                "events/subscribe" | "events/unsubscribe" => {
+                    return self.answer(&id, Err(RpcError::unsupported_webhook()));
+                }
+                "events/stream" if !id.is_null() => {
+                    return self.stream(id, &params, meta.clone()).await;
+                }
                 _ => {}
             }
         }
-        self.answer(&id, Err(RpcError::new(codes::METHOD_NOT_FOUND, format!("Method not found: {method}"))));
+        self.answer(
+            &id,
+            Err(RpcError::new(
+                codes::METHOD_NOT_FOUND,
+                format!("Method not found: {method}"),
+            )),
+        );
     }
 
     /// An `events/stream` request: the messages of the subscription go to standard output. `notifications/cancelled`
@@ -281,8 +411,17 @@ impl<C: Send + Sync + 'static> Server<C> {
     async fn stream(&self, id: Value, params: &Map<String, Value>, meta: Value) {
         let token = CancellationToken::new();
         let key = id.to_string();
-        self.streams.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).insert(key.clone(), token.clone());
-        match EventStream::start(&self.session, id.clone(), params, meta, self.options.heartbeat) {
+        self.streams
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(key.clone(), token.clone());
+        match EventStream::start(
+            &self.session,
+            id.clone(),
+            params,
+            meta,
+            self.options.heartbeat,
+        ) {
             Err(error) => self.answer(&id, Err(error)),
             Ok(mut stream) => loop {
                 let messages = tokio::select! {
@@ -296,13 +435,19 @@ impl<C: Send + Sync + 'static> Server<C> {
                 messages.iter().for_each(|message| self.send(message));
             },
         }
-        self.streams.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).remove(&key);
+        self.streams
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&key);
     }
 
     /// The `initialize` handshake. The server selects the revision of the client if it serves it, or else its latest.
     fn initialize(&self, id: &Value, params: &Map<String, Value>) {
         let offered = params.get("protocolVersion").and_then(Value::as_str);
-        let version = HANDSHAKE_VERSIONS.iter().find(|each| Some(**each) == offered).unwrap_or(&HANDSHAKE_VERSIONS[0]);
+        let version = HANDSHAKE_VERSIONS
+            .iter()
+            .find(|each| Some(**each) == offered)
+            .unwrap_or(&HANDSHAKE_VERSIONS[0]);
         let mut result = json!({
             "protocolVersion": version,
             "capabilities": { "tools": { "listChanged": true } },
@@ -318,14 +463,21 @@ impl<C: Send + Sync + 'static> Server<C> {
     /// A `subscriptions/listen` request of revision 2026-07-28. The server honors only tool list changes. The request
     /// stays open until the client cancels it or standard input ends, so the server never answers it.
     fn listen(&self, id: &Value, params: &Map<String, Value>) {
-        let tools = params.get("notifications").and_then(|wanted| wanted.get("toolsListChanged")) == Some(&json!(true)) && !id.is_null();
+        let tools = params
+            .get("notifications")
+            .and_then(|wanted| wanted.get("toolsListChanged"))
+            == Some(&json!(true))
+            && !id.is_null();
         self.send(&json!({
             "jsonrpc": "2.0",
             "method": "notifications/subscriptions/acknowledged",
             "params": { "_meta": { SUBSCRIPTION_ID_KEY: id }, "notifications": if tools { json!({ "toolsListChanged": true }) } else { json!({}) } },
         }));
         if tools {
-            self.listens.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).insert(id.to_string());
+            self.listens
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .insert(id.to_string());
         }
     }
 
@@ -333,7 +485,10 @@ impl<C: Send + Sync + 'static> Server<C> {
     fn announce(&self) {
         let next = available_ids(&self.session);
         {
-            let mut listed = self.listed.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut listed = self
+                .listed
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             if *listed == next {
                 return;
             }
@@ -342,7 +497,13 @@ impl<C: Send + Sync + 'static> Server<C> {
         if self.initialized.load(Ordering::SeqCst) {
             self.send(&json!({ "jsonrpc": "2.0", "method": "notifications/tools/list_changed", "params": {} }));
         }
-        let listens: Vec<String> = self.listens.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).iter().cloned().collect();
+        let listens: Vec<String> = self
+            .listens
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .cloned()
+            .collect();
         for id in listens {
             let id: Value = serde_json::from_str(&id).unwrap_or(Value::Null);
             self.send(&json!({ "jsonrpc": "2.0", "method": "notifications/tools/list_changed", "params": { "_meta": { SUBSCRIPTION_ID_KEY: id } } }));

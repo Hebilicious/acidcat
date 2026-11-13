@@ -31,7 +31,11 @@ pub struct Fixture {
 
 impl Default for Fixture {
     fn default() -> Self {
-        Fixture { switch: watch::Sender::new(Availability::Available), holds: Holds::default(), watchers: Watchers::default() }
+        Fixture {
+            switch: watch::Sender::new(Availability::Available),
+            holds: Holds::default(),
+            watchers: Watchers::default(),
+        }
     }
 }
 
@@ -48,7 +52,10 @@ impl Holds {
     async fn hold(&self, key: String, marker: Option<String>) {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let released = Arc::new(Notify::new());
-        self.holding.lock().unwrap().insert(id, (key, released.clone()));
+        self.holding
+            .lock()
+            .unwrap()
+            .insert(id, (key, released.clone()));
         let _forget = Forget(|| {
             self.holding.lock().unwrap().remove(&id);
         });
@@ -62,7 +69,10 @@ impl Holds {
         let holding = self.holding.lock().unwrap();
         let mut entries: Vec<_> = holding.iter().collect();
         entries.sort_by_key(|(id, _)| **id);
-        entries.into_iter().map(|(_, (key, _))| key.clone()).collect()
+        entries
+            .into_iter()
+            .map(|(_, (key, _))| key.clone())
+            .collect()
     }
 
     fn release(&self, key: &str) {
@@ -86,12 +96,20 @@ impl Watchers {
         let watching = self.watching.lock().unwrap();
         let mut entries: Vec<_> = watching.iter().collect();
         entries.sort_by_key(|(id, _)| **id);
-        entries.into_iter().map(|(_, (key, _))| key.clone()).collect()
+        entries
+            .into_iter()
+            .map(|(_, (key, _))| key.clone())
+            .collect()
     }
 
     /// Give the value to each watch of the key. The result is the number of these watches.
     fn signal(&self, key: &str, value: &str) -> usize {
-        self.watching.lock().unwrap().values().filter(|(watched, sender)| watched == key && sender.send(value.to_owned()).is_ok()).count()
+        self.watching
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|(watched, sender)| watched == key && sender.send(value.to_owned()).is_ok())
+            .count()
     }
 }
 
@@ -373,21 +391,81 @@ async fn main() {
         Some("catalog") => print!("{}", app.render_catalog()),
         Some("serve") => {
             use acid_cat_core::http::{HttpBinding, HttpOptions};
-            use acid_cat_core::mcp::{McpBinding, McpOptions};
-            let http = HttpBinding::new(app.clone(), context.clone(), HttpOptions { base: "/api".into(), ..HttpOptions::default() });
-            let mcp = McpBinding::new(app.clone(), context.clone(), McpOptions { poll: poll(), ..McpOptions::new("fixture", "0.0.0") });
-            let routes: acid_cat_core::remote::Routes = vec![("/api".into(), Arc::new(http)), ("/mcp".into(), Arc::new(mcp))];
-            let served = acid_cat_core::remote::serve("127.0.0.1:0".parse().unwrap(), routes).await.expect("the server starts");
+            use acid_cat_core::mcp::{McpBinding, McpOptions, Principal, WebhookOptions};
+            let http = HttpBinding::new(
+                app.clone(),
+                context.clone(),
+                HttpOptions {
+                    base: "/api".into(),
+                    ..HttpOptions::default()
+                },
+            );
+            // With `--webhook-ca <file>`, webhook delivery is on, and it trusts the certificate of the receiver of conform.
+            let webhooks = args
+                .iter()
+                .position(|arg| arg == "--webhook-ca")
+                .and_then(|index| args.get(index + 1))
+                .map(|file| WebhookOptions {
+                    allow_private_networks: true,
+                    trusted_certificates: vec![
+                        std::fs::read_to_string(file).expect("the certificate file can be read"),
+                    ],
+                    retry_delay: Arc::new(|_| std::time::Duration::from_millis(50)),
+                    min_ttl: std::time::Duration::from_millis(1000),
+                    max_ttl: std::time::Duration::from_millis(5000),
+                    max_subscriptions: 3,
+                    ..WebhookOptions::default()
+                });
+            // The principal of a request is the token of the header `Authorization: Bearer <principal>`.
+            let principal: Principal = Arc::new(|headers| {
+                headers
+                    .get("authorization")?
+                    .to_str()
+                    .ok()?
+                    .strip_prefix("Bearer ")
+                    .map(str::to_owned)
+            });
+            let mcp = McpBinding::new(
+                app.clone(),
+                context.clone(),
+                McpOptions {
+                    poll: poll(),
+                    principal: Some(principal),
+                    webhooks,
+                    ..McpOptions::new("fixture", "0.0.0")
+                },
+            );
+            let routes: acid_cat_core::remote::Routes = vec![
+                ("/api".into(), Arc::new(http)),
+                ("/mcp".into(), Arc::new(mcp)),
+            ];
+            let served = acid_cat_core::remote::serve("127.0.0.1:0".parse().unwrap(), routes)
+                .await
+                .expect("the server starts");
             println!("{}", served.url());
             std::future::pending::<()>().await;
         }
         Some("mcp-stdio") => {
             use acid_cat_core::mcp::{McpStdioOptions, serve_stdio};
-            serve_stdio(app, context, McpStdioOptions { poll: poll(), ..McpStdioOptions::new("fixture", "0.0.0") }).await;
+            serve_stdio(
+                app,
+                context,
+                McpStdioOptions {
+                    poll: poll(),
+                    ..McpStdioOptions::new("fixture", "0.0.0")
+                },
+            )
+            .await;
         }
         Some("cli") => {
             use acid_cat_core::cli::{CliOptions, run_cli_process};
-            let code = run_cli_process(app, context, CliOptions::new("fixture", "0.0.0"), args[1..].to_vec()).await;
+            let code = run_cli_process(
+                app,
+                context,
+                CliOptions::new("fixture", "0.0.0"),
+                args[1..].to_vec(),
+            )
+            .await;
             std::process::exit(code);
         }
         _ => {
@@ -400,5 +478,9 @@ async fn main() {
 /// The poll settings of the fixture: a small buffer and a short lease time, so that conform can test both. The tests
 /// give the same settings to conform.
 fn poll() -> acid_cat_core::mcp::PollOptions {
-    acid_cat_core::mcp::PollOptions { buffer_limit: 5, lease: std::time::Duration::from_millis(2000), ..Default::default() }
+    acid_cat_core::mcp::PollOptions {
+        buffer_limit: 5,
+        lease: std::time::Duration::from_millis(2000),
+        ..Default::default()
+    }
 }

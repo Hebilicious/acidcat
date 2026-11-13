@@ -13,14 +13,14 @@ use tokio_util::sync::CancellationToken;
 use super::poll::{PollLeases, PollOptions};
 use super::webhook::{WebhookOptions, Webhooks};
 use super::{
-    EventStream, HANDSHAKE_VERSIONS, OpenSession, PROTOCOL_VERSION, PROTOCOL_VERSION_KEY, RpcError, call_tool, capabilities, codes, list_events, list_tools,
-    response, server_info, serves_events,
+    EventStream, HANDSHAKE_VERSIONS, OpenSession, PROTOCOL_VERSION, PROTOCOL_VERSION_KEY, RpcError,
+    call_tool, capabilities, codes, list_events, list_tools, response, server_info, serves_events,
 };
 use crate::app::Application;
 use crate::http::async_stream;
 use crate::remote::{
-    DEFAULT_MAXIMUM_BYTES, Handler, KEEPALIVE, OnDrop, Rejection, RequestBody, ResponseBody, Rules, empty_response, header_text, json_response,
-    read_bounded, screen, sse_message, sse_response,
+    DEFAULT_MAXIMUM_BYTES, Handler, KEEPALIVE, OnDrop, Rejection, RequestBody, ResponseBody, Rules,
+    empty_response, header_text, json_response, read_request, sse_message, sse_response,
 };
 use crate::session::{DEFAULT_BUFFER_LIMIT, Session};
 
@@ -91,7 +91,9 @@ pub struct McpBinding<C> {
 
 impl<C> Clone for McpBinding<C> {
     fn clone(&self) -> Self {
-        McpBinding { inner: self.inner.clone() }
+        McpBinding {
+            inner: self.inner.clone(),
+        }
     }
 }
 
@@ -105,11 +107,30 @@ struct Message {
 }
 
 fn read_message(body: &Value) -> Message {
-    let params = body.get("params").and_then(Value::as_object).cloned().unwrap_or_default();
-    let meta_version = params.get("_meta").and_then(|meta| meta.get(PROTOCOL_VERSION_KEY)).cloned();
+    let params = body
+        .get("params")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let meta_version = params
+        .get("_meta")
+        .and_then(|meta| meta.get(PROTOCOL_VERSION_KEY))
+        .cloned();
     Message {
-        id: body.as_object().and_then(|object| object.get("id")).map(|id| if id.is_string() || id.is_number() { id.clone() } else { Value::Null }),
-        method: body.get("method").and_then(Value::as_str).map(str::to_owned),
+        id: body
+            .as_object()
+            .and_then(|object| object.get("id"))
+            .map(|id| {
+                if id.is_string() || id.is_number() {
+                    id.clone()
+                } else {
+                    Value::Null
+                }
+            }),
+        method: body
+            .get("method")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         params,
         meta_version,
     }
@@ -117,10 +138,22 @@ fn read_message(body: &Value) -> Message {
 
 impl<C: Send + Sync + 'static> McpBinding<C> {
     pub fn new(app: Arc<Application<C>>, context: Arc<C>, options: McpOptions) -> Self {
-        let instructions = options.instructions.clone().or_else(|| app.description().map(str::to_owned));
+        let instructions = options
+            .instructions
+            .clone()
+            .or_else(|| app.description().map(str::to_owned));
         let leases = PollLeases::new(options.poll.clone());
         let webhooks = options.webhooks.clone().map(Webhooks::new);
-        McpBinding { inner: Arc::new(Inner { app, context, options, instructions, leases, webhooks }) }
+        McpBinding {
+            inner: Arc::new(Inner {
+                app,
+                context,
+                options,
+                instructions,
+                leases,
+                webhooks,
+            }),
+        }
     }
 
     /// End the poll leases and the webhook subscriptions.
@@ -133,7 +166,14 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
 
     fn open(&self) -> OpenSession<C> {
         let inner = self.inner.clone();
-        Arc::new(move || Session::with_buffer_limit(&inner.app, &inner.options.target, inner.context.clone(), inner.options.buffer_limit))
+        Arc::new(move || {
+            Session::with_buffer_limit(
+                &inner.app,
+                &inner.options.target,
+                inner.context.clone(),
+                inner.options.buffer_limit,
+            )
+        })
     }
 
     fn meta(&self) -> Value {
@@ -143,16 +183,18 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
     /// Answer one request.
     pub async fn handle(&self, request: Request<RequestBody>) -> Response<ResponseBody> {
         let options = &self.inner.options;
-        let rules = Rules { methods: &[Method::POST], allowed_origins: &options.allowed_origins, maximum_bytes: options.maximum_bytes };
-        if let Some(rejection) = screen(&request, &rules) {
-            return rejected(rejection);
-        }
-        let (parts, body) = request.into_parts();
-        let text = match read_bounded(body, options.maximum_bytes).await {
-            Ok(text) => text,
+        let rules = Rules {
+            methods: &[Method::POST],
+            allowed_origins: &options.allowed_origins,
+            maximum_bytes: options.maximum_bytes,
+        };
+        let (parts, text) = match read_request(request, &rules).await {
+            Ok(read) => read,
             Err(rejection) => return rejected(rejection),
         };
-        let Ok(body) = serde_json::from_str::<Value>(&text) else { return rejected(Rejection::NotUtf8) };
+        let Ok(body) = serde_json::from_str::<Value>(&text) else {
+            return rejected(Rejection::NotUtf8);
+        };
         let message = read_message(&body);
         let header = header_text(&parts.headers, "mcp-protocol-version");
         let handshake = match header {
@@ -166,20 +208,52 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
         // Revision 2026-07-28: each request names its revision in a header, and repeats it in `_meta`.
         let id = message.id.clone().unwrap_or(Value::Null);
         let Some(version) = header else {
-            return rpc(400, &id, Err(RpcError::new(-32020, "MCP-Protocol-Version header is required")));
+            return rpc(
+                400,
+                &id,
+                Err(RpcError::new(
+                    -32020,
+                    "MCP-Protocol-Version header is required",
+                )),
+            );
         };
         if version != PROTOCOL_VERSION {
-            return rpc(400, &id, Err(RpcError::new(-32022, format!("Unsupported protocol version {version}")).with_data(json!({ "supported": [PROTOCOL_VERSION] }))));
+            return rpc(
+                400,
+                &id,
+                Err(
+                    RpcError::new(-32022, format!("Unsupported protocol version {version}"))
+                        .with_data(json!({ "supported": [PROTOCOL_VERSION] })),
+                ),
+            );
         }
         if message.id.is_none() {
             let mut answer = empty_response(200);
-            answer.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+            answer.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/json"),
+            );
             return answer;
         }
         match &message.meta_version {
-            None => return rpc(400, &id, Err(RpcError::invalid_params("Required request metadata is missing"))),
+            None => {
+                return rpc(
+                    400,
+                    &id,
+                    Err(RpcError::invalid_params(
+                        "Required request metadata is missing",
+                    )),
+                );
+            }
             Some(meta) if meta.as_str() != Some(version) => {
-                return rpc(400, &id, Err(RpcError::new(-32020, "MCP-Protocol-Version header does not match request metadata")));
+                return rpc(
+                    400,
+                    &id,
+                    Err(RpcError::new(
+                        -32020,
+                        "MCP-Protocol-Version header does not match request metadata",
+                    )),
+                );
             }
             Some(_) => {}
         }
@@ -194,7 +268,10 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
                 answer["ttlMs"] = json!(0);
                 answer["cacheScope"] = json!("private");
             }
-            answer.as_object_mut().into_iter().for_each(|object| object.extend(result.clone()));
+            answer
+                .as_object_mut()
+                .into_iter()
+                .for_each(|object| object.extend(result.clone()));
             rpc(200, &id, Ok(answer))
         };
         let events = serves_events(&session);
@@ -208,22 +285,46 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
                 }
                 complete(result, true)
             }
-            "tools/list" => complete(Map::from_iter([("tools".into(), Value::Array(list_tools(&session)))]), true),
-            "tools/call" => match call_tool(&session, &message.params, &CancellationToken::new()).await {
-                Ok(Value::Object(result)) => complete(result, false),
-                Ok(_) => rpc(200, &id, Err(RpcError::new(codes::INTERNAL, "The server gave no result."))),
-                Err(error) => rpc(200, &id, Err(error)),
-            },
-            "events/list" if events => complete(Map::from_iter([("events".into(), Value::Array(list_events(&session, self.inner.webhooks.is_some())))]), true),
+            "tools/list" => complete(
+                Map::from_iter([("tools".into(), Value::Array(list_tools(&session)))]),
+                true,
+            ),
+            "tools/call" => {
+                match call_tool(&session, &message.params, &CancellationToken::new()).await {
+                    Ok(Value::Object(result)) => complete(result, false),
+                    Ok(_) => rpc(
+                        200,
+                        &id,
+                        Err(RpcError::new(codes::INTERNAL, "The server gave no result.")),
+                    ),
+                    Err(error) => rpc(200, &id, Err(error)),
+                }
+            }
+            "events/list" if events => complete(
+                Map::from_iter([(
+                    "events".into(),
+                    Value::Array(list_events(&session, self.inner.webhooks.is_some())),
+                )]),
+                true,
+            ),
             "events/stream" if events && !id.is_null() => {
-                let mut stream = match EventStream::start(&session, id.clone(), &message.params, self.meta(), options.heartbeat) {
+                let mut stream = match EventStream::start(
+                    &session,
+                    id.clone(),
+                    &message.params,
+                    self.meta(),
+                    options.heartbeat,
+                ) {
                     Ok(stream) => stream,
                     Err(error) => return rpc(200, &id, Err(error)),
                 };
                 sse_response(async_stream(move |sender| async move {
                     let _guard = guard;
                     while let Some(messages) = stream.next().await {
-                        let text: String = messages.iter().map(|message| sse_message(None, None, &message.to_string())).collect();
+                        let text: String = messages
+                            .iter()
+                            .map(|message| sse_message(None, None, &message.to_string()))
+                            .collect();
                         if sender.send(text).await.is_err() {
                             return;
                         }
@@ -231,26 +332,48 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
                 }))
             }
             "events/poll" | "events/subscribe" | "events/unsubscribe" if events => {
-                let principal = options.principal.as_ref().and_then(|principal| principal(&parts.headers));
+                let principal = options
+                    .principal
+                    .as_ref()
+                    .and_then(|principal| principal(&parts.headers));
                 let answer = match (method, &self.inner.webhooks, &principal) {
-                    ("events/poll", _, _) => self.inner.leases.poll(principal.as_deref(), &message.params, &self.open()),
+                    ("events/poll", _, _) => {
+                        self.inner
+                            .leases
+                            .poll(principal.as_deref(), &message.params, &self.open())
+                    }
                     (_, None, _) => Err(RpcError::unsupported_webhook()),
                     (_, Some(_), None) => Err(RpcError::new(codes::FORBIDDEN, "Forbidden")),
-                    ("events/subscribe", Some(webhooks), Some(principal)) => webhooks.subscribe(principal, &message.params, &self.open()).await,
-                    (_, Some(webhooks), Some(principal)) => webhooks.unsubscribe(principal, &message.params),
+                    ("events/subscribe", Some(webhooks), Some(principal)) => {
+                        webhooks
+                            .subscribe(principal, &message.params, &self.open())
+                            .await
+                    }
+                    (_, Some(webhooks), Some(principal)) => {
+                        webhooks.unsubscribe(principal, &message.params)
+                    }
                 };
                 match answer {
                     Ok(result) => complete(result, false),
                     Err(error) => rpc(200, &id, Err(error)),
                 }
             }
-            _ => rpc(404, &id, Err(RpcError::new(codes::METHOD_NOT_FOUND, format!("Method not found: {method}")))),
+            _ => rpc(
+                404,
+                &id,
+                Err(RpcError::new(
+                    codes::METHOD_NOT_FOUND,
+                    format!("Method not found: {method}"),
+                )),
+            ),
         }
     }
 
     /// Answer a request of a revision with an `initialize` handshake. The server keeps no state for the handshake.
     async fn handshake(&self, message: Message) -> Response<ResponseBody> {
-        let Some(id) = message.id else { return empty_response(202) };
+        let Some(id) = message.id else {
+            return empty_response(202);
+        };
         let session = (self.open())();
         let _guard = OnDrop({
             let session = session.clone();
@@ -258,8 +381,14 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
         });
         let answer = match message.method.as_deref().unwrap_or_default() {
             "initialize" => {
-                let offered = message.params.get("protocolVersion").and_then(Value::as_str);
-                let version = HANDSHAKE_VERSIONS.iter().find(|each| Some(**each) == offered).unwrap_or(&HANDSHAKE_VERSIONS[0]);
+                let offered = message
+                    .params
+                    .get("protocolVersion")
+                    .and_then(Value::as_str);
+                let version = HANDSHAKE_VERSIONS
+                    .iter()
+                    .find(|each| Some(**each) == offered)
+                    .unwrap_or(&HANDSHAKE_VERSIONS[0]);
                 let mut result = json!({
                     "protocolVersion": version,
                     "capabilities": { "tools": { "listChanged": false } },
@@ -273,7 +402,10 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
             "ping" => Ok(json!({})),
             "tools/list" => Ok(json!({ "tools": list_tools(&session) })),
             "tools/call" => call_tool(&session, &message.params, &CancellationToken::new()).await,
-            method => Err(RpcError::new(codes::METHOD_NOT_FOUND, format!("Method not found: {method}"))),
+            method => Err(RpcError::new(
+                codes::METHOD_NOT_FOUND,
+                format!("Method not found: {method}"),
+            )),
         };
         rpc(200, &id, answer)
     }
@@ -299,12 +431,19 @@ fn rejected(rejection: Rejection) -> Response<ResponseBody> {
         Rejection::NotUtf8 => (400, Some((-32700, "The request body is not UTF-8 JSON."))),
     };
     let mut answer = match error {
-        Some((code, message)) => json_response(status, &response(&Value::Null, Err(RpcError::new(code, message)))),
+        Some((code, message)) => json_response(
+            status,
+            &response(&Value::Null, Err(RpcError::new(code, message))),
+        ),
         None => empty_response(status),
     };
-    answer.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    answer
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     if rejection == Rejection::Method {
-        answer.headers_mut().insert(header::ALLOW, HeaderValue::from_static("POST"));
+        answer
+            .headers_mut()
+            .insert(header::ALLOW, HeaderValue::from_static("POST"));
     }
     answer
 }

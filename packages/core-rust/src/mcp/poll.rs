@@ -32,7 +32,12 @@ pub struct PollOptions {
 
 impl Default for PollOptions {
     fn default() -> Self {
-        PollOptions { lease: Duration::from_secs(300), buffer_limit: 1000, max_events: 100, next_poll_ms: 2000 }
+        PollOptions {
+            lease: Duration::from_secs(300),
+            buffer_limit: 1000,
+            max_events: 100,
+            next_poll_ms: 2000,
+        }
     }
 }
 
@@ -66,7 +71,9 @@ struct Lease {
 
 impl Lease {
     fn lock(&self) -> MutexGuard<'_, LeaseState> {
-        self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// The cursor of a position of the lease.
@@ -76,7 +83,11 @@ impl Lease {
         } else if position >= state.newest {
             state.last_provider.clone()
         } else {
-            state.entries.iter().find(|entry| entry.position == position).and_then(|entry| entry.provider.clone())
+            state
+                .entries
+                .iter()
+                .find(|entry| entry.position == position)
+                .and_then(|entry| entry.provider.clone())
         };
         encode_cursor(&self.id, position, provider.as_deref())
     }
@@ -91,11 +102,17 @@ pub(crate) struct PollLeases {
 
 impl PollLeases {
     pub(crate) fn new(options: PollOptions) -> Arc<Self> {
-        Arc::new(PollLeases { options, leases: Mutex::new(HashMap::new()), closed: CancellationToken::new() })
+        Arc::new(PollLeases {
+            options,
+            leases: Mutex::new(HashMap::new()),
+            closed: CancellationToken::new(),
+        })
     }
 
     fn leases(&self) -> MutexGuard<'_, HashMap<String, Arc<Lease>>> {
-        self.leases.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.leases
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// End all leases.
@@ -110,20 +127,36 @@ impl PollLeases {
     fn end(&self, lease: &Arc<Lease>) {
         lease.ended.cancel();
         let mut leases = self.leases();
-        if leases.get(&lease.key).is_some_and(|current| Arc::ptr_eq(current, lease)) {
+        if leases
+            .get(&lease.key)
+            .is_some_and(|current| Arc::ptr_eq(current, lease))
+        {
             leases.remove(&lease.key);
         }
     }
 
     /// Answer `events/poll`. `principal` is the identity of the client, or `None`. `open` opens the session of a new
     /// lease.
-    pub(crate) fn poll<C: Send + Sync + 'static>(self: &Arc<Self>, principal: Option<&str>, params: &Map<String, Value>, open: &OpenSession<C>) -> RpcAnswer {
+    pub(crate) fn poll<C: Send + Sync + 'static>(
+        self: &Arc<Self>,
+        principal: Option<&str>,
+        params: &Map<String, Value>,
+        open: &OpenSession<C>,
+    ) -> RpcAnswer {
         let read = subscription_params(params)?;
         let max_events = match params.get("maxEvents") {
             None => self.options.max_events,
             Some(value) => match value.as_u64() {
-                Some(count) if count >= 1 && value.as_f64().is_some_and(|number| number.fract() == 0.0) => count,
-                _ => return Err(RpcError::invalid_params("maxEvents must be a positive integer.")),
+                Some(count)
+                    if count >= 1 && value.as_f64().is_some_and(|number| number.fract() == 0.0) =>
+                {
+                    count
+                }
+                _ => {
+                    return Err(RpcError::invalid_params(
+                        "maxEvents must be a positive integer.",
+                    ));
+                }
             },
         };
         let key = canonical_json(&json!([principal, read.name, read.input]));
@@ -142,15 +175,26 @@ impl PollLeases {
             // A cursor that is not of a lease that exists: resume after the cursor of the provider, if it has one.
             let provider = position.and_then(|(_, _, provider)| provider);
             // With no cursor of the provider, a valid maxAgeMs changes nothing. The session still rejects one that is not valid.
-            let max_age_ms = if provider.is_none() && read.max_age_ms.is_none_or(is_max_age_ms) { None } else { read.max_age_ms };
+            let max_age_ms = if provider.is_none() && read.max_age_ms.is_none_or(is_max_age_ms) {
+                None
+            } else {
+                read.max_age_ms
+            };
             let lease = self.start(key, &read.name, read.input, provider, max_age_ms, open)?;
             let state = lease.lock();
-            return Ok(self.result(Vec::new(), lease.cursor_of(&state, 0), read.cursor.is_some() && lease.start_provider.is_none(), false));
+            return Ok(self.result(
+                Vec::new(),
+                lease.cursor_of(&state, 0),
+                read.cursor.is_some() && lease.start_provider.is_none(),
+                false,
+            ));
         };
 
         // A lease with this key exists, so the event exists: an invalid maxAgeMs is the next failure that applies.
         if read.max_age_ms.is_some_and(|value| !is_max_age_ms(value)) {
-            return Err(RpcError::invalid_params("maxAgeMs must be an integer that is 0 or more."));
+            return Err(RpcError::invalid_params(
+                "maxAgeMs must be an integer that is 0 or more.",
+            ));
         }
         let mut state = lease.lock();
         state.deadline = Instant::now() + self.options.lease;
@@ -160,14 +204,26 @@ impl PollLeases {
         };
         match position {
             Some((id, after, _)) if id == lease.id => {
-                let oldest = state.entries.front().map_or(state.newest + 1, |entry| entry.position);
+                let oldest = state
+                    .entries
+                    .front()
+                    .map_or(state.newest + 1, |entry| entry.position);
                 let older = after + 1 < oldest;
-                let available: Vec<&Entry> = state.entries.iter().filter(|entry| entry.position > after).collect();
+                let available: Vec<&Entry> = state
+                    .entries
+                    .iter()
+                    .filter(|entry| entry.position > after)
+                    .collect();
                 let has_more = available.len() as u64 > max_events;
                 let events: Vec<&Entry> = available.into_iter().take(max_events as usize).collect();
                 let truncated = older || events.iter().any(|entry| entry.occurrence.truncated);
-                let cursor = events.last().map_or(request_cursor, |last| lease.cursor_of(&state, last.position));
-                let events = events.iter().map(|entry| entry.occurrence.to_json_without_truncated()).collect();
+                let cursor = events.last().map_or(request_cursor, |last| {
+                    lease.cursor_of(&state, last.position)
+                });
+                let events = events
+                    .iter()
+                    .map(|entry| entry.occurrence.to_json_without_truncated())
+                    .collect();
                 Ok(self.result(events, cursor, truncated, has_more))
             }
             // A cursor of another lease, while a lease with this key exists: the newest position, and the client can
@@ -191,7 +247,15 @@ impl PollLeases {
         open: &OpenSession<C>,
     ) -> Result<Arc<Lease>, RpcError> {
         let session: Session<C> = open();
-        let subscribed = session.subscribe(name, input, SubscribeOptions { cursor: provider.clone(), max_age_ms, cancel: CancellationToken::new() });
+        let subscribed = session.subscribe(
+            name,
+            input,
+            SubscribeOptions {
+                cursor: provider.clone(),
+                max_age_ms,
+                cancel: CancellationToken::new(),
+            },
+        );
         let mut occurrences = match subscribed {
             Ok(occurrences) => occurrences,
             Err(failure) => {
@@ -239,7 +303,11 @@ impl PollLeases {
                             state.last_provider = Some(cursor.clone());
                         }
                         state.newest += 1;
-                        let entry = Entry { position: state.newest, occurrence, provider: state.last_provider.clone() };
+                        let entry = Entry {
+                            position: state.newest,
+                            occurrence,
+                            provider: state.last_provider.clone(),
+                        };
                         state.entries.push_back(entry);
                         if state.entries.len() > limit {
                             state.entries.pop_front();
@@ -270,7 +338,13 @@ impl PollLeases {
         Ok(lease)
     }
 
-    fn result(&self, events: Vec<Value>, cursor: String, truncated: bool, has_more: bool) -> Map<String, Value> {
+    fn result(
+        &self,
+        events: Vec<Value>,
+        cursor: String,
+        truncated: bool,
+        has_more: bool,
+    ) -> Map<String, Value> {
         let mut result = Map::new();
         result.insert("events".into(), Value::Array(events));
         result.insert("cursor".into(), json!(cursor));

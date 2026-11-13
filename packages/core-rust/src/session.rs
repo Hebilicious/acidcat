@@ -59,7 +59,9 @@ pub struct Session<C> {
 
 impl<C> Clone for Session<C> {
     fn clone(&self) -> Self {
-        Session { inner: self.inner.clone() }
+        Session {
+            inner: self.inner.clone(),
+        }
     }
 }
 
@@ -70,16 +72,36 @@ impl<C: Send + Sync + 'static> Session<C> {
     }
 
     /// Open a session whose subscriptions each keep at most `buffer_limit` occurrences for a client that reads slowly.
-    pub fn with_buffer_limit(app: &Arc<Application<C>>, target: &str, context: Arc<C>, buffer_limit: usize) -> Self {
+    pub fn with_buffer_limit(
+        app: &Arc<Application<C>>,
+        target: &str,
+        context: Arc<C>,
+        buffer_limit: usize,
+    ) -> Self {
         let mut capabilities = HashMap::new();
         let mut capability_ids = Vec::new();
         for capability in &app.capabilities {
-            if !capability.definition.audience.iter().any(|name| name == target) {
+            if !capability
+                .definition
+                .audience
+                .iter()
+                .any(|name| name == target)
+            {
                 continue;
             }
-            let availability = capability.definition.availability.as_ref().map(|source| source(&context));
+            let availability = capability
+                .definition
+                .availability
+                .as_ref()
+                .map(|source| source(&context));
             capability_ids.push(capability.definition.id.clone());
-            capabilities.insert(capability.definition.id.clone(), Served { capability: capability.clone(), availability });
+            capabilities.insert(
+                capability.definition.id.clone(),
+                Served {
+                    capability: capability.clone(),
+                    availability,
+                },
+            );
         }
         let mut events = HashMap::new();
         let mut event_ids = Vec::new();
@@ -135,7 +157,14 @@ impl<C: Send + Sync + 'static> Session<C> {
     /// The availability of a capability now, or `None` when it is not in the view.
     pub fn availability(&self, id: &str) -> Option<Availability> {
         let served = self.inner.capabilities.get(id)?;
-        Some(served.availability.as_ref().map_or(Availability::Available, |receiver| receiver.borrow().clone()))
+        Some(
+            served
+                .availability
+                .as_ref()
+                .map_or(Availability::Available, |receiver| {
+                    receiver.borrow().clone()
+                }),
+        )
     }
 
     /// The token that is cancelled when the session starts to close.
@@ -153,7 +182,9 @@ impl<C: Send + Sync + 'static> Session<C> {
     pub fn availability_changes(&self) -> mpsc::UnboundedReceiver<()> {
         let (sender, receiver) = mpsc::unbounded_channel();
         for served in self.inner.capabilities.values() {
-            let Some(mut availability) = served.availability.clone() else { continue };
+            let Some(mut availability) = served.availability.clone() else {
+                continue;
+            };
             let sender = sender.clone();
             let closing = self.inner.closing.clone();
             tokio::spawn(async move {
@@ -180,21 +211,31 @@ impl<C: Send + Sync + 'static> Session<C> {
             return Outcome::CallFailure(CallFailure::cancelled());
         }
         let Some(served) = inner.capabilities.get(id) else {
-            return Outcome::CallFailure(CallFailure::new(Kind::UnknownCapability, format!("There is no capability {id}.")));
+            return Outcome::CallFailure(CallFailure::new(
+                Kind::UnknownCapability,
+                format!("There is no capability {id}."),
+            ));
         };
         if let Some(Availability::Unavailable { reason }) = self.availability(id) {
             return Outcome::CallFailure(CallFailure::new(Kind::Unavailable, reason));
         }
         let capability = &served.capability;
-        if let Some(issues) = capability.input.as_ref().and_then(|validator| validator.issues(&input)) {
+        if let Some(issues) = capability
+            .input
+            .as_ref()
+            .and_then(|validator| validator.issues(&input))
+        {
             return Outcome::CallFailure(CallFailure::new(Kind::InvalidInput, issues));
         }
         let token = inner.closing.child_token();
         let _cancel_on_end = token.clone().drop_guard();
-        let work = match (capability.definition.run)(input, call(inner.context.clone(), token.clone())) {
-            Ok(work) => work,
-            Err(message) => return Outcome::CallFailure(CallFailure::new(Kind::InvalidInput, message)),
-        };
+        let work =
+            match (capability.definition.run)(input, call(inner.context.clone(), token.clone())) {
+                Ok(work) => work,
+                Err(message) => {
+                    return Outcome::CallFailure(CallFailure::new(Kind::InvalidInput, message));
+                }
+            };
         let ended = tokio::select! {
             biased;
             () = token.cancelled() => return Outcome::CallFailure(CallFailure::cancelled()),
@@ -204,16 +245,29 @@ impl<C: Send + Sync + 'static> Session<C> {
         let checked = match ended {
             Err(panic) => Err(Defect::from_panic(panic)),
             Ok(Err(defect)) => Err(defect),
-            Ok(Ok(Ok(value))) => match capability.output.as_ref().and_then(|validator| validator.issues(&value)) {
-                Some(issues) => Err(Defect::new(format!("The output does not agree with its schema: {issues}"))),
+            Ok(Ok(Ok(value))) => match capability
+                .output
+                .as_ref()
+                .and_then(|validator| validator.issues(&value))
+            {
+                Some(issues) => Err(Defect::new(format!(
+                    "The output does not agree with its schema: {issues}"
+                ))),
                 None => Ok(Outcome::Value(value)),
             },
             Ok(Ok(Err(failure))) => {
-                let tag = failure.get("_tag").and_then(Value::as_str).unwrap_or_default();
+                let tag = failure
+                    .get("_tag")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
                 match capability.failures.get(tag) {
-                    None => Err(Defect::new(format!("The failure {tag} is not in failures."))),
+                    None => Err(Defect::new(format!(
+                        "The failure {tag} is not in failures."
+                    ))),
                     Some(validator) => match validator.issues(&failure) {
-                        Some(issues) => Err(Defect::new(format!("The failure {tag} does not agree with its schema: {issues}"))),
+                        Some(issues) => Err(Defect::new(format!(
+                            "The failure {tag} does not agree with its schema: {issues}"
+                        ))),
                         None => Ok(Outcome::Failure(failure)),
                     },
                 }
@@ -227,26 +281,46 @@ impl<C: Send + Sync + 'static> Session<C> {
 
     /// A subscription with an input that is not trusted. The result is the occurrences, or the call failure before
     /// the first occurrence (spec/events.md#subscribing).
-    pub fn subscribe(&self, id: &str, input: Value, options: SubscribeOptions) -> Result<Occurrences, CallFailure> {
+    pub fn subscribe(
+        &self,
+        id: &str,
+        input: Value,
+        options: SubscribeOptions,
+    ) -> Result<Occurrences, CallFailure> {
         let inner = &self.inner;
         let cancelled = || CallFailure::new(Kind::Cancelled, "The subscription was cancelled.");
         if inner.closing.is_cancelled() || options.cancel.is_cancelled() {
             return Err(cancelled());
         }
         let Some(event) = inner.events.get(id) else {
-            return Err(CallFailure::new(Kind::UnknownCapability, format!("There is no event {id}.")));
+            return Err(CallFailure::new(
+                Kind::UnknownCapability,
+                format!("There is no event {id}."),
+            ));
         };
         let max_age_ms = match options.max_age_ms {
-            Some(value) if !is_max_age_ms(value) => return Err(CallFailure::new(Kind::InvalidInput, "maxAgeMs must be an integer that is 0 or more.")),
+            Some(value) if !is_max_age_ms(value) => {
+                return Err(CallFailure::new(
+                    Kind::InvalidInput,
+                    "maxAgeMs must be an integer that is 0 or more.",
+                ));
+            }
             Some(value) => Some(value as u64),
             None => None,
         };
-        if let Some(issues) = event.input.as_ref().and_then(|validator| validator.issues(&input)) {
+        if let Some(issues) = event
+            .input
+            .as_ref()
+            .and_then(|validator| validator.issues(&input))
+        {
             return Err(CallFailure::new(Kind::InvalidInput, issues));
         }
         let (token, start) = prepare();
-        let source = (event.definition.subscribe)(input, subscription(inner.context.clone(), options.cursor, max_age_ms, token))
-            .map_err(|message| CallFailure::new(Kind::InvalidInput, message))?;
+        let source = (event.definition.subscribe)(
+            input,
+            subscription(inner.context.clone(), options.cursor, max_age_ms, token),
+        )
+        .map_err(|message| CallFailure::new(Kind::InvalidInput, message))?;
         let checked = event.clone();
         let app = inner.app.clone();
         let name = id.to_owned();
@@ -256,7 +330,10 @@ impl<C: Send + Sync + 'static> Session<C> {
             check: Box::new(move |data: &Value| match &checked.payload {
                 Some(validator) => validator.issues(data),
                 None if data.as_object().is_some_and(serde_json::Map::is_empty) => None,
-                None => Some("the event has no payload schema, so the data must be an empty object".to_owned()),
+                None => Some(
+                    "the event has no payload schema, so the data must be an empty object"
+                        .to_owned(),
+                ),
             }),
             limit: inner.buffer_limit,
             closing: inner.closing.clone(),
