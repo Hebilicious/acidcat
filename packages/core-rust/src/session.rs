@@ -41,7 +41,7 @@ struct Served<C> {
 
 struct Inner<C> {
     app: Arc<Application<C>>,
-    target: String,
+    target: Arc<str>,
     context: Arc<C>,
     view: Arc<Value>,
     closing: CancellationToken,
@@ -115,7 +115,7 @@ impl<C: Send + Sync + 'static> Session<C> {
             inner: Arc::new(Inner {
                 view: app.view(target),
                 app: app.clone(),
-                target: target.to_owned(),
+                target: Arc::from(target),
                 context,
                 closing: CancellationToken::new(),
                 capabilities,
@@ -237,13 +237,15 @@ impl<C: Send + Sync + 'static> Session<C> {
         }
         let token = inner.closing.child_token();
         let _cancel_on_end = token.clone().drop_guard();
-        let work =
-            match (capability.definition.run)(input, call(inner.context.clone(), token.clone())) {
-                Ok(work) => work,
-                Err(message) => {
-                    return Outcome::CallFailure(CallFailure::new(Kind::InvalidInput, message));
-                }
-            };
+        let work = match (capability.definition.run)(
+            input,
+            call(inner.context.clone(), inner.target.clone(), token.clone()),
+        ) {
+            Ok(work) => work,
+            Err(message) => {
+                return Outcome::CallFailure(CallFailure::new(Kind::InvalidInput, message));
+            }
+        };
         let ended = tokio::select! {
             biased;
             () = token.cancelled() => return Outcome::CallFailure(CallFailure::cancelled()),
@@ -326,7 +328,13 @@ impl<C: Send + Sync + 'static> Session<C> {
         let (token, start) = prepare();
         let source = (event.definition.subscribe)(
             input,
-            subscription(inner.context.clone(), options.cursor, max_age_ms, token),
+            subscription(
+                inner.context.clone(),
+                inner.target.clone(),
+                options.cursor,
+                max_age_ms,
+                token,
+            ),
         )
         .map_err(|message| CallFailure::new(Kind::InvalidInput, message))?;
         let checked = event.clone();

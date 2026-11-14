@@ -225,6 +225,85 @@ impl<F: FnMut()> Drop for OnDrop<F> {
     }
 }
 
+/// The answer that refuses a request, for example `401` when the request has no valid token.
+#[derive(Clone, Debug)]
+pub struct Refusal {
+    pub status: u16,
+    /// The text of the answer, in its JSON body `{ "message" }`. Show no internal data.
+    pub message: String,
+    pub headers: Vec<(String, String)>,
+}
+
+impl Refusal {
+    pub fn new(status: u16, message: impl Into<String>) -> Self {
+        Refusal {
+            status,
+            message: message.into(),
+            headers: Vec::new(),
+        }
+    }
+
+    /// Add a header to the answer, for example `WWW-Authenticate`.
+    pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.headers.push((name.into(), value.into()));
+        self
+    }
+
+    pub(crate) fn response(&self) -> Response<ResponseBody> {
+        let mut response =
+            json_response(self.status, &serde_json::json!({ "message": self.message }));
+        for (name, value) in &self.headers {
+            if let (Ok(name), Ok(value)) = (
+                http::HeaderName::try_from(name.as_str()),
+                http::HeaderValue::try_from(value.as_str()),
+            ) {
+                response.headers_mut().append(name, value);
+            }
+        }
+        response
+    }
+}
+
+/// Makes the context of one request from its head (the method, the URI and the headers), or refuses the request.
+pub type RequestContext<C> =
+    Arc<dyn Fn(&http::request::Parts) -> BoxFuture<'static, Result<Arc<C>, Refusal>> + Send + Sync>;
+
+/// The context of the requests of a remote binding: one context for all requests, or one for each request.
+pub(crate) enum Contexts<C> {
+    Shared(Arc<C>),
+    PerRequest(RequestContext<C>),
+}
+
+impl<C> Clone for Contexts<C> {
+    fn clone(&self) -> Self {
+        match self {
+            Contexts::Shared(context) => Contexts::Shared(context.clone()),
+            Contexts::PerRequest(make) => Contexts::PerRequest(make.clone()),
+        }
+    }
+}
+
+impl<C: Send + Sync + 'static> Contexts<C> {
+    pub(crate) fn per_request<Make, Made>(make: Make) -> Self
+    where
+        Make: Fn(&http::request::Parts) -> Made + Send + Sync + 'static,
+        Made: std::future::Future<Output = Result<C, Refusal>> + Send + 'static,
+    {
+        Contexts::PerRequest(Arc::new(move |parts| {
+            let made = make(parts);
+            Box::pin(async move { made.await.map(Arc::new) })
+        }))
+    }
+
+    /// The context of one request that passed the screening.
+    pub(crate) async fn open(&self, parts: &http::request::Parts) -> Result<Arc<C>, Refusal> {
+        match self {
+            Contexts::Shared(context) => Ok(context.clone()),
+            Contexts::PerRequest(make) => make(parts).await,
+        }
+    }
+}
+
 /// A server that serves handlers. `close` stops it.
 pub struct Served {
     /// The address of the server, for example `127.0.0.1:40123`.

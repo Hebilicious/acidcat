@@ -19,8 +19,9 @@ use super::{
 use crate::app::Application;
 use crate::http::async_stream;
 use crate::remote::{
-    DEFAULT_MAXIMUM_BYTES, Handler, KEEPALIVE, OnDrop, Rejection, RequestBody, ResponseBody, Rules,
-    empty_response, header_text, json_response, read_request, sse_message, sse_response,
+    Contexts, DEFAULT_MAXIMUM_BYTES, Handler, KEEPALIVE, OnDrop, Refusal, Rejection, RequestBody,
+    ResponseBody, Rules, empty_response, header_text, json_response, read_request, sse_message,
+    sse_response,
 };
 use crate::session::{DEFAULT_BUFFER_LIMIT, Session};
 
@@ -76,7 +77,7 @@ impl McpOptions {
 
 struct Inner<C> {
     app: Arc<Application<C>>,
-    context: Arc<C>,
+    context: Contexts<C>,
     options: McpOptions,
     instructions: Option<String>,
     leases: Arc<PollLeases>,
@@ -137,7 +138,27 @@ fn read_message(body: &Value) -> Message {
 }
 
 impl<C: Send + Sync + 'static> McpBinding<C> {
+    /// A binding whose requests share one context.
     pub fn new(app: Arc<Application<C>>, context: Arc<C>, options: McpOptions) -> Self {
+        Self::with_contexts(app, Contexts::Shared(context), options)
+    }
+
+    /// A binding that makes a context for each request that passes the screening, from the head of the request: for
+    /// example the caller, from a token in a header. A [`Refusal`] answers the request instead. A poll lease or a
+    /// webhook subscription keeps the context of the request that started it, until it ends.
+    pub fn with_request_context<Make, Made>(
+        app: Arc<Application<C>>,
+        make: Make,
+        options: McpOptions,
+    ) -> Self
+    where
+        Make: Fn(&http::request::Parts) -> Made + Send + Sync + 'static,
+        Made: std::future::Future<Output = Result<C, Refusal>> + Send + 'static,
+    {
+        Self::with_contexts(app, Contexts::per_request(make), options)
+    }
+
+    fn with_contexts(app: Arc<Application<C>>, context: Contexts<C>, options: McpOptions) -> Self {
         let instructions = options
             .instructions
             .clone()
@@ -164,13 +185,15 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
         }
     }
 
-    fn open(&self) -> OpenSession<C> {
+    /// Open sessions with the context of one request.
+    fn open(&self, context: &Arc<C>) -> OpenSession<C> {
         let inner = self.inner.clone();
+        let context = context.clone();
         Arc::new(move || {
             Session::with_buffer_limit(
                 &inner.app,
                 &inner.options.target,
-                inner.context.clone(),
+                context.clone(),
                 inner.options.buffer_limit,
             )
         })
@@ -195,6 +218,10 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
         let Ok(body) = serde_json::from_str::<Value>(&text) else {
             return rejected(Rejection::NotUtf8);
         };
+        let context = match self.inner.context.open(&parts).await {
+            Ok(context) => context,
+            Err(refusal) => return refusal.response(),
+        };
         let message = read_message(&body);
         let header = header_text(&parts.headers, "mcp-protocol-version");
         let handshake = match header {
@@ -202,7 +229,7 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
             Some(version) => HANDSHAKE_VERSIONS.contains(&version),
         };
         if options.handshake && handshake {
-            return self.handshake(message).await;
+            return self.handshake(message, &context).await;
         }
 
         // Revision 2026-07-28: each request names its revision in a header, and repeats it in `_meta`.
@@ -258,7 +285,7 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
             Some(_) => {}
         }
 
-        let session = (self.open())();
+        let session = (self.open(&context))();
         let close = session.clone();
         let guard = OnDrop(move || close.close());
         let method = message.method.as_deref().unwrap_or_default();
@@ -337,16 +364,16 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
                     .as_ref()
                     .and_then(|principal| principal(&parts.headers));
                 let answer = match (method, &self.inner.webhooks, &principal) {
-                    ("events/poll", _, _) => {
-                        self.inner
-                            .leases
-                            .poll(principal.as_deref(), &message.params, &self.open())
-                    }
+                    ("events/poll", _, _) => self.inner.leases.poll(
+                        principal.as_deref(),
+                        &message.params,
+                        &self.open(&context),
+                    ),
                     (_, None, _) => Err(RpcError::unsupported_webhook()),
                     (_, Some(_), None) => Err(RpcError::new(codes::FORBIDDEN, "Forbidden")),
                     ("events/subscribe", Some(webhooks), Some(principal)) => {
                         webhooks
-                            .subscribe(principal, &message.params, &self.open())
+                            .subscribe(principal, &message.params, &self.open(&context))
                             .await
                     }
                     (_, Some(webhooks), Some(principal)) => {
@@ -370,11 +397,11 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
     }
 
     /// Answer a request of a revision with an `initialize` handshake. The server keeps no state for the handshake.
-    async fn handshake(&self, message: Message) -> Response<ResponseBody> {
+    async fn handshake(&self, message: Message, context: &Arc<C>) -> Response<ResponseBody> {
         let Some(id) = message.id else {
             return empty_response(202);
         };
-        let session = (self.open())();
+        let session = (self.open(context))();
         let _guard = OnDrop({
             let session = session.clone();
             move || session.close()

@@ -12,8 +12,9 @@ use tokio_util::sync::CancellationToken;
 use crate::app::Application;
 use crate::outcome::{CallFailure, Kind, Outcome};
 use crate::remote::{
-    DEFAULT_MAXIMUM_BYTES, Handler, KEEPALIVE, OnDrop, Rejection, RequestBody, ResponseBody, Rules,
-    empty_response, header_text, json_response, read_request, sse_message, sse_response,
+    Contexts, DEFAULT_MAXIMUM_BYTES, Handler, KEEPALIVE, OnDrop, Refusal, Rejection, RequestBody,
+    ResponseBody, Rules, empty_response, header_text, json_response, read_request, sse_message,
+    sse_response,
 };
 use crate::session::{DEFAULT_BUFFER_LIMIT, Session, SubscribeOptions};
 
@@ -53,7 +54,7 @@ impl Default for HttpOptions {
 /// The HTTP binding of an application. Each request has its own session.
 pub struct HttpBinding<C> {
     app: Arc<Application<C>>,
-    context: Arc<C>,
+    context: Contexts<C>,
     options: Arc<HttpOptions>,
 }
 
@@ -68,10 +69,30 @@ impl<C> Clone for HttpBinding<C> {
 }
 
 impl<C: Send + Sync + 'static> HttpBinding<C> {
+    /// A binding whose requests share one context.
     pub fn new(app: Arc<Application<C>>, context: Arc<C>, options: HttpOptions) -> Self {
         HttpBinding {
             app,
-            context,
+            context: Contexts::Shared(context),
+            options: Arc::new(options),
+        }
+    }
+
+    /// A binding that makes a context for each request that passes the screening, from the head of the request: for
+    /// example the caller, from a token in a header. A [`Refusal`] answers the request instead. The context is
+    /// dropped when the session of the request ends: after the answer, or after the stream of a subscription.
+    pub fn with_request_context<Make, Made>(
+        app: Arc<Application<C>>,
+        make: Make,
+        options: HttpOptions,
+    ) -> Self
+    where
+        Make: Fn(&http::request::Parts) -> Made + Send + Sync + 'static,
+        Made: std::future::Future<Output = Result<C, Refusal>> + Send + 'static,
+    {
+        HttpBinding {
+            app,
+            context: Contexts::per_request(make),
             options: Arc::new(options),
         }
     }
@@ -94,12 +115,12 @@ impl<C: Send + Sync + 'static> HttpBinding<C> {
             .strip_prefix(options.base.as_str())
             .unwrap_or("")
             .to_owned();
-        let session = Session::with_buffer_limit(
-            &self.app,
-            &options.target,
-            self.context.clone(),
-            options.buffer_limit,
-        );
+        let context = match self.context.open(&parts).await {
+            Ok(context) => context,
+            Err(refusal) => return refusal.response(),
+        };
+        let session =
+            Session::with_buffer_limit(&self.app, &options.target, context, options.buffer_limit);
         // The session closes when the answer ends, or when a stream of a subscription ends.
         let close = session.clone();
         let guard = OnDrop(move || close.close());
