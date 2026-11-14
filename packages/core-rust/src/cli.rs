@@ -116,12 +116,7 @@ pub async fn run_cli_process<C: Send + Sync + 'static>(
     args: Vec<String>,
 ) -> i32 {
     let cancel = CancellationToken::new();
-    let interrupt = cancel.clone();
-    tokio::spawn(async move {
-        if tokio::signal::ctrl_c().await.is_ok() {
-            interrupt.cancel();
-        }
-    });
+    listen_for_interrupt(cancel.clone());
     let mut io = CliIo::standard(cancel);
     match run_cli(&app, context, &options, &args, &mut io).await {
         Ok(code) => code,
@@ -130,6 +125,34 @@ pub async fn run_cli_process<C: Send + Sync + 'static>(
             exit::INTERNAL
         }
     }
+}
+
+/// Cancel `cancel` on an interrupt. The handler is in place when this function returns, before the command runs: an
+/// interrupt that comes at once cancels the command, and does not end the process by the signal.
+fn listen_for_interrupt(cancel: CancellationToken) {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        if let Ok(mut interrupts) = signal(SignalKind::interrupt()) {
+            tokio::spawn(async move {
+                if interrupts.recv().await.is_some() {
+                    cancel.cancel();
+                }
+            });
+            return;
+        }
+    }
+    // `ctrl_c` puts its handler in place when it is first polled. Poll it once here, so that it is in place now.
+    let mut interrupt = Box::pin(tokio::signal::ctrl_c());
+    let waker = futures::task::noop_waker();
+    let _ = interrupt
+        .as_mut()
+        .poll(&mut std::task::Context::from_waker(&waker));
+    tokio::spawn(async move {
+        if interrupt.await.is_ok() {
+            cancel.cancel();
+        }
+    });
 }
 
 struct UsageError {
