@@ -17,11 +17,13 @@ import {
   isCallFailure,
   isJsonObject,
 } from "@acid-cat/spec-ts";
-import type { CallFailure, CatalogDocument, JsonObject, Outcome, Resume } from "@acid-cat/spec-ts";
-import { Console, Effect, Logger, Option, Predicate, Schema, Stream } from "effect";
+import { unavailable } from "@acid-cat/spec-ts";
+import type { Availability, CallFailure, CatalogDocument, JsonObject, Occurrence, Outcome, Resume } from "@acid-cat/spec-ts";
+import { Console, Effect, Logger, Option, Predicate, Schema, Scope, Stream } from "effect";
 import { Argument, CliError, Command, Flag, Primitive } from "effect/cli";
 
 import * as App from "./App.ts";
+import type * as Http from "./Http.ts";
 import * as Session from "./Session.ts";
 
 /**
@@ -44,7 +46,47 @@ export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = r
    * the command of a capability (spec/bindings/cli.md#commands).
    */
   readonly commands?: Commands | undefined;
+  /**
+   * The HTTP binding of the application on a server (spec/bindings/cli.md#server), from `Http.client`. With it, the
+   * command line sends each call, the availability of `list` and each subscription of `watch` to that server, and opens
+   * no session in this process. The commands still come from the view of `target` in this program. Serve the HTTP
+   * binding with the same target, so that both have the same view.
+   */
+  readonly remote?: Http.Client | undefined;
 }
+
+/** Where the command line sends the calls and the subscriptions: a session in this process, or a server. */
+interface Provider {
+  readonly invoke: (id: string, input: unknown) => Effect.Effect<Outcome<unknown, unknown>>;
+  /** The availability of each capability, or the call failure when the server does not answer. */
+  readonly availability: (ids: readonly string[]) => Effect.Effect<ReadonlyArray<Availability>, Session.CallFailed>;
+  readonly subscribe: (id: string, input: unknown, resume: Resume) => Effect.Effect<Stream.Stream<Occurrence, Session.CallFailed>, Session.CallFailed, Scope.Scope>;
+}
+
+/** The provider of a session in this process. The session closes with the scope. */
+const local = <R>(app: App.App<R>, target: string): Effect.Effect<Provider, never, R | Scope.Scope> =>
+  Effect.map(
+    Session.make(app, { target }),
+    (session): Provider => ({
+      invoke: session.invoke,
+      availability: (ids) => Effect.forEach(ids, session.availability),
+      subscribe: session.subscribe,
+    }),
+  );
+
+/** The provider of the HTTP binding of a server. A capability that the server does not list is unavailable. */
+const remote = (client: Http.Client): Provider => ({
+  invoke: client.invoke,
+  availability: (ids) =>
+    Effect.map(client.capabilities, (listed) =>
+      ids.map((id): Availability => {
+        const entry = listed.find((each) => each.id === id);
+        if (entry === undefined) return unavailable("The server does not serve this capability.");
+        return entry.available ? { available: true } : { available: false, reason: entry.reason };
+      }),
+    ),
+  subscribe: client.subscribe,
+});
 
 /**
  * The command line as an Effect. Exit codes follow spec/bindings/cli.md. To run it as the main program of a Node.js
@@ -98,7 +140,8 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   options: Options<Commands>,
 ): AppCommand<R | Command.Services<Commands[number]>, Command.Error<Commands[number]>> {
   const target = options.target ?? "cli";
-  const view = Session.make(app, { target });
+  const client = options.remote;
+  const view: Effect.Effect<Provider, never, R | Scope.Scope> = client === undefined ? local(app, target) : Effect.succeed(remote(client));
   const document = App.document(app);
   const catalogView: CatalogDocument = {
     ...document,
@@ -108,7 +151,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   const types = catalogView.$defs ?? {};
 
   const invoke = (id: string, input: unknown) =>
-    Effect.scoped(Effect.flatMap(view, (session) => session.invoke(id, input))).pipe(
+    Effect.scoped(Effect.flatMap(view, (provider) => provider.invoke(id, input))).pipe(
       Effect.flatMap(print),
       Effect.onInterrupt(() => Effect.sync(() => (process.exitCode = CLI_EXIT_CODES.cancelled))),
     );
@@ -151,9 +194,11 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
           return Effect.scoped(
             Effect.gen(function* () {
               if (catalogView.capabilities[id] === undefined) return yield* print({ kind: "unknown-capability", message: `There is no capability ${id}.` });
-              const session = yield* view;
-              const availability = yield* session.availability(id);
-              if (!availability.available) return yield* print({ kind: "unavailable", message: availability.reason });
+              const provider = yield* view;
+              const availability = yield* Effect.result(provider.availability([id]));
+              if (availability._tag === "Failure") return yield* print(availability.failure);
+              const [state] = availability.success;
+              if (state !== undefined && !state.available) return yield* print({ kind: "unavailable", message: state.reason });
               return yield* print({ kind: "invalid-input", message: "The input is not JSON." });
             }),
           );
@@ -165,11 +210,14 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   const list = Command.make("list", {}, () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const session = yield* view;
+        const provider = yield* view;
+        const capabilities = Object.entries(catalogView.capabilities);
+        const availability = yield* Effect.result(provider.availability(capabilities.map(([id]) => id)));
+        if (availability._tag === "Failure") return yield* print(availability.failure);
         const entries = [];
-        for (const [id, capability] of Object.entries(catalogView.capabilities)) {
+        for (const [index, [id, capability]] of capabilities.entries()) {
           const usage = cliUsage(options.name, id, capability.input === undefined ? undefined : bundle(capability.input, types));
-          entries.push({ kind: "capability", id, description: capability.description, ...(yield* session.availability(id)), usage });
+          entries.push({ kind: "capability", id, description: capability.description, ...availability.success[index], usage });
         }
         for (const [id, event] of Object.entries(catalogView.events ?? {})) {
           const usage = cliEventUsage(options.name, id, event.input === undefined ? undefined : bundle(event.input, types));
@@ -187,8 +235,8 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   const follow = (id: string, input: unknown, resume: Resume) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const session = yield* view;
-        const started = yield* Effect.result(session.subscribe(id, input, resume));
+        const provider = yield* view;
+        const started = yield* Effect.result(provider.subscribe(id, input, resume));
         if (started._tag === "Failure") return yield* printFailure(started.failure, CLI_EXIT_CODES[started.failure.kind]);
         const ended = yield* Effect.result(Stream.runForEach(started.success, (occurrence) => Console.log(JSON.stringify(occurrence))));
         if (ended._tag === "Failure") return yield* printFailure(ended.failure, CLI_WATCH_EXIT_CODES.internal);

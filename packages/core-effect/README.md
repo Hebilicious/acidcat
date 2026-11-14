@@ -140,7 +140,7 @@ The catalog has an `events` member when the application has events.
 | `Session` | [Invocation](../../spec/invocation.md), [Events](../../spec/events.md) | `Session.make(app, { target })` gives a `Session<R>`, where `R` is the services of the application: `invoke` for untrusted input by id, typed calls (see [Typed calls](#typed-calls)), and subscriptions (see [Follow events](#follow-events)) |
 | `Handles` | [TypeScript](../../spec/bindings/typescript.md) | `Handles.make(app, session)`: handles with promises and observables, for code that does not use Effect, such as a user interface. `Handles.makeEvents(app, session)`: event handles with async iterables. `Handles.open(app, layer, { target, webmcp })` opens a session from code that does not use Effect |
 | `Mcp` | [MCP](../../spec/bindings/mcp.md) | Through HTTP: `Mcp.toWebHandler(app, layer, options)`, or `Mcp.makeHandle(app, options)` for a host that builds the services itself. `Mcp.withHandshake(handler)` also serves the [`initialize` handshake of earlier revisions](../../spec/bindings/mcp.md#earlier-revisions-through-http), from [`@acid-cat/mcp-handshake`](../mcp-handshake). Through stdio: `Mcp.serveStdio(app, options)`, and `NodeMcp.main(app, layer, options)` from `@acid-cat/core-effect/node` (see [MCP through stdio](#mcp-through-stdio)). Both on `effect/ai/McpServer` |
-| `Http` | [HTTP](../../spec/bindings/http.md) | `Http.toWebHandler(app, layer, options)` |
+| `Http` | [HTTP](../../spec/bindings/http.md) | `Http.toWebHandler(app, layer, options)`. `Http.client(base, options)` is a client of the binding, for the command line of a server |
 | `Remote` | [Remote bindings](../../spec/bindings/README.md#remote-bindings) | `Remote.IncomingRequest`, the head of the request for the services of each request, and `Remote.refuse(status, message, headers)`. See [Services for each request](#services-for-each-request) |
 | `Cli` | [CLI](../../spec/bindings/cli.md) | `Cli.run(app, options)`, on `effect/cli`. `NodeCli.main(app, layer, options)` from `@acid-cat/core-effect/node` runs it as the main program of a Node.js process |
 | `WebMcp` | [WebMCP](../../spec/bindings/webmcp.md) | `WebMcp.install(session)`. WebMCP serves no events |
@@ -438,6 +438,39 @@ These two flags are not properties of the input. If the input schema of an event
 
 A subscription that cannot start has the exit code of its call failure. Each item of `list` has `kind`: `"capability"` or `"event"`. The items of the events come after the items of the capabilities, with their `usage`, which ends with `[--cursor <string>] [--max-age-ms <integer>]`. Standard output carries only JSON, so the logs of Effect go to standard error.
 
+### Command line of a server
+
+The command line can serve a view of an application that runs on a server ([Server](../../spec/bindings/cli.md#server)). It is then a client of the HTTP binding of that application. `Http.client(base, options)` makes the client, and the option `remote` of the command line takes it:
+
+```ts
+import { Http } from "@acid-cat/core-effect";
+import { NodeCli } from "@acid-cat/core-effect/node";
+
+NodeCli.main(aircon, unitLayer, {
+  name: "aircon",
+  version: "0.1.0",
+  remote: Http.client("http://pi.local:8080/cli", { headers: { Authorization: `Bearer ${token}` } }),
+});
+```
+
+- The commands, the flags and the usage come from the view of `target` in the program. The program does not read the catalog of the server.
+- A call is `POST {base}/capabilities/{id}`. `list` gets the availability from `GET {base}/capabilities`. A capability that the server does not list is unavailable. `watch` is `POST {base}/events/{id}`, with the cursor in `Last-Event-ID` and `maxAgeMs` in the query.
+- If the server does not answer, the call failure is `unavailable` (exit code 4). If the server gives an answer that the HTTP binding does not give, the call failure is `internal` (exit code 5).
+- An interrupt (`SIGINT`) closes the request, and the exit code is 130. The server then cancels the call or the subscription.
+- The client adds `headers` to each request. The command line never writes them to standard output or standard error.
+- `Http.client` throws an `Error` when `base` is not an `http` or `https` URL, or when a header is not valid. The message does not contain the value of a header.
+- The option `layer` of `Http.client` gives the HTTP client of `effect/http` that sends the requests. The default is `FetchHttpClient.layer`, which uses `globalThis.fetch`. Give another layer, for example to trust the certificate of a server.
+- The command line opens no session in its own process. `NodeCli.main` still builds the layer of the services.
+
+Serve the HTTP binding with the target of the command line, so that both have the same view:
+
+```ts
+const cli = Http.toWebHandler(aircon, unitLayer, { allowedOrigins: [], base: "/cli", target: "cli" });
+yield* NodeServer.serve({ "/cli": cli }, { hostname: "0.0.0.0", port: 8080 });
+```
+
+[`examples/aircon/core-effect/serve.ts`](../../examples/aircon/core-effect/serve.ts) serves the air conditioner this way, and [`examples/aircon/core-effect/cli.ts`](../../examples/aircon/core-effect/cli.ts) sends to it when `AIRCON_URL` is set. A `Http.Client` can also call a server from other Effect code: `client.invoke(id, input)`, `client.capabilities` and `client.subscribe(id, input, resume)`.
+
 ### Flags of the application
 
 The CLI binding allows an application to add its own flags. `Cli.command(app, options)` gives the command. Change it with `effect/cli`, then run it with `Cli.runCommand`, or with `NodeCli.runCommand` from `@acid-cat/core-effect/node`. Both set the exit codes of the binding. `Cli.exitCodeOf(error)` gives the exit code of one usage error.
@@ -489,6 +522,6 @@ Each module also has its own entry point, for example `@acid-cat/core-effect/Ses
 
 - [`examples/aircon/core-effect`](../../examples/aircon/README.md) is an air conditioner written with this package, with its command line. [`examples/aircon/apis/mcp.ts`](../../examples/aircon/apis/mcp.ts) builds an MCP server with its own tools on it, beside the MCP binding.
 - `moon run core-effect:test` tests sessions, handles and all bindings with the test applications of the package, in [`test/`](test/), and runs `acid-cat conform` against all bindings:
-  - [`test/fixture.ts`](test/fixture.ts) has one capability for each behavior that `acid-cat conform` tests.
+  - [`test/fixture.ts`](test/fixture.ts) has one capability for each behavior that `acid-cat conform` tests. [`test/fixture-cli.ts`](test/fixture-cli.ts) is its command line, and [`test/fixture-cli-remote.ts`](test/fixture-cli-remote.ts) is its command line that calls a server.
   - [`test/events-fixture.ts`](test/events-fixture.ts) has one event for each behavior of subscriptions: filters, cursors, a defect, a payload that does not agree, and an event outside the view. [`test/events-cli.ts`](test/events-cli.ts) is its command line.
   - [`test/lamp.ts`](test/lamp.ts) is a smart lamp with shared types, failures, a state and an availability. [`test/lamp-cli.ts`](test/lamp-cli.ts) is its command line. The tests use the lamp for the catalog, typed handles, state, availability, and the command line as a separate process.

@@ -5,7 +5,7 @@ One air conditioner, described once and served to every surface. The unit is sim
 | Directory | Contents |
 | --- | --- |
 | [`catalog/`](catalog) | The catalog, written in Pkl, TypeScript, Python, Go and Rust. Each language gives the same bytes |
-| [`core-ts/`](core-ts) | The application on [`@acid-cat/core-ts`](../../packages/core-ts), with Zod, its command line (in the same process, or for a server), and its MCP server through stdio |
+| [`core-ts/`](core-ts) | The application on [`@acid-cat/core-ts`](../../packages/core-ts), with Zod, its command line, and its MCP server through stdio |
 | [`core-effect/`](core-effect) | The application on [`@acid-cat/core-effect`](../../packages/core-effect), fully in Effect, its command line, and its MCP server through stdio |
 | [`core-rust/`](core-rust) | The application on [`acid-cat-core`](../../packages/core-rust), in Rust, its command line, and its MCP server through stdio |
 | [`apis/`](apis) | APIs whose design the application controls: GraphQL, Cap'n Web, Elysia and an MCP server |
@@ -31,11 +31,15 @@ node core-ts/cli.ts list
 cargo run --manifest-path core-rust/Cargo.toml -- cli aircon fan set --speed high
 ```
 
-The Rust command line can also control a unit in another process or on another machine. `aircon serve <address>` serves the HTTP binding of the `cli` target, and writes its URL. With `AIRCON_URL`, the command line sends each call and each subscription to that server:
+Each command line can also control a unit in another process or on another machine. The server serves the HTTP binding of the `cli` target, and writes its URL. With `AIRCON_URL`, the command line sends each call and each subscription to that server:
 
 ```sh
-examples/aircon/core-rust/target/debug/aircon serve 0.0.0.0:8080
-AIRCON_URL=http://localhost:8080/cli examples/aircon/core-rust/target/debug/aircon cli aircon power set --on
+node core-ts/serve.ts 0.0.0.0:8080
+node core-effect/serve.ts 0.0.0.0:8081
+examples/aircon/core-rust/target/debug/aircon serve 0.0.0.0:8082
+AIRCON_URL=http://localhost:8080/cli node core-ts/cli.ts aircon power set --on
+AIRCON_URL=http://localhost:8081/cli node core-effect/cli.ts aircon power set --on
+AIRCON_URL=http://localhost:8082/cli examples/aircon/core-rust/target/debug/aircon cli aircon power set --on
 ```
 
 The command line has one command for each capability in the view of the `cli` target. A flag of a shared type, for example `--mode`, accepts only the values of that type.

@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import type { ChildProcessByStdio } from "node:child_process";
+import type { Readable } from "node:stream";
 import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
@@ -7,6 +10,7 @@ import { Effect, Fiber, Layer, Schema, Stream } from "effect";
 import { aircon, statusChanged, unitLayer } from "../core-effect/aircon.ts";
 import { App, Mcp, Session } from "@acid-cat/core-effect";
 import { run } from "./run.ts";
+import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 
 /** The part of a `tools/list` response that the test reads. */
@@ -109,3 +113,52 @@ test("the state gives the current value, then each change", () =>
       }),
     ).pipe(Effect.provide(Layer.fresh(unitLayer))),
   ));
+
+/** The exit code and the output of a program when it exits. */
+function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<Run> {
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));
+  child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
+  return new Promise((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (code) => resolve({ code, stdout, stderr }));
+  });
+}
+
+test("the Effect command line controls the unit of a server, and watch follows its changes", async (context) => {
+  const cliPath = new URL("../core-effect/cli.ts", import.meta.url).pathname;
+  const server = spawn(process.execPath, [new URL("../core-effect/serve.ts", import.meta.url).pathname], { stdio: ["ignore", "pipe", "inherit"] });
+  context.after(() => server.kill());
+  const url = await new Promise<string>((resolve, reject) => {
+    server.on("error", reject);
+    server.stdout.setEncoding("utf-8").once("data", (chunk: string) => resolve(chunk.trim()));
+  });
+  // With AIRCON_URL, the command line sends each call and each subscription to the server.
+  const remote = (...args: string[]) =>
+    spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+
+  assert.equal((await finish(remote("aircon", "power", "set", "--on"))).code, 0);
+  const status = await finish(remote("aircon", "status", "get"));
+  assert.equal(status.code, 0);
+  assert.partialDeepStrictEqual(JSON.parse(status.stdout), { power: true });
+  // The unit of the server changed, not the unit of a new process.
+  assert.partialDeepStrictEqual(JSON.parse((await run(cliPath, "aircon", "status", "get")).stdout), { power: false });
+
+  const watch = remote("watch", "aircon.status.changed");
+  let watched = "";
+  watch.stdout.setEncoding("utf-8").on("data", (chunk: string) => (watched += chunk));
+  // Change the fan until the subscription writes its first occurrence: a change before the subscription starts is not
+  // in it.
+  for (let turn = 0; !watched.includes("\n"); turn++) {
+    assert.ok(turn < 100, "watch writes an occurrence");
+    assert.equal((await finish(remote("aircon", "fan", "set", "--speed", turn % 2 === 0 ? "low" : "high"))).code, 0);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  const line = watched.slice(0, watched.indexOf("\n"));
+  assert.partialDeepStrictEqual(JSON.parse(line), { name: "aircon.status.changed", data: { power: true } });
+  assert.match(line, /"fan":"(low|high)"/);
+  const exited = new Promise<number | null>((resolve) => watch.on("close", resolve));
+  watch.kill("SIGINT");
+  assert.equal(await exited, 130);
+});

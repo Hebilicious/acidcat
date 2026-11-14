@@ -76,6 +76,19 @@ All output is JSON. A result goes to standard output. A call failure goes to sta
 | `internal` | Nothing | 5 |
 | `cancelled` | Nothing | 130 |
 
+## Server
+
+The command line can serve a view of an application that runs in another process, for example on a server. It is then a client of the [HTTP binding](http.md) of that application, at a base URL that the deployment gives.
+
+- The commands, the flags and the usage come from the view in the program, as in [Commands](#commands). The program does not read the catalog of the server at run time.
+- A call is `POST {base}/capabilities/{id}`. `list` gets the availability of each capability from `GET {base}/capabilities`. A capability that the server does not list is unavailable.
+- `watch` is `POST {base}/events/{id}`, with the cursor in `Last-Event-ID` and `maxAgeMs` in the query. Each `next` message is one occurrence on standard output. `complete` is the end with exit code 0, and `error` is the end with its call failure.
+- The program writes the outcomes of the server as [Outcomes](#outcomes) tells. A call failure from the server has its kind.
+- If the server does not answer, the call failure is `unavailable`. If the server gives an answer that the HTTP binding does not give, the call failure is `internal`.
+- An interrupt (`SIGINT`) closes the request. The server then cancels the call or the subscription.
+- The deployment MAY add headers to each request, for example a token in `Authorization`. The program MUST NOT write these headers to standard output or standard error.
+- Serve the HTTP binding with the target of the command line, so that both have the same view.
+
 ## Design notes
 
 *This section is not normative.*
