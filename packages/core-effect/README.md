@@ -43,6 +43,20 @@ export const aircon = App.make({
 - Give a shared type an `identifier` annotation. It becomes a named type in `$defs`.
 - `Capability.make` keeps the literal type of `id`, so that an application can type its ids, for example `typeof powerSet.id`. The capability needs the services that `run`, `availability` and `state` need.
 
+### The target of the session
+
+The work of a capability reads the target of its session with `yield* Session.Target` (see [Sessions](../../spec/invocation.md#sessions)). The availability and the state of a capability, and the provider of an event, read it in the same way. Each session provides `Session.Target`, so it is not in the services that the application needs. Outside a session, its value is the empty string.
+
+```ts
+export const whoGet = Capability.make({
+  id: "who.get",
+  description: "Give the target of the call.",
+  audience: ["api", "mcp"],
+  output: Schema.Struct({ target: Schema.String }),
+  run: () => Effect.map(Session.Target, (target) => ({ target })),
+});
+```
+
 ### Availability and state
 
 A session gets the ref of each availability and each state one time, when it opens. It starts no fiber. It reads the availability ref when a call comes in, so a call that comes after `SubscriptionRef.set` is decided on the new value. `session.changes` and `session.state(id)` follow the refs only while they run, and a handle follows its refs only while it has listeners.
@@ -127,6 +141,7 @@ The catalog has an `events` member when the application has events.
 | `Handles` | [TypeScript](../../spec/bindings/typescript.md) | `Handles.make(app, session)`: handles with promises and observables, for code that does not use Effect, such as a user interface. `Handles.makeEvents(app, session)`: event handles with async iterables. `Handles.open(app, layer, { target, webmcp })` opens a session from code that does not use Effect |
 | `Mcp` | [MCP](../../spec/bindings/mcp.md) | Through HTTP: `Mcp.toWebHandler(app, layer, options)`, or `Mcp.makeHandle(app, options)` for a host that builds the services itself. `Mcp.withHandshake(handler)` also serves the [`initialize` handshake of earlier revisions](../../spec/bindings/mcp.md#earlier-revisions-through-http), from [`@acid-cat/mcp-handshake`](../mcp-handshake). Through stdio: `Mcp.serveStdio(app, options)`, and `NodeMcp.main(app, layer, options)` from `@acid-cat/core-effect/node` (see [MCP through stdio](#mcp-through-stdio)). Both on `effect/ai/McpServer` |
 | `Http` | [HTTP](../../spec/bindings/http.md) | `Http.toWebHandler(app, layer, options)` |
+| `Remote` | [Remote bindings](../../spec/bindings/README.md#remote-bindings) | `Remote.IncomingRequest`, the head of the request for the services of each request, and `Remote.refuse(status, message, headers)`. See [Services for each request](#services-for-each-request) |
 | `Cli` | [CLI](../../spec/bindings/cli.md) | `Cli.run(app, options)`, on `effect/cli`. `NodeCli.main(app, layer, options)` from `@acid-cat/core-effect/node` runs it as the main program of a Node.js process |
 | `WebMcp` | [WebMCP](../../spec/bindings/webmcp.md) | `WebMcp.install(session)`. WebMCP serves no events |
 | `NodeServer` | MCP and HTTP | `NodeServer.serve(handler, options)` and `NodeServer.layer(handler, options)` serve web handlers on Node.js. See [Serve on Node.js](#serve-on-nodejs) |
@@ -360,6 +375,30 @@ By default, a web handler builds the services from `layer` once, for the first r
 ```ts
 const handler = Mcp.toWebHandler(app, makeLayer(env), { ...options, services: "per-request" });
 ```
+
+With `services: "per-request"`, the layer can read the head of the request (its method, URL and headers) from the service `Remote.IncomingRequest`. Use it to find the caller, for example from a bearer token. The capabilities then read the caller from the services. The layer can also refuse the request: when the layer fails with a `Remote.Refusal`, the handler answers with its status and headers, `Content-Type: application/json`, and the body `{ "message": message }`. The handler opens no session, and no capability runs. `Remote.refuse(status, message, headers?)` fails with a `Remote.Refusal`. Show no internal data in the message. Only a layer of a handler with `services: "per-request"` can read `Remote.IncomingRequest`: the types refuse it with shared services.
+
+```ts
+class Caller extends Context.Service<Caller, { readonly name: string }>()("app/Caller") {}
+
+const callerLayer = Layer.effect(
+  Caller,
+  Effect.gen(function* () {
+    const request = yield* Remote.IncomingRequest;
+    const name = request.headers.get("Authorization")?.match(/^Bearer (.+)$/)?.[1];
+    if (name === undefined) return yield* Remote.refuse(401, "Give a token.", { "WWW-Authenticate": "Bearer" });
+    return { name };
+  }),
+);
+
+const handler = Http.toWebHandler(app, callerLayer, { allowedOrigins, services: "per-request" });
+```
+
+A poll lease and a webhook subscription keep the services of the request that started them, with its caller. Set the `principal` option of the MCP binding too, from the same caller. A poll lease is keyed by the principal, the event and the input: with no principal, two callers that poll the same event with the same input share one lease, and the second caller reads the occurrences of the session of the first caller. `Mcp.withEvents` refuses only the requests of the events extension: it gives the other requests to your own MCP server, which authenticates them itself.
+
+`Remote.refuse` throws a `RangeError` when the status is not an integer from 400 to 599.
+
+A host that uses `Http.handle` or `Mcp.handle` builds the services itself, and can give `Remote.IncomingRequest` the value `Remote.headOf(request)`.
 
 `Mcp.handle(app, request, options)` and `Http.handle(app, request, options)` screen one request and answer it. A host that builds the services itself provides them to this Effect. `Mcp.handle` keeps no state between requests, so it serves no poll leases and no webhook subscriptions. `Mcp.makeHandle(app, options)` keeps them in its scope (see [Poll delivery](#poll-delivery)).
 

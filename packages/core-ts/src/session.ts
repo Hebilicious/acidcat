@@ -218,7 +218,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     // The client or the session can abort during validation, before the listeners exist.
     if (lifetime.signal.aborted || signal?.aborted) controller.abort();
     const work = Promise.resolve()
-      .then(() => prepared.start({ signal: controller.signal, context: options.context }))
+      .then(() => prepared.start({ signal: controller.signal, context: options.context, target: options.target }))
       .catch((cause: unknown) => {
         onDefect(id, cause);
         return callFailure("internal", "The capability failed.");
@@ -355,6 +355,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
       source = prepared.start({
         signal: controller.signal,
         context: options.context,
+        target: options.target,
         ...(subscribeOptions.cursor === undefined ? {} : { cursor: subscribeOptions.cursor }),
         ...(subscribeOptions.maxAgeMs === undefined ? {} : { maxAgeMs: subscribeOptions.maxAgeMs }),
       });

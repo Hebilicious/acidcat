@@ -33,6 +33,7 @@
     "./Handles": "./src/Handles.ts",
     "./Mcp": "./src/Mcp.ts",
     "./Http": "./src/Http.ts",
+    "./Remote": "./src/Remote.ts",
     "./Cli": "./src/Cli.ts",
     "./WebMcp": "./src/WebMcp.ts",
     "./NodeServer": "./src/NodeServer.ts",
@@ -73,6 +74,10 @@
       "./Http": {
         "types": "./dist/Http.d.ts",
         "default": "./dist/Http.js"
+      },
+      "./Remote": {
+        "types": "./dist/Remote.d.ts",
+        "default": "./dist/Remote.js"
       },
       "./Cli": {
         "types": "./dist/Cli.d.ts",

@@ -4,7 +4,7 @@
  */
 import { AVAILABLE, callFailure, occurrenceOf, viewOf } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CatalogDocument, Occurrence, Outcome, Resume } from "@acid-cat/spec-ts";
-import { Cause, Data, Effect, Exit, Fiber, FiberSet, Queue, Ref, Schema, Scope, Stream, SubscriptionRef } from "effect";
+import { Cause, Context, Data, Effect, Exit, Fiber, FiberSet, Queue, Ref, Schema, Scope, Stream, SubscriptionRef } from "effect";
 
 import * as App from "./App.ts";
 import type * as Capability from "./Capability.ts";
@@ -12,6 +12,13 @@ import type * as Event from "./Event.ts";
 import { changesAfter, readable } from "./internal/changes.ts";
 import { resumeIssue } from "./internal/resume.ts";
 import { register } from "./internal/served.ts";
+
+/**
+ * The target of the session that runs the effect (spec/invocation.md#sessions). The work of a capability, its
+ * availability and its state, and the provider of an event read it with `yield* Session.Target`. Each session provides
+ * it, so it is not in the services that an application needs. Outside a session, its value is the empty string.
+ */
+export const Target: Context.Reference<string> = Context.Reference<string>("@acid-cat/core-effect/Session/Target", { defaultValue: () => "" });
 
 /** A call failure in the error channel of `execute`. */
 export class CallFailed extends Data.TaggedError("CallFailed")<CallFailure> {}
@@ -140,6 +147,9 @@ interface Served<R> {
 export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Session<R>, never, R | Scope.Scope> =>
   Effect.gen(function* () {
     const context = yield* Effect.context<R>();
+    /** Run an effect of the application with the services of the session and its target. */
+    const inSession = <A, E>(effect: Effect.Effect<A, E, R>) =>
+      effect.pipe(Effect.provideService(Target, options.target), Effect.provideContext(context));
     const scope = yield* Effect.scope;
     const running = yield* FiberSet.make<unknown, unknown>();
     const closed = yield* Ref.make(false);
@@ -149,8 +159,8 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
     for (const capability of app.capabilities) {
       if (!capability.audience.includes(options.target)) continue;
       if (served.has(capability.id)) throw new Error(`The capability ${capability.id} is declared two times.`);
-      const availability = capability.availability === undefined ? undefined : yield* capability.availability;
-      const stateValue = capability.pipeline.state === undefined ? undefined : yield* capability.pipeline.state;
+      const availability = capability.availability === undefined ? undefined : yield* inSession(capability.availability);
+      const stateValue = capability.pipeline.state === undefined ? undefined : yield* inSession(capability.pipeline.state);
       const state = stateValue === undefined || capability.state === undefined ? undefined : { value: stateValue, schema: capability.state.schema };
       served.set(capability.id, { capability, availability, state });
     }
@@ -181,7 +191,7 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
     /** Run a call in the session. The result is the value, the failure, or a call failure. */
     const call = <A, E>(program: Effect.Effect<A, E, R>) =>
       Effect.gen(function* () {
-        const fiber = yield* FiberSet.run(running, Effect.provideContext(program, context));
+        const fiber = yield* FiberSet.run(running, inSession(program));
         const exit = yield* Fiber.await(fiber).pipe(Effect.onInterrupt(() => Fiber.interrupt(fiber)));
         if (Exit.isSuccess(exit)) return { ok: true as const, value: exit.value };
         const failure = Cause.findErrorOption(exit.cause);
@@ -288,7 +298,7 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
           }),
           Effect.onInterrupt(() => Queue.end(queue)),
         );
-        const fiber = yield* FiberSet.run(running, Effect.provideContext(provider, context));
+        const fiber = yield* FiberSet.run(running, inSession(provider));
         yield* Effect.addFinalizer(() => Fiber.interrupt(fiber));
         let delivered = -1;
         return Stream.fromQueue(queue).pipe(

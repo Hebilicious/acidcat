@@ -19,13 +19,20 @@ use tokio_util::sync::CancellationToken;
 use crate::outcome::{Availability, Defect, NoFailure, RunError, RunResult};
 use crate::schema::{Validator, schema_of, view_of};
 
-/// What a capability gets for one call: the services of the application, and the signal of the call.
+/// What a capability gets for one call: the services of the application, the target of the session, and the signal of
+/// the call.
 pub struct Call<C> {
     context: Arc<C>,
+    target: Arc<str>,
     cancel: CancellationToken,
 }
 
 impl<C> Call<C> {
+    /// The target of the session that makes the call, for example `mcp` or `cli`.
+    pub fn target(&self) -> &str {
+        &self.target
+    }
+
     /// The services of the application.
     pub fn context(&self) -> &C {
         &self.context
@@ -46,12 +53,18 @@ impl<C> Call<C> {
 /// signal of the subscription (spec/events.md#resuming).
 pub struct Subscription<C> {
     context: Arc<C>,
+    target: Arc<str>,
     cursor: Option<String>,
     max_age_ms: Option<u64>,
     cancel: CancellationToken,
 }
 
 impl<C> Subscription<C> {
+    /// The target of the session that subscribes, for example `mcp` or `cli`.
+    pub fn target(&self) -> &str {
+        &self.target
+    }
+
     pub fn context(&self) -> &C {
         &self.context
     }
@@ -870,18 +883,24 @@ impl<C> Application<C> {
     }
 }
 
-pub(crate) fn call<C>(context: Arc<C>, cancel: CancellationToken) -> Call<C> {
-    Call { context, cancel }
+pub(crate) fn call<C>(context: Arc<C>, target: Arc<str>, cancel: CancellationToken) -> Call<C> {
+    Call {
+        context,
+        target,
+        cancel,
+    }
 }
 
 pub(crate) fn subscription<C>(
     context: Arc<C>,
+    target: Arc<str>,
     cursor: Option<String>,
     max_age_ms: Option<u64>,
     cancel: CancellationToken,
 ) -> Subscription<C> {
     Subscription {
         context,
+        target,
         cursor,
         max_age_ms,
         cancel,

@@ -17,6 +17,7 @@ import { makeWebhooks } from "./internal/webhooks.ts";
 import type { WebhookOptions, Webhooks } from "./internal/webhooks.ts";
 import { answerWith, closeUnlessStreaming, eventStream, keepNothing } from "./internal/web.ts";
 import type { Keep, Streaming } from "./internal/web.ts";
+import type { IncomingRequest } from "./Remote.ts";
 import * as Session from "./Session.ts";
 
 export type { PollOptions } from "./internal/poll.ts";
@@ -52,7 +53,8 @@ export interface Options {
    * first request that passes the screening, and all requests use them. With `"per-request"`, it builds them for each
    * request that passes the screening, and releases them when the response is complete. Use `"per-request"` when a
    * request must not use objects that an earlier request made, for example on Cloudflare Workers, or when a stateful
-   * service must not be shared between callers.
+   * service must not be shared between callers. With `"per-request"`, the layer can read the head of the request from
+   * `Remote.IncomingRequest`, and refuse the request with a `Remote.Refusal`.
    */
   readonly services?: "shared" | "per-request" | undefined;
   /**
@@ -105,15 +107,21 @@ const makeDeliveries = (options: Pick<Options, "poll" | "webhooks">): Effect.Eff
  * The handler keeps the poll leases and the webhook subscriptions between requests, in the memory of the process.
  * Each one holds a subscription in a session of its own, with the services of the request that started it. With
  * `"per-request"`, these services stay open until the lease or the subscription ends. `dispose` ends them all.
+ *
+ * With `"per-request"`, the layer can read the head of the request from `Remote.IncomingRequest`, for example to
+ * find the caller. When the layer fails with a `Remote.Refusal`, the handler answers with the refusal before it opens
+ * a session.
  */
-export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Options): WebHandler {
+export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E, IncomingRequest>, options: Options & { readonly services: "per-request" }): WebHandler;
+export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Options): WebHandler;
+export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E, IncomingRequest>, options: Options): WebHandler {
   const { answer, dispose: release } = answerWith(layer, options.services);
   const scope = Effect.runSync(Scope.make());
   const deliveries = Effect.runSync(makeDeliveries(options).pipe(Scope.provide(scope)));
   const handler = async (request: Request): Promise<Response> => {
     const admitted = await admit(request, options);
     if (admitted instanceof Response) return admitted;
-    return answer((requestScope, keep) => respond(app, admitted, options, requestScope, { ...deliveries, keep }));
+    return answer(admitted.request, (requestScope, keep) => respond(app, admitted, options, requestScope, { ...deliveries, keep }));
   };
   const dispose = async () => {
     await Effect.runPromise(Scope.close(scope, Exit.void));
@@ -272,9 +280,23 @@ export const eventsExtensions: { readonly [name: string]: JsonObject } = McpEven
  *
  * Your server declares the extension: give it `eventsExtensions` as the `extensions` of its capabilities, so that
  * `server/discover` tells clients that the server serves events. `dispose` ends the poll leases and the webhook
- * subscriptions, and releases the shared services. It does not dispose `server`.
+ * subscriptions, and releases the shared services. It does not dispose `server`. With `"per-request"`, the layer can
+ * read `Remote.IncomingRequest` and refuse a request of the events extension with a `Remote.Refusal`, as in
+ * `toWebHandler`.
  */
-export function withEvents<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, server: (request: Request) => Promise<Response>, options: EventsOptions): WebHandler {
+export function withEvents<R, E>(
+  app: App.App<R>,
+  layer: Layer.Layer<R, E, IncomingRequest>,
+  server: (request: Request) => Promise<Response>,
+  options: EventsOptions & { readonly services: "per-request" },
+): WebHandler;
+export function withEvents<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, server: (request: Request) => Promise<Response>, options: EventsOptions): WebHandler;
+export function withEvents<R, E>(
+  app: App.App<R>,
+  layer: Layer.Layer<R, E, IncomingRequest>,
+  server: (request: Request) => Promise<Response>,
+  options: EventsOptions,
+): WebHandler {
   const target = options.target ?? "mcp";
   const hasEvents = viewOf(App.document(app), target).events !== undefined;
   const { answer, dispose: release } = answerWith(layer, options.services);
@@ -285,7 +307,7 @@ export function withEvents<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, serv
     if (admitted instanceof Response) return admitted;
     const events = hasEvents ? eventsRequestOf(admitted) : undefined;
     if (events === undefined) return server(admitted.request);
-    return answer((requestScope, keep) =>
+    return answer(admitted.request, (requestScope, keep) =>
       Effect.gen(function* () {
         const session = yield* Session.make(app, { target, eventBuffer: options.eventBuffer }).pipe(Scope.provide(requestScope));
         return yield* answerEvents(app, session, events, admitted.request, options, requestScope, { ...deliveries, keep });

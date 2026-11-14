@@ -5,7 +5,7 @@ import { CallFailureError, callFailure, httpEventMessage, httpStatus, isCallFail
 import type { CallFailure, Rejection } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
-import { openContext } from "./context.ts";
+import { openContext, refusalResponse } from "./context.ts";
 import type { ContextOption } from "./context.ts";
 import { createSession } from "./session.ts";
 import type { Session } from "./session.ts";
@@ -32,7 +32,10 @@ export interface HttpSettings {
   readonly bufferLimit?: number | undefined;
 }
 
-/** A web request handler for the API. Each request has its own session, and with `createContext` its own context. */
+/**
+ * A web request handler for the API. Each request has its own session, and with `createContext` its own context.
+ * `createContext` can refuse a request: then the handler answers with the refusal, and opens no session.
+ */
 export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Context>) {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
   return async (request: Request): Promise<Response> => {
@@ -49,6 +52,7 @@ export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Con
     const url = new URL(request.url);
     const path = url.pathname.slice((options.base ?? "").length);
     const opened = await openContext<Context>(options, request);
+    if ("refusal" in opened) return refusalResponse(opened.refusal);
     const session = createSession(app, {
       target: options.target ?? "api",
       context: opened.context,

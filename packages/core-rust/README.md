@@ -103,7 +103,7 @@ The work ends in one of three ways:
 - `fail(failure)`: a failure of the capability.
 - An error, with `?`, a [`Defect`], or a panic: the call failure `internal`. Its message shows no internal data. `App::on_defect` records the cause. The default writes it to standard error.
 
-When a call is cancelled, the core drops the future of the work. `call.cancel_token()` is also cancelled. `call.context()` gives the services.
+When a call is cancelled, the core drops the future of the work. `call.cancel_token()` is also cancelled. `call.context()` gives the services, and `call.target()` the target of the session, for example `mcp` or `cli`. A subscription has the same `context()` and `target()`.
 
 An `Option` field that is not required takes the value of its type, not `null`. Add `#[serde(skip_serializing_if = "Option::is_none")]` to the fields of a value. Integers and numbers have no `format` in the catalog.
 
@@ -133,7 +133,30 @@ An `Option` field that is not required takes the value of its type, not `null`. 
 
 `McpBinding` and `HttpBinding` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. To use another server, give each request to `handle` after `remote::request_body`.
 
-The context is shared by all sessions. Each request of a remote binding has its own session.
+Each request of a remote binding has its own session. With `new`, all requests share one context.
+
+### A context for each request
+
+`HttpBinding::with_request_context(app, make, options)` and `McpBinding::with_request_context(app, make, options)` make a context for each request that passes the screening. `make` gets the head of the request (the method, the URI and the headers), and gives a future of `Result<C, Refusal>`. Use it to authenticate the caller, and to give the work of each capability who calls:
+
+```rust,ignore
+let binding = HttpBinding::with_request_context(app, move |parts: &http::request::Parts| {
+    let token = parts.headers.get("authorization").and_then(|value| value.to_str().ok()).map(str::to_owned);
+    let accounts = accounts.clone();
+    async move {
+        match accounts.caller(token.as_deref()).await {
+            Some(caller) => Ok(Services { caller, accounts }),
+            None => Err(Refusal::new(401, "Give a valid token.").header("WWW-Authenticate", "Bearer")),
+        }
+    }
+}, HttpOptions::default());
+```
+
+- A `Refusal` answers the request with its status, its headers, and the JSON body `{ "message" }`. No capability runs.
+- The core drops the context when the session of the request ends: after the answer, or after the stream of a subscription. Release resources in `Drop`.
+- Through MCP, a poll lease or a webhook subscription keeps the context of the request that started it, until it ends. Set the `McpOptions::principal` too, from the same caller. A poll lease is keyed by the principal, the event and the input: with no principal, two callers that poll the same event with the same input share one lease, and the second caller reads the occurrences of the session of the first caller.
+- `Refusal::new` panics when the status is not from 400 to 599. The answer always has the media type `application/json`.
+- The command line and MCP through stdio have one context for the process.
 
 ## Tests
 

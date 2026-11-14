@@ -5,5 +5,6 @@ export * as Session from "./Session.ts";
 export * as Handles from "./Handles.ts";
 export * as Mcp from "./Mcp.ts";
 export * as Http from "./Http.ts";
+export * as Remote from "./Remote.ts";
 export * as Cli from "./Cli.ts";
 export * as WebMcp from "./WebMcp.ts";

@@ -61,6 +61,7 @@ export const aircon = defineApp<{ unit: Unit }>({ targets, capabilities: [powerS
 - The session checks each `data` against the payload schema. Data that does not agree, or an iterable that throws, ends the subscription with `internal`. When the iterable ends, the subscription is complete.
 - When the source can replay, give each occurrence a `cursor`, and start after `cursor` when it is given. Poll leases, webhook subscriptions and `watch --cursor` resume with it. With no cursor, a client that comes back gets only new occurrences: for example, the first poll after a lease ended gets `truncated: true`.
 - A poll lease or a webhook subscription holds its subscription in a session of its own, with the context of the request that started it. With `createContext`, that context lives as long as the lease or the subscription.
+- `run` and `subscribe` also get `target`, the target of the session. For the caller, give `createContext(request)` to `httpHandler` or `mcpHandler`: it reads the headers and gives the context, or `refuse(401, "Give a valid token.", { "WWW-Authenticate": "Bearer" })`, which answers the request before a session opens. It is the place to authenticate.
 - `session.eventHandle(statusChanged).subscribe({})` gives an async iterator of occurrences. Its `return()` cancels the subscription, also while a `next()` waits. A GraphQL `subscribe` resolver can return this promise.
 
 ## core-effect
@@ -113,6 +114,7 @@ export const aircon = App.make({ targets, capabilities: [powerSet], events: [sta
 - The stream has no error channel. Put the problems of the source in the payload. A defect ends the subscription with `internal`.
 - The client cancels by interruption. Release the source with `Stream.ensuring` or a scoped resource.
 - `session.follow(event, input)` gives a typed `Stream` of occurrences in a scope. `session.event(event).subscribe(input)` of `Handles.open` gives an async iterable, which a GraphQL `subscribe` resolver can return.
+- `yield* Session.Target` gives the target of the session, in a capability and in the stream of an event. For the caller, use `services: "per-request"`: the layer reads the head of the request with `yield* Remote.IncomingRequest`, and fails with `Remote.refuse(401, "Give a valid token.", { "WWW-Authenticate": "Bearer" })` to answer the request before a session opens. It is the place to authenticate.
 - `Mcp.toWebHandler` serves push and poll. Set `principal: (request) => Effect<Option<string>>` so that each client has its own poll leases. For webhooks, add `webhooks: { sender: NodeWebhook.sender() }` from `@acid-cat/core-effect/NodeWebhook`; it needs `principal`. Call `handler.dispose()` to end the leases and the webhook subscriptions. `Mcp.handle` keeps no state, so it serves only push; use `Mcp.makeHandle` in its place.
 - An MCP server of your own, with `effect/ai/McpServer`, serves the events of the application with `Mcp.withEvents(app, layer, server, options)`: it answers the requests of the events extension, and gives each other request to your server. Give your server `extensions: Mcp.eventsExtensions`, so that `server/discover` declares the extension. Do not write the events methods yourself.
 
@@ -177,6 +179,7 @@ let aircon = App::new()
 - With no `input`, the work gets `()`. With no `output`, it gives `()`, and the value is `null`.
 - An `Option` field is an optional property. Add `#[serde(skip_serializing_if = "Option::is_none")]` to the fields of a value, because a value must agree with the output schema.
 - When a call is cancelled, the core drops the future of the work. Release resources in `Drop`, not after an `await`.
+- `call.target()` and `subscription.target()` give the target of the session. For the caller, make a context for each request: `HttpBinding::with_request_context` and `McpBinding::with_request_context` take a function of the head of the request that gives the context, or a `Refusal` (for example `401`) that answers the request. It is the place to authenticate. The context is dropped when the session of the request ends; a poll lease or a webhook subscription keeps it until it ends.
 - The provider of an event gives a `Stream` of `Result<Emitted<P>, Defect>`. The end of the stream is complete. An `Err` is `internal`. When the client cancels, the core drops the stream.
 - `state(|unit| unit.status.subscribe())` gives the state of a capability from a `tokio::sync::watch::Receiver`. Use a `broadcast` channel, not a `watch`, for an event that must give each change: a `watch` keeps only the last value.
 - `build()` checks the application and gives `Arc<Application<C>>`. `render_catalog()` gives the catalog in canonical form. A type with a `title` used in two or more places becomes a shared type in `$defs`.
