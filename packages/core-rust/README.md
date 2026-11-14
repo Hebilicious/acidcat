@@ -116,6 +116,25 @@ An `Option` field that is not required takes the value of its type, not `null`. 
 - When the client cancels the subscription, or the session closes, the core drops the stream.
 - `subscription.cursor()` and `subscription.max_age_ms()` tell where to start ([Resuming](../../spec/events.md#resuming)).
 
+### The event log
+
+`EventLog<P>` is a provider for an event that the application publishes once, and that each subscription receives. Its payload type also derives `Deserialize`.
+
+```rust,ignore
+let log = EventLog::<Imported>::in_memory(1000);
+// In the work of a capability, or in a task of the application:
+log.publish(Imported { title }).await?;
+// The provider of the event:
+Event::new("library.imported", "A title was imported.")
+    .payload::<Imported>()
+    .subscribe(move |(), subscription| log.subscribe(&subscription))
+```
+
+- Each occurrence has a cursor. A client that gives the cursor of its last occurrence gets the occurrences after it, then the new occurrences. With no cursor, the subscription starts now.
+- The store keeps the occurrences for the clients that resume. `EventLog::in_memory(capacity)` keeps the last `capacity` occurrences in memory. A store that removed occurrences, or a `maxAgeMs` that skips some, makes the first occurrence `truncated`.
+- To resume after the application restarts, implement `EventStore` on a database or a file, and use `EventLog::open(store).await`. The positions continue after the last record of the store. Its `epoch` stays the same across restarts. A cursor of a different epoch starts at the first record of the store, with `truncated`.
+- A subscription that reads slowly reads the occurrences that it missed from the store.
+
 ## The application
 
 `App::new()` declares the targets with `target(name, bindings)`, or `target_with(name, Target { .. })` for a target with a description or options, then the capabilities and the events. `build()` checks the application, compiles its schemas and writes its catalog. It gives an `Arc<Application<C>>`, or the rules that the application breaks. A schema with a `title`, or a failure, that the application uses in two or more places becomes a shared type in `$defs`, with its title or its tag as its name. `render_catalog()` gives the catalog in canonical form. Write it to a file in a build step, and check it with `acid-cat check`.

@@ -9,10 +9,10 @@
 
 use std::sync::{Arc, Mutex};
 
-use acid_cat_core::{App, Application, Availability, Emitted, RunResult, Target, fail};
+use acid_cat_core::{App, Application, Availability, EventLog, RunResult, Target, fail};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, watch};
+use tokio::sync::watch;
 
 // --- Types -------------------------------------------------------------------------------------------------------
 
@@ -54,7 +54,7 @@ struct Schedule {
     hours: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Status {
     power: bool,
@@ -142,8 +142,9 @@ fn no_properties(schema: &mut schemars::Schema) {
 pub struct Unit {
     /// The status now, which `aircon.status.get` gives as its state.
     status: watch::Sender<Status>,
-    /// Each new status, for the subscriptions to `aircon.status.changed`.
-    changes: broadcast::Sender<Status>,
+    /// Each new status, for the subscriptions to `aircon.status.changed`. The log keeps the last 256, so that a client
+    /// resumes with a cursor.
+    changes: EventLog<Status>,
     online: watch::Sender<Availability>,
     firmware: String,
     schedule: Mutex<Schedule>,
@@ -159,7 +160,7 @@ impl Default for Unit {
                 target_celsius: 22.0,
                 room_celsius: 25.0,
             }),
-            changes: broadcast::Sender::new(256),
+            changes: EventLog::in_memory(256),
             online: watch::Sender::new(Availability::Available),
             firmware: "1.0.0".into(),
             schedule: Mutex::new(Schedule {
@@ -176,7 +177,7 @@ impl Unit {
     }
 
     /// Change the status if the unit is online. A change that keeps the same status tells no one.
-    fn change<F>(&self, update: impl FnOnce(&mut Status)) -> RunResult<(), F>
+    async fn change<F>(&self, update: impl FnOnce(&mut Status)) -> RunResult<(), F>
     where
         F: From<Offline>,
     {
@@ -189,7 +190,8 @@ impl Unit {
             *status != before
         });
         if changed {
-            let _ = self.changes.send(self.status.borrow().clone());
+            let status = self.status.borrow().clone();
+            self.changes.publish(status).await?;
         }
         Ok(())
     }
@@ -277,7 +279,9 @@ pub fn aircon() -> Arc<Application<Unit>> {
                 .input::<Power>()
                 .failures::<Offline>()
                 .run(|Power { on }, call| async move {
-                    call.context().change::<Offline>(|status| status.power = on)
+                    call.context()
+                        .change::<Offline>(|status| status.power = on)
+                        .await
                 }),
         )
         .capability(
@@ -291,6 +295,7 @@ pub fn aircon() -> Arc<Application<Unit>> {
                         return fail(ModeFailure::PoweredOff {});
                     }
                     unit.change::<ModeFailure>(|status| status.mode = mode)
+                        .await
                 }),
         )
         .capability(
@@ -304,6 +309,7 @@ pub fn aircon() -> Arc<Application<Unit>> {
             .run(|Temperature { celsius }, call| async move {
                 call.context()
                     .change::<Offline>(|status| status.target_celsius = celsius)
+                    .await
             }),
         )
         .capability(
@@ -314,6 +320,7 @@ pub fn aircon() -> Arc<Application<Unit>> {
                 .run(|Fan { speed }, call| async move {
                     call.context()
                         .change::<Offline>(|status| status.fan = speed)
+                        .await
                 }),
         )
         .capability(
@@ -364,27 +371,8 @@ pub fn aircon() -> Arc<Application<Unit>> {
             .input::<NoInput>()
             .payload::<Status>()
             .subscribe(|_, subscription| {
-                // The receiver is made when the subscription starts, so the subscription gets each change after it. When
-                // the subscription reads too slowly, the channel skips changes, and the next occurrence is truncated.
-                let changes = subscription.context().changes.subscribe();
-                futures::stream::unfold(changes, |mut changes| async move {
-                    let mut skipped = false;
-                    loop {
-                        match changes.recv().await {
-                            Ok(status) => {
-                                let occurrence = Emitted::new(status);
-                                let occurrence = if skipped {
-                                    occurrence.truncated()
-                                } else {
-                                    occurrence
-                                };
-                                return Some((Ok(occurrence), changes));
-                            }
-                            Err(broadcast::error::RecvError::Lagged(_)) => skipped = true,
-                            Err(broadcast::error::RecvError::Closed) => return None,
-                        }
-                    }
-                })
+                // Each subscription gets each change after it starts, or after its cursor.
+                subscription.context().changes.subscribe(&subscription)
             }),
         )
         .build()
@@ -501,15 +489,67 @@ mod tests {
             .expect("no call failure");
         assert_eq!(fan.data["fan"], json!("high"));
         assert_eq!(fan.data["power"], json!(true));
-        assert_eq!(unit.changes.receiver_count(), 1);
+        assert_eq!(unit.changes.subscriptions(), 1);
         drop(occurrences);
         tokio::time::timeout(std::time::Duration::from_secs(5), async {
-            while unit.changes.receiver_count() > 0 {
+            while unit.changes.subscriptions() > 0 {
                 tokio::task::yield_now().await;
             }
         })
         .await
         .expect("the subscription stops listening when it ends");
+    }
+
+    #[tokio::test]
+    async fn each_subscription_gets_each_change_and_a_cursor_resumes_after_it() {
+        let unit = Arc::new(Unit::default());
+        let app = aircon();
+        let cancel = CancellationToken::new();
+        let first = Session::open(&app, "app", unit.clone());
+        let second = Session::open(&app, "mcp", unit.clone());
+        let mut watching = [&first, &second].map(|session| {
+            session
+                .subscribe(
+                    "aircon.status.changed",
+                    json!({}),
+                    SubscribeOptions::default(),
+                )
+                .expect("the subscription starts")
+        });
+        first
+            .invoke("aircon.power.set", json!({ "on": true }), &cancel)
+            .await;
+        let mut cursor = None;
+        for occurrences in &mut watching {
+            let power = occurrences
+                .next()
+                .await
+                .expect("an occurrence")
+                .expect("no call failure");
+            assert_eq!(power.data["power"], json!(true));
+            cursor = power.cursor;
+        }
+        drop(watching);
+        first
+            .invoke("aircon.fan.set", json!({ "speed": "low" }), &cancel)
+            .await;
+        let mut resumed = second
+            .subscribe(
+                "aircon.status.changed",
+                json!({}),
+                SubscribeOptions {
+                    cursor,
+                    ..SubscribeOptions::default()
+                },
+            )
+            .expect("the subscription starts");
+        let fan = resumed
+            .next()
+            .await
+            .expect("an occurrence")
+            .expect("no call failure");
+        assert_eq!(fan.data["fan"], json!("low"));
+        assert!(!fan.truncated);
     }
 
     #[tokio::test]
