@@ -4,10 +4,10 @@ import { test } from "node:test";
 import { conform, serve } from "@acid-cat/cli";
 
 import { httpHandler, mcpHandler } from "../src/index.ts";
-import { deadline, didNotSettle } from "./deadline.ts";
+import { deadline, didNotSettle, timeout } from "./deadline.ts";
 import { fixture, Holds, options, WatchersThatIgnoreCancellation } from "./fixture.ts";
 
-test("acid-cat conform fails only the cancellation checks of events of an implementation whose subscriptions ignore cancellation", async () => {
+test("acid-cat conform fails only the cancellation checks of events of an implementation whose subscriptions ignore cancellation", { timeout }, async () => {
   const watchersIgnoring = () => options(new Holds(), new WatchersThatIgnoreCancellation());
   const mcp = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...watchersIgnoring() });
   const served = await serve({

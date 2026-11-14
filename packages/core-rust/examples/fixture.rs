@@ -506,7 +506,7 @@ async fn main() {
 fn poll() -> acid_cat_core::mcp::PollOptions {
     acid_cat_core::mcp::PollOptions {
         buffer_limit: 5,
-        lease: std::time::Duration::from_millis(2000),
+        lease: std::time::Duration::from_millis(5000),
         ..Default::default()
     }
 }

@@ -3,9 +3,9 @@ import { test } from "node:test";
 
 import { conform } from "@acid-cat/cli";
 
-import { deadline, didNotSettle } from "./deadline.ts";
+import { deadline, didNotSettle, timeout } from "./deadline.ts";
 
-test("acid-cat conform fails the interrupt check of a command line that never writes its marker, and goes on", async () => {
+test("acid-cat conform fails the interrupt check of a command line that never writes its marker, and goes on", { timeout }, async () => {
   const results = await conform({ cli: [process.execPath, new URL("./fixture-cli-without-marker.ts", import.meta.url).pathname], deadline });
   const interrupt = results.find((result) => result.name === "an interrupt cancels the call with exit code 130");
   assert.equal(interrupt?.passed, false);
