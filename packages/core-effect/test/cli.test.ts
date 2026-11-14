@@ -56,6 +56,15 @@ describe("the command line of an application", { concurrency: true }, () => {
     assert.equal(toggle(off.stdout)?.available, false);
   });
 
+  test("call with input that is not JSON gives unknown-capability, then unavailable, before invalid-input", async () => {
+    const [unknown, unavailable, invalid] = await Promise.all([
+      cliWithFlag("call", "fixture.nothing", "{bad"),
+      cliWithFlag("--switch", "false", "call", "fixture.toggle", "{bad"),
+      cliWithFlag("call", "fixture.echo", "{bad"),
+    ]);
+    assert.deepEqual([unknown.code, unavailable.code, invalid.code], [2, 4, 3]);
+  });
+
   test("a command that the application changed keeps the exit codes", async () => {
     const runs = await Promise.all([
       cliWithFlag("--switch", "false", "fixture", "echo", "--text", "hi"),

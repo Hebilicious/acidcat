@@ -91,7 +91,7 @@ capabilities {
 }
 ```
 
-The best way to write a catalog is in Pkl, with a catalog library, or from the code of the application. A tool then writes the JSON, in [canonical form](spec/catalog.md#canonical-form). JSON written by hand is also a catalog, if it conforms. The same catalog in [TypeScript](examples/aircon/catalog/typescript.ts), [Python](examples/aircon/catalog/python.py), [Go](examples/aircon/catalog/go/main.go) or [Rust](examples/aircon/catalog/rust/src/main.rs) gives the same bytes: [`aircon.acidcat.json`](examples/aircon/catalog/aircon.acidcat.json). [`examples/aircon`](examples/aircon/README.md) also serves the air conditioner with both TypeScript cores, as a command line, and through APIs.
+The best way to write a catalog is in Pkl, with a catalog library, or from the code of the application. A tool then writes the JSON, in [canonical form](spec/catalog.md#canonical-form). JSON written by hand is also a catalog, if it conforms. The same catalog in [TypeScript](examples/aircon/catalog/typescript.ts), [Python](examples/aircon/catalog/python.py), [Go](examples/aircon/catalog/go/main.go) or [Rust](examples/aircon/catalog/rust/src/main.rs) gives the same bytes: [`aircon.acidcat.json`](examples/aircon/catalog/aircon.acidcat.json). [`examples/aircon`](examples/aircon/README.md) also serves the air conditioner with both TypeScript cores and the Rust core, as a command line, and through APIs.
 
 ## 📚 Specification
 
@@ -130,6 +130,14 @@ These packages show one way to implement the specification. They serve the TypeS
 | [`@acid-cat/core-effect`](packages/core-effect) | ⚡ Serve capabilities, written fully in Effect |
 | [`@acid-cat/core-ts`](packages/core-ts) | 🟦 Serve capabilities in plain TypeScript, with no Effect dependency |
 
+### Reference implementation in Rust
+
+This crate shows one way to implement the specification in Rust, on Tokio. It serves the MCP, CLI and HTTP bindings, and it passes all checks of `acid-cat conform` for them.
+
+| Package | Use |
+| --- | --- |
+| [`acid-cat-core`](packages/core-rust) | 🦀 Serve capabilities and events in Rust. Schemas come from types that derive `serde` and `schemars` |
+
 Reference implementations in more languages will follow. You do not need a package from this repository to implement AcidCat. A program that serves the bindings as the specification tells is an implementation. You, or an agent, can write a core for your language from [the specification](spec/README.md), and test it with `acid-cat conform`.
 
 To build your own API, for example in GraphQL, see [the APIs of the air conditioner](examples/aircon/README.md#apis): GraphQL, Cap'n Web and Elysia APIs, each beside the HTTP binding, and an MCP server in Effect beside the MCP binding. Each of these three APIs follows the event `aircon.status.changed`: GraphQL with a subscription, through WebSockets and through server-sent events, Cap'n Web with a function of the client that the server calls, through WebSockets, and Elysia with a stream of server-sent events and a WebSocket.
@@ -146,6 +154,7 @@ gh skill install Hebilicious/acidcat acid-cat
 
 - [x] `acid-cat conform`: test a running implementation through each binding
 - [x] A reference implementation in TypeScript: `@acid-cat/spec-ts`, `@acid-cat/core-effect` and `@acid-cat/core-ts`
+- [x] A reference implementation in Rust: `acid-cat-core`
 - [ ] Reference implementations in more languages
 - [ ] A site that publishes the specification
 

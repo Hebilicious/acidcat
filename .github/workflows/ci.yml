@@ -29,12 +29,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The builds of the Rust catalog library and of the Rust catalog of the air conditioner, with their dependencies.
+      # The builds of the Rust catalog library, the Rust core, and the Rust catalog and application of the air conditioner, with their dependencies.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: |
             packages/catalog/rust
+            packages/core-rust
             examples/aircon/catalog/rust
+            examples/aircon/core-rust
           cache-workspace-crates: true
 
       # The build cache of Go. The Go modules have no dependencies, so there is no module cache.

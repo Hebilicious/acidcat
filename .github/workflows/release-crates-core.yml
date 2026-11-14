@@ -1,0 +1,44 @@
+name: Release crates.io (core)
+
+# Publish acid-cat-core to crates.io at the version of the tag `crates-core/v<version>`.
+# release.yml starts this workflow after a release. A tag pushed by hand on main also starts it.
+# crates.io authenticates this workflow with trusted publishing, from the `crates-io` environment.
+on:
+  push:
+    tags: ["crates-core/v*"]
+  # Run it by hand on a tag to publish that release again.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish to crates.io
+    runs-on: ubuntu-latest
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - run: moon run core-rust:package
+
+      - name: Check the version
+        run: |
+          test "$(grep -m1 '^version = ' packages/core-rust/Cargo.toml)" = "version = \"${GITHUB_REF_NAME#crates-core/v}\""
+
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+        id: auth
+
+      - run: cargo publish
+        working-directory: packages/core-rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

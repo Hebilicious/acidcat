@@ -4,6 +4,7 @@ Each example is the same capability: `aircon.power.set` turns the unit on or off
 
 - core-ts: https://github.com/Hebilicious/acidcat/blob/main/packages/core-ts/README.md
 - core-effect: https://github.com/Hebilicious/acidcat/blob/main/packages/core-effect/README.md
+- core-rust: https://github.com/Hebilicious/acidcat/blob/main/packages/core-rust/README.md
 
 ## core-ts
 
@@ -114,3 +115,69 @@ export const aircon = App.make({ targets, capabilities: [powerSet], events: [sta
 - `session.follow(event, input)` gives a typed `Stream` of occurrences in a scope. `session.event(event).subscribe(input)` of `Handles.open` gives an async iterable, which a GraphQL `subscribe` resolver can return.
 - `Mcp.toWebHandler` serves push and poll. Set `principal: (request) => Effect<Option<string>>` so that each client has its own poll leases. For webhooks, add `webhooks: { sender: NodeWebhook.sender() }` from `@acid-cat/core-effect/NodeWebhook`; it needs `principal`. Call `handler.dispose()` to end the leases and the webhook subscriptions. `Mcp.handle` keeps no state, so it serves only push; use `Mcp.makeHandle` in its place.
 - An MCP server of your own, with `effect/ai/McpServer`, serves the events of the application with `Mcp.withEvents(app, layer, server, options)`: it answers the requests of the events extension, and gives each other request to your server. Give your server `extensions: Mcp.eventsExtensions`, so that `server/discover` declares the extension. Do not write the events methods yourself.
+
+## core-rust
+
+The crate `acid-cat-core`. Types give the schemas: each input, value, failure and payload derives `serde` and `schemars::JsonSchema`. Declare type aliases with the services of the application, so that the work of each capability knows their type.
+
+```rust
+use acid_cat_core::{App, Availability, Emitted, fail};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use tokio::sync::watch;
+
+struct Unit {
+    online: watch::Sender<Availability>,
+}
+
+type Capability = acid_cat_core::Capability<Unit>;
+type Event = acid_cat_core::Event<Unit>;
+
+#[derive(Deserialize, JsonSchema)]
+struct Power {
+    on: bool,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(tag = "_tag")]
+enum Failures {
+    Offline {},
+}
+
+#[derive(Serialize, JsonSchema)]
+struct Status {
+    power: bool,
+}
+
+let aircon = App::new()
+    .target("cli", ["cli"])
+    .target("mcp", ["mcp"])
+    .capability(
+        Capability::new("aircon.power.set", "Turn the unit on or off.")
+            .audience(["cli", "mcp"])
+            .input::<Power>()
+            .failures::<Failures>()
+            .run(|Power { on }, call| async move {
+                if !call.context().online.borrow().is_available() {
+                    return fail(Failures::Offline {});
+                }
+                Ok(())
+            }),
+    )
+    .event(
+        Event::new("aircon.status.changed", "The status of the unit changed. The occurrence gives the new status.")
+            .audience(["mcp"])
+            .payload::<Status>()
+            .subscribe(|(), subscription| futures::stream::iter([Ok(Emitted::new(Status { power: true }))])),
+    )
+    .build()?;
+```
+
+- `run` gives `Ok(value)`, `fail(failure)`, or an error with `?`, which is a defect: the call failure `internal`. A panic is a defect too.
+- With no `input`, the work gets `()`. With no `output`, it gives `()`, and the value is `null`.
+- An `Option` field is an optional property. Add `#[serde(skip_serializing_if = "Option::is_none")]` to the fields of a value, because a value must agree with the output schema.
+- When a call is cancelled, the core drops the future of the work. Release resources in `Drop`, not after an `await`.
+- The provider of an event gives a `Stream` of `Result<Emitted<P>, Defect>`. The end of the stream is complete. An `Err` is `internal`. When the client cancels, the core drops the stream.
+- `state(|unit| unit.status.subscribe())` gives the state of a capability from a `tokio::sync::watch::Receiver`. Use a `broadcast` channel, not a `watch`, for an event that must give each change: a `watch` keeps only the last value.
+- `build()` checks the application and gives `Arc<Application<C>>`. `render_catalog()` gives the catalog in canonical form. A type with a `title` used in two or more places becomes a shared type in `$defs`.
+- Bindings: `mcp::McpBinding` (MCP through HTTP, with the handshake, poll, and webhooks with `McpOptions::webhooks` and `principal`), `mcp::serve_stdio`, `http::HttpBinding`, `cli::cli_main`. `remote::serve(address, routes)` serves the remote bindings with hyper. The core has no WebMCP binding and no language binding: Rust code in the same process uses `Session::open`, `invoke` and `subscribe`.

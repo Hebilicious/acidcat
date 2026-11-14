@@ -147,7 +147,16 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
         try {
           parsed = JSON.parse(input);
         } catch {
-          return print({ kind: "invalid-input", message: "The input is not JSON." });
+          // The call failures of the id come before invalid-input (spec/invocation.md#call-failures).
+          return Effect.scoped(
+            Effect.gen(function* () {
+              if (catalogView.capabilities[id] === undefined) return yield* print({ kind: "unknown-capability", message: `There is no capability ${id}.` });
+              const session = yield* view;
+              const availability = yield* session.availability(id);
+              if (!availability.available) return yield* print({ kind: "unavailable", message: availability.reason });
+              return yield* print({ kind: "invalid-input", message: "The input is not JSON." });
+            }),
+          );
         }
         return invoke(id, parsed);
       }),

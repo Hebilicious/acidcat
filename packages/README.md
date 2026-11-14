@@ -45,6 +45,14 @@ Each core is complete in its own style. Neither core wraps the other. Both cores
 | Handles for code without Effect | `Handles.make`, `Handles.open` | `createSession` |
 
 
+## Reference implementation in Rust
+
+| Package | Directory | Registry name | Use |
+| --- | --- | --- | --- |
+| Core for Rust | [`core-rust/`](core-rust) | crates.io `acid-cat-core` | Serve capabilities and events in Rust, on Tokio, through the MCP binding (HTTP and stdio, with push, poll and webhook delivery), the HTTP binding and the CLI binding |
+
+`acid-cat-core` does not use the TypeScript packages. It follows the specification, and its tests run `acid-cat conform` against the conformance fixture, which [`examples/fixture.rs`](core-rust/examples/fixture.rs) serves. It writes the catalog of an application from its code, with `acid-cat-catalog`. It has no WebMCP binding, because WebMCP runs in a web page, and no language binding: Rust code in the same process opens a `Session`.
+
 ## Publishing
 
 [release-please](https://github.com/googleapis/release-please) makes the releases, in [`release.yml`](../.github/workflows/release.yml). It reads the commits on `main`, whose titles have the form `type(scope): subject`, and keeps one release pull request open:
@@ -65,6 +73,7 @@ Each registry has its own release workflow. A tag that is pushed by hand on `mai
 | npm | The six npm packages, all at one version | `npm/v0.1.0` | `release-npm.yml`: `moon run verify`, then `scripts/publish-npm.ts` |
 | PyPI | `acid-cat-catalog` | `pypi/v0.1.0` | `release-pypi.yml` |
 | crates.io | `acid-cat-catalog` | `crates/v0.1.0` | `release-crates.yml` |
+| crates.io | `acid-cat-core` | `crates-core/v0.1.0` | `release-crates-core.yml` |
 | Pkl | `acid-cat-catalog` | `acid-cat-catalog@0.1.0` | `release-pkl.yml`: a GitHub release with the package files |
 | Go | `github.com/Hebilicious/acidcat/packages/catalog/go` | `packages/catalog/go/v0.1.0` | None. The Go module proxy reads the tag |
 
@@ -87,7 +96,7 @@ On pypi.org, add a pending trusted publisher for `acid-cat-catalog`: repository 
 
 ### crates.io
 
-crates.io accepts a trusted publisher only for a crate that exists. Publish the first version with `cargo publish` and a token. Then, in the settings of the crate, add the trusted publisher: repository `Hebilicious/acidcat`, workflow `release-crates.yml`, environment `crates-io`. `moon run catalog-rust:package` packages the crate and builds it from the package.
+crates.io accepts a trusted publisher only for a crate that exists. Publish the first version of each crate with `cargo publish` and a token. Then, in the settings of the crate, add the trusted publisher: repository `Hebilicious/acidcat`, environment `crates-io`, and the workflow `release-crates.yml` for `acid-cat-catalog` or `release-crates-core.yml` for `acid-cat-core`. `moon run catalog-rust:package` and `moon run core-rust:package` package each crate and build it from the package.
 
 ### Pkl
 

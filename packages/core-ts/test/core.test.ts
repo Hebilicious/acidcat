@@ -339,6 +339,15 @@ test("the command line gives each outcome its exit code", async () => {
   assert.equal((await run("--help")).code, 0);
 });
 
+test("call with input that is not JSON gives unknown-capability, then unavailable, before invalid-input", async () => {
+  const context = options();
+  context.context.switch.set(false);
+  const run = (...args: string[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...context }, ...args);
+  assert.equal((await run("call", "fixture.nothing", "{bad")).code, 2);
+  assert.equal((await run("call", "fixture.toggle", "{bad")).code, 4);
+  assert.equal((await run("call", "fixture.echo", "{bad")).code, 3);
+});
+
 test("a repeated flag gives its items in order, or JSON text of the array, and a required one must occur", async () => {
   const Day = z.enum(["mon", "tue"]).meta({ id: "Day" });
   const app = defineApp({

@@ -1,0 +1,31 @@
+language: "rust"
+layer: "library"
+
+project:
+  title: "acid-cat-core"
+  description: "Serve AcidCat capabilities and events in Rust, through the MCP, HTTP and CLI bindings. Published to crates.io as acid-cat-core."
+
+tasks:
+  test:
+    description: "Run acid-cat conform against the conformance fixture through MCP over HTTP and stdio, HTTP and the command line, and check the catalog of the fixture."
+    command: "cargo"
+    args: ["test"]
+    inputs:
+      - "src/**/*"
+      - "examples/**/*"
+      - "tests/**/*"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "README.md"
+      - "/packages/catalog/rust/src/**/*"
+      - "/packages/cli/src/**/*.ts"
+      - "/packages/spec-ts/src/**/*.ts"
+      - "/packages/cli/conformance/*.acidcat.json"
+    toolchains: ["system"]
+
+  package:
+    description: "Package the crate, and build it from the package, for crates.io."
+    command: "cargo"
+    args: ["package", "--allow-dirty"]
+    inputs: ["src/**/*", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "/packages/catalog/rust/src/**/*"]
+    toolchains: ["system"]

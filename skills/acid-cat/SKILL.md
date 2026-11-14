@@ -2,7 +2,7 @@
 name: acid-cat
 license: MIT
 description: |
-  Build an application with AcidCat: write its catalog (in Pkl, with a catalog library, or from the code of a core), implement its capabilities and events with a core (@acid-cat/core-ts, @acid-cat/core-effect), serve them through bindings (MCP through HTTP or stdio, HTTP, command line, WebMCP), and test them with acid-cat check and acid-cat conform. Use when a repository depends on @acid-cat/*, has a *.acidcat.json catalog or a Pkl module that amends Catalog.pkl, or when the user asks to add a capability, a target or a binding, to expose an application to agents through MCP or WebMCP, or to give it a command line or an HTTP API.
+  Build an application with AcidCat: write its catalog (in Pkl, with a catalog library, or from the code of a core), implement its capabilities and events with a core (@acid-cat/core-ts, @acid-cat/core-effect, the Rust crate acid-cat-core), serve them through bindings (MCP through HTTP or stdio, HTTP, command line, WebMCP), and test them with acid-cat check and acid-cat conform. Use when a repository depends on @acid-cat/* or acid-cat-core, has a *.acidcat.json catalog or a Pkl module that amends Catalog.pkl, or when the user asks to add a capability, a target or a binding, to expose an application to agents through MCP or WebMCP, or to give it a command line or an HTTP API.
 ---
 
 # AcidCat
@@ -26,7 +26,7 @@ The specification is at https://github.com/Hebilicious/acidcat/tree/main/spec. R
 
 | Situation | Source of the catalog | Command that writes the JSON |
 | --- | --- | --- |
-| One application with one core | The code: the core writes the catalog from its capabilities | `renderCatalog(app, { toJsonSchema })` (core-ts), `App.render(app)` (core-effect) |
+| One application with one core | The code: the core writes the catalog from its capabilities | `renderCatalog(app, { toJsonSchema })` (core-ts), `App.render(app)` (core-effect), `app.render_catalog()` (core-rust) |
 | A catalog that several implementations share, for example a server in core-effect and a web page in core-ts | A Pkl module, or a program with a catalog library | `pkl eval <module>`, then `acid-cat format --write`; or the program of the library |
 
 When several implementations share one catalog, each implementation has a test that compares its own catalog with the shared catalog: the same targets, and for each capability the same audience, failure tags, `readOnly` and `state`. `examples/aircon` in the repository does this for both cores.
@@ -39,6 +39,7 @@ Commit the source and the JSON together. Add a check to the build that writes th
 | --- | --- | --- |
 | TypeScript | npm `@acid-cat/core-ts` | A capability returns a promise. Schemas are any Standard Schema library, for example Zod |
 | Effect | npm `@acid-cat/core-effect` | A capability is an Effect program with Effect Schema. Sessions are scopes, services are layers |
+| Rust | crates.io `acid-cat-core` | A capability is an async function on Tokio. Schemas come from types that derive `serde` and `schemars::JsonSchema`. It serves MCP, HTTP and the CLI, not WebMCP |
 
 A core in another language follows the specification and passes `acid-cat conform`. It does not use these packages.
 
@@ -55,7 +56,7 @@ An **event** is a thing that happens in the application, that clients follow, fo
 
 1. Add it to `events` in the source of the catalog: id, description, audience, input, payload. In Pkl: `events { ["aircon.status.changed"] { … } }`. In a catalog library: `event(id, …)`.
 2. Obey the rules: the id is not also the id of a capability. The input and the payload are objects: `"type": "object"`, or a `$ref` to a type that is an object. Put a filter in the input, for example `{ "room": … }`. Put a failure of the source in the payload, as a union with a `_tag`.
-3. Implement it in the core: in core-ts, `defineEvent` with a `subscribe` that gives an async iterable; in core-effect, `Event.make` with a `subscribe` that gives a `Stream`. See [references/cores.md](references/cores.md).
+3. Implement it in the core: in core-ts, `defineEvent` with a `subscribe` that gives an async iterable; in core-effect, `Event.make` with a `subscribe` that gives a `Stream`; in core-rust, `Event::new(…).subscribe(…)` that gives a `Stream`. See [references/cores.md](references/cores.md).
 4. Write the JSON of the catalog again, and run `acid-cat check --strict <catalog>`. A view has the events whose audience has its target.
 
 To keep old clients working, add members to a payload, and do not remove or change members. [spec/events.md](https://github.com/Hebilicious/acidcat/blob/main/spec/events.md) tells how subscriptions, occurrences and cursors work. The document of each binding tells how it serves them. The WebMCP binding does not serve events. To follow an event in your own API, with a GraphQL subscription, a Cap'n Web callback or an Elysia stream of server-sent events, see [references/bindings.md](references/bindings.md#graphql-subscription-from-an-event).
@@ -64,16 +65,16 @@ To keep old clients working, add members to a payload, and do not remove or chan
 
 Each target of the catalog lists its bindings. Each binding serves the **view** of its target: only the capabilities whose audience has the target.
 
-| Binding | Surface | core-ts | core-effect |
-| --- | --- | --- | --- |
-| `typescript` | Handles in code, for a user interface | `createSession` | `Session.make`, `Handles.make`, `Handles.makeEvents` |
-| `mcp` through HTTP | An MCP server at `/mcp` | `mcpHandler` | `Mcp.toWebHandler` |
-| `mcp` through stdio | A local MCP server that a client starts | `mcpStdioMain` | `NodeMcp.main` |
-| `http` | JSON at `POST /capabilities/<id>` | `httpHandler` | `Http.toWebHandler` |
-| `cli` | A command for each capability | `cliMain` | `NodeCli.main` |
-| `webmcp` | Tools of a web page for the agents of the browser | `installWebMcp` | `WebMcp.install` |
+| Binding | Surface | core-ts | core-effect | core-rust |
+| --- | --- | --- | --- | --- |
+| `typescript` | Handles in code, for a user interface | `createSession` | `Session.make`, `Handles.make`, `Handles.makeEvents` | None. Rust code in the same process uses `Session::open` |
+| `mcp` through HTTP | An MCP server at `/mcp` | `mcpHandler` | `Mcp.toWebHandler` | `mcp::McpBinding` |
+| `mcp` through stdio | A local MCP server that a client starts | `mcpStdioMain` | `NodeMcp.main` | `mcp::serve_stdio` |
+| `http` | JSON at `POST /capabilities/<id>` | `httpHandler` | `Http.toWebHandler` | `http::HttpBinding` |
+| `cli` | A command for each capability | `cliMain` | `NodeCli.main` | `cli::cli_main` |
+| `webmcp` | Tools of a web page for the agents of the browser | `installWebMcp` | `WebMcp.install` | None |
 
-The MCP and HTTP bindings give web handlers. On Node.js, the server of the core serves them: `serve` from `@acid-cat/core-ts/node`, or `NodeServer` from `@acid-cat/core-effect`. It is plain HTTP. TLS ends in the platform, before it. See [references/bindings.md](references/bindings.md) for the options and the traps of each binding.
+The MCP and HTTP bindings give web handlers. On Node.js, the server of the core serves them: `serve` from `@acid-cat/core-ts/node`, or `NodeServer` from `@acid-cat/core-effect`. In Rust, `remote::serve` of `acid-cat-core` serves them. It is plain HTTP. TLS ends in the platform, before it. See [references/bindings.md](references/bindings.md) for the options and the traps of each binding.
 
 ## Test
 
@@ -97,4 +98,4 @@ acid-cat conform --mcp http://127.0.0.1:3000/mcp --http http://127.0.0.1:3000/ap
 - A TLS proxy written in front of the server of a core, or `serve` from `@acid-cat/cli` used to serve an application. End TLS in the platform, and serve with the server of the core.
 - A server in a container that listens on `127.0.0.1`. Set `hostname` to `0.0.0.0`.
 - Writing to standard output from a capability that an MCP server through stdio serves. Standard output carries only MCP messages.
-- A long operation with no cancellation. Each core cancels the call when the client goes away. Stop the work when the signal (core-ts) or the fiber (core-effect) is cancelled.
+- A long operation with no cancellation. Each core cancels the call when the client goes away. Stop the work when the signal (core-ts) or the fiber (core-effect) is cancelled. In core-rust, the core drops the future: release resources in `Drop`.
