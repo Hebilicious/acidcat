@@ -378,6 +378,21 @@ test("parallel new subscriptions of one principal cannot pass the limit together
   }
 });
 
+test("the verification is for the pair of the principal and the URL as the client sent it", async () => {
+  const feed = feedForPromises();
+  const handler = webhookHandler(feed);
+  try {
+    const verifications = () => at("/spelled").filter((each) => isJsonObject(each.json) && each.json.type === "verification").length;
+    const spelled = { ...subscription("/spelled"), delivery: { ...subscription("/spelled").delivery, url: receiver.url("/spelled").replace("https://", "HTTPS://") } };
+    for (const params of [subscription("/spelled"), { ...subscription("/spelled"), arguments: { room: "again" } }, spelled]) {
+      decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", params, as("frank"))))).result);
+    }
+    assert.equal(verifications(), 2);
+  } finally {
+    await handler.dispose();
+  }
+});
+
 test("a principal gets ResourceExhausted over the maximum number of subscriptions", async () => {
   const feed = feedForPromises();
   const handler = webhookHandler(feed, { maxSubscriptions: 2 });

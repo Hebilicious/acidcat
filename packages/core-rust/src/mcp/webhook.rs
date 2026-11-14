@@ -158,10 +158,15 @@ pub(crate) struct Webhooks {
 struct Admitted {
     counts: Arc<Mutex<HashMap<String, usize>>>,
     principal: String,
+    released: bool,
 }
 
-impl Drop for Admitted {
-    fn drop(&mut self) {
+impl Admitted {
+    /// Stop counting the subscription as starting. It runs once: when the subscription exists, or when the start fails.
+    fn release(&mut self) {
+        if std::mem::replace(&mut self.released, true) {
+            return;
+        }
         let mut counts = lock(&self.counts);
         if let Some(count) = counts.get_mut(&self.principal) {
             *count -= 1;
@@ -169,6 +174,12 @@ impl Drop for Admitted {
                 counts.remove(&self.principal);
             }
         }
+    }
+}
+
+impl Drop for Admitted {
+    fn drop(&mut self) {
+        self.release();
     }
 }
 
@@ -315,7 +326,7 @@ impl Webhooks {
 
         // The check and the count are one step, so that parallel new subscriptions of one principal cannot all pass the
         // limit. A subscription that is starting counts until this request ends.
-        let Some(_admitted) = self.admit(principal) else {
+        let Some(mut admitted) = self.admit(principal) else {
             return Err(RpcError::new(
                 codes::RESOURCE_EXHAUSTED,
                 "Too many webhook subscriptions.",
@@ -376,7 +387,13 @@ impl Webhooks {
                 last_error: None,
             }),
         });
-        lock(&self.subscriptions).insert(key, subscription.clone());
+        // The subscription counts once: it leaves the starting count in the same step that adds it. The locks are taken
+        // in the order of `admit`: the subscriptions, then the starting counts.
+        {
+            let mut subscriptions = lock(&self.subscriptions);
+            subscriptions.insert(key, subscription.clone());
+            admitted.release();
+        }
         self.grant(&subscription, ttl_ms);
 
         // End the subscription when its lifetime ends with no renewal.
@@ -402,7 +419,6 @@ impl Webhooks {
         Ok(result_of(&subscription))
     }
 
-    /// Answer `events/unsubscribe`. The server checked the principal.
     /// Count a new subscription of `principal` that starts, if the limit admits it. The count ends when the result is
     /// dropped.
     fn admit(&self, principal: &str) -> Option<Admitted> {
@@ -420,9 +436,11 @@ impl Webhooks {
         Some(Admitted {
             counts: self.admitted.clone(),
             principal: principal.to_owned(),
+            released: false,
         })
     }
 
+    /// Answer `events/unsubscribe`. The server checked the principal.
     pub(crate) fn unsubscribe(&self, principal: &str, params: &Map<String, Value>) -> RpcAnswer {
         let name = params.get("name").and_then(Value::as_str);
         let url = params
@@ -916,5 +934,43 @@ mod tests {
         assert!(webhooks.admit("principal").is_some());
         drop(second);
         assert!(lock(&webhooks.admitted).is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_subscription_that_exists_counts_once_for_the_limit() {
+        let webhooks = Webhooks::new(WebhookOptions {
+            allow: Some(Arc::new(|_| true)),
+            max_subscriptions: 2,
+            ..WebhookOptions::default()
+        });
+        let open = opener();
+        let subscribe = |room: &str| {
+            let mut params = request("test.quiet", Value::Null);
+            if let Some(delivery) = params.get_mut("delivery") {
+                delivery["url"] = json!(format!("https://example.com/{room}"));
+            }
+            params
+        };
+        assert!(
+            webhooks
+                .subscribe("principal", &subscribe("a"), &open)
+                .await
+                .is_ok()
+        );
+        assert!(
+            lock(&webhooks.admitted).is_empty(),
+            "the subscription left the starting count when it was added"
+        );
+        assert!(
+            webhooks
+                .subscribe("principal", &subscribe("b"), &open)
+                .await
+                .is_ok()
+        );
+        let over = webhooks
+            .subscribe("principal", &subscribe("c"), &open)
+            .await;
+        assert!(over.is_err(), "a third subscription is over the limit");
+        webhooks.close().await;
     }
 }

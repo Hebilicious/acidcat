@@ -236,17 +236,24 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       return { error: { code: MCP_EVENT_ERRORS.resourceExhausted, message: "Too many webhook subscriptions.", data: { limit: "subscriptions", max: settings.maxSubscriptions } } };
     }
     admitted.set(principal, (admitted.get(principal) ?? 0) + 1);
-    try {
-      return await startAdmitted(principal, key, url, secret, request, open);
-    } finally {
+    let held = true;
+    /** Stop counting the subscription as starting. It runs once: when the subscription exists, or when the start fails. */
+    const release = () => {
+      if (!held) return;
+      held = false;
       const left = (admitted.get(principal) ?? 1) - 1;
       if (left === 0) admitted.delete(principal);
       else admitted.set(principal, left);
+    };
+    try {
+      return await startAdmitted(principal, key, url, secret, request, open, release);
+    } finally {
+      release();
     }
   }
 
-  /** Start a subscription that the limit admitted. */
-  async function startAdmitted(principal: string, key: string, url: URL, secret: string, request: WebhookRequest, open: OpenSession): Promise<RpcAnswer> {
+  /** Start a subscription that the limit admitted. `release` runs in the same step that adds the subscription. */
+  async function startAdmitted(principal: string, key: string, url: URL, secret: string, request: WebhookRequest, open: OpenSession, release: () => void): Promise<RpcAnswer> {
     const id = await webhookSubscriptionId(principal, request.rawUrl, request.name, request.input);
     const own = await open();
     const subscribed = await own.session.subscribe(request.name, request.input, {
@@ -279,6 +286,8 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       lastDeliveryAt: null,
       lastError: null,
     };
+    // The subscription counts once: it leaves the starting count in the same step that adds it.
+    release();
     subscriptions.set(key, subscription);
     grant(subscription, request.ttlMs);
     const work = pump(subscription).finally(() => pumps.delete(work));
@@ -293,7 +302,9 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       const { url, secret } = read;
       // The key has the URL as the client sent it, not the parsed URL (spec/bindings/mcp.md#webhook).
       const key = subscriptionKey(principal, read.rawUrl, read.name, read.input);
-      await starting.get(key);
+      // Wait until no request with this key starts a subscription. Each waiter checks again after it wakes, because
+      // another waiter can start first.
+      for (let pending = starting.get(key); pending !== undefined; pending = starting.get(key)) await pending.catch(() => undefined);
       const existing = subscriptions.get(key);
       if (existing !== undefined) {
         // A subscription with this key exists, so the event exists: an invalid maxAgeMs is the next failure that applies.
@@ -308,7 +319,9 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       }
       const started = start(principal, key, url, secret, read, open);
       starting.set(key, started);
-      return started.finally(() => starting.delete(key));
+      return started.finally(() => {
+        if (starting.get(key) === started) starting.delete(key);
+      });
     },
 
     unsubscribe(principal, params) {
