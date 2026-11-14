@@ -5,7 +5,7 @@
   "packages/cli": "0.11.0",
   "packages/core-effect": "0.11.0",
   "packages/core-ts": "0.11.0",
-  "packages/catalog/python": "0.2.2",
+  "packages/catalog/python": "0.2.3",
   "packages/catalog/rust": "0.2.2",
   "packages/core-rust": "0.1.0",
   "packages/catalog/go": "0.2.2",

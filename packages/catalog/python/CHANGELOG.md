@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/Hebilicious/acidcat/compare/pypi/v0.2.2...pypi/v0.2.3) (2026-11-14)
+
+
+### Documentation
+
+* **readme:** bring the READMEs up to date, and give the air conditioner a web page with WebMCP tools ([#133](https://github.com/Hebilicious/acidcat/issues/133)) ([5ee0f2e](https://github.com/Hebilicious/acidcat/commit/5ee0f2e6810718c1190558a3e13f4d5586bac322))
+
 ## [0.2.2](https://github.com/Hebilicious/acidcat/compare/pypi/v0.2.1...pypi/v0.2.2) (2026-11-12)
 
 
