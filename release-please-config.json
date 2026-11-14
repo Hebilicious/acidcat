@@ -6,6 +6,19 @@
   "pull-request-header": "Merge this pull request to release the packages below. The release workflow then publishes each one to its registry.",
   "include-v-in-tag": false,
   "tag-separator": "@",
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "perf", "section": "Performance Improvements" },
+    { "type": "revert", "section": "Reverts" },
+    { "type": "docs", "section": "Documentation", "hidden": true },
+    { "type": "style", "section": "Styles", "hidden": true },
+    { "type": "refactor", "section": "Code Refactoring", "hidden": true },
+    { "type": "test", "section": "Tests", "hidden": true },
+    { "type": "build", "section": "Build System", "hidden": true },
+    { "type": "ci", "section": "Continuous Integration", "hidden": true },
+    { "type": "chore", "section": "Miscellaneous Chores", "hidden": true }
+  ],
   "packages": {
     "packages/spec-ts": { "release-type": "node", "component": "@acid-cat/spec-ts" },
     "packages/mcp-handshake": { "release-type": "node", "component": "@acid-cat/mcp-handshake" },

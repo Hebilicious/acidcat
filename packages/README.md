@@ -57,7 +57,7 @@ Each core is complete in its own style. Neither core wraps the other. Both TypeS
 
 [release-please](https://github.com/googleapis/release-please) makes the releases, in [`release.yml`](../.github/workflows/release.yml). It reads the commits on `main`, whose titles have the form `type(scope): subject`, and keeps one release pull request open:
 
-- A package gets a release when a commit with the type `feat`, `fix`, `perf`, `revert` or `deps` changes a file in its directory. Other types, and files outside the packages, give no release.
+- A package gets a release when a commit with the type `feat`, `fix`, `perf` or `revert`, or a breaking change (`!`), changes a file in its directory. Other types, and files outside the packages, give no release. `changelog-sections` in `release-please-config.json` sets this rule for each package.
 - Before version 1.0, `feat` and a breaking change (`!`) increase the minor version. The other types increase the patch version.
 - The six npm packages are linked: they always have the same version, and they are released together.
 - The release pull request changes the versions in the package files, and the `CHANGELOG.md` of each package. release-please writes these changelogs.

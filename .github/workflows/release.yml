@@ -1,7 +1,7 @@
 name: Release
 
 # release-please keeps a release pull request open. It holds the next version and the changelog of each package with
-# releasable commits since its last release: `feat`, `fix`, `perf`, `revert` and `deps`.
+# releasable commits since its last release: `feat`, `fix`, `perf`, `revert`, or a breaking change (`!`).
 #
 # Merge the release pull request to release. release-please then tags each released package and creates its GitHub
 # release. Each tag starts the release workflow of its registry.
