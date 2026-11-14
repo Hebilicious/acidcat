@@ -197,7 +197,8 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       }
     }
     const subscribed = await provider.subscribe(id, input, { signal: io.signal, ...resume });
-    if ("kind" in subscribed) return print(subscribed);
+    // An interrupt ends the subscription as cancelled, also before the subscription starts: nothing goes to standard error.
+    if ("kind" in subscribed) return io.signal?.aborted === true ? CLI_WATCH_EXIT_CODES.cancelled : print(subscribed);
     try {
       for await (const occurrence of subscribed) io.stdout(JSON.stringify(occurrence));
     } catch (error) {

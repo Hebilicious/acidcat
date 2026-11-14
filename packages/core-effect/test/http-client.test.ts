@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { test } from "node:test";
 
 import { Effect, Exit, Scope, Stream } from "effect";
@@ -168,6 +169,35 @@ test("a base URL with a user name, a password, a query or a fragment throws, wit
   assert.throws(() => Http.client("http://example.com/cli?k=v"), /must not have a query or a fragment/);
   assert.throws(() => Http.client("http://example.com/cli#part"), /must not have a query or a fragment/);
   assert.throws(() => Http.client("not a url TOKEN"), (error: unknown) => error instanceof Error && !error.message.includes("TOKEN"));
+});
+
+test("an interrupt before the server answers a subscription ends watch with 130, and writes nothing", async (context) => {
+  // A server that accepts the subscription and never answers. The interrupt comes while the command line waits for the
+  // answer, as when the server has started the subscription but its answer has not come yet.
+  let received: () => void = () => undefined;
+  const subscribed = new Promise<void>((resolve) => (received = resolve));
+  let closed = false;
+  const server = await serve(
+    (request) =>
+      new Promise<Response>(() => {
+        request.signal.addEventListener("abort", () => (closed = true));
+        received();
+      }),
+  );
+  context.after(server.close);
+  const child = spawn(process.execPath, [remoteCli, server.url, "watch", "fixture.ticks", "--count", "1"], { stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));
+  child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
+  const exited = new Promise<number | null>((resolve) => child.on("close", resolve));
+  await subscribed;
+  child.kill("SIGINT");
+  assert.equal(await exited, 130);
+  assert.equal(stderr, "");
+  assert.equal(stdout, "");
+  for (let turn = 0; !closed && turn < 100; turn++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.ok(closed, "the interrupt closes the request");
 });
 
 test("a cursor that is not a header value is invalid-input, and the client sends no request", async (context) => {

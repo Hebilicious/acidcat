@@ -599,6 +599,9 @@ async fn watch<C: Send + Sync + 'static>(
     };
     let mut occurrences = match provider.subscribe(id, input, options).await {
         Ok(occurrences) => occurrences,
+        // An interrupt ends the subscription as cancelled, also before the subscription starts: nothing goes to
+        // standard error.
+        Err(_) if io.cancel.is_cancelled() => return Ok(exit::CANCELLED),
         Err(failure) => return Ok(print(io, &Outcome::CallFailure(failure))),
     };
     loop {
