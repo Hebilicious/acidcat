@@ -12,7 +12,10 @@ use serde_json::{Map, Value, json};
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
-use super::{OpenSession, RpcAnswer, RpcError, codes, subscribe_error, subscription_params};
+use super::{
+    KeyGate, KeyGates, OpenSession, RpcAnswer, RpcError, codes, subscribe_error,
+    subscription_params,
+};
 use crate::schema::canonical_json;
 use crate::session::{Session, SubscribeOptions, is_max_age_ms};
 use crate::subscription::Occurrence;
@@ -97,6 +100,8 @@ impl Lease {
 pub(crate) struct PollLeases {
     options: PollOptions,
     leases: Mutex<HashMap<String, Arc<Lease>>>,
+    /// A lock for each key that a poll reads or starts, so that two first polls with the same key share one lease.
+    starting: KeyGates<Mutex<()>>,
     closed: CancellationToken,
 }
 
@@ -105,6 +110,7 @@ impl PollLeases {
         Arc::new(PollLeases {
             options,
             leases: Mutex::new(HashMap::new()),
+            starting: Mutex::new(HashMap::new()),
             closed: CancellationToken::new(),
         })
     }
@@ -115,7 +121,8 @@ impl PollLeases {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// End all leases.
+    /// End all leases. A lease that starts after this call ends at once, because [`PollLeases::start`] checks `closed`
+    /// while it holds the lock of the map.
     pub(crate) fn close(&self) {
         self.closed.cancel();
         let leases: Vec<Arc<Lease>> = self.leases().drain().map(|(_, lease)| lease).collect();
@@ -160,6 +167,13 @@ impl PollLeases {
             },
         };
         let key = canonical_json(&json!([principal, read.name, read.input]));
+        // Find or start the lease while this request holds the lock of the key: a second poll with the same key waits,
+        // then finds the lease of the first.
+        let gate = KeyGate::enter(&self.starting, &key);
+        let _held = gate
+            .lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let lease = self.leases().get(&key).cloned();
 
         if let Some(lease) = &lease {
@@ -208,7 +222,8 @@ impl PollLeases {
                     .entries
                     .front()
                     .map_or(state.newest + 1, |entry| entry.position);
-                let older = after + 1 < oldest;
+                // `after + 1` overflows for a forged cursor at u64::MAX. `oldest` is 1 or more.
+                let older = after < oldest.saturating_sub(1);
                 let available: Vec<&Entry> = state
                     .entries
                     .iter()
@@ -263,10 +278,6 @@ impl PollLeases {
                 return Err(subscribe_error(&failure));
             }
         };
-        if self.closed.is_cancelled() {
-            session.close();
-            return Err(RpcError::new(codes::INTERNAL, "The server is closing."));
-        }
         let lease = Arc::new(Lease {
             id: uuid::Uuid::new_v4().to_string(),
             key: key.clone(),
@@ -280,7 +291,19 @@ impl PollLeases {
             }),
             ended: CancellationToken::new(),
         });
-        self.leases().insert(key, lease.clone());
+        {
+            let mut leases = self.leases();
+            if self.closed.is_cancelled() {
+                drop(leases);
+                drop(occurrences);
+                session.close();
+                return Err(RpcError::new(codes::INTERNAL, "The server is closing."));
+            }
+            // The lock of the key makes a replaced lease impossible. If one is still there, end it, so that it is not leaked.
+            if let Some(replaced) = leases.insert(key, lease.clone()) {
+                replaced.ended.cancel();
+            }
+        }
 
         // Read the occurrences into the buffer until the subscription ends. The lease keeps its buffer until it ends.
         let reading = lease.clone();
@@ -375,4 +398,122 @@ fn decode_cursor(cursor: &str) -> Option<(String, u64, Option<String>)> {
         Some(provider) => Some(provider.as_str()?.to_owned()),
     };
     (parts.len() <= 3).then_some((lease, position, provider))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::*;
+    use crate::app::{App, Application, Event};
+
+    /// The services of the test application: the number of subscriptions that the provider started.
+    #[derive(Default)]
+    struct Services {
+        subscribes: AtomicUsize,
+    }
+
+    /// An application with one event that never gives an occurrence. Its provider is slow to start, so that two polls
+    /// at the same time overlap.
+    fn application() -> Arc<Application<Services>> {
+        App::new()
+            .title("Test")
+            .target("mcp", ["mcp"])
+            .event(
+                Event::new("test.quiet", "Never give an occurrence.")
+                    .audience(["mcp"])
+                    .subscribe(|(), subscription: crate::app::Subscription<Services>| {
+                        subscription
+                            .context_arc()
+                            .subscribes
+                            .fetch_add(1, Ordering::SeqCst);
+                        std::thread::sleep(Duration::from_millis(50));
+                        futures::stream::pending()
+                    }),
+            )
+            .build()
+            .unwrap_or_else(|problems| panic!("the application does not conform: {problems:?}"))
+    }
+
+    fn opener(context: &Arc<Services>) -> OpenSession<Services> {
+        let app = application();
+        let context = context.clone();
+        Arc::new(move || Session::open(&app, "mcp", context.clone()))
+    }
+
+    fn params(cursor: Option<&str>) -> Map<String, Value> {
+        let mut params = Map::new();
+        params.insert("name".into(), json!("test.quiet"));
+        if let Some(cursor) = cursor {
+            params.insert("cursor".into(), json!(cursor));
+        }
+        params
+    }
+
+    fn cursor_of(result: &Map<String, Value>) -> String {
+        result
+            .get("cursor")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_first_polls_share_one_lease() {
+        let context = Arc::new(Services::default());
+        let open = opener(&context);
+        let leases = PollLeases::new(PollOptions::default());
+        let runtime = tokio::runtime::Handle::current();
+        let cursors: Vec<String> = std::thread::scope(|scope| {
+            let polls: Vec<_> = (0..4)
+                .map(|_| {
+                    scope.spawn(|| {
+                        let _runtime = runtime.enter();
+                        leases
+                            .poll(None, &params(None), &open)
+                            .map(|result| cursor_of(&result))
+                    })
+                })
+                .collect();
+            polls
+                .into_iter()
+                .map(|poll| poll.join().ok().and_then(Result::ok).unwrap_or_default())
+                .collect()
+        });
+        assert_eq!(context.subscribes.load(Ordering::SeqCst), 1);
+        assert_eq!(leases.leases().len(), 1);
+        let ids: Vec<Option<String>> = cursors
+            .iter()
+            .map(|cursor| decode_cursor(cursor).map(|(id, _, _)| id))
+            .collect();
+        assert!(ids[0].is_some());
+        assert!(ids.iter().all(|id| *id == ids[0]), "one lease: {ids:?}");
+        assert!(
+            leases
+                .starting
+                .lock()
+                .is_ok_and(|starting| starting.is_empty())
+        );
+        leases.close();
+    }
+
+    #[tokio::test]
+    async fn a_forged_cursor_at_the_largest_position_does_not_overflow() {
+        let context = Arc::new(Services::default());
+        let open = opener(&context);
+        let leases = PollLeases::new(PollOptions::default());
+        let first = leases.poll(None, &params(None), &open);
+        let lease = first
+            .as_ref()
+            .ok()
+            .and_then(|result| decode_cursor(&cursor_of(result)))
+            .map(|(id, _, _)| id)
+            .unwrap_or_default();
+        let forged = encode_cursor(&lease, u64::MAX, None);
+        let answer = leases.poll(None, &params(Some(&forged)), &open);
+        let result = answer.unwrap_or_default();
+        assert_eq!(result.get("events"), Some(&json!([])));
+        assert_eq!(result.get("truncated"), Some(&json!(false)));
+        leases.close();
+    }
 }

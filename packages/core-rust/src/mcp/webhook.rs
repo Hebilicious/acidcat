@@ -19,8 +19,12 @@ use sha2::{Digest, Sha256};
 use tokio::net::TcpStream;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
-use super::{OpenSession, RpcAnswer, RpcError, codes, subscribe_error, subscription_params};
+use super::{
+    KeyGate, KeyGates, OpenSession, RpcAnswer, RpcError, codes, subscribe_error,
+    subscription_params,
+};
 use crate::schema::canonical_json;
 use crate::session::{SubscribeOptions, is_max_age_ms};
 use crate::subscription::Occurrences;
@@ -141,10 +145,12 @@ pub(crate) struct Webhooks {
     tls: Arc<rustls::ClientConfig>,
     subscriptions: Mutex<HashMap<String, Arc<Subscription>>>,
     /// A lock for each key that starts or renews, so that two requests with the same key do not start two subscriptions.
-    starting: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    starting: KeyGates<tokio::sync::Mutex<()>>,
     /// The pairs of principal and URL that agreed to get deliveries, while the process runs.
     verified: Mutex<HashSet<String>>,
     closed: CancellationToken,
+    /// The tasks that send the occurrences of the subscriptions. [`Webhooks::close`] waits for them.
+    pumps: TaskTracker,
 }
 
 enum Sent {
@@ -159,6 +165,18 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// The lifetime that the server grants for `ttlMs`: not more than the maximum and not less than the minimum, and the
+/// maximum when the request gives no `ttlMs`. The clamp is in milliseconds, before the conversion to a [`Duration`], so
+/// that a very large `ttlMs` such as `1e22` cannot overflow.
+fn granted_lifetime(ttl_ms: Option<f64>, min_ttl: Duration, max_ttl: Duration) -> Duration {
+    let Some(ttl_ms) = ttl_ms else {
+        return max_ttl;
+    };
+    let min_ms = min_ttl.as_secs_f64() * 1000.0;
+    let max_ms = max_ttl.as_secs_f64() * 1000.0;
+    Duration::from_secs_f64(ttl_ms.max(min_ms).min(max_ms) / 1000.0)
+}
+
 impl Webhooks {
     pub(crate) fn new(options: WebhookOptions) -> Arc<Self> {
         let tls = Arc::new(tls_config(&options.trusted_certificates));
@@ -169,10 +187,11 @@ impl Webhooks {
             starting: Mutex::new(HashMap::new()),
             verified: Mutex::new(HashSet::new()),
             closed: CancellationToken::new(),
+            pumps: TaskTracker::new(),
         })
     }
 
-    /// End all webhook subscriptions.
+    /// End all webhook subscriptions, and wait until their deliveries stop and their sessions close.
     pub(crate) async fn close(&self) {
         self.closed.cancel();
         let subscriptions: Vec<Arc<Subscription>> = lock(&self.subscriptions)
@@ -182,6 +201,8 @@ impl Webhooks {
         subscriptions
             .iter()
             .for_each(|subscription| subscription.ended.cancel());
+        self.pumps.close();
+        self.pumps.wait().await;
     }
 
     fn end(&self, subscription: &Arc<Subscription>) {
@@ -248,8 +269,9 @@ impl Webhooks {
         // The key has the URL as the client sent it, not the parsed URL.
         let key_value = json!([principal, raw_url, read.name, read.input]);
         let key = canonical_json(&key_value);
-        let gate = lock(&self.starting).entry(key.clone()).or_default().clone();
-        let _gate = gate.lock().await;
+        // The gate leaves the map of starting keys when this request ends, with success or failure.
+        let gate = KeyGate::enter(&self.starting, &key);
+        let _held = gate.lock.lock().await;
 
         let existing = lock(&self.subscriptions).get(&key).cloned();
         if let Some(subscription) = existing {
@@ -354,7 +376,7 @@ impl Webhooks {
             }
         });
         let (webhooks, pumped) = (self.clone(), subscription.clone());
-        tokio::spawn(async move {
+        self.pumps.spawn(async move {
             webhooks.pump(&pumped, occurrences).await;
             webhooks.end(&pumped);
             session.close();
@@ -391,11 +413,7 @@ impl Webhooks {
 
     /// Grant a lifetime: `ttlMs`, but not more than the maximum and not less than the minimum.
     fn grant(&self, subscription: &Subscription, ttl_ms: Option<f64>) {
-        let lifetime = match ttl_ms {
-            None => self.options.max_ttl,
-            Some(ttl) => Duration::from_secs_f64(ttl / 1000.0)
-                .clamp(self.options.min_ttl, self.options.max_ttl),
-        };
+        let lifetime = granted_lifetime(ttl_ms, self.options.min_ttl, self.options.max_ttl);
         let mut state = subscription.lock();
         state.expires_at = SystemTime::now() + lifetime;
         state.deadline = Instant::now() + lifetime;
@@ -854,5 +872,123 @@ impl rustls::client::danger::ServerCertVerifier for Verifier {
         self.provider
             .signature_verification_algorithms
             .supported_schemes()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::{App, Application, Event};
+    use crate::session::Session;
+
+    struct Services;
+
+    /// An application with one event that never gives an occurrence.
+    fn application() -> Arc<Application<Services>> {
+        App::new()
+            .title("Test")
+            .target("mcp", ["mcp"])
+            .event(
+                Event::new("test.quiet", "Never give an occurrence.")
+                    .audience(["mcp"])
+                    .subscribe(|(), _| futures::stream::pending()),
+            )
+            .build()
+            .unwrap_or_else(|problems| panic!("the application does not conform: {problems:?}"))
+    }
+
+    fn opener() -> OpenSession<Services> {
+        let app = application();
+        let context = Arc::new(Services);
+        Arc::new(move || Session::open(&app, "mcp", context.clone()))
+    }
+
+    /// Webhooks that deliver to every URL with no verification.
+    fn webhooks() -> Arc<Webhooks> {
+        Webhooks::new(WebhookOptions {
+            allow: Some(Arc::new(|_| true)),
+            ..WebhookOptions::default()
+        })
+    }
+
+    fn request(name: &str, ttl_ms: Value) -> Map<String, Value> {
+        let secret = format!("whsec_{}", STANDARD.encode([7u8; 32]));
+        let params = json!({
+            "name": name,
+            "delivery": { "mode": "webhook", "url": "https://example.com/hook", "secret": secret },
+            "ttlMs": ttl_ms,
+        });
+        params.as_object().cloned().unwrap_or_default()
+    }
+
+    #[test]
+    fn the_granted_lifetime_is_clamped_in_milliseconds() {
+        let (min, max) = (Duration::from_secs(60), Duration::from_secs(3600));
+        assert_eq!(granted_lifetime(Some(1e22), min, max), max);
+        assert_eq!(granted_lifetime(Some(f64::MAX), min, max), max);
+        assert_eq!(granted_lifetime(Some(0.0), min, max), min);
+        assert_eq!(
+            granted_lifetime(Some(120_000.0), min, max),
+            Duration::from_secs(120)
+        );
+        assert_eq!(granted_lifetime(None, min, max), max);
+    }
+
+    #[tokio::test]
+    async fn a_very_large_ttl_gets_the_maximum_lifetime() {
+        let webhooks = webhooks();
+        let open = opener();
+        let result = webhooks
+            .subscribe("principal", &request("test.quiet", json!(1e22)), &open)
+            .await;
+        assert!(result.is_ok(), "the subscription starts: {result:?}");
+        let expires_at = lock(&webhooks.subscriptions)
+            .values()
+            .map(|subscription| subscription.lock().expires_at)
+            .next();
+        let lifetime = expires_at
+            .and_then(|expires_at| expires_at.duration_since(SystemTime::now()).ok())
+            .unwrap_or_default();
+        assert!(lifetime > Duration::from_secs(3590) && lifetime <= Duration::from_secs(3600));
+        webhooks.close().await;
+    }
+
+    #[tokio::test]
+    async fn the_lock_of_a_key_leaves_the_map_when_the_start_ends() {
+        let webhooks = webhooks();
+        let open = opener();
+        let started = webhooks
+            .subscribe("principal", &request("test.quiet", Value::Null), &open)
+            .await;
+        assert!(started.is_ok(), "the subscription starts: {started:?}");
+        assert!(lock(&webhooks.starting).is_empty());
+
+        let failed = webhooks
+            .subscribe("principal", &request("test.unknown", Value::Null), &open)
+            .await;
+        assert!(failed.is_err(), "an unknown event fails");
+        assert!(lock(&webhooks.starting).is_empty());
+        webhooks.close().await;
+    }
+
+    #[tokio::test]
+    async fn close_waits_until_the_deliveries_stop() {
+        let webhooks = webhooks();
+        let open = opener();
+        for key in ["a", "b", "c"] {
+            let mut params = request("test.quiet", Value::Null);
+            if let Some(delivery) = params.get_mut("delivery") {
+                delivery["url"] = json!(format!("https://example.com/{key}"));
+            }
+            let result = webhooks.subscribe("principal", &params, &open).await;
+            assert!(result.is_ok(), "the subscription starts: {result:?}");
+        }
+        assert_eq!(webhooks.pumps.len(), 3);
+        webhooks.close().await;
+        assert!(
+            webhooks.pumps.is_empty(),
+            "close returns after each pump ends"
+        );
+        assert!(lock(&webhooks.subscriptions).is_empty());
     }
 }

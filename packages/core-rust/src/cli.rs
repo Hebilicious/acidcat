@@ -8,7 +8,7 @@ use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
 use crate::app::Application;
-use crate::outcome::{CallFailure, Kind, Outcome};
+use crate::outcome::{Availability, CallFailure, Kind, Outcome};
 use crate::schema::{bundle, resolve};
 use crate::session::{Session, SubscribeOptions};
 
@@ -309,13 +309,22 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 })?;
                 let text = args.get(2).map_or("{}", String::as_str);
                 let Ok(input) = serde_json::from_str::<Value>(text) else {
-                    return Ok(print(
-                        io,
-                        &Outcome::CallFailure(CallFailure::new(
-                            Kind::InvalidInput,
-                            "The input is not JSON.",
-                        )),
-                    ));
+                    // Text that is not JSON is invalid input, but the kinds before it in spec/invocation.md#call-failures
+                    // come first: cancelled, unknown-capability and unavailable.
+                    let failure = match session.availability(id) {
+                        _ if io.cancel.is_cancelled() => CallFailure::cancelled(),
+                        None => CallFailure::new(
+                            Kind::UnknownCapability,
+                            format!("There is no capability {id}."),
+                        ),
+                        Some(Availability::Unavailable { reason }) => {
+                            CallFailure::new(Kind::Unavailable, reason)
+                        }
+                        Some(Availability::Available) => {
+                            CallFailure::new(Kind::InvalidInput, "The input is not JSON.")
+                        }
+                    };
+                    return Ok(print(io, &Outcome::CallFailure(failure)));
                 };
                 let outcome = session.invoke(id, input, &io.cancel).await;
                 Ok(print(io, &outcome))

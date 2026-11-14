@@ -198,6 +198,11 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       try {
         input = JSON.parse(text);
       } catch {
+        // The call failures of the id come before invalid-input (spec/invocation.md#call-failures).
+        const handle = session.handles.get(id);
+        if (handle === undefined) return print({ kind: "unknown-capability", message: `There is no capability ${id}.` });
+        const availability = handle.availability.getSnapshot();
+        if (!availability.available) return print({ kind: "unavailable", message: availability.reason });
         return print({ kind: "invalid-input", message: "The input is not JSON." });
       }
       return print(await session.invoke(id, input, { signal: io.signal }));

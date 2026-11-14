@@ -6,7 +6,8 @@ mod poll;
 mod stdio;
 mod webhook;
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::{Map, Value, json};
@@ -105,6 +106,50 @@ pub(crate) fn server_info(name: &str, version: &str) -> Value {
 
 /// A session of its own for a poll lease or a webhook subscription (spec/bindings/mcp.md#subscriptions-that-outlive-a-request).
 pub(crate) type OpenSession<C> = Arc<dyn Fn() -> Session<C> + Send + Sync>;
+
+/// One lock for each key that starts a subscription, so that two requests with the same key do not start two
+/// subscriptions. A key is in the map only while a request holds or waits for its lock.
+pub(crate) type KeyGates<L> = Mutex<HashMap<String, Arc<L>>>;
+
+/// The lock of one key in a [`KeyGates`] map. Lock [`KeyGate::lock`] before the work for the key. When the last request
+/// that uses the lock of a key drops its gate, with success or failure, the key leaves the map.
+pub(crate) struct KeyGate<'a, L> {
+    gates: &'a KeyGates<L>,
+    key: String,
+    pub(crate) lock: Arc<L>,
+}
+
+impl<'a, L: Default> KeyGate<'a, L> {
+    pub(crate) fn enter(gates: &'a KeyGates<L>, key: &str) -> Self {
+        let lock = lock_gates(gates).entry(key.to_owned()).or_default().clone();
+        KeyGate {
+            gates,
+            key: key.to_owned(),
+            lock,
+        }
+    }
+}
+
+impl<L> Drop for KeyGate<'_, L> {
+    fn drop(&mut self) {
+        let mut gates = lock_gates(self.gates);
+        // Each clone of the lock is made while the map is locked, so this count is exact: the map and this gate hold the
+        // only two references when no other request holds or waits for the lock.
+        if gates
+            .get(&self.key)
+            .is_some_and(|current| Arc::ptr_eq(current, &self.lock))
+            && Arc::strong_count(&self.lock) == 2
+        {
+            gates.remove(&self.key);
+        }
+    }
+}
+
+fn lock_gates<L>(gates: &KeyGates<L>) -> std::sync::MutexGuard<'_, HashMap<String, Arc<L>>> {
+    gates
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 /// The tools of the available capabilities in the view of a session (spec/bindings/mcp.md#tools).
 pub(crate) fn list_tools<C: Send + Sync + 'static>(session: &Session<C>) -> Vec<Value> {

@@ -234,29 +234,111 @@ pub(crate) fn view_of(catalog: &Value, target: &str) -> Value {
     Value::Object(view)
 }
 
-/// The canonical JSON of a value (spec/bindings/mcp.md#canonical-json): no spaces, and the keys of each object in
-/// code point order. Rust strings compare by bytes of UTF-8, which is the order of code points.
+/// The canonical JSON of a value (spec/bindings/mcp.md#canonical-json): no spaces, the keys of each object in code
+/// point order, and strings and numbers as the canonical form of a catalog writes them (spec/catalog.md#canonical-form),
+/// which is how ECMAScript writes them. Rust strings compare by bytes of UTF-8, which is the order of code points.
 pub(crate) fn canonical_json(value: &Value) -> String {
+    let mut out = String::new();
+    write_canonical(&mut out, value);
+    out
+}
+
+fn write_canonical(out: &mut String, value: &Value) {
     match value {
-        Value::Array(items) => format!(
-            "[{}]",
-            items
-                .iter()
-                .map(canonical_json)
-                .collect::<Vec<_>>()
-                .join(",")
-        ),
+        Value::Null => out.push_str("null"),
+        Value::Bool(flag) => out.push_str(if *flag { "true" } else { "false" }),
+        Value::Number(number) => out.push_str(&number_text(number)),
+        Value::String(text) => write_string(out, text),
+        Value::Array(items) => {
+            out.push('[');
+            for (index, item) in items.iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                write_canonical(out, item);
+            }
+            out.push(']');
+        }
         Value::Object(object) => {
             let sorted: BTreeMap<&String, &Value> = object.iter().collect();
-            let members: Vec<String> = sorted
-                .into_iter()
-                .map(|(key, value)| {
-                    format!("{}:{}", Value::String(key.clone()), canonical_json(value))
-                })
-                .collect();
-            format!("{{{}}}", members.join(","))
+            out.push('{');
+            for (index, (key, item)) in sorted.into_iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                write_string(out, key);
+                out.push(':');
+                write_canonical(out, item);
+            }
+            out.push('}');
         }
-        other => other.to_string(),
+    }
+}
+
+/// Escape a string exactly as ECMAScript's `JSON.stringify` does.
+fn write_string(out: &mut String, text: &str) {
+    out.push('"');
+    for character in text.chars() {
+        match character {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            control if (control as u32) < 0x20 => {
+                out.push_str(&format!("\\u{:04x}", control as u32));
+            }
+            other => out.push(other),
+        }
+    }
+    out.push('"');
+}
+
+/// The largest integer that an ECMAScript number holds exactly: 2^53.
+const EXACT_INTEGER_LIMIT: u64 = 1 << 53;
+
+/// Write a number the way ECMAScript's `Number::toString` does. A client in ECMAScript reads each JSON number as a
+/// 64-bit float, so an integer larger than 2^53 is written from its float value, as that client writes it.
+fn number_text(number: &serde_json::Number) -> String {
+    if let Some(integer) = number.as_i64()
+        && integer.unsigned_abs() <= EXACT_INTEGER_LIMIT
+    {
+        return integer.to_string();
+    }
+    let value = number.as_f64().unwrap_or(0.0);
+    // ECMAScript writes both 0 and -0 as "0".
+    if value == 0.0 {
+        return "0".to_owned();
+    }
+    // `{:e}` gives the shortest digits that read back as the same float, in the form d.ddde±x.
+    let scientific = format!("{:e}", value.abs());
+    let (mantissa, exponent) = scientific.split_once('e').unwrap_or((&scientific, "0"));
+    let exponent: i32 = exponent.parse().unwrap_or(0);
+    let digits = mantissa.replace('.', "");
+    let digits = digits.trim_end_matches('0');
+    let sign = if value < 0.0 { "-" } else { "" };
+    format!("{sign}{}", layout(digits, exponent + 1))
+}
+
+/// Lay out the number `0.<digits> × 10^n` as ECMAScript's `Number::toString` does.
+fn layout(digits: &str, n: i32) -> String {
+    let k = digits.len() as i32;
+    if k <= n && n <= 21 {
+        format!("{digits}{}", "0".repeat((n - k) as usize))
+    } else if 0 < n && n <= 21 {
+        format!("{}.{}", &digits[..n as usize], &digits[n as usize..])
+    } else if -6 < n && n <= 0 {
+        format!("0.{}{digits}", "0".repeat((-n) as usize))
+    } else {
+        let e = n - 1;
+        let mantissa = if k > 1 {
+            format!("{}.{}", &digits[..1], &digits[1..])
+        } else {
+            digits.to_owned()
+        };
+        format!("{mantissa}e{}{}", if e > 0 { "+" } else { "-" }, e.abs())
     }
 }
 
@@ -300,5 +382,39 @@ impl Validator {
         } else {
             Some(issues.join("; "))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::canonical_json;
+    use serde_json::json;
+
+    #[test]
+    fn canonical_json_writes_numbers_as_ecmascript_does() {
+        let cases = [
+            (json!(22.0), "22"),
+            (json!(1e21), "1e+21"),
+            (json!(1.5e-7), "1.5e-7"),
+            (json!(-0.0), "0"),
+            (json!(123456789012345680000.0), "123456789012345680000"),
+            (json!(0.000001), "0.000001"),
+            (json!(-2.5), "-2.5"),
+            (json!(42), "42"),
+            (json!(-7), "-7"),
+            (json!(u64::MAX), "18446744073709552000"),
+        ];
+        for (value, text) in cases {
+            assert_eq!(canonical_json(&value), text, "the number {value}");
+        }
+    }
+
+    #[test]
+    fn canonical_json_sorts_keys_and_escapes_strings() {
+        let value = json!({ "b": [1.0, "x\u{1}\"\n"], "a": { "d": null, "c": true } });
+        assert_eq!(
+            canonical_json(&value),
+            r#"{"a":{"c":true,"d":null},"b":[1,"x\u0001\"\n"]}"#
+        );
     }
 }
