@@ -262,6 +262,23 @@ A GraphQL server can use an event handle as the source of a subscription. Return
 subscription: { statusChanged: { subscribe: () => status.subscribe({}), resolve: (occurrence) => occurrence.data } }
 ```
 
+### WebMCP
+
+`installWebMcp(session, { host })` registers each capability of the view of the session that is available as a [WebMCP](../../spec/bindings/webmcp.md) tool. Use it in a web page, with a session of a target that has the binding `webmcp`. The host is the option `host`, else `findHost()`: `document.modelContext`, then `navigator.modelContext`. With no host, it returns `undefined`, and the page works as before.
+
+```ts
+const session = createSession(app, { target: "app", context, toJsonSchema });
+const webmcp = installWebMcp(session);
+webmcp?.status.subscribe(({ phase, message }) => console.log(phase, message));
+```
+
+- A tool has the id of its capability as its name, its description, and its bundled input schema. A value or a failure is the result of the tool. A call failure rejects with an `Error` that has its `kind`. The signal of the host cancels the call.
+- The tools follow availability: a capability that becomes unavailable loses its tool, and gets it again when it is available. The binding makes one update at a time. A failed update keeps the tools that the page has.
+- `status` is an observable `{ phase, message }`. The phases are `loading`, `reconciling`, `ready`, `failed`, `closing` and `disposed`. `retry()` tries the last failed update again. `dispose()` removes all tools, and waits for the calls in progress.
+- WebMCP serves no events.
+
+[`examples/aircon/core-ts/page.ts`](../../examples/aircon/core-ts/page.ts) is a page with its WebMCP tools. `acid-cat conform --webmcp <url>` tests a page in Chromium.
+
 ### Context for each request
 
 `mcpHandler` and `httpHandler` take `context` or `createContext`. With `context`, all requests share one context. With `createContext(request)`, the handler makes a new context for each request that passes the screening. Use it when a request must not use objects that an earlier request made, for example on Cloudflare Workers, or when a stateful service must not be shared between callers. When the context has `Symbol.asyncDispose` or `Symbol.dispose`, the handler calls it after the response:

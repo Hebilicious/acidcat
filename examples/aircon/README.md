@@ -5,9 +5,10 @@ One air conditioner, described once and served to every surface. The unit is sim
 | Directory | Contents |
 | --- | --- |
 | [`catalog/`](catalog) | The catalog, written in Pkl, TypeScript, Python, Go and Rust. Each language gives the same bytes |
-| [`core-ts/`](core-ts) | The application on [`@acid-cat/core-ts`](../../packages/core-ts), with Zod, its command line, and its MCP server through stdio |
-| [`core-effect/`](core-effect) | The application on [`@acid-cat/core-effect`](../../packages/core-effect), fully in Effect, its command line, and its MCP server through stdio |
-| [`core-rust/`](core-rust) | The application on [`acid-cat-core`](../../packages/core-rust), in Rust, its command line, and its MCP server through stdio |
+| [`core-ts/`](core-ts) | The application on [`@acid-cat/core-ts`](../../packages/core-ts), with Zod, its command line, its MCP server through stdio, its server for a remote command line (`serve.ts`), and its web page with WebMCP tools (`page.ts`, `serve-page.ts`) |
+| [`core-effect/`](core-effect) | The application on [`@acid-cat/core-effect`](../../packages/core-effect), fully in Effect, its command line, its MCP server through stdio, its server for a remote command line (`serve.ts`), and its web page with WebMCP tools (`page.ts`, `serve-page.ts`) |
+| [`core-rust/`](core-rust) | The application on [`acid-cat-core`](../../packages/core-rust), in Rust, one program with its command line, its MCP server through stdio, and its server for a remote command line (`aircon serve`) |
+| [`web/`](web) | The markup and the controls of the web page, which both TypeScript cores use |
 | [`apis/`](apis) | APIs whose design the application controls: GraphQL, Cap'n Web, Elysia and an MCP server |
 | [`test/`](test) | The tests of all parts |
 
@@ -21,7 +22,7 @@ Each catalog library writes the same catalog in its own language: [`typescript.t
 
 ## Application and command line
 
-Each application serves the catalog: the test of each one compares its catalog with `aircon.acidcat.json`. Each one has a command line:
+Each application serves the catalog: the test of each one compares its catalog with `aircon.acidcat.json`. Each one has a command line. Run these commands in `examples/aircon`:
 
 ```sh
 node core-ts/cli.ts aircon power set --on
@@ -31,15 +32,15 @@ node core-ts/cli.ts list
 cargo run --manifest-path core-rust/Cargo.toml -- cli aircon fan set --speed high
 ```
 
-Each command line can also control a unit in another process or on another machine. The server serves the HTTP binding of the `cli` target, and writes its URL. With `AIRCON_URL`, the command line sends each call and each subscription to that server:
+Each command line can also control a unit in another process or on another machine. The server serves the HTTP binding of the `cli` target, and writes its URL. With `AIRCON_URL`, the command line sends each call and each subscription to that server. Each server runs until you stop it, so start each one in its own terminal. `cargo build --manifest-path core-rust/Cargo.toml` builds the Rust program:
 
 ```sh
 node core-ts/serve.ts 0.0.0.0:8080
 node core-effect/serve.ts 0.0.0.0:8081
-examples/aircon/core-rust/target/debug/aircon serve 0.0.0.0:8082
+core-rust/target/debug/aircon serve 0.0.0.0:8082
 AIRCON_URL=http://localhost:8080/cli node core-ts/cli.ts aircon power set --on
 AIRCON_URL=http://localhost:8081/cli node core-effect/cli.ts aircon power set --on
-AIRCON_URL=http://localhost:8082/cli examples/aircon/core-rust/target/debug/aircon cli aircon power set --on
+AIRCON_URL=http://localhost:8082/cli core-rust/target/debug/aircon cli aircon power set --on
 ```
 
 The command line has one command for each capability in the view of the `cli` target. A flag of a shared type, for example `--mode`, accepts only the values of that type.
@@ -52,7 +53,7 @@ aircon aircon schedule set --days <mon|tue|wed|thu|fri|sat|sun>... [--hours <int
 
 ## MCP server through stdio
 
-Each application also has an MCP server through [stdio](../../spec/bindings/mcp.md#stdio), for MCP clients that start a local process. It serves the view of the `mcp` target. For example, give an MCP client this command:
+Each application also has an MCP server through [stdio](../../spec/bindings/mcp.md#stdio), for MCP clients that start a local process. It serves the view of the `mcp` target. For example, give an MCP client one of these commands, with the root of the repository as its working directory:
 
 ```sh
 node examples/aircon/core-ts/mcp-stdio.ts
@@ -63,6 +64,37 @@ examples/aircon/core-rust/target/debug/aircon mcp-stdio
 The Rust program is built with `cargo build` in `core-rust/`. The task `example-aircon:test-rust` builds it and runs its tests before the other tests.
 
 The process is one session with one simulated unit. When standard input ends, the process exits.
+
+## WebMCP
+
+Each TypeScript core has a web page of the air conditioner on the `app` target. The `app` target is for the apps that people use, and it has the [WebMCP binding](../../spec/bindings/webmcp.md). The page shows the status of the unit and has controls: power, mode, target temperature, fan speed and firmware update. A check box takes the simulated unit offline and online again. The page also installs the WebMCP binding, so a browser agent gets one tool for each capability of the view of the `app` target:
+
+| Page | Session | WebMCP |
+| --- | --- | --- |
+| [`core-ts/page.ts`](core-ts/page.ts) | `createSession(aircon, { target: "app", … })` | `installWebMcp(session)` |
+| [`core-effect/page.ts`](core-effect/page.ts) | `Session.make(aircon, { target: "app" })`, in one Effect program | `WebMcp.install(session)` |
+
+Both pages use the markup of [`web/page.ts`](web/page.ts) and the controls of [`web/controls.ts`](web/controls.ts). Each page has its own simulated unit. Run one of these commands in `examples/aircon`. The script bundles the page with esbuild, serves it on `127.0.0.1` with a free port, and writes its URL. Give an address, for example `127.0.0.1:8080`, to choose the port:
+
+```sh
+node core-ts/serve-page.ts
+node core-effect/serve-page.ts
+```
+
+Open the URL in a browser that has WebMCP: the page uses `document.modelContext`, or `navigator.modelContext` if the first one does not exist. In a browser without WebMCP, the controls work, and the WebMCP status is `no host`.
+
+An agent in the browser sees these tools:
+
+- **Names and descriptions.** The name of each tool is the id of the capability, for example `aircon.temperature.set`. Its description is the description of the capability. Its input schema is the bundled input schema: `aircon.mode.set` has the type `Mode` in its `$defs`.
+- **Outcomes.** A call resolves with the result in its JSON form: `{ "ok": true, "value": null }`, or a failure such as `{ "ok": false, "error": { "_tag": "Offline" } }`. A call failure rejects with an `Error` that has a `kind`, for example `invalid-input` for a temperature of 40.
+- **Availability.** `aircon.firmware.update` is available only while the unit is online. While it is offline, the page removes its tool. When the unit is online again, the page registers the tool again. The page lists each capability, and tells if it has a tool now.
+- **One session.** The controls and the tools call the same session, so the page shows each change that an agent makes, and the agent reads each change that a person makes.
+
+The page shows the status of the binding: `loading`, `reconciling`, `ready`, `failed`, `closing` or `disposed` (core-ts: `status` of the installation; core-effect: the `status` ref of the installation).
+
+The Rust core has no WebMCP. WebMCP runs in a web page, and the Rust program runs as a process. Its catalog has the WebMCP binding on the `app` target all the same, so that the catalog is the same in each language.
+
+[`test/webmcp-page.test.ts`](test/webmcp-page.test.ts) opens each page in Chromium through Playwright, with a test WebMCP host as its `modelContext`. It reads the tools, calls them, and reads what the page shows.
 
 ## APIs
 
@@ -134,4 +166,4 @@ using following = await api.followStatus((status) => console.log(status));
 await api.setPower(true);
 ```
 
-The test runs the Python, Go and Rust programs of `catalog/`, so it needs `python`, `go` and `cargo`. proto installs them from [`.prototools`](../../.prototools).
+The test runs the Python, Go and Rust programs of `catalog/`, so it needs `python`, `go` and `cargo`. proto installs them from [`.prototools`](../../.prototools). The test of the web pages needs Chromium: the task `cli:browser` installs it before the tests.

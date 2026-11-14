@@ -295,6 +295,9 @@ importers:
       elysia:
         specifier: 'catalog:'
         version: 1.4.30(@sinclair/typebox@0.34.52)(exact-mirror@1.2.6)(file-type@22.1.1)(openapi-types@12.1.3)(typescript@7.0.2)
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.2
       graphql:
         specifier: 'catalog:'
         version: 17.1.0
@@ -323,6 +326,9 @@ importers:
       '@types/ws':
         specifier: 'catalog:'
         version: 8.18.2
+      playwright:
+        specifier: 'catalog:'
+        version: 1.65.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

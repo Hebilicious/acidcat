@@ -4,8 +4,10 @@ The AcidCat catalog module for [Pkl](https://pkl-lang.org). Pkl package: `packag
 
 Write a catalog in Pkl. The module checks the catalog rules while you write. Render the catalog to JSON with `pkl eval`, then put it in canonical form with `acid-cat format --write`.
 
+<!-- x-release-please-start-version -->
+
 ```pkl
-amends "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@0.1.0#/Catalog.pkl"
+amends "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@0.2.1#/Catalog.pkl"
 
 targets {
   ["panel"] { bindings { "typescript" } }
@@ -29,6 +31,8 @@ events {
   }
 }
 ```
+
+<!-- x-release-please-end -->
 
 ```sh
 pkl eval greenhouse.pkl --output-path greenhouse.acidcat.json

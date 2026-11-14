@@ -40,7 +40,7 @@
       "tag-separator": "/",
       "include-v-in-tag": true
     },
-    "packages/catalog/pkl": { "release-type": "simple", "component": "acid-cat-catalog" }
+    "packages/catalog/pkl": { "release-type": "simple", "component": "acid-cat-catalog", "extra-files": ["README.md"] }
   },
   "plugins": [
     {

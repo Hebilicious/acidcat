@@ -15,7 +15,7 @@ fn aircon_catalog() -> Catalog {
             "app",
             Target {
                 description: Some("The phone, desktop and web apps that people use.".into()),
-                bindings: strings(&["typescript", "acme:swift", "acme:kotlin"]),
+                bindings: strings(&["typescript", "webmcp", "acme:swift", "acme:kotlin"]),
                 ..Target::default()
             },
         )

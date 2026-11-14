@@ -194,7 +194,7 @@ export const aircon = App.make({
   title: "Living-room air conditioner",
   description: "Control and monitor one split-unit air conditioner on the home network.",
   targets: {
-    app: { description: "The phone, desktop and web apps that people use.", bindings: ["typescript", "acme:swift", "acme:kotlin"] },
+    app: { description: "The phone, desktop and web apps that people use.", bindings: ["typescript", "webmcp", "acme:swift", "acme:kotlin"] },
     taskbar: { description: "A desktop taskbar widget showing the status and a power toggle.", bindings: ["typescript"] },
     cli: { bindings: ["cli"] },
     mcp: { description: "Agents, through an MCP server.", bindings: ["mcp"] },

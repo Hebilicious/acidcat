@@ -17,7 +17,7 @@ def aircon_catalog() -> Catalog:
     catalog.target(
         "app",
         description="The phone, desktop and web apps that people use.",
-        bindings=["typescript", "acme:swift", "acme:kotlin"],
+        bindings=["typescript", "webmcp", "acme:swift", "acme:kotlin"],
     )
     catalog.target(
         "taskbar",

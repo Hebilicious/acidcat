@@ -6,7 +6,7 @@ The AcidCat command line. npm package: `@acid-cat/cli`. It gives the `acid-cat` 
 acid-cat check [--strict] <catalog.json ...>  # check catalogs
 acid-cat format [--write] <catalog.json ...>  # write catalogs in canonical form
 acid-cat view <catalog.json> <target>         # write the view of one target
-acid-cat conform --mcp <url> [--mcp-handshake] --mcp-stdio "<command>" --http <url> --cli "<command>" --webmcp <url> [--deadline <ms>]  # test an implementation
+acid-cat conform --mcp <url> [--mcp-handshake] --mcp-stdio "<command>" --http <url> --cli "<command>" --webmcp <url> [--deadline <ms>] [--max-bytes <n>]  # test an implementation
   [--poll-buffer <n>] [--poll-lease-ms <ms>] [--webhook-principal <name> --webhook-cert <file> --webhook-key <file>]
   [--webhook-other-principal <name>] [--webhook-min-ttl-ms <ms>] [--webhook-max-ttl-ms <ms>] [--webhook-max-subscriptions <n>]
 ```
@@ -54,7 +54,7 @@ The exit code is 0 if there are no errors. It is 1 if there are errors. With `--
 
 The checks wait for states that they can observe, not for times. Before a check cancels a call to `fixture.hold`, it waits until `fixture.held` gives the key of the call, or, for the CLI, until the marker file of the call exists. In the same way, before a check signals or cancels a subscription to `fixture.watch`, it waits until `fixture.watching` gives its key, or until its marker file exists. After it cancels the subscription, it waits until the key leaves `fixture.watching`. Each check has one deadline: `--deadline`, or `deadline` in code, in milliseconds. The default is 30 000. A check that does not settle before its deadline fails with "did not settle", and the check stops what it started. This cleanup has a deadline of the same length, so `conform` always returns. The deadline never makes a check pass.
 
-A check of a recommendation (SHOULD) that fails gives a warning, marked `!`, and passes. The exit code is 1 if a check fails. Both AcidCat cores run `conform` in their tests. In code, use `conform()` and `serve()` from `@acid-cat/cli`. This `serve()` is for tests: it listens on `127.0.0.1`, on a free port, with plain HTTP. To serve an application, use the server of its core: `serve` from `@acid-cat/core-ts/node`, or `NodeServer` from `@acid-cat/core-effect`. `createTestHost()` gives the WebMCP host of the checks.
+A check of a recommendation (SHOULD) that fails gives a warning, marked `!`, and passes. The exit code is 1 if a check fails. Each AcidCat core runs `conform` in its tests. In code, use `conform()` and `serve()` from `@acid-cat/cli`. This `serve()` is for tests: it listens on `127.0.0.1`, on a free port, with plain HTTP. To serve an application, use the server of its core: `serve` from `@acid-cat/core-ts/node`, `NodeServer` from `@acid-cat/core-effect`, or `remote::serve` from the crate `acid-cat-core`. `createTestHost()` gives the WebMCP host of the checks.
 
 ## Implementation
 

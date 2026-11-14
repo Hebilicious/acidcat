@@ -33,7 +33,7 @@ A language-neutral specification. Describe what your application can do one time
 | --- | --- |
 | 💻 Command line | `aircon temperature set --celsius 22` |
 | 🤖 MCP server | the tool `aircon.temperature.set` |
-| 🌐 WebMCP | an in-page tool for browser agents |
+| 🌐 WebMCP | a tool that a browser agent calls in your web page, with the session of the person who uses it |
 | 🔌 HTTP | `POST /capabilities/aircon.temperature.set` |
 | 🧩 Your language | a typed function, for example `execute({ celsius: 22 })` in TypeScript |
 
@@ -73,7 +73,7 @@ An air conditioner, written in Pkl ([full example](examples/aircon/catalog/airco
 amends "../../../packages/catalog/pkl/Catalog.pkl"
 
 targets {
-  ["app"] { bindings { "typescript" } }
+  ["app"] { bindings { "typescript"; "webmcp" } }
   ["mcp"] { bindings { "mcp" } }
 }
 
@@ -91,7 +91,28 @@ capabilities {
 }
 ```
 
-The best way to write a catalog is in Pkl, with a catalog library, or from the code of the application. A tool then writes the JSON, in [canonical form](spec/catalog.md#canonical-form). JSON written by hand is also a catalog, if it conforms. The same catalog in [TypeScript](examples/aircon/catalog/typescript.ts), [Python](examples/aircon/catalog/python.py), [Go](examples/aircon/catalog/go/main.go) or [Rust](examples/aircon/catalog/rust/src/main.rs) gives the same bytes: [`aircon.acidcat.json`](examples/aircon/catalog/aircon.acidcat.json). [`examples/aircon`](examples/aircon/README.md) also serves the air conditioner with both TypeScript cores and the Rust core, as a command line, and through APIs.
+The best way to write a catalog is in Pkl, with a catalog library, or from the code of the application. A tool then writes the JSON, in [canonical form](spec/catalog.md#canonical-form). JSON written by hand is also a catalog, if it conforms. The same catalog in [TypeScript](examples/aircon/catalog/typescript.ts), [Python](examples/aircon/catalog/python.py), [Go](examples/aircon/catalog/go/main.go) or [Rust](examples/aircon/catalog/rust/src/main.rs) gives the same bytes: [`aircon.acidcat.json`](examples/aircon/catalog/aircon.acidcat.json). [`examples/aircon`](examples/aircon/README.md) also serves the air conditioner with both TypeScript cores and the Rust core: as a command line, as a web page with WebMCP tools, through MCP, and through APIs.
+
+## 🌐 WebMCP: agents in your web page
+
+[WebMCP](spec/bindings/webmcp.md) gives a browser agent the capabilities of the page that it is on. The agent does not read the screen or click buttons. It calls the same capabilities as your user interface, in the page, with the session, the state and the sign-in of the person who uses it.
+
+Add the `webmcp` binding to a target, then install it from the session of the page:
+
+```ts
+import { createSession, installWebMcp } from "@acid-cat/core-ts";
+
+const session = createSession(aircon, { target: "app", context: { unit }, toJsonSchema });
+const webmcp = installWebMcp(session); // undefined when the browser has no WebMCP
+```
+
+- Each capability of the view that is available is one tool, with its description and its input schema. A capability that becomes unavailable loses its tool, and gets it again when it is available.
+- A value or a failure is the result of the tool. A call failure rejects with its `kind`. The agent can cancel a call.
+- The page can observe the status of the tools (`loading`, `ready`, `failed`, …), try again, and remove all its tools.
+- The binding needs a browser with `document.modelContext` or `navigator.modelContext`. Without one, the page works as before.
+- `acid-cat conform --webmcp <url>` tests a page in Chromium.
+
+Both TypeScript cores serve WebMCP: `installWebMcp` in `@acid-cat/core-ts`, and `WebMcp.install` in `@acid-cat/core-effect`. [`examples/aircon`](examples/aircon/README.md#webmcp) has a web page of the air conditioner for each of them, with its WebMCP tools and a test in Chromium. The Rust core does not serve WebMCP, because WebMCP runs in a web page.
 
 ## 📚 Specification
 
@@ -162,7 +183,7 @@ See [packages/README.md](packages/README.md).
 
 ## 🛠️ Development
 
-[proto](https://moonrepo.dev/proto) installs the tools in `.prototools`: Moon, Node, pnpm, Pkl, Python, Go and Rust. [Moon](https://moonrepo.dev) runs the tasks.
+[proto](https://moonrepo.dev/proto) installs the tools in `.prototools`: Moon, Node, pnpm, Pkl, Python, uv, Go and Rust. [Moon](https://moonrepo.dev) runs the tasks.
 
 ```sh
 proto install

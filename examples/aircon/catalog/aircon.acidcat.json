@@ -12,6 +12,7 @@
     "app": {
       "bindings": [
         "typescript",
+        "webmcp",
         "acme:swift",
         "acme:kotlin"
       ],

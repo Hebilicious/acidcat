@@ -10,14 +10,14 @@ The documents of the bindings are at https://github.com/Hebilicious/acidcat/tree
 - Events use the MCP events extension, only in revision `2026-07-28`, and only when the view has events. A client with the `initialize` handshake gets no events.
   - Push: the answer to `events/stream` is a stream of server-sent events.
   - Poll: `events/poll` reads a lease, which holds the subscription between polls in a session of its own. A lease ends when it gets no poll for 5 minutes. Keep the cursor of each result, and give it to the next poll.
-  - Webhook: off by default. The deployment turns it on, and gives the identity of each client (the principal). In core-ts: the options `webhooks: webhookDelivery(…)` (from `@acid-cat/core-ts/node`) and `principal(request)` of `mcpHandler`. In core-effect: the options `webhooks: { sender: NodeWebhook.sender(…) }` and `principal` of the MCP binding. With webhook delivery off, `events/subscribe` and `events/unsubscribe` answer `Unsupported`. The callback URL must use `https`, must agree to get deliveries (a `verification` message, or the allowlist), and must resolve to a globally routable address. In tests with a local receiver, set `allowPrivateNetworks` and give its certificate in `ca`.
+  - Webhook: off by default. The deployment turns it on, and gives the identity of each client (the principal). In core-ts: the options `webhooks: webhookDelivery(…)` (from `@acid-cat/core-ts/node`) and `principal(request)` of `mcpHandler`. In core-effect: the options `webhooks: { sender: NodeWebhook.sender(…) }` and `principal` of the MCP binding. In core-rust: `McpOptions::webhooks` and `McpOptions::principal`. With webhook delivery off, `events/subscribe` and `events/unsubscribe` answer `Unsupported`. The callback URL must use `https`, must agree to get deliveries (a `verification` message, or the allowlist), and must resolve to a globally routable address. In tests with a local receiver, set `allowPrivateNetworks` and give its certificate in `ca`.
 - The principal is part of the key of a poll lease and of a webhook subscription. Give it from a verified identity, never from a header that the client chooses.
 - Poll leases and webhook subscriptions are the only state between requests. They are soft: after a restart, clients start again with their cursors.
 - Keep the network safety of the webhook sender on: it connects only to globally routable addresses. Allow private networks only in tests.
 
 ## Serve MCP and HTTP on a network
 
-- The cores give web handlers, `(request: Request) => Promise<Response>`. The host serves them. On Node.js, use the server of the core: `serve` from `@acid-cat/core-ts/node`, or `NodeServer.serve` and `NodeServer.layer` from `@acid-cat/core-effect/NodeServer`. On Bun, Deno and Cloudflare Workers, give the handler to the server of the runtime.
+- The TypeScript cores give web handlers, `(request: Request) => Promise<Response>`. The host serves them. On Node.js, use the server of the core: `serve` from `@acid-cat/core-ts/node`, or `NodeServer.serve` and `NodeServer.layer` from `@acid-cat/core-effect/NodeServer`. On Bun, Deno and Cloudflare Workers, give the handler to the server of the runtime. The Rust core gives handlers that implement `remote::Handler`, and `remote::serve(address, routes)` serves them with hyper.
 - Authenticate each request in the context of the request: `createContext(request)` and `refuse` in core-ts, a per-request layer with `Remote.IncomingRequest` and `Remote.refuse` in core-effect, `with_request_context` and `Refusal` in core-rust. The function reads the headers, and refuses a request with no valid caller: the answer has its status (400 to 599) and the body `{ "message" }`, and no session opens. Through MCP, also give the `principal` from the same caller: a poll lease is keyed by the principal, so with no principal two callers share one lease. In core-effect, `Mcp.withEvents` refuses only the requests of the events extension; your own MCP server authenticates the others. The capabilities read the caller from the context.
 - `serve` from `@acid-cat/cli` is for tests only. It listens on `127.0.0.1`, on a free port.
 - The server of a core is plain HTTP/1.1, on `127.0.0.1:3000` by default. In a container, set `hostname` to `0.0.0.0` or `::`, or the platform cannot connect.
@@ -49,8 +49,10 @@ The documents of the bindings are at https://github.com/Hebilicious/acidcat/tree
 
 ## WebMCP
 
-- The page registers one tool for each available capability, on `document.modelContext` or `navigator.modelContext`. With no host, the binding does nothing.
-- The page can remove all tools while the session stays open.
+- Use WebMCP to give a browser agent the capabilities of a web page: the agent calls them in the page, with the session and the sign-in of the person, and does not read the screen. Add the binding `webmcp` to the target of the page.
+- The page registers one tool for each available capability, on `document.modelContext` or `navigator.modelContext`. With no host, the binding does nothing. core-ts: `installWebMcp(session)`. core-effect: `WebMcp.install(session)`, or `Handles.open(…, { webmcp })`. core-rust has no WebMCP, because WebMCP runs in a page.
+- The tools follow availability. The page can observe the status (`loading`, `reconciling`, `ready`, `failed`, `closing`, `disposed`), try a failed update again, and remove all tools while the session stays open.
+- Test a page with `acid-cat conform --webmcp <url>`: it opens the page in Chromium with a test host. `examples/aircon` has a page for each TypeScript core, with a test.
 - WebMCP serves no events. The page follows events through the TypeScript binding.
 
 ## GraphQL subscription from an event
