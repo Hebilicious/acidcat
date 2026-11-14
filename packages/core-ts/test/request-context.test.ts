@@ -5,8 +5,11 @@ import { z } from "zod";
 
 import { capabilitiesFor, createSession, defineApp, eventsFor, httpHandler, isRefusal, mcpHandler, ok, refuse } from "../src/index.ts";
 import type { Refusal } from "../src/index.ts";
+import { webhookDelivery } from "../src/node.ts";
 import { readJson, toJsonSchema } from "./fixture.ts";
+import { ManualClock } from "./manual-clock.ts";
 import { sseReader } from "./sse.ts";
+import { startReceiver, testCertificate } from "./webhook-receiver.ts";
 
 /** The services of one request: who calls. */
 interface Services {
@@ -39,6 +42,19 @@ const app = defineApp({
       payload: Who,
       async *subscribe(_input, { context, target }) {
         yield { data: { caller: context.caller, target } };
+      },
+    }),
+    event({
+      id: "caller.watched",
+      description: "Give one occurrence with the caller and the target of the session, then wait until the subscription ends.",
+      audience: ["mcp"],
+      payload: Who,
+      async *subscribe(_input, { context, target, signal }) {
+        yield { data: { caller: context.caller, target } };
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) resolve();
+          else signal.addEventListener("abort", () => resolve(), { once: true });
+        });
       },
     }),
   ],
@@ -157,4 +173,82 @@ test("the provider of an event receives the target of the session", async () => 
   const step = await occurrences.next();
   assert.ok(step.done !== true);
   assert.deepEqual(step.value.data, { caller: "local", target: "app" });
+});
+
+/** A request to the MCP server of the test, with the caller `Bearer <caller>`, the principal of the caller, and a JSON-RPC message. */
+function mcpRequest(caller: string, method: string, params: object): Request {
+  return new Request("https://who.example/mcp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "MCP-Protocol-Version": "2026-07-28", Authorization: `Bearer ${caller}` },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } } }),
+  });
+}
+
+const Poll = z.object({ result: z.object({ events: z.array(z.object({ data: Who })), cursor: z.string() }) });
+
+test("through MCP, a poll lease uses the context of the request that started it, and releases it when the lease ends", async () => {
+  const { counts, createContext } = bearerContexts();
+  const clock = new ManualClock();
+  await using handler = mcpHandler(app, { name: "who", version: "0.0.0", allowedOrigins: [], toJsonSchema, createContext, clock, poll: { leaseMs: 1000 } });
+
+  const started = await readJson(await handler(mcpRequest("ada", "events/poll", { name: "caller.watched" })), Poll);
+  // One context for the request. The lease holds it after the answer.
+  assert.deepEqual(counts, { created: 1, released: 0 });
+
+  // The session of the lease sees the caller of the request that started it. A poll with the same key reads the
+  // same lease: its request has a context of its own, which the handler releases after the answer.
+  const read = async () => (await readJson(await handler(mcpRequest("ada", "events/poll", { name: "caller.watched", cursor: started.result.cursor })), Poll)).result.events;
+  let events = await read();
+  while (events.length === 0) events = await read();
+  assert.deepEqual(events.map((each) => each.data), [{ caller: "ada", target: "mcp" }]);
+  assert.equal(counts.created - counts.released, 1);
+
+  // The lease ends when it gets no poll for the lease time. Then the handler releases the context of the first request.
+  clock.advance(1000);
+  await until(() => counts.released === counts.created);
+});
+
+test("through MCP, a webhook subscription uses the context of the request that started it, and releases it when the subscription ends", async () => {
+  const certificate = testCertificate();
+  const receiver = await startReceiver(certificate);
+  try {
+    const { counts, createContext } = bearerContexts();
+    const webhooks = webhookDelivery({ allowPrivateNetworks: true, ca: certificate.cert, retryDelayMs: () => 5 });
+    await using handler = mcpHandler(app, {
+      name: "who",
+      version: "0.0.0",
+      allowedOrigins: [],
+      toJsonSchema,
+      createContext,
+      principal: (request) => request.headers.get("Authorization") ?? undefined,
+      webhooks,
+    });
+    const delivery = { mode: "webhook", url: receiver.url, secret: `whsec_${Buffer.alloc(32, 7).toString("base64")}` };
+
+    const subscribed = await handler(mcpRequest("grace", "events/subscribe", { name: "caller.watched", delivery }));
+    assert.equal(subscribed.status, 200);
+    await readJson(subscribed, z.object({ result: z.object({ id: z.string() }) }));
+    // One context for the request. The subscription holds it after the answer.
+    assert.deepEqual(counts, { created: 1, released: 0 });
+
+    // The session of the subscription sees the caller of the request that started it.
+    await until(() => receiver.received.some((each) => each.body["type"] !== "verification"));
+    const delivered = receiver.received.find((each) => each.body["type"] !== "verification");
+    assert.deepEqual(z.object({ data: Who }).parse(delivered?.body).data, { caller: "grace", target: "mcp" });
+    assert.deepEqual(counts, { created: 1, released: 0 });
+
+    // The end of the subscription releases the context of the first request.
+    const ended = await handler(mcpRequest("grace", "events/unsubscribe", { name: "caller.watched", delivery: { url: receiver.url } }));
+    assert.equal(ended.status, 200);
+    await until(() => counts.released === counts.created);
+    assert.deepEqual(counts, { created: 2, released: 2 });
+  } finally {
+    await receiver.close();
+  }
+});
+
+test("refuse throws a RangeError for a status that is not an integer from 400 to 599", () => {
+  for (const status of [200, 399, 600, 401.5, Number.NaN]) assert.throws(() => refuse(status, "No."), RangeError, String(status));
+  assert.equal(refuse(400, "No.").status, 400);
+  assert.equal(refuse(599, "No.").status, 599);
 });

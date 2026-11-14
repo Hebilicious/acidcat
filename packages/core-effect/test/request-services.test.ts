@@ -130,3 +130,9 @@ test("only per-request services can read the request", () => {
     Http.toWebHandler(app, callerLayer().layer, { allowedOrigins: [ORIGIN] });
   assert.equal(typeof shared, "function");
 });
+
+test("a refusal needs a status from 400 to 599", () => {
+  assert.throws(() => Remote.refuse(200, "Not a refusal."), RangeError);
+  assert.throws(() => Remote.refuse(600, "Not a status."), RangeError);
+  assert.doesNotThrow(() => Remote.refuse(403, "No."));
+});

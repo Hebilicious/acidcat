@@ -235,7 +235,16 @@ pub struct Refusal {
 }
 
 impl Refusal {
+    /// A refusal with a status from 400 to 599.
+    ///
+    /// # Panics
+    ///
+    /// When `status` is not from 400 to 599, as `refuse` of the TypeScript cores throws.
     pub fn new(status: u16, message: impl Into<String>) -> Self {
+        assert!(
+            (400..=599).contains(&status),
+            "the status of a refusal is from 400 to 599, not {status}"
+        );
         Refusal {
             status,
             message: message.into(),
@@ -257,7 +266,10 @@ impl Refusal {
                 http::HeaderName::try_from(name.as_str()),
                 http::HeaderValue::try_from(value.as_str()),
             ) {
-                response.headers_mut().append(name, value);
+                // The body is JSON, so the media type of the answer is always application/json.
+                if name != header::CONTENT_TYPE {
+                    response.headers_mut().append(name, value);
+                }
             }
         }
         response

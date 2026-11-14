@@ -394,7 +394,11 @@ const callerLayer = Layer.effect(
 const handler = Http.toWebHandler(app, callerLayer, { allowedOrigins, services: "per-request" });
 ```
 
-A poll lease and a webhook subscription keep the services of the request that started them, with its caller. A host that uses `Http.handle` or `Mcp.handle` builds the services itself, and can give `Remote.IncomingRequest` the value `Remote.headOf(request)`.
+A poll lease and a webhook subscription keep the services of the request that started them, with its caller. Set the `principal` option of the MCP binding too, from the same caller. A poll lease is keyed by the principal, the event and the input: with no principal, two callers that poll the same event with the same input share one lease, and the second caller reads the occurrences of the session of the first caller. `Mcp.withEvents` refuses only the requests of the events extension: it gives the other requests to your own MCP server, which authenticates them itself.
+
+`Remote.refuse` throws a `RangeError` when the status is not an integer from 400 to 599.
+
+A host that uses `Http.handle` or `Mcp.handle` builds the services itself, and can give `Remote.IncomingRequest` the value `Remote.headOf(request)`.
 
 `Mcp.handle(app, request, options)` and `Http.handle(app, request, options)` screen one request and answer it. A host that builds the services itself provides them to this Effect. `Mcp.handle` keeps no state between requests, so it serves no poll leases and no webhook subscriptions. `Mcp.makeHandle(app, options)` keeps them in its scope (see [Poll delivery](#poll-delivery)).
 

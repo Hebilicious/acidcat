@@ -13,7 +13,8 @@ export type ContextOption<Context> =
       /**
        * Make the context of one request. The handler calls it for each request that passes the screening. When the
        * context has `Symbol.asyncDispose` or `Symbol.dispose`, the handler calls it after the response, as a `using`
-       * declaration does. Give a `Refusal` from `refuse` to answer the request with no session: for example `401` when
+       * declaration does. Through MCP, a poll lease or a webhook subscription that the request starts keeps the context:
+       * the handler calls it when the last of them ends. Give a `Refusal` from `refuse` to answer the request with no session: for example `401` when
        * the request has no valid token.
        */
       readonly createContext: (request: Request) => Context | Refusal | Promise<Context | Refusal>;
@@ -37,9 +38,10 @@ export interface Refusal {
 /**
  * Refuse a request: `createContext` gives the result instead of a context. The handler answers with `status`, the media
  * type `application/json`, the body `{ "message": message }`, and `headers`. No capability runs, and no subscription
- * starts.
+ * starts. `status` must be an integer from 400 to 599: an other value throws a `RangeError`.
  */
 export function refuse(status: number, message: string, headers?: HeadersInit): Refusal {
+  if (!Number.isInteger(status) || status < 400 || status > 599) throw new RangeError(`The status of a refusal must be an integer from 400 to 599, not ${status}.`);
   return { [refusalKey]: true, status, message, headers: new Headers(headers) };
 }
 

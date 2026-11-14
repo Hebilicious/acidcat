@@ -154,7 +154,8 @@ let binding = HttpBinding::with_request_context(app, move |parts: &http::request
 
 - A `Refusal` answers the request with its status, its headers, and the JSON body `{ "message" }`. No capability runs.
 - The core drops the context when the session of the request ends: after the answer, or after the stream of a subscription. Release resources in `Drop`.
-- Through MCP, a poll lease or a webhook subscription keeps the context of the request that started it, until it ends.
+- Through MCP, a poll lease or a webhook subscription keeps the context of the request that started it, until it ends. Set the `McpOptions::principal` too, from the same caller. A poll lease is keyed by the principal, the event and the input: with no principal, two callers that poll the same event with the same input share one lease, and the second caller reads the occurrences of the session of the first caller.
+- `Refusal::new` panics when the status is not from 400 to 599. The answer always has the media type `application/json`.
 - The command line and MCP through stdio have one context for the process.
 
 ## Tests

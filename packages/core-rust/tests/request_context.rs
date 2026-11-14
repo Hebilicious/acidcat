@@ -25,6 +25,7 @@ impl Drop for Caller {
 }
 
 type Capability = acid_cat_core::Capability<Caller>;
+type Event = acid_cat_core::Event<Caller>;
 
 #[derive(serde::Serialize, schemars::JsonSchema)]
 struct Who {
@@ -47,6 +48,21 @@ fn app() -> Arc<acid_cat_core::Application<Caller>> {
                         target: call.target().to_owned(),
                     })
                 }),
+        )
+        .event(
+            Event::new(
+                "who.seen",
+                "Give the caller and the target of the subscription once.",
+            )
+            .audience(["api"])
+            .payload::<Who>()
+            .subscribe(|(), subscription| {
+                let who = Who {
+                    caller: subscription.context().name.clone(),
+                    target: subscription.target().to_owned(),
+                };
+                futures::stream::iter([Ok(acid_cat_core::Emitted::new(who))])
+            }),
         )
         .build()
         .expect("the application conforms")
@@ -169,6 +185,69 @@ async fn through_mcp_the_capability_gets_the_caller_of_the_request_and_the_targe
         "the context is dropped after the answer"
     );
 
-    let (status, _) = answer(binding.handle(request(None)).await).await;
+    let refused = binding.handle(request(None)).await;
+    assert_eq!(refused.headers()["www-authenticate"], "Bearer");
+    let (status, body) = answer(refused).await;
     assert_eq!(status, 401);
+    assert_eq!(body, json!({ "message": "Give a token." }));
+}
+
+#[tokio::test]
+async fn a_refusal_answers_with_one_media_type_application_json() {
+    let binding = HttpBinding::with_request_context(
+        app(),
+        |_: &http::request::Parts| {
+            std::future::ready(Err::<Caller, _>(
+                Refusal::new(403, "No.").header("Content-Type", "text/plain"),
+            ))
+        },
+        HttpOptions::default(),
+    );
+    let refused = binding
+        .handle(request_body(
+            post("/capabilities/who.get", None)
+                .body(Full::new(bytes::Bytes::from("{}")))
+                .expect("a request"),
+        ))
+        .await;
+    let types: Vec<_> = refused.headers().get_all("content-type").iter().collect();
+    assert_eq!(types, ["application/json"]);
+    assert_eq!(answer(refused).await.0, 403);
+}
+
+#[test]
+#[should_panic(expected = "from 400 to 599")]
+fn a_refusal_needs_a_status_from_400_to_599() {
+    let _ = Refusal::new(200, "Not a refusal.");
+}
+
+#[tokio::test]
+async fn through_http_an_event_gets_the_target_and_the_context_lives_until_the_stream_ends() {
+    let alive = Arc::new(AtomicUsize::new(0));
+    let binding = HttpBinding::with_request_context(app(), caller(&alive), HttpOptions::default());
+    let response = binding
+        .handle(request_body(
+            post("/events/who.seen", Some("dashboard"))
+                .body(Full::new(bytes::Bytes::from("{}")))
+                .expect("a request"),
+        ))
+        .await;
+    assert_eq!(response.status(), 200);
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("the stream")
+        .to_bytes();
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(
+        text.contains(r#""caller":"dashboard""#) && text.contains(r#""target":"api""#),
+        "{text}"
+    );
+    assert!(text.contains("event: complete"), "{text}");
+    assert_eq!(
+        alive.load(Ordering::SeqCst),
+        0,
+        "the context is dropped when the stream ends"
+    );
 }

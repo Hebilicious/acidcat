@@ -7,7 +7,7 @@ import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
 import { openContext, refusalResponse } from "./context.ts";
-import type { ContextOption, OpenedContext } from "./context.ts";
+import type { ContextOption } from "./context.ts";
 import type { Clock } from "./clock.ts";
 import { eventCapabilities, forbidden, listEvents, servesEvents, startEventStream, unsupportedWebhook } from "./mcp-events.ts";
 import type { OpenSession, RpcAnswer, WebhookDelivery } from "./mcp-events.ts";
@@ -97,8 +97,9 @@ function readRequest(body: unknown): JsonRpcRequest {
 /**
  * A web request handler for the MCP server. Each request has its own session, and with `createContext` its own
  * context. `createContext` can refuse a request: then the handler answers with the refusal, and opens no session.
- * Each poll lease and each webhook subscription also has its own session, opened with the context of the
- * request that started it.
+ * Each poll lease and each webhook subscription also has its own session, with the context of the request that
+ * started it. The handler releases that context when the answer is done and each of those leases and subscriptions
+ * has ended.
  */
 export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Context>): McpHandler {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
@@ -133,21 +134,13 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
     }
     const id = message.id ?? null;
 
-    // The session of the request uses the context of the request. A poll lease or a webhook subscription opens one more
-    // session, with a context that `createContext` makes from the same request.
-    let unused: OpenedContext<Context> | undefined = opened;
-    const contextOfSession = async (): Promise<OpenedContext<Context>> => {
-      if (unused !== undefined) {
-        const first = unused;
-        unused = undefined;
-        return first;
-      }
-      const again = await openContext<Context>(options, request);
-      if ("refusal" in again) throw new Error("createContext refused a request that it accepted before.");
-      return again;
-    };
+    // The session of the request uses the context of the request. A poll lease or a webhook subscription that the
+    // request starts opens one more session, with the same context. Each open session holds the context. The last
+    // session to close releases it: the context lives until the answer is done and every lease and webhook
+    // subscription of the request has ended.
+    let holders = 0;
     const open: OpenSession = async () => {
-      const opened = await contextOfSession();
+      holders += 1;
       const session = createSession(app, {
         target: options.target ?? "mcp",
         context: opened.context,
@@ -157,8 +150,12 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
       let closing: Promise<void> | undefined;
       const close = () =>
         (closing ??= (async () => {
-          await session.dispose();
-          await opened.release();
+          try {
+            await session.dispose();
+          } finally {
+            holders -= 1;
+            if (holders === 0) await opened.release();
+          }
         })());
       return { session, close };
     };

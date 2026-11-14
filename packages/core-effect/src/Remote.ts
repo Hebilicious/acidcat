@@ -36,9 +36,11 @@ export class Refusal extends Data.TaggedError("Refusal")<{
   readonly headers: Readonly<Record<string, string>>;
 }> {}
 
-/** Refuse a request: fail with a `Refusal`. */
-export const refuse = (status: number, message: string, headers: Readonly<Record<string, string>> = {}): Effect.Effect<never, Refusal> =>
-  Effect.fail(new Refusal({ status, message, headers }));
+/** Refuse a request: fail with a `Refusal`. It throws a `RangeError` when `status` is not an integer from 400 to 599. */
+export const refuse = (status: number, message: string, headers: Readonly<Record<string, string>> = {}): Effect.Effect<never, Refusal> => {
+  if (!Number.isInteger(status) || status < 400 || status > 599) throw new RangeError(`The status of a refusal is from 400 to 599, not ${status}.`);
+  return Effect.fail(new Refusal({ status, message, headers }));
+};
 
 /** The web response of a refusal. */
 export function refusalResponse(refusal: Refusal): Response {

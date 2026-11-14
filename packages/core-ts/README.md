@@ -115,7 +115,7 @@ The options `bufferLimit` of `createSession`, `httpHandler`, `mcpHandler` and `r
 
 ### MCP poll and webhook delivery
 
-A poll lease and a webhook subscription continue after the request that started them. Each one holds its subscription in a session of its own. Through HTTP, that session has the context of the request that started it: the shared `context`, or a new one from `createContext`. Through stdio, it has the `context` of the process. The session closes when the lease or the webhook subscription ends. This state is in memory: when the process stops, it is lost, and clients start again with their cursors.
+A poll lease and a webhook subscription continue after the request that started them. Each one holds its subscription in a session of its own. Through HTTP, that session has the context of the request that started it: the shared `context`, or the context that `createContext` made for that request. Through stdio, it has the `context` of the process. The session closes when the lease or the webhook subscription ends. This state is in memory: when the process stops, it is lost, and clients start again with their cursors.
 
 `handler.close()` of `mcpHandler` ends all leases and webhook subscriptions. `await using handler = mcpHandler(…)` calls it at the end of the block. Through stdio, the end of standard input ends them.
 
@@ -290,9 +290,11 @@ const handler = httpHandler(aircon, {
 ```
 
 - A refusal answers the request with its status, its headers, the media type `application/json`, and the body `{ "message" }`. The handler opens no session. No capability runs, and no subscription starts. The message shows no internal data.
+- The status of a refusal is an integer from 400 to 599. `refuse` throws a `RangeError` for another status.
 - `isRefusal(value)` tells if a value is a refusal that `refuse` made.
 - The handler releases the context after the answer, or when the stream of a subscription ends.
-- Through MCP, each poll lease and each webhook subscription calls `createContext` again with the request that started it, and keeps that context until it ends.
+- Through MCP, a poll lease or a webhook subscription uses the context of the request that started it. The handler calls `createContext` once for each request. It releases the context when the answer is done and each lease and webhook subscription of the request has ended.
+- Set the option `principal` of `mcpHandler` too, from the same caller. A poll lease is keyed by the principal, the event and the input: with no principal, two callers that poll the same event with the same input share one lease, and the second caller reads the occurrences of the session of the first caller.
 - The command line and MCP through stdio have one context for the program.
 
 ### Command line
