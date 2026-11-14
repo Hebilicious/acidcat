@@ -1,20 +1,14 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
-import { before, test } from "node:test";
+import { spawn } from "node:child_process";
+import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
 
 import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 
-const directory = new URL("../core-rust/", import.meta.url).pathname;
-
-/** The program of the air conditioner on the Rust core. `before` builds it. */
+/** The program of the air conditioner on the Rust core. The task `test-rust` builds it before the tests. */
 const aircon = new URL("target/debug/aircon", new URL("../core-rust/", import.meta.url)).pathname;
-
-before(() => {
-  execFileSync("cargo", ["build", "--quiet"], { cwd: directory, stdio: "inherit" });
-});
 
 /** Run the program with the arguments, and give its exit code and its output when it exits. */
 function run(...args: string[]): Promise<Run> {
@@ -35,10 +29,6 @@ test("the Rust code writes a catalog that conforms and agrees with the Pkl catal
   const { stdout: text } = await run("catalog");
   assert.deepEqual(check(JSON.parse(text), text), { errors: [], warnings: [] });
   assert.deepEqual(shape(JSON.parse(text)), shape(JSON.parse(writtenText)));
-});
-
-test("the session, the events and the state of the Rust application pass their tests", () => {
-  execFileSync("cargo", ["test", "--quiet"], { cwd: directory, stdio: "pipe" });
 });
 
 test("the Rust command line runs a capability, and a flag follows a $ref to its type", async () => {

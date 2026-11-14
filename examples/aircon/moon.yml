@@ -18,7 +18,20 @@ tasks:
     options:
       runInCI: false
 
+  test-rust:
+    description: "Build the program of the air conditioner on the Rust core, and run its tests: the session, the events and the state. The tests of the command line and of the MCP server start this program."
+    script: "cd core-rust && cargo build --quiet && cargo test --quiet"
+    inputs:
+      - "core-rust/src/**/*.rs"
+      - "core-rust/Cargo.toml"
+      - "core-rust/Cargo.lock"
+      - "/packages/catalog/rust/src/**/*.rs"
+      - "/packages/core-rust/src/**/*.rs"
+      - "/packages/core-rust/Cargo.toml"
+    toolchains: ["system"]
+
   test:
+    deps: ["test-rust"]
     description: "Write the catalog in each language, run the application on each core and its command line, and call each API."
     command: "node"
     args: ["--test", "--test-timeout=60000", "test/"]

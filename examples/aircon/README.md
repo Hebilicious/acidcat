@@ -49,7 +49,7 @@ node examples/aircon/core-effect/mcp-stdio.ts
 examples/aircon/core-rust/target/debug/aircon mcp-stdio
 ```
 
-The Rust program is built with `cargo build` in `core-rust/`. The tests build it.
+The Rust program is built with `cargo build` in `core-rust/`. The task `example-aircon:test-rust` builds it and runs its tests before the other tests.
 
 The process is one session with one simulated unit. When standard input ends, the process exits.
 
