@@ -52,7 +52,7 @@ The documents of the bindings are at https://github.com/Hebilicious/acidcat/tree
 - Use WebMCP to give a browser agent the capabilities of a web page: the agent calls them in the page, with the session and the sign-in of the person, and does not read the screen. Add the binding `webmcp` to the target of the page.
 - The page registers one tool for each available capability, on `document.modelContext` or `navigator.modelContext`. With no host, the binding does nothing. core-ts: `installWebMcp(session)`. core-effect: `WebMcp.install(session)`, or `Handles.open(…, { webmcp })`. core-rust has no WebMCP, because WebMCP runs in a page.
 - The tools follow availability. The page can observe the status (`loading`, `reconciling`, `ready`, `failed`, `closing`, `disposed`), try a failed update again, and remove all tools while the session stays open.
-- Test a page with `acid-cat conform --webmcp <url>`: it opens the page in Chromium with a test host. `examples/aircon` has a page for each TypeScript core, with a test.
+- `acid-cat conform --webmcp <url>` tests the binding of a core with a page that serves the conformance fixture, in Chromium with a test host. It does not test the page of your application: test that page in a browser with a test host, as `examples/aircon/test/webmcp-page.test.ts` does.
 - WebMCP serves no events. The page follows events through the TypeScript binding.
 
 ## GraphQL subscription from an event

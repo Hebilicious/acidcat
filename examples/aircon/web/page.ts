@@ -3,6 +3,8 @@
  * the bundled script of one core. `core-ts/page.ts` and `core-effect/page.ts` are the scripts. esbuild bundles each one
  * for the browser when the handler is made.
  */
+import { fileURLToPath } from "node:url";
+
 import { build } from "esbuild";
 
 export type WebHandler = (request: Request) => Response;
@@ -65,9 +67,9 @@ const markup = `<!doctype html>
  * the script at each path that ends with `/page.js`.
  */
 export async function pageHandler(entry: URL): Promise<WebHandler> {
-  const bundled = await build({ entryPoints: [entry.pathname], bundle: true, write: false, format: "esm", platform: "browser" });
+  const bundled = await build({ entryPoints: [fileURLToPath(entry)], bundle: true, write: false, format: "esm", platform: "browser" });
   const [output] = bundled.outputFiles;
-  if (output === undefined) throw new Error(`esbuild wrote no output for ${entry.pathname}.`);
+  if (output === undefined) throw new Error(`esbuild wrote no output for ${fileURLToPath(entry)}.`);
   const script = output.text;
   return (request) => {
     const path = new URL(request.url).pathname;

@@ -114,7 +114,7 @@ export function bindPage(core: string, actions: Actions): View {
         const item = document.createElement("li");
         item.dataset.id = tool.id;
         item.dataset.available = String(tool.available);
-        item.textContent = tool.available ? `${tool.id}: tool` : `${tool.id}: no tool (${tool.reason ?? "unavailable"})`;
+        item.textContent = tool.available ? `${tool.id}: available` : `${tool.id}: unavailable (${tool.reason ?? "no reason"})`;
         return item;
       });
       find("tools", HTMLUListElement).replaceChildren(...items);

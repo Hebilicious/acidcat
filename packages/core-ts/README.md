@@ -277,7 +277,7 @@ webmcp?.status.subscribe(({ phase, message }) => console.log(phase, message));
 - `status` is an observable `{ phase, message }`. The phases are `loading`, `reconciling`, `ready`, `failed`, `closing` and `disposed`. `retry()` tries the last failed update again. `dispose()` removes all tools, and waits for the calls in progress.
 - WebMCP serves no events.
 
-[`examples/aircon/core-ts/page.ts`](../../examples/aircon/core-ts/page.ts) is a page with its WebMCP tools. `acid-cat conform --webmcp <url>` tests a page in Chromium.
+[`examples/aircon/core-ts/page.ts`](../../examples/aircon/core-ts/page.ts) is a page with its WebMCP tools, and `examples/aircon/test/webmcp-page.test.ts` tests it in Chromium with a test host. `acid-cat conform --webmcp <url>` tests the binding with a page that serves the conformance fixture.
 
 ### Context for each request
 

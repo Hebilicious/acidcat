@@ -121,7 +121,7 @@ for (const core of ["core-ts", "core-effect"]) {
       // The controls of the page call the same session, and the agent sees the change.
       await page.locator("#fan").selectOption("high");
       await page.locator("#status-fan", { hasText: "high" }).waitFor();
-      assert.equal(await page.locator("#result").textContent(), "Done.");
+      await page.locator("#result", { hasText: "Done." }).waitFor();
 
       // While the unit is offline, the firmware update is unavailable: its tool goes, and comes back after.
       await page.locator("#online").uncheck();

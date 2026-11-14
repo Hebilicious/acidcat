@@ -87,12 +87,12 @@ An agent in the browser sees these tools:
 
 - **Names and descriptions.** The name of each tool is the id of the capability, for example `aircon.temperature.set`. Its description is the description of the capability. Its input schema is the bundled input schema: `aircon.mode.set` has the type `Mode` in its `$defs`.
 - **Outcomes.** A call resolves with the result in its JSON form: `{ "ok": true, "value": null }`, or a failure such as `{ "ok": false, "error": { "_tag": "Offline" } }`. A call failure rejects with an `Error` that has a `kind`, for example `invalid-input` for a temperature of 40.
-- **Availability.** `aircon.firmware.update` is available only while the unit is online. While it is offline, the page removes its tool. When the unit is online again, the page registers the tool again. The page lists each capability, and tells if it has a tool now.
+- **Availability.** `aircon.firmware.update` is available only while the unit is online. While it is offline, the page removes its tool. When the unit is online again, the page registers the tool again. The page lists each capability, and tells if it is available. The binding registers a tool for each available capability.
 - **One session.** The controls and the tools call the same session, so the page shows each change that an agent makes, and the agent reads each change that a person makes.
 
 The page shows the status of the binding: `loading`, `reconciling`, `ready`, `failed`, `closing` or `disposed` (core-ts: `status` of the installation; core-effect: the `status` ref of the installation).
 
-The Rust core has no WebMCP. WebMCP runs in a web page, and the Rust program runs as a process. Its catalog has the WebMCP binding on the `app` target all the same, so that the catalog is the same in each language.
+The Rust core has no WebMCP. WebMCP runs in a web page, and the Rust program runs as a process. Its catalog has the WebMCP binding on the `app` target also, so that the catalog is the same in each language.
 
 [`test/webmcp-page.test.ts`](test/webmcp-page.test.ts) opens each page in Chromium through Playwright, with a test WebMCP host as its `modelContext`. It reads the tools, calls them, and reads what the page shows.
 

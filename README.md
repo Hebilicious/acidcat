@@ -110,7 +110,7 @@ const webmcp = installWebMcp(session); // undefined when the browser has no WebM
 - A value or a failure is the result of the tool. A call failure rejects with its `kind`. The agent can cancel a call.
 - The page can observe the status of the tools (`loading`, `ready`, `failed`, …), try again, and remove all its tools.
 - The binding needs a browser with `document.modelContext` or `navigator.modelContext`. Without one, the page works as before.
-- `acid-cat conform --webmcp <url>` tests a page in Chromium.
+- `acid-cat conform --webmcp <url>` tests the WebMCP binding of a core in Chromium, with a page that serves the conformance fixture. Test the page of an application with a test host in a browser, as `examples/aircon` does.
 
 Both TypeScript cores serve WebMCP: `installWebMcp` in `@acid-cat/core-ts`, and `WebMcp.install` in `@acid-cat/core-effect`. [`examples/aircon`](examples/aircon/README.md#webmcp) has a web page of the air conditioner for each of them, with its WebMCP tools and a test in Chromium. The Rust core does not serve WebMCP, because WebMCP runs in a web page.
 
