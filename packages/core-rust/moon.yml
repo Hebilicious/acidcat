@@ -9,7 +9,7 @@ tasks:
   test:
     description: "Run acid-cat conform against the conformance fixture through MCP over HTTP and stdio, HTTP and the command line, and check the catalog of the fixture."
     command: "cargo"
-    args: ["test"]
+    args: ["test", "--locked"]
     inputs:
       - "src/**/*"
       - "examples/**/*"
@@ -18,6 +18,7 @@ tasks:
       - "Cargo.lock"
       - "README.md"
       - "/packages/catalog/rust/src/**/*"
+      - "/packages/catalog/rust/Cargo.toml"
       - "/packages/cli/src/**/*.ts"
       - "/packages/spec-ts/src/**/*.ts"
       - "/packages/cli/conformance/*.acidcat.json"

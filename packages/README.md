@@ -60,7 +60,7 @@ Each core is complete in its own style. Neither core wraps the other. Both TypeS
 - A package gets a release when a commit with the type `feat`, `fix`, `perf`, `revert` or `deps` changes a file in its directory. Other types, and files outside the packages, give no release.
 - Before version 1.0, `feat` and a breaking change (`!`) increase the minor version. The other types increase the patch version.
 - The six npm packages are linked: they always have the same version, and they are released together.
-- The release pull request changes the versions in the package files, and the `CHANGELOG.md` of each package. release-please writes these changelogs.
+- The release pull request changes the versions in the package files, and the `CHANGELOG.md` of each package. release-please writes these changelogs. Some Rust crates use `acid-cat-catalog` or `acid-cat-core` from the directory of that crate, and their `Cargo.lock` records its version. The `extra-files` of each crate in `release-please-config.json` list these lock files, and the release pull request changes the version in them. Each Rust test runs cargo with `--locked`, so a lock file with an old version fails the test.
 
 To release, merge the release pull request. release-please then tags each released package and creates its GitHub release. Each new tag starts the release workflow of its registry. [`release-please-config.json`](../release-please-config.json) holds the settings, and [`.release-please-manifest.json`](../.release-please-manifest.json) holds the version of each package.
 
