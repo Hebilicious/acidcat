@@ -348,7 +348,13 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
                 return { error: { code: MCP_EVENT_ERRORS.resourceExhausted, message: "The principal has the maximum number of webhook subscriptions.", data: { limit: "subscriptions", max: maxSubscriptions } } };
               }
               return yield* create(key, principal, params, url, open).pipe(
-                Effect.ensuring(Effect.sync(() => void starting.set(principal, (starting.get(principal) ?? 1) - 1))),
+                Effect.ensuring(
+                  Effect.sync(() => {
+                    const left = (starting.get(principal) ?? 1) - 1;
+                    if (left === 0) starting.delete(principal);
+                    else starting.set(principal, left);
+                  }),
+                ),
               );
             }
             // A renewal starts no subscription, so the binding checks `maxAgeMs` here. The subscription exists, so the

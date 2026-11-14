@@ -112,7 +112,9 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
   const subscriptions = new Map<string, Subscription>();
   /** The subscriptions that start, by key. A second request with the same key waits for the first. */
   const starting = new Map<string, Promise<unknown>>();
-  /** The pairs of principal and URL that agreed to get deliveries, while the process runs. */
+  /** The new subscriptions of each principal that are starting now, so that they count for the limit. */
+  const admitted = new Map<string, number>();
+  /** The pairs of principal and URL, as the client sent it, that agreed to get deliveries, while the process runs. */
   const verified = new Set<string>();
   const pumps = new Set<Promise<void>>();
   let closed = false;
@@ -200,8 +202,8 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
   }
 
   /** Verify that the endpoint agrees to get deliveries for this principal. The result is the reason of a failure. */
-  async function verify(principal: string, url: URL, id: string, secret: string): Promise<WebhookError | undefined> {
-    const pair = canonicalJson([principal, url.href]);
+  async function verify(principal: string, rawUrl: string, url: URL, id: string, secret: string): Promise<WebhookError | undefined> {
+    const pair = canonicalJson([principal, rawUrl]);
     if (verified.has(pair) || options.allow?.(url) === true) return undefined;
     const challenge = randomBytes(24).toString("base64url");
     const body = JSON.stringify({ type: "verification", challenge });
@@ -227,10 +229,24 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
 
   /** Start a new subscription: subscribe in a session of its own, verify the endpoint, then send the occurrences. */
   async function start(principal: string, key: string, url: URL, secret: string, request: WebhookRequest, open: OpenSession): Promise<RpcAnswer> {
-    const count = [...subscriptions.values()].filter((each) => each.principal === principal).length;
+    // The check and the count are one step, before the first await, so that parallel new subscriptions of one principal
+    // cannot all pass the limit. A subscription that is starting counts.
+    const count = [...subscriptions.values()].filter((each) => each.principal === principal).length + (admitted.get(principal) ?? 0);
     if (count >= settings.maxSubscriptions) {
       return { error: { code: MCP_EVENT_ERRORS.resourceExhausted, message: "Too many webhook subscriptions.", data: { limit: "subscriptions", max: settings.maxSubscriptions } } };
     }
+    admitted.set(principal, (admitted.get(principal) ?? 0) + 1);
+    try {
+      return await startAdmitted(principal, key, url, secret, request, open);
+    } finally {
+      const left = (admitted.get(principal) ?? 1) - 1;
+      if (left === 0) admitted.delete(principal);
+      else admitted.set(principal, left);
+    }
+  }
+
+  /** Start a subscription that the limit admitted. */
+  async function startAdmitted(principal: string, key: string, url: URL, secret: string, request: WebhookRequest, open: OpenSession): Promise<RpcAnswer> {
     const id = await webhookSubscriptionId(principal, request.rawUrl, request.name, request.input);
     const own = await open();
     const subscribed = await own.session.subscribe(request.name, request.input, {
@@ -241,7 +257,7 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       await own.close();
       return { error: mcpSubscribeError(subscribed) };
     }
-    const reason = closed ? "connection_refused" : await verify(principal, url, id, secret);
+    const reason = closed ? "connection_refused" : await verify(principal, request.rawUrl, url, id, secret);
     if (reason !== undefined || closed) {
       await subscribed.return();
       await own.close();

@@ -145,11 +145,31 @@ pub(crate) struct Webhooks {
     subscriptions: Mutex<HashMap<String, Arc<Subscription>>>,
     /// A lock for each key that starts or renews, so that two requests with the same key do not start two subscriptions.
     starting: KeyGates<tokio::sync::Mutex<()>>,
-    /// The pairs of principal and URL that agreed to get deliveries, while the process runs.
+    /// The new subscriptions of each principal that are starting now, so that they count for the limit.
+    admitted: Arc<Mutex<HashMap<String, usize>>>,
+    /// The pairs of principal and URL, as the client sent it, that agreed to get deliveries, while the process runs.
     verified: Mutex<HashSet<String>>,
     closed: CancellationToken,
     /// The tasks that send the occurrences of the subscriptions. [`Webhooks::close`] waits for them.
     pumps: TaskTracker,
+}
+
+/// A new subscription that the limit admitted, and counts while it starts.
+struct Admitted {
+    counts: Arc<Mutex<HashMap<String, usize>>>,
+    principal: String,
+}
+
+impl Drop for Admitted {
+    fn drop(&mut self) {
+        let mut counts = lock(&self.counts);
+        if let Some(count) = counts.get_mut(&self.principal) {
+            *count -= 1;
+            if *count == 0 {
+                counts.remove(&self.principal);
+            }
+        }
+    }
 }
 
 enum Sent {
@@ -184,6 +204,7 @@ impl Webhooks {
             tls,
             subscriptions: Mutex::new(HashMap::new()),
             starting: Mutex::new(HashMap::new()),
+            admitted: Arc::new(Mutex::new(HashMap::new())),
             verified: Mutex::new(HashSet::new()),
             closed: CancellationToken::new(),
             pumps: TaskTracker::new(),
@@ -292,11 +313,9 @@ impl Webhooks {
             return Ok(result_of(&subscription));
         }
 
-        let count = lock(&self.subscriptions)
-            .values()
-            .filter(|each| each.principal == principal)
-            .count();
-        if count >= self.options.max_subscriptions {
+        // The check and the count are one step, so that parallel new subscriptions of one principal cannot all pass the
+        // limit. A subscription that is starting counts until this request ends.
+        let Some(_admitted) = self.admit(principal) else {
             return Err(RpcError::new(
                 codes::RESOURCE_EXHAUSTED,
                 "Too many webhook subscriptions.",
@@ -304,7 +323,7 @@ impl Webhooks {
             .with_data(
                 json!({ "limit": "subscriptions", "max": self.options.max_subscriptions }),
             ));
-        }
+        };
         let digest = Sha256::digest(key.as_bytes());
         let id = format!(
             "sub_{}",
@@ -384,6 +403,26 @@ impl Webhooks {
     }
 
     /// Answer `events/unsubscribe`. The server checked the principal.
+    /// Count a new subscription of `principal` that starts, if the limit admits it. The count ends when the result is
+    /// dropped.
+    fn admit(&self, principal: &str) -> Option<Admitted> {
+        let subscriptions = lock(&self.subscriptions);
+        let mut admitted = lock(&self.admitted);
+        let count = subscriptions
+            .values()
+            .filter(|each| each.principal == principal)
+            .count()
+            + admitted.get(principal).copied().unwrap_or(0);
+        if count >= self.options.max_subscriptions {
+            return None;
+        }
+        *admitted.entry(principal.to_owned()).or_default() += 1;
+        Some(Admitted {
+            counts: self.admitted.clone(),
+            principal: principal.to_owned(),
+        })
+    }
+
     pub(crate) fn unsubscribe(&self, principal: &str, params: &Map<String, Value>) -> RpcAnswer {
         let name = params.get("name").and_then(Value::as_str);
         let url = params
@@ -855,5 +894,27 @@ mod tests {
             "close returns after each pump ends"
         );
         assert!(lock(&webhooks.subscriptions).is_empty());
+    }
+
+    #[test]
+    fn a_subscription_that_starts_counts_for_the_limit_until_it_ends() {
+        let webhooks = Webhooks::new(WebhookOptions {
+            max_subscriptions: 2,
+            ..WebhookOptions::default()
+        });
+        let first = webhooks.admit("principal").expect("the first is admitted");
+        let second = webhooks.admit("principal").expect("the second is admitted");
+        assert!(
+            webhooks.admit("principal").is_none(),
+            "two subscriptions that start fill the limit"
+        );
+        assert!(
+            webhooks.admit("other").is_some(),
+            "another principal has its own limit"
+        );
+        drop(first);
+        assert!(webhooks.admit("principal").is_some());
+        drop(second);
+        assert!(lock(&webhooks.admitted).is_empty());
     }
 }

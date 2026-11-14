@@ -373,6 +373,25 @@ test("webhook: internal sends a terminated message, and a complete subscription 
   await handler.close();
 });
 
+test("webhook: parallel new subscriptions of one principal cannot pass the limit together", async () => {
+  const { handler, subscribe } = server({ maxSubscriptions: 2 });
+  // Each URL is new, so each subscription waits for its verification before it exists.
+  const answers = await Promise.all(["a", "b", "c", "d"].map((room) => subscribe({ arguments: { room }, url: `${receiver.url}?room=${room}` })));
+  assert.equal(answers.filter((answer) => isJsonObject(answer["result"])).length, 2);
+  assert.equal(answers.filter((answer) => isJsonObject(answer["error"]) && answer["error"]["code"] === -32025).length, 2);
+  await handler.close();
+});
+
+test("webhook: the verification is for the pair of the principal and the URL as the client sent it", async () => {
+  const { handler, subscribe } = server();
+  const spelled = receiver.url.replace("https://", "HTTPS://");
+  assert.ok(isJsonObject((await subscribe({ arguments: { room: "a" } }))["result"]));
+  assert.ok(isJsonObject((await subscribe({ arguments: { room: "b" } }))["result"]));
+  assert.ok(isJsonObject((await subscribe({ arguments: { room: "c" }, url: spelled }))["result"]));
+  assert.equal(receiver.received.filter((each) => each.body["type"] === "verification").length, 2);
+  await handler.close();
+});
+
 test("webhook: a new subscription over the limit of the principal gets ResourceExhausted", async () => {
   const { handler, subscribe } = server({ maxSubscriptions: 1 });
   assert.ok(isJsonObject((await subscribe({}))["result"]));
