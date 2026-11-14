@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { conform } from "@acid-cat/cli";
 
-import { deadline, didNotSettle, timeout } from "./deadline.ts";
+import { deadline, didNotSettle, failures, timeout } from "./deadline.ts";
 
 test("acid-cat conform fails the interrupt check of a command line that never writes its marker, and goes on", { timeout }, async () => {
   const results = await conform({ cli: [process.execPath, new URL("./fixture-cli-without-marker.ts", import.meta.url).pathname], deadline });
@@ -30,6 +30,7 @@ test("acid-cat conform fails the interrupt check of a command line that never wr
       "passed: watch with a --max-age-ms that is a fraction has exit code 3",
       "passed: an interrupt cancels watch with exit code 130",
     ],
+    failures(results),
   );
   assert.deepEqual(results.filter((result) => !result.passed), [interrupt]);
 });

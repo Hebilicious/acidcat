@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { conform, serve } from "@acid-cat/cli";
 
 import { httpHandler, mcpHandler } from "../src/index.ts";
-import { deadline, didNotSettle, timeout } from "./deadline.ts";
+import { deadline, didNotSettle, failures, timeout } from "./deadline.ts";
 import { fixture, Holds, options, WatchersThatIgnoreCancellation } from "./fixture.ts";
 
 test("acid-cat conform fails only the cancellation checks of events of an implementation whose subscriptions ignore cancellation", { timeout }, async () => {
@@ -30,7 +30,7 @@ test("acid-cat conform fails only the cancellation checks of events of an implem
       "mcp-stdio events: two subscriptions at the same time each get their own messages, and cancelling one leaves the other",
       "mcp: events/stream gets the things that happen, and cancelling it ends the subscription",
       "mcp: two subscriptions at the same time each get their own messages, and cancelling one leaves the other",
-    ]);
+    ], failures(failed));
     for (const result of failed) assert.match(result.detail ?? "", didNotSettle);
   } finally {
     await served.close();
