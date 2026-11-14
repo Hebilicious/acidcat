@@ -68,7 +68,12 @@ test("the Rust command line controls the unit of a server, and watch follows its
   context.after(() => server.kill());
   const url = await new Promise<string>((resolve, reject) => {
     server.on("error", reject);
-    server.stdout.setEncoding("utf-8").once("data", (chunk: string) => resolve(chunk.trim()));
+    // The first line of standard output is the URL. It can come in more than one chunk.
+    let text = "";
+    server.stdout.setEncoding("utf-8").on("data", (chunk: string) => {
+      text += chunk;
+      if (text.includes("\n")) resolve(text.slice(0, text.indexOf("\n")).trim());
+    });
   });
   // With AIRCON_URL, the command line sends each call and each subscription to the server.
   const remote = (...args: string[]) => spawn(aircon, ["cli", ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
@@ -81,6 +86,7 @@ test("the Rust command line controls the unit of a server, and watch follows its
   assert.partialDeepStrictEqual(JSON.parse((await run("cli", "aircon", "status", "get")).stdout), { power: false });
 
   const watch = remote("watch", "aircon.status.changed");
+  context.after(() => watch.kill());
   let watched = "";
   watch.stdout.setEncoding("utf-8").on("data", (chunk: string) => (watched += chunk));
   // Change the fan until the subscription writes its first occurrence: a change before the subscription starts is

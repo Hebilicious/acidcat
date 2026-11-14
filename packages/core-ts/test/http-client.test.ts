@@ -165,6 +165,50 @@ describe("the command line that calls a server", () => {
     assert.equal(kindOf(run.stderr), "cancelled");
   });
 
+  test("an interrupt during list is cancelled, with exit code 130, and closes the request", async (context) => {
+    // A server that accepts the request and never answers.
+    let closed = false;
+    const url = await served(
+      (request) =>
+        new Promise<Response>(() => {
+          request.signal.addEventListener("abort", () => (closed = true));
+        }),
+      context,
+    );
+    const interrupt = new AbortController();
+    setTimeout(() => interrupt.abort(), 50);
+    const run = await remoteCli(httpClient(url), ["list"], interrupt.signal);
+    assert.equal(run.code, 130);
+    assert.equal(kindOf(run.stderr), "cancelled");
+    assert.equal(run.stdout, "");
+    for (let turn = 0; !closed && turn < 100; turn++) await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.ok(closed, "the interrupt closes the request");
+  });
+
+  test("a cursor that cannot be a header value is invalid-input, with exit code 3, and sends no request", async (context) => {
+    let requests = 0;
+    const url = await served(() => {
+      requests++;
+      return new Response(null);
+    }, context);
+    for (const cursor of ["a→b", "a\nb", "a\rb"]) {
+      const run = await remoteCli(httpClient(url), ["watch", "fixture.ticks", "--count", "1", "--cursor", cursor]);
+      assert.equal(run.code, 3, JSON.stringify(cursor));
+      assert.equal(kindOf(run.stderr), "invalid-input");
+      assert.equal(run.stdout, "");
+    }
+    assert.equal(requests, 0);
+  });
+
+  test("a complete message with no data line ends the stream as complete, with exit code 0", async (context) => {
+    const occurrence = { eventId: "1", name: "fixture.ticks", timestamp: "2026-01-01T00:00:00.000Z", data: { n: 1 }, cursor: "1" };
+    const url = await served(() => new Response(`event: next\ndata: ${JSON.stringify(occurrence)}\n\nevent: complete\n\n`, { headers: { "Content-Type": "text/event-stream" } }), context);
+    const run = await remoteCli(httpClient(url), ["watch", "fixture.ticks", "--count", "1"]);
+    assert.equal(run.code, 0);
+    assert.deepEqual(JSON.parse(run.stdout), occurrence);
+    assert.equal(run.stderr, "");
+  });
+
   test("httpClient refuses a URL that is not http or https, and does not write the value of a header that is not valid", () => {
     assert.throws(() => httpClient("ftp://example.com"), /not an http or https URL/);
     assert.throws(() => httpClient("not a url"), /not a URL/);
@@ -185,5 +229,10 @@ describe("SseParser", () => {
       { event: "next", data: "one\ntwo" },
       { event: "complete", data: "" },
     ]);
+  });
+
+  test("gives a message with no data line only when its event is complete", () => {
+    const parser = new SseParser();
+    assert.deepEqual(parser.push("event: next\n\nevent: complete\n\n\n"), [{ event: "complete", data: "" }]);
   });
 });

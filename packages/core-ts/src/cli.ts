@@ -57,7 +57,7 @@ export interface CliOptions<Context> {
 interface Provider {
   readonly view: CatalogDocument;
   /** The availability of each capability of the view, or the call failure when the server does not answer. */
-  readonly availability: () => Promise<ReadonlyMap<string, Availability> | CallFailure>;
+  readonly availability: (signal: AbortSignal | undefined) => Promise<ReadonlyMap<string, Availability> | CallFailure>;
   readonly invoke: (id: string, input: unknown, signal: AbortSignal | undefined) => Promise<Outcome<unknown, unknown>>;
   readonly subscribe: (id: string, input: unknown, options: { readonly signal?: AbortSignal | undefined; readonly cursor?: string; readonly maxAgeMs?: number }) => Promise<AsyncIterable<Occurrence> | CallFailure>;
   readonly dispose: () => Promise<void>;
@@ -80,8 +80,8 @@ function remoteProvider<Context>(app: App<Context>, options: CliOptions<Context>
   const view = viewOf(catalogOf(app, { toJsonSchema: options.toJsonSchema }), options.target ?? "cli");
   return {
     view,
-    availability: async () => {
-      const served = await client.capabilities();
+    availability: async (signal) => {
+      const served = await client.capabilities({ signal });
       if ("kind" in served) return served;
       // A capability that the server does not list is unavailable.
       return new Map(Object.keys(view.capabilities).map((id) => [id, served.get(id) ?? unavailable("The server does not serve this capability.")]));
@@ -219,7 +219,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       return CLI_EXIT_CODES.value;
     }
     if (first === "list") {
-      const availability = await provider.availability();
+      const availability = await provider.availability(io.signal);
       if ("kind" in availability) return print(availability);
       io.stdout(
         JSON.stringify(
@@ -253,7 +253,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       } catch {
         // The call failures of the id come before invalid-input (spec/invocation.md#call-failures).
         if (provider.view.capabilities[id] === undefined) return print({ kind: "unknown-capability", message: `There is no capability ${id}.` });
-        const availability = await provider.availability();
+        const availability = await provider.availability(io.signal);
         if ("kind" in availability) return print(availability);
         const state = availability.get(id);
         if (state !== undefined && !state.available) return print({ kind: "unavailable", message: state.reason });

@@ -145,3 +145,65 @@ test("the command line that calls a server never writes its headers", async (con
     assert.ok(!`${result.stdout}${result.stderr}`.includes("secret-token"), `${result.stdout}${result.stderr}`);
   }
 });
+
+test("an item of GET /capabilities without an id, a boolean available, or a reason when it is not available makes the answer internal", async (context) => {
+  const lists: Record<string, unknown> = {
+    "no-reason": [{ id: "fixture.echo", available: true }, { id: "fixture.toggle", available: false }],
+    "no-id": [{ available: true }],
+    "not-boolean": [{ id: "fixture.echo", available: "yes" }],
+    "reason-not-text": [{ id: "fixture.toggle", available: false, reason: 1 }],
+  };
+  const server = await serve((request) => Response.json(lists[new URL(request.url).pathname.split("/")[1] ?? ""] ?? null));
+  context.after(server.close);
+  for (const base of Object.keys(lists)) {
+    const failure = await Effect.runPromise(Effect.flip(Http.client(`${server.url}/${base}`).capabilities));
+    assert.equal(failure.kind, "internal", base);
+  }
+});
+
+test("a base URL with a user name, a password, a query or a fragment throws, with no credentials in the message", () => {
+  const credentials = (error: unknown) => error instanceof Error && /user name or a password\. Give them in a header/.test(error.message) && !error.message.includes("TOKEN");
+  assert.throws(() => Http.client("http://user:TOKEN@example.com/cli"), credentials);
+  assert.throws(() => Http.client("http://TOKEN@example.com/cli"), credentials);
+  assert.throws(() => Http.client("http://example.com/cli?k=v"), /must not have a query or a fragment/);
+  assert.throws(() => Http.client("http://example.com/cli#part"), /must not have a query or a fragment/);
+  assert.throws(() => Http.client("not a url TOKEN"), (error: unknown) => error instanceof Error && !error.message.includes("TOKEN"));
+});
+
+test("a cursor that is not a header value is invalid-input, and the client sends no request", async (context) => {
+  let requests = 0;
+  const server = await serve(() => {
+    requests += 1;
+    return new Response(null, { status: 404 });
+  });
+  context.after(server.close);
+  const client = Http.client(server.url);
+  for (const cursor of ["a→b", "a\nb", "a\rb", "a\0b"]) {
+    const failure = await Effect.runPromise(Effect.scoped(Effect.flip(client.subscribe("fixture.watch", {}, { cursor }))));
+    assert.equal(failure.kind, "invalid-input", JSON.stringify(cursor));
+  }
+  assert.equal(requests, 0);
+  const watched = await runWith({}, remoteCli, server.url, "watch", "fixture.ticks", "--count", "1", "--cursor", "a→b");
+  assert.equal(watched.code, 3, watched.stderr);
+  assert.partialDeepStrictEqual(JSON.parse(watched.stderr), { kind: "invalid-input" });
+  assert.equal(requests, 0);
+});
+
+test("a 200 answer to a subscription that is not a stream of server-sent events is internal at once", async (context) => {
+  let closed = false;
+  const server = await serve(() => {
+    // A body that never ends: the client must not wait for its end.
+    const body = new ReadableStream<Uint8Array>({
+      start: (controller) => controller.enqueue(new TextEncoder().encode("{")),
+      cancel: () => {
+        closed = true;
+      },
+    });
+    return new Response(body, { status: 200, headers: { "Content-Type": "application/json" } });
+  });
+  context.after(server.close);
+  const failure = await Effect.runPromise(Effect.scoped(Effect.flip(Http.client(server.url).subscribe("fixture.watch", {}))).pipe(Effect.timeout("5 seconds")));
+  assert.equal(failure.kind, "internal");
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.ok(closed, "the client closes the body");
+});

@@ -61,8 +61,9 @@ export type Listed = HttpClient.Listed;
 
 /**
  * A client of the HTTP binding at `base`, an `http` or `https` URL, for example `http://pi.local:8080/cli`. It throws an
- * `Error` when `base` is not such a URL, or when a header is not valid. The message of the error does not contain the
- * value of a header.
+ * `Error` when `base` is not such a URL, when `base` has a user name, a password, a query or a fragment, or when a
+ * header is not valid. Give a token in a header, for example `Authorization`. The message of the error does not contain
+ * the URL or the value of a header.
  *
  * The client gives the call failure `unavailable` when the server does not answer, and `internal` when the server
  * gives an answer that the HTTP binding does not give.

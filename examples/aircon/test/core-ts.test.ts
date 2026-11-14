@@ -161,7 +161,12 @@ test("the TypeScript command line controls the unit of a server, and watch follo
   context.after(() => server.kill());
   const url = await new Promise<string>((resolve, reject) => {
     server.on("error", reject);
-    server.stdout.setEncoding("utf-8").once("data", (chunk: string) => resolve(chunk.trim()));
+    // The first line of standard output is the URL. It can come in more than one chunk.
+    let text = "";
+    server.stdout.setEncoding("utf-8").on("data", (chunk: string) => {
+      text += chunk;
+      if (text.includes("\n")) resolve(text.slice(0, text.indexOf("\n")).trim());
+    });
   });
   const cliPath = new URL("../core-ts/cli.ts", import.meta.url).pathname;
   // With AIRCON_URL, the command line sends each call and each subscription to the server.
@@ -175,6 +180,7 @@ test("the TypeScript command line controls the unit of a server, and watch follo
   assert.partialDeepStrictEqual(JSON.parse((await run(cliPath, "aircon", "status", "get")).stdout), { power: false });
 
   const watch = remote("watch", "aircon.status.changed");
+  context.after(() => watch.kill());
   let watched = "";
   watch.stdout.setEncoding("utf-8").on("data", (chunk: string) => (watched += chunk));
   // Change the fan until the subscription writes its first occurrence: a change before the subscription starts is

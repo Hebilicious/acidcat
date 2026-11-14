@@ -2,7 +2,7 @@
  * A client of the HTTP binding (spec/bindings/http.md), with the HTTP client of `effect/http`. `Http.client` makes it.
  * The command line uses it to serve a view of an application that runs on a server (spec/bindings/cli.md#server).
  */
-import { CALL_FAILURE_KINDS, callFailure, isOccurrence } from "@acid-cat/spec-ts";
+import { CALL_FAILURE_KINDS, callFailure, isOccurrence, SSE_MEDIA_TYPE } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, Occurrence, Outcome, Resume } from "@acid-cat/spec-ts";
 import { Effect, Layer, Option, Result, Schema, Scope, Stream } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
@@ -35,6 +35,7 @@ export interface Client {
    * The effect succeeds when the server sends the stream of server-sent events. It fails with the call failure of the
    * server before the first occurrence. The stream ends at `complete`, and fails at `error` with its call failure, or
    * with `internal` when the connection breaks. Close the scope, or interrupt the stream, to cancel the subscription.
+   * A cursor that is not a header value fails with `invalid-input`, and the client sends no request.
    */
   readonly subscribe: (id: string, input: unknown, options?: Resume) => Effect.Effect<Stream.Stream<Occurrence, CallFailed>, CallFailed, Scope.Scope>;
 }
@@ -54,13 +55,16 @@ export interface ClientOptions {
 
 /**
  * A client of the HTTP binding at `base`, an `http` or `https` URL. It throws an `Error` when `base` is not such a URL,
- * or when a header is not valid. The message of the error does not contain the value of a header.
+ * when it has a user name, a password, a query or a fragment, or when a header is not valid. The message of the error
+ * does not contain the URL or the value of a header.
  */
 export function make(base: string, options: ClientOptions = {}): Client {
-  const root = base.replace(/\/+$/, "");
-  if (!URL.canParse(root)) throw new Error(`${root} is not a URL.`);
-  const url = new URL(root);
-  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.hostname === "") throw new Error(`${root} is not an http or https URL.`);
+  if (!URL.canParse(base)) throw new Error("The URL of the server is not a URL.");
+  const url = new URL(base);
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.hostname === "") throw new Error("The URL of the server is not an http or https URL.");
+  if (url.search !== "" || url.hash !== "") throw new Error("The URL of the server must not have a query or a fragment.");
+  if (url.username !== "" || url.password !== "") throw new Error("The URL of the server must not have a user name or a password. Give them in a header.");
+  const root = `${url.origin}${url.pathname}`.replace(/\/+$/, "");
   const headers = new Headers();
   for (const [name, value] of Object.entries(options.headers ?? {})) {
     try {
@@ -93,9 +97,7 @@ export function make(base: string, options: ClientOptions = {}): Client {
       if (answer.status !== 200) return yield* new CallFailed(failureOf(body));
       const listed = Schema.decodeUnknownOption(CapabilityList)(body);
       if (Option.isNone(listed)) return yield* new CallFailed(notAnAnswer);
-      return listed.value.map(
-        ({ id, available, reason }): Listed => (available ? { id, available: true } : { id, available: false, reason: reason ?? "" }),
-      );
+      return listed.value.map((item): Listed => (item.available ? { id: item.id, available: true } : { id: item.id, available: false, reason: item.reason }));
     }),
   );
 
@@ -111,9 +113,15 @@ export function make(base: string, options: ClientOptions = {}): Client {
 
   const subscribe = (id: string, input: unknown, resume: Resume = {}) =>
     Effect.gen(function* () {
+      if (resume.cursor !== undefined && !isHeaderValue(resume.cursor)) {
+        return yield* new CallFailed(callFailure("invalid-input", "The cursor must contain only visible ASCII characters, spaces and tabs."));
+      }
       const query = resume.maxAgeMs === undefined ? "" : `?maxAgeMs=${resume.maxAgeMs}`;
       const answer = yield* send("POST", `/events/${encodeURIComponent(id)}${query}`, input, resume.cursor === undefined ? {} : { "Last-Event-ID": resume.cursor });
       if (answer.status !== 200) return yield* new CallFailed(failureOf(yield* readJson(answer)));
+      // The scope closes the body of an answer that is not a stream of server-sent events.
+      const mediaType = (answer.headers["content-type"] ?? "").split(";")[0]?.trim().toLowerCase();
+      if (mediaType !== SSE_MEDIA_TYPE) return yield* new CallFailed(notAnAnswer);
       return occurrences(answer.stream);
     });
 
@@ -125,7 +133,16 @@ const CallFailureSchema = Schema.Struct({ kind: Schema.Literals(CALL_FAILURE_KIN
 /** The body of an answer with the status 200 to a call: a value or a failure. */
 const CallResult = Schema.Union([Schema.Struct({ ok: Schema.Literal(true), value: Schema.Json }), Schema.Struct({ ok: Schema.Literal(false), error: Schema.Json })]);
 
-const CapabilityList = Schema.Array(Schema.Struct({ id: Schema.String, available: Schema.Boolean, reason: Schema.optionalKey(Schema.String) }));
+/** The body of `GET {base}/capabilities`. A capability that is not available has a reason. */
+const CapabilityList = Schema.Array(
+  Schema.Union([
+    Schema.Struct({ id: Schema.String, available: Schema.Literal(true) }),
+    Schema.Struct({ id: Schema.String, available: Schema.Literal(false), reason: Schema.String }),
+  ]),
+);
+
+/** True if a text can be the value of a header: visible ASCII characters, spaces and tabs. */
+const isHeaderValue = (text: string): boolean => /^[\t\x20-\x7e]*$/.test(text);
 
 export const notAnAnswer = callFailure("internal", "The server gave an answer that the HTTP binding does not give.");
 

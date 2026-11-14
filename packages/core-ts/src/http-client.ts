@@ -77,7 +77,13 @@ export function httpClient(url: string, options: HttpClientOptions = {}): HttpCl
     if (aborted(init.signal)) return cancelled();
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Accept", "application/json, text/event-stream");
-    if (init.lastEventId !== undefined) requestHeaders.set("Last-Event-ID", init.lastEventId);
+    if (init.lastEventId !== undefined) {
+      try {
+        requestHeaders.set("Last-Event-ID", init.lastEventId);
+      } catch {
+        return callFailure("invalid-input", "The cursor cannot be sent in the header Last-Event-ID.");
+      }
+    }
     let body: string | undefined;
     if (method === "POST") {
       requestHeaders.set("Content-Type", "application/json");
@@ -208,7 +214,8 @@ interface Message {
 /**
  * The parser of a stream of server-sent events (https://html.spec.whatwg.org/multipage/server-sent-events.html): lines
  * end with CRLF, LF or CR, a line that starts with `:` is a comment, and a blank line ends a message. It reads the
- * fields `event` and `data`, and ignores the others, also `id`: the cursor of an occurrence is in its data.
+ * fields `event` and `data`, and ignores the others, also `id`: the cursor of an occurrence is in its data. It gives a
+ * message with no data only when its event is `complete`.
  */
 export class SseParser {
   #buffer = "";
@@ -243,8 +250,8 @@ export class SseParser {
       const empty = this.#data.length === 0;
       this.#event = "";
       this.#data = [];
-      // A message with no data is not dispatched.
-      return empty ? undefined : message;
+      // A message with no data is not dispatched, except `complete`: the HTTP binding needs no data to end a stream.
+      return empty && message.event !== "complete" ? undefined : message;
     }
     if (line.startsWith(":")) return undefined;
     const colon = line.indexOf(":");

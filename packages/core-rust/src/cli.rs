@@ -130,15 +130,24 @@ impl<C: Send + Sync + 'static> Provider<C> {
         }
     }
 
-    /// The availability of each capability, or the call failure when the server does not answer.
-    async fn availability(&self, ids: &[String]) -> Result<Vec<Availability>, CallFailure> {
+    /// The availability of each capability, or the call failure when the server does not answer or `cancel` is
+    /// cancelled.
+    async fn availability(
+        &self,
+        ids: &[String],
+        cancel: &CancellationToken,
+    ) -> Result<Vec<Availability>, CallFailure> {
         match self {
             Provider::Local(session) => Ok(ids
                 .iter()
                 .map(|id| session.availability(id).unwrap_or(Availability::Available))
                 .collect()),
             Provider::Remote(client) => {
-                let served = client.capabilities().await?;
+                let served = tokio::select! {
+                    biased;
+                    () = cancel.cancelled() => return Err(CallFailure::cancelled()),
+                    served = client.capabilities() => served?,
+                };
                 Ok(ids
                     .iter()
                     .map(|id| {
@@ -397,7 +406,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 Ok(exit::VALUE)
             }
             Some("list") => {
-                let availability = match provider.availability(&capability_ids).await {
+                let availability = match provider.availability(&capability_ids, &io.cancel).await {
                     Ok(availability) => availability,
                     Err(failure) => return Ok(print(io, &Outcome::CallFailure(failure))),
                 };
@@ -450,7 +459,10 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                             format!("There is no capability {id}."),
                         )
                     } else {
-                        match provider.availability(std::slice::from_ref(id)).await {
+                        match provider
+                            .availability(std::slice::from_ref(id), &io.cancel)
+                            .await
+                        {
                             Err(failure) => failure,
                             Ok(availability) => match availability.into_iter().next() {
                                 Some(Availability::Unavailable { reason }) => {

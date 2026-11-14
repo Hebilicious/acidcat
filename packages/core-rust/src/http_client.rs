@@ -40,6 +40,22 @@ impl HttpClient {
     /// A client of the HTTP binding at `base`, an `http` or `https` URL. The error tells what is wrong with the URL.
     pub fn new(base: &str) -> Result<Self, String> {
         let base = base.trim_end_matches('/').to_owned();
+        // A user name or a password is a credential: it must not reach an error message or a header. Give a token in
+        // a header instead. A query or a fragment cannot come before the paths of the binding.
+        if base
+            .split_once("://")
+            .map_or(base.as_str(), |(_, rest)| rest)
+            .split('/')
+            .next()
+            .is_some_and(|authority| authority.contains('@'))
+        {
+            return Err(
+                "The URL has a user name or a password. Give a token in a header instead.".into(),
+            );
+        }
+        if base.contains(['?', '#']) {
+            return Err(format!("{base} has a query or a fragment."));
+        }
         let uri: Uri = base.parse().map_err(|_| format!("{base} is not a URL."))?;
         if !matches!(uri.scheme_str(), Some("http" | "https"))
             || uri.host().is_none_or(str::is_empty)
@@ -84,23 +100,24 @@ impl HttpClient {
         if status != 200 {
             return Err(call_failure(&body));
         }
+        // Each item has a string `id` and a boolean `available`, and a string `reason` when it is unavailable. Any other
+        // answer is not an answer of the HTTP binding.
         let items = body.as_array().ok_or_else(not_an_answer)?;
-        Ok(items
+        items
             .iter()
-            .filter_map(|item| {
-                let id = item.get("id")?.as_str()?.to_owned();
-                let availability = if item.get("available") == Some(&Value::Bool(false)) {
-                    Availability::unavailable(
-                        item.get("reason")
-                            .and_then(Value::as_str)
-                            .unwrap_or_default(),
-                    )
-                } else {
-                    Availability::Available
-                };
-                Some((id, availability))
+            .map(|item| {
+                let id = item.get("id").and_then(Value::as_str);
+                let available = item.get("available").and_then(Value::as_bool);
+                let reason = item.get("reason").and_then(Value::as_str);
+                match (id, available, reason) {
+                    (Some(id), Some(true), _) => Ok((id.to_owned(), Availability::Available)),
+                    (Some(id), Some(false), Some(reason)) => {
+                        Ok((id.to_owned(), Availability::unavailable(reason)))
+                    }
+                    _ => Err(not_an_answer()),
+                }
             })
-            .collect())
+            .collect()
     }
 
     /// Call a capability: `POST {base}/capabilities/{id}`. Drop the future to cancel the call: the client closes the
@@ -109,7 +126,7 @@ impl HttpClient {
         let answer = match self
             .send(
                 Method::POST,
-                &format!("/capabilities/{id}"),
+                &format!("/capabilities/{}", path_segment(id)),
                 Some(input.to_string()),
                 None,
             )
@@ -143,8 +160,8 @@ impl HttpClient {
         max_age_ms: Option<u64>,
     ) -> Result<BoxStream<'static, Result<Occurrence, CallFailure>>, CallFailure> {
         let path = match max_age_ms {
-            Some(age) => format!("/events/{id}?maxAgeMs={age}"),
-            None => format!("/events/{id}"),
+            Some(age) => format!("/events/{}?maxAgeMs={age}", path_segment(id)),
+            None => format!("/events/{}", path_segment(id)),
         };
         let answer = self
             .send(Method::POST, &path, Some(input.to_string()), cursor)
@@ -152,6 +169,14 @@ impl HttpClient {
         if answer.status() != 200 {
             let (_, body) = read(answer).await?;
             return Err(call_failure(&body));
+        }
+        let media_type = answer
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default();
+        if !media_type.starts_with("text/event-stream") {
+            return Err(not_an_answer());
         }
         Ok(server_sent_events(answer.into_body()))
     }
@@ -200,6 +225,18 @@ impl HttpClient {
             .await
             .map_err(|_| unreachable())
     }
+}
+
+/// An id as one segment of a path: each byte that is not unreserved (RFC 3986) is percent-encoded.
+fn path_segment(id: &str) -> String {
+    id.bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                (byte as char).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
 }
 
 /// The status and the JSON body of an answer.
@@ -251,8 +288,22 @@ struct Reader {
 impl Reader {
     /// Read the complete lines in the buffer.
     fn lines(&mut self) {
-        while let Some(end) = self.buffer.iter().position(|byte| *byte == b'\n') {
-            let line: Vec<u8> = self.buffer.drain(..=end).collect();
+        // A line ends with CR LF, LF or CR. A CR at the end of the buffer waits for the next bytes, which can be its LF.
+        while let Some(end) = self
+            .buffer
+            .iter()
+            .position(|byte| *byte == b'\n' || *byte == b'\r')
+        {
+            let terminator = if self.buffer[end] == b'\r' {
+                match self.buffer.get(end + 1) {
+                    None => return,
+                    Some(b'\n') => 2,
+                    Some(_) => 1,
+                }
+            } else {
+                1
+            };
+            let line: Vec<u8> = self.buffer.drain(..end + terminator).collect();
             let line = String::from_utf8_lossy(&line);
             let line = line.trim_end_matches(['\n', '\r']);
             if line.is_empty() {
@@ -320,7 +371,15 @@ fn server_sent_events(body: Incoming) -> BoxStream<'static, Result<Occurrence, C
                         reader.lines();
                     }
                 }
-                // The stream ended with no `complete`.
+                // The body ended. A CR at its end ends a line. Then a stream that sent no `complete` broke.
+                _ if reader.buffer.last() == Some(&b'\r') => {
+                    reader.buffer.push(b'\n');
+                    reader.lines();
+                    if !reader.ended {
+                        reader.ready.push_back(Err(broken()));
+                        reader.ended = true;
+                    }
+                }
                 _ => {
                     reader.ready.push_back(Err(broken()));
                     reader.ended = true;
@@ -329,4 +388,120 @@ fn server_sent_events(body: Incoming) -> BoxStream<'static, Result<Occurrence, C
         }
     })
     .boxed()
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    use super::*;
+
+    /// A server that answers each request on one connection with `answer`, then closes it. The result is its base URL.
+    async fn server(answer: &'static str) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                let mut request = [0; 4096];
+                let _ = stream.read(&mut request).await;
+                let _ = stream.write_all(answer.as_bytes()).await;
+            }
+        });
+        format!("http://{address}/cli")
+    }
+
+    fn json_answer(body: &str) -> String {
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
+    #[test]
+    fn a_base_url_with_credentials_a_query_or_a_fragment_is_refused_without_its_credentials() {
+        let error = HttpClient::new("http://user:secret-token@host/cli").unwrap_err();
+        assert!(!error.contains("secret-token"), "{error}");
+        assert!(HttpClient::new("http://host/cli?k=v").is_err());
+        assert!(HttpClient::new("http://host/cli#top").is_err());
+        assert!(HttpClient::new("ftp://host/cli").is_err());
+        assert!(HttpClient::new("http://host/cli/").is_ok());
+    }
+
+    #[test]
+    fn an_id_is_one_percent_encoded_segment_of_the_path() {
+        assert_eq!(path_segment("aircon.power.set"), "aircon.power.set");
+        assert_eq!(path_segment("a b?c/d"), "a%20b%3Fc%2Fd");
+        assert_eq!(path_segment("é"), "%C3%A9");
+    }
+
+    #[tokio::test]
+    async fn an_item_of_capabilities_that_the_binding_does_not_give_is_internal() {
+        for body in [
+            r#"[{"id":"a","available":"false"}]"#,
+            r#"[{"id":"a","available":false}]"#,
+            r#"[{"available":true}]"#,
+        ] {
+            let base = server(Box::leak(json_answer(body).into_boxed_str())).await;
+            let failure = HttpClient::new(&base)
+                .unwrap()
+                .capabilities()
+                .await
+                .unwrap_err();
+            assert_eq!(failure.kind, Kind::Internal, "{body}");
+        }
+        let base = server(Box::leak(
+            json_answer(
+                r#"[{"id":"a","available":true},{"id":"b","available":false,"reason":"off"}]"#,
+            )
+            .into_boxed_str(),
+        ))
+        .await;
+        assert_eq!(
+            HttpClient::new(&base)
+                .unwrap()
+                .capabilities()
+                .await
+                .unwrap(),
+            [
+                ("a".to_owned(), Availability::Available),
+                ("b".to_owned(), Availability::unavailable("off"))
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_stream_that_is_not_text_event_stream_is_internal_at_once() {
+        let base = server(Box::leak(json_answer("{}").into_boxed_str())).await;
+        let Err(failure) = HttpClient::new(&base)
+            .unwrap()
+            .subscribe("e", &serde_json::json!({}), None, None)
+            .await
+        else {
+            panic!("a stream that is not text/event-stream is not a subscription");
+        };
+        assert_eq!(failure.kind, Kind::Internal);
+    }
+
+    #[tokio::test]
+    async fn the_reader_takes_lines_that_end_with_cr_lf_lf_or_cr() {
+        for body in [
+            "event: next\r\ndata: {\"eventId\":\"1\",\"name\":\"e\",\"timestamp\":\"t\",\"data\":{}}\r\n\r\nevent: complete\r\ndata:\r\n\r\n",
+            "event: next\ndata: {\"eventId\":\"1\",\"name\":\"e\",\"timestamp\":\"t\",\"data\":{}}\n\nevent: complete\ndata:\n\n",
+            "event: next\rdata: {\"eventId\":\"1\",\"name\":\"e\",\"timestamp\":\"t\",\"data\":{}}\r\revent: complete\rdata:\r\r",
+        ] {
+            let answer = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let base = server(Box::leak(answer.into_boxed_str())).await;
+            let stream = HttpClient::new(&base)
+                .unwrap()
+                .subscribe("e", &serde_json::json!({}), None, None)
+                .await
+                .expect("the stream starts");
+            let items: Vec<_> = stream.collect().await;
+            assert_eq!(items.len(), 1, "{body:?}: {items:?}");
+            assert_eq!(items[0].as_ref().unwrap().event_id, "1");
+        }
+    }
 }
