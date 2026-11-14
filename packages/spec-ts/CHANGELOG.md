@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/spec-ts@0.10.2...@acid-cat/spec-ts@0.11.0) (2026-11-14)
+
+
+### Miscellaneous Chores
+
+* **@acid-cat/spec-ts:** Synchronize npm versions
+
 ## [0.10.2](https://github.com/Hebilicious/acidcat/compare/@acid-cat/spec-ts@0.10.1...@acid-cat/spec-ts@0.10.2) (2026-11-12)
 
 

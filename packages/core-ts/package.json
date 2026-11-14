@@ -1,6 +1,6 @@
 {
   "name": "@acid-cat/core-ts",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "description": "Serve AcidCat capabilities and events in plain TypeScript, with no Effect dependency.",
   "keywords": [
     "acidcat",

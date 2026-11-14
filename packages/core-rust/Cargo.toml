@@ -1,6 +1,6 @@
 [package]
 name = "acid-cat-core"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Serve AcidCat capabilities and events in Rust, through the MCP, HTTP and CLI bindings."
