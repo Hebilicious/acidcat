@@ -5,6 +5,8 @@
 //! cargo run -- catalog                      # the catalog in canonical form
 //! cargo run -- cli aircon power set --on    # the command line
 //! cargo run -- mcp-stdio                    # the MCP server through standard input and output
+//! cargo run -- serve 0.0.0.0:8080           # the HTTP binding of the target `cli`, for a remote command line
+//! AIRCON_URL=http://host:8080/cli cargo run -- cli aircon status get   # the command line of that server
 //! ```
 
 use std::sync::{Arc, Mutex};
@@ -400,22 +402,48 @@ async fn main() {
         Some("catalog") => print!("{}", app.render_catalog()),
         Some("cli") => {
             use acid_cat_core::cli::{CliOptions, run_cli_process};
-            std::process::exit(
-                run_cli_process(
-                    app,
-                    unit,
-                    CliOptions::new("aircon", "0.1.0"),
-                    args[1..].to_vec(),
-                )
-                .await,
+            use acid_cat_core::http::HttpClient;
+            let mut options = CliOptions::new("aircon", "0.1.0");
+            // With `AIRCON_URL`, the command line controls the unit of the server at that URL (`aircon serve`).
+            if let Ok(url) = std::env::var("AIRCON_URL") {
+                match HttpClient::new(&url) {
+                    Ok(client) => options = options.remote(client),
+                    Err(problem) => {
+                        eprintln!("AIRCON_URL: {problem}");
+                        std::process::exit(2);
+                    }
+                }
+            }
+            std::process::exit(run_cli_process(app, unit, options, args[1..].to_vec()).await);
+        }
+        Some("serve") => {
+            use acid_cat_core::http::{HttpBinding, HttpOptions};
+            // The view of the target `cli` through HTTP, for the command line on another machine.
+            let cli = HttpBinding::new(
+                app,
+                unit,
+                HttpOptions {
+                    target: "cli".into(),
+                    base: "/cli".into(),
+                    ..HttpOptions::default()
+                },
             );
+            let address = args.get(1).map_or("127.0.0.1:0", String::as_str);
+            let served = acid_cat_core::remote::serve(
+                address.parse().expect("an address such as 0.0.0.0:8080"),
+                vec![("/cli".into(), Arc::new(cli))],
+            )
+            .await
+            .expect("the server starts");
+            println!("{}/cli", served.url());
+            std::future::pending::<()>().await;
         }
         Some("mcp-stdio") => {
             use acid_cat_core::mcp::{McpStdioOptions, serve_stdio};
             serve_stdio(app, unit, McpStdioOptions::new("aircon", "0.1.0")).await;
         }
         _ => {
-            eprintln!("Usage: aircon <catalog|cli|mcp-stdio> [args]");
+            eprintln!("Usage: aircon <catalog|cli|serve|mcp-stdio> [args]");
             std::process::exit(2);
         }
     }

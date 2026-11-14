@@ -18,6 +18,8 @@ use crate::remote::{
 };
 use crate::session::{DEFAULT_BUFFER_LIMIT, Session, SubscribeOptions};
 
+pub use crate::http_client::HttpClient;
+
 /// The settings of the HTTP binding.
 #[derive(Clone, Debug)]
 pub struct HttpOptions {

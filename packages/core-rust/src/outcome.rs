@@ -2,12 +2,12 @@
 
 use std::fmt;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 /// The kinds of call failure, in order of precedence: when more than one applies, the first one is used
 /// (spec/invocation.md#call-failures).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Kind {
     Cancelled,
@@ -31,7 +31,7 @@ impl Kind {
 }
 
 /// A call that did not give a result: `{ "kind", "message" }`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CallFailure {
     pub kind: Kind,
     pub message: String,

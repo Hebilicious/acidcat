@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use futures::FutureExt;
 use futures::stream::{BoxStream, StreamExt};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
@@ -16,16 +16,16 @@ use crate::app::ErasedEmitted;
 use crate::outcome::{CallFailure, Defect, Kind};
 
 /// One thing that happened, in its JSON form (spec/events.md#occurrences).
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Occurrence {
     pub event_id: String,
     pub name: String,
     pub timestamp: String,
     pub data: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cursor: Option<String>,
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub truncated: bool,
 }
 

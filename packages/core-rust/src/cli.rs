@@ -4,13 +4,16 @@ use std::io::Write;
 use std::sync::Arc;
 
 use futures::future::BoxFuture;
+use futures::stream::{BoxStream, StreamExt};
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
 use crate::app::Application;
+use crate::http::HttpClient;
 use crate::outcome::{Availability, CallFailure, Kind, Outcome};
 use crate::schema::{bundle, resolve};
 use crate::session::{Session, SubscribeOptions};
+use crate::subscription::Occurrence;
 
 /// The exit codes of the outcomes (spec/bindings/cli.md#outcomes).
 pub mod exit {
@@ -81,6 +84,11 @@ pub struct CliOptions<C> {
     /// The commands of the application. The name of each one must not be `call`, `list`, `watch`, the name of
     /// another command of the application, or the first word of the command of a capability.
     pub commands: Vec<CliCommand<C>>,
+    /// The HTTP binding of the application in another process or on another machine. With it, the command line
+    /// sends each call and each subscription to that server. The commands still come from the view of `target` in
+    /// this program. Serve the HTTP binding with a target whose view has the same capabilities and events, for
+    /// example the target `cli`.
+    pub remote: Option<HttpClient>,
 }
 
 impl<C> CliOptions<C> {
@@ -91,6 +99,89 @@ impl<C> CliOptions<C> {
             target: "cli".into(),
             description: None,
             commands: Vec::new(),
+            remote: None,
+        }
+    }
+
+    /// Send each call and each subscription to the HTTP binding of a server.
+    pub fn remote(mut self, client: HttpClient) -> Self {
+        self.remote = Some(client);
+        self
+    }
+}
+
+/// Where the command line sends the calls and the subscriptions.
+enum Provider<C> {
+    /// A session in this process.
+    Local(Session<C>),
+    /// The HTTP binding of a server.
+    Remote(HttpClient),
+}
+
+impl<C: Send + Sync + 'static> Provider<C> {
+    async fn invoke(&self, id: &str, input: Value, cancel: &CancellationToken) -> Outcome {
+        match self {
+            Provider::Local(session) => session.invoke(id, input, cancel).await,
+            Provider::Remote(client) => tokio::select! {
+                biased;
+                () = cancel.cancelled() => Outcome::CallFailure(CallFailure::cancelled()),
+                outcome = client.invoke(id, &input) => outcome,
+            },
+        }
+    }
+
+    /// The availability of each capability, or the call failure when the server does not answer.
+    async fn availability(&self, ids: &[String]) -> Result<Vec<Availability>, CallFailure> {
+        match self {
+            Provider::Local(session) => Ok(ids
+                .iter()
+                .map(|id| session.availability(id).unwrap_or(Availability::Available))
+                .collect()),
+            Provider::Remote(client) => {
+                let served = client.capabilities().await?;
+                Ok(ids
+                    .iter()
+                    .map(|id| {
+                        served.iter().find(|(each, _)| each == id).map_or_else(
+                            || {
+                                Availability::unavailable(
+                                    "The server does not serve this capability.",
+                                )
+                            },
+                            |(_, availability)| availability.clone(),
+                        )
+                    })
+                    .collect())
+            }
+        }
+    }
+
+    async fn subscribe(
+        &self,
+        id: &str,
+        input: Value,
+        options: SubscribeOptions,
+    ) -> Result<BoxStream<'static, Result<Occurrence, CallFailure>>, CallFailure> {
+        match self {
+            Provider::Local(session) => session
+                .subscribe(id, input, options)
+                .map(|occurrences| occurrences.into_stream()),
+            Provider::Remote(client) => {
+                let max_age_ms = match options.max_age_ms {
+                    Some(value) if !crate::session::is_max_age_ms(value) => {
+                        return Err(CallFailure::new(
+                            Kind::InvalidInput,
+                            "maxAgeMs must be an integer that is 0 or more.",
+                        ));
+                    }
+                    other => other.map(|value| value as u64),
+                };
+                tokio::select! {
+                    biased;
+                    () = options.cancel.cancelled() => Err(CallFailure::new(Kind::Cancelled, "The subscription was cancelled.")),
+                    stream = client.subscribe(id, &input, options.cursor.as_deref(), max_age_ms) => stream,
+                }
+            }
         }
     }
 }
@@ -176,17 +267,35 @@ pub async fn run_cli<C: Send + Sync + 'static>(
     args: &[String],
     io: &mut CliIo,
 ) -> Result<i32, String> {
-    let session = Session::open(app, &options.target, context.clone());
-    let close = session.clone();
-    let _close = crate::remote::OnDrop(move || close.close());
-    let view = session.view().clone();
+    let view = app.view(&options.target);
+    let provider = match &options.remote {
+        None => Provider::Local(Session::open(app, &options.target, context.clone())),
+        Some(client) => Provider::Remote(client.clone()),
+    };
+    // The local session closes when the command ends.
+    let local = match &provider {
+        Provider::Local(session) => Some(session.clone()),
+        Provider::Remote(_) => None,
+    };
+    let _close = crate::remote::OnDrop(move || {
+        if let Some(session) = &local {
+            session.close();
+        }
+    });
+    let ids_of = |member: &str| -> Vec<String> {
+        view.get(member)
+            .and_then(Value::as_object)
+            .map(|entries| entries.keys().cloned().collect())
+            .unwrap_or_default()
+    };
+    let capability_ids = ids_of("capabilities");
+    let event_ids = ids_of("events");
     let types = view
         .get("$defs")
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
-    let commands: Vec<(String, Vec<String>)> = session
-        .capability_ids()
+    let commands: Vec<(String, Vec<String>)> = capability_ids
         .iter()
         .map(|id| (id.clone(), id.split('.').map(str::to_owned).collect()))
         .collect();
@@ -208,7 +317,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
             ));
         }
     }
-    for id in session.event_ids() {
+    for id in &event_ids {
         let input = view
             .pointer(&format!("/events/{id}/input"))
             .map(|input| bundle(input, &types));
@@ -269,7 +378,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 );
                 lines.push("  call <id> [input]".into());
                 lines.push("  list".into());
-                if !session.event_ids().is_empty() {
+                if !event_ids.is_empty() {
                     lines.push(
                         "  watch <id> [flags] [--cursor <string>] [--max-age-ms <integer>]".into(),
                     );
@@ -288,8 +397,12 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 Ok(exit::VALUE)
             }
             Some("list") => {
+                let availability = match provider.availability(&capability_ids).await {
+                    Ok(availability) => availability,
+                    Err(failure) => return Ok(print(io, &Outcome::CallFailure(failure))),
+                };
                 let mut entries = Vec::new();
-                for id in session.capability_ids() {
+                for (id, available) in capability_ids.iter().zip(availability) {
                     let entry = capability(id);
                     let mut item = Map::new();
                     item.insert("kind".into(), json!("capability"));
@@ -298,19 +411,14 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                         "description".into(),
                         entry.get("description").cloned().unwrap_or(Value::Null),
                     );
-                    item.extend(
-                        session
-                            .availability(id)
-                            .map(|availability| availability.members())
-                            .unwrap_or_default(),
-                    );
+                    item.extend(available.members());
                     item.insert(
                         "usage".into(),
                         json!(usage(&options.name, id, schema_of(&entry).as_ref())),
                     );
                     entries.push(Value::Object(item));
                 }
-                for id in session.event_ids() {
+                for id in &event_ids {
                     let event = view
                         .get("events")
                         .and_then(|events| events.get(id.as_str()))
@@ -334,25 +442,30 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 let Ok(input) = serde_json::from_str::<Value>(text) else {
                     // Text that is not JSON is invalid input, but the kinds before it in spec/invocation.md#call-failures
                     // come first: cancelled, unknown-capability and unavailable.
-                    let failure = match session.availability(id) {
-                        _ if io.cancel.is_cancelled() => CallFailure::cancelled(),
-                        None => CallFailure::new(
+                    let failure = if io.cancel.is_cancelled() {
+                        CallFailure::cancelled()
+                    } else if !capability_ids.contains(id) {
+                        CallFailure::new(
                             Kind::UnknownCapability,
                             format!("There is no capability {id}."),
-                        ),
-                        Some(Availability::Unavailable { reason }) => {
-                            CallFailure::new(Kind::Unavailable, reason)
-                        }
-                        Some(Availability::Available) => {
-                            CallFailure::new(Kind::InvalidInput, "The input is not JSON.")
+                        )
+                    } else {
+                        match provider.availability(std::slice::from_ref(id)).await {
+                            Err(failure) => failure,
+                            Ok(availability) => match availability.into_iter().next() {
+                                Some(Availability::Unavailable { reason }) => {
+                                    CallFailure::new(Kind::Unavailable, reason)
+                                }
+                                _ => CallFailure::new(Kind::InvalidInput, "The input is not JSON."),
+                            },
                         }
                     };
                     return Ok(print(io, &Outcome::CallFailure(failure)));
                 };
-                let outcome = session.invoke(id, input, &io.cancel).await;
+                let outcome = provider.invoke(id, input, &io.cancel).await;
                 Ok(print(io, &outcome))
             }
-            Some("watch") => watch(&session, &view, &types, &options.name, &args[1..], io).await,
+            Some("watch") => watch(&provider, &view, &types, &options.name, &args[1..], io).await,
             Some(name) if options.commands.iter().any(|command| command.name == name) => {
                 let command = options
                     .commands
@@ -399,7 +512,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                     return Ok(exit::VALUE);
                 }
                 let input = parse_flags(flags, &schema)?;
-                let outcome = session.invoke(id, Value::Object(input), &io.cancel).await;
+                let outcome = provider.invoke(id, Value::Object(input), &io.cancel).await;
                 Ok(print(io, &outcome))
             }
         }
@@ -413,7 +526,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
 
 /// Subscribe to an event, and write each occurrence on one line (spec/bindings/cli.md#events).
 async fn watch<C: Send + Sync + 'static>(
-    session: &Session<C>,
+    provider: &Provider<C>,
     view: &Value,
     types: &Map<String, Value>,
     program: &str,
@@ -472,7 +585,7 @@ async fn watch<C: Send + Sync + 'static>(
         max_age_ms,
         cancel: io.cancel.clone(),
     };
-    let mut occurrences = match session.subscribe(id, input, options) {
+    let mut occurrences = match provider.subscribe(id, input, options).await {
         Ok(occurrences) => occurrences,
         Err(failure) => return Ok(print(io, &Outcome::CallFailure(failure))),
     };

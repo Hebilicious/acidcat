@@ -435,8 +435,19 @@ async fn main() {
                     ..McpOptions::new("fixture", "0.0.0")
                 },
             );
+            // The view of the target `cli` through HTTP, for the command line that calls this server (`cli-remote`).
+            let cli = HttpBinding::new(
+                app.clone(),
+                context.clone(),
+                HttpOptions {
+                    target: "cli".into(),
+                    base: "/cli".into(),
+                    ..HttpOptions::default()
+                },
+            );
             let routes: acid_cat_core::remote::Routes = vec![
                 ("/api".into(), Arc::new(http)),
+                ("/cli".into(), Arc::new(cli)),
                 ("/mcp".into(), Arc::new(mcp)),
             ];
             let served = acid_cat_core::remote::serve("127.0.0.1:0".parse().unwrap(), routes)
@@ -468,8 +479,23 @@ async fn main() {
             .await;
             std::process::exit(code);
         }
+        // The command line, with each call and each subscription sent to the server at the URL.
+        Some("cli-remote") => {
+            use acid_cat_core::cli::{CliOptions, run_cli_process};
+            use acid_cat_core::http::HttpClient;
+            let url = args.get(1).expect("the URL of the server");
+            let client = HttpClient::new(url).expect("an http URL");
+            let code = run_cli_process(
+                app,
+                context,
+                CliOptions::new("fixture", "0.0.0").remote(client),
+                args[2..].to_vec(),
+            )
+            .await;
+            std::process::exit(code);
+        }
         _ => {
-            eprintln!("Usage: fixture <catalog|serve|mcp-stdio|cli> [args]");
+            eprintln!("Usage: fixture <catalog|serve|mcp-stdio|cli|cli-remote> [args]");
             std::process::exit(2);
         }
     }

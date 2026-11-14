@@ -8,6 +8,13 @@ Serve the capabilities and the events of an application through the [MCP](../../
 cargo add acid-cat-core
 ```
 
+Until a version is on crates.io, depend on the repository. Cargo finds the crate and its catalog library in it:
+
+```toml
+[dependencies]
+acid-cat-core = { git = "https://github.com/Hebilicious/acidcat", branch = "main" }
+```
+
 The core uses [Tokio](https://tokio.rs). Types give the schemas: an input, a value, a failure or a payload is a type that derives `serde` and `schemars::JsonSchema`. The core validates each input against its JSON Schema before the work starts, and checks each value, failure and payload against its schema.
 
 ## Example
@@ -129,7 +136,7 @@ An `Option` field that is not required takes the value of its type, not `null`. 
 | MCP through HTTP | `mcp::McpBinding::new(app, context, McpOptions::new(name, version))`. It serves revision `2026-07-28`, and the `initialize` handshake of earlier revisions. Poll delivery is on. Webhook delivery is on with `McpOptions::webhooks`, and the principal of each request comes from `McpOptions::principal` |
 | MCP through stdio | `mcp::serve_stdio(app, context, McpStdioOptions::new(name, version))` |
 | HTTP | `http::HttpBinding::new(app, context, HttpOptions::default())` |
-| CLI | `cli::cli_main(app, context, CliOptions::new(name, version))`. An interrupt cancels the call or the subscription |
+| CLI | `cli::cli_main(app, context, CliOptions::new(name, version))`. An interrupt cancels the call or the subscription. With `CliOptions::remote`, it calls a server: see [A command line for a server](#a-command-line-for-a-server) |
 
 `McpBinding` and `HttpBinding` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. To use another server, give each request to `handle` after `remote::request_body`.
 
@@ -158,6 +165,22 @@ let binding = HttpBinding::with_request_context(app, move |parts: &http::request
 - `Refusal::new` panics when the status is not from 400 to 599. The answer always has the media type `application/json`.
 - The command line and MCP through stdio have one context for the process.
 
+### A command line for a server
+
+The command line can run on another machine than the application. `CliOptions::remote(client)` sends each call and each subscription to the HTTP binding of a server, with `http::HttpClient`:
+
+```rust,ignore
+let client = HttpClient::new("http://pi.local:8080/cli")?.header("Authorization", &format!("Bearer {token}"))?;
+cli_main(app, context, CliOptions::new("aircon", "1.0.0").remote(client)).await;
+```
+
+- The commands, the flags and the usage come from the view of the target in the program. The program and the server use the same application, so that they have the same catalog.
+- Serve the HTTP binding at the server with the same target: `HttpOptions { target: "cli".into(), base: "/cli".into(), .. }`. A capability that the server does not serve gives `unknown-capability`.
+- `list` gets the availability of each capability from the server.
+- An interrupt closes the request, and the server cancels the call or the subscription.
+- When the server does not answer, the call failure is `unavailable`, with exit code 4.
+- `HttpClient::trust_certificate(pem)` trusts a self-signed certificate for an `https` URL.
+
 ## Tests
 
-`cargo test` runs `acid-cat conform` of the repository against the fixture, through MCP over HTTP with the handshake, poll and webhook delivery, MCP over stdio, HTTP and the command line. It needs `pnpm install` at the root of the repository, and `openssl`. Test with `moon run core-rust:test`.
+`cargo test` runs `acid-cat conform` of the repository against the fixture, through MCP over HTTP with the handshake, poll and webhook delivery, MCP over stdio, HTTP, and the command line, in the same process and for a server. It needs `pnpm install` at the root of the repository, and `openssl`. Test with `moon run core-rust:test`.

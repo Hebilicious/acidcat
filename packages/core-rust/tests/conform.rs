@@ -1,6 +1,6 @@
 //! The Rust core passes `acid-cat conform` through each binding: MCP over HTTP (with the handshake, poll and webhook
-//! delivery), MCP over stdio, HTTP and the command line. Each test serves the conformance fixture
-//! (`examples/fixture.rs`), and runs `acid-cat conform` of the workspace with `pnpm exec`.
+//! delivery), MCP over stdio, HTTP, and the command line, in the same process and for a server. Each test serves the
+//! conformance fixture (`examples/fixture.rs`), and runs `acid-cat conform` of the workspace with `pnpm exec`.
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -190,6 +190,13 @@ fn through_http() {
 #[test]
 fn through_the_command_line() {
     let command = format!("{} cli", fixture().display());
+    assert_conforms(&["--cli", &command], 20);
+}
+
+#[test]
+fn through_the_command_line_that_calls_a_server() {
+    let server = Server::start(&[]);
+    let command = format!("{} cli-remote {}/cli", fixture().display(), server.url);
     assert_conforms(&["--cli", &command], 20);
 }
 
