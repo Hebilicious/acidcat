@@ -35,6 +35,21 @@ jobs:
         run: |
           test "$(grep -m1 '^version = ' packages/core-rust/Cargo.toml)" = "version = \"${GITHUB_REF_NAME#crates-core/v}\""
 
+      # A release can publish acid-cat-catalog and acid-cat-core together. cargo publish builds the core with the
+      # acid-cat-catalog of crates.io, so wait until the crates.io index has the version that the core requires.
+      - name: Wait for acid-cat-catalog on crates.io
+        run: |
+          version="$(grep -oP '^acid-cat-catalog = \{ version = "\K[^"]+' packages/core-rust/Cargo.toml)"
+          for attempt in $(seq 1 90); do
+            if curl -fsS -A "acidcat-release (github.com/Hebilicious/acidcat)" https://index.crates.io/ac/id/acid-cat-catalog | grep -q "\"vers\":\"$version\""; then
+              exit 0
+            fi
+            echo "acid-cat-catalog $version is not on crates.io yet (attempt $attempt)"
+            sleep 20
+          done
+          echo "acid-cat-catalog $version is not on crates.io after 30 minutes"
+          exit 1
+
       - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
         id: auth
 

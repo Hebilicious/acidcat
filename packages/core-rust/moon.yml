@@ -25,8 +25,7 @@ tasks:
     toolchains: ["system"]
 
   package:
-    description: "Package the crate, and build it from the package, for crates.io."
-    command: "cargo"
-    args: ["package", "--allow-dirty"]
-    inputs: ["src/**/*", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "/packages/catalog/rust/src/**/*"]
+    description: "Package the crate, and build it from the package, for crates.io. The build takes acid-cat-catalog from its directory, because the release pull request can require a version that crates.io does not have yet."
+    script: "cargo package --allow-dirty --config 'patch.crates-io.acid-cat-catalog.path=\"../catalog/rust\"'"
+    inputs: ["src/**/*", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "/packages/catalog/rust/src/**/*", "/packages/catalog/rust/Cargo.toml"]
     toolchains: ["system"]

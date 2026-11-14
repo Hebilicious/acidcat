@@ -41,6 +41,11 @@
           "type": "toml",
           "path": "/examples/aircon/core-rust/Cargo.lock",
           "jsonpath": "$.package[?(@.name.value=='acid-cat-catalog')].version"
+        },
+        {
+          "type": "toml",
+          "path": "/packages/core-rust/Cargo.toml",
+          "jsonpath": "$.dependencies['acid-cat-catalog'].version"
         }
       ]
     },
