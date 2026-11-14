@@ -9,6 +9,7 @@ import type { Layer } from "effect";
 import type * as App from "./App.ts";
 import { cancelOnAbort } from "./internal/cancel.ts";
 import { withHeartbeat } from "./internal/idle.ts";
+import type { IncomingRequest } from "./Remote.ts";
 import { answerWith, closeUnlessStreaming, eventStream } from "./internal/web.ts";
 import type { Streaming } from "./internal/web.ts";
 import * as Session from "./Session.ts";
@@ -32,7 +33,8 @@ export interface Options {
    * first request that passes the screening, and all requests use them. With `"per-request"`, it builds them for each
    * request that passes the screening, and releases them when the response is complete. Use `"per-request"` when a
    * request must not use objects that an earlier request made, for example on Cloudflare Workers, or when a stateful
-   * service must not be shared between callers.
+   * service must not be shared between callers. With `"per-request"`, the layer can read the head of the request from
+   * `Remote.IncomingRequest`, and refuse the request with a `Remote.Refusal`.
    */
   readonly services?: "shared" | "per-request" | undefined;
   /**
@@ -48,13 +50,23 @@ export interface Options {
  * A web request handler for the API. Each request has its own session. `layer` gives the services that the
  * capabilities and the events need. `options.services` tells when the handler builds them. The session of a
  * subscription, and its services with `"per-request"`, stay open until the stream of server-sent events ends.
+ *
+ * With `"per-request"`, the layer can read the head of the request from `Remote.IncomingRequest`, for example to
+ * find the caller. When the layer fails with a `Remote.Refusal`, the handler answers with the refusal before it opens
+ * a session.
  */
-export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Options) {
+export function toWebHandler<R, E>(
+  app: App.App<R>,
+  layer: Layer.Layer<R, E, IncomingRequest>,
+  options: Options & { readonly services: "per-request" },
+): (request: Request) => Promise<Response>;
+export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Options): (request: Request) => Promise<Response>;
+export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E, IncomingRequest>, options: Options) {
   const { answer } = answerWith(layer, options.services);
   return async (request: Request): Promise<Response> => {
     const admitted = await admit(request, options);
     if (admitted instanceof Response) return admitted;
-    return answer((scope) => respond(app, request, admitted.text, options, scope));
+    return answer(request, (scope) => respond(app, request, admitted.text, options, scope));
   };
 }
 

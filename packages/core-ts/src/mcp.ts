@@ -6,8 +6,8 @@ import { bundle, isJsonObject, KEEPALIVE_MS, MCP_PROTOCOL_VERSION, MCP_REJECTION
 import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
-import { openContext } from "./context.ts";
-import type { ContextOption } from "./context.ts";
+import { openContext, refusalResponse } from "./context.ts";
+import type { ContextOption, OpenedContext } from "./context.ts";
 import type { Clock } from "./clock.ts";
 import { eventCapabilities, forbidden, listEvents, servesEvents, startEventStream, unsupportedWebhook } from "./mcp-events.ts";
 import type { OpenSession, RpcAnswer, WebhookDelivery } from "./mcp-events.ts";
@@ -96,7 +96,8 @@ function readRequest(body: unknown): JsonRpcRequest {
 
 /**
  * A web request handler for the MCP server. Each request has its own session, and with `createContext` its own
- * context. Each poll lease and each webhook subscription also has its own session, opened with the context of the
+ * context. `createContext` can refuse a request: then the handler answers with the refusal, and opens no session.
+ * Each poll lease and each webhook subscription also has its own session, opened with the context of the
  * request that started it.
  */
 export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Context>): McpHandler {
@@ -122,21 +123,31 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
       return rejection("not-utf8");
     }
 
-    // Revision 2026-07-28: each request names its revision in a header, and each request repeats it in `_meta`.
-    const version = request.headers.get("MCP-Protocol-Version");
-    const id = message.id ?? null;
-    if (version === null) return error(400, id, -32020, "MCP-Protocol-Version header is required");
-    if (version !== MCP_PROTOCOL_VERSION) {
-      return error(400, id, -32022, `Unsupported protocol version ${version}`, { supported: [MCP_PROTOCOL_VERSION] });
+    // The context of the request. `createContext` can refuse the request here, before a session opens.
+    const opened = await openContext<Context>(options, request);
+    if ("refusal" in opened) return refusalResponse(opened.refusal);
+    const unanswerable = revisionError(request, message);
+    if (unanswerable !== undefined) {
+      await opened.release();
+      return unanswerable;
     }
-    if (message.id === undefined) return new Response(null, { status: 200, headers: { "Content-Type": "application/json" } });
-    const metaVersion = message.protocolVersion;
-    if (metaVersion === undefined) return error(400, id, -32602, "Required request metadata is missing");
-    if (metaVersion !== version) return error(400, id, -32020, "MCP-Protocol-Version header does not match request metadata");
+    const id = message.id ?? null;
 
-    // The session of the request. A poll lease or a webhook subscription opens one more, with the same context.
+    // The session of the request uses the context of the request. A poll lease or a webhook subscription opens one more
+    // session, with a context that `createContext` makes from the same request.
+    let unused: OpenedContext<Context> | undefined = opened;
+    const contextOfSession = async (): Promise<OpenedContext<Context>> => {
+      if (unused !== undefined) {
+        const first = unused;
+        unused = undefined;
+        return first;
+      }
+      const again = await openContext<Context>(options, request);
+      if ("refusal" in again) throw new Error("createContext refused a request that it accepted before.");
+      return again;
+    };
     const open: OpenSession = async () => {
-      const opened = await openContext<Context>(options, request);
+      const opened = await contextOfSession();
       const session = createSession(app, {
         target: options.target ?? "mcp",
         context: opened.context,
@@ -155,7 +166,7 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
     // The stream of `events/stream` closes the session and releases the context when it ends.
     let streaming = false;
     try {
-      if (message.method === "events/stream" && message.id !== null && servesEvents(session)) {
+      if (message.method === "events/stream" && message.id !== null && message.id !== undefined && servesEvents(session)) {
         const started = await startEventStream(session, message.id, message.params, {
           heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
           resultMeta: serverInfoOf(options),
@@ -180,6 +191,25 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
     }
   };
   return Object.assign(handle, { close: closeAll, [Symbol.asyncDispose]: closeAll });
+}
+
+/**
+ * The error answer of a request that does not name revision 2026-07-28 correctly, or the empty answer of a
+ * notification. `undefined` for a request that the server answers.
+ */
+function revisionError(request: Request, message: JsonRpcRequest): Response | undefined {
+  // Revision 2026-07-28: each request names its revision in a header, and each request repeats it in `_meta`.
+  const version = request.headers.get("MCP-Protocol-Version");
+  const id = message.id ?? null;
+  if (version === null) return error(400, id, -32020, "MCP-Protocol-Version header is required");
+  if (version !== MCP_PROTOCOL_VERSION) {
+    return error(400, id, -32022, `Unsupported protocol version ${version}`, { supported: [MCP_PROTOCOL_VERSION] });
+  }
+  if (message.id === undefined) return new Response(null, { status: 200, headers: { "Content-Type": "application/json" } });
+  const metaVersion = message.protocolVersion;
+  if (metaVersion === undefined) return error(400, id, -32602, "Required request metadata is missing");
+  if (metaVersion !== version) return error(400, id, -32020, "MCP-Protocol-Version header does not match request metadata");
+  return undefined;
 }
 
 /** The methods whose state outlives the request (spec/bindings/mcp.md#subscriptions-that-outlive-a-request). */

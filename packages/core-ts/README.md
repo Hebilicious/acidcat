@@ -33,7 +33,7 @@ export const aircon = defineApp<{ unit: Unit }>({
 });
 ```
 
-- `run` gets the input, an `AbortSignal` and the context. It returns `ok(value)` or `fail(failure)`, for example `fail({ _tag: "Offline", since })`. The types check that the value agrees with the output schema, that the failure has a tag of `failures`, and that it has the members of the schema of that tag. If `run` throws, the call fails as `internal`.
+- `run` gets the input, and `{ signal, context, target }`: an `AbortSignal`, the context, and the target of the session, for example `"mcp"` or `"cli"`. It returns `ok(value)` or `fail(failure)`, for example `fail({ _tag: "Offline", since })`. The types check that the value agrees with the output schema, that the failure has a tag of `failures`, and that it has the members of the schema of that tag. If `run` throws, the call fails as `internal`.
 - With an input schema, `run` gets the output of the schema. With none, it gets an empty object.
 - A failure schema describes the whole failure object, with its `_tag`.
 - `availability` is an optional function that returns an observable availability. A session reads it with `getSnapshot` when a call comes in. It subscribes to it only while `onChange` or the handle has listeners.
@@ -66,7 +66,7 @@ export const statusChanged = event({
 export const aircon = defineApp<{ unit: Unit }>({ targets, capabilities: [powerSet], events: [statusChanged] });
 ```
 
-- `subscribe` gets the input, and `{ signal, context, cursor, maxAgeMs }`. The signal aborts when the subscription ends, in all ways. Stop the work and release the resources then.
+- `subscribe` gets the input, and `{ signal, context, target, cursor, maxAgeMs }`. `target` is the target of the session. The signal aborts when the subscription ends, in all ways. Stop the work and release the resources then.
 - Each value is `{ data }`, and optionally `eventId`, `timestamp`, `cursor` and `truncated`. Give the `eventId` of the source if it has one. With none, the session makes a unique id. With no `timestamp`, the session uses the time at which it gets the value.
 - `data` must agree with the payload schema. The session gives the client the output of the schema, as a copy. With no payload schema, `data` must be an empty object.
 - If `subscribe` throws before it gives an iterable, the subscription fails as `internal` before it starts. If the iterable throws, or gives data that does not agree with the payload schema, the subscription ends with `internal`. The details go to `onDefect`, not to the client.
@@ -272,6 +272,28 @@ const handler = httpHandler(aircon, {
   createContext: () => ({ unit: connectUnit(env), [Symbol.asyncDispose]: () => disconnectUnit() }),
 });
 ```
+
+`createContext` can refuse a request: it gives `refuse(status, message, headers?)` in place of a context. Use it to authenticate the caller, and give the caller to the capabilities in the context:
+
+```ts
+import { httpHandler, refuse } from "@acid-cat/core-ts";
+
+const handler = httpHandler(aircon, {
+  allowedOrigins: [],
+  toJsonSchema,
+  createContext: async (request) => {
+    const caller = await accounts.caller(request.headers.get("Authorization"));
+    if (caller === undefined) return refuse(401, "Give a valid token.", { "WWW-Authenticate": "Bearer" });
+    return { unit, caller };
+  },
+});
+```
+
+- A refusal answers the request with its status, its headers, the media type `application/json`, and the body `{ "message" }`. The handler opens no session. No capability runs, and no subscription starts. The message shows no internal data.
+- `isRefusal(value)` tells if a value is a refusal that `refuse` made.
+- The handler releases the context after the answer, or when the stream of a subscription ends.
+- Through MCP, each poll lease and each webhook subscription calls `createContext` again with the request that started it, and keeps that context until it ends.
+- The command line and MCP through stdio have one context for the program.
 
 ### Command line
 

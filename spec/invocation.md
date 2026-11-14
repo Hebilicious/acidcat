@@ -48,6 +48,7 @@ A **session** is one period in which one client calls the capabilities of one ta
 - An input MUST NOT contain identity data, credentials or tokens. The session holds the identity of its client.
 - A session is **open**, then **closing**, then **closed**. When a session starts to close, it accepts no new calls and cancels its work. A call after this time fails as `cancelled`. Its subscriptions end as [Events](events.md#sessions-and-concurrency) tells.
 - A provider MAY give sessions the services that it needs, for example authentication or storage. This specification does not define these services.
+- A provider SHOULD let the work of a capability and the provider of an event read the target of their session.
 
 ## Cancellation and concurrency
 

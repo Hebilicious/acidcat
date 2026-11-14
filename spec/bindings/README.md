@@ -43,6 +43,8 @@ A remote binding serves clients through the network. Before it opens a session o
 
 Each remote binding tells its status codes. It also tells if it accepts requests that have no `Origin` header. The deployment sets the limits.
 
+After these checks, the deployment MAY refuse a request, for example when it does not know the caller. It refuses before it opens a session. The answer has the status that the deployment chooses, for example `401` or `403`, the media type `application/json`, and the body `{ "message" }`. The message shows no internal data. No capability runs, and no subscription starts.
+
 ## Bindings in this specification
 
 | Name | Kind | Surface | Events |

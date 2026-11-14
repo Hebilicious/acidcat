@@ -26,10 +26,12 @@ export type FailureOf<Failures> = { [Tag in keyof Failures]: { readonly _tag: Ta
 /** The failure schemas of a capability, by tag. The schema of a failure describes the object, without or with its `_tag`. */
 export type FailureSchemas<Failures> = { readonly [Tag in keyof Failures]: StandardSchemaV1<unknown, Failures[Tag]> };
 
-/** What `run` receives beside the input: the signal of the call, and the context. */
+/** What `run` receives beside the input: the signal of the call, the context, and the target of the session. */
 export interface Call<Context> {
   readonly signal: AbortSignal;
   readonly context: Context;
+  /** The target of the session, for example `"mcp"` or `"cli"`. */
+  readonly target: string;
 }
 
 /** The function of a capability. Its result has the types of the output schema and of the failure schemas. */
@@ -174,12 +176,15 @@ export interface CapabilityFactory<Context> {
 export const capabilitiesFor = <Context>(): CapabilityFactory<Context> => defineCapability;
 
 /**
- * What `subscribe` receives beside the input: the signal of the subscription, the context, and where the subscription
- * starts (spec/events.md#resuming). The signal aborts when the subscription ends, in all ways.
+ * What `subscribe` receives beside the input: the signal of the subscription, the context, the target of the session,
+ * and where the subscription starts (spec/events.md#resuming). The signal aborts when the subscription ends, in all
+ * ways.
  */
 export interface Subscription<Context> {
   readonly signal: AbortSignal;
   readonly context: Context;
+  /** The target of the session, for example `"mcp"` or `"cli"`. */
+  readonly target: string;
   /** The cursor of the client. With none, the subscription starts now. */
   readonly cursor?: string | undefined;
   /** The client wants no occurrence that is older than this number of milliseconds. */

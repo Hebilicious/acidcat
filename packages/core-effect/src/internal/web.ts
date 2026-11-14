@@ -1,5 +1,7 @@
 import { SSE_MEDIA_TYPE } from "@acid-cat/spec-ts";
-import { Effect, Exit, Layer, ManagedRuntime, Scope } from "effect";
+import { Cause, Effect, Exit, Layer, ManagedRuntime, Scope } from "effect";
+
+import { headOf, IncomingRequest, Refusal, refusalResponse } from "../Remote.ts";
 
 /**
  * Keep the services of a request open until `holder` closes, also after the response is complete. A poll lease and a
@@ -16,17 +18,23 @@ export const keepNothing: Keep = () => Effect.void;
  * scope of its request, and closes it: when the response is ready, or when the stream of its body ends. With
  * `"per-request"`, the services stay open until the scope of the request and each scope that `keep` got are closed.
  * `dispose` releases the shared services.
+ *
+ * With `"per-request"`, the layer reads the head of the request from `IncomingRequest`. When the layer fails with a
+ * `Refusal`, the answer is the refusal, and `answer` does not run. The shared services have no request: the public
+ * handlers accept a layer that needs `IncomingRequest` only with `"per-request"`, so the shared layer never reads it.
  */
-export function answerWith<R, E>(layer: Layer.Layer<R, E>, services: "shared" | "per-request" | undefined) {
-  const runtime = services === "per-request" ? undefined : ManagedRuntime.make(layer);
-  const answer = async <AE>(answer: (scope: Scope.Closeable, keep: Keep) => Effect.Effect<Response, AE, R>): Promise<Response> => {
+export function answerWith<R, E>(layer: Layer.Layer<R, E, IncomingRequest>, services: "shared" | "per-request" | undefined) {
+  const runtime = services === "per-request" ? undefined : ManagedRuntime.make(Layer.provide(layer, Layer.succeed(IncomingRequest, noRequest)));
+  const answer = async <AE>(request: Request, answer: (scope: Scope.Closeable, keep: Keep) => Effect.Effect<Response, AE, R>): Promise<Response> => {
     const scope = Effect.runSync(Scope.make());
     if (runtime !== undefined) return runtime.runPromise(answer(scope, keepNothing));
     const servicesScope = Effect.runSync(Scope.make());
-    const built = await Effect.runPromiseExit(Layer.buildWithScope(layer, servicesScope));
+    const built = await Effect.runPromiseExit(Layer.buildWithScope(layer, servicesScope).pipe(Effect.provideService(IncomingRequest, headOf(request))));
     if (Exit.isFailure(built)) {
       await Effect.runPromise(Scope.close(servicesScope, built));
       await Effect.runPromise(Scope.close(scope, built));
+      const failure = Cause.findErrorOption(built.cause);
+      if (failure._tag === "Some" && failure.value instanceof Refusal) return refusalResponse(failure.value);
       return Effect.runPromise(Effect.failCause(built.cause));
     }
     let holders = 1;
@@ -47,6 +55,9 @@ export function answerWith<R, E>(layer: Layer.Layer<R, E>, services: "shared" | 
   };
   return { answer, dispose };
 }
+
+/** The head of the request of the shared services, which have no request. No typed layer reads it. */
+const noRequest = { method: "", url: "", headers: new Headers() };
 
 /** A response whose body is a stream. The stream closes the scope of its request when it ends. */
 export interface Streaming {
