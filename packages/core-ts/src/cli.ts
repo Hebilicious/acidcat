@@ -17,10 +17,14 @@ import {
   commandPath,
   isCallFailure,
   isJsonObject,
+  unavailable,
+  viewOf,
 } from "@acid-cat/spec-ts";
-import type { CallFailure, CatalogCapability, CatalogDocument, JsonObject, Outcome } from "@acid-cat/spec-ts";
+import type { Availability, CallFailure, CatalogCapability, CatalogDocument, JsonObject, Occurrence, Outcome } from "@acid-cat/spec-ts";
 
+import { catalogOf } from "./app.ts";
 import type { App, ToJsonSchema } from "./app.ts";
+import type { HttpClient } from "./http-client.ts";
 import { createSession } from "./session.ts";
 
 export interface CliOptions<Context> {
@@ -40,6 +44,52 @@ export interface CliOptions<Context> {
    * the command of a capability (spec/bindings/cli.md#commands).
    */
   readonly commands?: readonly CliCommand<Context>[] | undefined;
+  /**
+   * The HTTP binding of the application in another process or on another machine (spec/bindings/cli.md#server). With
+   * it, the command line sends each call, the availability of `list` and each subscription of `watch` to that server.
+   * The commands still come from the view of `target` in this program. Serve the HTTP binding with the same target, for
+   * example `httpHandler(app, { target: "cli", … })`. The commands of the application still get `context`.
+   */
+  readonly remote?: HttpClient | undefined;
+}
+
+/** Where the command line sends the calls and the subscriptions: a session in this process, or the HTTP binding of a server. */
+interface Provider {
+  readonly view: CatalogDocument;
+  /** The availability of each capability of the view, or the call failure when the server does not answer. */
+  readonly availability: (signal: AbortSignal | undefined) => Promise<ReadonlyMap<string, Availability> | CallFailure>;
+  readonly invoke: (id: string, input: unknown, signal: AbortSignal | undefined) => Promise<Outcome<unknown, unknown>>;
+  readonly subscribe: (id: string, input: unknown, options: { readonly signal?: AbortSignal | undefined; readonly cursor?: string; readonly maxAgeMs?: number }) => Promise<AsyncIterable<Occurrence> | CallFailure>;
+  readonly dispose: () => Promise<void>;
+}
+
+function localProvider<Context>(app: App<Context>, options: CliOptions<Context>): Provider {
+  const session = createSession(app, { target: options.target ?? "cli", context: options.context, toJsonSchema: options.toJsonSchema });
+  return {
+    get view() {
+      return session.view;
+    },
+    availability: async () => new Map([...session.handles.values()].map((handle) => [handle.id, handle.availability.getSnapshot()])),
+    invoke: (id, input, signal) => session.invoke(id, input, { signal }),
+    subscribe: (id, input, subscribeOptions) => session.subscribe(id, input, subscribeOptions),
+    dispose: () => session.dispose(),
+  };
+}
+
+function remoteProvider<Context>(app: App<Context>, options: CliOptions<Context>, client: HttpClient): Provider {
+  const view = viewOf(catalogOf(app, { toJsonSchema: options.toJsonSchema }), options.target ?? "cli");
+  return {
+    view,
+    availability: async (signal) => {
+      const served = await client.capabilities({ signal });
+      if ("kind" in served) return served;
+      // A capability that the server does not list is unavailable.
+      return new Map(Object.keys(view.capabilities).map((id) => [id, served.get(id) ?? unavailable("The server does not serve this capability.")]));
+    },
+    invoke: (id, input, signal) => client.invoke(id, input, { signal }),
+    subscribe: (id, input, subscribeOptions) => client.subscribe(id, input, subscribeOptions),
+    dispose: async () => undefined,
+  };
 }
 
 export interface CliIo {
@@ -69,11 +119,14 @@ class UsageError extends Error {
   }
 }
 
-/** Run the command line as the main program of the process. An interrupt (`SIGINT`) cancels the call or the subscription. */
-export function main<Context>(app: App<Context>, options: CliOptions<Context>): void {
+/**
+ * Run the command line as the main program of the process. An interrupt (`SIGINT`) cancels the call or the subscription.
+ * The default arguments are the arguments of the process.
+ */
+export function main<Context>(app: App<Context>, options: CliOptions<Context>, args: readonly string[] = process.argv.slice(2)): void {
   const interrupt = new AbortController();
   process.once("SIGINT", () => interrupt.abort());
-  void runCli(app, options, process.argv.slice(2), {
+  void runCli(app, options, args, {
     stdout: (text) => process.stdout.write(`${text}\n`),
     stderr: (text) => process.stderr.write(`${text}\n`),
     signal: interrupt.signal,
@@ -84,9 +137,10 @@ export function main<Context>(app: App<Context>, options: CliOptions<Context>): 
 
 /** Run the command line with arguments. The result is the exit code (spec/bindings/cli.md#outcomes). */
 export async function runCli<Context>(app: App<Context>, options: CliOptions<Context>, args: readonly string[], io: CliIo): Promise<number> {
-  const session = createSession(app, { target: options.target ?? "cli", context: options.context, toJsonSchema: options.toJsonSchema });
-  const types = session.view.$defs ?? {};
-  const commands = Object.keys(session.view.capabilities).map((id) => ({ id, path: commandPath(id) }));
+  const provider = options.remote === undefined ? localProvider(app, options) : remoteProvider(app, options, options.remote);
+  const view = provider.view;
+  const types = view.$defs ?? {};
+  const commands = Object.keys(view.capabilities).map((id) => ({ id, path: commandPath(id) }));
   for (const { path } of commands) {
     if (path[0] !== undefined && GENERIC_COMMANDS.includes(path[0])) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
   }
@@ -98,7 +152,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       throw new Error(`The command ${path.join(" ")} is also the start of the command ${longer.path.join(" ")}. A shared prefix only contains other commands.`);
     }
   }
-  for (const [id, event] of Object.entries(session.view.events ?? {})) {
+  for (const [id, event] of Object.entries(view.events ?? {})) {
     const properties = event.input === undefined ? undefined : bundle(event.input, types).properties;
     const taken = CLI_RESUME_FLAGS.find((flag) => isJsonObject(properties) && flag in properties);
     if (taken !== undefined) throw new Error(`The input of the event ${id} has a property ${taken}, which is a flag of watch.`);
@@ -122,7 +176,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     const [id, ...args] = rest;
     const { flagArgs, resume } = resumeFlags(args);
     if (id === undefined) throw new UsageError("Give the id of an event.", CLI_EXIT_CODES["invalid-input"]);
-    const event = session.view.events?.[id];
+    const event = view.events?.[id];
     let input: unknown = {};
     if (event !== undefined) {
       const schema = bundle(event.input ?? { type: "object" }, types);
@@ -142,7 +196,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
         }
       }
     }
-    const subscribed = await session.subscribe(id, input, { signal: io.signal, ...resume });
+    const subscribed = await provider.subscribe(id, input, { signal: io.signal, ...resume });
     if ("kind" in subscribed) return print(subscribed);
     try {
       for await (const occurrence of subscribed) io.stdout(JSON.stringify(occurrence));
@@ -157,7 +211,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     const [first, ...rest] = args;
     if (first === undefined || first === "--help" || first === "-h") {
       const description = options.description ?? app.description ?? app.title ?? options.name;
-      io.stdout(help(options.name, description, commands.map(({ path }) => path.join(" ")), Object.keys(session.view.events ?? {}).length > 0, added));
+      io.stdout(help(options.name, description, commands.map(({ path }) => path.join(" ")), Object.keys(view.events ?? {}).length > 0, added));
       return CLI_EXIT_CODES.value;
     }
     if (first === "--version" || first === "-v") {
@@ -165,20 +219,19 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       return CLI_EXIT_CODES.value;
     }
     if (first === "list") {
+      const availability = await provider.availability(io.signal);
+      if ("kind" in availability) return print(availability);
       io.stdout(
         JSON.stringify(
           [
-            ...[...session.handles.values()].map((handle) => {
-            const input = viewCapability(session.view, handle.id).input;
-            return {
+            ...Object.entries(view.capabilities).map(([id, capability]) => ({
               kind: "capability",
-              id: handle.id,
-              description: handle.description,
-              ...handle.availability.getSnapshot(),
-              usage: cliUsage(options.name, handle.id, input === undefined ? undefined : bundle(input, types)),
-            };
-          }),
-          ...Object.entries(session.view.events ?? {}).map(([id, event]) => ({
+              id,
+              description: capability.description,
+              ...(availability.get(id) ?? unavailable("There is no such capability.")),
+              usage: cliUsage(options.name, id, capability.input === undefined ? undefined : bundle(capability.input, types)),
+            })),
+          ...Object.entries(view.events ?? {}).map(([id, event]) => ({
             kind: "event",
             id,
             description: event.description,
@@ -199,13 +252,14 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
         input = JSON.parse(text);
       } catch {
         // The call failures of the id come before invalid-input (spec/invocation.md#call-failures).
-        const handle = session.handles.get(id);
-        if (handle === undefined) return print({ kind: "unknown-capability", message: `There is no capability ${id}.` });
-        const availability = handle.availability.getSnapshot();
-        if (!availability.available) return print({ kind: "unavailable", message: availability.reason });
+        if (provider.view.capabilities[id] === undefined) return print({ kind: "unknown-capability", message: `There is no capability ${id}.` });
+        const availability = await provider.availability(io.signal);
+        if ("kind" in availability) return print(availability);
+        const state = availability.get(id);
+        if (state !== undefined && !state.available) return print({ kind: "unavailable", message: state.reason });
         return print({ kind: "invalid-input", message: "The input is not JSON." });
       }
-      return print(await session.invoke(id, input, { signal: io.signal }));
+      return print(await provider.invoke(id, input, io.signal));
     }
     if (first === "watch") return await watch(rest);
     const command = added.find(({ name }) => name === first);
@@ -216,20 +270,20 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       .sort((a, b) => b.path.length - a.path.length)[0];
     if (match === undefined) throw new UsageError(`There is no command ${args.filter((arg) => !arg.startsWith("-")).join(" ")}.`, CLI_EXIT_CODES["unknown-capability"]);
 
-    const capability = viewCapability(session.view, match.id);
+    const capability = viewCapability(view, match.id);
     const schema = bundle(capability.input ?? { type: "object" }, types);
     const flagArgs = args.slice(match.path.length);
     if (flagArgs.includes("--help") || flagArgs.includes("-h")) {
       io.stdout(usage(options.name, match.path, capability.description, schema));
       return CLI_EXIT_CODES.value;
     }
-    return print(await session.invoke(match.id, parseFlags(flagArgs, schema), { signal: io.signal }));
+    return print(await provider.invoke(match.id, parseFlags(flagArgs, schema), io.signal));
   } catch (error) {
     if (!(error instanceof UsageError)) throw error;
     io.stderr(error.message);
     return error.exitCode;
   } finally {
-    await session.dispose();
+    await provider.dispose();
   }
 }
 

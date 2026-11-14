@@ -8,6 +8,7 @@ import type { Layer } from "effect";
 
 import type * as App from "./App.ts";
 import { cancelOnAbort } from "./internal/cancel.ts";
+import * as HttpClient from "./internal/httpClient.ts";
 import { withHeartbeat } from "./internal/idle.ts";
 import type { IncomingRequest } from "./Remote.ts";
 import { answerWith, closeUnlessStreaming, eventStream } from "./internal/web.ts";
@@ -45,6 +46,29 @@ export interface Options {
   /** The number of occurrences of one subscription that the session keeps for a slow client. See `Session.Options`. */
   readonly eventBuffer?: number | undefined;
 }
+
+/**
+ * A client of the HTTP binding of an application that runs in another process or on another machine. Give it to the
+ * `remote` option of the command line (spec/bindings/cli.md#server).
+ */
+export type Client = HttpClient.Client;
+
+/** The options of `client`: the headers of each request, and the HTTP client that sends them. */
+export type ClientOptions = HttpClient.ClientOptions;
+
+/** A capability that the server lists, with its availability. */
+export type Listed = HttpClient.Listed;
+
+/**
+ * A client of the HTTP binding at `base`, an `http` or `https` URL, for example `http://pi.local:8080/cli`. It throws an
+ * `Error` when `base` is not such a URL, when `base` has a user name, a password, a query or a fragment, or when a
+ * header is not valid. Give a token in a header, for example `Authorization`. The message of the error does not contain
+ * the URL or the value of a header.
+ *
+ * The client gives the call failure `unavailable` when the server does not answer, and `internal` when the server
+ * gives an answer that the HTTP binding does not give.
+ */
+export const client = (base: string, options?: ClientOptions): Client => HttpClient.make(base, options);
 
 /**
  * A web request handler for the API. Each request has its own session. `layer` gives the services that the

@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::net::{IpAddr, SocketAddr};
+use std::net::IpAddr;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -16,7 +16,6 @@ use http_body_util::{BodyExt, Full};
 use rand::Rng;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
-use tokio::net::TcpStream;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
@@ -179,7 +178,7 @@ fn granted_lifetime(ttl_ms: Option<f64>, min_ttl: Duration, max_ttl: Duration) -
 
 impl Webhooks {
     pub(crate) fn new(options: WebhookOptions) -> Arc<Self> {
-        let tls = Arc::new(tls_config(&options.trusted_certificates));
+        let tls = Arc::new(crate::client::tls_config(&options.trusted_certificates));
         Arc::new(Webhooks {
             options,
             tls,
@@ -585,36 +584,9 @@ impl Webhooks {
             .trim_start_matches('[')
             .trim_end_matches(']')
             .to_owned();
-        let port = url.port_u16().unwrap_or(443);
         let accepts =
             |address: &IpAddr| self.options.allow_private_networks || is_globally_routable(address);
-        let address: SocketAddr = match host.parse::<IpAddr>() {
-            Ok(ip) if accepts(&ip) => SocketAddr::new(ip, port),
-            Ok(_) => return Err("connection_refused"),
-            Err(_) => {
-                let addresses = tokio::net::lookup_host((host.as_str(), port))
-                    .await
-                    .map_err(|_| "connection_refused")?;
-                addresses
-                    .into_iter()
-                    .find(|address| accepts(&address.ip()))
-                    .ok_or("connection_refused")?
-            }
-        };
-        let stream = TcpStream::connect(address)
-            .await
-            .map_err(|_| "connection_refused")?;
-        let server_name =
-            rustls::pki_types::ServerName::try_from(host.clone()).map_err(|_| "tls_error")?;
-        let tls = tokio_rustls::TlsConnector::from(self.tls.clone())
-            .connect(server_name, stream)
-            .await
-            .map_err(|_| "tls_error")?;
-        let (mut sender, connection) =
-            hyper::client::conn::http1::handshake(hyper_util::rt::TokioIo::new(tls))
-                .await
-                .map_err(|_| "connection_refused")?;
-        tokio::spawn(connection);
+        let mut sender = crate::client::connect(url, &self.tls, &accepts).await?;
         let authority = url
             .authority()
             .map(|authority| authority.as_str().to_owned())
@@ -765,113 +737,6 @@ fn is_globally_routable(address: &IpAddr) -> bool {
                 || a == 0x5f00)
                 && (a & 0xe000) == 0x2000
         }
-    }
-}
-
-/// The TLS settings of the deliveries: the default authorities, and the trusted certificates of the deployment.
-fn tls_config(trusted: &[String]) -> rustls::ClientConfig {
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let mut roots = rustls::RootCertStore {
-        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
-    };
-    let mut pinned = Vec::new();
-    for pem in trusted {
-        for certificate in rustls_pemfile::certs(&mut pem.as_bytes()).flatten() {
-            let _ = roots.add(certificate.clone());
-            pinned.push(certificate);
-        }
-    }
-    let webpki = rustls::client::WebPkiServerVerifier::builder_with_provider(
-        Arc::new(roots),
-        provider.clone(),
-    )
-    .build();
-    let builder = rustls::ClientConfig::builder_with_provider(provider.clone())
-        .with_safe_default_protocol_versions();
-    match (webpki, builder) {
-        (Ok(webpki), Ok(builder)) => builder
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(Verifier {
-                webpki,
-                pinned,
-                provider,
-            }))
-            .with_no_client_auth(),
-        // The ring provider always has default protocol versions, and the default roots are never empty.
-        _ => rustls::ClientConfig::builder_with_provider(provider)
-            .with_safe_default_protocol_versions()
-            .map(|builder| {
-                builder
-                    .with_root_certificates(rustls::RootCertStore::empty())
-                    .with_no_client_auth()
-            })
-            .unwrap_or_else(|_| {
-                unreachable!("the ring provider supports the default protocol versions")
-            }),
-    }
-}
-
-/// Checks the certificate of an endpoint: a trusted certificate of the deployment, also a self-signed one, or a
-/// certificate that the authorities sign. The signatures of the handshake are always checked.
-#[derive(Debug)]
-struct Verifier {
-    webpki: Arc<rustls::client::WebPkiServerVerifier>,
-    pinned: Vec<rustls::pki_types::CertificateDer<'static>>,
-    provider: Arc<rustls::crypto::CryptoProvider>,
-}
-
-impl rustls::client::danger::ServerCertVerifier for Verifier {
-    fn verify_server_cert(
-        &self,
-        end_entity: &rustls::pki_types::CertificateDer<'_>,
-        intermediates: &[rustls::pki_types::CertificateDer<'_>],
-        server_name: &rustls::pki_types::ServerName<'_>,
-        ocsp_response: &[u8],
-        now: rustls::pki_types::UnixTime,
-    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-        if self
-            .pinned
-            .iter()
-            .any(|pinned| pinned.as_ref() == end_entity.as_ref())
-        {
-            return Ok(rustls::client::danger::ServerCertVerified::assertion());
-        }
-        self.webpki
-            .verify_server_cert(end_entity, intermediates, server_name, ocsp_response, now)
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        message: &[u8],
-        certificate: &rustls::pki_types::CertificateDer<'_>,
-        signature: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls12_signature(
-            message,
-            certificate,
-            signature,
-            &self.provider.signature_verification_algorithms,
-        )
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        message: &[u8],
-        certificate: &rustls::pki_types::CertificateDer<'_>,
-        signature: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls13_signature(
-            message,
-            certificate,
-            signature,
-            &self.provider.signature_verification_algorithms,
-        )
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        self.provider
-            .signature_verification_algorithms
-            .supported_schemes()
     }
 }
 

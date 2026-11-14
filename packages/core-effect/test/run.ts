@@ -12,7 +12,12 @@ export interface Run {
  * exits. The process is killed after 20 seconds. Many runs can wait at the same time.
  */
 export function run(path: string, ...args: string[]): Promise<Run> {
-  const child = spawn(process.execPath, [path, ...args], { stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  return runWith({}, path, ...args);
+}
+
+/** `run`, with more variables in the environment of the process. */
+export function runWith(environment: Readonly<Record<string, string>>, path: string, ...args: string[]): Promise<Run> {
+  const child = spawn(process.execPath, [path, ...args], { env: { ...process.env, ...environment }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
   let stdout = "";
   let stderr = "";
   child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));

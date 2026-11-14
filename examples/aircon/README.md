@@ -31,6 +31,17 @@ node core-ts/cli.ts list
 cargo run --manifest-path core-rust/Cargo.toml -- cli aircon fan set --speed high
 ```
 
+Each command line can also control a unit in another process or on another machine. The server serves the HTTP binding of the `cli` target, and writes its URL. With `AIRCON_URL`, the command line sends each call and each subscription to that server:
+
+```sh
+node core-ts/serve.ts 0.0.0.0:8080
+node core-effect/serve.ts 0.0.0.0:8081
+examples/aircon/core-rust/target/debug/aircon serve 0.0.0.0:8082
+AIRCON_URL=http://localhost:8080/cli node core-ts/cli.ts aircon power set --on
+AIRCON_URL=http://localhost:8081/cli node core-effect/cli.ts aircon power set --on
+AIRCON_URL=http://localhost:8082/cli examples/aircon/core-rust/target/debug/aircon cli aircon power set --on
+```
+
 The command line has one command for each capability in the view of the `cli` target. A flag of a shared type, for example `--mode`, accepts only the values of that type.
 
 The input of `aircon.schedule.set` has two arrays: `days`, with items of the shared type `Day`, and `hours`, with integer items. Each one is a repeated flag. Each occurrence of the flag gives one item, in the order of the flags, so the command above sets the days `["mon", "fri"]` and the hours `[7, 18]`. A repeated flag that occurs once can also give the whole array as JSON text: `--days '["mon","fri"]'` gives the same days. `list` gives the usage of each command. The usage of a repeated flag ends with `...`:

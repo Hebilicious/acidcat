@@ -1,6 +1,8 @@
 #![doc = include_str!("../README.md")]
 
 mod app;
+mod client;
+mod http_client;
 mod outcome;
 mod schema;
 mod session;

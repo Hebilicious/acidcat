@@ -97,6 +97,7 @@ Standard Schema does not convert to JSON Schema. Give the converter of your sche
 | `mcpStdioMain(app, options)`, `runMcpStdio(…)` | [MCP](../../spec/bindings/mcp.md#stdio) through stdio | The MCP server of the process, or a promise that resolves when the input ends |
 | `httpHandler(app, options)` | [HTTP](../../spec/bindings/http.md) | `(request: Request) => Promise<Response>` |
 | `cliMain(app, options)`, `runCli(…)` | [CLI](../../spec/bindings/cli.md) | The command line of the process, or an exit code |
+| `httpClient(url, options)` | [CLI](../../spec/bindings/cli.md#server), [HTTP](../../spec/bindings/http.md) | A client of the HTTP binding of a server, for the option `remote` of the command line |
 | `installWebMcp(session)` | [WebMCP](../../spec/bindings/webmcp.md) | Tools in the page, with a status. WebMCP serves no events |
 | `serve(handler, options)`, from `@acid-cat/core-ts/node` | MCP and HTTP | A Node.js server for the web handlers. See [Serve on Node.js](#serve-on-nodejs) |
 
@@ -339,6 +340,27 @@ const report: CliCommand<{ unit: Unit }> = {
 
 cliMain(aircon, { name: "aircon", version: "0.1.0", context: { unit }, toJsonSchema, description: "Control the air conditioner.", commands: [report] });
 ```
+
+### Command line of a server
+
+The command line can serve a view of an application that runs on a server ([Server](../../spec/bindings/cli.md#server)). Give the option `remote` of `cliMain` and `runCli` a client of the HTTP binding of the server: `httpClient(url, { headers?, fetch? })`. The commands, the flags and the help still come from the view in the program. Each call is `POST {url}/capabilities/{id}`, `list` gets the availability from `GET {url}/capabilities`, and `watch` is `POST {url}/events/{id}`, with the cursor in `Last-Event-ID` and `maxAgeMs` in the query.
+
+- A capability that the server does not list is unavailable in `list`.
+- A server that does not answer is the call failure `unavailable`, with exit code 4. An answer that the HTTP binding does not give is `internal`, with exit code 5.
+- An interrupt (`SIGINT`) closes the request, so the server cancels the call or the subscription. The exit code is 130.
+- The client sends `headers` with each request, for example a token in `Authorization`. The command line never writes them. `httpClient` throws when the URL is not an `http` or `https` URL, when it has a user name, a password, a query or a fragment, and when a header is not valid. The error does not contain the value of a header.
+
+Serve the HTTP binding with the target of the command line, so that both have the same view. [`examples/aircon/core-ts/serve.ts`](../../examples/aircon/core-ts/serve.ts) serves it, and [`examples/aircon/core-ts/cli.ts`](../../examples/aircon/core-ts/cli.ts) sends to it when `AIRCON_URL` is set:
+
+```ts
+// On the server.
+serve({ "/cli": httpHandler(aircon, { allowedOrigins: [], target: "cli", base: "/cli", context: { unit }, toJsonSchema }) }, { hostname: "0.0.0.0", port: 8080 });
+
+// In the command line.
+cliMain(aircon, { name: "aircon", version: "0.1.0", context: { unit: new Unit() }, toJsonSchema, remote: httpClient("http://pi.local:8080/cli", { headers: { Authorization: `Bearer ${token}` } }) });
+```
+
+The client works alone too: `capabilities()`, `invoke(id, input, { signal })` and `subscribe(id, input, { signal, cursor, maxAgeMs })`. No method rejects: each one gives the call failure.
 
 ## Examples and tests
 

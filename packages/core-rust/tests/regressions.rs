@@ -310,3 +310,42 @@ async fn a_client_that_stops_reading_gets_truncated_occurrences_and_still_gets_a
     );
     client.close().await;
 }
+
+#[tokio::test]
+async fn an_interrupt_ends_list_of_a_server_that_does_not_answer_with_exit_code_130() {
+    // A server that accepts the connection and never answers.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let mut open = Vec::new();
+        while let Ok((stream, _)) = listener.accept().await {
+            open.push(stream);
+        }
+    });
+    let client = acid_cat_core::http::HttpClient::new(&format!("http://{address}/cli")).unwrap();
+    let cancel = CancellationToken::new();
+    let mut io = CliIo {
+        stdout: Box::new(|_| {}),
+        stderr: Box::new(|_| {}),
+        cancel: cancel.clone(),
+    };
+    let interrupt = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        cancel.cancel();
+    });
+    let code = tokio::time::timeout(
+        Duration::from_secs(5),
+        run_cli(
+            &application(),
+            Arc::new(Services::default()),
+            &CliOptions::new("test", "0.0.0").remote(client),
+            &["list".to_owned()],
+            &mut io,
+        ),
+    )
+    .await
+    .expect("the interrupt ends list")
+    .expect("the commands follow the rules");
+    interrupt.await.unwrap();
+    assert_eq!(code, exit::CANCELLED);
+}

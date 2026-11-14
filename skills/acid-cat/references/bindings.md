@@ -45,6 +45,7 @@ The documents of the bindings are at https://github.com/Hebilicious/acidcat/tree
 - Exit codes: 0 for a value, 1 for a failure, 2 unknown, 3 invalid input, 4 unavailable, 5 internal, 130 cancelled.
 - `watch <id>` subscribes to an event, and writes each occurrence as JSON on one line. It exits with 0 when the subscription is complete, 130 after an interrupt, and 5 after `internal`. `list` gives each item a `kind`: `capability` or `event`. No command can have the name `watch`. Write logs to standard error, or they break the lines of JSON.
 - `watch <id> --cursor <cursor> --max-age-ms <integer>` resumes after the cursor of an earlier occurrence. No input property of an event can be named `cursor` or `max-age-ms`: the command line stops with an error when it starts.
+- The command line can run on another machine than the application ([Server](https://github.com/Hebilicious/acidcat/blob/main/spec/bindings/cli.md#server)): it sends each call and each subscription to the HTTP binding of a server. core-ts: `remote: httpClient(url, { headers })` in the options of the command line. core-effect: `remote: Http.client(url, { headers })` in `Cli.Options`. core-rust: `CliOptions::remote(HttpClient::new(url)?.header(…)?)`. The commands still come from the view in the program. Serve that HTTP binding with the target of the command line, so that both have the same view. Give a token in a header when the server checks one: the command line never writes it.
 
 ## WebMCP
 

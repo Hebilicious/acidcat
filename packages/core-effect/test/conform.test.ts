@@ -3,12 +3,14 @@ import { after, before, describe, test } from "node:test";
 
 import { conform } from "@acid-cat/cli";
 import type { Check } from "@acid-cat/cli";
+import { writeFile } from "node:fs/promises";
+
 import { Effect, Exit, Layer, Option, Schedule, Scope } from "effect";
 
 import { Http, Mcp, Session, WebMcp } from "../src/index.ts";
 import * as NodeServer from "../src/NodeServer.ts";
 import * as NodeWebhook from "../src/NodeWebhook.ts";
-import { fixture, fixtureLayer, POLL, WEBHOOK_LIMITS } from "./fixture.ts";
+import { fixture, fixtureLayer, holdsLayer, POLL, switchLayer, watchersLayer, WEBHOOK_LIMITS } from "./fixture.ts";
 import { testCertificate } from "./webhook-receiver.ts";
 
 /** The principal of a request in the conformance tests: the token of the header `Authorization: Bearer <principal>`. */
@@ -27,6 +29,7 @@ function assertConforms(results: readonly Check[], minimum: number) {
 // takes the time of the slowest binding. Each binding has its own services of the fixture, so that the checks of one
 // binding do not change the state of another.
 const certificate = testCertificate();
+const writeMarker = (path: string) => Effect.promise(() => writeFile(path, ""));
 const mcp = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), {
   name: "fixture",
   version: "0.0.0",
@@ -45,6 +48,14 @@ before(async () => {
       {
         "/mcp": Mcp.withHandshake(mcp),
         "/api": Http.toWebHandler(fixture, Layer.fresh(fixtureLayer), { allowedOrigins: [], base: "/api" }),
+        // The view of the target `cli` through HTTP, for the command line that calls this server. The checks of the
+        // command line give a marker file to a call that holds and to a subscription that starts, as for the command
+        // line in its own process, and this server is on the same computer.
+        "/cli": Http.toWebHandler(fixture, Layer.fresh(Layer.mergeAll(switchLayer, holdsLayer(writeMarker), watchersLayer(writeMarker))), {
+          allowedOrigins: [],
+          base: "/cli",
+          target: "cli",
+        }),
       },
       { port: 0 },
     ).pipe(Scope.provide(server)),
@@ -72,6 +83,10 @@ describe("the Effect core passes acid-cat conform", { concurrency: true }, () =>
 
   test("through the command line", async () => {
     assertConforms(await conform({ cli: [process.execPath, new URL("./fixture-cli.ts", import.meta.url).pathname] }), 20);
+  });
+
+  test("through the command line that calls a server", async () => {
+    assertConforms(await conform({ cli: [process.execPath, new URL("./fixture-cli-remote.ts", import.meta.url).pathname, `${url}/cli`] }), 20);
   });
 
   test("through WebMCP, on a model context in Node.js", async () => {
