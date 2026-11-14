@@ -363,6 +363,36 @@ test("internal ends the subscription with a terminated message", async () => {
   }
 });
 
+test("parallel new subscriptions of one principal cannot pass the limit together", async () => {
+  const feed = feedForPromises();
+  const handler = webhookHandler(feed, { maxSubscriptions: 2 });
+  try {
+    // Each URL is new, so each subscription waits for its verification before it exists.
+    const answers = await Promise.all(
+      ["a", "b", "c", "d"].map(async (room) => json(await handler(mcpRequest("events/subscribe", subscription(`/parallel-${room}`), as("erin"))))),
+    );
+    assert.equal(answers.filter((answer) => answer.error === undefined).length, 2);
+    assert.equal(answers.filter((answer) => answer.error?.code === -32025).length, 2);
+  } finally {
+    await handler.dispose();
+  }
+});
+
+test("the verification is for the pair of the principal and the URL as the client sent it", async () => {
+  const feed = feedForPromises();
+  const handler = webhookHandler(feed);
+  try {
+    const verifications = () => at("/spelled").filter((each) => isJsonObject(each.json) && each.json.type === "verification").length;
+    const spelled = { ...subscription("/spelled"), delivery: { ...subscription("/spelled").delivery, url: receiver.url("/spelled").replace("https://", "HTTPS://") } };
+    for (const params of [subscription("/spelled"), { ...subscription("/spelled"), arguments: { room: "again" } }, spelled]) {
+      decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", params, as("frank"))))).result);
+    }
+    assert.equal(verifications(), 2);
+  } finally {
+    await handler.dispose();
+  }
+});
+
 test("a principal gets ResourceExhausted over the maximum number of subscriptions", async () => {
   const feed = feedForPromises();
   const handler = webhookHandler(feed, { maxSubscriptions: 2 });

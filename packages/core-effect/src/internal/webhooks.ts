@@ -269,6 +269,7 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
       params: typeof SubscribeParams.Type,
       url: URL,
       open: Opener<R>,
+      release: () => void,
     ): Effect.Effect<WebhookAnswer> =>
       Effect.gen(function* () {
         const input = params.arguments ?? {};
@@ -309,6 +310,8 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
           lastError: null,
           worker: undefined,
         };
+        // The subscription counts once: it leaves the starting count in the same step that adds it.
+        release();
         hooks.set(key, hook);
         const cleanup = Effect.suspend(() => {
           if (hooks.get(key) === hook) hooks.delete(key);
@@ -347,9 +350,16 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
               if (!admitted) {
                 return { error: { code: MCP_EVENT_ERRORS.resourceExhausted, message: "The principal has the maximum number of webhook subscriptions.", data: { limit: "subscriptions", max: maxSubscriptions } } };
               }
-              return yield* create(key, principal, params, url, open).pipe(
-                Effect.ensuring(Effect.sync(() => void starting.set(principal, (starting.get(principal) ?? 1) - 1))),
-              );
+              let held = true;
+              /** Stop counting the subscription as starting. It runs once: when the subscription exists, or when the start fails. */
+              const release = () => {
+                if (!held) return;
+                held = false;
+                const left = (starting.get(principal) ?? 1) - 1;
+                if (left === 0) starting.delete(principal);
+                else starting.set(principal, left);
+              };
+              return yield* create(key, principal, params, url, open, release).pipe(Effect.ensuring(Effect.sync(release)));
             }
             // A renewal starts no subscription, so the binding checks `maxAgeMs` here. The subscription exists, so the
             // name is known, and the failure is `invalid-input`.
