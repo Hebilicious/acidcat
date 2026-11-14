@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/mcp-handshake@0.10.2...@acid-cat/mcp-handshake@0.11.0) (2026-11-14)
+
+
+### Miscellaneous Chores
+
+* **@acid-cat/mcp-handshake:** Synchronize npm versions
+
 ## [0.10.2](https://github.com/Hebilicious/acidcat/compare/@acid-cat/mcp-handshake@0.10.1...@acid-cat/mcp-handshake@0.10.2) (2026-11-12)
 
 

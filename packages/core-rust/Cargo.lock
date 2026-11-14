@@ -12,7 +12,7 @@ dependencies = [
 
 [[package]]
 name = "acid-cat-core"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "acid-cat-catalog",
  "async-stream",
