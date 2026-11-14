@@ -150,11 +150,11 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   };
   const types = catalogView.$defs ?? {};
 
+  /** An interrupt cancels the call. The call failure `cancelled` goes to standard error (spec/bindings/cli.md#outcomes). */
+  const cancelledByInterrupt = Effect.onInterrupt(() => printFailure({ kind: "cancelled", message: "The call was cancelled." }, CLI_EXIT_CODES.cancelled));
+
   const invoke = (id: string, input: unknown) =>
-    Effect.scoped(Effect.flatMap(view, (provider) => provider.invoke(id, input))).pipe(
-      Effect.flatMap(print),
-      Effect.onInterrupt(() => Effect.sync(() => (process.exitCode = CLI_EXIT_CODES.cancelled))),
-    );
+    Effect.scoped(Effect.flatMap(view, (provider) => provider.invoke(id, input))).pipe(Effect.flatMap(print), cancelledByInterrupt);
 
   /** The flags of an input schema, one for each top-level property. */
   const flagsOf = (input: JsonObject | undefined) => {
@@ -225,7 +225,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
         }
         yield* Console.log(JSON.stringify(entries, null, 2));
       }),
-    ),
+    ).pipe(cancelledByInterrupt),
   ).pipe(Command.withDescription("List the capabilities, with their availability, and the events."));
 
   /**

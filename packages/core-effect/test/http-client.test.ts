@@ -200,6 +200,24 @@ test("an interrupt before the server answers a subscription ends watch with 130,
   assert.ok(closed, "the interrupt closes the request");
 });
 
+test("an interrupt during list of a server that does not answer is cancelled, with exit code 130", async (context) => {
+  let received: () => void = () => undefined;
+  const requested = new Promise<void>((resolve) => (received = resolve));
+  const server = await serve(() => new Promise<Response>(() => received()));
+  context.after(server.close);
+  const child = spawn(process.execPath, [remoteCli, server.url, "list"], { stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));
+  child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
+  const exited = new Promise<number | null>((resolve) => child.on("close", resolve));
+  await requested;
+  child.kill("SIGINT");
+  assert.equal(await exited, 130);
+  assert.deepEqual(JSON.parse(stderr), { kind: "cancelled", message: "The call was cancelled." });
+  assert.equal(stdout, "");
+});
+
 test("a cursor that is not a header value is invalid-input, and the client sends no request", async (context) => {
   let requests = 0;
   const server = await serve(() => {

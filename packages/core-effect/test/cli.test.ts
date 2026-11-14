@@ -74,22 +74,26 @@ describe("the command line of an application", { concurrency: true }, () => {
     assert.deepEqual(runs.map((run) => run.code), [0, 2, 3]);
   });
 
-  test("an interrupt as soon as a call holds cancels the call with exit code 130", async () => {
+  test("an interrupt as soon as a call holds cancels the call with exit code 130, and writes cancelled to standard error", async () => {
     const directory = mkdtempSync(join(tmpdir(), "core-effect-cli-"));
     // Each run sends the interrupt as soon as the call writes its marker file. Ten runs make a race more likely to show.
     const interrupted = async (run: number) => {
       const marker = join(directory, `held-${run}`);
       const child = spawn(process.execPath, [new URL("./fixture-cli.ts", import.meta.url).pathname, "fixture", "hold", "--key", "k", "--marker", marker]);
+      let stderr = "";
+      child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
       const watcher = watch(directory, (_, name) => {
         if (name === `held-${run}`) child.kill("SIGINT");
       });
       const [code, signal] = await new Promise<[number | null, NodeJS.Signals | null]>((resolve) => child.on("close", (...exit) => resolve(exit)));
       watcher.close();
-      return { code, signal };
+      return { code, signal, stderr };
     };
     try {
       const runs = await Promise.all(Array.from({ length: 10 }, (_, run) => interrupted(run)));
-      assert.deepEqual(runs, Array.from({ length: 10 }, () => ({ code: 130, signal: null })));
+      // A cancelled call is a call failure: it goes to standard error (spec/bindings/cli.md#outcomes).
+      const cancelled = JSON.stringify({ kind: "cancelled", message: "The call was cancelled." });
+      assert.deepEqual(runs, Array.from({ length: 10 }, () => ({ code: 130, signal: null, stderr: `${cancelled}\n` })));
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

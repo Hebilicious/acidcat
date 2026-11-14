@@ -202,6 +202,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     try {
       for await (const occurrence of subscribed) io.stdout(JSON.stringify(occurrence));
     } catch (error) {
+      if (io.signal?.aborted === true) return CLI_WATCH_EXIT_CODES.cancelled;
       printFailure(error instanceof CallFailureError ? { kind: error.kind, message: error.message } : { kind: "internal", message: "The event failed." });
       return CLI_WATCH_EXIT_CODES.internal;
     }
