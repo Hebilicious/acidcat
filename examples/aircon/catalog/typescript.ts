@@ -10,7 +10,7 @@ export function airconCatalog(): Catalog {
   catalog
     .target("app", {
       description: "The phone, desktop and web apps that people use.",
-      bindings: ["typescript", "acme:swift", "acme:kotlin"],
+      bindings: ["typescript", "webmcp", "acme:swift", "acme:kotlin"],
     })
     .target("taskbar", {
       description: "A desktop taskbar widget showing the status and a power toggle.",

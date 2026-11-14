@@ -29,7 +29,7 @@ The specification is at https://github.com/Hebilicious/acidcat/tree/main/spec. R
 | One application with one core | The code: the core writes the catalog from its capabilities | `renderCatalog(app, { toJsonSchema })` (core-ts), `App.render(app)` (core-effect), `app.render_catalog()` (core-rust) |
 | A catalog that several implementations share, for example a server in core-effect and a web page in core-ts | A Pkl module, or a program with a catalog library | `pkl eval <module>`, then `acid-cat format --write`; or the program of the library |
 
-When several implementations share one catalog, each implementation has a test that compares its own catalog with the shared catalog: the same targets, and for each capability the same audience, failure tags, `readOnly` and `state`. `examples/aircon` in the repository does this for both cores.
+When several implementations share one catalog, each implementation has a test that compares its own catalog with the shared catalog: the same targets, and for each capability the same audience, failure tags, `readOnly` and `state`. `examples/aircon` in the repository does this for each core.
 
 Commit the source and the JSON together. Add a check to the build that writes the JSON again and fails when it differs.
 
@@ -82,10 +82,11 @@ The MCP and HTTP bindings give web handlers. On Node.js, the server of the core 
 acid-cat check --strict catalog.acidcat.json   # the catalog conforms, and is in canonical form
 acid-cat view catalog.acidcat.json mcp          # the view of one target
 acid-cat conform --mcp http://127.0.0.1:3000/mcp --http http://127.0.0.1:3000/api \
-  --cli "node cli.ts" --mcp-stdio "node mcp.ts"  # each binding of a running implementation
+  --cli "node cli.ts" --mcp-stdio "node mcp.ts" \
+  --webmcp http://127.0.0.1:3000/page            # each binding of a running implementation
 ```
 
-`acid-cat` is the npm package `@acid-cat/cli`. `acid-cat conform` tests an implementation of the conformance fixture, not of your catalog. It tests the capabilities and the events of the fixture through each binding: outcomes, call failures, occurrences, the ends of a subscription, and cancellation. Through MCP, it also tests poll delivery, and with `--webhook-principal`, `--webhook-cert` and `--webhook-key`, webhook delivery. Give the deployment under test a small poll buffer, a short lease time, short webhook lifetimes and a small limit of webhook subscriptions, and the same values to `--poll-buffer`, `--poll-lease-ms`, `--webhook-min-ttl-ms`, `--webhook-max-ttl-ms` and `--webhook-max-subscriptions`, so that conform tests them too. For webhooks, the deployment trusts the test certificate, allows private networks, and takes the principal from `Authorization: Bearer <principal>`. Run it in the tests of a new core or a new binding. For an application, test the capabilities through a session, and the surfaces through the bindings.
+`acid-cat` is the npm package `@acid-cat/cli`. `acid-cat conform` tests an implementation of the conformance fixture, not of your catalog. It tests the capabilities and the events of the fixture through each binding: outcomes, call failures, occurrences, the ends of a subscription, and cancellation. Through WebMCP, it opens the page in Chromium with a test host (Playwright installs Chromium). Through MCP, it also tests poll delivery, and with `--webhook-principal`, `--webhook-cert` and `--webhook-key`, webhook delivery. Give the deployment under test a small poll buffer, a short lease time, short webhook lifetimes and a small limit of webhook subscriptions, and the same values to `--poll-buffer`, `--poll-lease-ms`, `--webhook-min-ttl-ms`, `--webhook-max-ttl-ms` and `--webhook-max-subscriptions`, so that conform tests them too. For webhooks, the deployment trusts the test certificate, allows private networks, and takes the principal from `Authorization: Bearer <principal>`. Run it in the tests of a new core or a new binding. For an application, test the capabilities through a session, and the surfaces through the bindings.
 
 ## Common mistakes
 

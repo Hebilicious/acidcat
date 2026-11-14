@@ -235,11 +235,13 @@ pub fn aircon() -> Arc<Application<Unit>> {
     App::new()
         .title("Living-room air conditioner")
         .description("Control and monitor one split-unit air conditioner on the home network.")
+        // The target `app` has the WebMCP binding, so the catalog is the same in each language. WebMCP runs in a web
+        // page, so this program serves no WebMCP tools: the TypeScript cores serve them in their pages.
         .target_with(
             "app",
             target(
                 "The phone, desktop and web apps that people use.",
-                &["typescript", "acme:swift", "acme:kotlin"],
+                &["typescript", "webmcp", "acme:swift", "acme:kotlin"],
             ),
         )
         .target_with(

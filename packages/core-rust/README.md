@@ -8,13 +8,6 @@ Serve the capabilities and the events of an application through the [MCP](../../
 cargo add acid-cat-core
 ```
 
-Until a version is on crates.io, depend on the repository. Cargo finds the crate and its catalog library in it:
-
-```toml
-[dependencies]
-acid-cat-core = { git = "https://github.com/Hebilicious/acidcat", branch = "main" }
-```
-
 The core uses [Tokio](https://tokio.rs). Types give the schemas: an input, a value, a failure or a payload is a type that derives `serde` and `schemars::JsonSchema`. The core validates each input against its JSON Schema before the work starts, and checks each value, failure and payload against its schema.
 
 ## Example

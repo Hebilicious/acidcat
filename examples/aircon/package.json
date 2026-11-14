@@ -1,7 +1,7 @@
 {
   "name": "@acid-cat/example-aircon",
   "version": "0.1.0",
-  "description": "An air conditioner, described once and served to every surface: its catalog in Pkl, TypeScript, Python, Go and Rust, its application on both cores with a command line each, and APIs built on it.",
+  "description": "An air conditioner, described once and served to every surface: its catalog in Pkl, TypeScript, Python, Go and Rust, its application on three cores with a command line each, a web page with WebMCP tools on each TypeScript core, and APIs built on it.",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -16,6 +16,7 @@
     "capnweb": "catalog:",
     "effect": "catalog:",
     "elysia": "catalog:",
+    "esbuild": "catalog:",
     "graphql": "catalog:",
     "graphql-sse": "catalog:",
     "graphql-ws": "catalog:",
@@ -27,6 +28,7 @@
     "@modelcontextprotocol/client": "catalog:",
     "@types/node": "catalog:",
     "@types/ws": "catalog:",
+    "playwright": "catalog:",
     "typescript": "catalog:"
   }
 }

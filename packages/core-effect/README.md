@@ -6,7 +6,7 @@ All of this package is Effect: a capability is an Effect program with Effect Sch
 
 ```sh
 pnpm add @acid-cat/core-effect effect
-pnpm add @effect/platform-node  # only for NodeCli, from @acid-cat/core-effect/node
+pnpm add @effect/platform-node  # only for NodeCli and NodeMcp, from @acid-cat/core-effect/node
 ```
 
 `effect` and `@effect/platform-node` are peer dependencies, so that the application and the core share one Effect. The package supports Effect 4.
@@ -172,7 +172,7 @@ The handler is one handler for all paths, or handlers by path prefix. The longes
 | `port` | `3000` | The port. With `0`, the system chooses a free port |
 | `hostname` | `127.0.0.1` | The address. Only the same computer can connect. Use `0.0.0.0` or `::` to accept connections from the network |
 
-When a client closes its connection, the signal of its request aborts, so the handler cancels the call or the subscription. The server sends the headers of a response with a body before the first chunk, so that the client of a stream of server-sent events gets the status before the first message. `@acid-cat/core-effect/NodeServer` needs only Node.js. `@acid-cat/core-effect/node` exports `NodeServer` too, with `NodeCli`, which needs `@effect/platform-node`.
+When a client closes its connection, the signal of its request aborts, so the handler cancels the call or the subscription. The server sends the headers of a response with a body before the first chunk, so that the client of a stream of server-sent events gets the status before the first message. `@acid-cat/core-effect/NodeServer` needs only Node.js. `@acid-cat/core-effect/node` exports `NodeServer` too, with `NodeCli` and `NodeMcp`, which need `@effect/platform-node`.
 
 `NodeServer` gives a plain HTTP/1.1 server. It does not serve HTTPS. When clients connect through a network, end TLS before the server, in the platform: a load balancer, the ingress of a Kubernetes cluster (for example with cert-manager for the certificates), or a tunnel such as Cloudflare Tunnel. The platform sends plain HTTP to the server on its private network. Set `hostname` to `0.0.0.0` or `::`, so that the platform can connect. Do not put a TLS proxy in the process in front of `NodeServer`.
 

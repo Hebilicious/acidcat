@@ -20,7 +20,7 @@ func airconCatalog() *catalog.Catalog {
 	c.
 		Target("app", catalog.Target{
 			Description: "The phone, desktop and web apps that people use.",
-			Bindings:    []string{"typescript", "acme:swift", "acme:kotlin"},
+			Bindings:    []string{"typescript", "webmcp", "acme:swift", "acme:kotlin"},
 		}).
 		Target("taskbar", catalog.Target{
 			Description: "A desktop taskbar widget showing the status and a power toggle.",

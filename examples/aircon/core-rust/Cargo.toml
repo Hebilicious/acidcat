@@ -3,7 +3,7 @@ name = "aircon-core-rust"
 version = "0.0.0"
 edition = "2024"
 publish = false
-description = "The air conditioner, written with the Rust core: its command line and its MCP server through stdio."
+description = "The air conditioner, written with the Rust core: its command line, its MCP server through stdio, and its HTTP server for a remote command line."
 
 [[bin]]
 name = "aircon"
