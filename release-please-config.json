@@ -25,14 +25,43 @@
       "package-name": "acid-cat-catalog",
       "component": "crates",
       "tag-separator": "/",
-      "include-v-in-tag": true
+      "include-v-in-tag": true,
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/examples/aircon/catalog/rust/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='acid-cat-catalog')].version"
+        },
+        {
+          "type": "toml",
+          "path": "/packages/core-rust/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='acid-cat-catalog')].version"
+        },
+        {
+          "type": "toml",
+          "path": "/examples/aircon/core-rust/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='acid-cat-catalog')].version"
+        },
+        {
+          "type": "toml",
+          "path": "/packages/core-rust/Cargo.toml",
+          "jsonpath": "$.dependencies['acid-cat-catalog'].version"
+        }
+      ]
     },
     "packages/core-rust": {
       "release-type": "rust",
       "package-name": "acid-cat-core",
       "component": "crates-core",
       "tag-separator": "/",
-      "include-v-in-tag": true
+      "include-v-in-tag": true,
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/examples/aircon/core-rust/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='acid-cat-core')].version"
+        }
+      ]
     },
     "packages/catalog/go": {
       "release-type": "go",

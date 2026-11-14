@@ -61,6 +61,12 @@ Each core is complete in its own style. Neither core wraps the other. Both TypeS
 - Before version 1.0, `feat` and a breaking change (`!`) increase the minor version. The other types increase the patch version.
 - The six npm packages are linked: they always have the same version, and they are released together.
 - The release pull request changes the versions in the package files, and the `CHANGELOG.md` of each package. release-please writes these changelogs.
+- Three Rust crates use `acid-cat-catalog` or `acid-cat-core` through a path: `packages/core-rust` and the two crates in `examples/aircon`. The `Cargo.lock` of each of these crates records the version of the crate that it uses.
+- The `extra-files` of the two published crates in `release-please-config.json` list these lock files. The release pull request changes the version in each lock file.
+- Each Rust test runs cargo with `--locked`. A lock file with an old version fails the test.
+- The release pull request also changes the version of `acid-cat-catalog` that `packages/core-rust/Cargo.toml` requires. crates.io does not have this version before the release. For this reason, `moon run core-rust:package` builds the core with `acid-cat-catalog` from `packages/catalog/rust`.
+- A release can publish `acid-cat-catalog` and `acid-cat-core` together. The release workflow of the core waits until crates.io has the version of `acid-cat-catalog` that the core requires. Then it publishes the core.
+
 
 To release, merge the release pull request. release-please then tags each released package and creates its GitHub release. Each new tag starts the release workflow of its registry. [`release-please-config.json`](../release-please-config.json) holds the settings, and [`.release-please-manifest.json`](../.release-please-manifest.json) holds the version of each package.
 

@@ -24,5 +24,5 @@ test("the Go catalog library writes the same catalog as Pkl", () => {
 });
 
 test("the Rust catalog library writes the same catalog as Pkl", () => {
-  assert.equal(output("cargo", ["run", "--quiet"], { cwd: `${directory}rust` }), expected);
+  assert.equal(output("cargo", ["run", "--quiet", "--locked"], { cwd: `${directory}rust` }), expected);
 });

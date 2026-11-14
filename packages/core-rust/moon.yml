@@ -9,7 +9,7 @@ tasks:
   test:
     description: "Run acid-cat conform against the conformance fixture through MCP over HTTP and stdio, HTTP and the command line, and check the catalog of the fixture."
     command: "cargo"
-    args: ["test"]
+    args: ["test", "--locked"]
     inputs:
       - "src/**/*"
       - "examples/**/*"
@@ -18,14 +18,14 @@ tasks:
       - "Cargo.lock"
       - "README.md"
       - "/packages/catalog/rust/src/**/*"
+      - "/packages/catalog/rust/Cargo.toml"
       - "/packages/cli/src/**/*.ts"
       - "/packages/spec-ts/src/**/*.ts"
       - "/packages/cli/conformance/*.acidcat.json"
     toolchains: ["system"]
 
   package:
-    description: "Package the crate, and build it from the package, for crates.io."
-    command: "cargo"
-    args: ["package", "--allow-dirty"]
-    inputs: ["src/**/*", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "/packages/catalog/rust/src/**/*"]
+    description: "Package the crate, and build it from the package, for crates.io. The build takes acid-cat-catalog from its directory, because the release pull request can require a version that crates.io does not have yet."
+    script: "cargo package --allow-dirty --config 'patch.crates-io.acid-cat-catalog.path=\"../catalog/rust\"'"
+    inputs: ["src/**/*", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "/packages/catalog/rust/src/**/*", "/packages/catalog/rust/Cargo.toml"]
     toolchains: ["system"]
