@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.11.0...@acid-cat/core-effect@0.11.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* **cores:** end watch with 130 and nothing on standard error when an interrupt comes before the subscription starts ([#137](https://github.com/Hebilicious/acidcat/issues/137)) ([99764b7](https://github.com/Hebilicious/acidcat/commit/99764b7ba5e805d91ee647dde78b7e7daaef2d28))
+
 ## [0.11.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.10.2...@acid-cat/core-effect@0.11.0) (2026-11-14)
 
 
