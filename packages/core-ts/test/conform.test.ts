@@ -20,6 +20,12 @@ function assertConforms(results: readonly Check[], minimum: number) {
   assert.ok(results.length >= minimum, `${results.length} checks, expected ${minimum} or more`);
 }
 
+/**
+ * The test timeout of each binding. On a computer that runs many tests at the same time, the command line of a core can
+ * take more than one minute, because each of its checks starts a new process. The test timeout of the task is one minute.
+ */
+const CONFORM_TIMEOUT = 120_000;
+
 // One server serves the MCP and HTTP bindings to the tests below, and the HTTP binding of the target `cli` at `/cli` to the
 // command line that calls a server. Each binding has its own test, so that a slow binding
 // shows in the test report. The tests run at the same time, so the file takes the time of the slowest binding. Each
@@ -47,27 +53,27 @@ describe("the TypeScript core passes acid-cat conform", { concurrency: true }, (
     await mcp?.close();
   });
 
-  test("through MCP over HTTP, with the handshake, poll and webhook delivery", async () => {
+  test("through MCP over HTTP, with the handshake, poll and webhook delivery", { timeout: CONFORM_TIMEOUT }, async () => {
     assertConforms(await conform({ mcp: `${url}/mcp`, mcpHandshake: true, poll: POLL, webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS } }), 60);
   });
 
-  test("through MCP over stdio", async () => {
+  test("through MCP over stdio", { timeout: CONFORM_TIMEOUT }, async () => {
     assertConforms(await conform({ mcpStdio: [process.execPath, new URL("./fixture-mcp-stdio.ts", import.meta.url).pathname], poll: POLL }), 50);
   });
 
-  test("through HTTP", async () => {
+  test("through HTTP", { timeout: CONFORM_TIMEOUT }, async () => {
     assertConforms(await conform({ http: `${url}/api` }), 20);
   });
 
-  test("through the command line", async () => {
+  test("through the command line", { timeout: CONFORM_TIMEOUT }, async () => {
     assertConforms(await conform({ cli: [process.execPath, new URL("./fixture-cli.ts", import.meta.url).pathname] }), 20);
   });
 
-  test("through the command line that calls a server", async () => {
+  test("through the command line that calls a server", { timeout: CONFORM_TIMEOUT }, async () => {
     assertConforms(await conform({ cli: [process.execPath, new URL("./fixture-cli-remote.ts", import.meta.url).pathname, `${url}/cli`] }), 20);
   });
 
-  test("through WebMCP, on a model context in Node.js", async () => {
+  test("through WebMCP, on a model context in Node.js", { timeout: CONFORM_TIMEOUT }, async () => {
     const results = await conform({
       webmcp: (modelContext) => {
         const session = createSession(fixture, { target: "app", ...options() });

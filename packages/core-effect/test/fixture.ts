@@ -107,7 +107,7 @@ export const watchersLayer = (mark?: (path: string) => Effect.Effect<void>) =>
  * The poll settings of the MCP servers of the fixture in the conformance tests: a small buffer and a short lease time, so
  * that conform can test both. The tests give the same settings to conform.
  */
-export const POLL = { bufferLimit: 5, leaseMs: 2000 } as const;
+export const POLL = { bufferLimit: 5, leaseMs: 5000 } as const;
 
 /**
  * The limits of webhook delivery of the MCP server of the fixture in the conformance tests: short lifetimes and a small

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
 /// The settings of the fixture that the tests give to conform: the poll settings and the webhook limits.
-const POLL: [&str; 4] = ["--poll-buffer", "5", "--poll-lease-ms", "2000"];
+const POLL: [&str; 4] = ["--poll-buffer", "5", "--poll-lease-ms", "5000"];
 const WEBHOOK_LIMITS: [&str; 6] = [
     "--webhook-min-ttl-ms",
     "1000",

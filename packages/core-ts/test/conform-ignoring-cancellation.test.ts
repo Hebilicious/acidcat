@@ -4,12 +4,12 @@ import { test } from "node:test";
 import { conform, serve } from "@acid-cat/cli";
 
 import { createSession, httpHandler, installWebMcp, mcpHandler } from "../src/index.ts";
-import { deadline, didNotSettle } from "./deadline.ts";
+import { deadline, didNotSettle, failures, timeout } from "./deadline.ts";
 import { fixture, HoldsThatIgnoreCancellation, options } from "./fixture.ts";
 
 const ignoring = () => options(new HoldsThatIgnoreCancellation());
 
-test("acid-cat conform fails only the cancellation checks of an implementation that ignores cancellation, and returns", async () => {
+test("acid-cat conform fails only the cancellation checks of an implementation that ignores cancellation, and returns", { timeout }, async () => {
   const mcp = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...ignoring() });
   const served = await serve({
     "/mcp": mcp,
@@ -39,7 +39,7 @@ test("acid-cat conform fails only the cancellation checks of an implementation t
       "http properties: cancelling a call affects only that call",
       "mcp properties: cancelling a call affects only that call",
       "webmcp: the signal of the host cancels a call, as an AbortError",
-    ]);
+    ], failures(failed));
     for (const result of failed) assert.match(result.detail ?? "", didNotSettle);
   } finally {
     await served.close();
