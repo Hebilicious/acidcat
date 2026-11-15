@@ -60,7 +60,7 @@ An application MAY add its own commands and flags. The name of a command of the 
 | Cancelled | Nothing | 130 |
 | `internal` | `{ "kind", "message" }` | 5 |
 
-A call failure before the first occurrence has the exit code of the table in [Outcomes](#outcomes), and goes to standard error.
+A call failure before the first occurrence has the exit code of the table in [Outcomes](#outcomes), and goes to standard error. An interrupt is always the end Cancelled, also before the first occurrence and before the subscription starts: nothing goes to standard error.
 
 ## Outcomes
 

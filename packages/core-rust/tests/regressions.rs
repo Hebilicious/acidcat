@@ -1,5 +1,6 @@
 //! Tests of behaviors that `acid-cat conform` cannot check well: the order of the call failures of the command line,
-//! the cancellation of a stdio request on the next line, and standard output that the client stops reading.
+//! the cancellation of a stdio request on the next line, standard output that the client stops reading, and an
+//! interrupt of the command line before a server answers.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -11,7 +12,7 @@ use acid_cat_core::{App, Application, Availability, Emitted};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
@@ -348,4 +349,46 @@ async fn an_interrupt_ends_list_of_a_server_that_does_not_answer_with_exit_code_
     .expect("the commands follow the rules");
     interrupt.await.unwrap();
     assert_eq!(code, exit::CANCELLED);
+}
+
+#[tokio::test]
+async fn an_interrupt_before_the_answer_to_watch_exits_with_130_and_writes_nothing() {
+    // A server that reads the subscription and never answers. The interrupt comes while the command line waits for the
+    // answer, as when the server has started the subscription but its answer has not come yet.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let cancel = CancellationToken::new();
+    let interrupt = cancel.clone();
+    tokio::spawn(async move {
+        let mut open = Vec::new();
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request).await;
+            interrupt.cancel();
+            open.push(stream);
+        }
+    });
+    let client = acid_cat_core::http::HttpClient::new(&format!("http://{address}/cli")).unwrap();
+    let written = Arc::new(Mutex::new(String::new()));
+    let (stdout, stderr) = (written.clone(), written.clone());
+    let mut io = CliIo {
+        stdout: Box::new(move |text| stdout.lock().unwrap().push_str(text)),
+        stderr: Box::new(move |text| stderr.lock().unwrap().push_str(text)),
+        cancel,
+    };
+    let code = tokio::time::timeout(
+        Duration::from_secs(5),
+        run_cli(
+            &application(),
+            Arc::new(Services::default()),
+            &CliOptions::new("test", "0.0.0").remote(client),
+            &["watch".to_owned(), "test.slow".to_owned()],
+            &mut io,
+        ),
+    )
+    .await
+    .expect("the interrupt ends watch")
+    .expect("the commands follow the rules");
+    assert_eq!(code, exit::CANCELLED);
+    assert_eq!(written.lock().unwrap().as_str(), "");
 }

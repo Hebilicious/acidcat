@@ -185,6 +185,27 @@ describe("the command line that calls a server", () => {
     assert.ok(closed, "the interrupt closes the request");
   });
 
+  test("an interrupt before the server answers a subscription ends watch with 130, and writes nothing", async (context) => {
+    // A server that accepts the subscription and never answers. The interrupt comes while the command line waits for the
+    // answer, as when the server has started the subscription but its answer has not come yet.
+    const interrupt = new AbortController();
+    let closed = false;
+    const url = await served(
+      (request) =>
+        new Promise<Response>(() => {
+          request.signal.addEventListener("abort", () => (closed = true));
+          interrupt.abort();
+        }),
+      context,
+    );
+    const run = await remoteCli(httpClient(url), ["watch", "fixture.ticks", "--count", "1"], interrupt.signal);
+    assert.equal(run.code, 130);
+    assert.equal(run.stderr, "");
+    assert.equal(run.stdout, "");
+    for (let turn = 0; !closed && turn < 100; turn++) await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.ok(closed, "the interrupt closes the request");
+  });
+
   test("a cursor that cannot be a header value is invalid-input, with exit code 3, and sends no request", async (context) => {
     let requests = 0;
     const url = await served(() => {
