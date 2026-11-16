@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.11.1...@acid-cat/core-ts@0.11.2) (2026-11-16)
+
+
+### Code Refactoring
+
+* **cores:** say in code what the deleted comments said ([#144](https://github.com/Hebilicious/acidcat/issues/144)) ([c590bed](https://github.com/Hebilicious/acidcat/commit/c590bedc37cf93ce593311655030c58bc1c5973a))
+
 ## [0.11.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.11.0...@acid-cat/core-ts@0.11.1) (2026-11-15)
 
 
