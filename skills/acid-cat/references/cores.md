@@ -46,7 +46,7 @@ const event = eventsFor<{ unit: Unit }>();
 
 export const statusChanged = event({
   id: "aircon.status.changed",
-  description: "The status of the unit changed. The occurrence gives the new status.",
+  description: "The status of the unit changed.",
   audience: ["app", "mcp"],
   payload: Status, // an object schema
   async *subscribe(_input, { context, signal }) {
@@ -102,7 +102,7 @@ import { Schema, Stream } from "effect";
 
 export const statusChanged = Event.make({
   id: "aircon.status.changed",
-  description: "The status of the unit changed. The occurrence gives the new status.",
+  description: "The status of the unit changed.",
   audience: ["app", "mcp"],
   payload: Status, // a Schema.Struct
   subscribe: (_input, resume) => Unit.statusChanges.pipe(Stream.map((status) => ({ data: status }))),
@@ -167,7 +167,7 @@ let aircon = App::new()
             }),
     )
     .event(
-        Event::new("aircon.status.changed", "The status of the unit changed. The occurrence gives the new status.")
+        Event::new("aircon.status.changed", "The status of the unit changed.")
             .audience(["mcp"])
             .payload::<Status>()
             .subscribe(|(), subscription| futures::stream::iter([Ok(Emitted::new(Status { power: true }))])),

@@ -63,6 +63,6 @@ type Status {
 union StatusResult = Offline | Status
 
 type Subscription {
-  """The status of the unit changed. The occurrence gives the new status."""
+  """The status of the unit changed."""
   statusChanged: Status!
 }

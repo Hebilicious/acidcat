@@ -360,36 +360,33 @@ pub fn aircon() -> Arc<Application<Unit>> {
             }),
         )
         .event(
-            Event::new(
-                "aircon.status.changed",
-                "The status of the unit changed. The occurrence gives the new status.",
-            )
-            .audience(EVERYWHERE)
-            .input::<NoInput>()
-            .payload::<Status>()
-            .subscribe(|_, subscription| {
-                // The receiver is made when the subscription starts, so the subscription gets each change after it. When
-                // the subscription reads too slowly, the channel skips changes, and the next occurrence is truncated.
-                let changes = subscription.context().changes.subscribe();
-                futures::stream::unfold(changes, |mut changes| async move {
-                    let mut skipped = false;
-                    loop {
-                        match changes.recv().await {
-                            Ok(status) => {
-                                let occurrence = Emitted::new(status);
-                                let occurrence = if skipped {
-                                    occurrence.truncated()
-                                } else {
-                                    occurrence
-                                };
-                                return Some((Ok(occurrence), changes));
+            Event::new("aircon.status.changed", "The status of the unit changed.")
+                .audience(EVERYWHERE)
+                .input::<NoInput>()
+                .payload::<Status>()
+                .subscribe(|_, subscription| {
+                    // The receiver is made when the subscription starts, so the subscription gets each change after it. When
+                    // the subscription reads too slowly, the channel skips changes, and the next occurrence is truncated.
+                    let changes = subscription.context().changes.subscribe();
+                    futures::stream::unfold(changes, |mut changes| async move {
+                        let mut skipped = false;
+                        loop {
+                            match changes.recv().await {
+                                Ok(status) => {
+                                    let occurrence = Emitted::new(status);
+                                    let occurrence = if skipped {
+                                        occurrence.truncated()
+                                    } else {
+                                        occurrence
+                                    };
+                                    return Some((Ok(occurrence), changes));
+                                }
+                                Err(broadcast::error::RecvError::Lagged(_)) => skipped = true,
+                                Err(broadcast::error::RecvError::Closed) => return None,
                             }
-                            Err(broadcast::error::RecvError::Lagged(_)) => skipped = true,
-                            Err(broadcast::error::RecvError::Closed) => return None,
                         }
-                    }
-                })
-            }),
+                    })
+                }),
         )
         .build()
         .unwrap_or_else(|problems| panic!("the air conditioner does not conform: {problems:?}"))
