@@ -99,6 +99,36 @@ test("an input schema that throws is internal, with no internal data, and the ca
   assert.deepEqual(defects, ["probe.throws"]);
 });
 
+test("an abort during input validation cancels the call", async () => {
+  let validationStarted = () => {};
+  const started = new Promise<void>((resolve) => (validationStarted = resolve));
+  let finishValidation = () => {};
+  const finished = new Promise<void>((resolve) => (finishValidation = resolve));
+  const app = defineApp({
+    targets: { mcp: { bindings: ["mcp"] } },
+    capabilities: [
+      defineCapability({
+        id: "probe.slow",
+        description: "The input schema waits.",
+        audience: ["mcp"],
+        input: z.object({}).refine(async () => {
+          validationStarted();
+          await finished;
+          return true;
+        }),
+        run: () => ok(null),
+      }),
+    ],
+  });
+  await using session = createSession(app, { target: "mcp", toJsonSchema, context: {} });
+  const controller = new AbortController();
+  const call = session.invoke("probe.slow", {}, { signal: controller.signal });
+  await started;
+  controller.abort();
+  finishValidation();
+  assert.deepEqual(await call, { kind: "cancelled", message: "The call was cancelled." });
+});
+
 test("a session subscribes to the availabilities only while it has listeners", async () => {
   const context = options();
   const switcher = context.context.switch;

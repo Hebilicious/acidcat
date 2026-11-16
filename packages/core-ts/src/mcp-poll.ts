@@ -1,11 +1,12 @@
 import { canonicalJson, decodePollCursor, encodePollCursor, MCP_EVENT_ERRORS, MCP_POLL_DEFAULTS, mcpSubscribeError } from "@acid-cat/spec-ts";
 import type { JsonObject, Occurrence } from "@acid-cat/spec-ts";
 
-import { systemClock } from "./clock.ts";
+import { backgroundClock } from "./clock.ts";
 import type { Clock } from "./clock.ts";
 import { endMessage, invalidParams, subscriptionParams } from "./mcp-events.ts";
 import type { JsonRpcError, OpenSession, OwnSession, RpcAnswer } from "./mcp-events.ts";
-import { isMaxAgeMs } from "./session.ts";
+import { subscribeWithMaxAge } from "./session.ts";
+import type { MaxAge } from "./session.ts";
 import type { Occurrences } from "./subscription.ts";
 
 export interface PollOptions {
@@ -49,16 +50,12 @@ export class PollLeases {
   readonly #clock: Clock;
   #closed = false;
 
-  constructor(options: PollOptions = {}, clock: Clock = systemClock) {
+  constructor(options: PollOptions = {}, clock: Clock = backgroundClock) {
     this.#leaseMs = options.leaseMs ?? MCP_POLL_DEFAULTS.leaseMs;
     this.#bufferLimit = options.bufferLimit ?? MCP_POLL_DEFAULTS.bufferLimit;
     this.#maxEvents = options.maxEvents ?? MCP_POLL_DEFAULTS.maxEvents;
     this.#nextPollMs = options.nextPollMs ?? MCP_POLL_DEFAULTS.nextPollMs;
     this.#clock = clock;
-  }
-
-  get size(): number {
-    return this.#leases.size;
   }
 
   async poll(principal: string | undefined, params: JsonObject, open: OpenSession): Promise<RpcAnswer> {
@@ -78,15 +75,14 @@ export class PollLeases {
 
     if (lease === undefined) {
       const provider = read.cursor === undefined ? undefined : position?.provider;
-      const maxAgeMs = provider === undefined && isMaxAgeMs(read.maxAgeMs) ? undefined : read.maxAgeMs;
-      const started = this.#start(key, read.name, read.input, provider, maxAgeMs, open);
+      const started = this.#start(key, read.name, read.input, provider, newLeaseMaxAge(provider, read.maxAge), open);
       this.#starting.set(key, started);
       const answer = await started.finally(() => this.#starting.delete(key));
       if ("error" in answer) return answer;
       return this.#result([], this.#cursorOf(answer, 0), read.cursor !== undefined && provider === undefined, false);
     }
 
-    if (!isMaxAgeMs(read.maxAgeMs)) return invalidParams("maxAgeMs must be an integer that is 0 or more.");
+    if (read.maxAge.kind === "invalid") return invalidParams("maxAgeMs must be an integer that is 0 or more.");
     this.#renew(lease);
     if (read.cursor === undefined) return this.#result([], this.#cursorOf(lease, lease.newest), false, false);
     if (position?.lease === lease.id) return this.#read(lease, position.position, maxEvents, read.cursor);
@@ -101,12 +97,9 @@ export class PollLeases {
     await Promise.allSettled([...this.#leases.values()].map((lease) => this.#end(lease)));
   }
 
-  async #start(key: string, name: string, input: unknown, provider: string | undefined, maxAgeMs: number | undefined, open: OpenSession): Promise<Lease | { readonly error: JsonRpcError }> {
+  async #start(key: string, name: string, input: unknown, provider: string | undefined, maxAge: MaxAge, open: OpenSession): Promise<Lease | { readonly error: JsonRpcError }> {
     const own = await open();
-    const subscribed = await own.session.subscribe(name, input, {
-      ...(provider === undefined ? {} : { cursor: provider }),
-      ...(maxAgeMs === undefined ? {} : { maxAgeMs }),
-    });
+    const subscribed = await subscribeWithMaxAge(own.session, name, input, { cursor: provider, maxAge });
     if ("kind" in subscribed || this.#closed) {
       if (!("kind" in subscribed)) await subscribed.return();
       await own.close();
@@ -179,6 +172,14 @@ export class PollLeases {
   #result(events: readonly JsonObject[], cursor: string, truncated: boolean, hasMore: boolean): RpcAnswer {
     return { result: { events: [...events], cursor, truncated, hasMore, nextPollMs: this.#nextPollMs } };
   }
+}
+
+/**
+ * The `maxAgeMs` of a new lease. A new lease resumes after the cursor of the provider, if the request gives one. With no
+ * such cursor, a valid `maxAgeMs` changes nothing. An invalid one still fails.
+ */
+function newLeaseMaxAge(provider: string | undefined, maxAge: MaxAge): MaxAge {
+  return provider === undefined && maxAge.kind === "valid" ? { kind: "absent" } : maxAge;
 }
 
 function withoutTruncated(occurrence: Occurrence): JsonObject {

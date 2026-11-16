@@ -13,6 +13,16 @@ export const systemClock: Clock = {
   },
 };
 
+/** The clock of the system, whose timers do not keep the process running. */
+export const backgroundClock: Clock = {
+  now: () => Date.now(),
+  schedule: (callback, ms) => {
+    const timer = setTimeout(callback, ms);
+    if (typeof timer === "object") timer.unref();
+    return () => clearTimeout(timer);
+  },
+};
+
 /** Wait `ms` milliseconds on a clock. The wait ends early, with `false`, when the signal aborts. */
 export function sleep(clock: Clock, ms: number, signal: AbortSignal): Promise<boolean> {
   return new Promise((resolve) => {

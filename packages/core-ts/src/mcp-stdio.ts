@@ -40,7 +40,9 @@ export interface McpStdioIo {
   readonly write: (text: string) => void;
 }
 
-const HANDSHAKE_VERSIONS = ["2025-11-25", "2025-06-18"] as const;
+const LATEST_HANDSHAKE_VERSION = "2025-11-25";
+
+const HANDSHAKE_VERSIONS = [LATEST_HANDSHAKE_VERSION, "2025-06-18"] as const;
 
 const SUPPORTED_VERSIONS = [MCP_PROTOCOL_VERSION, ...HANDSHAKE_VERSIONS];
 
@@ -132,7 +134,7 @@ class StdioServer {
   readonly #options: ServerInfo;
   readonly #write: (text: string) => void;
   readonly #calls = new Map<Id, AbortController>();
-  readonly #streams = new Map<Id, AbortController>();
+  readonly #streamsOnlyTheClientCancels = new Map<Id, AbortController>();
   readonly #streaming = new Set<Promise<void>>();
   readonly #subscriptions = new Set<Id>();
   /** True after the `initialize` handshake: the client then gets `notifications/tools/list_changed` with no subscription. */
@@ -183,7 +185,7 @@ class StdioServer {
     const requestId = message.params["requestId"];
     if (typeof requestId !== "string" && typeof requestId !== "number") return;
     this.#calls.get(requestId)?.abort();
-    this.#streams.get(requestId)?.abort();
+    this.#streamsOnlyTheClientCancels.get(requestId)?.abort();
     this.#subscriptions.delete(requestId);
   }
 
@@ -253,7 +255,7 @@ class StdioServer {
 
   async #stream(id: Id, params: JsonObject): Promise<void> {
     const controller = new AbortController();
-    this.#streams.set(id, controller);
+    this.#streamsOnlyTheClientCancels.set(id, controller);
     try {
       const started = await startEventStream(this.#session, id, params, { heartbeatMs: this.#options.heartbeatMs, resultMeta: this.#serverInfo(), signal: controller.signal });
       if (controller.signal.aborted) return;
@@ -263,7 +265,7 @@ class StdioServer {
         messages.forEach((message) => this.#send(message));
       }
     } finally {
-      if (this.#streams.get(id) === controller) this.#streams.delete(id);
+      if (this.#streamsOnlyTheClientCancels.get(id) === controller) this.#streamsOnlyTheClientCancels.delete(id);
     }
   }
 
@@ -273,7 +275,7 @@ class StdioServer {
 
   /** The server selects the revision of the client if it serves it, or else its latest. */
   #initialize(id: Id | null, offered: unknown): void {
-    const version = HANDSHAKE_VERSIONS.find((each) => each === offered) ?? HANDSHAKE_VERSIONS[0];
+    const version = HANDSHAKE_VERSIONS.find((each) => each === offered) ?? LATEST_HANDSHAKE_VERSION;
     this.#result(id, {
       protocolVersion: version,
       capabilities: { tools: { listChanged: true } },

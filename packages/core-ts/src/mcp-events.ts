@@ -1,7 +1,8 @@
 import { bundle, CallFailureError, MCP_EVENT_ERRORS, MCP_EVENTS_EXTENSION, MCP_SUBSCRIPTION_ID, mcpEventEntry, mcpEventParams, mcpSubscribeError } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
-import type { Session } from "./session.ts";
+import { maxAgeOf, subscribeWithMaxAge } from "./session.ts";
+import type { MaxAge, Session } from "./session.ts";
 import { idlePuller } from "./stream.ts";
 
 export interface JsonRpcError {
@@ -59,17 +60,17 @@ export const forbidden: JsonRpcError = { code: MCP_EVENT_ERRORS.forbidden, messa
 export const invalidParams = (message: string): { readonly error: JsonRpcError } => ({ error: { code: MCP_EVENT_ERRORS.invalidParams, message } });
 
 /**
- * This function does not check `maxAgeMs`: an unknown id comes before an invalid `maxAgeMs` (spec/events.md#subscribing),
- * so the session checks it after the id. A `maxAgeMs` that is not a number is `NaN`, which the session rejects.
+ * This function does not reject an invalid `maxAgeMs`: an unknown id comes before an invalid `maxAgeMs`
+ * (spec/events.md#subscribing), so `subscribeWithMaxAge` rejects it after the id.
  */
-export function subscriptionParams(params: JsonObject): { readonly error: JsonRpcError } | { readonly name: string; readonly input: unknown; readonly cursor: string | undefined; readonly maxAgeMs: number | undefined } {
+export function subscriptionParams(params: JsonObject): { readonly error: JsonRpcError } | { readonly name: string; readonly input: unknown; readonly cursor: string | undefined; readonly maxAge: MaxAge } {
   const { name, arguments: input, cursor, maxAgeMs } = params;
   if (cursor !== undefined && cursor !== null && typeof cursor !== "string") return invalidParams("cursor must be a string or null.");
   return {
     name: typeof name === "string" ? name : "",
     input: input ?? {},
     cursor: typeof cursor === "string" ? cursor : undefined,
-    maxAgeMs: maxAgeMs === undefined || maxAgeMs === null ? undefined : typeof maxAgeMs === "number" ? maxAgeMs : Number.NaN,
+    maxAge: maxAgeOf(maxAgeMs),
   };
 }
 
@@ -86,12 +87,7 @@ export interface StreamSettings {
 export async function startEventStream(session: Session, id: string | number, params: JsonObject, settings: StreamSettings): Promise<{ readonly error: JsonRpcError } | { readonly messages: StreamMessages; readonly cancel: () => void }> {
   const read = subscriptionParams(params);
   if ("error" in read) return read;
-  const { cursor, maxAgeMs } = read;
-  const subscribed = await session.subscribe(read.name, read.input, {
-    signal: settings.signal,
-    ...(cursor === undefined ? {} : { cursor }),
-    ...(maxAgeMs === undefined ? {} : { maxAgeMs }),
-  });
+  const subscribed = await subscribeWithMaxAge(session, read.name, read.input, { signal: settings.signal, cursor: read.cursor, maxAge: read.maxAge });
   if ("kind" in subscribed) return { error: mcpSubscribeError(subscribed) };
 
   const meta = { [MCP_SUBSCRIPTION_ID]: id };

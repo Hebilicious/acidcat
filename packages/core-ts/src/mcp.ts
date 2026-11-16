@@ -116,16 +116,16 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
 
     const opened = await openContext<Context>(options, request);
     if ("refusal" in opened) return refusalResponse(opened.refusal);
-    const unanswerable = revisionError(request, message);
-    if (unanswerable !== undefined) {
+    const withoutSession = answerWithoutSession(request, message);
+    if (withoutSession !== undefined) {
       await opened.release();
-      return unanswerable;
+      return withoutSession;
     }
     const id = message.id ?? null;
 
-    let holders = 0;
+    const context = sharedUntilLastRelease(opened.release);
     const open: OpenSession = async () => {
-      holders += 1;
+      const releaseContext = context.hold();
       const session = createSession(app, {
         target: options.target ?? "mcp",
         context: opened.context,
@@ -138,14 +138,13 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
           try {
             await session.dispose();
           } finally {
-            holders -= 1;
-            if (holders === 0) await opened.release();
+            await releaseContext();
           }
         })());
       return { session, close };
     };
     const { session, close } = await open();
-    let streaming = false;
+    let streamOwnsClose = false;
     try {
       if (message.method === "events/stream" && message.id !== null && message.id !== undefined && servesEvents(session)) {
         const started = await startEventStream(session, message.id, message.params, {
@@ -157,7 +156,7 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
         const { messages, cancel } = started;
         const produce = async () => (await messages())?.map((each) => sseMessage({ data: JSON.stringify(each) }));
         const body = textStream(produce, cancel, close);
-        streaming = true;
+        streamOwnsClose = true;
         return new Response(body, { status: 200, headers: { "Content-Type": SSE_MEDIA_TYPE, "Cache-Control": "no-store" } });
       }
       if (servesEvents(session) && message.method !== undefined && LONG_LIVED.has(message.method)) {
@@ -168,13 +167,37 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
       }
       return await answer(session, message, { ...options, instructions: options.instructions ?? app.description }, request.signal);
     } finally {
-      if (!streaming) await close();
+      if (!streamOwnsClose) await close();
     }
   };
   return Object.assign(handle, { close: closeAll, [Symbol.asyncDispose]: closeAll });
 }
 
-function revisionError(request: Request, message: JsonRpcRequest): Response | undefined {
+/**
+ * Hold a resource for each holder, and release it when the last holder lets it go. Each function that `hold` gives
+ * lets go once.
+ */
+function sharedUntilLastRelease(release: () => Promise<void>): { readonly hold: () => () => Promise<void> } {
+  let holders = 0;
+  return {
+    hold: () => {
+      holders += 1;
+      let held = true;
+      return async () => {
+        if (!held) return;
+        held = false;
+        holders -= 1;
+        if (holders === 0) await release();
+      };
+    },
+  };
+}
+
+/**
+ * The answer to a message that needs no session: an error for a request that does not name revision 2026-07-28
+ * correctly, or the empty answer of a notification. `undefined` for a request that the server answers with a session.
+ */
+function answerWithoutSession(request: Request, message: JsonRpcRequest): Response | undefined {
   // Revision 2026-07-28: each request names its revision in a header, and each request repeats it in `_meta`.
   const version = request.headers.get("MCP-Protocol-Version");
   const id = message.id ?? null;
