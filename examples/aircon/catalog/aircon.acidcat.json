@@ -37,10 +37,14 @@
                 "on": true
               }
             },
+            "follow": {
+              "event": "aircon.status.changed"
+            },
             "status": {
               "capability": "aircon.status.get"
             }
-          }
+          },
+          "default": "status"
         }
       }
     },

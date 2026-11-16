@@ -131,7 +131,7 @@ An `Option` field that is not required takes the value of its type, not `null`. 
 | HTTP | `http::HttpBinding::new(app, context, HttpOptions::default())` |
 | CLI | `cli::cli_main(app, context, CliOptions::new(name, version))`. An interrupt cancels the call or the subscription. With `CliOptions::remote`, it calls a server: see [A command line for a server](#a-command-line-for-a-server) |
 
-The command line has the [aliases](../../spec/bindings/cli.md#aliases) of its target. Give them in the options of the target, with `App::target_with` and `Target { options: Some(json!({ "cli": { "aliases": { ... } } })), .. }`. An alias that breaks a rule stops the command line when it starts.
+The command line has the [aliases](../../spec/bindings/cli.md#aliases) of its target. Give them in the options of the target, with `App::target_with` and `Target { options: Some(json!({ "cli": { "aliases": { ... }, "default": "..." } })), .. }`. An alias of a capability calls it, and an alias of an event subscribes to it as `watch` does. With no arguments, or with a first flag that is not a flag alias, the command line runs the default alias. An alias that breaks a rule stops the command line when it starts.
 
 `McpBinding` and `HttpBinding` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. To use another server, give each request to `handle` after `remote::request_body`.
 

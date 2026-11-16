@@ -154,6 +154,30 @@ test("the aliases of the Effect command line call their capabilities with their 
   assert.equal((await remote("--off")).code, 0);
   assert.partialDeepStrictEqual(JSON.parse((await remote("status")).stdout), { power: false });
   assert.equal((await remote("--on", "--on", "false")).code, 3);
+  const none = await remote();
+  assert.equal(none.code, 0, "the default alias is status");
+  assert.partialDeepStrictEqual(JSON.parse(none.stdout), { power: false });
+});
+
+test("the alias follow of the Effect command line writes each change of the status", async (context) => {
+  const url = await startServer(context);
+  const remote = (...args: string[]) =>
+    spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  const follow = remote("follow");
+  context.after(() => follow.kill());
+  let followed = "";
+  follow.stdout.setEncoding("utf-8").on("data", (chunk: string) => (followed += chunk));
+  // A change before the subscription starts is not in it, so change the power until the first occurrence comes.
+  for (let turn = 0; !followed.includes("\n"); turn++) {
+    assert.ok(turn < 100, "follow writes an occurrence");
+    assert.equal((await finish(remote(turn % 2 === 0 ? "--on" : "--off"))).code, 0);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  const line = followed.slice(0, followed.indexOf("\n"));
+  assert.partialDeepStrictEqual(JSON.parse(line), { name: "aircon.status.changed" });
+  const exited = new Promise<number | null>((resolve) => follow.on("close", resolve));
+  follow.kill("SIGINT");
+  assert.equal(await exited, 130);
 });
 
 test("the Effect command line controls the unit of a server, and watch follows its changes", async (context) => {

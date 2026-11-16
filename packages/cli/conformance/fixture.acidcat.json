@@ -27,6 +27,12 @@
                 "text": "hello"
               }
             },
+            "broken-ticks": {
+              "event": "fixture.broken"
+            },
+            "echoes": {
+              "event": "fixture.echoes"
+            },
             "fixed-note": {
               "capability": "fixture.note",
               "input": {
@@ -47,8 +53,15 @@
             },
             "say": {
               "capability": "fixture.echo"
+            },
+            "ticks": {
+              "event": "fixture.ticks",
+              "input": {
+                "count": 2
+              }
             }
-          }
+          },
+          "default": "quick"
         }
       }
     },
@@ -453,6 +466,18 @@
         "required": [
           "n"
         ],
+        "type": "object"
+      }
+    },
+    "fixture.echoes": {
+      "description": "Give one occurrence whose data is the input, then end.",
+      "audience": [
+        "cli"
+      ],
+      "input": {
+        "type": "object"
+      },
+      "payload": {
         "type": "object"
       }
     },

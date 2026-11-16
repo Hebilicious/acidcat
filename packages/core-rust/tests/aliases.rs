@@ -3,13 +3,14 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 use acid_cat_core::cli::{CliCommand, CliIo, CliOptions, exit, run_cli};
-use acid_cat_core::{App, Application, CapabilityDefinition, Target};
+use acid_cat_core::{App, Application, CapabilityDefinition, Emitted, EventDefinition, Target};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 type Capability = acid_cat_core::Capability<()>;
+type Event = acid_cat_core::Event<()>;
 
 /// Cargo builds the examples before the integration tests, beside the directory of the tests.
 fn fixture() -> PathBuf {
@@ -40,16 +41,27 @@ fn parsed(text: &str) -> Value {
 }
 
 fn probe(aliases: Value, capabilities: Vec<CapabilityDefinition<()>>) -> Arc<Application<()>> {
+    probe_with(json!({ "aliases": aliases }), capabilities, Vec::new())
+}
+
+fn probe_with(
+    settings: Value,
+    capabilities: Vec<CapabilityDefinition<()>>,
+    events: Vec<EventDefinition<()>>,
+) -> Arc<Application<()>> {
     let mut app = App::new().title("Probe").target_with(
         "cli",
         Target {
             bindings: vec!["cli".into()],
-            options: Some(json!({ "cli": { "aliases": aliases } })),
+            options: Some(json!({ "cli": settings })),
             ..Target::default()
         },
     );
     for capability in capabilities {
         app = app.capability(capability);
+    }
+    for event in events {
+        app = app.event(event);
     }
     app.build()
         .unwrap_or_else(|problems| panic!("the application does not conform: {problems:?}"))
@@ -84,7 +96,7 @@ fn the_help_lists_the_aliases_and_an_alias_with_help_gives_its_usage() {
     let (_, help) = fixture_cli(&["--help"]);
     assert!(
         help.ends_with(
-            "\nAliases:\n  --hello\n  fixed-note [--loud]\n  held-keys\n  quick [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]\n  raw '<json>'\n  say --text <string>\n"
+            "\nAliases:\n  --hello\n  broken-ticks [--cursor <string>] [--max-age-ms <integer>]\n  echoes '<json>' [--cursor <string>] [--max-age-ms <integer>]\n  fixed-note [--loud]\n  held-keys\n  quick [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]\n  raw '<json>'\n  say --text <string>\n  ticks [--gap <integer>] [--key <string>] [--cursor <string>] [--max-age-ms <integer>]\n"
         ),
         "{help}"
     );
@@ -189,4 +201,104 @@ async fn a_command_of_the_application_must_not_have_the_name_of_an_alias() {
         run(&app, options, &["list"]).await,
         Err("The command say of the application has the same name as another command.".into())
     );
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+struct Reading {
+    room: String,
+}
+
+fn readings() -> EventDefinition<()> {
+    Event::new("probe.readings", "Give one reading of the room.")
+        .audience(["cli"])
+        .input::<Reading>()
+        .payload::<Reading>()
+        .subscribe(|reading: Reading, _| futures::stream::iter([Ok(Emitted::new(reading))]))
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+struct Helpful {
+    help: Option<bool>,
+}
+
+#[tokio::test]
+async fn the_command_line_stops_when_it_starts_if_an_alias_of_an_event_or_the_default_alias_breaks_a_rule()
+ {
+    let helpful = || {
+        Capability::new("probe.helpful", "Help.")
+            .audience(["cli"])
+            .input::<Helpful>()
+            .run(|_: Helpful, _| async move { Ok(()) })
+    };
+    let start = |settings: Value| async move {
+        run(
+            &probe_with(settings, vec![ping(), helpful()], vec![readings()]),
+            CliOptions::new("probe", "0.0.0"),
+            &["list"],
+        )
+        .await
+    };
+    for (settings, message) in [
+        (
+            json!({ "aliases": { "both": { "capability": "probe.ping", "event": "probe.readings" } } }),
+            "target cli: the alias both must be an object with the id of a capability in capability, or the id of an event in event",
+        ),
+        (
+            json!({ "aliases": { "neither": { "input": {} } } }),
+            "target cli: the alias neither must be an object with the id of a capability in capability, or the id of an event in event",
+        ),
+        (
+            json!({ "aliases": { "gone": { "event": "probe.gone" } } }),
+            "target cli: the alias gone refers to probe.gone, which is not an event in the view of the target",
+        ),
+        (
+            json!({ "aliases": { "pinged": { "event": "probe.ping" } } }),
+            "target cli: the alias pinged refers to probe.ping, which is not an event in the view of the target",
+        ),
+        (
+            json!({ "aliases": { "hall": { "event": "probe.readings", "input": { "floor": 1 } } } }),
+            "target cli: the alias hall has the fixed input floor, which is not a property of the input of probe.readings",
+        ),
+        (
+            json!({ "aliases": { "hall": { "event": "probe.readings", "extra": 1 } } }),
+            "target cli: the alias hall has the unknown member extra",
+        ),
+        (
+            json!({ "aliases": { "--ping": { "capability": "probe.ping" } }, "default": "--ping" }),
+            "target cli: options.cli.default must be the name of a command alias",
+        ),
+        (
+            json!({ "default": "ping" }),
+            "target cli: options.cli.default must be the name of a command alias",
+        ),
+        (
+            json!({ "aliases": { "ping": { "capability": "probe.ping" } }, "default": 1 }),
+            "target cli: options.cli.default must be the name of a command alias",
+        ),
+        (
+            json!({ "aliases": { "gone": { "capability": "probe.gone" } }, "default": "gone" }),
+            "target cli: the alias gone refers to probe.gone, which is not a capability in the view of the target",
+        ),
+        (
+            json!({ "aliases": { "aid": { "capability": "probe.helpful" } }, "default": "aid" }),
+            "target cli: the default alias aid has the flag --help, which is a flag of the command line",
+        ),
+        (
+            json!({ "aliases": {
+                "follow": { "event": "probe.readings" },
+                "--cursor": { "capability": "probe.ping" },
+                "--room": { "capability": "probe.ping" }
+            }, "default": "follow" }),
+            "target cli: the alias --cursor has the name of a flag of the default alias follow\ntarget cli: the alias --room has the name of a flag of the default alias follow",
+        ),
+    ] {
+        assert_eq!(start(settings).await, Err(message.to_owned()));
+    }
+    let (code, text) = start(json!({
+        "aliases": { "hall": { "event": "probe.readings", "input": { "room": "hall" }, "x-note": "The hall." } },
+        "default": "hall"
+    }))
+    .await
+    .expect("the aliases follow the rules");
+    assert_eq!(code, exit::VALUE, "{text}");
 }

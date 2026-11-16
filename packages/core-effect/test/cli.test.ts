@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { describe, test } from "node:test";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Schema } from "effect";
 import { Command, Flag, GlobalFlag } from "effect/cli";
 
 import { App, Capability, Cli } from "../src/index.ts";
@@ -112,7 +112,7 @@ describe("the command line of an application", { concurrency: true }, () => {
 
   test("the help lists the aliases, and <alias> --help gives the usage of the alias", async () => {
     const [help, sayHelp, helloHelp] = await Promise.all([cli("--help"), cli("say", "--help"), cli("--hello", "--help")]);
-    assert.match(help.stdout, /\nALIASES\n {2}--hello\n {2}fixed-note \[--loud\]\n {2}held-keys\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n$/);
+    assert.match(help.stdout, /\nALIASES\n {2}--hello\n {2}broken-ticks \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}echoes '<json>' \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}fixed-note \[--loud\]\n {2}held-keys\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n {2}ticks \[--gap <integer>\] \[--key <string>\] \[--cursor <string>\] \[--max-age-ms <integer>\]\n$/);
     assert.doesNotMatch(help.stdout, /alias --hello/);
     assert.deepEqual(sayHelp, { code: 0, stdout: "Usage: fixture say --text <string>\n\nReturn the input text.\n", stderr: "" });
     assert.equal(helloHelp.stdout, "Usage: fixture --hello\n\nReturn the input text.\n");
@@ -210,6 +210,21 @@ test("the command line stops when it starts if a flag alias has the name of a gl
     assert.ok(Exit.isFailure(exit), `${name} stops the command line`);
     assert.match(Cause.pretty(exit.cause), new RegExp(`The alias ${name} has the name of a flag of the command line`));
   }
+});
+
+test("the command line stops when it starts if a flag of the default alias has the name of a global flag", async () => {
+  const Input = Schema.Struct({ switch: Schema.optionalKey(Schema.Boolean), text: Schema.optionalKey(Schema.String) });
+  const ping = Capability.make({ id: "probe.ping", description: "Ping.", audience: ["cli"], input: Input, run: () => Effect.succeed(null) });
+  const switchFlag = GlobalFlag.Setting("switch")({ flag: Flag.Boolean("switch") });
+  const start = () => {
+    const aliases = { ping: { capability: "probe.ping" } };
+    const app = App.make({ targets: { cli: { bindings: ["cli"], options: { cli: { aliases, default: "ping" } } } }, capabilities: [ping] });
+    const command = Cli.command(app, { name: "probe", version: "0.0.0" }).pipe(Command.withGlobalFlags([switchFlag]));
+    return Effect.runPromiseExit(Cli.runCommand(command, { version: "0.0.0" }).pipe(Effect.provide(NodeServices.layer)));
+  };
+  const exit = await start();
+  assert.ok(Exit.isFailure(exit), "the flag --switch of the default alias stops the command line");
+  assert.match(Cause.pretty(exit.cause), /The default alias ping has the flag --switch, which is a flag of the command line/);
 });
 
 test("the path of a capability must not be the start of the path of another capability", () => {

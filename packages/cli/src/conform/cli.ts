@@ -29,6 +29,7 @@ const USAGES: { readonly [id: string]: string } = {
 
 const EVENT_USAGES: { readonly [id: string]: string } = {
   "fixture.broken": "watch fixture.broken [--cursor <string>] [--max-age-ms <integer>]",
+  "fixture.echoes": "watch fixture.echoes '<json>' [--cursor <string>] [--max-age-ms <integer>]",
   "fixture.ticks": "watch fixture.ticks --count <integer> [--gap <integer>] [--key <string>] [--cursor <string>] [--max-age-ms <integer>]",
   "fixture.watch": "watch fixture.watch --key <string> [--marker <string>] [--cursor <string>] [--max-age-ms <integer>]",
 };
@@ -39,6 +40,12 @@ const ALIAS_USAGES: { readonly [id: string]: readonly string[] } = {
   "fixture.held": ["held-keys"],
   "fixture.note": ["fixed-note [--loud]"],
   "fixture.raw": ["raw '<json>'"],
+};
+
+const EVENT_ALIAS_USAGES: { readonly [id: string]: readonly string[] } = {
+  "fixture.broken": ["broken-ticks [--cursor <string>] [--max-age-ms <integer>]"],
+  "fixture.echoes": ["echoes '<json>' [--cursor <string>] [--max-age-ms <integer>]"],
+  "fixture.ticks": ["ticks [--gap <integer>] [--key <string>] [--cursor <string>] [--max-age-ms <integer>]"],
 };
 
 const ALIASES = `${RULE}#aliases`;
@@ -84,6 +91,13 @@ async function expectUsageError(result: Promise<Run>, code: number): Promise<voi
   const { code: actual, stdout } = await result;
   expectEqual(actual, code, "exit code");
   expectEqual(stdout, "", "standard output");
+}
+
+function occurrencesIn(stdout: string, id: string) {
+  return stdout
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => expectOccurrence(parseJson(line), id));
 }
 
 export async function checkCli(command: readonly string[], options: { readonly deadline: number }): Promise<Checks> {
@@ -213,10 +227,63 @@ async function checkAliases(checks: Checks, command: readonly string[]): Promise
     expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
     expect(isArrayOf(memberOf(parseJson(result.stdout), "keys"), (key) => typeof key === "string"), `standard output must have the keys, got ${result.stdout}`);
   });
+  const ticks = async (signal: AbortSignal, ...args: string[]) => {
+    const result = await run(signal, "ticks", ...args);
+    expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
+    return occurrencesIn(result.stdout, "fixture.ticks");
+  };
+  const tickData = async (signal: AbortSignal, ...args: string[]) => (await ticks(signal, ...args)).map((occurrence) => occurrence.data);
+  await checks.run("an alias of an event subscribes with its fixed input and the cursor", ALIASES, async (signal) => {
+    expectEqual(await tickData(signal), [{ n: 1 }, { n: 2 }], "the data of the occurrences");
+    expectEqual(await tickData(signal, "--cursor", "1"), [{ n: 2 }], "the data of the occurrences after the cursor 1");
+  });
+  await checks.run("an alias of an event takes the flags of the input of its event", ALIASES, async (signal) => {
+    expectEqual(
+      (await ticks(signal, "--gap", "2")).map((occurrence) => [occurrence.data, occurrence.truncated ?? null]),
+      [[{ n: 1 }, null], [{ n: 2 }, true]],
+      "the data and truncated of the occurrences",
+    );
+  });
+  await checks.run("an alias of an event takes --max-age-ms", ALIASES, async (signal) => {
+    expectEqual(await tickData(signal, "--max-age-ms", "60000"), [{ n: 1 }, { n: 2 }], "the data of the occurrences");
+  });
+  await checks.run("an alias of an event takes a flag value that starts with - in the form --name=value", ALIASES, async (signal) => {
+    expectEqual(await tickData(signal, "--key=--cursor"), [{ n: 1 }, { n: 2 }], "the data of the occurrences with the key --cursor");
+  });
+  await checks.run("an alias of an event whose input schema has no properties takes the input as JSON text", ALIASES, async (signal) => {
+    const echoes = async (...args: string[]) => {
+      const result = await run(signal, "echoes", ...args);
+      expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
+      return occurrencesIn(result.stdout, "fixture.echoes").map((occurrence) => occurrence.data);
+    };
+    expectEqual(await echoes('{"a":1}'), [{ a: 1 }], "the data of the occurrences");
+    expectEqual(await echoes(), [{}], "the data of the occurrences with no input");
+  });
+  await checks.run("an alias of an event writes internal to standard error with exit code 5 after a defect", ALIASES, async (signal) => {
+    const result = await run(signal, "broken-ticks");
+    expectEqual(result.code, 5, "exit code");
+    expectEqual(occurrencesIn(result.stdout, "fixture.broken").map((occurrence) => occurrence.data), [{ n: 1 }], "the data of the occurrences");
+    expect(/"kind":"internal"/.test(result.stderr), `standard error must contain the call failure internal, got ${JSON.stringify(result.stderr)}`);
+  });
+  await checks.run("the default alias runs with no arguments", ALIASES, async (signal) => {
+    expectOutput(await run(signal), { mode: "fast" });
+  });
+  await checks.run("the default alias takes the flags when the first argument is a flag", ALIASES, async (signal) => {
+    expectOutput(await run(signal, "--count", "2", "--verbose"), { mode: "fast", count: 2, verbose: true });
+    expectOutput(await run(signal, "--hello"), { text: "hello" });
+  });
+  await checks.run("--help writes the help when there is a default alias", ALIASES, async (signal) => {
+    const result = await run(signal, "--help");
+    expectEqual(result.code, 0, "exit code");
+    expect(result.stdout.length > 0, "standard output must have the help");
+  });
   for (const [name, args, code] of [
     ["a flag of a property of the fixed input has exit code 3", ["quick", "--mode", "slow"], 3],
+    ["a flag of a property of the fixed input of an alias of an event has exit code 3", ["ticks", "--count", "3"], 3],
+    ["a flag that the default alias does not have has exit code 3", ["--nothing"], 3],
     ["a missing required flag of an alias has exit code 3", ["say"], 3],
     ["an alias with input that is not JSON has exit code 3", ["raw", "{"], 3],
+    ["an alias of an event with input that is not JSON has exit code 3", ["echoes", "{"], 3],
     ["JSON text to an alias of a capability whose input schema refers to a type with properties has exit code 3", ["fixed-note", '{"text":"override"}'], 3],
     ["an argument to an alias of a capability with no input has exit code 3", ["held-keys", "{}"], 3],
   ] as const) {
@@ -227,7 +294,7 @@ async function checkAliases(checks: Checks, command: readonly string[]): Promise
   await checks.run("list gives the usage of the aliases of each capability", ALIASES, async (signal) => {
     const entries = entriesOf((await run(signal, "list")).stdout);
     for (const { id, kind, aliases } of entries) {
-      const expected = kind === "capability" ? ALIAS_USAGES[id] : undefined;
+      const expected = kind === "capability" ? ALIAS_USAGES[id] : EVENT_ALIAS_USAGES[id];
       if (expected === undefined) {
         expect(aliases === undefined, `${id} has no alias, so its item must not have aliases, got ${JSON.stringify(aliases)}`);
         continue;
@@ -243,17 +310,11 @@ const EVENTS = `${RULE}#events`;
 
 async function checkWatch(checks: Checks, command: readonly string[]): Promise<void> {
   const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
-  const occurrences = (stdout: string, id: string) =>
-    stdout
-      .split("\n")
-      .filter((line) => line !== "")
-      .map((line) => expectOccurrence(parseJson(line), id));
-
   await checks.run("watch writes each occurrence as one line of JSON, and exits with 0 when the subscription is complete", EVENTS, async (signal) => {
     const result = await run(signal, "watch", "fixture.ticks", "--count", "2");
     expectEqual(result.code, 0, "exit code");
     expectEqual(
-      occurrences(result.stdout, "fixture.ticks").map((occurrence) => occurrence.data),
+      occurrencesIn(result.stdout, "fixture.ticks").map((occurrence) => occurrence.data),
       [{ n: 1 }, { n: 2 }],
       "the data of the occurrences",
     );
@@ -263,16 +324,21 @@ async function checkWatch(checks: Checks, command: readonly string[]): Promise<v
     const result = await run(signal, "watch", "fixture.ticks", "--count", "3", "--cursor", "1", "--max-age-ms", "60000");
     expectEqual(result.code, 0, "exit code");
     expectEqual(
-      occurrences(result.stdout, "fixture.ticks").map((occurrence) => [occurrence.data, occurrence.cursor]),
+      occurrencesIn(result.stdout, "fixture.ticks").map((occurrence) => [occurrence.data, occurrence.cursor]),
       [[{ n: 2 }, "2"], [{ n: 3 }, "3"]],
       "the data and the cursor of the occurrences",
     );
+  });
+  await checks.run("watch takes a flag value that starts with - in the form --name=value", EVENTS, async (signal) => {
+    const result = await run(signal, "watch", "fixture.ticks", "--count", "1", "--key=--cursor");
+    expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
+    expectEqual(occurrencesIn(result.stdout, "fixture.ticks").map((occurrence) => occurrence.data), [{ n: 1 }], "the data of the occurrences");
   });
   await checks.run("watch writes an occurrence after a gap with truncated: true", EVENTS, async (signal) => {
     const result = await run(signal, "watch", "fixture.ticks", "--count", "3", "--gap", "2");
     expectEqual(result.code, 0, "exit code");
     expectEqual(
-      occurrences(result.stdout, "fixture.ticks").map((occurrence) => [occurrence.data, occurrence.truncated ?? null]),
+      occurrencesIn(result.stdout, "fixture.ticks").map((occurrence) => [occurrence.data, occurrence.truncated ?? null]),
       [[{ n: 1 }, null], [{ n: 2 }, true], [{ n: 3 }, null]],
       "the data and truncated of the occurrences",
     );
@@ -280,7 +346,7 @@ async function checkWatch(checks: Checks, command: readonly string[]): Promise<v
   await checks.run("watch writes internal to standard error with exit code 5 after a defect", EVENTS, async (signal) => {
     const result = await run(signal, "watch", "fixture.broken");
     expectEqual(result.code, 5, "exit code");
-    expectEqual(occurrences(result.stdout, "fixture.broken").map((occurrence) => occurrence.data), [{ n: 1 }], "the data of the occurrences");
+    expectEqual(occurrencesIn(result.stdout, "fixture.broken").map((occurrence) => occurrence.data), [{ n: 1 }], "the data of the occurrences");
     expect(/"kind":"internal"/.test(result.stderr), `standard error must contain the call failure internal, got ${JSON.stringify(result.stderr)}`);
   });
   for (const [name, args, code] of [

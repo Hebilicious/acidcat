@@ -3,7 +3,8 @@ import {
   CLI_RESUME_FLAGS,
   CLI_WATCH_EXIT_CODES,
   cliAliases,
-  cliAliasSchema,
+  cliAliasFlagNames,
+  cliAliasInput,
   cliAliasUsage,
   cliEventUsage,
   cliExitCode,
@@ -55,6 +56,8 @@ interface AliasEntry {
   readonly name: string;
   readonly usage: string;
   readonly description: string;
+  readonly default: boolean;
+  readonly flags: readonly string[];
 }
 
 const Aliases = Context.Reference<ReadonlyArray<AliasEntry>>("@acid-cat/core-effect/Cli/Aliases", { defaultValue: () => [] });
@@ -143,9 +146,11 @@ function parentUsageError(commandPath: readonly string[]): { readonly message: s
  * so the logs and the usage errors go to standard error.
  *
  * When the first argument is the name of an alias (spec/bindings/cli.md#aliases), the subcommand of the alias makes
- * the call, and `<alias> --help` writes the usage of the alias. The help of the root command ends with the aliases. The
- * program stops with a defect when it starts if the name of a flag alias is the name of a global flag: a flag of
- * `effect/cli`, such as `--log-level`, or a flag of the application.
+ * the call or the subscription, and `<alias> --help` writes the usage of the alias. With a default alias, the program
+ * runs it when there is no argument, or when the first argument starts with `--` and is not a flag alias or a global
+ * flag: then all the arguments are its flags. The help of the root command ends with the aliases. The program stops
+ * with a defect when it starts if the name of a flag alias, or of a flag of the default alias, is the name of a global
+ * flag: a flag of `effect/cli`, such as `--log-level`, or a flag of the application.
  */
 export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   command: Command.Command<Name, Input, ContextInput, E, R>,
@@ -160,11 +165,19 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
     const taken = new Set(globalFlagsOfEveryCommand(command, builtIns).flatMap(flagNames));
     const clash = aliases.find(({ name }) => name.startsWith("--") && taken.has(name.slice(2)));
     if (clash !== undefined) return yield* Effect.die(new Error(`The alias ${clash.name} has the name of a flag of the command line.`));
+    const fallback = aliases.find((alias) => alias.default);
+    const shadowed = fallback?.flags.find((flag) => taken.has(flag));
+    if (fallback !== undefined && shadowed !== undefined) {
+      return yield* Effect.die(new Error(`The default alias ${fallback.name} has the flag --${shadowed}, which is a flag of the command line.`));
+    }
+    const runAlias = (alias: AliasEntry, rest: readonly string[]) =>
+      rest.includes("--help") || rest.includes("-h") ? Console.log(`Usage: ${alias.usage}\n\n${alias.description}`) : runWith([aliasWord(alias.name), ...rest]);
     const [first, ...rest] = args;
-    const alias = aliases.find(({ name }) => name === first);
-    if (alias === undefined) return yield* runWith(args);
-    if (rest.includes("--help") || rest.includes("-h")) return yield* Console.log(`Usage: ${alias.usage}\n\n${alias.description}`);
-    return yield* runWith([aliasWord(alias.name), ...rest]);
+    const named = aliases.find(({ name }) => name === first);
+    if (named !== undefined) return yield* runAlias(named, rest);
+    const startsDefault = first === undefined || (first.startsWith("--") && !taken.has(longFlagName(first)));
+    if (fallback !== undefined && startsDefault) return yield* runAlias(fallback, args);
+    return yield* runWith(args);
   });
   return Effect.catchIf(
     program,
@@ -204,6 +217,8 @@ function globalFlagsOfEveryCommand(command: Command.Command.Any, builtIns: Built
 }
 
 const flagNames = (flag: CommandSpec.Flag): readonly string[] => [flag.name, ...flag.aliases, ...(flag.negation === undefined ? [] : [flag.negation])];
+
+const longFlagName = (arg: string): string => arg.slice(2).split("=", 1)[0] ?? "";
 
 function withAliases(help: string, doc: { readonly annotations: Context.Context<never> }): string {
   const aliases = Context.get(doc.annotations, Aliases);
@@ -294,44 +309,19 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
       return invoke(id, parsed);
     });
 
-  const { aliases, errors: aliasErrors } = cliAliases(catalogView, target);
-  if (aliasErrors.length > 0) throw new Error(aliasErrors.join("\n"));
-  const aliasCommands = aliases.map((alias) => {
-    const capability = catalogView.capabilities[alias.capability];
-    if (capability === undefined) throw new Error(`The alias ${alias.name} refers to ${alias.capability}, which is not in the view.`);
-    const schema = capability.input === undefined ? undefined : cliAliasSchema(cliInputSchema(capability.input, types), alias.input);
-    const entry: AliasEntry = {
-      name: alias.name,
-      usage: cliAliasUsage(options.name, alias.name, schema),
-      description: capability.description,
-    };
-    const finish = <Input>(made: Command.Command<string, Input, {}, never, R>) =>
-      made.pipe(Command.withDescription(capability.description), Command.unlisted, Command.withAlias(aliasWord(alias.name)));
-    const subcommand =
-      schema !== undefined && schema.properties === undefined
-        ? finish(
-            Command.make(
-              entry.name,
-              { input: Argument.String("input").pipe(Argument.withDescription("The input as JSON"), Argument.withDefault("{}")) },
-              ({ input }) => invokeJson(alias.capability, input),
-            ),
-          )
-        : finish(
-            Command.make(entry.name, flagsOfBundled(schema ?? { type: "object" }), (parsed: Record<string, unknown>) =>
-              invoke(alias.capability, { ...alias.input, ...inputFrom(parsed) }),
-            ),
-          );
-    return { capability: alias.capability, entry, subcommand };
-  });
+  const jsonInput = { input: Argument.String("input").pipe(Argument.withDescription("The input as JSON"), Argument.withDefault("{}")) };
 
   const call = Command.make(
     "call",
     {
       id: Argument.String("id").pipe(Argument.withDescription("The id of the capability")),
-      input: Argument.String("input").pipe(Argument.withDescription("The input as JSON"), Argument.withDefault("{}")),
+      ...jsonInput,
     },
     ({ id, input }) => invokeJson(id, input),
   ).pipe(Command.withDescription("Call a capability by its id, with its input as JSON."));
+
+  const aliasUsages = (kind: "capability" | "event", id: string): readonly string[] =>
+    aliasCommands.flatMap((alias) => (alias.kind === kind && alias.id === id ? [alias.entry.usage] : []));
 
   const list = Command.make("list", {}, () =>
     Effect.scoped(
@@ -343,7 +333,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
         const entries = [];
         for (const [index, [id, capability]] of capabilities.entries()) {
           const usage = cliUsage(options.name, id, capability.input === undefined ? undefined : cliInputSchema(capability.input, types));
-          const usages = aliasCommands.flatMap(({ capability, entry }) => (capability === id ? [entry.usage] : []));
+          const usages = aliasUsages("capability", id);
           entries.push({
             kind: "capability",
             id,
@@ -355,7 +345,8 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
         }
         for (const [id, event] of Object.entries(catalogView.events ?? {})) {
           const usage = cliEventUsage(options.name, id, event.input === undefined ? undefined : cliInputSchema(event.input, types));
-          entries.push({ kind: "event", id, description: event.description, usage });
+          const usages = aliasUsages("event", id);
+          entries.push({ kind: "event", id, description: event.description, usage, ...(usages.length > 0 ? { aliases: usages } : {}) });
         }
         yield* Console.log(JSON.stringify(entries, null, 2));
       }),
@@ -390,32 +381,60 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
       });
     });
 
+  type Finish = <Input>(made: Command.Command<string, Input, {}, never, R>) => Command.Command<string, Input, {}, never, R>;
+
+  const followCommand = (name: string, id: string, schema: JsonObject | undefined, fixed: JsonObject | undefined, finish: Finish) =>
+    schema !== undefined && schema.properties === undefined
+      ? finish(
+          Command.make(name, { ...jsonInput, ...resumeFlags }, ({ input, cursor, "max-age-ms": maxAgeMs }) =>
+            Effect.suspend(() =>
+              isJsonText(input)
+                ? followWith(id, JSON.parse(input), cursor, maxAgeMs)
+                : printFailure({ kind: "invalid-input", message: "The input is not JSON." }, CLI_EXIT_CODES["invalid-input"]),
+            ),
+          ),
+        )
+      : finish(
+          Command.make(name, { input: flagsOfBundled(schema ?? { type: "object" }), ...resumeFlags }, ({ input, cursor, "max-age-ms": maxAgeMs }) =>
+            followWith(id, { ...fixed, ...inputFrom(input) }, cursor, maxAgeMs),
+          ),
+        );
+
   const watchers = Object.entries(catalogView.events ?? {}).map(([id, event]) => {
     const schema = event.input === undefined ? undefined : cliInputSchema(event.input, types);
     const properties = schema === undefined ? {} : schemasIn(schema.properties);
     for (const name of CLI_RESUME_FLAGS) {
       if (name in properties) throw new Error(`The input of the event ${id} has a property ${name}, which is a flag of watch.`);
     }
-    if (schema !== undefined && schema.properties === undefined) {
-      return Command.make(
-        id,
-        { input: Argument.String("input").pipe(Argument.withDescription("The input as JSON"), Argument.withDefault("{}")), ...resumeFlags },
-        ({ input, cursor, "max-age-ms": maxAgeMs }) =>
-          Effect.suspend(() =>
-            isJsonText(input)
-              ? followWith(id, JSON.parse(input), cursor, maxAgeMs)
-              : printFailure({ kind: "invalid-input", message: "The input is not JSON." }, CLI_EXIT_CODES["invalid-input"]),
-          ),
-      ).pipe(Command.withDescription(event.description));
-    }
-    return Command.make(id, { input: flagsOf(event.input), ...resumeFlags }, ({ input, cursor, "max-age-ms": maxAgeMs }) =>
-      followWith(id, inputFrom(input), cursor, maxAgeMs),
-    ).pipe(Command.withDescription(event.description));
+    return followCommand(id, id, schema, undefined, (made) => made.pipe(Command.withDescription(event.description)));
   });
   const watch = Command.make("watch").pipe(
     Command.withDescription("Follow an event by its id. Each occurrence goes to standard output as one line of JSON."),
     Command.withSubcommands(watchers),
   );
+
+  const { aliases, default: defaultAlias, errors: aliasErrors } = cliAliases(catalogView, target);
+  if (aliasErrors.length > 0) throw new Error(aliasErrors.join("\n"));
+  const aliasCommands = aliases.map((alias) => {
+    const described = alias.kind === "event" ? catalogView.events?.[alias.id] : catalogView.capabilities[alias.id];
+    if (described === undefined) throw new Error(`The alias ${alias.name} refers to ${alias.id}, which is not in the view.`);
+    const schema = cliAliasInput(catalogView, alias);
+    const entry: AliasEntry = {
+      name: alias.name,
+      usage: cliAliasUsage(options.name, alias, schema),
+      description: described.description,
+      default: alias.name === defaultAlias?.name,
+      flags: cliAliasFlagNames(catalogView, alias),
+    };
+    const finish: Finish = (made) => made.pipe(Command.withDescription(described.description), Command.unlisted, Command.withAlias(aliasWord(alias.name)));
+    const subcommand =
+      alias.kind === "event"
+        ? followCommand(entry.name, alias.id, schema, alias.input, finish)
+        : schema !== undefined && schema.properties === undefined
+          ? finish(Command.make(entry.name, jsonInput, ({ input }) => invokeJson(alias.id, input)))
+          : finish(Command.make(entry.name, flagsOfBundled(schema ?? { type: "object" }), (parsed: Record<string, unknown>) => invoke(alias.id, { ...alias.input, ...inputFrom(parsed) })));
+    return { kind: alias.kind, id: alias.id, entry, subcommand };
+  });
 
   const reserved = new Set(["call", "list", "watch"]);
   const taken = new Set(reserved);

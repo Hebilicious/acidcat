@@ -205,7 +205,11 @@ export const fixture = defineApp<Context>({
             raw: { capability: "fixture.raw" },
             "held-keys": { capability: "fixture.held" },
             "fixed-note": { capability: "fixture.note", input: { text: "fixed" } },
+            ticks: { event: "fixture.ticks", input: { count: 2 } },
+            "broken-ticks": { event: "fixture.broken" },
+            echoes: { event: "fixture.echoes" },
           },
+          default: "quick",
         },
       },
     },
@@ -365,6 +369,16 @@ export const fixture = defineApp<Context>({
       async *subscribe() {
         yield { data: { n: 1 } };
         throw new Error("secret internal detail");
+      },
+    }),
+    event({
+      id: "fixture.echoes",
+      description: "Give one occurrence whose data is the input, then end.",
+      audience: ["cli"],
+      input: z.record(z.string(), z.unknown()),
+      payload: z.record(z.string(), z.unknown()),
+      async *subscribe(input) {
+        yield { data: input };
       },
     }),
     event({

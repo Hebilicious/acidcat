@@ -109,6 +109,10 @@ const rejected: Readonly<Record<string, readonly string[]>> = {
     "target shop: the alias list has the name of a command or a flag of the command line",
     "target shop: the alias odd has the unknown member extra",
   ],
+  "cli-alias-default.json": [
+    "target shop: the alias orders refers to shop.order.gone, which is not an event in the view of the target",
+    "target shop: options.cli.default must be the name of a command alias",
+  ],
   "cli-alias-name.json": ['["targets"]["shop"]["options"]["cli"]["aliases"]["Shop"]: Expected a string matching the RegExp ^(--)?[a-z][a-z0-9]*(-[a-z0-9]+)*$'],
   "audience-inherited-name.json": ["shop.item.get: the audience names constructor, which is not a target"],
   "event-audience.json": ["shop.order.ready: the audience names till, which is not a target"],
@@ -157,10 +161,10 @@ test("an unknown member of an event without an x- prefix gets a warning", () => 
 });
 
 test("an unknown member of options.cli without an x- prefix gets a warning, and other members of options get none", () => {
-  const kitchen = { ...bakery.targets.kitchen, options: { cli: { aliases: {}, "x-color": "red", color: "red" }, mcp: { color: "red" } } };
-  assert.deepEqual(check({ ...bakery, targets: { ...bakery.targets, kitchen } }).warnings, [
-    "target kitchen options.cli: unknown member color; give extensions an x- prefix",
-  ]);
+  const cli = { aliases: { start: { capability: "bakery.oven.start" } }, default: "start", "x-color": "red", defualt: "start" };
+  const kitchen = { ...bakery.targets.kitchen, options: { cli, mcp: { color: "red" } } };
+  const report = check({ ...bakery, targets: { ...bakery.targets, kitchen } });
+  assert.deepEqual(report, { errors: [], warnings: ["target kitchen options.cli: unknown member defualt; give extensions an x- prefix"] });
 });
 
 test("a catalog that does not match the catalog schema gets an error with its path", () => {
