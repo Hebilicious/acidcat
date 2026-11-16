@@ -59,6 +59,7 @@ export interface Options {
    * `notifications/events/heartbeat`. The default is 15 000.
    */
   readonly heartbeatMs?: number | undefined;
+  /** The number of occurrences of one subscription that the session keeps for a slow client. See `Session.Options`. */
   readonly eventBuffer?: number | undefined;
   /**
    * The identity of the client of a request: the principal. A poll lease belongs to the principal of the request that
@@ -382,6 +383,7 @@ export interface StdioOptions {
    * `notifications/events/heartbeat`. The default is 15 000.
    */
   readonly heartbeatMs?: number | undefined;
+  /** The number of occurrences of one subscription that the session keeps for a slow client. See `Session.Options`. */
   readonly eventBuffer?: number | undefined;
   /** The settings of poll delivery (spec/bindings/mcp.md#poll). The process has no principal. */
   readonly poll?: PollOptions | undefined;

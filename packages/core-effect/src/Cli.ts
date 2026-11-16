@@ -273,6 +273,8 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     if (reserved.has(first)) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
     taken.add(first);
   }
+  // A shared prefix is a command that only contains other commands (`spec/bindings/cli.md`), so the path of a capability
+  // must not be the start of the path of another capability.
   for (const { path } of leaves) {
     const longer = leaves.find((other) => other.path.length > path.length && path.every((word, index) => other.path[index] === word));
     if (longer !== undefined) {

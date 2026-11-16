@@ -36,7 +36,8 @@ export class ServeError extends Data.TaggedError("ServeError")<{ readonly cause:
 /**
  * Serve one handler for all paths, or handlers by path prefix, for example `{ "/mcp": mcp, "/api": http }`. The effect
  * succeeds when the server listens. When the scope closes, the server stops accepting connections, and the scope waits
- * until the open requests are complete.
+ * until the open requests are complete. The server serves plain HTTP/1.1. For HTTPS, HTTP/2 or middleware, use a
+ * library for web handlers.
  *
  * - The signal of each request aborts when the client closes the connection before the response is complete. The
  *   handlers of the core then cancel the call.

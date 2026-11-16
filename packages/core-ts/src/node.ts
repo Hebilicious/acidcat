@@ -36,7 +36,8 @@ export interface Served extends AsyncDisposable {
 
 /**
  * Serve one handler for all paths, or handlers by path prefix. The promise resolves when the server listens, and rejects
- * when it cannot listen, for example when the port is in use.
+ * when it cannot listen, for example when the port is in use. The server serves plain HTTP/1.1. For HTTPS, HTTP/2 or
+ * middleware, use a library for web handlers.
  *
  * - The signal of each request aborts when the client closes the connection before the response is complete. A handler
  *   that follows the signal then cancels its work.

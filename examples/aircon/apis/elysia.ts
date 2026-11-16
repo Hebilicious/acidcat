@@ -33,6 +33,10 @@ interface Following {
   readonly abort: AbortController;
 }
 
+/**
+ * The WebSocket needs a server adapter that serves WebSockets, for example `@elysiajs/node` on Node.js: give it as
+ * `adapter`, then call `listen`.
+ */
 export function elysiaApi(options: ApiOptions, adapter?: ElysiaConfig<"">["adapter"]) {
   const following = new Map<string, Following>();
   return new Elysia(adapter === undefined ? {} : { adapter })

@@ -358,6 +358,7 @@ export interface WebMcpRegistration {
 
 export interface OpenOptions {
   readonly target: string;
+  /** The number of occurrences of one subscription that the session keeps for a slow client. See `Session.Options`. */
   readonly eventBuffer?: number | undefined;
   readonly webmcp?: WebMcp.ModelContext | undefined;
 }

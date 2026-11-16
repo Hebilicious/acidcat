@@ -40,6 +40,7 @@ export interface Options {
    * line as a keepalive. The default is 15 000.
    */
   readonly keepaliveMs?: number | undefined;
+  /** The number of occurrences of one subscription that the session keeps for a slow client. See `Session.Options`. */
   readonly eventBuffer?: number | undefined;
 }
 

@@ -52,7 +52,8 @@ const isModelContext = (value: unknown): value is ModelContext =>
 
 /**
  * Register the capabilities of a session as tools. If there is no host, do nothing and return `None`. The tools are
- * removed when the scope closes.
+ * removed when the scope closes. The binding serves no events (`spec/bindings/webmcp.md#events`): the page follows them
+ * through the event handles of `Handles`.
  */
 export const install = (session: Session.Session, options: { readonly host?: ModelContext | undefined } = {}) =>
   Effect.gen(function* () {
