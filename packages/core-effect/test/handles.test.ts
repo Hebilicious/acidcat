@@ -9,10 +9,8 @@ import { App, Capability, Handles, Session } from "../src/index.ts";
 import { fixture, fixtureLayer, holdsLayer, position, Switch, watchersLayer } from "./fixture.ts";
 import { Burnt, Lamp, lamp, lampLayer, Light, lightGet, pair, powerSet, sceneSet, Unreachable } from "./lamp.ts";
 
-/** The error that a promise rejects with. */
 const rejection = (promise: Promise<unknown>) => promise.then(() => assert.fail("the promise must reject"), (error: unknown) => error);
 
-/** The call failure that a promise rejects with. */
 const callFailure = (promise: Promise<unknown>) =>
   promise.then(
     () => assert.fail("the call must reject"),
@@ -22,7 +20,6 @@ const callFailure = (promise: Promise<unknown>) =>
     },
   );
 
-/** The handle of an id. The handle must exist. */
 const handleOf = (handles: ReadonlyMap<string, Handles.Handle>, id: string) => {
   const handle = handles.get(id);
   assert.ok(handle, `there is a handle for ${id}`);
@@ -178,7 +175,6 @@ test("session.handle gives a handle with the types of its capability", async () 
     assert.deepEqual(value, { ok: true, value: snapshot });
     assert.deepEqual(snapshot, { on: true, brightness: 80, kelvin: 3000, scene: "relax" });
 
-    // These calls do not run. `moon run core-effect:typecheck` checks that each one is an error.
     const wrongCalls = () => {
       // @ts-expect-error The input of lamp.power.set has `on`, a boolean.
       void power.execute({ on: "yes" });

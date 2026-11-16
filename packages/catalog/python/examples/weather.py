@@ -1,5 +1,3 @@
-"""A weather-station catalog, written with the Python catalog library."""
-
 import sys
 from pathlib import Path
 

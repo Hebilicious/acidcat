@@ -1,5 +1,3 @@
-//! Outcomes, call failures, availability and defects (spec/invocation.md).
-
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -49,7 +47,6 @@ impl CallFailure {
         Self::new(Kind::Cancelled, "The call was cancelled.")
     }
 
-    /// The JSON form of the call failure.
     pub fn to_json(&self) -> Value {
         json!({ "kind": self.kind.as_str(), "message": self.message })
     }
@@ -70,7 +67,6 @@ pub enum Outcome {
     Value(Value),
     /// The capability did not do the operation. The failure is an object with a `_tag`.
     Failure(Value),
-    /// The call did not give a result.
     CallFailure(CallFailure),
 }
 
@@ -103,7 +99,6 @@ impl Availability {
         matches!(self, Availability::Available)
     }
 
-    /// The members of the JSON form: `available`, and `reason` when the capability is unavailable.
     pub(crate) fn members(&self) -> serde_json::Map<String, Value> {
         let mut members = serde_json::Map::new();
         match self {
@@ -125,7 +120,6 @@ impl Availability {
 pub struct Defect(Box<dyn std::error::Error + Send + Sync>);
 
 impl Defect {
-    /// A defect with a message.
     pub fn new(message: impl Into<String>) -> Self {
         Defect(message.into().into())
     }
@@ -175,7 +169,6 @@ impl<F> From<Defect> for RunError<F> {
     }
 }
 
-/// The result of a capability: its value, or a failure or a defect.
 pub type RunResult<O, F> = Result<O, RunError<F>>;
 
 /// End a capability with a failure: `return fail(Failures::Offline {})`.

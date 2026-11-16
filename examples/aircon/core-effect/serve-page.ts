@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-/**
- * The web page of the air conditioner on @acid-cat/core-effect, with its WebMCP tools. `node core-effect/serve-page.ts
- * [host:port]` bundles `page.ts`, serves the page on the address, by default on 127.0.0.1 with a free port, and writes
- * its URL on standard output. Open the URL in a browser that has WebMCP. Each page has its own simulated unit.
- */
 import * as NodeServer from "@acid-cat/core-effect/NodeServer";
 import { Console, Effect } from "effect";
 

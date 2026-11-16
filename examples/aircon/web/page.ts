@@ -1,15 +1,9 @@
-/**
- * The web page of the air conditioner, on the server: its markup, and a web request handler that serves the markup and
- * the bundled script of one core. `core-ts/page.ts` and `core-effect/page.ts` are the scripts. esbuild bundles each one
- * for the browser when the handler is made.
- */
 import { fileURLToPath } from "node:url";
 
 import { build } from "esbuild";
 
 export type WebHandler = (request: Request) => Response;
 
-/** The elements that `controls.ts` reads and writes. */
 const markup = `<!doctype html>
 <html lang="en">
 <head>
@@ -62,10 +56,6 @@ const markup = `<!doctype html>
 </html>
 `;
 
-/**
- * Bundle a page script for the browser, and give a handler that serves the page at each path that ends with `/`, and
- * the script at each path that ends with `/page.js`.
- */
 export async function pageHandler(entry: URL): Promise<WebHandler> {
   const bundled = await build({ entryPoints: [fileURLToPath(entry)], bundle: true, write: false, format: "esm", platform: "browser" });
   const [output] = bundled.outputFiles;
@@ -79,7 +69,6 @@ export async function pageHandler(entry: URL): Promise<WebHandler> {
   };
 }
 
-/** The host and port of an address such as `127.0.0.1:8080` or `[::1]:8080`, or `undefined` if it is not one. */
 export function addressOf(text: string): { readonly hostname: string; readonly port: number } | undefined {
   const match = /^(.+):([0-9]+)$/.exec(text);
   const port = Number(match?.[2]);

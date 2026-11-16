@@ -7,12 +7,10 @@ import { fileURLToPath } from "node:url";
 import { canonicalText } from "@acid-cat/catalog";
 import { bundle, check, viewOf, type Catalog } from "../src/catalog.ts";
 
-/** A value is a catalog when the catalog checks give no errors. */
 const isCatalog = (value: unknown): value is Catalog => check(value).errors.length === 0;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** The test catalog: a bakery, in canonical form. */
 const bakeryText = readFileSync(new URL("./fixtures/bakery.acidcat.json", import.meta.url), "utf-8");
 const bakery: Catalog = (() => {
   const parsed: unknown = JSON.parse(bakeryText);
@@ -104,7 +102,6 @@ test("a catalog that breaks a rule gets an error", () => {
   assert.deepEqual(check(broken).errors, ["a.b: the audience names nowhere, which is not a target"]);
 });
 
-/** The catalogs that `check` rejects (test/fixtures/rejected), with the errors that each one gets. */
 const rejected: Readonly<Record<string, readonly string[]>> = {
   "audience-inherited-name.json": ["shop.item.get: the audience names constructor, which is not a target"],
   "event-audience.json": ["shop.order.ready: the audience names till, which is not a target"],

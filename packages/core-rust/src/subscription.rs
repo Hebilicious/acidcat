@@ -1,6 +1,3 @@
-//! One subscription (spec/events.md): the task that reads the occurrences of the provider, the bounded buffer for a
-//! slow client, and the handle that the client reads.
-
 use std::collections::VecDeque;
 use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -30,12 +27,10 @@ pub struct Occurrence {
 }
 
 impl Occurrence {
-    /// The JSON form of the occurrence.
     pub fn to_json(&self) -> Value {
         serde_json::to_value(self).unwrap_or(Value::Null)
     }
 
-    /// The JSON form of the occurrence without `truncated`, as the MCP binding sends it.
     pub fn to_json_without_truncated(&self) -> Value {
         let mut json = self.to_json();
         if let Some(object) = json.as_object_mut() {
@@ -45,23 +40,18 @@ impl Occurrence {
     }
 }
 
-/// The message of the call failure `internal` of a subscription. It shows no internal data.
 pub(crate) const INTERNAL_MESSAGE: &str = "The event failed.";
 
 struct State {
     buffer: VecDeque<Occurrence>,
-    /// True when the buffer removed occurrences: the next occurrence that the client reads has `truncated: true`.
     dropped: bool,
-    /// How the provider ended: complete (`None`) or with a call failure. The client still reads the buffer first.
     ending: Option<Option<CallFailure>>,
-    /// True when the client sees only the end.
     closed: bool,
 }
 
 struct Shared {
     state: Mutex<State>,
     notify: Notify,
-    /// Cancelled when the subscription ends in any way. It stops the provider.
     stop: CancellationToken,
 }
 
@@ -141,7 +131,6 @@ impl Occurrences {
         self.shared.notify.notify_waiters();
     }
 
-    /// The occurrences as a stream. The stream ends after the end of the subscription.
     pub fn into_stream(self) -> BoxStream<'static, Result<Occurrence, CallFailure>> {
         futures::stream::unfold(self, |mut occurrences| async move {
             occurrences.next().await.map(|item| (item, occurrences))
@@ -156,22 +145,17 @@ impl Drop for Occurrences {
     }
 }
 
-/// Checks the data of one occurrence against the payload schema. The result is the problem, if any.
 pub(crate) type PayloadCheck = Box<dyn Fn(&Value) -> Option<String> + Send + Sync>;
 
-/// The parts of a subscription that starts.
 pub(crate) struct Parts {
     pub(crate) name: String,
     pub(crate) source: BoxStream<'static, Result<ErasedEmitted, Defect>>,
-    /// Check the data of one occurrence against the payload schema. The result is the problem, if any.
     pub(crate) check: PayloadCheck,
     pub(crate) limit: usize,
-    /// Cancelled when the session closes. The subscription then ends as complete.
     pub(crate) closing: CancellationToken,
     pub(crate) on_defect: Box<dyn Fn(&Defect) + Send + Sync>,
 }
 
-/// The token that the provider gets, and the function that starts the task of the subscription.
 pub(crate) fn prepare() -> (CancellationToken, impl FnOnce(Parts) -> Occurrences) {
     let stop = CancellationToken::new();
     let token = stop.clone();
@@ -192,7 +176,6 @@ pub(crate) fn prepare() -> (CancellationToken, impl FnOnce(Parts) -> Occurrences
     (token, start)
 }
 
-/// Read the occurrences of the provider into the buffer, until the subscription ends.
 async fn pump(shared: Arc<Shared>, parts: Parts) {
     let Parts {
         name,

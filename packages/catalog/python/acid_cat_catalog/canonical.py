@@ -17,7 +17,6 @@ _EVENT_ORDER = ["description", "audience", "input", "payload"]
 
 
 def canonical_text(catalog: dict[str, Any]) -> str:
-    """A catalog in canonical form, as text."""
     return _write(_catalog(catalog), "") + "\n"
 
 

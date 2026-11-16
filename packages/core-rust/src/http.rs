@@ -20,7 +20,6 @@ use crate::session::{DEFAULT_BUFFER_LIMIT, Session, SubscribeOptions};
 
 pub use crate::http_client::HttpClient;
 
-/// The settings of the HTTP binding.
 #[derive(Clone, Debug)]
 pub struct HttpOptions {
     /// The origins that can call the API. A request with no `Origin` header is accepted.
@@ -99,7 +98,6 @@ impl<C: Send + Sync + 'static> HttpBinding<C> {
         }
     }
 
-    /// Answer one request.
     pub async fn handle(&self, request: Request<RequestBody>) -> Response<ResponseBody> {
         let options = &self.options;
         let rules = Rules {
@@ -123,7 +121,6 @@ impl<C: Send + Sync + 'static> HttpBinding<C> {
         };
         let session =
             Session::with_buffer_limit(&self.app, &options.target, context, options.buffer_limit);
-        // The session closes when the answer ends, or when a stream of a subscription ends.
         let close = session.clone();
         let guard = OnDrop(move || close.close());
 
@@ -168,7 +165,6 @@ impl<C: Send + Sync + 'static> HttpBinding<C> {
         } else {
             return no_route();
         };
-        // An id with a malformed escape names no capability and no event.
         let Some(id) = percent_decode(encoded) else {
             return no_route();
         };
@@ -258,8 +254,6 @@ impl<C: Send + Sync + 'static> Handler for HttpBinding<C> {
     }
 }
 
-/// A stream of messages that a task writes. When the client drops the stream, the task stops at its next send, and
-/// the server drops the task.
 pub(crate) fn async_stream<F, Fut>(produce: F) -> futures::stream::BoxStream<'static, String>
 where
     F: FnOnce(tokio::sync::mpsc::Sender<String>) -> Fut,
@@ -283,7 +277,6 @@ enum Route {
     Event,
 }
 
-/// The call failure of a request whose body is not JSON. The kinds before `invalid-input` apply first.
 fn not_json<C: Send + Sync + 'static>(session: &Session<C>, route: Route, id: &str) -> CallFailure {
     match route {
         Route::Event if !session.has_event(id) => {
@@ -303,7 +296,6 @@ fn not_json<C: Send + Sync + 'static>(session: &Session<C>, route: Route, id: &s
     }
 }
 
-/// The status of a call failure (spec/bindings/http.md#requests).
 fn status_of(kind: Kind) -> u16 {
     match kind {
         Kind::UnknownCapability => 404,
@@ -345,7 +337,6 @@ fn rejected(rejection: Rejection) -> Response<ResponseBody> {
     response
 }
 
-/// Decode the escapes of a path segment, or `None` when an escape is malformed or the text is not UTF-8.
 fn percent_decode(text: &str) -> Option<String> {
     let bytes = text.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());

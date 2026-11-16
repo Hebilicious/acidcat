@@ -1,7 +1,3 @@
-/**
- * The types of `defineEvent`, `eventsFor` and event handles. `moon run core-ts:typecheck` checks this file: each
- * `@ts-expect-error` marks a program that the types must reject.
- */
 import { test } from "node:test";
 
 import { z } from "zod";
@@ -33,7 +29,6 @@ test("subscribe gets the type of its input from the input schema, and each data 
   });
   const ids: readonly ["probe.reading", "probe.tick"] = [reading.id, tick.id];
 
-  // These declarations are not used. `moon run core-ts:typecheck` checks that each one is an error.
   const wrong = [
     // @ts-expect-error The data must agree with the payload schema.
     event({ id: "probe.a", description: "x", audience: [], payload: z.object({ celsius: z.number() }), async *subscribe() { yield { data: { celsius: "hot" } }; } }),

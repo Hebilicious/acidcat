@@ -1,7 +1,3 @@
-/**
- * The types of `defineCapability` and `capabilitiesFor`. `moon run core-ts:typecheck` checks this file: each
- * `@ts-expect-error` marks a program that the types must reject.
- */
 import { test } from "node:test";
 
 import { z } from "zod";
@@ -40,7 +36,6 @@ test("run gets the type of its input from the input schema, and its result must 
     },
   });
 
-  // These declarations are not used. `moon run core-ts:typecheck` checks that each one is an error.
   const wrong = [
     // @ts-expect-error The failure Overflow must have `capacity`.
     capability({ id: "probe.a", description: "x", audience: [], failures: { Overflow }, run: () => fail({ _tag: "Overflow" }) }),

@@ -1,4 +1,3 @@
-/** Conformance checks for the HTTP binding (spec/bindings/http.md). */
 import { randomUUID } from "node:crypto";
 
 import { isArrayOf, isObject, isStringArray, memberOf, parseJson, readJson } from "../json.ts";
@@ -8,12 +7,10 @@ import { sseReader } from "./sse.ts";
 
 const RULE = "spec/bindings/http.md";
 
-/** An entry of the list that `GET /capabilities` gives. */
 type Entry = JsonObject & { readonly id: string };
 
 const isEntry = (value: unknown): value is Entry => isObject(value) && typeof value.id === "string";
 
-/** The list that `GET /capabilities` gives. The check fails when it is not a list of entries. */
 async function entriesOf(response: Response): Promise<readonly Entry[]> {
   const list = await readJson(response);
   if (!isArrayOf(list, isEntry)) throw new Error(`GET /capabilities must give a list of objects with an id, got ${JSON.stringify(list)}`);
@@ -95,18 +92,15 @@ export async function checkHttp(base: string, options: { readonly maximumBytes: 
 
 const EVENTS = `${RULE}#events`;
 
-/** A subscription through the HTTP binding: the response, and its messages. Closing it cancels the subscription. */
 interface Stream {
   readonly response: Response;
   readonly reader: ReturnType<typeof sseReader>;
   close(): void;
 }
 
-/** The checks of the events (spec/bindings/http.md#events). */
 async function checkEvents(checks: Checks, base: string): Promise<void> {
   const subscribe = (signal: AbortSignal, id: string, input: unknown, headers: Record<string, string> = {}) =>
     fetch(`${base}/events/${id}`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(input), signal });
-  /** Subscribe, and check that the stream starts. `signal` and `close` both close the stream. */
   const open = async (signal: AbortSignal, id: string, input: unknown, headers: Record<string, string> = {}): Promise<Stream> => {
     const controller = new AbortController();
     const response = await subscribe(AbortSignal.any([signal, controller.signal]), id, input, headers);
@@ -118,7 +112,6 @@ async function checkEvents(checks: Checks, base: string): Promise<void> {
     expectEqual(response.headers.get("Cache-Control"), "no-store", "Cache-Control");
     return { response, reader: sseReader(response), close: () => controller.abort() };
   };
-  /** The next message of a stream, which must be an occurrence of the event with the cursor as its SSE id. */
   const nextOccurrence = async (stream: Stream, id: string) => {
     const message = await stream.reader.next();
     expect(message?.event === "next", `expected event: next, got ${JSON.stringify(message)}`);

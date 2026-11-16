@@ -1,4 +1,3 @@
-/** A test application with one capability for each behavior that the tests examine. */
 import { unavailable, AVAILABLE } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
 import { Context, Deferred, Effect, Layer, PubSub, Schema, Stream, SubscriptionRef } from "effect";
@@ -7,26 +6,21 @@ import * as App from "../src/App.ts";
 import * as Capability from "../src/Capability.ts";
 import * as Event from "../src/Event.ts";
 
-/** A switch that the tests turn on and off. It holds the availability of `fixture.toggle`. */
 export class Switch extends Context.Service<Switch, SubscriptionRef.SubscriptionRef<Availability>>()("fixture/Switch") {}
 
-/** The availability of `fixture.toggle` when the switch is on or off. */
 export const position = (on: boolean): Availability => (on ? AVAILABLE : unavailable("The switch is off."));
 
 export const switchLayer = Layer.effect(Switch, SubscriptionRef.make(position(true)));
 
-/** The calls to `fixture.hold` that hold now, for all the sessions of one provider. */
 export class Holds extends Context.Service<
   Holds,
   {
-    /** Hold until `release` releases the key. An interruption stops the hold. */
     readonly hold: (key: string, marker: string | undefined) => Effect.Effect<void>;
     readonly held: Effect.Effect<ReadonlyArray<string>>;
     readonly release: (key: string) => Effect.Effect<void>;
   }
 >()("fixture/Holds") {}
 
-/** The holds of one provider. `mark` writes the file of a marker. A page cannot write files, so only the command line of the fixture gives it. */
 export const holdsLayer = (mark?: (path: string) => Effect.Effect<void>) =>
   Layer.sync(Holds, () => {
     const holding = new Set<{ readonly key: string; readonly released: Deferred.Deferred<void> }>();
@@ -51,22 +45,15 @@ export const holdsLayer = (mark?: (path: string) => Effect.Effect<void>) =>
     };
   });
 
-/** The subscriptions to `fixture.watch` that are active now, for all the sessions of one provider. */
 export class Watchers extends Context.Service<
   Watchers,
   {
-    /**
-     * The values that `signal` gives for the key, while the stream runs. The watch starts before the stream first
-     * waits. With a marker, the stream writes its file after the watch starts.
-     */
     readonly watch: (key: string, marker: string | undefined) => Stream.Stream<string>;
     readonly watching: Effect.Effect<ReadonlyArray<string>>;
-    /** Give the value to each watch of the key. Give the number of these watches. */
     readonly signal: (key: string, value: string) => Effect.Effect<number>;
   }
 >()("fixture/Watchers") {}
 
-/** The watchers of one provider. `mark` writes the file of a marker, as for `holdsLayer`. */
 export const watchersLayer = (mark?: (path: string) => Effect.Effect<void>) =>
   Layer.effect(
     Watchers,
@@ -102,22 +89,12 @@ export const watchersLayer = (mark?: (path: string) => Effect.Effect<void>) =>
     }),
   );
 
-/** The services of the fixture: the switch, which is on, the holds and the watchers. */
-/**
- * The poll settings of the MCP servers of the fixture in the conformance tests: a small buffer and a short lease time, so
- * that conform can test both. The tests give the same settings to conform.
- */
 export const POLL = { bufferLimit: 5, leaseMs: 5000 } as const;
 
-/**
- * The limits of webhook delivery of the MCP server of the fixture in the conformance tests: short lifetimes and a small
- * number of subscriptions, so that conform can test them. The tests give the same limits to conform.
- */
 export const WEBHOOK_LIMITS = { minTtlMs: 1000, maxTtlMs: 5000, maxSubscriptions: 3 } as const;
 
 export const fixtureLayer = Layer.mergeAll(switchLayer, holdsLayer(), watchersLayer());
 
-/** The services of the fixture, which count how many times the switch is built and released, to test when a host builds the services. */
 export function countedFixtureLayer() {
   const counts = { built: 0, released: 0 };
   const counted = Layer.effect(
@@ -137,7 +114,6 @@ const Keys = Schema.Struct({ keys: Schema.Array(Schema.String) });
 const Tick = Schema.Struct({ n: Schema.Int });
 const Watched = Schema.Struct({ key: Schema.String, value: Schema.String });
 
-/** The position after a cursor of `fixture.ticks`. A cursor that is not a count starts at the first tick. */
 const after = (cursor: string | undefined): number => {
   const position = Number(cursor);
   return Number.isInteger(position) && position >= 0 ? position + 1 : 1;
@@ -312,10 +288,6 @@ export const fixture = App.make({
   ],
 });
 
-/**
- * An application with one capability, `held.wait`, that runs until it is interrupted. `started` completes when the
- * call starts, and `interrupted` when the call is interrupted.
- */
 export function heldApp() {
   const started = Deferred.makeUnsafe<void>();
   const interrupted = Deferred.makeUnsafe<void>();
@@ -337,7 +309,6 @@ export function heldApp() {
   return { app, started, interrupted };
 }
 
-/** An application with one capability, `recorded.run`. `record.ran` tells if a call ran it. */
 export function recordingApp() {
   const record = { ran: false };
   const app = App.make({

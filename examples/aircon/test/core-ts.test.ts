@@ -88,7 +88,6 @@ test("session.handle gives a handle with the types of its capability", async () 
   const snapshot: z.infer<typeof Status> | undefined = status.snapshot?.getSnapshot();
   assert.deepEqual(value, { ok: true, value: snapshot });
 
-  // These calls do not run. `moon run core-ts:typecheck` checks that each one is an error.
   const wrongCalls = () => {
     // @ts-expect-error The input of aircon.power.set has `on`, a boolean.
     void power.execute({ on: "yes" });
@@ -145,7 +144,6 @@ test("an array input takes one repeated flag for each item, or JSON text of the 
   assert.match(list.stdout, /"usage": "aircon aircon schedule set --days <mon\|tue\|wed\|thu\|fri\|sat\|sun>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });
 
-/** The exit code and the output of a program when it exits. */
 function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<{ readonly code: number | null; readonly stdout: string }> {
   let stdout = "";
   child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));
@@ -161,7 +159,6 @@ test("the TypeScript command line controls the unit of a server, and watch follo
   context.after(() => server.kill());
   const url = await new Promise<string>((resolve, reject) => {
     server.on("error", reject);
-    // The first line of standard output is the URL. It can come in more than one chunk.
     let text = "";
     server.stdout.setEncoding("utf-8").on("data", (chunk: string) => {
       text += chunk;
@@ -169,22 +166,18 @@ test("the TypeScript command line controls the unit of a server, and watch follo
     });
   });
   const cliPath = new URL("../core-ts/cli.ts", import.meta.url).pathname;
-  // With AIRCON_URL, the command line sends each call and each subscription to the server.
   const remote = (...args: string[]) => spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
 
   assert.equal((await finish(remote("aircon", "power", "set", "--on"))).code, 0);
   const status = await finish(remote("aircon", "status", "get"));
   assert.equal(status.code, 0);
   assert.partialDeepStrictEqual(JSON.parse(status.stdout), { power: true });
-  // The unit of the server changed, not the unit of a new process.
   assert.partialDeepStrictEqual(JSON.parse((await run(cliPath, "aircon", "status", "get")).stdout), { power: false });
 
   const watch = remote("watch", "aircon.status.changed");
   context.after(() => watch.kill());
   let watched = "";
   watch.stdout.setEncoding("utf-8").on("data", (chunk: string) => (watched += chunk));
-  // Change the fan until the subscription writes its first occurrence: a change before the subscription starts is
-  // not in it.
   for (let turn = 0; !watched.includes("\n"); turn++) {
     assert.ok(turn < 100, "watch writes an occurrence");
     assert.equal((await finish(remote("aircon", "fan", "set", "--speed", turn % 2 === 0 ? "low" : "high"))).code, 0);

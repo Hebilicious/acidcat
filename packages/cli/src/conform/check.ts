@@ -1,4 +1,3 @@
-/** The result of one conformance check, and helpers to write checks. */
 import { setTimeout as pause } from "node:timers/promises";
 
 import fixtureJson from "../../conformance/fixture.acidcat.json" with { type: "json" };
@@ -23,10 +22,6 @@ export interface Check {
 /** The conformance fixture: the catalog that each implementation serves. */
 export const fixture: CatalogDocument = fixtureJson;
 
-/**
- * True if the value is an outcome (spec/invocation.md): `{ ok: true, value }`, `{ ok: false, error }`, or a call
- * failure `{ kind, message }` with no `ok`.
- */
 export const isOutcome = (value: unknown): value is Outcome<unknown, unknown> => {
   if (!isObject(value)) return false;
   if (value.ok === true) return "value" in value;
@@ -34,16 +29,12 @@ export const isOutcome = (value: unknown): value is Outcome<unknown, unknown> =>
   return !("ok" in value) && CALL_FAILURE_KINDS.some((kind) => kind === value.kind) && typeof value.message === "string";
 };
 
-/** The ids of the capabilities in the view of a target of the fixture. */
 export const idsOf = (target: string): string[] => Object.keys(viewOf(fixture, target).capabilities).sort();
 
-/** The ids of the events in the view of a target of the fixture. */
 export const eventIdsOf = (target: string): string[] => Object.keys(viewOf(fixture, target).events ?? {}).sort();
 
-/** A check of a payload against the payload schema of an event of the fixture, made once for each event. */
 const payloadChecks = new Map<string, (data: unknown) => boolean>();
 
-/** True if the data agrees with the payload schema of the event. With no payload schema, the data is an empty object. */
 function agreesWithPayload(id: string, data: unknown): boolean {
   let agrees = payloadChecks.get(id);
   if (agrees === undefined) {
@@ -60,10 +51,6 @@ function agreesWithPayload(id: string, data: unknown): boolean {
   return agrees(data);
 }
 
-/**
- * The value as an occurrence of the event `id`: an occurrence in its JSON form (schemas/occurrence.schema.json), with
- * the id as its name, and data that agrees with the payload schema. The check fails when the value is not one.
- */
 export function expectOccurrence(value: unknown, id: string): Occurrence {
   expect(isOccurrence(value), `expected an occurrence, got ${JSON.stringify(value)}`);
   expectEqual(value.name, id, "the name of the occurrence");
@@ -71,15 +58,8 @@ export function expectOccurrence(value: unknown, id: string): Occurrence {
   return value;
 }
 
-/** The time, in milliseconds, that each check has to settle when `conform` gets no other time. */
 export const DEADLINE = 30_000;
 
-/**
- * Collects checks for one binding. Each check has one deadline. The check gives its signal to each operation, and the
- * signal aborts at the deadline. Then each operation stops, and the check fails with "did not settle". The deadline
- * never makes a check pass. The cleanup of a check, which releases what the check holds, gets its own signal with the
- * same time, so that `conform` always returns.
- */
 export class Checks {
   readonly results: Check[] = [];
   readonly binding: string;
@@ -95,13 +75,11 @@ export class Checks {
     this.results.push(failure === undefined ? { binding: this.binding, name, rule, passed: true } : { binding: this.binding, name, rule, passed: false, detail: failure });
   }
 
-  /** Run a check of a recommendation (SHOULD). When it fails, the result is a warning, and the check passes. */
   async should(name: string, rule: string, body: (signal: AbortSignal) => Promise<void> | void): Promise<void> {
     const failure = await this.#settle(body);
     this.results.push(failure === undefined ? { binding: this.binding, name, rule, passed: true } : { binding: this.binding, name, rule, passed: true, warning: true, detail: failure });
   }
 
-  /** Run the body of a check with its deadline. The result is the detail of the failure, or `undefined`. */
   async #settle(body: (signal: AbortSignal) => Promise<void> | void): Promise<string | undefined> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.deadline);
@@ -117,10 +95,6 @@ export class Checks {
   }
 }
 
-/**
- * Read a state until `done` is true for it, and give that value. The read and the pause between two reads stop when the
- * signal of the check aborts.
- */
 export async function until<T, Done extends T>(what: string, read: () => Promise<T>, done: (value: T) => value is Done, signal: AbortSignal): Promise<Done>;
 export async function until<T>(what: string, read: () => Promise<T>, done: (value: T) => boolean, signal: AbortSignal): Promise<T>;
 export async function until<T>(what: string, read: () => Promise<T>, done: (value: T) => boolean, signal: AbortSignal): Promise<T> {
@@ -136,7 +110,6 @@ export async function until<T>(what: string, read: () => Promise<T>, done: (valu
   }
 }
 
-/** Settle as the promise does, or reject with the reason of the signal when it aborts first. */
 export function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   const aborted = new Promise<never>((_, reject) => {
     signal.throwIfAborted();
@@ -145,20 +118,16 @@ export function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<
   return Promise.race([promise, aborted]);
 }
 
-/** Fail a check unless `condition` is true. */
 export function expect(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-/** Fail a check unless the two values have the same JSON. */
 export function expectEqual(actual: unknown, expected: unknown, what: string): void {
   const a = JSON.stringify(actual);
   const b = JSON.stringify(expected);
   if (a !== b) throw new Error(`${what}: expected ${b}, got ${a}`);
 }
 
-/** A sorted copy of a list. */
 export const sorted = (values: Iterable<string>): string[] => [...values].sort();
 
-/** An origin that no deployment allows. */
 export const FORBIDDEN_ORIGIN = "https://not-allowed.acid-cat.invalid";

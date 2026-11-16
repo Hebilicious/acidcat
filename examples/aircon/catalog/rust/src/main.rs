@@ -1,6 +1,3 @@
-//! The air-conditioner catalog of `aircon.pkl`, written with the Rust catalog library. Run it with `cargo run` to
-//! write the catalog.
-
 use acid_cat_catalog::{Capability, Catalog, Event, Schema, Target};
 use serde_json::json;
 

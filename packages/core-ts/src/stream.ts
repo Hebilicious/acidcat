@@ -1,21 +1,12 @@
-/**
- * Streams of messages for the bindings that serve events through a connection: the next occurrence or a sign that the
- * stream is idle, and a web stream of text.
- */
 import type { Occurrence } from "@acid-cat/spec-ts";
 
 import type { Occurrences } from "./subscription.ts";
 
-/** One pull of a subscription: the next step, the error that ends it, or `idle` when nothing came in time. */
 export type Pulled<Payload> =
   | { readonly idle: true }
   | { readonly step: IteratorResult<Occurrence<Payload>, undefined> }
   | { readonly error: unknown };
 
-/**
- * A function that pulls the next step of a subscription. It gives `idle` when no step comes within `idleMs`
- * milliseconds. The `next()` that waits is kept for the next pull, so no occurrence is lost.
- */
 export function idlePuller<Payload>(occurrences: Occurrences<Payload>, idleMs: number): () => Promise<Pulled<Payload>> {
   let pending: Promise<Pulled<Payload>> | undefined;
   return async () => {
@@ -37,15 +28,10 @@ export function idlePuller<Payload>(occurrences: Occurrences<Payload>, idleMs: n
   };
 }
 
-/**
- * A web stream of text. The stream calls `produce` each time that the client can take more: it gives the next messages,
- * or `undefined` at the end. When the client cancels the stream, the stream calls `cancel`. `release` runs one time, when
- * the stream ends in any way.
- */
 export function textStream(produce: () => Promise<readonly string[] | undefined>, cancel: () => void, release: () => Promise<void>): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   let released = false;
-  // A pull can still wait for `produce` when the client cancels. Its messages then go nowhere.
+  // A ReadableStream can call `cancel` while a `pull` still waits for `produce`.
   let cancelled = false;
   const releaseOnce = async () => {
     if (released) return;

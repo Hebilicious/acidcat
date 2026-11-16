@@ -1,8 +1,3 @@
-/**
- * The controls of the web page of the air conditioner, in the browser. Both TypeScript cores use them: each page gives
- * the actions and the values of its own session, and these functions show them in the elements of `markup` in
- * `page.ts`. The page has no dependency on a core.
- */
 import type { CallFailure, Outcome } from "@acid-cat/spec-ts";
 
 export interface Status {
@@ -13,53 +8,44 @@ export interface Status {
   readonly roomCelsius: number;
 }
 
-/** The status of the WebMCP tools, as both cores give it. */
 export interface ToolStatus {
   readonly phase: string;
   readonly message: string | null;
 }
 
-/** The availability of one capability of the view. While it is available, the page has a WebMCP tool for it. */
 export interface Tool {
   readonly id: string;
   readonly available: boolean;
   readonly reason?: string | undefined;
 }
 
-/** What the controls do. Each action calls one capability through the session of the page, and gives its outcome. */
 export interface Actions {
   readonly power: (on: boolean) => Promise<Outcome<unknown, unknown>>;
   readonly mode: (mode: string) => Promise<Outcome<unknown, unknown>>;
   readonly temperature: (celsius: number) => Promise<Outcome<unknown, unknown>>;
   readonly fan: (speed: string) => Promise<Outcome<unknown, unknown>>;
   readonly firmware: () => Promise<Outcome<unknown, unknown>>;
-  /** Connect or disconnect the simulated unit. This is not a capability: it simulates the network. */
   readonly online: (online: boolean) => void;
 }
 
-/** What the page shows. */
 export interface View {
   readonly showStatus: (status: Status) => void;
-  /** Show the status of the WebMCP tools, or `undefined` when the browser has no WebMCP host. */
   readonly showToolStatus: (status: ToolStatus | undefined) => void;
   readonly showTools: (tools: readonly Tool[]) => void;
 }
 
-/** The element with this id, of this kind. The page throws if the markup does not have it. */
 function find<T extends HTMLElement>(id: string, kind: { new (): T; prototype: T }): T {
   const element = document.getElementById(id);
   if (!(element instanceof kind)) throw new Error(`The page has no ${kind.name} with the id ${id}.`);
   return element;
 }
 
-/** The outcome of a call that rejects with a call failure, for example a `CallFailureError`. */
 export function callFailureOf(error: unknown): CallFailure {
   const kind = typeof error === "object" && error !== null && "kind" in error ? error.kind : undefined;
   const message = error instanceof Error ? error.message : String(error);
   return { kind: kind === "cancelled" || kind === "unknown-capability" || kind === "unavailable" || kind === "invalid-input" ? kind : "internal", message };
 }
 
-/** A line of text that tells the outcome of a call. */
 function describe(outcome: Outcome<unknown, unknown>): string {
   if ("kind" in outcome) return `Call failure ${outcome.kind}: ${outcome.message}`;
   if (outcome.ok) return "Done.";
@@ -67,7 +53,6 @@ function describe(outcome: Outcome<unknown, unknown>): string {
   return `Failure ${tag}.`;
 }
 
-/** Connect the controls of the page to the actions, and give the functions that show the values of the session. */
 export function bindPage(core: string, actions: Actions): View {
   find("core", HTMLElement).textContent = core;
   const result = find("result", HTMLOutputElement);

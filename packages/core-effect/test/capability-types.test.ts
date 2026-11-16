@@ -1,7 +1,3 @@
-/**
- * The types of `Capability.make`. `moon run core-effect:typecheck` checks this file: each `@ts-expect-error` marks a
- * program that the types must reject.
- */
 import { test } from "node:test";
 
 import type { Availability } from "@acid-cat/spec-ts";
@@ -13,7 +9,6 @@ class Connection extends Context.Service<Connection, SubscriptionRef.Subscriptio
 class Progress extends Context.Service<Progress, SubscriptionRef.SubscriptionRef<string>>()("probe/Progress") {}
 class Store extends Context.Service<Store, { readonly save: Effect.Effect<void> }>()("probe/Store") {}
 
-/** `true` when `A` and `B` are the same type. */
 type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 const save = Capability.make({

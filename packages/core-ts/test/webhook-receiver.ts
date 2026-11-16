@@ -1,7 +1,3 @@
-/**
- * A webhook receiver for the tests: an HTTPS server on 127.0.0.1, with a certificate that `openssl` makes for each run
- * in a temporary directory. The key never leaves that directory, and the directory is removed when the receiver closes.
- */
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:https";
@@ -12,17 +8,14 @@ import { join } from "node:path";
 import { isJsonObject } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
-/** One request that the receiver got. */
 export interface Received {
   readonly headers: IncomingHttpHeaders;
   readonly text: string;
   readonly body: JsonObject;
 }
 
-/** The answer of the receiver to one request: a status and a body. */
 export type Answer = { readonly status: number; readonly body?: string };
 
-/** Make a self-signed certificate for `localhost` and `127.0.0.1`. */
 export function testCertificate(): { readonly cert: string; readonly key: string } {
   const directory = mkdtempSync(join(tmpdir(), "acid-cat-webhook-"));
   try {
@@ -38,10 +31,6 @@ export function testCertificate(): { readonly cert: string; readonly key: string
   }
 }
 
-/**
- * Start a receiver. By default it answers a verification with its challenge, and each other request with 200.
- * `answer` changes the answer to a request.
- */
 export async function startReceiver(certificate: { readonly cert: string; readonly key: string }) {
   const received: Received[] = [];
   let answer: (request: Received) => Answer | undefined = () => undefined;
@@ -64,7 +53,6 @@ export async function startReceiver(certificate: { readonly cert: string; readon
     port,
     url: `https://127.0.0.1:${port}/hook`,
     received,
-    /** The requests that are not verifications. */
     deliveries: () => received.filter((each) => each.body["type"] !== "verification"),
     answer: (choose: (request: Received) => Answer | undefined) => {
       answer = choose;

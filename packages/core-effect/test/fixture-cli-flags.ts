@@ -1,7 +1,3 @@
-/**
- * The fixture's command line with a flag of the application: `--switch` gives the first position of the switch, so the
- * services of the capabilities depend on the flag.
- */
 import { Effect, Layer, SubscriptionRef } from "effect";
 import { Command, Flag, GlobalFlag } from "effect/cli";
 

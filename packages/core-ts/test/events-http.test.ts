@@ -8,7 +8,6 @@ import { serve } from "../src/node.ts";
 import { sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
 import { sseReader } from "./sse.ts";
 
-/** Wait until a condition is true, or fail after one second. */
 async function until(condition: () => boolean): Promise<void> {
   const end = Date.now() + 1000;
   while (!condition()) {
@@ -17,13 +16,11 @@ async function until(condition: () => boolean): Promise<void> {
   }
 }
 
-/** The member `key` of a JSON text that is an object. */
 function memberOf(text: string, key: string): unknown {
   const value: unknown = JSON.parse(text);
   return isJsonObject(value) ? value[key] : undefined;
 }
 
-/** Serve the sensors through HTTP on a free port. */
 async function served(sensors = new Sensors(), keepaliveMs?: number) {
   const handler = httpHandler(sensorsApp, { allowedOrigins: [], target: "api", base: "/api", ...sensorOptions(sensors), ...(keepaliveMs === undefined ? {} : { keepaliveMs }) });
   const server = await serve({ "/api": handler }, { port: 0 });

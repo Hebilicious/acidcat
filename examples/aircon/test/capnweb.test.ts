@@ -21,7 +21,6 @@ before(async () => {
 });
 after(() => served.close());
 
-/** A batch: the calls that a client makes before it waits go in one request. */
 const client = () => newHttpBatchRpcSession<AirconApi>(`${served.url}/rpc`);
 
 test("methods give the results of the capabilities", async () => {
@@ -48,7 +47,6 @@ test("the HTTP binding is at /api", async () => {
   assert.equal(unit.state.fan, "high");
 });
 
-/** Wait until a condition is true, or fail after five seconds. */
 async function until(what: string, condition: () => boolean): Promise<void> {
   const end = Date.now() + 5000;
   while (!condition()) {
@@ -57,7 +55,6 @@ async function until(what: string, condition: () => boolean): Promise<void> {
   }
 }
 
-/** A `ws` server on a free port that serves the API through WebSockets, for one unit. */
 async function webSocketServer(unit: Unit, allowedOrigins: readonly string[] = []) {
   const server = new WebSocketServer({ host: "127.0.0.1", port: 0, path: "/rpc" });
   await once(server, "listening");
@@ -80,7 +77,6 @@ test("followStatus calls the listener with each new status, and disposing its re
   assert.equal(statuses[0]?.power, true);
   following[Symbol.dispose]();
   await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
-  // The connection stays open: its session still calls the capabilities.
   assert.equal((await api.status()).ok, true);
 });
 

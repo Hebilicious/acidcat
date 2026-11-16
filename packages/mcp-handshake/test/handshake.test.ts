@@ -8,7 +8,6 @@ import { mcpHandshake } from "../src/index.ts";
 
 const SERVER_INFO = { "io.modelcontextprotocol/serverInfo": { name: "stub", version: "1.0.0" } };
 
-/** The requests that reach the stub, and the stub: a server of revision 2026-07-28 that rejects one origin. */
 function stub() {
   const seen: { headers: Headers; body: JsonObject }[] = [];
   const handler = async (request: Request): Promise<Response> => {

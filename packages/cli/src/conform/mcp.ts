@@ -1,8 +1,3 @@
-/**
- * Conformance checks for the MCP binding through HTTP (spec/bindings/mcp.md). The protocol checks use the official MCP
- * client with revision 2026-07-28. With `handshake`, they run again with the `initialize` handshake of revision
- * 2025-11-25. The other checks send requests that a client never sends.
- */
 import { randomUUID } from "node:crypto";
 
 import { MCP_EVENTS_EXTENSION, MCP_SUBSCRIPTION_ID } from "@acid-cat/spec-ts";
@@ -19,17 +14,14 @@ import type { WebhookSettings } from "./webhook.ts";
 
 const RULE = "spec/bindings/mcp.md";
 
-/** A tool result, as the MCP client gives it. */
 type ToolResult = Awaited<ReturnType<Client["callTool"]>>;
 
-/** A connected MCP client. With `handshake`, the client opens the session with `initialize`. */
 export async function mcpClient(url: string, signal?: AbortSignal, handshake = false): Promise<Client> {
   const client = new Client({ name: "acid-cat-conform", version: "0.1.0" }, handshake ? { versionNegotiation: { mode: "legacy" } } : { versionNegotiation: { mode: { pin: "2026-07-28" } } });
   await client.connect(new StreamableHTTPClientTransport(new URL(url)), signal ? { signal } : undefined);
   return client;
 }
 
-/** The JSON value in the first text content of a tool result, or `null` when there is no text content. */
 const textOf = (result: ToolResult): unknown => {
   const first = result.content[0];
   return parseJson(first?.type === "text" ? first.text : "null");
@@ -39,9 +31,7 @@ export interface McpCheckOptions {
   readonly maximumBytes: number;
   readonly deadline: number;
   readonly handshake: boolean;
-  /** The poll settings of the deployment, for the checks of the buffer and of the lease time. */
   readonly poll: PollSettings;
-  /** The settings of the checks of webhook delivery. With none, conform does not test webhook delivery. */
   readonly webhook: WebhookSettings | undefined;
 }
 
@@ -94,7 +84,6 @@ export async function checkMcp(url: string, options: McpCheckOptions): Promise<C
 
 const ANCHOR = `${RULE}#earlier-revisions-through-http`;
 
-/** The checks of the `initialize` handshake of revision 2025-11-25 (spec/bindings/mcp.md#earlier-revisions-through-http). */
 async function checkHandshake(checks: Checks, url: string, deadline: number): Promise<void> {
   const handshakeChecks = new Checks("mcp 2025-11-25", deadline);
   let client: Client | undefined;
@@ -129,10 +118,6 @@ async function checkHandshake(checks: Checks, url: string, deadline: number): Pr
   checks.results.push(...handshakeChecks.results);
 }
 
-/**
- * The checks of the tools and their outcomes, through a connected client (spec/bindings/mcp.md#tools). Each transport
- * runs them.
- */
 export async function checkTools(checks: Checks, mcp: Client): Promise<void> {
   const call = (signal: AbortSignal, name: string, args: Record<string, unknown>) =>
     mcp.callTool({ name, arguments: args }, { signal });
@@ -204,34 +189,22 @@ export async function checkTools(checks: Checks, mcp: Client): Promise<void> {
   });
 }
 
-// --- Events ------------------------------------------------------------------------------------------------------
-
-/** The revision of the protocol that serves the events extension. */
 export const EVENTS_REVISION = "2026-07-28";
 
-/** The `_meta` of each request of revision 2026-07-28: the revision, and the capabilities of the client, which has none. */
 export const META = { "io.modelcontextprotocol/protocolVersion": EVENTS_REVISION, "io.modelcontextprotocol/clientCapabilities": {} };
 
-/** A JSON-RPC message from the server. */
 export type Message = JsonObject;
 
-/**
- * The messages of one `events/stream` request: the notifications of the subscription and its response. `next` gives
- * the next message, or `undefined` at the end. `cancel` cancels the subscription, as the transport does.
- */
 export interface EventStream {
   next(): Promise<Message | undefined>;
   cancel(): Promise<void>;
 }
 
-/** A way to send requests of revision 2026-07-28 to a server: through HTTP, or through standard input and output. */
 export interface Channel {
   request(method: string, params: JsonObject, signal: AbortSignal): Promise<Message>;
-  /** Start `events/stream` with this request id. */
   stream(id: string, params: JsonObject, signal: AbortSignal): Promise<EventStream>;
 }
 
-/** A channel to a server through HTTP. Each request has the `headers` too, for example the credentials of a principal. */
 export function httpChannel(url: string, headers: Readonly<Record<string, string>> = {}): Channel {
   const post = (id: string, method: string, params: JsonObject, signal: AbortSignal) =>
     fetch(url, {
@@ -247,7 +220,6 @@ export function httpChannel(url: string, headers: Readonly<Record<string, string
       body: JSON.stringify({ jsonrpc: "2.0", id, method, params: { ...params, _meta: META } }),
       signal,
     });
-  /** The messages of a response: one JSON message, or a stream of server-sent events with one message in each. */
   const messagesOf = (response: Response, close: () => void): EventStream => {
     if (response.headers.get("Content-Type")?.startsWith("text/event-stream") !== true) {
       let read = false;
@@ -290,10 +262,8 @@ export function httpChannel(url: string, headers: Readonly<Record<string, string
   };
 }
 
-/** The subscription id in the `_meta` of the params of a notification, or of a result. */
 export const subscriptionOf = (message: Message): unknown => memberOf(memberOf(memberOf(message, "params") ?? memberOf(message, "result"), "_meta"), MCP_SUBSCRIPTION_ID);
 
-/** The params of a notification of a subscription, without `_meta`. */
 const paramsOf = (message: Message): JsonObject => {
   const params = memberOf(message, "params");
   expect(isObject(params), `expected a notification with params, got ${JSON.stringify(message)}`);
@@ -301,20 +271,14 @@ const paramsOf = (message: Message): JsonObject => {
   return rest;
 };
 
-/** How a server serves the events extension, as `checkEvents` tests it. */
 export interface EventsOptions {
-  /** The transport of the channel. Through stdio, the server never serves webhook delivery. */
   readonly transport: "http" | "stdio";
-  /** The poll settings of the deployment. */
   readonly poll: PollSettings;
-  /** `true` if conform tests webhook delivery through this server, so the server must serve it. */
   readonly webhook: boolean;
 }
 
-/** The order of the delivery modes in `events/list` (spec/bindings/mcp.md#events). */
 const DELIVERY_ORDER = ["push", "poll", "webhook"];
 
-/** The requests that the checks of events send through a channel, and the capabilities of the fixture that they call. */
 export function eventRequests(channel: Channel) {
   const resultOf = async (method: string, params: JsonObject, signal: AbortSignal) => {
     const message = await channel.request(method, params, signal);
@@ -328,28 +292,20 @@ export function eventRequests(channel: Channel) {
     return error;
   };
   const tool = async (name: string, args: JsonObject, signal: AbortSignal) => memberOf(await resultOf("tools/call", { name, arguments: args }, signal), "structuredContent");
-  /** The keys of the subscriptions to `fixture.watch` that are active now. */
   const watching = async (signal: AbortSignal) => {
     const keys = memberOf(await tool("fixture.watching", {}, signal), "keys");
     expect(isStringArray(keys), `fixture.watching must give a list of keys, got ${JSON.stringify(keys)}`);
     return keys;
   };
-  /** Give a value to the subscriptions to `fixture.watch` that watch the key. The result is the number of these subscriptions. */
   const signalKey = async (key: string, value: string, signal: AbortSignal) => memberOf(await tool("fixture.signal", { key, value }, signal), "delivered");
   return { resultOf, errorOf, tool, watching, signalKey };
 }
 
-/** The number of times that a key is in a list of keys. */
 export const count = (keys: readonly string[], key: string) => keys.filter((each) => each === key).length;
 
-/**
- * The checks of the events extension (spec/bindings/mcp.md#events), through a channel. Each transport runs them. Through
- * stdio, `cancel` sends `notifications/cancelled`; through HTTP, it closes the request.
- */
 export async function checkEvents(checks: Checks, channel: Channel, options: EventsOptions): Promise<void> {
   const RULE_EVENTS = `${RULE}#events`;
   const { resultOf, errorOf, watching, signalKey } = eventRequests(channel);
-  /** The next message of a stream, which must be a notification of the method for this subscription. */
   const notification = async (stream: EventStream, id: string, method: string) => {
     const message = await stream.next();
     expect(message !== undefined && message.method === method, `expected ${method}, got ${JSON.stringify(message)}`);
@@ -362,7 +318,6 @@ export async function checkEvents(checks: Checks, channel: Channel, options: Eve
     const message = await notification(stream, id, "notifications/events/active");
     expectEqual(paramsOf(message), { truncated: false }, "the params of notifications/events/active");
   };
-  /** The response of the stream, which must be the result `complete` for this subscription, then the end. */
   const complete = async (stream: EventStream, id: string) => {
     const message = await stream.next();
     expect(message !== undefined && message.id === id, `expected the result of events/stream, got ${JSON.stringify(message)}`);
@@ -377,7 +332,6 @@ export async function checkEvents(checks: Checks, channel: Channel, options: Eve
     const extensions = memberOf(memberOf(result, "capabilities"), "extensions");
     expect(isObject(memberOf(extensions, MCP_EVENTS_EXTENSION)), `the capabilities must have the extension ${MCP_EVENTS_EXTENSION}, got ${JSON.stringify(result)}`);
   });
-  /** The delivery modes that the server serves, from `events/list`. */
   let delivery: readonly string[] = [];
   await checks.run("events/list gives each event of the view, with the delivery modes of the server and its schemas", RULE_EVENTS, async (signal) => {
     const result = await resultOf("events/list", {}, signal);

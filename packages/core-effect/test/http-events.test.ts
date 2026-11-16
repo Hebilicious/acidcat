@@ -10,7 +10,6 @@ import { events, feedForPromises } from "./events-fixture.ts";
 
 const ORIGIN = "https://fixture.example";
 
-/** A handler for the fixture, with its own feed. */
 function setup(options: Partial<Http.Options> = {}) {
   const feed = feedForPromises();
   const handler = Http.toWebHandler(events, feed.layer, { allowedOrigins: [ORIGIN], base: "/api", ...options });
@@ -26,13 +25,11 @@ function setup(options: Partial<Http.Options> = {}) {
   return { feed, handler, subscribe };
 }
 
-/** A reader of the server-sent events of a response, one message at a time. */
 function messagesOf(response: Response) {
   assert.ok(response.body);
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffered = "";
   return {
-    /** The next message, as its text without the blank line that ends it, or `undefined` when the stream ends. */
     next: async (): Promise<string | undefined> => {
       for (;;) {
         const end = buffered.indexOf("\n\n");
@@ -50,7 +47,6 @@ function messagesOf(response: Response) {
   };
 }
 
-/** The fields of one message: `event`, `id` and `data`. */
 function fieldsOf(message: string | undefined) {
   assert.ok(message !== undefined, "the stream has a message");
   const fields: Record<string, string> = {};

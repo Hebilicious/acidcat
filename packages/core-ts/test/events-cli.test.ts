@@ -9,7 +9,6 @@ import { z } from "zod";
 import { defineApp, defineCapability, defineEvent, ok, runCli } from "../src/index.ts";
 import { sensorOptions, Sensors, sensorsApp, toJsonSchema } from "./sensors.ts";
 
-/** Wait until a condition is true, or fail after one second. */
 async function until(condition: () => boolean): Promise<void> {
   const end = Date.now() + 1000;
   while (!condition()) {
@@ -18,13 +17,11 @@ async function until(condition: () => boolean): Promise<void> {
   }
 }
 
-/** The member `key` of a JSON text that is an object. */
 function memberOf(text: string, key: string): unknown {
   const value: unknown = JSON.parse(text);
   return isJsonObject(value) ? value[key] : undefined;
 }
 
-/** Run the command line of the sensors in this process, and keep what it writes. */
 function commandLine(args: readonly string[], sensors = new Sensors(), signal?: AbortSignal) {
   const out: string[] = [];
   const err: string[] = [];
@@ -139,9 +136,7 @@ test("watch --cursor and --max-age-ms resume the subscription", async () => {
   sensors.emit("kitchen", 19);
   sensors.emit("hall", 25);
   const controller = new AbortController();
-  // After cursor 0: readings 1 and 2. With --room kitchen, only reading 1.
   const flags = commandLine(["watch", "sensor.reading.changed", "--room", "kitchen", "--cursor", "0"], sensors, controller.signal);
-  // The flags can also have the form --name=value. maxAgeMs skips the old reading 0, so reading 1 is truncated.
   const json = commandLine(["watch", "sensor.reading.changed", "--cursor=-1", "--max-age-ms=1000"], sensors, controller.signal);
   await until(() => flags.out.length === 1 && json.out.length === 2);
   controller.abort();
@@ -164,7 +159,6 @@ test("watch takes the resume flags after JSON text, and rejects a --max-age-ms t
   await until(() => json.out.length === 1);
   controller.abort();
   assert.equal(await json.code, 130);
-  // The threshold event reads only new readings: the cursor is passed, and the provider ignores it.
   assert.equal(memberOf(json.out[0] ?? "", "cursor"), "2");
 
   for (const value of ["soon", "-5", "1.5", ""]) {

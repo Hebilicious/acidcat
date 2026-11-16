@@ -9,7 +9,6 @@ import { countedFixtureLayer, fixture, fixtureLayer, heldApp, recordingApp } fro
 const ORIGIN = "https://fixture.example";
 const handler = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] });
 
-/** One MCP request in the stateless 2026-07-28 revision. */
 function mcpRequest(method: string, params: object = {}, name?: string) {
   const headers = new Headers({
     Accept: "application/json, text/event-stream",
@@ -26,7 +25,6 @@ function mcpRequest(method: string, params: object = {}, name?: string) {
   });
 }
 
-/** A JSON-RPC answer. Each test decodes `result` with the schema of the method. */
 const Answer = Schema.Struct({
   result: Schema.optional(Schema.Unknown),
   error: Schema.optional(Schema.Struct({ code: Schema.Number, message: Schema.String })),
@@ -47,11 +45,9 @@ const ToolResult = Schema.Struct({
   content: Schema.NonEmptyArray(Schema.Struct({ text: Schema.String })),
 });
 
-/** The `result` of an answer, decoded with `schema`. */
 const resultOf = <S extends Schema.Decoder<unknown>>(schema: S, answer: typeof Answer.Type): S["Type"] =>
   Schema.decodeUnknownSync(schema)(answer.result);
 
-/** The JSON-RPC answer of a response. */
 const answerOf = async (response: Response) => Schema.decodeUnknownSync(Answer)(await response.json());
 
 async function mcp(method: string, params: object = {}, name?: string) {

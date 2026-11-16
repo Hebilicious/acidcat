@@ -1,8 +1,3 @@
-/**
- * The time of the server: the current time, and timers. Poll leases and webhook subscriptions use it, so that a test
- * can control the time.
- */
-
 export interface Clock {
   /** The current time, in milliseconds since the epoch. */
   readonly now: () => number;
@@ -10,7 +5,6 @@ export interface Clock {
   readonly schedule: (callback: () => void, ms: number) => () => void;
 }
 
-/** The clock of the system: `Date.now` and `setTimeout`. */
 export const systemClock: Clock = {
   now: () => Date.now(),
   schedule: (callback, ms) => {

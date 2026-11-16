@@ -9,10 +9,8 @@ import { GraphQLInt, GraphQLObjectType, GraphQLSchema, GraphQLString, parse, sub
 import { App, Event, Handles, Session } from "../src/index.ts";
 import { counted, events, Feed, feedForPromises, feedLayer, following, publish, resumed, ticked } from "./events-fixture.ts";
 
-/** Run a program with the services of the fixture. */
 const run = <A, E>(program: Effect.Effect<A, E, Feed | Scope.Scope>) => Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(feedLayer)));
 
-/** The call failure that a subscription fails with before it starts. */
 const startFailure = <A>(start: Effect.Effect<A, Session.CallFailed, Scope.Scope>) =>
   Effect.flip(start).pipe(Effect.map(({ kind, message }) => ({ kind, message })));
 
@@ -184,7 +182,6 @@ test("a slow client loses the oldest occurrences, and the next one it reads has 
       const stream = yield* session.follow(ticked, {});
       yield* following(1);
       for (const count of [1, 2, 3, 4, 5]) yield* publish({ room: "a", count });
-      // Let the provider give all the ticks before the client reads.
       yield* Effect.sleep(50);
       const fiber = yield* Effect.forkChild(Stream.runCollect(Stream.take(stream, 3)));
       yield* Effect.sleep(10);
@@ -224,14 +221,12 @@ test("a defect of the provider, or a payload that does not agree, ends the subsc
   assert.doesNotMatch(bad.failure.value.message, /secret/);
 });
 
-/** The handle of an id. The handle must exist. */
 const eventHandle = (handles: ReadonlyMap<string, Handles.EventHandle>, id: string) => {
   const handle = handles.get(id);
   assert.ok(handle, `there is a handle for ${id}`);
   return handle;
 };
 
-/** The call failure that a promise rejects with. */
 const rejected = (promise: Promise<unknown>) =>
   promise.then(
     () => assert.fail("the promise must reject"),

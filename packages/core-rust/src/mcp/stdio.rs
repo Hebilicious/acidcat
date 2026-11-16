@@ -23,12 +23,8 @@ use crate::app::Application;
 use crate::remote::KEEPALIVE;
 use crate::session::{DEFAULT_BUFFER_LIMIT, Session};
 
-/// The number of lines that wait for standard output. When the client stops reading, the queue fills, and the tasks
-/// that write wait. Then each subscription stops reading its occurrences, and its bounded buffer drops the oldest ones
-/// and marks the next one `truncated` (spec/events.md#slow-clients).
 const OUTPUT_QUEUE: usize = 64;
 
-/// The settings of the MCP binding through stdio.
 #[derive(Clone, Debug)]
 pub struct McpStdioOptions {
     pub name: String,
@@ -145,7 +141,6 @@ pub async fn run_stdio<C, R, W>(
         }
     }
 
-    // Standard input ended: close the session, stop the leases, and cancel the calls in progress.
     server.leases.close();
     server
         .listens
@@ -174,7 +169,6 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// The ids of the available tools, as one string, to compare two sets.
 fn available_ids<C: Send + Sync + 'static>(session: &Session<C>) -> String {
     session
         .capability_ids()
@@ -189,29 +183,22 @@ fn available_ids<C: Send + Sync + 'static>(session: &Session<C>) -> String {
         .join("\n")
 }
 
-/// The state of the one session of the process.
 struct Server<C> {
     session: Session<C>,
     open: OpenSession<C>,
     leases: Arc<PollLeases>,
     instructions: Option<String>,
     options: McpStdioOptions,
-    /// The queue of standard output. A send waits while the queue is full.
     sender: mpsc::Sender<String>,
-    /// The calls in progress, by the JSON of the request id. `notifications/cancelled` cancels them.
     calls: Mutex<HashMap<String, CancellationToken>>,
-    /// The `events/stream` requests in progress, by the JSON of the request id.
     streams: Mutex<HashMap<String, CancellationToken>>,
-    /// The ids of the open `subscriptions/listen` requests that asked for tool list changes.
     listens: Mutex<HashSet<String>>,
-    /// True after the `initialize` handshake: the client then gets `notifications/tools/list_changed`.
     initialized: AtomicBool,
     listed: Mutex<String>,
     tasks: TaskTracker,
 }
 
 impl<C: Send + Sync + 'static> Server<C> {
-    /// Write one message to standard output. It waits while the queue of standard output is full.
     async fn send(&self, message: &Value) {
         let _ = self.sender.send(format!("{message}\n")).await;
     }
@@ -220,15 +207,12 @@ impl<C: Send + Sync + 'static> Server<C> {
         self.send(&response(id, answer)).await;
     }
 
-    /// Answer a line that is not a request, in a task, so that the reader of standard input never waits for standard
-    /// output.
     fn reject(self: &Arc<Self>, error: RpcError) {
         let server = self.clone();
         self.tasks
             .spawn(async move { server.answer(&Value::Null, Err(error)).await });
     }
 
-    /// Read one line of standard input. An empty line is ignored. The reader does not wait: each request runs in a task.
     fn receive(self: &Arc<Self>, line: &str) {
         if line.trim().is_empty() {
             return;
@@ -261,7 +245,7 @@ impl<C: Send + Sync + 'static> Server<C> {
             .and_then(Value::as_str)
             .map(str::to_owned)
         else {
-            // A response of the client. The server sends no requests, so it reads none.
+            // A JSON-RPC response of the client. The server sends no requests, so it reads none.
             if id.is_none() {
                 self.reject(RpcError::new(-32600, "A message must have a method."));
             }
@@ -270,8 +254,6 @@ impl<C: Send + Sync + 'static> Server<C> {
         let Some(id) = id else {
             return self.notification(&method, &params);
         };
-        // Register the token of a call or a stream now, before the task starts, so that a `notifications/cancelled`
-        // on the next line finds it.
         let token = CancellationToken::new();
         let registry = self.registry(&method).filter(|_| !id.is_null());
         if let Some(registry) = registry {
@@ -287,7 +269,6 @@ impl<C: Send + Sync + 'static> Server<C> {
         });
     }
 
-    /// The map of the requests that `notifications/cancelled` can cancel, for a method that has one.
     fn registry(&self, method: &str) -> Option<&Mutex<HashMap<String, CancellationToken>>> {
         match method {
             "tools/call" => Some(&self.calls),
@@ -329,8 +310,6 @@ impl<C: Send + Sync + 'static> Server<C> {
             .remove(&key);
     }
 
-    /// Answer one request. `token` is cancelled by `notifications/cancelled` for a `tools/call` or an `events/stream`
-    /// request.
     async fn request(
         self: &Arc<Self>,
         id: Value,
@@ -432,9 +411,6 @@ impl<C: Send + Sync + 'static> Server<C> {
         self.answer(&id, Err(error)).await;
     }
 
-    /// An `events/stream` request: the messages of the subscription go to standard output. `notifications/cancelled`
-    /// with the id of the request cancels `token`, and then the server sends nothing more for it. While standard output
-    /// is full, the stream reads no occurrences, so the buffer of the subscription fills and drops the oldest ones.
     async fn stream(
         &self,
         id: Value,
@@ -471,7 +447,6 @@ impl<C: Send + Sync + 'static> Server<C> {
         }
     }
 
-    /// The `initialize` handshake. The server selects the revision of the client if it serves it, or else its latest.
     async fn initialize(&self, id: &Value, params: &Map<String, Value>) {
         let offered = params.get("protocolVersion").and_then(Value::as_str);
         let version = HANDSHAKE_VERSIONS
@@ -490,8 +465,8 @@ impl<C: Send + Sync + 'static> Server<C> {
         self.initialized.store(true, Ordering::SeqCst);
     }
 
-    /// A `subscriptions/listen` request of revision 2026-07-28. The server honors only tool list changes. The request
-    /// stays open until the client cancels it or standard input ends, so the server never answers it.
+    /// A `subscriptions/listen` request of MCP revision 2026-07-28 stays open until the client cancels it or standard
+    /// input ends, so the server never answers it.
     async fn listen(&self, id: &Value, params: &Map<String, Value>) {
         let tools = params
             .get("notifications")
@@ -512,7 +487,6 @@ impl<C: Send + Sync + 'static> Server<C> {
         }
     }
 
-    /// Tell the client when the set of available tools changes.
     async fn announce(&self) {
         let next = available_ids(&self.session);
         {

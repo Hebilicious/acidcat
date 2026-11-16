@@ -1,7 +1,3 @@
-/**
- * An application: its targets, its capabilities and its events. The application writes its own catalog, so the code is the
- * source and the catalog is checked at build time. See spec/catalog.md#build-time-and-run-time.
- */
 import { canonicalText } from "@acid-cat/catalog";
 import { objectInput, REFERENCE } from "@acid-cat/spec-ts";
 import type { CatalogCapability, CatalogDocument, CatalogEvent, JsonObject } from "@acid-cat/spec-ts";
@@ -26,19 +22,15 @@ export interface App<R = never> {
   readonly events?: readonly Event.Any<R>[] | undefined;
 }
 
-/** The services of all the capabilities and all the events of an application. */
 export type Services<Capabilities extends readonly Capability.Any[], Events extends readonly Event.Any[]> =
   | Capability.Services<Capabilities[number]>
   | Event.Services<Events[number]>;
 
-/** Declare an application. */
 export const make = <const Capabilities extends readonly Capability.Any[], const Events extends readonly Event.Any[] = readonly []>(app: {
   readonly title?: string;
   readonly description?: string;
   readonly targets: { readonly [name: string]: Target };
-  /** Each capability needs only the services of the application, so the intersection accepts the same values. */
   readonly capabilities: Capabilities & readonly Capability.Any<Services<Capabilities, Events>>[];
-  /** Each event needs only the services of the application, so the intersection accepts the same values. */
   readonly events?: Events & readonly Event.Any<Services<Capabilities, Events>>[];
 }): App<Services<Capabilities, Events>> => app;
 
@@ -129,7 +121,6 @@ function write(app: App<unknown>): CatalogDocument {
   };
 }
 
-/** `true` if a schema is an object: `"type": "object"`, or a reference to a type that is an object (spec/catalog.md#events). */
 function isObjectSchema(schema: JsonObject, types: { readonly [name: string]: JsonObject }): boolean {
   const name = typeof schema.$ref === "string" ? REFERENCE.exec(schema.$ref)?.[1] : undefined;
   const resolved = name === undefined ? schema : types[name];
@@ -153,8 +144,7 @@ function tagOf(schema: JsonObject, types: { readonly [name: string]: JsonObject 
 /**
  * Effect writes an empty `Schema.Struct({})` as "not null", because an empty TypeScript object type accepts almost
  * any value. A catalog input is always an object, so write it as one. An empty struct is an input with no properties,
- * so it gets an empty `properties` (spec/catalog.md#capabilities). Other schemas that Effect writes as "not null"
- * take any object.
+ * so it gets an empty `properties` (spec/catalog.md#capabilities).
  */
 function inputSchema(input: Schema.Top, json: JsonObject): JsonObject {
   const notNull = Object.keys(json).length === 1 && JSON.stringify(json.not) === JSON.stringify({ type: "null" });

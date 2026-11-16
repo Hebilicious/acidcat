@@ -1,8 +1,3 @@
-/**
- * The core with the kettle of `kettle.ts`: the catalog it writes, named types, state, typed handles, availability and
- * the command line. `moon run core-ts:typecheck` checks this file: each `@ts-expect-error` marks a program that the
- * types must reject.
- */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -14,7 +9,6 @@ import type { Result } from "../src/index.ts";
 import { boil, descale, fill, Kettle, kettle, statusGet, toJsonSchema, warmSet } from "./kettle.ts";
 import type { Status } from "./kettle.ts";
 
-/** A kettle with water in it. */
 function filledKettle(litres = 1): Kettle {
   const filled = new Kettle();
   filled.change({ litres });
@@ -167,7 +161,6 @@ test("session.handle gives a handle with the types of its capability", async () 
   assert.deepEqual(value, { ok: true, value: snapshot });
   assert.equal(snapshot?.keepWarm, "white-tea");
 
-  // These calls do not run. `moon run core-ts:typecheck` checks that each one is an error.
   const wrongCalls = (boiled: Result<{ celsius: number }, { readonly _tag: "Empty" }>) => {
     void [
     // @ts-expect-error The input of kettle.fill has `litres`, a number.

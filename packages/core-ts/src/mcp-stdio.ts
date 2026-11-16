@@ -1,7 +1,3 @@
-/**
- * The MCP binding through standard input and standard output (spec/bindings/mcp.md#stdio). The process is one session.
- * The server serves revision 2026-07-28, and the `initialize` handshake of revisions 2025-11-25 and 2025-06-18.
- */
 import { isJsonObject, KEEPALIVE_MS, MCP_PROTOCOL_VERSION, MCP_UNKNOWN_TOOL, mcpToolResult } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
@@ -20,7 +16,6 @@ export interface McpStdioOptions<Context> {
   readonly version: string;
   /** Guidance for a model about the whole server. The default is the description of the application. */
   readonly instructions?: string | undefined;
-  /** The context of the session. */
   readonly context: Context;
   readonly toJsonSchema: ToJsonSchema;
   /** The target that the server serves. The default is `"mcp"`. */
@@ -34,7 +29,7 @@ export interface McpStdioOptions<Context> {
    * has a session of its own with `context`. The leases have no identity, because the process serves one client.
    */
   readonly poll?: PollOptions | undefined;
-  /** The clock of the poll leases. The default is the clock of the system. Tests give a clock that they control. */
+  /** The clock of the poll leases. The default is the clock of the system. */
   readonly clock?: Clock | undefined;
 }
 
@@ -45,7 +40,6 @@ export interface McpStdioIo {
   readonly write: (text: string) => void;
 }
 
-/** The revisions with an `initialize` handshake that the server serves, the latest first. */
 const HANDSHAKE_VERSIONS = ["2025-11-25", "2025-06-18"] as const;
 
 const SUPPORTED_VERSIONS = [MCP_PROTOCOL_VERSION, ...HANDSHAKE_VERSIONS];
@@ -55,7 +49,6 @@ const SUBSCRIPTION_ID_KEY = "io.modelcontextprotocol/subscriptionId";
 
 type Id = string | number;
 
-/** The members of a JSON-RPC message that the server reads. */
 interface Message {
   readonly id: Id | null | undefined;
   readonly method: string | undefined;
@@ -114,7 +107,6 @@ export function main<Context>(app: App<Context>, options: McpStdioOptions<Contex
   void runMcpStdio(app, options, { input: process.stdin, write: (text) => process.stdout.write(text) });
 }
 
-/** The lines of a stream of bytes or text, without their line ends. */
 async function* lines(input: AsyncIterable<string | Uint8Array>): AsyncGenerator<string> {
   const decoder = new TextDecoder();
   let rest = "";
@@ -128,7 +120,6 @@ async function* lines(input: AsyncIterable<string | Uint8Array>): AsyncGenerator
   if (rest !== "") yield rest;
 }
 
-/** The information that the server gives about itself. */
 interface ServerInfo {
   readonly name: string;
   readonly version: string;
@@ -136,21 +127,13 @@ interface ServerInfo {
   readonly heartbeatMs: number;
 }
 
-/** The state of the one session of the process: the requests in progress, the subscriptions, and the handshake. */
 class StdioServer {
   readonly #session: Session;
   readonly #options: ServerInfo;
   readonly #write: (text: string) => void;
-  /** The calls in progress, by request id. `notifications/cancelled` aborts them. */
   readonly #calls = new Map<Id, AbortController>();
-  /**
-   * The `events/stream` requests in progress, by request id. `notifications/cancelled` aborts them. When the session
-   * closes, their subscriptions end as complete, so they are not aborted then.
-   */
   readonly #streams = new Map<Id, AbortController>();
-  /** The work of each `events/stream` request. `close` waits for it, so that the last result is written. */
   readonly #streaming = new Set<Promise<void>>();
-  /** The open `subscriptions/listen` requests of revision 2026-07-28 that asked for tool list changes. */
   readonly #subscriptions = new Set<Id>();
   /** True after the `initialize` handshake: the client then gets `notifications/tools/list_changed` with no subscription. */
   #initialized = false;
@@ -167,7 +150,6 @@ class StdioServer {
     this.#changes = session.onChange(() => this.#announce());
   }
 
-  /** Read one line of standard input. An empty line is ignored. */
   receive(line: string): void {
     if (line.trim() === "") return;
     let body: unknown;
@@ -180,7 +162,6 @@ class StdioServer {
     if (!isJsonObject(body)) return this.#error(null, -32600, "A message must be a JSON object.");
     const message = readMessage(body);
     if (message.method === undefined) {
-      // A response of the client. The server sends no requests, so it reads none.
       if (message.id !== undefined) return;
       return this.#error(null, -32600, "A message must have a method.");
     }
@@ -188,7 +169,6 @@ class StdioServer {
     void this.#request({ ...message, id: message.id ?? null });
   }
 
-  /** Close the session: stop the subscriptions and the poll leases, and cancel the calls in progress. */
   async close(): Promise<void> {
     this.#changes.unsubscribe();
     await this.#poll.leases.close();
@@ -271,10 +251,6 @@ class StdioServer {
     return this.#error(id, -32601, `Method not found: ${method}`);
   }
 
-  /**
-   * An `events/stream` request: the messages of the subscription go to standard output. `notifications/cancelled` with
-   * the id of the request cancels it, and then the server sends nothing more for it.
-   */
   async #stream(id: Id, params: JsonObject): Promise<void> {
     const controller = new AbortController();
     this.#streams.set(id, controller);
@@ -291,12 +267,11 @@ class StdioServer {
     }
   }
 
-  /** The `_meta` of a result of revision 2026-07-28: the information about the server. */
   #serverInfo(): JsonObject {
     return { "io.modelcontextprotocol/serverInfo": { name: this.#options.name, version: this.#options.version } };
   }
 
-  /** The `initialize` handshake. The server selects the revision of the client if it serves it, or else its latest. */
+  /** The server selects the revision of the client if it serves it, or else its latest. */
   #initialize(id: Id | null, offered: unknown): void {
     const version = HANDSHAKE_VERSIONS.find((each) => each === offered) ?? HANDSHAKE_VERSIONS[0];
     this.#result(id, {
@@ -308,10 +283,7 @@ class StdioServer {
     this.#initialized = true;
   }
 
-  /**
-   * A `subscriptions/listen` request of revision 2026-07-28. The server honors only tool list changes. The request
-   * stays open until the client cancels it or standard input ends, so the server never answers it.
-   */
+  /** The request stays open until the client cancels it or standard input ends, so the server never answers it. */
   #listen(id: Id | null, params: JsonObject): void {
     const wanted = params["notifications"];
     const tools = isJsonObject(wanted) && wanted["toolsListChanged"] === true && id !== null;
@@ -341,7 +313,6 @@ class StdioServer {
     }
   }
 
-  /** The ids of the available tools, as one string, to compare two sets. */
   #availableIds(): string {
     return [...this.#session.handles.values()]
       .filter((handle) => handle.availability.getSnapshot().available)
@@ -349,7 +320,6 @@ class StdioServer {
       .join("\n");
   }
 
-  /** Tell the client when the set of available tools changes. */
   #announce(): void {
     const next = this.#availableIds();
     if (next === this.#listed) return;

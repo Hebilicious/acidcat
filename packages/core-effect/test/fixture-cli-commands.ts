@@ -1,7 +1,3 @@
-/**
- * The fixture's command line with a command of the application, `position`, and its own description. `position` uses
- * the services of the capabilities and takes an argument.
- */
 import { Console, Effect, SubscriptionRef } from "effect";
 import { Argument, Command } from "effect/cli";
 

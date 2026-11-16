@@ -1,7 +1,3 @@
-/**
- * The services of each request: the HTTP and MCP bindings build them from the head of the request, a capability reads
- * the caller from them and the target from its session, and a refusal answers the request instead.
- */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -11,7 +7,6 @@ import { App, Capability, Event, Http, Mcp, Remote, Session } from "../src/index
 import { decodeBody } from "./decode.ts";
 import { json, mcpRequest, ORIGIN } from "./mcp-client.ts";
 
-/** Who calls. The layer builds it for each request, from the token of the request. */
 class Caller extends Context.Service<Caller, { readonly name: string }>()("request-services/Caller") {}
 
 const Who = Schema.Struct({ caller: Schema.String, target: Schema.String });
@@ -41,10 +36,6 @@ const app = App.make({
   events: [targeted],
 });
 
-/**
- * Build the caller from `Authorization: Bearer <name>`, or refuse the request with 401. `counts` tells how many callers
- * were built and released.
- */
 function callerLayer() {
   const counts = { built: 0, released: 0 };
   const layer = Layer.effect(

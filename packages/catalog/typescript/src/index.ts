@@ -1,10 +1,3 @@
-/**
- * Write an AcidCat catalog in TypeScript, and render it to the JSON document the toolchain checks.
- *
- * This is an authoring library, not a runtime: a program uses it to produce `acidcat.catalog.json`, and nothing
- * reads the catalog through it at runtime. See spec/catalog.md.
- */
-
 import { canonicalText } from "./canonical.ts";
 
 export { canonicalText } from "./canonical.ts";
@@ -66,7 +59,6 @@ export class Catalog {
     this.#description = options.description;
   }
 
-  /** Declare a target. */
   target(name: string, options: TargetOptions): this {
     if (this.#targets.has(name)) throw new Error(`The target ${name} is declared twice`);
     this.#targets.set(name, options);
@@ -80,14 +72,12 @@ export class Catalog {
     return { $ref: `#/$defs/${name}` };
   }
 
-  /** Declare a capability. */
   capability(id: string, options: CapabilityOptions): this {
     if (this.#capabilities.has(id)) throw new Error(`The capability ${id} is declared twice`);
     this.#capabilities.set(id, options);
     return this;
   }
 
-  /** Declare an event (spec/events.md). */
   event(id: string, options: EventOptions): this {
     if (this.#events.has(id)) throw new Error(`The event ${id} is declared twice`);
     this.#events.set(id, options);
@@ -137,7 +127,6 @@ export class Catalog {
     return problems;
   }
 
-  /** The problems of the id, the description, the audience and the input of a capability or an event. */
   #entryProblems(id: string, entry: { readonly description: string; readonly audience?: readonly string[]; readonly input?: Schema }): string[] {
     const problems: string[] = [];
     if (id.length > 128 || !ID.test(id)) problems.push(`the id ${id} is malformed`);
@@ -231,10 +220,8 @@ function compact(value: Record<string, unknown>): Schema {
   return Object.fromEntries(Object.entries(value).filter(([, member]) => member !== undefined));
 }
 
-/** Tell if a value is an object that is not `null`. Each of its members is read as `unknown`. */
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => value !== null && typeof value === "object";
 
-/** Tell if a value is a JSON object: an object that is not `null` and not an array. */
 const isJsonObject = (value: unknown): value is Schema => isRecord(value) && !Array.isArray(value);
 
 function visit(value: unknown, onObject: (node: Readonly<Record<string, unknown>>) => void): void {

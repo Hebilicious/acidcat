@@ -19,7 +19,6 @@ after(async () => {
   await api.dispose();
 });
 
-/** The official MCP client, with revision 2026-07-28. */
 async function connect(path: string): Promise<Client> {
   const client = new Client({ name: "example-test", version: "0.0.0" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
   await client.connect(new StreamableHTTPClientTransport(new URL(`${served.url}${path}`)));
@@ -62,7 +61,6 @@ test("the MCP binding serves one tool for each capability, on the same unit", as
     "aircon.temperature.set",
   ]);
   const status = await binding.callTool({ name: "aircon.status.get", arguments: {} });
-  // The first test changed the power, the mode and the target temperature of the same unit.
   assert.deepEqual(status.structuredContent, { power: true, mode: "heat", fan: "high", targetCelsius: 24, roomCelsius: 25 });
 });
 
@@ -87,9 +85,6 @@ test("the MCP binding serves revision 2026-07-28 only, and the wrapped binding s
   await current.close();
 });
 
-// --- Events of the server of the application -----------------------------------------------------------------------
-
-/** Wait until a condition is true, or fail after five seconds. */
 async function until(what: string, condition: () => boolean): Promise<void> {
   const end = Date.now() + 5000;
   while (!condition()) {
@@ -98,7 +93,6 @@ async function until(what: string, condition: () => boolean): Promise<void> {
   }
 }
 
-/** A JSON-RPC message, with the members that the tests read. */
 const Message = z.looseObject({
   id: z.union([z.string(), z.number()]).optional(),
   method: z.string().optional(),
@@ -107,7 +101,6 @@ const Message = z.looseObject({
   error: z.looseObject({ code: z.number() }).optional(),
 });
 
-/** One request of the events extension to the server of the application, with the headers of revision 2026-07-28. */
 function eventsRequest(id: string, method: string, params: Record<string, unknown>, signal?: AbortSignal) {
   return fetch(`${served.url}/mcp`, {
     method: "POST",
@@ -123,7 +116,6 @@ function eventsRequest(id: string, method: string, params: Record<string, unknow
   });
 }
 
-/** The JSON-RPC messages of a stream of server-sent events, one at a time. */
 function sseMessages(response: Response) {
   assert.ok(response.body);
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();

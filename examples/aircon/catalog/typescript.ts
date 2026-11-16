@@ -1,4 +1,3 @@
-/** The air-conditioner catalog of `aircon.pkl`, written with the TypeScript catalog library. Run it to write the catalog. */
 import { Catalog, type Schema } from "@acid-cat/catalog";
 
 export function airconCatalog(): Catalog {

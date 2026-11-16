@@ -1,4 +1,3 @@
-/// An air conditioner that can be controlled over Wi-Fi, described once and served to every surface.
 amends "../../../packages/catalog/pkl/Catalog.pkl"
 
 title = "Living-room air conditioner"
@@ -57,13 +56,11 @@ types {
   }
 }
 
-/// An hour of the day, from 0 to 23.
 local hour = new Dynamic { type = "integer"; minimum = 0; maximum = 23 }
 
 local everywhere = new Listing { "app"; "taskbar"; "cli"; "mcp"; "api" }
 local controls = new Listing { "app"; "cli"; "mcp"; "api" }
 
-/// A command that takes one required input property.
 local function setting(text: String, name: String, property: Dynamic) = new Capability {
   description = text
   audience = controls

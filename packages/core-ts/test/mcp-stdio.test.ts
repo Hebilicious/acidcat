@@ -4,7 +4,6 @@ import { test } from "node:test";
 import { runMcpStdio } from "../src/index.ts";
 import { fixture, options } from "./fixture.ts";
 
-/** Standard input that the test writes line by line, and then ends. */
 function lines() {
   const queue: string[] = [];
   let ended = false;

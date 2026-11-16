@@ -1,14 +1,9 @@
-/**
- * Poll leases (spec/bindings/mcp.md#poll): the answer to `events/poll`. A lease holds one subscription, in a session of
- * its own, and a buffer of its occurrences. The leases live in the scope of the server, not in the scope of a request.
- */
 import { canonicalJson, decodePollCursor, encodePollCursor, MCP_EVENT_ERRORS, MCP_POLL_DEFAULTS, mcpSubscribeError } from "@acid-cat/spec-ts";
 import type { JsonObject, Occurrence, Resume } from "@acid-cat/spec-ts";
 import { Clock, Effect, Exit, Fiber, Option, Scope, Semaphore, Stream } from "effect";
 
 import type * as Session from "../Session.ts";
 
-/** The settings of poll delivery. Each one has the default of the specification. */
 export interface PollOptions {
   /** The time in milliseconds after the last poll at which a lease ends, and its subscription is cancelled. The default is 300 000. */
   readonly leaseMs?: number | undefined;
@@ -20,10 +15,8 @@ export interface PollOptions {
   readonly nextPollMs?: number | undefined;
 }
 
-/** Open a session in a scope, with the services of the request that starts a lease or a webhook subscription. */
 export type Opener<R> = (scope: Scope.Scope) => Effect.Effect<Session.Session<R>>;
 
-/** The params of `events/poll`, after they are decoded. */
 export interface PollParams {
   readonly name: string;
   readonly input: unknown;
@@ -32,14 +25,12 @@ export interface PollParams {
   readonly maxEvents: number | undefined;
 }
 
-/** The result of a poll, or a JSON-RPC error. */
 export type PollAnswer = { readonly result: JsonObject } | { readonly error: { readonly code: number; readonly message: string; readonly data?: JsonObject } };
 
 export interface Polls {
   readonly poll: <R>(params: PollParams, principal: Option.Option<string>, open: Opener<R>) => Effect.Effect<PollAnswer>;
 }
 
-/** One occurrence in the buffer of a lease, at its position, with the last cursor of the provider at that position. */
 interface Entry {
   readonly position: number;
   readonly provider: string | undefined;
@@ -50,18 +41,15 @@ interface Lease {
   readonly id: string;
   readonly key: string;
   readonly scope: Scope.Closeable;
-  /** The cursor of the provider at position 0: the cursor that the subscription resumed after, if any. */
   readonly startProvider: string | undefined;
   readonly entries: Entry[];
   newest: number;
   newestProvider: string | undefined;
-  /** The message of the call failure `internal`, when the subscription ended with it. */
   failure: string | undefined;
   expiresAt: number;
   worker: Fiber.Fiber<void> | undefined;
 }
 
-/** The leases of a server, while the scope is open. When the scope closes, each lease ends. */
 export const makePolls = (options: PollOptions = {}): Effect.Effect<Polls, never, Scope.Scope> =>
   Effect.gen(function* () {
     const leaseMs = options.leaseMs ?? MCP_POLL_DEFAULTS.leaseMs;
@@ -90,7 +78,6 @@ export const makePolls = (options: PollOptions = {}): Effect.Effect<Polls, never
     });
     const renew = (lease: Lease) => Effect.map(Clock.currentTimeMillis, (now) => void (lease.expiresAt = now + leaseMs));
 
-    /** Wait until the lease gets no poll for the lease time. */
     const expiry = (lease: Lease) =>
       Effect.gen(function* () {
         for (;;) {
@@ -100,7 +87,6 @@ export const makePolls = (options: PollOptions = {}): Effect.Effect<Polls, never
         }
       });
 
-    /** Keep each occurrence of the subscription in the buffer of the lease. */
     const consume = (lease: Lease, subscription: Session.Subscription<unknown>) =>
       Stream.runForEach(subscription, (occurrence) =>
         Effect.sync(() => {
@@ -111,11 +97,9 @@ export const makePolls = (options: PollOptions = {}): Effect.Effect<Polls, never
         }),
       ).pipe(
         Effect.catchTag("CallFailed", (failure) => Effect.sync(() => void (lease.failure = failure.message))),
-        // A complete subscription keeps its buffer until the lease ends.
         Effect.andThen(Effect.never),
       );
 
-    /** Start a lease with a new subscription in a session of its own. A failure before the first occurrence starts no lease. */
     const start = <R>(key: string, params: PollParams, resume: Resume, open: Opener<R>): Effect.Effect<Lease | PollAnswer> =>
       Effect.gen(function* () {
         const scope = yield* Scope.make();
@@ -182,11 +166,9 @@ export const makePolls = (options: PollOptions = {}): Effect.Effect<Polls, never
             );
           }
           if (lease !== undefined) {
-            // A cursor of another lease, for a key that has a lease: the client can have missed occurrences.
             yield* renew(lease);
             return result([], newestCursor(lease), true, false);
           }
-          // No lease. A cursor of a lease that ended resumes after the last cursor of the provider in it.
           const provider = decoded?.provider;
           const resume: Resume =
             provider === undefined ? {} : { cursor: provider, ...(params.maxAgeMs === undefined ? {} : { maxAgeMs: params.maxAgeMs }) };

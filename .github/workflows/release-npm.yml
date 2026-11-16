@@ -1,12 +1,8 @@
 name: Release npm
 
-# Publish the npm packages at the version of the tag `npm/v<version>`.
-# release.yml starts this workflow after a release. A tag pushed by hand on main also starts it.
-# npm authenticates this workflow with trusted publishing, and adds provenance to each package.
 on:
   push:
     tags: ["npm/v*"]
-  # Run it by hand on a tag to publish that release again.
   workflow_dispatch:
 
 permissions:
@@ -32,7 +28,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The caches that CI writes on `main`: the Rust and Go builds, and Chromium. The release only reads them.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: |
@@ -52,12 +47,10 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      # When the cache has no Chromium, install it with the system libraries that it needs. The runner image already has
-      # these libraries.
+      # The runner image already has the system libraries that Chromium needs.
       - if: steps.browsers.outputs.cache-hit != 'true'
         run: pnpm --dir packages/cli exec playwright install --with-deps chromium
 
-      # `verify` also builds the packages, and tests them as they are installed from their tarballs.
       - run: moon run verify
 
       - run: node scripts/publish-npm.ts --version "${GITHUB_REF_NAME#npm/v}"

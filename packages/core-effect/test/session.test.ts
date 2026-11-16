@@ -9,13 +9,11 @@ import { Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream, SubscriptionR
 import { App, Capability, Session } from "../src/index.ts";
 import { echo, fixture, fixtureLayer, hidden, position, refuse, Switch } from "./fixture.ts";
 
-/** Run a test with a session for a target, and the fixture's services. */
 const withSession = <A, E>(target: string, body: (session: Session.Session) => Effect.Effect<A, E, Switch | Scope.Scope>) =>
   Effect.runPromise(
     Effect.scoped(Effect.flatMap(Session.make(fixture, { target }), body)).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
   );
 
-/** The capability of a catalog with an id. It must exist. */
 function capabilityIn(document: CatalogDocument, id: string) {
   const capability = document.capabilities[id];
   assert.ok(capability !== undefined, `The catalog has no capability ${id}.`);
@@ -143,7 +141,6 @@ test("execute puts failures and call failures in the error channel", () =>
     }),
   ));
 
-/** The kind of the call failure in the error channel of a typed call. */
 const callFailureKind = (error: unknown) => {
   assert.ok(error instanceof Session.CallFailed);
   return error.kind;

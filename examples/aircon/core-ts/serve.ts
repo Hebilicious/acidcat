@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-/**
- * The air conditioner as a server: the HTTP binding of the target `cli` at `/cli`, for the command line on another
- * machine. `node core-ts/serve.ts [host:port]` listens on the address, by default on 127.0.0.1 with a free port, and
- * writes the base URL on standard output. Then `AIRCON_URL=<url> node core-ts/cli.ts aircon status get` controls the
- * unit of this server.
- */
 import { httpHandler } from "@acid-cat/core-ts";
 import { serve } from "@acid-cat/core-ts/node";
 import { aircon, toJsonSchema, Unit } from "./aircon.ts";

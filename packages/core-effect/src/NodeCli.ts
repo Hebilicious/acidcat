@@ -1,6 +1,3 @@
-/**
- * Run the CLI binding as the main program of a Node.js process.
- */
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect, Layer } from "effect";
@@ -16,10 +13,6 @@ import * as Cli from "./Cli.ts";
  */
 const afterInterruptHandlers = <A, E, R>(program: Effect.Effect<A, E, R>) => Effect.andThen(Effect.yieldNow, program);
 
-/**
- * Run the command line as the main program of the process. `layer` gives the services of the capabilities, and of the
- * commands of the application.
- */
 export function main<R, E, const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(
   app: App.App<R>,
   layer: Layer.Layer<R | Command.Services<Commands[number]>, E>,
@@ -28,10 +21,6 @@ export function main<R, E, const Commands extends ReadonlyArray<Command.Command.
   Cli.run(app, options).pipe(Effect.provide(Layer.merge(layer, NodeServices.layer)), afterInterruptHandlers, NodeRuntime.runMain);
 }
 
-/**
- * Run a command that `Cli.command` made and the application changed, as the main program of the process. The command
- * must already have the services of the capabilities, for example from `Command.provide`. See `Cli.runCommand`.
- */
 export function runCommand<Name extends string, Input, ContextInput, E>(
   command: Command.Command<Name, Input, ContextInput, E, Command.Environment>,
   options: { readonly version: string },

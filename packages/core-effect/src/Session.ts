@@ -1,7 +1,3 @@
-/**
- * A session: the context of the calls and the subscriptions of one client, for one target. See spec/invocation.md and
- * spec/events.md.
- */
 import { AVAILABLE, callFailure, occurrenceOf, viewOf } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CatalogDocument, Occurrence, Outcome, Resume } from "@acid-cat/spec-ts";
 import { Cause, Context, Data, Effect, Exit, Fiber, FiberSet, Queue, Ref, Schema, Scope, Stream, SubscriptionRef } from "effect";
@@ -20,37 +16,23 @@ import { register } from "./internal/served.ts";
  */
 export const Target: Context.Reference<string> = Context.Reference<string>("@acid-cat/core-effect/Session/Target", { defaultValue: () => "" });
 
-/** A call failure in the error channel of `execute`. */
 export class CallFailed extends Data.TaggedError("CallFailed")<CallFailure> {}
 
-/**
- * The part of a capability that a typed call with a decoded input uses: its id and its operation. Each `Capability` is
- * an `Executable` with the types of its schemas.
- */
 export interface Executable<Input, Value, Failure, R> {
   readonly id: string;
   readonly run: (input: Input) => Effect.Effect<Value, Failure, R>;
 }
 
-/**
- * The part of a capability that a typed call with an input that is not trusted uses: its id, and the decoding of its
- * input. Each `Capability` is a `Preparable` with the types of its schemas.
- */
 export interface Preparable<Value, Failure, R> {
   readonly id: string;
   readonly prepare: (input: unknown) => Effect.Effect<Effect.Effect<Value, Failure, R>, string>;
 }
 
-/**
- * The part of an event that a typed subscription with a decoded input uses: its id, and the check of its input. Each
- * `Event` is a `Followable` with the types of its schemas.
- */
 export interface Followable<Input, Payload, R> {
   readonly id: string;
   readonly open: (input: Input) => Effect.Effect<Event.Opener<Payload, R>, string>;
 }
 
-/** Where a subscription starts (spec/events.md#resuming). */
 export type SubscribeOptions = Resume;
 
 /**
@@ -71,10 +53,8 @@ export interface Options {
   readonly eventBuffer?: number | undefined;
 }
 
-/** The default number of occurrences of one subscription that a session keeps for a slow client. */
 export const DEFAULT_EVENT_BUFFER = 1024;
 
-/** A session of an application that needs the services `R`. */
 export interface Session<R = never> {
   readonly target: string;
   /**
@@ -82,7 +62,6 @@ export interface Session<R = never> {
    * session writes the view when it is first read.
    */
   readonly view: CatalogDocument;
-  /** The current availability of a capability in the view. */
   readonly availability: (id: string) => Effect.Effect<Availability>;
   /**
    * An event each time the availability of a capability changes, after the stream starts. The stream follows the
@@ -147,7 +126,6 @@ interface Served<R> {
 export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Session<R>, never, R | Scope.Scope> =>
   Effect.gen(function* () {
     const context = yield* Effect.context<R>();
-    /** Run an effect of the application with the services of the session and its target. */
     const inSession = <A, E>(effect: Effect.Effect<A, E, R>) =>
       effect.pipe(Effect.provideService(Target, options.target), Effect.provideContext(context));
     const scope = yield* Effect.scope;
@@ -188,7 +166,6 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
       return entry.availability === undefined ? Effect.succeed(AVAILABLE) : SubscriptionRef.get(entry.availability);
     };
 
-    /** Run a call in the session. The result is the value, the failure, or a call failure. */
     const call = <A, E>(program: Effect.Effect<A, E, R>) =>
       Effect.gen(function* () {
         const fiber = yield* FiberSet.run(running, inSession(program));
@@ -201,10 +178,6 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
         return callFailure("internal", "The capability failed.");
       });
 
-    /**
-     * Admit a call: the session is open, and the capability is in the view and available. With `object`, the capability
-     * must also be that object.
-     */
     const admit = (id: string, object?: { readonly id: string }) =>
       Effect.gen(function* () {
         if (yield* Ref.get(closed)) return callFailure("cancelled", "The session is closed.");
@@ -215,7 +188,6 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
         return entry.capability;
       });
 
-    /** Admit and run a call through the pipeline of the capability. */
     const throughPipeline = (
       id: string,
       use: (pipeline: Capability.Pipeline<R>) => Effect.Effect<unknown, Capability.PipelineError, R>,
@@ -239,7 +211,6 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
     const invoke = (id: string, input: unknown): Effect.Effect<Outcome<unknown, unknown>> =>
       throughPipeline(id, (pipeline) => pipeline.invoke(input));
 
-    /** Admit a typed call of a capability object, prepare its program, and run it. */
     const perform = <A, E>(capability: { readonly id: string }, prepared: Effect.Effect<Effect.Effect<A, E, R>, string>) =>
       Effect.gen(function* () {
         const admitted = yield* admit(capability.id, capability);
@@ -253,11 +224,6 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
     const execute: Session<R>["execute"] = (capability, input) => lift(outcome(capability, input));
     const typedCall: Session<R>["call"] = (capability, input) => lift(perform(capability, capability.prepare(input)));
 
-    /**
-     * Admit a subscription and start it: the session is open, the event is in the view, and the input agrees with the
-     * input schema. With `object`, the event must also be that object. The provider runs in a fiber of the session, so
-     * the session closing ends the subscription as complete.
-     */
     const start = <P>(
       id: string,
       object: { readonly id: string } | undefined,
@@ -277,8 +243,6 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
           ...(resume.cursor === undefined ? {} : { cursor: resume.cursor }),
           ...(resume.maxAgeMs === undefined ? {} : { maxAgeMs: resume.maxAgeMs }),
         };
-        // The occurrences that the client has not read. When the queue is full, it drops the oldest one. A gap in the
-        // sequence numbers tells the reader that occurrences were dropped.
         const queue = yield* Queue.sliding<{ readonly sequence: number; readonly occurrence: Occurrence<P> }, CallFailed | Cause.Done>(capacity);
         let sequence = 0;
         const provider = opener(where).pipe(
@@ -349,10 +313,8 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
     return session;
   });
 
-/** An `eventId` that is unique in a subscription, for an occurrence whose provider gives none. */
 const newEventId = (): string => globalThis.crypto.randomUUID();
 
-/** An outcome with its failures and call failures in the error channel. */
 const lift = <Value, Failure>(outcome: Effect.Effect<Outcome<Value, Failure>>): Effect.Effect<Value, Failure | CallFailed> =>
   Effect.gen(function* () {
     const each = yield* outcome;

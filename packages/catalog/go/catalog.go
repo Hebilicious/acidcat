@@ -1,7 +1,4 @@
 // Package catalog writes an AcidCat catalog in Go, and renders it to the JSON document the toolchain checks.
-//
-// This is an authoring library, not a runtime: a program uses it to produce acidcat.catalog.json, and nothing
-// reads the catalog through it at runtime. See spec/catalog.md.
 package catalog
 
 import (
@@ -16,7 +13,6 @@ import (
 // value.
 type Schema = map[string]any
 
-// Target says how a target is served.
 type Target struct {
 	// Bindings serve the target, such as "typescript" and "webmcp".
 	Bindings    []string
@@ -25,7 +21,6 @@ type Target struct {
 	Options Schema
 }
 
-// Capability describes one capability.
 type Capability struct {
 	// Description says what the capability does for its caller, written for people and agents.
 	Description string
@@ -43,7 +38,6 @@ type Capability struct {
 	State Schema
 }
 
-// Event describes one event (spec/events.md).
 type Event struct {
 	// Description says what happens, and when the provider sends an occurrence, written for people and agents.
 	Description string
@@ -68,7 +62,6 @@ type named[T any] struct {
 	value T
 }
 
-// Catalog is a catalog being written.
 type Catalog struct {
 	title        string
 	description  string
@@ -79,12 +72,10 @@ type Catalog struct {
 	duplicates   []string
 }
 
-// New starts a catalog.
 func New(title, description string) *Catalog {
 	return &Catalog{title: title, description: description}
 }
 
-// Target declares a target.
 func (c *Catalog) Target(name string, target Target) *Catalog {
 	if c.target(name) != nil {
 		c.duplicates = append(c.duplicates, fmt.Sprintf("the target %s is declared twice", name))
@@ -102,7 +93,6 @@ func (c *Catalog) Type(name string, schema Schema) Schema {
 	return Schema{"$ref": "#/$defs/" + name}
 }
 
-// Capability declares a capability.
 func (c *Catalog) Capability(id string, capability Capability) *Catalog {
 	for _, existing := range c.capabilities {
 		if existing.name == id {
@@ -113,7 +103,6 @@ func (c *Catalog) Capability(id string, capability Capability) *Catalog {
 	return c
 }
 
-// Event declares an event.
 func (c *Catalog) Event(id string, event Event) *Catalog {
 	for _, existing := range c.events {
 		if existing.name == id {
@@ -148,7 +137,7 @@ func (c *Catalog) Validate() []string {
 			problems = append(problems, fmt.Sprintf("the type name %s is malformed", t.name))
 		}
 		if t.value == nil {
-			// Schema is a map, so a type is never a boolean schema. A nil map would render as null.
+			// A nil map would render as null.
 			problems = append(problems, fmt.Sprintf("the type %s is not a JSON object", t.name))
 		}
 		for _, problem := range c.referenceProblems(t.value) {
@@ -192,8 +181,6 @@ func (c *Catalog) Validate() []string {
 	return problems
 }
 
-// entryProblems returns the problems of the id, the description, the audience and the input of a capability or an
-// event.
 func (c *Catalog) entryProblems(id, description string, audience []string, input Schema) []string {
 	var problems []string
 	if len(id) > 128 || !idPattern.MatchString(id) {

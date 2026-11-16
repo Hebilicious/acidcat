@@ -5,7 +5,6 @@ import { test } from "node:test";
 import { Catalog, canonicalText } from "../src/index.ts";
 import { libraryCatalog } from "../examples/library.ts";
 
-/** Reads a file. The path is relative to this package. */
 function expected(path: string): string {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf-8");
 }

@@ -9,7 +9,6 @@ import { serve } from "../src/node.ts";
 import { sensorOptions, Sensors, sensorsApp, toJsonSchema } from "./sensors.ts";
 import { sseReader } from "./sse.ts";
 
-/** Wait until a condition is true, or fail after one second. */
 async function until(condition: () => boolean): Promise<void> {
   const end = Date.now() + 1000;
   while (!condition()) {
@@ -23,21 +22,17 @@ const META = { "io.modelcontextprotocol/protocolVersion": VERSION };
 const SERVER_INFO = { "io.modelcontextprotocol/serverInfo": { name: "sensors", version: "0.0.0" } };
 const sub = (id: number | string) => ({ "io.modelcontextprotocol/subscriptionId": id });
 
-/** A JSON object from text. */
 function objectOf(text: string): JsonObject {
   const value: unknown = JSON.parse(text);
   if (!isJsonObject(value)) throw new Error("The message is not an object.");
   return value;
 }
 
-/** A member of a JSON object that is itself an object. */
 function member(value: unknown, key: string): JsonObject {
   const inner = isJsonObject(value) ? value[key] : undefined;
   if (!isJsonObject(inner)) throw new Error(`The member ${key} is not an object.`);
   return inner;
 }
-
-// --- Through HTTP ----------------------------------------------------------------------------------------------------
 
 function httpServer(sensors = new Sensors(), heartbeatMs?: number) {
   const handler = mcpHandler(sensorsApp, { name: "sensors", version: "0.0.0", allowedOrigins: [], ...sensorOptions(sensors), ...(heartbeatMs === undefined ? {} : { heartbeatMs }) });
@@ -162,7 +157,6 @@ test("MCP through HTTP: heartbeats, a truncated occurrence, and the cursor", asy
   const reader = sseReader(await handler(request("events/stream", { name: "sensor.reading.changed", cursor: "0", maxAgeMs: 1000 })));
   const read = async () => objectOf((await reader.next())?.data ?? "null");
   assert.equal(member(await read(), "params")["truncated"], false);
-  // maxAgeMs skips the two old readings, so the stream says that it is truncated before the last reading.
   assert.deepEqual(await read(), { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: true, cursor: "2", _meta: sub(1) } });
   const event = member(await read(), "params");
   assert.equal(event["cursor"], "2");
@@ -197,9 +191,6 @@ test("MCP through HTTP: a client with the initialize handshake gets no events", 
   assert.equal(member(await post({ id: 2, method: "events/list", params: {} }), "error")["code"], -32601);
 });
 
-// --- Through stdio ---------------------------------------------------------------------------------------------------
-
-/** Standard input that the test writes line by line, and the lines of standard output. */
 function stdio(sensors = new Sensors(), heartbeatMs?: number) {
   const queue: string[] = [];
   let ended = false;
@@ -231,7 +222,6 @@ function stdio(sensors = new Sensors(), heartbeatMs?: number) {
       ended = true;
       wake();
     },
-    /** The messages of one subscription, by its id in `_meta`, or the response with that id. */
     of: (id: number | string) =>
       written.filter((message) => message["id"] === id || (isJsonObject(message["params"]) && isJsonObject(message["params"]["_meta"]) && message["params"]["_meta"]["io.modelcontextprotocol/subscriptionId"] === id)),
   };
@@ -254,13 +244,11 @@ test("MCP through stdio: events/stream writes its messages to standard output, a
       params: { eventId: "reading-0", name: "sensor.reading.changed", timestamp: "2026-11-10T09:00:00.000Z", data: { room: "kitchen", celsius: 21 }, cursor: "0", _meta: sub(1) },
     },
   ]);
-  // notifications/cancelled cancels one stream. The server sends nothing more for it, and the other stream continues.
   io.send({ method: "notifications/cancelled", params: { requestId: 1 } });
   await until(() => sensors.listeners === 1);
   sensors.emit("kitchen", 22);
   await until(() => io.of(2).length === 4);
   assert.equal(io.of(1).length, 2);
-  // The end of standard input closes the session: the open stream is complete.
   io.end();
   await io.served;
   assert.deepEqual(io.of(2).at(-1), { jsonrpc: "2.0", id: 2, result: { resultType: "complete", _meta: { ...SERVER_INFO, ...sub(2) } } });
@@ -280,7 +268,6 @@ test("MCP through stdio: discover, list, heartbeat, Unsupported webhook delivery
   assert.equal(Array.isArray(member(io.of(2)[0], "result")["events"]), true);
   assert.equal(member(io.of(3)[0], "error")["code"], -32026);
   assert.deepEqual(io.of(4).find((message) => message["method"] === "notifications/events/heartbeat"), { jsonrpc: "2.0", method: "notifications/events/heartbeat", params: { cursor: null, _meta: sub(4) } });
-  // A request with no revision in _meta is of a revision with a handshake: it gets no events.
   assert.equal(member(io.of(5)[0], "error")["code"], -32601);
   assert.deepEqual(member(member(io.of(6)[0], "result"), "capabilities"), { tools: { listChanged: true } });
   io.end();

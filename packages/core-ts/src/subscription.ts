@@ -1,7 +1,3 @@
-/**
- * One subscription (spec/events.md): the pump that reads the occurrences of the provider, the bounded buffer for a slow
- * client, and the iterator that the client reads.
- */
 import { CallFailureError, callFailure, occurrenceOf } from "@acid-cat/spec-ts";
 import type { Emitted, Occurrence } from "@acid-cat/spec-ts";
 
@@ -19,46 +15,31 @@ export interface Occurrences<Payload> extends AsyncIterable<Occurrence<Payload>>
 /** The number of occurrences that a subscription keeps for a client that reads slowly, if the session gives no limit. */
 export const DEFAULT_BUFFER_LIMIT = 256;
 
-/** The message of the call failure `internal` of a subscription. It shows no internal data. */
 const INTERNAL_MESSAGE = "The event failed.";
 
 const DONE: IteratorReturnResult<undefined> = { done: true, value: undefined };
 
 export interface SubscriptionParts<Source, Payload> {
-  /** The id of the event. */
   readonly name: string;
-  /** The occurrences of the provider. The pump starts to read them at once. */
   readonly source: AsyncIterable<Emitted<Source>>;
-  /** Check the data of one occurrence against the payload schema, and give a copy in its JSON form. It throws if the data does not agree. */
   readonly check: (data: Source) => Promise<Payload>;
-  /** The controller of the signal of the provider. The subscription aborts it when it ends. */
   readonly controller: AbortController;
-  /** The maximum number of occurrences that wait for the client. */
   readonly limit: number;
-  /** Record a defect of the provider. */
   readonly onDefect: (cause: unknown) => void;
-  /** Called one time, when the subscription ends. */
   readonly onEnd: () => void;
 }
 
-/** A subscription that runs: the iterator of the client, and the two ends that the session and the client cause. */
 export interface Running<Payload> {
   readonly occurrences: Occurrences<Payload>;
-  /** End the subscription as cancelled: the client sees `done: true` at once. */
   readonly cancel: () => void;
-  /** End the subscription as complete: the client reads the occurrences that wait, then sees `done: true`. */
   readonly complete: () => void;
 }
 
-/** Start the pump of a subscription, and give the iterator of the client. */
 export function runSubscription<Source, Payload>(parts: SubscriptionParts<Source, Payload>): Running<Payload> {
   const buffer: Occurrence<Payload>[] = [];
   const waiters: { readonly resolve: (result: IteratorResult<Occurrence<Payload>, undefined>) => void; readonly reject: (error: unknown) => void }[] = [];
-  /** True when the buffer removed occurrences: the next occurrence that the client reads has `truncated: true`. */
   let dropped = false;
-  /** How the source ended. The client still reads the occurrences in the buffer before it sees the end. */
   let ending: { readonly failure?: CallFailureError } | undefined;
-  /** True when the client sees only `done: true`. */
   let closed = false;
   let stopped = false;
   let stopSource = () => {};
@@ -69,7 +50,6 @@ export function runSubscription<Source, Payload>(parts: SubscriptionParts<Source
     return { ...occurrence, truncated: true };
   };
 
-  /** Give each waiting `next()` an occurrence or the end, while there are some. */
   const settle = () => {
     for (let waiter = waiters.shift(); waiter !== undefined; waiter = waiters.shift()) {
       const occurrence = buffer.shift();
@@ -88,7 +68,6 @@ export function runSubscription<Source, Payload>(parts: SubscriptionParts<Source
     }
   };
 
-  /** Stop the provider one time: abort its signal, and close its iterator. */
   const stop = () => {
     if (stopped) return;
     stopped = true;
@@ -113,7 +92,6 @@ export function runSubscription<Source, Payload>(parts: SubscriptionParts<Source
   };
 
   const push = (occurrence: Occurrence<Payload>) => {
-    // An occurrence that the provider marks keeps its mark. The occurrences before it in the buffer came before the gap.
     buffer.push(occurrence);
     if (buffer.length > parts.limit) {
       buffer.shift();
@@ -164,10 +142,6 @@ export function runSubscription<Source, Payload>(parts: SubscriptionParts<Source
 }
 
 
-/**
- * Check the members of a value that the provider gives, beside its data. The provider is code of the application, but
- * plain JavaScript can give any value. A value that is not valid is a defect.
- */
 function checkEmitted<Source>(value: Emitted<Source>): Emitted<Source> {
   const object: unknown = value;
   if (typeof object !== "object" || object === null) throw new TypeError("The provider gave a value that is not an object.");

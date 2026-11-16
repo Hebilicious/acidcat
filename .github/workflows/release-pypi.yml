@@ -1,12 +1,8 @@
 name: Release PyPI
 
-# Publish acid-cat-catalog to PyPI at the version of the tag `pypi/v<version>`.
-# release.yml starts this workflow after a release. A tag pushed by hand on main also starts it.
-# PyPI authenticates this workflow with trusted publishing, from the `pypi` environment.
 on:
   push:
     tags: ["pypi/v*"]
-  # Run it by hand on a tag to publish that release again.
   workflow_dispatch:
 
 permissions:

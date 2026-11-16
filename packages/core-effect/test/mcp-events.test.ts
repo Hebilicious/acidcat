@@ -12,7 +12,6 @@ const ORIGIN = "https://fixture.example";
 const SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId";
 const EXTENSION = "io.modelcontextprotocol/events";
 
-/** A JSON-RPC message, with the members that the tests read. */
 const Message = Schema.Struct({
   id: Schema.optional(Schema.Union([Schema.String, Schema.Number, Schema.Null])),
   method: Schema.optional(Schema.String),
@@ -33,7 +32,6 @@ const EventList = Schema.Struct({
 
 const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} };
 
-/** One MCP request of revision 2026-07-28 through HTTP, with the headers of the revision. */
 function mcpRequest(method: string, params: Record<string, unknown> = {}, init: { readonly id?: string | number; readonly signal?: AbortSignal; readonly name?: string | null } = {}) {
   const headers = new Headers({
     Accept: "application/json, text/event-stream",
@@ -51,7 +49,6 @@ function mcpRequest(method: string, params: Record<string, unknown> = {}, init: 
   });
 }
 
-/** The JSON-RPC messages in the `data:` fields of a stream of server-sent events, one at a time. */
 function sseMessages(response: Response) {
   assert.ok(response.body);
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -110,7 +107,6 @@ test("through HTTP, events/list gives the events of the view, and Mcp.handle, wh
 
 test("withEvents answers the requests of the events extension beside an MCP server of your own, and gives it each other request", async () => {
   const seen: string[] = [];
-  // A stand-in for a server of your own: it records the method of each request that it gets.
   const server = async (request: Request) => {
     const body = decodeMessage(await request.text());
     seen.push(body.method ?? "");

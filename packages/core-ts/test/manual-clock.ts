@@ -1,4 +1,3 @@
-/** A clock that only the test moves, for poll leases and webhook lifetimes. */
 import type { Clock } from "../src/index.ts";
 
 export class ManualClock implements Clock {
@@ -15,7 +14,6 @@ export class ManualClock implements Clock {
     };
   };
 
-  /** Move the time forward, and call each timer that is due, in order. */
   advance(ms: number): void {
     const end = this.#time + ms;
     for (;;) {

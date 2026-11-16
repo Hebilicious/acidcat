@@ -10,7 +10,6 @@ const file = new URL("./events-cli.ts", import.meta.url).pathname;
 
 const cli = (...args: string[]) => run(file, ...args);
 
-/** The lines of standard output, each decoded as an occurrence. */
 const occurrences = (stdout: string) =>
   stdout
     .trim()
@@ -26,7 +25,6 @@ const Entry = Schema.Struct({
   available: Schema.optionalKey(Schema.Boolean),
 });
 
-// Each test below starts processes. The tests run at the same time, and the runs of a test wait at the same time.
 describe("the command line of an application with events", { concurrency: true }, () => {
   test("list gives the capabilities, then the events, each with its kind and its usage", async () => {
     const list = await cli("list");

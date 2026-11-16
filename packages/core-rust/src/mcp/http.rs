@@ -28,7 +28,6 @@ use crate::session::{DEFAULT_BUFFER_LIMIT, Session};
 /// The identity of the client of a request, from its headers: the principal (spec/bindings/mcp.md#webhook).
 pub type Principal = Arc<dyn Fn(&HeaderMap) -> Option<String> + Send + Sync>;
 
-/// The settings of the MCP binding through HTTP.
 #[derive(Clone)]
 pub struct McpOptions {
     pub name: String,
@@ -47,7 +46,6 @@ pub struct McpOptions {
     pub buffer_limit: usize,
     /// Serve the `initialize` handshake of revisions 2025-11-25 and 2025-06-18. The default is `true`.
     pub handshake: bool,
-    /// The settings of poll delivery.
     pub poll: PollOptions,
     /// The identity of the client of a request. It is part of the key of a poll lease and of a webhook subscription.
     /// With no function, no request has an identity.
@@ -98,9 +96,7 @@ impl<C> Clone for McpBinding<C> {
     }
 }
 
-/// The members of a JSON-RPC request that the server reads.
 struct Message {
-    /// `None` for a notification. An `id` that is not a string or a number is `null`.
     id: Option<Value>,
     method: Option<String>,
     params: Map<String, Value>,
@@ -185,7 +181,6 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
         }
     }
 
-    /// Open sessions with the context of one request.
     fn open(&self, context: &Arc<C>) -> OpenSession<C> {
         let inner = self.inner.clone();
         let context = context.clone();
@@ -203,7 +198,6 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
         server_info(&self.inner.options.name, &self.inner.options.version)
     }
 
-    /// Answer one request.
     pub async fn handle(&self, request: Request<RequestBody>) -> Response<ResponseBody> {
         let options = &self.inner.options;
         let rules = Rules {
@@ -396,7 +390,6 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
         }
     }
 
-    /// Answer a request of a revision with an `initialize` handshake. The server keeps no state for the handshake.
     async fn handshake(&self, message: Message, context: &Arc<C>) -> Response<ResponseBody> {
         let Some(id) = message.id else {
             return empty_response(202);

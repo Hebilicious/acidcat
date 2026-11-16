@@ -7,7 +7,6 @@ import { CallFailureError, catalogOf, createSession, defineApp, defineCapability
 import type { ModelContextTool, Occurrences } from "../src/index.ts";
 import { broken, clock, failing, hidden, read, readingChanged, sensorOptions, Sensors, sensorsApp, ticks, toJsonSchema } from "./sensors.ts";
 
-/** Wait until a condition is true, or fail after one second. */
 async function until(condition: () => boolean): Promise<void> {
   const end = Date.now() + 1000;
   while (!condition()) {
@@ -16,17 +15,14 @@ async function until(condition: () => boolean): Promise<void> {
   }
 }
 
-/** The next value of a subscription. It fails if the subscription ends. */
 async function nextOf<Payload>(occurrences: Occurrences<Payload>) {
   const step = await occurrences.next();
   if (step.done === true) throw new Error("The subscription ended.");
   return step.value;
 }
 
-/** The kind of a call failure, or `undefined` for the occurrences of a subscription that started. */
 const kindOf = (started: Occurrences<unknown> | { readonly kind: string }) => ("kind" in started ? started.kind : undefined);
 
-/** The kind of the call failure of a promise that rejects. */
 async function failureKind(promise: Promise<unknown>): Promise<string> {
   try {
     await promise;
@@ -86,7 +82,6 @@ test("a subscription gives each occurrence, with the members of the provider or 
   sensors.emit("kitchen", 21, "2026-11-10T09:00:01.000Z");
   const first = await nextOf(occurrences);
   assert.deepEqual(first, { eventId: "reading-1", name: "sensor.reading.changed", timestamp: "2026-11-10T09:00:01.000Z", data: { room: "kitchen", celsius: 21 }, cursor: "1" });
-  // Each occurrence is a copy: a change by the client does not change the history of the provider.
   first.data.celsius = 99;
   assert.equal(sensors.history[1]?.data.celsius, 21);
 
@@ -115,7 +110,6 @@ test("start failures reject before the first occurrence: unknown-capability, inv
   assert.equal(await failureKind(session.eventHandle(other).subscribe({})), "unknown-capability");
   assert.deepEqual(await session.subscribe("sensor.hidden", {}), { kind: "unknown-capability", message: "There is no event sensor.hidden." });
   assert.equal(await failureKind(handle.subscribeExternal({}, { signal: AbortSignal.abort() })), "cancelled");
-  // An invalid input to a session that closes is cancelled: cancelled comes first.
   await session.dispose();
   assert.equal(await failureKind(handle.subscribeExternal({ room: 7 })), "cancelled");
   assert.equal(await failureKind(session.eventHandle(ticks).subscribe({})), "cancelled");
@@ -178,7 +172,6 @@ test("an occurrence that the provider marks truncated keeps the mark, also when 
   await using session = createSession(app, { target: "app", ...sensorOptions() });
   const occurrences = await session.subscribe("probe.gap", {});
   assert.ok(!("kind" in occurrences));
-  // The provider gives all three before the client reads the first.
   await new Promise((resolve) => setTimeout(resolve, 10));
   const read = [await nextOf(occurrences), await nextOf(occurrences), await nextOf(occurrences)];
   assert.deepEqual(read.map((each) => [each.eventId, each.truncated]), [["1", undefined], ["2", true], ["3", undefined]]);
@@ -222,7 +215,6 @@ test("options.signal cancels one subscription, and the others continue", async (
   sensors.emit("kitchen", 22);
   assert.equal((await nextOf(second)).data.celsius, 22);
   assert.equal((await nextOf(third)).data.celsius, 22);
-  // A call at the same time as the subscriptions.
   assert.deepEqual(await session.handle(read).invokeExternal({}), { ok: true, value: { room: "kitchen", celsius: 22 } });
 });
 
@@ -235,7 +227,6 @@ test("dispose ends each subscription as complete, and the providers stop", async
   const pending = first.next();
   await session.dispose();
   assert.deepEqual(await pending, { done: true, value: undefined });
-  // The ticks in the buffer can still be read, then the subscription is complete.
   for (let step = await second.next(); step.done !== true; step = await second.next());
   assert.equal(sensors.listeners, 0);
 });

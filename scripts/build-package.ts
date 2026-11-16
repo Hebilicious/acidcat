@@ -1,17 +1,4 @@
-/**
- * Build one TypeScript package for npm. Run it in the directory of the package.
- *
- * In the workspace, `exports` and `bin` point to the TypeScript sources. `publishConfig` points to `dist/`, and pnpm
- * uses it when it packs or publishes the package. This script writes `dist/`:
- *
- * - rolldown writes one file in `dist/` for each module in `src/`, for Node.js 24 and later: `src/<name>.ts` becomes
- *   `dist/<name>.js`. The output keeps the modules of the sources, so a bundler that uses the package keeps only the
- *   modules that a program imports. Dependencies stay imports. JSON files that the sources import become
- *   modules in `dist/json/`.
- * - tsc writes the declarations from `tsconfig.build.json`. Their relative `.ts` imports become `.js` imports.
- *
- * The script fails when `publishConfig` does not point to the files that it writes.
- */
+// pnpm uses `publishConfig` when it packs or publishes the package.
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
@@ -29,7 +16,6 @@ interface Manifest {
   publishConfig?: { exports?: unknown; bin?: unknown };
 }
 
-/** Read `package.json`, and check the members that this script uses. */
 function readManifest(): Manifest {
   const json = parseObject(readFileSync("package.json", "utf8"), "package.json");
   const exports = typeof json.exports === "string" ? json.exports : stringRecord(json.exports, "package.json: exports");
@@ -47,7 +33,6 @@ const manifest = readManifest();
 
 const source = /^\.\/src\/([\w-]+)\.ts$/;
 
-/** The published form of one export: the bundle and its declarations, or the same file if it is not a source. */
 const publishedExport = (path: string) => {
   const match = source.exec(path);
   return match ? { types: `./dist/${match[1]}.d.ts`, default: `./dist/${match[1]}.js` } : path;
@@ -84,14 +69,12 @@ await build({
   input: entryPoints,
   platform: "node",
   transform: { target: "node24" },
-  // Each import that is not a relative path is a dependency or a module of Node.js. It stays an import.
   external: (id) => !id.startsWith(".") && !isAbsolute(id),
   output: {
     dir: "dist",
     format: "esm",
     preserveModules: true,
     preserveModulesRoot: "src",
-    // A JSON file can be outside `src/`. Its module goes into `dist/json/`.
     entryFileNames: (chunk) => (chunk.facadeModuleId?.endsWith(".json") ? `json/${basename(chunk.name)}.js` : "[name].js"),
   },
   logLevel: "warn",

@@ -50,7 +50,6 @@ test("the HTTP binding is mounted at /api, and a foreign origin is rejected", as
   assert.equal((await app.handle(request("/status", { origin: "https://example.com" }))).status, 403);
 });
 
-/** Wait until a condition is true, or fail after five seconds. */
 async function until(what: string, condition: () => boolean): Promise<void> {
   const end = Date.now() + 5000;
   while (!condition()) {
@@ -59,7 +58,6 @@ async function until(what: string, condition: () => boolean): Promise<void> {
   }
 }
 
-/** Read the events of a stream of server-sent events, one at a time. Each event is a map from field to value. */
 function sseEvents(body: ReadableStream<Uint8Array>) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -114,7 +112,6 @@ test("when the signal of the request aborts, the stream ends and the subscriptio
   await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
 });
 
-/** A free port on 127.0.0.1. */
 async function freePort(): Promise<number> {
   const server = createServer();
   server.listen(0, "127.0.0.1");
@@ -126,8 +123,6 @@ async function freePort(): Promise<number> {
 }
 
 /**
- * Serve an app on the Node.js adapter of Elysia, on a free port, and give the function that stops it.
- *
  * `@elysiajs/node` 1.4.5 takes `stop` from the web standard adapter of Elysia. That `stop` reads `app.server`, but the
  * `listen` of `@elysiajs/node` does not set `app.server`. Thus `app.server` stays `null`, and `app.stop()` throws
  * "Elysia isn't running" for a server that runs. The adapter gives its server to the callback of `listen`, and that
@@ -158,11 +153,9 @@ async function listenOnNode(app: ReturnType<typeof elysiaApi>): Promise<{ readon
   }
 }
 
-/** Tell if a server has a `stop` method, as the server of the Node.js adapter has. */
 const isStoppable = (server: unknown): server is { stop(): unknown } =>
   typeof server === "object" && server !== null && "stop" in server && typeof server.stop === "function";
 
-/** The text of a message of a WebSocket. */
 const textOf = (data: Buffer | ArrayBuffer | Buffer[]): string =>
   Array.isArray(data) ? Buffer.concat(data).toString("utf8") : data instanceof ArrayBuffer ? Buffer.from(data).toString("utf8") : data.toString("utf8");
 
@@ -177,7 +170,6 @@ test("the WebSocket /status/follow, on the Node.js adapter of Elysia, gets each 
     socket.on("message", (data) => messages.push(Message.parse(JSON.parse(textOf(data)))));
     await until("the subscription has started", () => messages.some((message) => message.event === "following"));
     assert.equal(unit.statusListeners, 1);
-    // The routes of the application run on the same server.
     const changed = await fetch(`http://127.0.0.1:${port}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

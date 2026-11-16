@@ -1,4 +1,3 @@
-// Command aircon writes the air-conditioner catalog of aircon.pkl with the Go catalog library.
 package main
 
 import (
@@ -10,7 +9,6 @@ import (
 
 type schema = catalog.Schema
 
-// airconCatalog returns the air-conditioner catalog.
 func airconCatalog() *catalog.Catalog {
 	c := catalog.New(
 		"Living-room air conditioner",

@@ -1,4 +1,3 @@
-/** Run a program of the example in its own Node.js process. */
 import { spawn } from "node:child_process";
 
 export interface Run {
@@ -7,10 +6,6 @@ export interface Run {
   readonly stderr: string;
 }
 
-/**
- * Run the TypeScript file with the arguments in a new Node.js process, and give its exit code and its output when it
- * exits. The process is killed after 20 seconds. Many runs can wait at the same time.
- */
 export function run(path: string, ...args: string[]): Promise<Run> {
   const child = spawn(process.execPath, [path, ...args], { stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
   let stdout = "";

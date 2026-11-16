@@ -1,15 +1,8 @@
-/**
- * Serve web request handlers, such as the handlers of `Mcp.toWebHandler` and `Http.toWebHandler`, on Node.js, with only
- * `node:http`. The server runs while its scope is open, and closes when the scope closes.
- *
- * The server serves plain HTTP/1.1. For HTTPS, HTTP/2 or middleware, use a library for web handlers.
- */
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 
 import { Data, Effect, Exit, FiberSet, Layer } from "effect";
 
-/** A web request handler. */
 export type WebHandler = (request: Request) => Promise<Response> | Response;
 
 /**
@@ -31,11 +24,9 @@ export interface ServeOptions {
   readonly hostname?: string | undefined;
 }
 
-/** The address of a server that runs. */
 export interface Address {
   /** The base URL, for example `http://127.0.0.1:3000`. */
   readonly url: string;
-  /** The port that the server listens on. */
   readonly port: number;
 }
 
@@ -45,7 +36,8 @@ export class ServeError extends Data.TaggedError("ServeError")<{ readonly cause:
 /**
  * Serve one handler for all paths, or handlers by path prefix, for example `{ "/mcp": mcp, "/api": http }`. The effect
  * succeeds when the server listens. When the scope closes, the server stops accepting connections, and the scope waits
- * until the open requests are complete.
+ * until the open requests are complete. The server serves plain HTTP/1.1. For HTTPS, HTTP/2 or middleware, use a
+ * library for web handlers.
  *
  * - The signal of each request aborts when the client closes the connection before the response is complete. The
  *   handlers of the core then cancel the call.
@@ -58,8 +50,7 @@ export class ServeError extends Data.TaggedError("ServeError")<{ readonly cause:
 export const serve = Effect.fnUntraced(function* (handler: WebHandler | Routes, options: ServeOptions = {}) {
   const route = router(handler);
   const hostname = options.hostname ?? "127.0.0.1";
-  // Each request runs in a fiber of this set. The server closes first, and waits for the open requests. Then the set
-  // interrupts the fibers that are left.
+  // The scope closes the server first, which waits for the open requests. Then the set interrupts the fibers that are left.
   const run = yield* FiberSet.makeRuntime();
   const server = createServer((incoming, outgoing) => {
     run(answer(incoming, outgoing, route));
@@ -76,7 +67,6 @@ export const serve = Effect.fnUntraced(function* (handler: WebHandler | Routes, 
 export const layer = (handler: WebHandler | Routes, options: ServeOptions = {}): Layer.Layer<never, ServeError> =>
   Layer.effectDiscard(serve(handler, options));
 
-/** Listen, and give the port. */
 const listen = (server: Server, port: number, hostname: string) =>
   Effect.callback<number, ServeError>((resume) => {
     const failed = (cause: unknown) => resume(Effect.fail(new ServeError({ cause })));
@@ -88,13 +78,11 @@ const listen = (server: Server, port: number, hostname: string) =>
     });
   });
 
-/** Stop accepting connections, and wait until the open requests are complete. */
 const close = (server: Server) =>
   Effect.callback<void>((resume) => {
     server.close(() => resume(Effect.void));
   });
 
-/** The handler of a path, or `undefined` when no prefix matches. */
 function router(handler: WebHandler | Routes): (path: string) => WebHandler | undefined {
   if (typeof handler === "function") return () => handler;
   const prefixes = Object.keys(handler).sort((a, b) => b.length - a.length);
@@ -106,13 +94,10 @@ function router(handler: WebHandler | Routes): (path: string) => WebHandler | un
   };
 }
 
-/** The request is not valid HTTP for a URL. */
 class BadRequest extends Data.TaggedError("BadRequest")<{ readonly cause: unknown }> {}
 
-/** A handler threw or rejected, or the body of its response failed. */
 class HandlerError extends Data.TaggedError("HandlerError")<{ readonly cause: unknown }> {}
 
-/** Answer one request. When the fiber is interrupted, the signal of the request aborts. */
 const answer = (incoming: IncomingMessage, outgoing: ServerResponse, route: (path: string) => WebHandler | undefined) =>
   Effect.gen(function* () {
     const abort = new AbortController();
@@ -137,7 +122,6 @@ const answer = (incoming: IncomingMessage, outgoing: ServerResponse, route: (pat
     ),
   );
 
-/** The web request of an incoming request. It throws when the request has no valid URL. */
 function requestOf(incoming: IncomingMessage, signal: AbortSignal): Request {
   const url = new URL(incoming.url ?? "/", `http://${incoming.headers.host ?? "localhost"}`);
   const headers = new Headers();
@@ -153,10 +137,6 @@ function requestOf(incoming: IncomingMessage, signal: AbortSignal): Request {
   return new Request(url, withBody);
 }
 
-/**
- * Write a web response. The body waits when the connection is full. When the client closes the connection, or the
- * fiber is interrupted, the body is cancelled.
- */
 const send = (response: Response, outgoing: ServerResponse) =>
   Effect.gen(function* () {
     const headers: Record<string, string | string[]> = {};
@@ -190,7 +170,6 @@ const send = (response: Response, outgoing: ServerResponse) =>
     );
   });
 
-/** Write the chunks of a body until it ends, or until the connection closes. */
 const write = (reader: ReadableStreamDefaultReader<Uint8Array>, outgoing: ServerResponse) =>
   Effect.gen(function* () {
     for (;;) {
@@ -202,7 +181,6 @@ const write = (reader: ReadableStreamDefaultReader<Uint8Array>, outgoing: Server
     outgoing.end();
   });
 
-/** Wait until the connection can take more data, or until it closes. */
 const drained = (outgoing: ServerResponse) =>
   Effect.callback<void>((resume) => {
     const done = () => {
@@ -218,12 +196,7 @@ const drained = (outgoing: ServerResponse) =>
     });
   });
 
-/**
- * The body of an incoming request, as a web stream. The stream reads the request only when the handler reads the body,
- * and the request pauses after each chunk until the handler reads again. A request that the handler does not read stays
- * unread, so that Node.js discards it after the response. When the handler cancels the stream, the request discards the
- * rest of its body.
- */
+/** A request that the handler does not read stays unread, so that Node.js discards it after the response. */
 function bodyOf(incoming: IncomingMessage): ReadableStream<Uint8Array> {
   let open = true;
   let reading = false;

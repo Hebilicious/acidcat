@@ -1,12 +1,8 @@
 name: Release crates.io
 
-# Publish acid-cat-catalog to crates.io at the version of the tag `crates/v<version>`.
-# release.yml starts this workflow after a release. A tag pushed by hand on main also starts it.
-# crates.io authenticates this workflow with trusted publishing, from the `crates-io` environment.
 on:
   push:
     tags: ["crates/v*"]
-  # Run it by hand on a tag to publish that release again.
   workflow_dispatch:
 
 permissions:

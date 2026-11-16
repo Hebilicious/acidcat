@@ -1,7 +1,3 @@
-/**
- * The catalog operations that the specification defines: the catalog rules, views and bundling.
- * See spec/catalog.md and spec/conformance.md.
- */
 import { canonicalText } from "@acid-cat/catalog";
 import { bundle, eventSchemasOf, REFERENCE, resolveType, schemasOf, viewOf, visitObjects } from "@acid-cat/spec-ts";
 import type { CatalogCapability, CatalogDocument as Catalog, CatalogEvent } from "@acid-cat/spec-ts";
@@ -28,7 +24,6 @@ const KNOWN_MEMBERS = {
   event: ["description", "audience", "input", "payload"],
 };
 
-/** The catalog schema (schemas/catalog.schema.json), imported as an Effect schema. */
 const decodeCatalog = (() => {
   const { $defs, $schema: _schema, $id: _id, ...root } = catalogJsonSchema;
   const definitions: JsonSchema.Definitions = $defs;
@@ -36,12 +31,11 @@ const decodeCatalog = (() => {
     { dialect: "draft-2020-12", schema: root, definitions },
     { patterns: "apply" },
   );
-  // A schema imported from JSON Schema has no transformations, so its type side checks the same values. The type side
-  // needs no services to decode.
+  // A schema imported from JSON Schema has no transformations, so its type side checks the same values and needs no
+  // services to decode.
   return Schema.decodeUnknownResult(Schema.toType(schema));
 })();
 
-/** True if `key` is absent from the object, or if `isMember` is true for its value. */
 const optional = (object: JsonObject, key: string, isMember: (value: unknown) => boolean): boolean =>
   !Object.hasOwn(object, key) || isMember(object[key]);
 
@@ -66,10 +60,6 @@ const isEvent = (value: unknown): value is CatalogEvent =>
   optional(value, "input", isObject) &&
   optional(value, "payload", isObject);
 
-/**
- * True if the value has the members and the member types of a catalog. It does not check the catalog rules: `check`
- * does that.
- */
 export const isCatalog = (value: unknown): value is Catalog =>
   isObject(value) &&
   typeof value.acidcat === "string" &&
@@ -92,7 +82,6 @@ export function check(document: unknown, text?: string): Report {
     return { errors, warnings: [] };
   }
   if (!isCatalog(document)) {
-    // The catalog schema requires these members, so this error is a defect of the schema.
     return { errors: ["the catalog: the members do not have the types of a catalog"], warnings: [] };
   }
   const catalog = document;
@@ -104,7 +93,6 @@ export function check(document: unknown, text?: string): Report {
   return { errors, warnings };
 }
 
-/** The catalog rules that the catalog schema cannot express. */
 function ruleErrors(catalog: Catalog): string[] {
   const errors: string[] = [];
   const types = catalog.$defs ?? {};
@@ -133,7 +121,6 @@ function ruleErrors(catalog: Catalog): string[] {
   return errors;
 }
 
-/** The schemas of each capability and each event, with the id that holds them. */
 function catalogSchemas(catalog: Catalog): readonly (readonly [string, string, JsonObject])[] {
   return [
     ...Object.entries(catalog.capabilities).flatMap(([id, capability]) => schemasOf(capability).map(([member, schema]) => [id, member, schema] as const)),
@@ -141,7 +128,6 @@ function catalogSchemas(catalog: Catalog): readonly (readonly [string, string, J
   ];
 }
 
-/** Members that the specification does not define and that have no `x-` prefix. */
 function unknownMembers(catalog: Catalog): string[] {
   const unknown = (where: string, value: JsonObject, known: readonly string[]) =>
     Object.keys(value)
@@ -159,7 +145,6 @@ function unknownMembers(catalog: Catalog): string[] {
   ];
 }
 
-/** Schemas that cannot be imported as Effect schemas. They can still be valid JSON Schema, so this is a warning. */
 function schemaWarnings(catalog: Catalog): string[] {
   const definitions: JsonSchema.Definitions = catalog.$defs ?? {};
   const warnings: string[] = [];

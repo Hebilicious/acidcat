@@ -1,15 +1,5 @@
-/**
- * The services of one request of a remote binding (spec/bindings/README.md#remote-bindings): the head of the request,
- * and the refusal that answers a request before its session opens.
- *
- * `Http.toWebHandler` and `Mcp.toWebHandler` with `services: "per-request"` build the services from the layer for each
- * request that passes the screening. The layer can read the head of the request from `Remote.IncomingRequest`, for
- * example to find the caller from a bearer token. When the layer fails with a `Refusal`, the handler answers with it,
- * and opens no session: no capability runs.
- */
 import { Context, Data, Effect } from "effect";
 
-/** The head of a request: its method, its URL and its headers. The body is not in it. */
 export interface RequestHead {
   readonly method: string;
   readonly url: string;
@@ -22,7 +12,6 @@ export interface RequestHead {
  */
 export class IncomingRequest extends Context.Service<IncomingRequest, RequestHead>()("@acid-cat/core-effect/Remote/IncomingRequest") {}
 
-/** The head of a web request. A host that builds the services itself gives it to `IncomingRequest`. */
 export const headOf = (request: Request): RequestHead => ({ method: request.method, url: request.url, headers: new Headers(request.headers) });
 
 /**
@@ -42,7 +31,6 @@ export const refuse = (status: number, message: string, headers: Readonly<Record
   return Effect.fail(new Refusal({ status, message, headers }));
 };
 
-/** The web response of a refusal. */
 export function refusalResponse(refusal: Refusal): Response {
   const headers = new Headers(refusal.headers);
   headers.set("Content-Type", "application/json");

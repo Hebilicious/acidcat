@@ -1,7 +1,3 @@
-/**
- * A webhook endpoint for the tests: an HTTPS server on the local computer, with a certificate that is made for the test
- * and removed after it. It keeps each request that it gets, and answers as the test tells it.
- */
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:https";
@@ -10,7 +6,6 @@ import { join } from "node:path";
 
 import { isJsonObject } from "@acid-cat/spec-ts";
 
-/** One request that the endpoint got. */
 export interface Received {
   readonly path: string;
   readonly headers: { readonly [name: string]: string };
@@ -18,22 +13,18 @@ export interface Received {
   readonly json: unknown;
 }
 
-/** The answer to a request. */
 export interface Reply {
   readonly status: number;
   readonly body?: string;
 }
 
-/** A function that answers a request. */
 export type Responder = (received: Received) => Reply | Promise<Reply>;
 
-/** Answer a verification with its challenge, and each other request with 200. */
 export const agree: Responder = (received) => {
   const challenge = isJsonObject(received.json) && received.json.type === "verification" ? received.json.challenge : undefined;
   return typeof challenge === "string" ? { status: 200, body: JSON.stringify({ challenge }) } : { status: 200 };
 };
 
-/** A self-signed certificate for `localhost` and `127.0.0.1`, made with OpenSSL in a temporary directory. */
 export function testCertificate(): { readonly key: string; readonly cert: string } {
   const directory = mkdtempSync(join(tmpdir(), "acid-cat-webhook-"));
   try {
@@ -81,11 +72,8 @@ export async function startReceiver() {
     cert,
     port,
     received,
-    /** The URL of a path on the endpoint, with the host name `localhost`. */
     url: (path: string) => `https://localhost:${port}${path}`,
-    /** Answer the next requests with this function. */
     respond: (next: Responder) => void (responder = next),
-    /** Wait until the endpoint has got at least `count` requests, and give them. */
     async count(count: number, timeoutMs = 5000): Promise<readonly Received[]> {
       const deadline = Date.now() + timeoutMs;
       while (received.length < count) {

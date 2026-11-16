@@ -1,13 +1,3 @@
-/**
- * Check that no code turns the type checks off. The linter (`.oxlintrc.json`) rejects type assertions, non-null
- * assertions, `any` and `@ts-` comments. This check rejects what the linter cannot see:
- *
- * - a comment that turns a lint rule off: `oxlint-disable…` or `eslint-disable…`;
- * - a `tsconfig*.json` that does not extend `tsconfig.base.json`, or that changes one of its options. Only `noEmit`
- *   can change, so that a build configuration can write declarations.
- *
- * Usage: node scripts/check-escapes.ts
- */
 import { globSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -48,7 +38,6 @@ for (const file of globSync("**/tsconfig*.json", { cwd: root, exclude: ignored }
   const absolute = path.join(root, file);
   if (absolute === base) continue;
 
-  // Follow `extends` to the base configuration.
   const chain = [absolute];
   for (let current = readConfig(absolute); typeof current.extends === "string"; ) {
     const next = path.resolve(path.dirname(chain.at(-1) ?? absolute), current.extends);

@@ -13,7 +13,6 @@ import { run } from "./run.ts";
 import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 
-/** The part of a `tools/list` response that the test reads. */
 const ToolList = Schema.Struct({ result: Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: Schema.String })) }) });
 
 test("the code writes a catalog that conforms and agrees with the Pkl catalog", () => {
@@ -114,7 +113,6 @@ test("the state gives the current value, then each change", () =>
     ).pipe(Effect.provide(Layer.fresh(unitLayer))),
   ));
 
-/** The exit code and the output of a program when it exits. */
 function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<Run> {
   let stdout = "";
   let stderr = "";
@@ -132,14 +130,12 @@ test("the Effect command line controls the unit of a server, and watch follows i
   context.after(() => server.kill());
   const url = await new Promise<string>((resolve, reject) => {
     server.on("error", reject);
-    // The first line of standard output is the URL. It can come in more than one chunk.
     let text = "";
     server.stdout.setEncoding("utf-8").on("data", (chunk: string) => {
       text += chunk;
       if (text.includes("\n")) resolve(text.slice(0, text.indexOf("\n")).trim());
     });
   });
-  // With AIRCON_URL, the command line sends each call and each subscription to the server.
   const remote = (...args: string[]) =>
     spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
 
@@ -147,15 +143,12 @@ test("the Effect command line controls the unit of a server, and watch follows i
   const status = await finish(remote("aircon", "status", "get"));
   assert.equal(status.code, 0);
   assert.partialDeepStrictEqual(JSON.parse(status.stdout), { power: true });
-  // The unit of the server changed, not the unit of a new process.
   assert.partialDeepStrictEqual(JSON.parse((await run(cliPath, "aircon", "status", "get")).stdout), { power: false });
 
   const watch = remote("watch", "aircon.status.changed");
   context.after(() => watch.kill());
   let watched = "";
   watch.stdout.setEncoding("utf-8").on("data", (chunk: string) => (watched += chunk));
-  // Change the fan until the subscription writes its first occurrence: a change before the subscription starts is not
-  // in it.
   for (let turn = 0; !watched.includes("\n"); turn++) {
     assert.ok(turn < 100, "watch writes an occurrence");
     assert.equal((await finish(remote("aircon", "fan", "set", "--speed", turn % 2 === 0 ? "low" : "high"))).code, 0);

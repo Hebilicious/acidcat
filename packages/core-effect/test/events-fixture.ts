@@ -1,17 +1,14 @@
-/** A test application with one event for each behavior of subscriptions that the tests examine. */
 import { Context, Effect, Layer, PubSub, Schema, Stream, SubscriptionRef } from "effect";
 
 import * as App from "../src/App.ts";
 import * as Capability from "../src/Capability.ts";
 import * as Event from "../src/Event.ts";
 
-/** One tick that a test publishes. */
 export interface Tick {
   readonly room: string;
   readonly count: number;
 }
 
-/** The ticks that the tests publish, and the number of subscriptions that follow them now. */
 export class Feed extends Context.Service<
   Feed,
   {
@@ -25,14 +22,11 @@ export const feedLayer = Layer.effect(
   Effect.all({ ticks: PubSub.unbounded<Tick>(), following: SubscriptionRef.make(0) }),
 );
 
-/** Publish one tick. */
 export const publish = (tick: Tick) => Feed.use((feed) => PubSub.publish(feed.ticks, tick));
 
-/** Wait until exactly `count` subscriptions follow the ticks. */
 export const following = (count: number) =>
   Feed.use((feed) => SubscriptionRef.changes(feed.following).pipe(Stream.filter((now) => now === count), Stream.runHead));
 
-/** The services of the fixture, and a function that waits for the subscriptions, for code that does not use Effect. */
 export function feedForPromises() {
   const feed = Effect.runSync(Effect.all({ ticks: PubSub.unbounded<Tick>(), following: SubscriptionRef.make(0) }));
   return {
@@ -42,7 +36,6 @@ export function feedForPromises() {
   };
 }
 
-/** The ticks, while a subscription follows them. The count of followers changes when the stream starts and ends. */
 const ticks = Stream.unwrap(
   Effect.gen(function* () {
     const feed = yield* Feed;
@@ -71,7 +64,6 @@ export const ticked = Event.make({
     ),
 });
 
-/** An event whose input schema has no top-level properties. */
 export const counted = Event.make({
   id: "feed.counted",
   description: "Give one occurrence for each key of the input, in order, with its number, then end.",

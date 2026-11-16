@@ -1,7 +1,3 @@
-//! A music-player catalog, written with the Rust catalog library.
-//!
-//! Run it with `cargo run --example player` to print the catalog.
-
 use acid_cat_catalog::{Capability, Catalog, Event, Target};
 use serde_json::json;
 

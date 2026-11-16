@@ -1,15 +1,7 @@
 name: Release
 
-# release-please keeps a release pull request open. It holds the next version and the changelog of each package with
-# releasable commits since its last release: `feat`, `fix`, `perf`, `revert`, or a breaking change (`!`).
-#
-# Merge the release pull request to release. release-please then tags each released package and creates its GitHub
-# release. Each tag starts the release workflow of its registry.
-#
-# release-please uses a token of the GitHub App `heb-release` (variable RELEASE_APP_CLIENT_ID, secret
-# RELEASE_APP_PRIVATE_KEY), not GITHUB_TOKEN. GitHub starts no workflows for tags that GITHUB_TOKEN makes, and holds
-# the checks of pull requests that GITHUB_TOKEN opens. With the token of the App, the release pull request has its
-# checks, and the tags start the release workflows, as for any other pull request and tag.
+# GitHub starts no workflows for tags that GITHUB_TOKEN makes, and holds the checks of pull requests that GITHUB_TOKEN
+# opens.
 on:
   push:
     branches: [main]
@@ -37,8 +29,7 @@ jobs:
         with:
           token: ${{ steps.app.outputs.token }}
 
-      # The npm packages share one version, and one tag `npm/v<version>` publishes them all. release-please makes one
-      # tag for each package, so this step makes the shared tag.
+      # release-please makes one tag for each package.
       - name: Tag the npm release
         if: steps.release.outputs['packages/cli--release_created']
         env:

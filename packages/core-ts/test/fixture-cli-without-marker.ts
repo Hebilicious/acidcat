@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * The fixture as a command line whose calls to fixture.hold write no marker file, for the conformance tests. Its
- * subscriptions to fixture.watch write their marker files.
- */
 import { writeFile } from "node:fs/promises";
 
 import { cliMain } from "../src/index.ts";

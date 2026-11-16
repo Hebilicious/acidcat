@@ -15,12 +15,9 @@ import { run } from "./run.ts";
 
 const program = (file: string) => (...args: string[]) => run(new URL(file, import.meta.url).pathname, ...args);
 
-/** The command line with the flag `--switch` of the application. The services of the capabilities depend on it. */
 const cliWithFlag = program("./fixture-cli-flags.ts");
-/** The command line with the command `position` of the application, and a description in the options. */
 const cliWithCommand = program("./fixture-cli-commands.ts");
 
-/** The command line with a required repeated flag and an optional repeated flag. */
 const cliWithRepeated = program("./fixture-cli-repeated.ts");
 
 const toggle = (stdout: string) =>
@@ -28,7 +25,6 @@ const toggle = (stdout: string) =>
     .flatMap((entry) => (entry.kind === "capability" ? [entry] : []))
     .find((entry) => entry.id === "fixture.toggle");
 
-// Each test below starts processes. The tests run at the same time, and the runs of a test wait at the same time.
 describe("the command line of an application", { concurrency: true }, () => {
   test("a repeated flag gives its items in order, or JSON text of the array, and a required one must occur", async () => {
     const [plan, once, missing, jsonText, notAnItem, notAnInteger, list] = await Promise.all([
@@ -76,7 +72,6 @@ describe("the command line of an application", { concurrency: true }, () => {
 
   test("an interrupt as soon as a call holds cancels the call with exit code 130, and writes cancelled to standard error", async () => {
     const directory = mkdtempSync(join(tmpdir(), "core-effect-cli-"));
-    // Each run sends the interrupt as soon as the call writes its marker file. Ten runs make a race more likely to show.
     const interrupted = async (run: number) => {
       const marker = join(directory, `held-${run}`);
       const child = spawn(process.execPath, [new URL("./fixture-cli.ts", import.meta.url).pathname, "fixture", "hold", "--key", "k", "--marker", marker]);
@@ -91,7 +86,6 @@ describe("the command line of an application", { concurrency: true }, () => {
     };
     try {
       const runs = await Promise.all(Array.from({ length: 10 }, (_, run) => interrupted(run)));
-      // A cancelled call is a call failure: it goes to standard error (spec/bindings/cli.md#outcomes).
       const cancelled = JSON.stringify({ kind: "cancelled", message: "The call was cancelled." });
       assert.deepEqual(runs, Array.from({ length: 10 }, () => ({ code: 130, signal: null, stderr: `${cancelled}\n` })));
     } finally {

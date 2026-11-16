@@ -1,25 +1,3 @@
-/**
- * A GraphQL API for the air conditioner, with Pothos and GraphQL Yoga, next to the HTTP binding at `/api`.
- *
- * The schema is application code: its types and fields are a design choice. It keeps the three outcomes of a call:
- *
- * - a value is data: the status of the unit;
- * - a failure is data too: each field returns a union of the status and the failures of its capability, so a client
- *   gets the failure with its type, for example `... on PoweredOff`;
- * - a call failure is a GraphQL error whose `code` is the kind of the call failure. Yoga masks all other errors.
- *
- * Each request has its own session. `session.call` checks the arguments with the input schema of the capability.
- *
- * The subscription `statusChanged` follows the event `aircon.status.changed`. Its `subscribe` resolver returns the
- * promise of `subscribe` of the event handle, and GraphQL calls `return()` of the iterator when the client ends the
- * subscription. It is served two ways, with one schema:
- *
- * - through server-sent events, by GraphQL Yoga at `/graphql` (the "distinct connections" mode of the GraphQL over
- *   server-sent events protocol, which the graphql-sse client uses). The session of the request stays open until the
- *   stream ends;
- * - through WebSockets, by graphql-ws on a `ws` server (`graphqlWebSocket`). Each connection is one session: it opens
- *   when the client connects, and closes when the connection closes. Its errors are masked as Yoga masks them.
- */
 import SchemaBuilder from "@pothos/core";
 import { CallFailureError } from "@acid-cat/core-ts";
 import type { Session } from "@acid-cat/core-ts";
@@ -67,10 +45,8 @@ const PoweredOffType = builder.objectRef<z.infer<typeof PoweredOff>>("PoweredOff
   fields: (t) => ({ _tag: t.exposeString("_tag") }),
 });
 
-/** The GraphQL type of a status or of the failure `Offline`: a failure has a `_tag`. */
 const statusOrOffline = (value: z.infer<typeof Status> | z.infer<typeof Offline>) => ("_tag" in value ? OfflineType : StatusType);
 
-/** The GraphQL type of a status, or of the failure `Offline` or `PoweredOff`. */
 const statusOrFailure = (value: z.infer<typeof Status> | z.infer<typeof Offline> | z.infer<typeof PoweredOff>) => {
   if (!("_tag" in value)) return StatusType;
   return value._tag === "Offline" ? OfflineType : PoweredOffType;
@@ -87,7 +63,6 @@ const SetModeResult = builder.unionType("SetModeResult", {
   resolveType: statusOrFailure,
 });
 
-/** The status of the unit, or the failure that stops the read. */
 async function statusOf(session: Session<AirconContext>) {
   const result = await session.call(statusGet, {});
   return result.ok ? result.value : result.error;
@@ -145,6 +120,7 @@ builder.subscriptionType({
     statusChanged: t.field({
       type: StatusType,
       description: statusChanged.description,
+      // GraphQL calls `return()` of the iterator when the client ends the subscription.
       subscribe: (_, __, { session }) => session.eventHandle(statusChanged).subscribe({}),
       resolve: (occurrence) => occurrence.data,
     }),
@@ -153,7 +129,6 @@ builder.subscriptionType({
 
 export const schema = builder.toSchema();
 
-/** A call failure becomes a GraphQL error with its kind as `code`. Yoga masks all other errors. */
 function maskError(error: unknown, message: string): GraphQLError {
   const cause = error instanceof GraphQLError ? error.originalError : error;
   if (!(cause instanceof CallFailureError)) return new GraphQLError(message);
@@ -166,11 +141,7 @@ function maskError(error: unknown, message: string): GraphQLError {
 /** Yoga logs one line for each request at the level `info`. The level `warn` keeps the logs of masked errors. */
 export const yoga = createYoga<Context>({ schema, graphiql: false, maskedErrors: { maskError }, logging: "warn" });
 
-/**
- * A response whose body closes the session when it ends: when the stream is done, or when the client cancels it. A
- * stream of server-sent events uses the session until its subscription ends. When the client cancels the stream, Yoga
- * cancels the subscription first, then the session closes.
- */
+/** When the client cancels the stream, Yoga cancels the subscription first, then the session closes. */
 function closingSession(response: Response, session: Session<AirconContext>): Response {
   const body = response.body;
   if (body === null) return response;
@@ -190,7 +161,6 @@ function closingSession(response: Response, session: Session<AirconContext>): Re
   return new Response(stream, { status: response.status, statusText: response.statusText, headers: response.headers });
 }
 
-/** A web request handler: GraphQL at `/graphql`, with subscriptions through server-sent events, and the HTTP binding at `/api`. */
 export function graphqlApi(options: ApiOptions): (request: Request) => Promise<Response> {
   const http = httpBinding(options, "/api");
   return async (request) => {
@@ -210,11 +180,6 @@ export function graphqlApi(options: ApiOptions): (request: Request) => Promise<R
   };
 }
 
-/**
- * Serve GraphQL through WebSockets on a `ws` server, with the graphql-ws protocol, the same schema, and the same masked
- * errors. Each connection is one session. A connection from an origin that the API does not allow is refused.
- * The result stops the server from taking new connections: call `dispose()` on it.
- */
 export function graphqlWebSocket(options: ApiOptions, server: WebSocketServer) {
   return useServer<Record<string, unknown> | undefined, { session: Session<AirconContext> }>(
     {
@@ -233,7 +198,6 @@ export function graphqlWebSocket(options: ApiOptions, server: WebSocketServer) {
         if (session === undefined) throw new GraphQLError("The connection has no session.");
         return { session };
       },
-      // The errors of each result are masked as Yoga masks them.
       onNext: (_context, _id, _payload, _args, { data, errors }) =>
         errors === undefined ? undefined : { data: data ?? null, errors: errors.map((error) => maskError(error, "Unexpected error.").toJSON()) },
     },

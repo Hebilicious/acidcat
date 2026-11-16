@@ -1,11 +1,6 @@
-/**
- * A client of the HTTP binding (spec/bindings/http.md). The command line uses it to call the capabilities and follow
- * the events of an application that runs in another process or on another machine (spec/bindings/cli.md#server).
- */
 import { AVAILABLE, CALL_FAILURE_KINDS, CallFailureError, callFailure, isJsonObject, isOccurrence, SSE_MEDIA_TYPE, unavailable } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CallFailureKind, Occurrence, Outcome } from "@acid-cat/spec-ts";
 
-/** The largest answer that the client reads, in bytes. */
 const MAXIMUM_ANSWER = 64 * 1024 * 1024;
 
 export interface HttpClientOptions {
@@ -72,7 +67,6 @@ export function httpClient(url: string, options: HttpClientOptions = {}): HttpCl
   const send = options.fetch ?? fetch;
   const notAnswering = () => callFailure("unavailable", `The server at ${base} does not answer.`);
 
-  /** Send a request. The result is the response, or the call failure when the server does not answer or the signal aborts. */
   async function request(method: "GET" | "POST", path: string, init: { readonly body?: unknown; readonly signal?: AbortSignal | undefined; readonly lastEventId?: string | undefined }): Promise<Response | CallFailure> {
     if (aborted(init.signal)) return cancelled();
     const requestHeaders = new Headers(headers);
@@ -96,7 +90,6 @@ export function httpClient(url: string, options: HttpClientOptions = {}): HttpCl
     }
   }
 
-  /** The status and the JSON body of an answer, or the call failure when it is not JSON. */
   async function read(response: Response, signal: AbortSignal | undefined): Promise<{ readonly status: number; readonly body: unknown } | CallFailure> {
     const text = await boundedText(response, signal);
     if (typeof text !== "string") return text;
@@ -168,13 +161,11 @@ const broken = () => callFailure("internal", "The connection to the server broke
 
 const isCallFailureKind = (value: unknown): value is CallFailureKind => CALL_FAILURE_KINDS.some((kind) => kind === value);
 
-/** The call failure in the body of an answer, or `internal` when the body is not a call failure. */
 function failureOf(body: unknown): CallFailure {
   if (isJsonObject(body) && isCallFailureKind(body.kind) && typeof body.message === "string") return callFailure(body.kind, body.message);
   return notAnAnswer();
 }
 
-/** One item of `GET {base}/capabilities`, or `undefined` when it is not one. */
 function availabilityEntry(item: unknown): { readonly id: string; readonly availability: Availability } | undefined {
   if (!isJsonObject(item) || typeof item.id !== "string") return undefined;
   if (item.available === true) return { id: item.id, availability: AVAILABLE };
@@ -182,7 +173,6 @@ function availabilityEntry(item: unknown): { readonly id: string; readonly avail
   return undefined;
 }
 
-/** The text of a body, at most `MAXIMUM_ANSWER` bytes, or the call failure when it cannot be read. */
 async function boundedText(response: Response, signal: AbortSignal | undefined): Promise<string | CallFailure> {
   if (response.body === null) return "";
   const reader = response.body.getReader();
@@ -205,7 +195,6 @@ async function boundedText(response: Response, signal: AbortSignal | undefined):
   }
 }
 
-/** A message of a stream of server-sent events. */
 interface Message {
   readonly event: string;
   readonly data: string;
@@ -213,9 +202,7 @@ interface Message {
 
 /**
  * The parser of a stream of server-sent events (https://html.spec.whatwg.org/multipage/server-sent-events.html): lines
- * end with CRLF, LF or CR, a line that starts with `:` is a comment, and a blank line ends a message. It reads the
- * fields `event` and `data`, and ignores the others, also `id`: the cursor of an occurrence is in its data. It gives a
- * message with no data only when its event is `complete`.
+ * end with CRLF, LF or CR, a line that starts with `:` is a comment, and a blank line ends a message.
  */
 export class SseParser {
   #buffer = "";
@@ -223,7 +210,6 @@ export class SseParser {
   #data: string[] = [];
   #started = false;
 
-  /** Give the next text of the stream. The result is the messages that it ends. */
   push(text: string): Message[] {
     this.#buffer += text;
     if (!this.#started && this.#buffer.length > 0) {
@@ -250,7 +236,7 @@ export class SseParser {
       const empty = this.#data.length === 0;
       this.#event = "";
       this.#data = [];
-      // A message with no data is not dispatched, except `complete`: the HTTP binding needs no data to end a stream.
+      // Server-sent events dispatch no message without data, but the `complete` message of the HTTP binding has none.
       return empty && message.event !== "complete" ? undefined : message;
     }
     if (line.startsWith(":")) return undefined;
@@ -264,7 +250,6 @@ export class SseParser {
   }
 }
 
-/** Parse JSON text, or give `undefined` when it is not JSON. */
 function parseJson(text: string): { readonly value: unknown } | undefined {
   try {
     return { value: JSON.parse(text) };
@@ -273,10 +258,6 @@ function parseJson(text: string): { readonly value: unknown } | undefined {
   }
 }
 
-/**
- * The occurrences of a stream of server-sent events of the HTTP binding. `next` is an occurrence, `complete` the end,
- * and `error` the end with its call failure. A stream that ends with no `complete` or `error` is `internal`.
- */
 async function* occurrencesOf(body: ReadableStream<Uint8Array>, signal: AbortSignal | undefined): AsyncGenerator<Occurrence> {
   const reader = body.getReader();
   const decoder = new TextDecoder();

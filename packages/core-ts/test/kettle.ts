@@ -1,15 +1,8 @@
-/**
- * An electric kettle, simulated in memory. The tests use it to examine typed handles, state, availability, named types
- * and the catalog that the core writes.
- */
 import { z } from "zod";
 
 import { AVAILABLE, capabilitiesFor, defineApp, fail, ok, unavailable } from "../src/index.ts";
 import type { Availability, Observable, ToJsonSchema } from "../src/index.ts";
 
-// --- Types -------------------------------------------------------------------------------------------------------
-
-/** The drinks that the kettle can keep the water warm for. Each one has its own temperature. */
 export const Drink = z.enum(["green-tea", "white-tea", "coffee", "baby-milk"]).meta({ id: "Drink" });
 export const KettleStatus = z
   .object({ litres: z.number(), celsius: z.number(), keepWarm: Drink.optional() })
@@ -23,20 +16,15 @@ export type Status = z.infer<typeof KettleStatus>;
 const CAPACITY = 1.7;
 const WARM_CELSIUS: Record<z.infer<typeof Drink>, number> = { "green-tea": 80, "white-tea": 85, coffee: 95, "baby-milk": 40 };
 
-// --- The kettle --------------------------------------------------------------------------------------------------
-
-/** The simulated kettle. Its status is an observable. Each change calls the listeners. */
 export class Kettle {
   #status: Status = { litres: 0, celsius: 20 };
   readonly #statusListeners = new Set<(value: Status) => void>();
   readonly #coolListeners = new Set<(value: Availability) => void>();
 
-  /** The status of the kettle. The getter gives the object of the kettle itself, not a copy. */
   get status(): Status {
     return this.#status;
   }
 
-  /** The status, as clients observe it. */
   readonly observed: Observable<Status> = {
     getSnapshot: () => this.#status,
     subscribe: (listener) => {
@@ -45,7 +33,6 @@ export class Kettle {
     },
   };
 
-  /** Available while the water is cooler than 40 °C. */
   readonly cool: Observable<Availability> = {
     getSnapshot: () => (this.#status.celsius < 40 ? AVAILABLE : unavailable("The water is too hot.")),
     subscribe: (listener) => {
@@ -54,7 +41,6 @@ export class Kettle {
     },
   };
 
-  /** The number of listeners of the status, to test when a handle subscribes. */
   get statusListeners(): number {
     return this.#statusListeners.size;
   }
@@ -71,8 +57,6 @@ export interface Context {
 }
 
 const capability = capabilitiesFor<Context>();
-
-// --- The capabilities --------------------------------------------------------------------------------------------
 
 export const statusGet = capability({
   id: "kettle.status.get",
@@ -132,8 +116,6 @@ export const descale = capability({
   run: () => ok(null),
 });
 
-// --- The application ---------------------------------------------------------------------------------------------
-
 export const kettle = defineApp<Context>({
   title: "Electric kettle",
   description: "Boil water, and keep it warm for a drink.",
@@ -146,7 +128,6 @@ export const kettle = defineApp<Context>({
   capabilities: [statusGet, fill, boil, warmSet, descale],
 });
 
-/** Converts a Zod schema to JSON Schema, for the catalog. */
 export const toJsonSchema: ToJsonSchema = (schema) => {
   if (!(schema instanceof z.ZodType)) throw new Error("The kettle has only Zod schemas.");
   return z.toJSONSchema(schema, { target: "draft-2020-12" });

@@ -1,39 +1,21 @@
-/**
- * The fixed details of the AcidCat specification, as TypeScript data and pure functions, for the TypeScript reference
- * implementation. This package has no dependencies.
- *
- * - Outcomes and call failures: spec/invocation.md
- * - Subscriptions and occurrences: spec/events.md
- * - Names, views and bundling: spec/catalog.md
- * - Exit codes, status codes and MCP results: spec/bindings/
- */
-
-// ---------------------------------------------------------------------------------------------------------------
-// Outcomes (spec/invocation.md#outcomes)
-// ---------------------------------------------------------------------------------------------------------------
-
 /** The kinds of call failure, in order of precedence: when more than one applies, the first one is used. */
 export const CALL_FAILURE_KINDS = ["cancelled", "unknown-capability", "unavailable", "invalid-input", "internal"] as const;
 
 export type CallFailureKind = (typeof CALL_FAILURE_KINDS)[number];
 
-/** A call that did not give a result. */
 export interface CallFailure {
   readonly kind: CallFailureKind;
   readonly message: string;
 }
 
-/** A value or a failure. */
 export type Result<Value, Failure> =
   | { readonly ok: true; readonly value: Value }
   | { readonly ok: false; readonly error: Failure };
 
-/** The end of a call: a value, a failure or a call failure. */
 export type Outcome<Value, Failure> = Result<Value, Failure> | CallFailure;
 
 export const ok = <Value>(value: Value): Result<Value, never> => ({ ok: true, value });
 
-/** A failure, with its tag in `_tag`, as a result: `fail({ _tag: "Offline" })`. */
 export const fail = <const Failure extends { readonly _tag: string }>(failure: Failure): Result<never, Failure> => ({ ok: false, error: failure });
 
 export const callFailure = (kind: CallFailureKind, message: string): CallFailure => ({ kind, message });
@@ -51,14 +33,9 @@ export class CallFailureError extends Error {
   }
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// Events (spec/events.md)
-// ---------------------------------------------------------------------------------------------------------------
-
 /** The kinds of call failure that a subscription can fail with before its first occurrence, in order of precedence. */
 export const SUBSCRIBE_FAILURE_KINDS = ["cancelled", "unknown-capability", "invalid-input", "internal"] as const;
 
-/** One thing that happened, in its JSON form (spec/events.md#occurrences). */
 export interface Occurrence<Payload = unknown> {
   readonly eventId: string;
   readonly name: string;
@@ -77,7 +54,6 @@ export interface Emitted<Payload = unknown> {
   readonly truncated?: true;
 }
 
-/** Where a subscription starts (spec/events.md#resuming). */
 export interface Resume {
   readonly cursor?: string;
   readonly maxAgeMs?: number;
@@ -120,31 +96,17 @@ const OCCURRENCE_MEMBERS = new Set(["eventId", "name", "timestamp", "data", "cur
 /** The time with no message on a stream after which a binding sends a keepalive or a heartbeat, in milliseconds. */
 export const KEEPALIVE_MS = 15_000;
 
-// ---------------------------------------------------------------------------------------------------------------
-// Availability (spec/invocation.md#availability)
-// ---------------------------------------------------------------------------------------------------------------
-
 export type Availability = { readonly available: true } | { readonly available: false; readonly reason: string };
 
 export const AVAILABLE: Availability = { available: true };
 
 export const unavailable = (reason: string): Availability => ({ available: false, reason });
 
-// ---------------------------------------------------------------------------------------------------------------
-// Names (spec/catalog.md#ids)
-// ---------------------------------------------------------------------------------------------------------------
-
 export const ID_PATTERN = /^[a-z][a-z0-9]*(-[a-z0-9]+)*(\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$/;
 
 export const isId = (id: string): boolean => id.length <= 128 && ID_PATTERN.test(id);
 
-/** The path of the CLI command for an id: `aircon.power.set` → `["aircon", "power", "set"]`. */
 export const commandPath = (id: string): readonly string[] => id.split(".");
-
-
-// ---------------------------------------------------------------------------------------------------------------
-// CLI binding (spec/bindings/cli.md#outcomes)
-// ---------------------------------------------------------------------------------------------------------------
 
 export const CLI_EXIT_CODES = {
   value: 0,
@@ -244,10 +206,6 @@ export const CLI_RESUME_FLAGS = ["cursor", "max-age-ms"] as const;
 /** The exit code for each end of a subscription through the CLI (spec/bindings/cli.md#events). */
 export const CLI_WATCH_EXIT_CODES = { complete: 0, cancelled: 130, internal: 5 } as const;
 
-// ---------------------------------------------------------------------------------------------------------------
-// HTTP binding (spec/bindings/http.md)
-// ---------------------------------------------------------------------------------------------------------------
-
 export const HTTP_STATUS = {
   "unknown-capability": 404,
   "invalid-input": 422,
@@ -277,12 +235,7 @@ export const httpEventMessage = {
   keepalive: (): string => ":\n\n",
 } as const;
 
-/** The media type of a stream of server-sent events. */
 export const SSE_MEDIA_TYPE = "text/event-stream";
-
-// ---------------------------------------------------------------------------------------------------------------
-// Remote bindings (spec/bindings/README.md#remote-bindings)
-// ---------------------------------------------------------------------------------------------------------------
 
 export type Rejection = "method" | "origin" | "media-type" | "too-large" | "not-utf8";
 
@@ -342,15 +295,10 @@ export async function readBounded(
   }
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// MCP binding (spec/bindings/mcp.md)
-// ---------------------------------------------------------------------------------------------------------------
-
 export const MCP_PROTOCOL_VERSION = "2026-07-28";
 
 export const MCP_UNKNOWN_TOOL = -32602;
 
-/** The HTTP status and JSON-RPC error code for each rejected MCP request. */
 export const MCP_REJECTIONS: { readonly [R in Rejection]: { readonly status: number; readonly code?: number } } = {
   method: { status: 405 },
   origin: { status: 403 },
@@ -359,7 +307,6 @@ export const MCP_REJECTIONS: { readonly [R in Rejection]: { readonly status: num
   "not-utf8": { status: 400, code: -32700 },
 };
 
-/** The identifier of the MCP events extension (spec/bindings/mcp.md#events). */
 export const MCP_EVENTS_EXTENSION = "io.modelcontextprotocol/events";
 
 /** The key in `params._meta` that holds the id of the `events/stream` request. */
@@ -446,7 +393,6 @@ export function encodePollCursor(position: PollPosition): string {
   return `p1.${base64UrlOfText(JSON.stringify(parts))}`;
 }
 
-/** The position of a poll cursor, or `undefined` when the text is not a poll cursor. */
 export function decodePollCursor(cursor: string): PollPosition | undefined {
   if (!cursor.startsWith("p1.")) return undefined;
   let parts: unknown;
@@ -593,7 +539,6 @@ function ipv6Words(input: string): number[] | undefined {
   if (ipv4 !== undefined) {
     const [w = 0, x = 0, y = 0, z = 0] = ipv4;
     tail.push((w << 8) | x, (y << 8) | z);
-    // Keep the "::" before an embedded IPv4 address, and remove a single ":".
     address = address.slice(0, lastColon + 1);
     if (!address.endsWith("::")) address = address.slice(0, -1);
   }
@@ -624,10 +569,6 @@ export function mcpToolResult(outcome: Outcome<unknown, unknown>, hasOutputSchem
     ? { content: text(outcome.value), structuredContent: outcome.value }
     : { content: text(outcome.value) };
 }
-
-// ---------------------------------------------------------------------------------------------------------------
-// Catalog (spec/catalog.md)
-// ---------------------------------------------------------------------------------------------------------------
 
 export type JsonObject = { readonly [key: string]: unknown };
 
@@ -660,11 +601,9 @@ export interface CatalogDocument extends JsonObject {
 
 export const REFERENCE = /^#\/\$defs\/([A-Za-z][A-Za-z0-9_]*)$/;
 
-/** The name of the type that a schema's `$ref` refers to, or `undefined` when it has no `$ref` of that form. */
 const referenceName = (schema: JsonObject): string | undefined =>
   typeof schema.$ref === "string" ? REFERENCE.exec(schema.$ref)?.[1] : undefined;
 
-/** Tell if a value is a JSON object: an object that is not `null` and not an array. */
 export const isJsonObject = (value: unknown): value is JsonObject => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
@@ -675,10 +614,8 @@ export function ownMember<Value>(object: { readonly [key: string]: Value }, key:
   return Object.hasOwn(object, key) ? object[key] : undefined;
 }
 
-/** A value as a JSON object, or an empty object when it is not one. */
 const objectOrEmpty = (value: unknown): JsonObject => (isJsonObject(value) ? value : {});
 
-/** The strings in a value that is an array, or no strings when it is not an array. */
 const stringsOf = (value: unknown): readonly string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 
@@ -702,7 +639,6 @@ export function eventSchemasOf(event: CatalogEvent): readonly (readonly [string,
   return members.filter((entry): entry is readonly [string, JsonObject] => entry[1] !== undefined);
 }
 
-/** Every object in a JSON value, at all levels. */
 export function visitObjects(value: unknown, onObject: (node: JsonObject) => void): void {
   if (Array.isArray(value)) {
     value.forEach((item) => visitObjects(item, onObject));

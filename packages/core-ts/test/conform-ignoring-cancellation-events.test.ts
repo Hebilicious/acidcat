@@ -34,7 +34,6 @@ test("acid-cat conform fails only the cancellation checks of events of an implem
     for (const result of failed) assert.match(result.detail ?? "", didNotSettle);
   } finally {
     await served.close();
-    // The poll leases of the MCP handler have timers. Close them, so that the process can exit.
     await mcp.close();
   }
 });

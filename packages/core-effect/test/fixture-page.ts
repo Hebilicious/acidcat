@@ -1,4 +1,3 @@
-/** The fixture as a web page with WebMCP tools, for the conformance tests. The tools stay while the page is open. */
 import { Effect } from "effect";
 
 import { Session, WebMcp } from "../src/index.ts";

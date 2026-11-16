@@ -6,7 +6,6 @@ import { Effect, Layer, Schema } from "effect";
 import { App, Capability, Handles, Http, Session } from "../src/index.ts";
 import { CatalogShape, decodeBody, Listing } from "./decode.ts";
 
-/** An application whose input schema counts how many times Effect writes it as JSON Schema. */
 function countedApp() {
   const counts = { writes: 0 };
   const Counted = Schema.String.check(

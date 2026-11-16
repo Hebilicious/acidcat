@@ -1,9 +1,3 @@
-/**
- * The TypeScript binding (spec/bindings/typescript.md): handles with promises and observables, for code that does not
- * use Effect. For example, a component of a user interface, or a library that takes handles.
- *
- * The handles use a session of Effect. The program that opens the session keeps its services and its scope.
- */
 import { AVAILABLE, CallFailureError, callFailure } from "@acid-cat/spec-ts";
 import type { Availability, Occurrence, Outcome, Result } from "@acid-cat/spec-ts";
 import { Cause, Context, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schema, Scope, Stream } from "effect";
@@ -16,7 +10,6 @@ import { refsOf } from "./internal/served.ts";
 import * as Session from "./Session.ts";
 import * as WebMcp from "./WebMcp.ts";
 
-/** A value that changes, and that code without Effect can read and observe. */
 export interface Observable<T> {
   getSnapshot(): T;
   subscribe(listener: (value: T) => void): { unsubscribe(): void };
@@ -43,7 +36,6 @@ export interface Handle<Input = unknown, Value = unknown, Failure = unknown, Sta
   invokeExternal(input: unknown, options?: CallOptions): Promise<Result<unknown, unknown>>;
 }
 
-/** The handle of a capability, with the types of its schemas. */
 export type HandleOf<C extends Capability.Any> = Handle<
   NonNullable<C["input"]>["Type"],
   NonNullable<C["output"]>["Type"],
@@ -54,7 +46,6 @@ export type HandleOf<C extends Capability.Any> = Handle<
 export type { Occurrence } from "@acid-cat/spec-ts";
 
 export interface SubscribeOptions {
-  /** Cancel the subscription. */
   readonly signal?: AbortSignal | undefined;
   /** Start after this position (spec/events.md#resuming). */
   readonly cursor?: string | undefined;
@@ -80,10 +71,8 @@ export interface EventHandle<Input = unknown, Payload = unknown> {
   subscribeExternal(input: unknown, options?: SubscribeOptions): Promise<AsyncIterable<Occurrence<unknown>>>;
 }
 
-/** The handle of an event, with the types of its schemas. */
 export type EventHandleOf<E extends Event.Any> = EventHandle<NonNullable<E["input"]>["Type"], NonNullable<E["payload"]>["Type"]>;
 
-/** The typed handle of a capability that a session serves, from its handle by id and its typed call. */
 function typedHandle<
   Input extends Capability.AnySchema,
   Output extends Capability.AnySchema,
@@ -109,10 +98,6 @@ function typedHandle<
   };
 }
 
-/**
- * An observable of values in the JSON form of a state schema. The handle of the session encoded each value with that
- * schema, so a value that does not agree with it is a defect, and throws.
- */
 function checked<T>(source: Observable<unknown>, is: (value: unknown) => value is T, id: string): Observable<T> {
   const check = (value: unknown): T => {
     if (is(value)) return value;
@@ -142,14 +127,8 @@ function eventOutsideView(event: { readonly id: string; readonly description: st
   return { id: event.id, description: event.description, audience: [], subscribe: reject, subscribeExternal: reject };
 }
 
-/** A value that never changes. */
 const constant = <T>(value: T): Observable<T> => ({ getSnapshot: () => value, subscribe: () => ({ unsubscribe() {} }) });
 
-/**
- * An observable of a ref. `getSnapshot` reads the ref. The observable follows the ref only while it has listeners: one
- * follower starts with the first listener, and stops after the last listener unsubscribes. A listener gets the value
- * of the ref at the moment that it is delivered, and never the same value two times in sequence.
- */
 function observe<A, T>(
   ref: Capability.Readable<A>,
   read: (value: A) => T,
@@ -182,10 +161,6 @@ function observe<A, T>(
   };
 }
 
-/**
- * The synchronous encoder of a state schema. `getSnapshot` is synchronous, so a handle needs a state schema that
- * encodes synchronously. Encode the current value one time to check this.
- */
 function synchronousEncoder(id: string, schema: Capability.AnySchema, current: unknown): (value: unknown) => unknown {
   const encode = Schema.encodeUnknownSync(schema);
   try {
@@ -197,7 +172,6 @@ function synchronousEncoder(id: string, schema: Capability.AnySchema, current: u
   return encode;
 }
 
-/** A copy of each value, so that a client cannot change the data of the provider. */
 const detached = <T>(source: Observable<T>): Observable<T> => ({
   getSnapshot: () => structuredClone(source.getSnapshot()),
   subscribe: (listener) => source.subscribe((value) => listener(structuredClone(value))),
@@ -279,12 +253,8 @@ const resumeOf = (options: SubscribeOptions | undefined): Session.SubscribeOptio
 const cancelledError = () => new CallFailureError(callFailure("cancelled", "The subscription was cancelled."));
 
 /**
- * Start a subscription, and give its occurrences as an async iterable. The promise rejects with a `CallFailureError`
- * when the subscription does not start. `lifetime` and the signal of the options cancel the subscription.
- *
- * The iterator runs each `next()` in its own fiber, one at a time. `return()` interrupts the fiber of a `next()` that
- * waits, so that `next()` resolves with `done: true`, and closes the scope of the subscription. `Stream.toAsyncIterable`
- * does not do this: its `return()` waits for the `next()` in progress.
+ * `return()` interrupts the fiber of a `next()` that waits. `Stream.toAsyncIterable` does not do this: its `return()`
+ * waits for the `next()` in progress.
  */
 async function iterate<P>(
   start: Effect.Effect<Session.Subscription<P>, Session.CallFailed, Scope.Scope>,
@@ -318,7 +288,6 @@ async function iterate<P>(
   signal.addEventListener("abort", finish, { once: true });
 
   const done = (): IteratorResult<Occurrence<P>> => ({ done: true, value: undefined });
-  /** One `next()`: an occurrence that is ready, or the next pull. */
   const step = (): Promise<IteratorResult<Occurrence<P>>> => {
     const value = ready.shift();
     if (value !== undefined) return Promise.resolve({ done: false, value });
@@ -340,7 +309,6 @@ async function iterate<P>(
       });
     });
   };
-  // Each `next()` waits for the one before it.
   let last: Promise<unknown> = Promise.resolve();
   const iterator: AsyncIterator<Occurrence<P>> = {
     next: () => {
@@ -356,14 +324,9 @@ async function iterate<P>(
   return { [Symbol.asyncIterator]: () => iterator };
 }
 
-/** The result of an outcome. A call failure is a defect, which rejects the promise of the call with a `CallFailureError`. */
 const resultOf = <Value, Failure>(outcome: Effect.Effect<Outcome<Value, Failure>>): Effect.Effect<Result<Value, Failure>> =>
   Effect.flatMap(outcome, (each) => ("kind" in each ? Effect.die(new CallFailureError(each)) : Effect.succeed(each)));
 
-/**
- * Run a call as a promise. `lifetime` and the signal of the call interrupt it, as `cancelled`. A defect rejects the
- * promise, for example the `CallFailureError` of `resultOf`.
- */
 const runner =
   (lifetime: AbortSignal, context: Context.Context<never>) =>
   <A>(effect: Effect.Effect<A, unknown>, options: CallOptions | undefined): Promise<A> => {
@@ -397,7 +360,6 @@ export interface OpenOptions {
   readonly target: string;
   /** The number of occurrences of one subscription that the session keeps for a slow client. See `Session.Options`. */
   readonly eventBuffer?: number | undefined;
-  /** The WebMCP host that gets the tools of the session. Without a host, the session registers no tool. */
   readonly webmcp?: WebMcp.ModelContext | undefined;
 }
 
@@ -407,9 +369,7 @@ export interface OpenOptions {
  */
 export interface PromiseSession<R = never> {
   readonly target: string;
-  /** The view of the target. */
   readonly view: Session.Session["view"];
-  /** The handles of the capabilities in the view, by id. Bindings use them. */
   readonly handles: ReadonlyMap<string, Handle>;
   /**
    * The handle of a capability, with the types of the capability. Only the capability object that the session serves
@@ -435,7 +395,6 @@ export interface PromiseSession<R = never> {
     input: unknown,
     options?: CallOptions,
   ) => Promise<Result<Value, Failure>>;
-  /** The handles of the events in the view, by id. */
   readonly events: ReadonlyMap<string, EventHandle>;
   /**
    * The handle of an event, with the types of the event. Only the event object that the session serves gets a handle
@@ -445,13 +404,11 @@ export interface PromiseSession<R = never> {
   readonly event: <Input extends Capability.AnySchema, Payload extends Capability.AnySchema, Id extends string>(
     event: Event.Event<Input, Payload, R, Id>,
   ) => EventHandle<Input["Type"], Payload["Type"]>;
-  /** The tools of the session on the WebMCP host of `open`, or `undefined` if `open` got no host. */
   readonly webmcp: WebMcpRegistration | undefined;
   /** The signal of the session. It aborts when the session closes. */
   readonly signal: AbortSignal;
   /** Close the session: remove its tools, cancel the calls in progress, and wait for them. */
   readonly dispose: () => Promise<void>;
-  /** Close the session, as `dispose` does, at the end of the block of `await using session = await Handles.open(…)`. */
   readonly [Symbol.asyncDispose]: () => Promise<void>;
 }
 
@@ -465,7 +422,6 @@ export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, opti
   const lifetime = new AbortController();
   const opened = await Effect.runPromiseExit(
     Effect.gen(function* () {
-      // The services live as long as the session.
       const services = yield* Layer.buildWithScope(layer, scope);
       const session = yield* Session.make(app, { target: options.target, eventBuffer: options.eventBuffer }).pipe(Effect.provideContext(services));
       const handles = yield* make(app, session);
@@ -489,7 +445,6 @@ export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, opti
   const { services, session, handles, events, webmcp } = opened.value;
   const refs = refsOf(session);
   const run = runner(lifetime.signal, Context.empty());
-  /** A program of a capability, with the services of the session. */
   const withServices = <A, Err>(program: Effect.Effect<A, Err, R>): Effect.Effect<A, Err> =>
     Effect.updateContext(program, (current: Context.Context<never>) => Context.merge(current, services));
   const dispose = async () => {

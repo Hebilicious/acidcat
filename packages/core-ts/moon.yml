@@ -21,12 +21,9 @@ tasks:
     description: "Test sessions, handles, event handles and the MCP, HTTP, CLI and WebMCP bindings, with the test application, the kettle, the sensors and the air conditioner. WebMCP also runs in Chromium."
     command: "node"
     args: ["--test", "--test-timeout=60000", "test/"]
-    # The tests start the fixtures in many Node.js processes. The compile cache lets each process reuse the compiled code.
     env:
       NODE_COMPILE_CACHE: "node_modules/.cache/node-compile-cache"
     inputs: ["src/**/*.ts", "test/**/*.ts", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/cli/src/**/*.ts", "/packages/cli/conformance/*.acidcat.json"]
-    # The tests of core-ts and core-effect run at the same time. On the CI runner, with 4 vCPUs, each of the two tasks
-    # takes about 40 seconds, and each check that must settle settles before its deadline.
 
   typecheck:
     description: "Type-check the sources and tests."

@@ -33,7 +33,6 @@ test("an input that is a union of objects is an object schema, and the catalog c
   assert.equal(catalogOf(app, { toJsonSchema }).capabilities["probe.find"]?.input?.type, "object");
 });
 
-/** The kind of a call failure, or `undefined` for a result. */
 const kindOf = (outcome: Outcome<unknown, unknown>) => ("kind" in outcome ? outcome.kind : undefined);
 
 test("a call gives a value, a failure or a call failure", async () => {
@@ -194,7 +193,6 @@ test("HTTP gives each outcome its status code", async () => {
   assert.equal((await post("fixture.echo", { text: 1 })).status, 422);
   assert.equal((await post("fixture.hidden", {})).status, 404);
   assert.equal((await post("fixture.crash", {})).status, 500);
-  // A malformed escape in the id names no capability.
   const malformed = await post("%E0", {});
   assert.equal(malformed.status, 404);
   assert.equal((await readJson(malformed, z.object({ kind: z.string() }))).kind, "unknown-capability");
@@ -222,7 +220,6 @@ test("HTTP: a body that is not JSON is invalid-input only after cancelled, unkno
   assert.equal(await kind(await post("fixture.hidden", AbortSignal.abort())), "cancelled");
 });
 
-/** A `createContext` that counts the contexts it makes and the contexts that the handler releases. */
 function countedContexts() {
   const counts = { created: 0, released: 0 };
   const createContext = (): Context & AsyncDisposable => {
@@ -317,7 +314,6 @@ test("the abort of an MCP request cancels its call", async () => {
   assert.equal(seen.aborted, true);
 });
 
-/** Run the command line of an application with arguments, and keep what it writes. */
 async function commandLine<C>(app: App<C>, cliOptions: CliOptions<C>, ...args: string[]) {
   const out: string[] = [];
   const err: string[] = [];
@@ -375,7 +371,6 @@ test("a repeated flag gives its items in order, or JSON text of the array, and a
   assert.match((await run("list")).stdout, /"usage": "probe probe plan --days <mon\|tue>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });
 
-/** A command of the application. It uses the context, and writes its first argument. */
 const position: CliCommand<Context> = {
   name: "position",
   description: "Write the position of the switch.",
@@ -417,7 +412,6 @@ test("the command line stops when it starts if the path of a capability is the s
     message: "The command aircon status is also the start of the command aircon status get. A shared prefix only contains other commands.",
   });
   await assert.rejects(run("aircon.status.get", "aircon.status"), /The command aircon status is also the start of the command aircon status get\./);
-  // A shared first word with different paths is allowed.
   assert.equal((await run("aircon.status.get", "aircon.statuses", "aircon.power.set")).code, 0);
 });
 

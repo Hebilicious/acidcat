@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/** The fixture as a command line whose subscriptions to fixture.watch ignore cancellation, for the conformance tests. */
 import { writeFile } from "node:fs/promises";
 
 import { cliMain } from "../src/index.ts";

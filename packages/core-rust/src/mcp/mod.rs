@@ -47,7 +47,6 @@ pub(crate) mod codes {
     pub const UNKNOWN_TOOL: i64 = -32602;
 }
 
-/// A JSON-RPC error.
 #[derive(Clone, Debug)]
 pub(crate) struct RpcError {
     pub(crate) code: i64,
@@ -81,17 +80,14 @@ impl RpcError {
         error
     }
 
-    /// The error of `events/subscribe` and `events/unsubscribe` when webhook delivery is off, or through stdio.
     pub(crate) fn unsupported_webhook() -> Self {
         RpcError::new(codes::UNSUPPORTED, "Unsupported")
             .with_data(json!({ "feature": "deliveryMode", "value": "webhook" }))
     }
 }
 
-/// The answer to a request: its result, with no `resultType` and no `_meta`, or a JSON-RPC error.
 pub(crate) type RpcAnswer = Result<Map<String, Value>, RpcError>;
 
-/// A JSON-RPC response.
 pub(crate) fn response(id: &Value, answer: Result<Value, RpcError>) -> Value {
     match answer {
         Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
@@ -99,20 +95,14 @@ pub(crate) fn response(id: &Value, answer: Result<Value, RpcError>) -> Value {
     }
 }
 
-/// The `_meta` of a result: the information about the server.
 pub(crate) fn server_info(name: &str, version: &str) -> Value {
     json!({ SERVER_INFO_KEY: { "name": name, "version": version } })
 }
 
-/// A session of its own for a poll lease or a webhook subscription (spec/bindings/mcp.md#subscriptions-that-outlive-a-request).
 pub(crate) type OpenSession<C> = Arc<dyn Fn() -> Session<C> + Send + Sync>;
 
-/// One lock for each key that starts a subscription, so that two requests with the same key do not start two
-/// subscriptions. A key is in the map only while a request holds or waits for its lock.
 pub(crate) type KeyGates<L> = Mutex<HashMap<String, Arc<L>>>;
 
-/// The lock of one key in a [`KeyGates`] map. Lock [`KeyGate::lock`] before the work for the key. When the last request
-/// that uses the lock of a key drops its gate, with success or failure, the key leaves the map.
 pub(crate) struct KeyGate<'a, L> {
     gates: &'a KeyGates<L>,
     key: String,
@@ -133,8 +123,6 @@ impl<'a, L: Default> KeyGate<'a, L> {
 impl<L> Drop for KeyGate<'_, L> {
     fn drop(&mut self) {
         let mut gates = lock_gates(self.gates);
-        // Each clone of the lock is made while the map is locked, so this count is exact: the map and this gate hold the
-        // only two references when no other request holds or waits for the lock.
         if gates
             .get(&self.key)
             .is_some_and(|current| Arc::ptr_eq(current, &self.lock))
@@ -151,7 +139,6 @@ fn lock_gates<L>(gates: &KeyGates<L>) -> std::sync::MutexGuard<'_, HashMap<Strin
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// The tools of the available capabilities in the view of a session (spec/bindings/mcp.md#tools).
 pub(crate) fn list_tools<C: Send + Sync + 'static>(session: &Session<C>) -> Vec<Value> {
     let empty = Map::new();
     let view = session.view();
@@ -181,7 +168,6 @@ pub(crate) fn list_tools<C: Send + Sync + 'static>(session: &Session<C>) -> Vec<
         .collect()
 }
 
-/// True if the bundled output schema of a capability has `"type": "object"`.
 pub(crate) fn has_object_output<C: Send + Sync + 'static>(session: &Session<C>, id: &str) -> bool {
     let empty = Map::new();
     let view = session.view();
@@ -196,7 +182,6 @@ pub(crate) fn has_object_output<C: Send + Sync + 'static>(session: &Session<C>, 
     .is_some_and(|output| bundle(output, types).get("type") == Some(&json!("object")))
 }
 
-/// The MCP tool result for an outcome that is not `unknown-capability`.
 pub(crate) fn tool_result(outcome: &Outcome, has_output_schema: bool) -> Value {
     let text = |value: &Value| json!([{ "type": "text", "text": value.to_string() }]);
     match outcome {
@@ -213,7 +198,6 @@ pub(crate) fn tool_result(outcome: &Outcome, has_output_schema: bool) -> Value {
     }
 }
 
-/// Answer `tools/call`: the tool result, or the error of an unknown tool.
 pub(crate) async fn call_tool<C: Send + Sync + 'static>(
     session: &Session<C>,
     params: &Map<String, Value>,
@@ -240,12 +224,10 @@ pub(crate) async fn call_tool<C: Send + Sync + 'static>(
     Ok(tool_result(&outcome, has_object_output(session, name)))
 }
 
-/// True if the view of the session has events. The server serves the extension only then.
 pub(crate) fn serves_events<C: Send + Sync + 'static>(session: &Session<C>) -> bool {
     !session.event_ids().is_empty()
 }
 
-/// The capabilities of `server/discover`.
 pub(crate) fn capabilities<C: Send + Sync + 'static>(
     session: &Session<C>,
     list_changed: bool,
@@ -257,7 +239,6 @@ pub(crate) fn capabilities<C: Send + Sync + 'static>(
     capabilities
 }
 
-/// The entries of `events/list`: one for each event in the view.
 pub(crate) fn list_events<C: Send + Sync + 'static>(
     session: &Session<C>,
     webhook: bool,
@@ -285,16 +266,13 @@ pub(crate) fn list_events<C: Send + Sync + 'static>(
         .collect()
 }
 
-/// The subscription parameters (spec/bindings/mcp.md#events).
 pub(crate) struct SubscriptionParams {
     pub(crate) name: String,
     pub(crate) input: Value,
     pub(crate) cursor: Option<String>,
-    /// `NaN` when `maxAgeMs` is not a number. The session rejects it after it checks the id of the event.
     pub(crate) max_age_ms: Option<f64>,
 }
 
-/// Read the subscription parameters. An absent cursor and a `null` cursor are the same.
 pub(crate) fn subscription_params(
     params: &Map<String, Value>,
 ) -> Result<SubscriptionParams, RpcError> {
@@ -323,7 +301,6 @@ pub(crate) fn subscription_params(
     })
 }
 
-/// The JSON-RPC error for a call failure of a subscription before its first occurrence.
 pub(crate) fn subscribe_error(failure: &CallFailure) -> RpcError {
     match failure.kind {
         Kind::UnknownCapability => RpcError::new(codes::NOT_FOUND, failure.message.clone())
@@ -333,7 +310,6 @@ pub(crate) fn subscribe_error(failure: &CallFailure) -> RpcError {
     }
 }
 
-/// The messages of one `events/stream` request (spec/bindings/mcp.md#push).
 pub(crate) struct EventStream {
     occurrences: Occurrences,
     id: Value,
@@ -350,7 +326,6 @@ enum StreamState {
 }
 
 impl EventStream {
-    /// Start the subscription of an `events/stream` request, or give the JSON-RPC error before the first occurrence.
     pub(crate) fn start<C: Send + Sync + 'static>(
         session: &Session<C>,
         id: Value,
@@ -391,8 +366,6 @@ impl EventStream {
         json!({ "jsonrpc": "2.0", "id": self.id, "result": { "resultType": "complete", "_meta": meta } })
     }
 
-    /// The next messages: `notifications/events/active`, then the occurrences and the heartbeats, then the result.
-    /// `None` after the result.
     pub(crate) async fn next(&mut self) -> Option<Vec<Value>> {
         match self.state {
             StreamState::Ended => return None,

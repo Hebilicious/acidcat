@@ -8,7 +8,6 @@ import { Handles, Session, WebMcp } from "../src/index.ts";
 import { fixture, fixtureLayer, position, Switch } from "./fixture.ts";
 import { lamp, lampLayer } from "./lamp.ts";
 
-/** A WebMCP host in memory. It can refuse a tool, to test a failed update. */
 function fakeHost() {
   const tools = new Map<string, WebMcp.ModelContextTool>();
   const host = {
@@ -24,23 +23,17 @@ function fakeHost() {
   return host;
 }
 
-/** The tool of a host with a name. It must exist. */
 function toolOf(host: ReturnType<typeof fakeHost>, name: string) {
   const tool = host.tools.get(name);
   assert.ok(tool !== undefined, `The host has no tool ${name}.`);
   return tool;
 }
 
-/**
- * Wait until `done` is true. The binding updates its tools in its own fiber, so a test waits for the state that it checks,
- * not for a time. The wait fails after 5 seconds.
- */
 const until = (done: () => boolean | Promise<boolean>) =>
   Effect.gen(function* () {
     while (!(yield* Effect.promise(async () => done()))) yield* Effect.sleep(5);
   }).pipe(Effect.timeout("5 seconds"), Effect.orDie);
 
-/** A short time, for the one check that nothing happens. */
 const settle = Effect.sleep(20);
 
 test("tools follow availability, a failed update keeps the last tools, and closing removes them", () =>
@@ -177,7 +170,6 @@ test("Handles.open: remove takes the tools away during a call of the same sessio
   await handle("fixture.switch.set").invokeExternal({ on: false });
   await handle("fixture.switch.set").invokeExternal({ on: true });
   await webmcp.retry();
-  // Nothing must happen here, and a test cannot wait for nothing, so it waits for a time.
   await Effect.runPromise(settle);
   assert.equal(host.tools.size, 0);
 

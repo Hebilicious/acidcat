@@ -4,16 +4,13 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
-/** The program of the air conditioner on the Rust core. The task `test-rust` builds it before the tests. */
 const rust = new URL("../core-rust/target/debug/aircon", import.meta.url).pathname;
 
-/** The command that starts the MCP server of one core. */
 function command(core: "core-ts" | "core-effect" | "core-rust") {
   if (core === "core-rust") return { command: rust, args: ["mcp-stdio"] };
   return { command: process.execPath, args: [new URL(`../${core}/mcp-stdio.ts`, import.meta.url).pathname] };
 }
 
-/** Start the MCP server of one core as a process, and connect an MCP client to it, as an agent does. */
 async function connect(core: "core-ts" | "core-effect" | "core-rust") {
   const client = new Client({ name: "aircon-test", version: "0.0.0" });
   await client.connect(new StdioClientTransport({ ...command(core), stderr: "ignore" }));

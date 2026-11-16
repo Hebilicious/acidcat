@@ -11,7 +11,6 @@ import { ManualClock } from "./manual-clock.ts";
 import { sseReader } from "./sse.ts";
 import { startReceiver, testCertificate } from "./webhook-receiver.ts";
 
-/** The services of one request: who calls. */
 interface Services {
   readonly caller: string;
 }
@@ -60,7 +59,6 @@ const app = defineApp({
   ],
 });
 
-/** A `createContext` that reads the caller from `Authorization: Bearer <name>`, and counts the contexts that it makes and releases. */
 function bearerContexts() {
   const counts = { created: 0, released: 0 };
   const createContext = (request: Request): (Services & AsyncDisposable) | Refusal => {
@@ -72,7 +70,6 @@ function bearerContexts() {
   return { counts, createContext };
 }
 
-/** Wait until a condition is true, or fail after one second. */
 async function until(condition: () => boolean): Promise<void> {
   const end = Date.now() + 1000;
   while (!condition()) {
@@ -125,7 +122,6 @@ test("through HTTP, the provider of an event reads the caller and the target, an
   assert.deepEqual(z.object({ data: Who }).parse(JSON.parse(first?.data ?? "")).data, { caller: "grace", target: "api" });
   assert.equal((await reader.next())?.event, "complete");
   assert.equal(await reader.next(), undefined);
-  // The stream releases the context after its last chunk.
   await until(() => counts.released === 1);
   assert.deepEqual(counts, { created: 1, released: 1 });
 
@@ -175,7 +171,6 @@ test("the provider of an event receives the target of the session", async () => 
   assert.deepEqual(step.value.data, { caller: "local", target: "app" });
 });
 
-/** A request to the MCP server of the test, with the caller `Bearer <caller>`, the principal of the caller, and a JSON-RPC message. */
 function mcpRequest(caller: string, method: string, params: object): Request {
   return new Request("https://who.example/mcp", {
     method: "POST",
@@ -192,18 +187,14 @@ test("through MCP, a poll lease uses the context of the request that started it,
   await using handler = mcpHandler(app, { name: "who", version: "0.0.0", allowedOrigins: [], toJsonSchema, createContext, clock, poll: { leaseMs: 1000 } });
 
   const started = await readJson(await handler(mcpRequest("ada", "events/poll", { name: "caller.watched" })), Poll);
-  // One context for the request. The lease holds it after the answer.
   assert.deepEqual(counts, { created: 1, released: 0 });
 
-  // The session of the lease sees the caller of the request that started it. A poll with the same key reads the
-  // same lease: its request has a context of its own, which the handler releases after the answer.
   const read = async () => (await readJson(await handler(mcpRequest("ada", "events/poll", { name: "caller.watched", cursor: started.result.cursor })), Poll)).result.events;
   let events = await read();
   while (events.length === 0) events = await read();
   assert.deepEqual(events.map((each) => each.data), [{ caller: "ada", target: "mcp" }]);
   assert.equal(counts.created - counts.released, 1);
 
-  // The lease ends when it gets no poll for the lease time. Then the handler releases the context of the first request.
   clock.advance(1000);
   await until(() => counts.released === counts.created);
 });
@@ -228,16 +219,13 @@ test("through MCP, a webhook subscription uses the context of the request that s
     const subscribed = await handler(mcpRequest("grace", "events/subscribe", { name: "caller.watched", delivery }));
     assert.equal(subscribed.status, 200);
     await readJson(subscribed, z.object({ result: z.object({ id: z.string() }) }));
-    // One context for the request. The subscription holds it after the answer.
     assert.deepEqual(counts, { created: 1, released: 0 });
 
-    // The session of the subscription sees the caller of the request that started it.
     await until(() => receiver.received.some((each) => each.body["type"] !== "verification"));
     const delivered = receiver.received.find((each) => each.body["type"] !== "verification");
     assert.deepEqual(z.object({ data: Who }).parse(delivered?.body).data, { caller: "grace", target: "mcp" });
     assert.deepEqual(counts, { created: 1, released: 0 });
 
-    // The end of the subscription releases the context of the first request.
     const ended = await handler(mcpRequest("grace", "events/unsubscribe", { name: "caller.watched", delivery: { url: receiver.url } }));
     assert.equal(ended.status, 200);
     await until(() => counts.released === counts.created);

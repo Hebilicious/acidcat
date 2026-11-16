@@ -13,10 +13,8 @@ import * as NodeWebhook from "../src/NodeWebhook.ts";
 import { fixture, fixtureLayer, holdsLayer, POLL, switchLayer, watchersLayer, WEBHOOK_LIMITS } from "./fixture.ts";
 import { testCertificate } from "./webhook-receiver.ts";
 
-/** The principal of a request in the conformance tests: the token of the header `Authorization: Bearer <principal>`. */
 const principalOf = (request: Request) => Effect.succeed(Option.fromNullishOr(/^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")?.[1]));
 
-/** The checks of one run of `acid-cat conform`: no failure, no warning, and at least `minimum` checks, so that a binding cannot pass by running no checks. */
 function assertConforms(results: readonly Check[], minimum: number) {
   const failed = results.filter((result) => !result.passed);
   assert.deepEqual(failed, [], failed.map((result) => `${result.binding}: ${result.name}: ${result.detail}`).join("\n"));
@@ -24,16 +22,8 @@ function assertConforms(results: readonly Check[], minimum: number) {
   assert.ok(results.length >= minimum, `${results.length} checks, expected ${minimum} or more`);
 }
 
-/**
- * The test timeout of each binding. On a computer that runs many tests at the same time, the command line of a core can
- * take more than one minute, because each of its checks starts a new process. The test timeout of the task is one minute.
- */
 const CONFORM_TIMEOUT = 120_000;
 
-// One server serves the MCP and HTTP bindings to the tests below. Each binding has its own test, so that each one has
-// the whole test timeout, and a slow binding shows in the test report. The tests run at the same time, so the file
-// takes the time of the slowest binding. Each binding has its own services of the fixture, so that the checks of one
-// binding do not change the state of another.
 const certificate = testCertificate();
 const writeMarker = (path: string) => Effect.promise(() => writeFile(path, ""));
 const mcp = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), {
@@ -42,7 +32,6 @@ const mcp = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), {
   allowedOrigins: [],
   poll: POLL,
   principal: principalOf,
-  // A short wait before each new attempt of a delivery, so that the check of retries ends soon.
   webhooks: { sender: NodeWebhook.sender({ allowPrivateNetworks: true, ca: certificate.cert }), retryDelays: Schedule.spaced("50 millis"), ...WEBHOOK_LIMITS },
 });
 const server = Effect.runSync(Scope.make());
@@ -54,9 +43,6 @@ before(async () => {
       {
         "/mcp": Mcp.withHandshake(mcp),
         "/api": Http.toWebHandler(fixture, Layer.fresh(fixtureLayer), { allowedOrigins: [], base: "/api" }),
-        // The view of the target `cli` through HTTP, for the command line that calls this server. The checks of the
-        // command line give a marker file to a call that holds and to a subscription that starts, as for the command
-        // line in its own process, and this server is on the same computer.
         "/cli": Http.toWebHandler(fixture, Layer.fresh(Layer.mergeAll(switchLayer, holdsLayer(writeMarker), watchersLayer(writeMarker))), {
           allowedOrigins: [],
           base: "/cli",

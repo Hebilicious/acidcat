@@ -1,7 +1,3 @@
-/**
- * The MCP events extension (spec/bindings/mcp.md#events), apart from the transports: the answer to each `events/*`
- * request, as one JSON-RPC message or as a stream of JSON-RPC messages.
- */
 import {
   bundle,
   callFailure,
@@ -24,19 +20,15 @@ import type { Opener, Polls } from "./poll.ts";
 import { maxAgeOf, resumeIssue } from "./resume.ts";
 import type { Webhooks } from "./webhooks.ts";
 
-/** The methods of the events extension that the binding answers. */
 const METHODS = new Set(["events/list", "events/stream", "events/poll", "events/subscribe", "events/unsubscribe"]);
 
-/** The methods of the events extension that name an event in `params.name`, and so in the `Mcp-Name` header. */
 export const NAMED_METHODS = new Set(["events/stream", "events/poll", "events/subscribe", "events/unsubscribe"]);
 
 /** The capabilities member that tells a client of revision 2026-07-28 that the server serves events. */
 export const EXTENSIONS = { [MCP_EVENTS_EXTENSION]: {} };
 
-/** The id of a JSON-RPC request. */
 export type RequestId = string | number;
 
-/** A request of the events extension, in revision 2026-07-28. */
 export interface EventsRequest {
   readonly id: RequestId;
   readonly method: string;
@@ -59,21 +51,15 @@ export function eventsRequestOf(message: unknown): EventsRequest | undefined {
   return { id, method: message.method, params };
 }
 
-/** The answer to a request: one message, or the messages of a stream. */
 export type Answer =
   | { readonly _tag: "Message"; readonly message: JsonObject }
   | { readonly _tag: "Stream"; readonly messages: Stream.Stream<JsonObject> };
 
 export interface AnswerOptions<R> {
-  /** The time in milliseconds with no message on a stream after which the server sends a heartbeat. */
   readonly heartbeatMs: number;
-  /** The identity of the client of the request, if the deployment gives one. */
   readonly principal: Option.Option<string>;
-  /** The poll leases of the server. With none, the server keeps no state, and `events/poll` is unsupported. */
   readonly polls: Polls | undefined;
-  /** The webhook subscriptions of the server. With none, webhook delivery is off. */
   readonly webhooks: Webhooks | undefined;
-  /** Open a session of its own for a poll lease or a webhook subscription, with the services of the request. */
   readonly open: Opener<R>;
 }
 
@@ -100,14 +86,9 @@ const PollParams = Schema.Struct({
 });
 const decodePollParams = Schema.decodeUnknownEffect(PollParams);
 
-/** A result or an error of the extension, as a JSON-RPC message. */
 const outcomeMessage = (id: RequestId, outcome: { readonly result: JsonObject } | { readonly error: { readonly code: number; readonly message: string; readonly data?: JsonObject } }): Answer =>
   "result" in outcome ? message({ id, result: outcome.result }) : message(errorMessage(id, outcome.error));
 
-/**
- * Answer a request of the events extension for a session whose view has events. A subscription lives in the scope of
- * the answer: close the scope to cancel it.
- */
 export const answer = <R>(session: Session.Session<R>, request: EventsRequest, options: AnswerOptions<R>): Effect.Effect<Answer, never, Scope.Scope> =>
   Effect.gen(function* () {
     const view = session.view;
@@ -138,8 +119,6 @@ export const answer = <R>(session: Session.Session<R>, request: EventsRequest, o
         }
         const { name, cursor, maxEvents } = params.success;
         const maxAgeMs = maxAgeOf(params.success.maxAgeMs);
-        // A poll does not always start a subscription, so the binding checks `maxAgeMs` here, after the name, in the
-        // order of the call failures.
         const issue = maxAgeMs === undefined ? undefined : resumeIssue({ maxAgeMs });
         if (issue !== undefined) {
           const known = Object.hasOwn(view.events ?? {}, name);
@@ -193,11 +172,6 @@ function unsupported(id: RequestId, mode: "poll" | "webhook"): JsonObject {
   });
 }
 
-/**
- * The messages of a subscription that started: `notifications/events/active`, one `notifications/events/event` for
- * each occurrence, heartbeats, and the result of `events/stream` at the end. The call failure `internal` sends
- * `notifications/events/terminated` before the result.
- */
 function streamMessages(id: RequestId, occurrences: Session.Subscription<unknown>, options: { readonly heartbeatMs: number }): Stream.Stream<JsonObject> {
   const meta = { [MCP_SUBSCRIPTION_ID]: id };
   const notification = (method: string, params: JsonObject): JsonObject => ({ jsonrpc: "2.0", method, params: { ...params, _meta: meta } });

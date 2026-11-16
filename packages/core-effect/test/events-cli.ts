@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/** The events fixture as a command line, for the tests of `watch`. */
 import * as NodeCli from "../src/NodeCli.ts";
 import { events, feedLayer } from "./events-fixture.ts";
 

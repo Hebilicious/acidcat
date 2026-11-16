@@ -1,22 +1,9 @@
-//! The air conditioner of `catalog/aircon.pkl`, written with the Rust core `acid-cat-core`. The unit is simulated in
-//! memory.
-//!
-//! ```sh
-//! cargo run -- catalog                      # the catalog in canonical form
-//! cargo run -- cli aircon power set --on    # the command line
-//! cargo run -- mcp-stdio                    # the MCP server through standard input and output
-//! cargo run -- serve 0.0.0.0:8080           # the HTTP binding of the target `cli`, for a remote command line
-//! AIRCON_URL=http://host:8080/cli cargo run -- cli aircon status get   # the command line of that server
-//! ```
-
 use std::sync::{Arc, Mutex};
 
 use acid_cat_core::{App, Application, Availability, Emitted, RunResult, Target, fail};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, watch};
-
-// --- Types -------------------------------------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
@@ -66,7 +53,6 @@ struct Status {
     room_celsius: f64,
 }
 
-/// The failures of a capability that needs the unit online.
 #[derive(Serialize, JsonSchema)]
 #[serde(tag = "_tag")]
 enum Offline {
@@ -86,8 +72,6 @@ enum ModeFailure {
     PoweredOff {},
 }
 
-/// The failures of `aircon.firmware.update`. The capability is unavailable while the unit is offline, so it never
-/// gives `Offline`. The tag stays in the catalog, as in the Pkl source.
 #[derive(Serialize, JsonSchema)]
 #[serde(tag = "_tag")]
 #[allow(dead_code)]
@@ -129,7 +113,6 @@ struct ScheduleInput {
     hours: Option<Vec<u8>>,
 }
 
-/// An input that takes no properties.
 #[derive(Deserialize, JsonSchema)]
 #[schemars(transform = no_properties)]
 struct NoInput {}
@@ -138,13 +121,8 @@ fn no_properties(schema: &mut schemars::Schema) {
     schema.insert("properties".into(), serde_json::json!({}));
 }
 
-// --- The unit ----------------------------------------------------------------------------------------------------
-
-/// The simulated unit.
 pub struct Unit {
-    /// The status now, which `aircon.status.get` gives as its state.
     status: watch::Sender<Status>,
-    /// Each new status, for the subscriptions to `aircon.status.changed`.
     changes: broadcast::Sender<Status>,
     online: watch::Sender<Availability>,
     firmware: String,
@@ -177,7 +155,6 @@ impl Unit {
         self.online.borrow().is_available()
     }
 
-    /// Change the status if the unit is online. A change that keeps the same status tells no one.
     fn change<F>(&self, update: impl FnOnce(&mut Status)) -> RunResult<(), F>
     where
         F: From<Offline>,
@@ -196,7 +173,6 @@ impl Unit {
         Ok(())
     }
 
-    /// Take the unit offline or bring it back.
     pub fn set_online(&self, online: bool) {
         self.online.send_replace(if online {
             Availability::Available
@@ -218,7 +194,6 @@ type Event = acid_cat_core::Event<Unit>;
 const EVERYWHERE: [&str; 5] = ["app", "taskbar", "cli", "mcp", "api"];
 const CONTROLS: [&str; 4] = ["app", "cli", "mcp", "api"];
 
-/// A target with a description of its clients.
 fn target(description: &str, bindings: &[&str]) -> Target {
     Target {
         bindings: bindings
@@ -230,13 +205,11 @@ fn target(description: &str, bindings: &[&str]) -> Target {
     }
 }
 
-/// The application.
 pub fn aircon() -> Arc<Application<Unit>> {
     App::new()
         .title("Living-room air conditioner")
         .description("Control and monitor one split-unit air conditioner on the home network.")
-        // The target `app` has the WebMCP binding, so the catalog is the same in each language. WebMCP runs in a web
-        // page, so this program serves no WebMCP tools: the TypeScript cores serve them in their pages.
+        // WebMCP runs in a web page, so this program serves no WebMCP tools.
         .target_with(
             "app",
             target(
@@ -365,8 +338,7 @@ pub fn aircon() -> Arc<Application<Unit>> {
                 .input::<NoInput>()
                 .payload::<Status>()
                 .subscribe(|_, subscription| {
-                    // The receiver is made when the subscription starts, so the subscription gets each change after it. When
-                    // the subscription reads too slowly, the channel skips changes, and the next occurrence is truncated.
+                    // The receiver is made when the subscription starts, so the subscription gets each change after it.
                     let changes = subscription.context().changes.subscribe();
                     futures::stream::unfold(changes, |mut changes| async move {
                         let mut skipped = false;
@@ -403,7 +375,6 @@ async fn main() {
             use acid_cat_core::cli::{CliOptions, run_cli_process};
             use acid_cat_core::http::HttpClient;
             let mut options = CliOptions::new("aircon", "0.1.0");
-            // With `AIRCON_URL`, the command line controls the unit of the server at that URL (`aircon serve`).
             if let Ok(url) = std::env::var("AIRCON_URL") {
                 match HttpClient::new(&url) {
                     Ok(client) => options = options.remote(client),
@@ -417,7 +388,6 @@ async fn main() {
         }
         Some("serve") => {
             use acid_cat_core::http::{HttpBinding, HttpOptions};
-            // The view of the target `cli` through HTTP, for the command line on another machine.
             let cli = HttpBinding::new(
                 app,
                 unit,

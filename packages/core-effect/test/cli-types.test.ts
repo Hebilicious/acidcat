@@ -1,7 +1,3 @@
-/**
- * The types of the CLI binding keep the services of the application. `moon run core-effect:typecheck` checks this file:
- * each `@ts-expect-error` marks a program that forgets the layer of the application.
- */
 import { test } from "node:test";
 import { Context, Effect, Layer } from "effect";
 import { Command } from "effect/cli";
@@ -10,7 +6,6 @@ import { Cli } from "../src/index.ts";
 import { NodeCli } from "../src/node.ts";
 import { fixture, fixtureLayer } from "./fixture.ts";
 
-/** A service that only a command of the application needs. */
 class Clock extends Context.Service<Clock, number>()("fixture/Clock") {}
 
 const clockLayer = Layer.succeed(Clock, 0);

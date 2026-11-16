@@ -1,13 +1,7 @@
-/**
- * The `initialize` handshake of earlier MCP revisions through HTTP (spec/bindings/mcp.md#earlier-revisions-through-http).
- * `mcpHandshake` wraps the web handler of an MCP server that serves revision 2026-07-28. Each request of a revision with
- * a handshake goes to that handler as a request of revision 2026-07-28, so the handler screens it. The wrapper keeps no
- * state.
- */
+/** The `initialize` handshake of earlier MCP revisions through HTTP (spec/bindings/mcp.md#earlier-revisions-through-http). */
 import { isJsonObject, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, readBounded } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
-/** A web request handler. */
 export type WebHandler = (request: Request) => Promise<Response>;
 
 export interface McpHandshakeOptions {
@@ -19,10 +13,8 @@ const PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
 const CLIENT_CAPABILITIES_KEY = "io.modelcontextprotocol/clientCapabilities";
 const SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo";
 
-/** The revisions with an `initialize` handshake that the wrapper serves, the latest first. */
 const HANDSHAKE_VERSIONS = ["2025-11-25", "2025-06-18"] as const;
 
-/** The members of a result that only revision 2026-07-28 has. */
 const CURRENT_ONLY_MEMBERS = new Set(["_meta", "resultType", "ttlMs", "cacheScope"]);
 
 /**
@@ -35,22 +27,16 @@ export function mcpHandshake(handler: WebHandler, options: McpHandshakeOptions =
     const header = request.headers.get("MCP-Protocol-Version");
     if (request.method !== "POST" || header === MCP_PROTOCOL_VERSION) return handler(request);
     const message = await readMessage(request.clone(), maximumBytes);
-    // A body that is too large or not a JSON object goes to the handler, which rejects it.
     if (message === undefined || !isHandshakeRequest(header, metaOf(message)[PROTOCOL_VERSION_KEY])) return handler(request);
     return answer(handler, request, message);
   };
 }
 
-/**
- * Answer a request of a revision with a handshake. `initialize`, `ping` and notifications go to the handler as
- * `server/discover`, and the other methods go as they are.
- */
 async function answer(handler: WebHandler, request: Request, message: JsonObject): Promise<Response> {
   const method = typeof message["method"] === "string" ? message["method"] : "";
   const params = isJsonObject(message["params"]) ? message["params"] : {};
   const ownMethod = method === "tools/list" || method === "tools/call" ? method : "server/discover";
   const response = await handler(current(request, ownMethod, ownMethod === "server/discover" ? {} : params));
-  // A rejection of the handler, for example of the origin, goes to the client unchanged.
   if (!response.ok) return response;
   const reply = parseObject(await response.text()) ?? {};
   if (!("id" in message)) return new Response(null, { status: 202 });
@@ -63,16 +49,11 @@ async function answer(handler: WebHandler, request: Request, message: JsonObject
   return json({ jsonrpc: "2.0", id, result: Object.fromEntries(Object.entries(result).filter(([member]) => !CURRENT_ONLY_MEMBERS.has(member))) });
 }
 
-/**
- * True if a request is of a revision with a handshake: its header names one, or it has no header and no revision
- * 2026-07-28 in its `params._meta`.
- */
 function isHandshakeRequest(header: string | null, metaVersion: unknown): boolean {
   if (header === null) return metaVersion !== MCP_PROTOCOL_VERSION;
   return HANDSHAKE_VERSIONS.some((version) => version === header);
 }
 
-/** The request of revision 2026-07-28 for `method`, with the headers and the metadata that the revision requires. */
 function current(request: Request, method: string, params: JsonObject): Request {
   const headers = new Headers(request.headers);
   headers.set("MCP-Protocol-Version", MCP_PROTOCOL_VERSION);
@@ -96,7 +77,6 @@ function initializeResult(offered: unknown, discovered: JsonObject): JsonObject 
   const instructions = typeof discovered["instructions"] === "string" ? discovered["instructions"] : undefined;
   const capabilities = isJsonObject(discovered["capabilities"]) ? discovered["capabilities"] : {};
   return {
-    // The revision of the client if the wrapper serves it, or else the latest revision with a handshake.
     protocolVersion: HANDSHAKE_VERSIONS.find((each) => each === offered) ?? HANDSHAKE_VERSIONS[0],
     capabilities: { ...withoutEvents(capabilities), tools: { listChanged: false } },
     serverInfo: { name, version },
@@ -104,7 +84,6 @@ function initializeResult(offered: unknown, discovered: JsonObject): JsonObject 
   };
 }
 
-/** Capabilities without the events extension. A capability object with no other extension has no `extensions` member. */
 function withoutEvents(capabilities: JsonObject): JsonObject {
   const { extensions, ...rest } = capabilities;
   if (!isJsonObject(extensions)) return capabilities;
@@ -112,14 +91,12 @@ function withoutEvents(capabilities: JsonObject): JsonObject {
   return Object.keys(others).length === 0 ? rest : { ...rest, extensions: others };
 }
 
-/** The `params._meta` of a message, or an empty object. */
 function metaOf(message: JsonObject): JsonObject {
   const params = message["params"];
   const meta = isJsonObject(params) ? params["_meta"] : undefined;
   return isJsonObject(meta) ? meta : {};
 }
 
-/** The JSON object in the body of a request, or `undefined` when the body is too large or not a JSON object. */
 async function readMessage(request: Request, maximumBytes: number): Promise<JsonObject | undefined> {
   const body = await readBounded(request, maximumBytes);
   return "text" in body ? parseObject(body.text) : undefined;
