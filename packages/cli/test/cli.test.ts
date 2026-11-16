@@ -183,12 +183,13 @@ test("a file that is not in canonical form gets a warning", () => {
   assert.deepEqual(report.warnings, ["the file is not in canonical form: run `acid-cat format --write`"]);
 });
 
-test("check with --output json writes the report of each catalog to standard output, and keeps the exit code", () => {
+test("check with --output json writes the report of each catalog, also one that cannot be read, to standard output, and keeps the exit code", () => {
   const main = fileURLToPath(new URL("../src/main.ts", import.meta.url));
   const fixture = fileURLToPath(new URL("./fixtures/bakery.acidcat.json", import.meta.url));
   const rejected = fileURLToPath(new URL("./fixtures/rejected/output-boolean.json", import.meta.url));
   const rejectedText = readFileSync(rejected, "utf-8");
-  const result = spawnSync(process.execPath, [main, "check", "--output", "json", fixture, rejected], { encoding: "utf-8" });
+  const missing = fileURLToPath(new URL("./fixtures/missing.acidcat.json", import.meta.url));
+  const result = spawnSync(process.execPath, [main, "check", "--output", "json", fixture, rejected, missing], { encoding: "utf-8" });
   assert.equal(result.status, 1);
   assert.equal(result.stderr, "");
   const report: unknown = JSON.parse(result.stdout);
@@ -197,6 +198,7 @@ test("check with --output json writes the report of each catalog to standard out
     catalogs: [
       { file: fixture, errors: [], warnings: [] },
       { file: rejected, ...check(JSON.parse(rejectedText), rejectedText) },
+      { file: missing, errors: [`the file cannot be read: NotFound: FileSystem.readFile (${missing})`], warnings: [] },
     ],
   });
 });

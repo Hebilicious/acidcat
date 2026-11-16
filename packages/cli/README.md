@@ -23,10 +23,10 @@ It needs Node.js 24 or later. `acid-cat conform --webmcp <url>` also needs [Play
 
 `check` and `conform` take `--output human` (the default) or `--output json`. Human output is text for a person. JSON output is one JSON document on standard output, for a script or an agent. It writes nothing to standard error. The exit code is the same in both modes.
 
-- `check`: `{ "conforms": boolean, "catalogs": [{ "file", "errors": [string], "warnings": [string] }] }`. `conforms` is `false` when the exit code is 1.
-- `conform`: `{ "passed": number, "failed": number, "warnings": number, "checks": [{ "binding", "name", "rule", "passed", "warning"?, "detail"? }] }`.
+- `check`: `{ "conforms": boolean, "catalogs": [{ "file", "errors": [string], "warnings": [string] }] }`. `conforms` is `false` when the exit code is 1. A file that cannot be read, or that is not JSON, is a catalog with one error.
+- `conform`: `{ "passed": number, "failed": number, "warnings": number, "checks": [{ "binding", "name", "rule", "passed", "warning"?, "detail"? }] }`. A check with a warning has `"passed": true` and `"warning": true`, and counts in `passed` and in `warnings`.
 
-An error in the options, for example `conform` with no binding, goes to standard error as text in both modes, with the exit code 1.
+The JSON document comes only when the options are correct. With options that are not correct, the exit code is 1, and standard output can have the help text. `conform` with no binding, with only part of the `--webhook-*` options, or with a certificate file that cannot be read writes one line of text to standard error, and nothing to standard output.
 
 ## check
 
