@@ -1,14 +1,3 @@
-/**
- * An Elysia server for the air conditioner. It mounts the HTTP binding at `/api`, and adds its own routes:
- * `GET /status`, `PATCH /status`, which changes more than one setting in one request, `GET /status/changes`, a
- * stream of server-sent events that follows the event `aircon.status.changed`, and the WebSocket `/status/follow`,
- * which follows the same event. The WebSocket needs a server adapter that serves WebSockets, for example
- * `@elysiajs/node` on Node.js: give it as `adapter`, then call `listen`.
- *
- * Each request has its own session. `PATCH /status` checks the shape of its body with Zod, and `session.call` checks
- * each setting with the input schema of its capability. The application chooses the status codes: a failure gives
- * `409` with the failure in the body, and a call failure gives the status code of its kind.
- */
 import { CallFailureError, ok } from "@acid-cat/core-ts";
 import type { Result, Session } from "@acid-cat/core-ts";
 import { HTTP_STATUS } from "@acid-cat/spec-ts";
@@ -21,7 +10,6 @@ import type { Context, Offline, PoweredOff } from "../core-ts/aircon.ts";
 import { forbidden, foreignOrigin, httpBinding, openSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
 
-/** The settings that `PATCH /status` changes, in this order. */
 const Settings = z.object({
   power: z.boolean().optional(),
   mode: Mode.optional(),
@@ -29,13 +17,8 @@ const Settings = z.object({
   targetCelsius: z.number().optional(),
 });
 
-/** A failure that stops a change of the settings. */
 type ChangeFailure = z.infer<typeof Offline> | z.infer<typeof PoweredOff>;
 
-/**
- * Change each setting that the body gives, in order. Each change runs only if the change before it succeeded, so the
- * first failure stops the change. The settings before it stay changed.
- */
 async function change(session: Session<Context>, { power, mode, fan, targetCelsius }: z.infer<typeof Settings>) {
   let result: Result<null, ChangeFailure> = ok(null);
   if (result.ok && power !== undefined) result = await session.call(powerSet, { on: power });
@@ -45,14 +28,12 @@ async function change(session: Session<Context>, { power, mode, fan, targetCelsi
   return result;
 }
 
-/** A WebSocket that follows the event: its session, and the signal that cancels its subscription. */
 interface Following {
   readonly session: Session<Context>;
   readonly abort: AbortController;
 }
 
 export function elysiaApi(options: ApiOptions, adapter?: ElysiaConfig<"">["adapter"]) {
-  // Each WebSocket is one session. The id of the WebSocket finds its session when the connection closes.
   const following = new Map<string, Following>();
   return new Elysia(adapter === undefined ? {} : { adapter })
     .onRequest(({ request }) => (foreignOrigin(request, options) ? forbidden() : undefined))
@@ -80,7 +61,6 @@ export function elysiaApi(options: ApiOptions, adapter?: ElysiaConfig<"">["adapt
       { body: Settings },
     )
     .get("/status/changes", async function* ({ request }) {
-      // The session of the request stays open until the stream ends.
       await using session = openSession(options);
       // When the client goes away, the signal of the request aborts and cancels the subscription. Elysia also calls
       // `return()` of the generator, but that call waits until the `await` of the loop ends, so it alone does not stop
@@ -102,7 +82,6 @@ export function elysiaApi(options: ApiOptions, adapter?: ElysiaConfig<"">["adapt
           ws.send(JSON.stringify({ event: "following" }));
           for await (const occurrence of occurrences) ws.send(JSON.stringify({ event: statusChanged.id, data: occurrence.data }));
         } catch (error) {
-          // A subscription that ends with a call failure closes the WebSocket with its kind.
           if (error instanceof CallFailureError && !abort.signal.aborted) ws.close(1011, error.kind);
         } finally {
           following.delete(ws.id);
@@ -110,7 +89,6 @@ export function elysiaApi(options: ApiOptions, adapter?: ElysiaConfig<"">["adapt
         }
       },
       close(ws) {
-        // When the client closes the WebSocket, the subscription is cancelled, and its session closes.
         following.get(ws.id)?.abort.abort();
       },
     });

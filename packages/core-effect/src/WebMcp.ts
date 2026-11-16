@@ -1,13 +1,8 @@
-/**
- * The WebMCP binding (spec/bindings/webmcp.md): register capabilities as WebMCP tools in a web page. The binding serves
- * no events (spec/bindings/webmcp.md#events): the page follows them through the event handles of `Handles`.
- */
 import { bundle, callFailure, CallFailureError, isCallFailure } from "@acid-cat/spec-ts";
 import { Effect, Fiber, Option, Predicate, Queue, Scope, Stream, SubscriptionRef } from "effect";
 
 import type * as Session from "./Session.ts";
 
-/** A WebMCP tool, as `registerTool` receives it. */
 export interface ModelContextTool {
   readonly name: string;
   readonly description: string;
@@ -15,7 +10,6 @@ export interface ModelContextTool {
   readonly execute: (input: unknown, options?: { readonly signal?: AbortSignal }) => Promise<unknown>;
 }
 
-/** The part of the WebMCP host that the binding uses. */
 export interface ModelContext {
   readonly registerTool: (tool: ModelContextTool, options: { readonly signal: AbortSignal }) => unknown;
 }
@@ -39,7 +33,6 @@ export interface Installation {
   readonly remove: Effect.Effect<void>;
 }
 
-/** The WebMCP host of the page, if there is one (spec/bindings/webmcp.md#host). */
 export function findHost(): ModelContext | undefined {
   for (const owner of ["document", "navigator"]) {
     const candidate = property(property(globalThis, owner), "modelContext");
@@ -48,7 +41,6 @@ export function findHost(): ModelContext | undefined {
   return undefined;
 }
 
-/** A property of a value, or `undefined` if the value has no such property. */
 const property = (value: unknown, name: string): unknown => (Predicate.hasProperty(value, name) ? value[name] : undefined);
 
 /**
@@ -91,7 +83,6 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
               if (isCallFailure(outcome)) throw new CallFailureError(outcome);
               return outcome;
             },
-            // The signal interrupts the call. The interruption is the call failure `cancelled`.
             (error: unknown) => {
               if (signal.aborted) throw new CallFailureError(callFailure("cancelled", "The call was cancelled."));
               throw error;
@@ -104,7 +95,6 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
       };
     };
 
-    /** One update. If it fails, the tools stay as they were before the update. */
     const pass = Effect.gen(function* () {
       const wanted = new Set<string>();
       for (const id of Object.keys(session.view.capabilities)) {
@@ -145,7 +135,6 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
       }),
     ).pipe(Effect.forkIn(scope));
 
-    // Start to follow the changes before the first update reads the availability, so that no change comes between them.
     const follower = yield* session.changes.pipe(
       Stream.runForEach(() => Queue.offer(requests, undefined)),
       Effect.forkIn(scope, { startImmediately: true }),

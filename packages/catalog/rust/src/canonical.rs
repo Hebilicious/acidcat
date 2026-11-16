@@ -24,7 +24,6 @@ const CAPABILITY_ORDER: [&str; 7] = [
 ];
 const EVENT_ORDER: [&str; 4] = ["description", "audience", "input", "payload"];
 
-/// A catalog in canonical form, as text.
 pub fn canonical_text(catalog: &Value) -> String {
     let mut out = String::new();
     write(&mut out, &canonical_catalog(catalog), "");
@@ -54,7 +53,6 @@ fn canonical_catalog(catalog: &Value) -> Value {
     })
 }
 
-/// The known members in their order, then every other member sorted by key.
 fn ordered(value: &Value, order: &[&str], each: impl Fn(&str, &Value) -> Value) -> Value {
     let Some(object) = value.as_object() else {
         return value.clone();
@@ -87,7 +85,6 @@ fn by_key(value: &Value, each: impl Fn(&Value) -> Value) -> Value {
     )
 }
 
-/// Every object's keys sorted, at every depth. Arrays keep their order.
 fn sorted(value: &Value) -> Value {
     match value {
         Value::Array(items) => Value::Array(items.iter().map(sorted).collect()),

@@ -9,10 +9,8 @@ import type { WebHandler } from "../src/node.ts";
 import { fixture, options } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
 
-/** A token that the tests send in a header. No output may contain it. */
 const SECRET = "Bearer s3cr3t-t0k3n";
 
-/** Run the command line of the fixture with a remote client, and give its exit code and its output. */
 async function remoteCli(remote: HttpClient, args: readonly string[], signal?: AbortSignal) {
   const stdout: string[] = [];
   const stderr: string[] = [];
@@ -21,13 +19,11 @@ async function remoteCli(remote: HttpClient, args: readonly string[], signal?: A
   return { code, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
 }
 
-/** The kind of the call failure on standard error. */
 const kindOf = (stderr: string): unknown => {
   const parsed: unknown = JSON.parse(stderr);
   return typeof parsed === "object" && parsed !== null && "kind" in parsed ? parsed.kind : undefined;
 };
 
-/** Serve a handler on a free port for the time of a test. */
 async function served(handler: WebHandler, context: { after: (fn: () => Promise<void>) => void }): Promise<string> {
   const server = await serve(handler, { port: 0 });
   context.after(() => server.close());
@@ -36,7 +32,6 @@ async function served(handler: WebHandler, context: { after: (fn: () => Promise<
 
 describe("the command line that calls a server", () => {
   test("a server that does not answer is unavailable, with exit code 4, and the header is not written", async () => {
-    // A port that was free a moment ago: nothing listens on it.
     const server = await serve(() => new Response(null), { port: 0 });
     await server.close();
     const remote = httpClient(server.url, { headers: { Authorization: SECRET } });
@@ -128,7 +123,6 @@ describe("the command line that calls a server", () => {
     assert.equal(completed.code, 0);
     assert.equal(completed.stderr, "");
 
-    // A stream that sends one occurrence, then nothing until the client closes it.
     let closed = false;
     const open = await served((request) => {
       request.signal.addEventListener("abort", () => (closed = true));
@@ -166,7 +160,6 @@ describe("the command line that calls a server", () => {
   });
 
   test("an interrupt during list is cancelled, with exit code 130, and closes the request", async (context) => {
-    // A server that accepts the request and never answers.
     let closed = false;
     const url = await served(
       (request) =>
@@ -186,8 +179,6 @@ describe("the command line that calls a server", () => {
   });
 
   test("an interrupt before the server answers a subscription ends watch with 130, and writes nothing", async (context) => {
-    // A server that accepts the subscription and never answers. The interrupt comes while the command line waits for the
-    // answer, as when the server has started the subscription but its answer has not come yet.
     const interrupt = new AbortController();
     let closed = false;
     const url = await served(

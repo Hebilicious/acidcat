@@ -1,19 +1,4 @@
-/**
- * Publish the npm packages, in dependency order. Build the packages first, with `moon run :build`.
- *
- * The script packs each package with pnpm, and publishes the tarball with npm. It skips a version that is already on
- * npm, so it is safe to run again after a failure. In GitHub Actions, npm authenticates with trusted publishing and
- * adds provenance. On a computer, log in first with `npm login --auth-type=web`.
- *
- * npm accepts a trusted publisher only for a package that exists. Before it publishes anything, the script checks that
- * each package is on npm. If one is not, it stops. The skill `.agents/skills/npm-release` tells how to add a package.
- *
- * Usage: node scripts/publish-npm.ts [--dry-run] [--version <version>] [<package> ...]
- *
- * - `<package>`: publish only these packages, for example `@acid-cat/cli`. The default is all packages.
- * - `--version`: fail unless each package has this version. The release workflow gives the version of its tag.
- * - `--dry-run`: pack and check, but do not publish.
- */
+// npm accepts a trusted publisher only for a package that exists.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -34,7 +19,6 @@ if (unknown.length > 0) {
 }
 const selected = positionals.length === 0 ? npmPackages : npmPackages.filter((p) => positionals.includes(p.name));
 
-/** True if this version of the package is on npm. */
 const isPublished = (name: string, version: string) => {
   try {
     const output = execFileSync("npm", ["view", `${name}@${version}`, "version"], {
@@ -47,7 +31,6 @@ const isPublished = (name: string, version: string) => {
   }
 };
 
-/** True if the package is on npm, at any version. */
 const exists = (name: string) => {
   try {
     execFileSync("npm", ["view", name, "name"], { stdio: ["ignore", "ignore", "ignore"] });

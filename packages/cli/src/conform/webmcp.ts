@@ -1,10 +1,3 @@
-/**
- * Conformance checks for the WebMCP binding (spec/bindings/webmcp.md).
- *
- * The checks act as the WebMCP host: they give the page a `modelContext`, record the tools that the binding registers,
- * and call them. The page can run in a browser, or the implementation can install itself on the host in the same
- * process.
- */
 import { REFERENCE, visitObjects } from "@acid-cat/spec-ts";
 
 import { isArrayOf, isObject, isStringArray, memberOf, parseJson } from "../json.ts";
@@ -13,43 +6,33 @@ import { abortable, Checks, expect, expectEqual, fixture, idsOf, sorted, until }
 
 const RULE = "spec/bindings/webmcp.md";
 
-/** The target of the fixture that has the WebMCP binding. */
 const TARGET = "app";
 
-/** A tool as the host records it. */
 export interface RecordedTool {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: unknown;
 }
 
-/** A tool, as a page gives it to `registerTool`. */
 export interface HostTool extends RecordedTool {
   execute(input: unknown, options: { readonly signal: AbortSignal }): Promise<unknown>;
 }
 
-/** What a call to a tool gives: the value that `execute` resolves with, or the error that it rejects with. */
 export type ToolCall =
   | { readonly resolved: unknown }
   | { readonly rejected: { readonly name: string; readonly kind: unknown; readonly message: string } }
   | { readonly missing: true };
 
-/** The host that the checks give to the page. */
 export interface TestHost {
   readonly modelContext: {
     registerTool(tool: HostTool, options: { readonly signal: AbortSignal }): void;
   };
   tools(): RecordedTool[];
-  /** Call a tool. With an `id`, `cancel` can abort the signal of the call. */
   call(name: string, input: unknown, id?: string): Promise<ToolCall>;
-  /** Abort the signal of the call that has this `id`, if it runs. */
   cancel(id: string): void;
 }
 
-/**
- * Make a test host. The function uses no imports and no outer variables, because the browser driver sends its
- * source text to the page.
- */
+/** The function uses no imports and no outer variables, because the browser driver sends its source text to the page. */
 export function createTestHost(): TestHost {
   const registered = new Map<string, HostTool>();
   const calls = new Map<string, AbortController>();
@@ -87,18 +70,12 @@ export function createTestHost(): TestHost {
   };
 }
 
-/** The view from the checks: the tools of the page, and calls to them. */
 export interface WebMcpDriver {
   tools(signal: AbortSignal): Promise<RecordedTool[]>;
-  /**
-   * Call a tool. When `cancel` aborts, the host aborts the signal of the call, and the driver waits for what the tool
-   * gives. When `signal` aborts, the host aborts the signal of the call, and the driver stops waiting.
-   */
   call(name: string, input: unknown, options?: { readonly signal?: AbortSignal; readonly cancel?: AbortSignal }): Promise<ToolCall>;
   close(): Promise<void>;
 }
 
-/** The tools that a host gives, after they pass through JSON. The check fails when the value is not a list of tools. */
 function toolsOf(value: unknown): RecordedTool[] {
   const isTool = (tool: unknown): tool is JsonObject & { readonly name: string; readonly description: string } =>
     isObject(tool) && typeof tool.name === "string" && typeof tool.description === "string";
@@ -106,7 +83,6 @@ function toolsOf(value: unknown): RecordedTool[] {
   return value.map((tool) => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema }));
 }
 
-/** A tool call that a host gives, after it passes through JSON. The check fails when the value is not a tool call. */
 function toolCallOf(value: unknown): ToolCall {
   if (isObject(value)) {
     if (value.missing === true) return { missing: true };
@@ -119,7 +95,6 @@ function toolCallOf(value: unknown): ToolCall {
   throw new Error(`the host must give a tool call, got ${JSON.stringify(value)}`);
 }
 
-/** A test host as a driver reaches it: in the same process, or in a page. */
 interface HostAccess {
   tools(): Promise<RecordedTool[]>;
   call(name: string, input: unknown, id: string): Promise<ToolCall>;
@@ -155,7 +130,6 @@ export type WebMcpInstall = (
   modelContext: TestHost["modelContext"],
 ) => void | (() => void | Promise<void>) | Promise<void | (() => void | Promise<void>)>;
 
-/** A driver for an implementation in the same process. Values pass through JSON, as they do from a page. */
 export async function processDriver(install: WebMcpInstall): Promise<WebMcpDriver> {
   const host = createTestHost();
   const remove = await install(host.modelContext);
@@ -170,7 +144,6 @@ export async function processDriver(install: WebMcpInstall): Promise<WebMcpDrive
   });
 }
 
-/** A driver for a page in Chromium, through Playwright. The page loads with the test host as its `modelContext`. */
 export async function browserDriver(url: string): Promise<WebMcpDriver> {
   let playwright: typeof import("playwright");
   try {
@@ -191,8 +164,6 @@ export async function browserDriver(url: string): Promise<WebMcpDriver> {
     }
   `);
   await page.goto(url);
-  // The page is not trusted. Each expression calls the test host of the page, with its arguments as JSON, and the
-  // driver checks what the page gives.
   const host = (method: string, ...args: unknown[]) =>
     page.evaluate<unknown>(`window.__acidCatConform.${method}(${args.map((arg) => JSON.stringify(arg) ?? "undefined").join(", ")})`);
   return driverOf({
@@ -208,7 +179,6 @@ export async function browserDriver(url: string): Promise<WebMcpDriver> {
   });
 }
 
-/** True if each `$ref` of a schema refers to a type in its own `$defs` (spec/catalog.md#bundling). */
 function isBundled(schema: JsonObject): boolean {
   const types = isObject(schema.$defs) ? schema.$defs : {};
   let bundled = true;
@@ -222,7 +192,6 @@ function isBundled(schema: JsonObject): boolean {
 
 const names = async (driver: WebMcpDriver, signal: AbortSignal) => sorted((await driver.tools(signal)).map((tool) => tool.name));
 
-/** The keys of the calls that hold now, as fixture.held gives them through the host. */
 async function heldKeys(driver: WebMcpDriver, signal: AbortSignal): Promise<readonly string[]> {
   const call = await driver.call("fixture.held", {}, { signal });
   expect("resolved" in call, `fixture.held gave ${JSON.stringify(call)}`);
@@ -247,8 +216,6 @@ export async function checkWebMcp(driver: WebMcpDriver, options: { readonly dead
   await checks.run("a tool has the description and the bundled input schema of its capability", `${RULE}#tools`, async (signal) => {
     for (const tool of await driver.tools(signal)) {
       expectEqual(tool.description, view[tool.name]?.description, `description of ${tool.name}`);
-      // Each implementation writes its schemas from its own code. Compare what the fixture fixes: an object, its
-      // properties and its required properties, with no reference outside the schema.
       const schema = tool.inputSchema;
       expect(isObject(schema), `the input schema of ${tool.name} must be an object`);
       const input: JsonObject = view[tool.name]?.input ?? {};

@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-/**
- * `acid-cat`: check, format and view AcidCat catalogs.
- *
- * Exit codes: 0 when the command succeeds, 1 when a catalog does not conform or a file is not found.
- */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { canonicalText } from "@acid-cat/catalog";
 import { Console, Effect, FileSystem, Option } from "effect";

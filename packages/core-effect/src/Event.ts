@@ -1,7 +1,3 @@
-/**
- * An event, written in Effect: Effect Schema for its input and its payload, and a `Stream` of the things that happen.
- * See spec/events.md and spec/catalog.md#events.
- */
 import type { Emitted, Resume } from "@acid-cat/spec-ts";
 import { Data, Effect, Schema, Stream } from "effect";
 
@@ -11,7 +7,6 @@ import { describe } from "./internal/issues.ts";
 export type { AnySchema, NoInput } from "./Capability.ts";
 export type { Emitted, Resume } from "@acid-cat/spec-ts";
 
-/** The provider gave a payload that does not agree with the payload schema of the event. */
 export class PayloadDisagrees extends Data.TaggedError("PayloadDisagrees")<{}> {}
 
 /**
@@ -54,7 +49,6 @@ export interface Event<Input extends AnySchema = AnySchema, Payload extends AnyS
    * type. The failure is the message of an input that does not agree. `make` builds it.
    */
   readonly open: (input: Input["Type"]) => Effect.Effect<Opener<Payload["Type"], R>, string>;
-  /** The subscriptions of the event for code that does not know the types of its schemas. `make` builds it. */
   readonly pipeline: Pipeline<R>;
 }
 
@@ -71,10 +65,8 @@ export interface Any<R = unknown> {
   readonly pipeline: Pipeline<R>;
 }
 
-/** The services that an event needs. */
 export type Services<E> = E extends Any<infer R> ? R : never;
 
-/** The members of a declaration that do not depend on the input. */
 export interface Declaration<Payload extends AnySchema, Id extends string> {
   readonly id: Id;
   readonly description: string;
@@ -82,56 +74,41 @@ export interface Declaration<Payload extends AnySchema, Id extends string> {
   readonly payload?: Payload | undefined;
 }
 
-/** The declaration of an event with an input schema. `subscribe` gets the decoded input. */
 export interface WithInput<Input extends AnySchema, Payload extends AnySchema, R, Id extends string> extends Declaration<Payload, Id> {
   readonly input: Input;
   readonly subscribe: (input: Input["Type"], resume: Resume) => Stream.Stream<Emitted<Payload["Type"]>, never, R>;
 }
 
-/** The declaration of an event with no input schema. `subscribe` gets the object that the client sent. */
 export interface WithoutInput<Payload extends AnySchema, R, Id extends string> extends Declaration<Payload, Id> {
   readonly input?: undefined;
   readonly subscribe: (input: NoInput, resume: Resume) => Stream.Stream<Emitted<Payload["Type"]>, never, R>;
 }
 
-/** The input of an event with no input schema. */
 const AnyObject = Schema.Record(Schema.String, Schema.Unknown);
 
-/** The data of an event with no payload schema: an empty object. */
 const EmptyPayload = Schema.Struct({});
 
-/** `true` if a declaration has an input. See `hasInput` in `Capability.ts`. */
 function hasInput<With extends { readonly input: object }, Without extends { readonly input?: undefined }>(
   definition: With | Without,
 ): definition is With {
   return definition.input !== undefined;
 }
 
-/**
- * Declare an event. The id keeps its literal type. The event needs the services that `subscribe` needs. With no input
- * schema, the type of the input is the empty struct. With no payload schema, the data is an empty object.
- */
 export function make<Input extends AnySchema, R = never, Payload extends AnySchema = typeof EmptyPayload, const Id extends string = string>(
   definition: WithInput<Input, Payload, R, Id>,
 ): Event<Input, Payload, R, Id>;
 export function make<R = never, Payload extends AnySchema = typeof EmptyPayload, const Id extends string = string>(
   definition: WithoutInput<Payload, R, Id>,
 ): Event<Schema.Struct<{}>, Payload, R, Id>;
-/** Each declaration above is this function with `Input` set: the type of its input schema, or the empty struct. */
 export function make<Input extends AnySchema, R, Payload extends AnySchema, const Id extends string>(
   definition: WithInput<Input, Payload, R, Id> | WithoutInput<Payload, R, Id>,
 ): Event<Input, Payload, R, Id> {
   const disagrees = () => new PayloadDisagrees();
-  /** The payload in its JSON form, as a copy. */
   const encoded = (data: unknown) =>
     Schema.encodeUnknownEffect(definition.payload ?? EmptyPayload)(data).pipe(
       Effect.mapError(disagrees),
       Effect.flatMap((json) => Effect.try({ try: () => structuredClone(json), catch: disagrees })),
     );
-  /**
-   * The payload as a copy, in its type: the JSON form, decoded again. With no payload schema, the type is the empty
-   * object type, and the copy is a clone of an object that encodes.
-   */
   const copied = typedCopy(definition.payload, encoded, disagrees);
   const declared = {
     id: definition.id,
@@ -141,7 +118,6 @@ export function make<Input extends AnySchema, R, Payload extends AnySchema, cons
     payload: definition.payload,
   };
 
-  /** The event, from the decoding and the check of the input of one member of the declaration. */
   const finish = <In>(
     calls: {
       readonly decode: (input: unknown) => Effect.Effect<In, string>;
@@ -192,7 +168,6 @@ export function make<Input extends AnySchema, R, Payload extends AnySchema, cons
 
 const notInput = "input: The input does not agree with the input schema.";
 
-/** The copy of a payload in its type, with the payload schema, or a clone of the payload when there is no schema. */
 function typedCopy<Payload extends AnySchema>(
   schema: Payload | undefined,
   encoded: (data: unknown) => Effect.Effect<unknown, PayloadDisagrees>,

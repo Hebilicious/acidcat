@@ -1,11 +1,3 @@
-/**
- * Conformance checks for poll delivery of the MCP events extension (spec/bindings/mcp.md#poll), through a channel. Each
- * transport runs them. The checks read the state of a lease only through `events/poll` and `fixture.watching`, and wait
- * for states that they can observe, not for times.
- *
- * A lease continues after the check that started it, until the lease time of the deployment ends. So each check uses a
- * new key in its input: the leases of one check, or of an earlier run of conform, never have the key of another check.
- */
 import { randomUUID } from "node:crypto";
 
 import type { Occurrence } from "@acid-cat/spec-ts";
@@ -29,7 +21,6 @@ export interface PollSettings {
   readonly leaseMs?: number | undefined;
 }
 
-/** The result of `events/poll`, after the checks of its form. */
 interface Polled {
   readonly events: readonly Occurrence[];
   readonly cursor: string;
@@ -37,16 +28,13 @@ interface Polled {
   readonly hasMore: boolean;
 }
 
-/** The largest count of `fixture.ticks`. */
 const MAXIMUM_TICKS = 100;
 
-/** The most occurrences that a check asks for in one poll. */
 const MAXIMUM_EVENTS = 100;
 
 export async function checkPoll(checks: Checks, channel: Channel, settings: PollSettings): Promise<void> {
   const { errorOf, watching, signalKey } = eventRequests(channel);
 
-  /** The form of a result of `events/poll` (spec/bindings/mcp.md#poll). */
   const polledOf = (message: Message, name: string): Polled => {
     const result = memberOf(message, "result");
     expect(isObject(result), `events/poll must give a result, got ${JSON.stringify(message)}`);
@@ -60,13 +48,10 @@ export async function checkPoll(checks: Checks, channel: Channel, settings: Poll
     expect(typeof nextPollMs === "number" && Number.isSafeInteger(nextPollMs) && nextPollMs >= 0, `nextPollMs must be an integer of 0 or more, got ${JSON.stringify(nextPollMs)}`);
     return { events: events.map((each) => expectOccurrence(each, name)), cursor, truncated, hasMore };
   };
-  /** Poll once. The result must have the form of a result. */
   const poll = async (name: string, input: JsonObject, extra: JsonObject, signal: AbortSignal): Promise<Polled> =>
     polledOf(await channel.request("events/poll", { name, arguments: input, ...extra }, signal), name);
-  /** Poll with the same params until `done` is true for the result. Each poll renews the lease. */
   const pollUntil = (what: string, name: string, input: JsonObject, extra: JsonObject, done: (polled: Polled) => boolean, signal: AbortSignal) =>
     until(what, () => poll(name, input, extra, signal), done, signal);
-  /** The JSON-RPC error of a poll. */
   const pollError = async (name: string, input: JsonObject, extra: JsonObject, signal: AbortSignal) =>
     errorOf(await channel.request("events/poll", { name, arguments: input, ...extra }, signal));
   const dataOf = (polled: Polled) => polled.events.map((each) => each.data);
@@ -79,14 +64,12 @@ export async function checkPoll(checks: Checks, channel: Channel, settings: Poll
     expectEqual(polled.truncated, truncated, "truncated");
     expectEqual(polled.hasMore, false, "hasMore");
   };
-  /** Start a lease of `fixture.watch` for the key, and wait until its subscription is active. The result is the cursor of the start. */
   const startWatch = async (key: string, signal: AbortSignal) => {
     const started = await poll("fixture.watch", { key }, {}, signal);
     expectStart(started, false);
     await until("fixture.watching gives the key of the lease", () => watching(signal), hasKey(key), signal);
     return started.cursor;
   };
-  /** Give values to the subscriptions of the key, one at a time. Each must reach one subscription. */
   const signalAll = async (key: string, values: readonly string[], signal: AbortSignal) => {
     for (const value of values) expectEqual(await signalKey(key, value, signal), 1, "the subscriptions that fixture.signal reached");
   };
@@ -210,7 +193,6 @@ export async function checkPoll(checks: Checks, channel: Channel, settings: Poll
       ["fixture.echo", { text: "x" }, -32023],
       ["fixture.ticks", { count: MAXIMUM_TICKS + 1 }, -32602],
     ] as const) {
-      // A lease would answer the second poll with a result. So each poll gets the error.
       for (const attempt of ["first", "second"]) {
         const error = await pollError(name, input, {}, signal);
         expectEqual(error.code, code, `the JSON-RPC error code of the ${attempt} poll of ${name}`);
@@ -220,14 +202,12 @@ export async function checkPoll(checks: Checks, channel: Channel, settings: Poll
   });
 
   await checks.run("after a defect, the next poll is the error -32603 and ends the lease, and a later poll starts a new lease", RULE, async (signal) => {
-    /** Start a lease of `fixture.broken`. A lease of an earlier run can still have the failure: its poll ends it first. */
     const start = async () => {
       const message = await channel.request("events/poll", { name: "fixture.broken", arguments: {} }, signal);
       const polled = memberOf(message, "error") === undefined ? polledOf(message, "fixture.broken") : await poll("fixture.broken", {}, {}, signal);
       expectStart(polled, false);
       return polled.cursor;
     };
-    /** Poll until the error. A result before the error can only have the occurrence n = 1. */
     const failure = async (cursor: string) => {
       const message = await until(
         "a poll gets the error",

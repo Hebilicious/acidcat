@@ -1,7 +1,3 @@
-//! Poll delivery (spec/bindings/mcp.md#poll): `events/poll` reads the occurrences of a poll lease. A lease holds one
-//! subscription, in a session of its own, and a buffer of its occurrences. The HTTP and the stdio transports share
-//! this module.
-
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -44,7 +40,6 @@ impl Default for PollOptions {
     }
 }
 
-/// One occurrence in the buffer of a lease, with its position and the last cursor of the provider at that position.
 struct Entry {
     position: u64,
     occurrence: Occurrence,
@@ -53,11 +48,8 @@ struct Entry {
 
 struct LeaseState {
     entries: VecDeque<Entry>,
-    /// The position of the newest occurrence. The start of the lease is position 0.
     newest: u64,
-    /// The cursor of the last occurrence that the provider gave, or the cursor at the start.
     last_provider: Option<String>,
-    /// The message of the call failure `internal` that ended the subscription.
     failure: Option<String>,
     deadline: Instant,
 }
@@ -65,10 +57,8 @@ struct LeaseState {
 struct Lease {
     id: String,
     key: String,
-    /// The cursor of the provider at the start of the lease.
     start_provider: Option<String>,
     state: Mutex<LeaseState>,
-    /// Cancelled when the lease ends. It cancels the subscription, and closes its session.
     ended: CancellationToken,
 }
 
@@ -79,7 +69,6 @@ impl Lease {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// The cursor of a position of the lease.
     fn cursor_of(&self, state: &LeaseState, position: u64) -> String {
         let provider = if position == 0 {
             self.start_provider.clone()
@@ -96,11 +85,9 @@ impl Lease {
     }
 }
 
-/// The poll leases of one server. [`PollLeases::close`] ends them all.
 pub(crate) struct PollLeases {
     options: PollOptions,
     leases: Mutex<HashMap<String, Arc<Lease>>>,
-    /// A lock for each key that a poll reads or starts, so that two first polls with the same key share one lease.
     starting: KeyGates<Mutex<()>>,
     closed: CancellationToken,
 }
@@ -121,8 +108,6 @@ impl PollLeases {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// End all leases. A lease that starts after this call ends at once, because [`PollLeases::start`] checks `closed`
-    /// while it holds the lock of the map.
     pub(crate) fn close(&self) {
         self.closed.cancel();
         let leases: Vec<Arc<Lease>> = self.leases().drain().map(|(_, lease)| lease).collect();
@@ -142,8 +127,6 @@ impl PollLeases {
         }
     }
 
-    /// Answer `events/poll`. `principal` is the identity of the client, or `None`. `open` opens the session of a new
-    /// lease.
     pub(crate) fn poll<C: Send + Sync + 'static>(
         self: &Arc<Self>,
         principal: Option<&str>,
@@ -167,8 +150,6 @@ impl PollLeases {
             },
         };
         let key = canonical_json(&json!([principal, read.name, read.input]));
-        // Find or start the lease while this request holds the lock of the key: a second poll with the same key waits,
-        // then finds the lease of the first.
         let gate = KeyGate::enter(&self.starting, &key);
         let _held = gate
             .lock
@@ -186,9 +167,7 @@ impl PollLeases {
         let position = read.cursor.as_deref().and_then(decode_cursor);
 
         let Some(lease) = lease else {
-            // A cursor that is not of a lease that exists: resume after the cursor of the provider, if it has one.
             let provider = position.and_then(|(_, _, provider)| provider);
-            // With no cursor of the provider, a valid maxAgeMs changes nothing. The session still rejects one that is not valid.
             let max_age_ms = if provider.is_none() && read.max_age_ms.is_none_or(is_max_age_ms) {
                 None
             } else {
@@ -204,7 +183,6 @@ impl PollLeases {
             ));
         };
 
-        // A lease with this key exists, so the event exists: an invalid maxAgeMs is the next failure that applies.
         if read.max_age_ms.is_some_and(|value| !is_max_age_ms(value)) {
             return Err(RpcError::invalid_params(
                 "maxAgeMs must be an integer that is 0 or more.",
@@ -222,7 +200,6 @@ impl PollLeases {
                     .entries
                     .front()
                     .map_or(state.newest + 1, |entry| entry.position);
-                // `after + 1` overflows for a forged cursor at u64::MAX. `oldest` is 1 or more.
                 let older = after < oldest.saturating_sub(1);
                 let available: Vec<&Entry> = state
                     .entries
@@ -241,8 +218,6 @@ impl PollLeases {
                     .collect();
                 Ok(self.result(events, cursor, truncated, has_more))
             }
-            // A cursor of another lease, while a lease with this key exists: the newest position, and the client can
-            // have missed occurrences.
             _ => {
                 let cursor = lease.cursor_of(&state, state.newest);
                 Ok(self.result(Vec::new(), cursor, true, false))
@@ -250,8 +225,6 @@ impl PollLeases {
         }
     }
 
-    /// Start a lease: open its session, subscribe, and keep the occurrences. A failure before the first occurrence
-    /// starts no lease.
     fn start<C: Send + Sync + 'static>(
         self: &Arc<Self>,
         key: String,
@@ -299,13 +272,11 @@ impl PollLeases {
                 session.close();
                 return Err(RpcError::new(codes::INTERNAL, "The server is closing."));
             }
-            // The lock of the key makes a replaced lease impossible. If one is still there, end it, so that it is not leaked.
             if let Some(replaced) = leases.insert(key, lease.clone()) {
                 replaced.ended.cancel();
             }
         }
 
-        // Read the occurrences into the buffer until the subscription ends. The lease keeps its buffer until it ends.
         let reading = lease.clone();
         let limit = self.options.buffer_limit.max(1);
         tokio::spawn(async move {
@@ -342,7 +313,6 @@ impl PollLeases {
             session.close();
         });
 
-        // End the lease when it gets no poll for the lease time.
         let leases = self.clone();
         let timed = lease.clone();
         tokio::spawn(async move {
@@ -378,7 +348,6 @@ impl PollLeases {
     }
 }
 
-/// The cursor of a poll position. Only the server reads it.
 fn encode_cursor(lease: &str, position: u64, provider: Option<&str>) -> String {
     let parts = match provider {
         Some(provider) => json!([lease, position, provider]),
@@ -387,7 +356,6 @@ fn encode_cursor(lease: &str, position: u64, provider: Option<&str>) -> String {
     format!("p1.{}", URL_SAFE_NO_PAD.encode(parts.to_string()))
 }
 
-/// The lease, the position and the cursor of the provider of a poll cursor, or `None` when the text is not one.
 fn decode_cursor(cursor: &str) -> Option<(String, u64, Option<String>)> {
     let bytes = URL_SAFE_NO_PAD.decode(cursor.strip_prefix("p1.")?).ok()?;
     let parts: Vec<Value> = serde_json::from_slice(&bytes).ok()?;
@@ -407,14 +375,11 @@ mod tests {
     use super::*;
     use crate::app::{App, Application, Event};
 
-    /// The services of the test application: the number of subscriptions that the provider started.
     #[derive(Default)]
     struct Services {
         subscribes: AtomicUsize,
     }
 
-    /// An application with one event that never gives an occurrence. Its provider is slow to start, so that two polls
-    /// at the same time overlap.
     fn application() -> Arc<Application<Services>> {
         App::new()
             .title("Test")

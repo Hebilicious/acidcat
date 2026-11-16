@@ -1,5 +1,3 @@
-//! The application: its targets, capabilities and events, and the catalog that its code writes (spec/catalog.md).
-
 use std::collections::HashMap;
 use std::future::Future;
 use std::marker::PhantomData;
@@ -142,7 +140,6 @@ pub struct NoPayload {}
 
 type AvailabilityFn<C> = Arc<dyn Fn(&C) -> watch::Receiver<Availability> + Send + Sync>;
 
-/// The state of a capability in a session, with its type erased.
 pub(crate) trait StateSource: Send + Sync {
     fn snapshot(&self) -> Value;
     fn changed(&mut self) -> BoxFuture<'_, bool>;
@@ -168,7 +165,6 @@ impl StateWatch {
         StateWatch(source)
     }
 
-    /// The value now.
     pub fn snapshot(&self) -> Value {
         self.0.snapshot()
     }
@@ -179,8 +175,6 @@ impl StateWatch {
     }
 }
 
-/// The work of a capability on an input in its JSON form: the input is not valid (the message), or the future of the
-/// work, which gives a value or a failure in their JSON forms.
 pub(crate) type ErasedRun<C> = Arc<
     dyn Fn(
             Value,
@@ -192,8 +186,6 @@ pub(crate) type ErasedRun<C> = Arc<
 
 pub(crate) type ErasedEmitted = Emitted<Value>;
 
-/// The provider of an event on an input in its JSON form: the input is not valid (the message), or the stream of
-/// occurrences.
 pub(crate) type ErasedSubscribe<C> = Arc<
     dyn Fn(
             Value,
@@ -221,7 +213,6 @@ pub struct Capability<C, I = (), O = (), F = NoFailure> {
 }
 
 impl<C> Capability<C> {
-    /// Start a capability with no input, no output and no failures.
     pub fn new(id: impl Into<String>, description: impl Into<String>) -> Self {
         Capability {
             id: id.into(),
@@ -326,7 +317,6 @@ impl<C, I, O, F> Capability<C, I, O, F> {
         self.retype()
     }
 
-    /// The type of the value, with a schema that you write.
     pub fn output_schema<T: Serialize>(mut self, schema: Value) -> Capability<C, I, T, F> {
         self.output = Some(schema);
         self.retype()
@@ -404,7 +394,6 @@ where
     }
 }
 
-/// The schema of each failure, from the schema of an enum with `#[serde(tag = "_tag")]`.
 fn failures_of(schema: &Value) -> Result<Vec<(String, Value)>, String> {
     let variants: Vec<&Value> = match schema
         .get("oneOf")
@@ -431,7 +420,6 @@ fn failures_of(schema: &Value) -> Result<Vec<(String, Value)>, String> {
         .collect()
 }
 
-/// A capability, ready to be served.
 pub struct CapabilityDefinition<C> {
     pub(crate) id: String,
     pub(crate) description: String,
@@ -461,7 +449,6 @@ pub struct Event<C, I = (), P = NoPayload> {
 }
 
 impl<C> Event<C> {
-    /// Start an event with no input and no payload.
     pub fn new(id: impl Into<String>, description: impl Into<String>) -> Self {
         Event {
             id: id.into(),
@@ -516,7 +503,6 @@ impl<C, I, P> Event<C, I, P> {
         self.retype()
     }
 
-    /// The input type of a subscription, with a schema that you write.
     pub fn input_schema<T: DeserializeOwned>(mut self, schema: Value) -> Event<C, T, P> {
         self.input = Some(schema);
         self.retype()
@@ -530,7 +516,6 @@ impl<C, I, P> Event<C, I, P> {
         self.retype()
     }
 
-    /// The type of the data of each occurrence, with a schema that you write.
     pub fn payload_schema<T: Serialize>(mut self, schema: Value) -> Event<C, I, T> {
         self.payload = Some(schema);
         self.retype()
@@ -581,7 +566,6 @@ where
     }
 }
 
-/// An event, ready to be served.
 pub struct EventDefinition<C> {
     pub(crate) id: String,
     pub(crate) description: String,
@@ -593,7 +577,6 @@ pub struct EventDefinition<C> {
     pub(crate) subscribe: ErasedSubscribe<C>,
 }
 
-/// A capability that the application serves, with the validators of its schemas.
 pub(crate) struct ServedCapability<C> {
     pub(crate) definition: CapabilityDefinition<C>,
     pub(crate) input: Option<Validator>,
@@ -601,7 +584,6 @@ pub(crate) struct ServedCapability<C> {
     pub(crate) failures: HashMap<String, Validator>,
 }
 
-/// An event that the application serves, with the validators of its schemas.
 pub(crate) struct ServedEvent<C> {
     pub(crate) definition: EventDefinition<C>,
     pub(crate) input: Option<Validator>,
@@ -855,7 +837,6 @@ pub struct Application<C> {
 }
 
 impl<C> Application<C> {
-    /// The catalog of the application, as JSON.
     pub fn catalog(&self) -> &Value {
         &self.catalog
     }
@@ -907,8 +888,6 @@ pub(crate) fn subscription<C>(
     }
 }
 
-/// Move each named schema that the application uses in two or more places into the shared types, and refer to it
-/// there (spec/catalog.md#types). The name of a schema is its `title`, or the tag of a failure.
 fn share_types<C>(
     capabilities: &mut [CapabilityDefinition<C>],
     events: &mut [EventDefinition<C>],

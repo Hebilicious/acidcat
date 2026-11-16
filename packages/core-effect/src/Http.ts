@@ -1,6 +1,3 @@
-/**
- * The HTTP binding (spec/bindings/http.md): JSON through HTTP, and the occurrences of events as server-sent events.
- */
 import { callFailure, HTTP_STATUS, httpEventMessage, httpStatus, isCallFailure, KEEPALIVE_MS, readBounded, screenRequest } from "@acid-cat/spec-ts";
 import type { CallFailure, Rejection } from "@acid-cat/spec-ts";
 import { Effect, Exit, Scope, Stream } from "effect";
@@ -43,7 +40,6 @@ export interface Options {
    * line as a keepalive. The default is 15 000.
    */
   readonly keepaliveMs?: number | undefined;
-  /** The number of occurrences of one subscription that the session keeps for a slow client. See `Session.Options`. */
   readonly eventBuffer?: number | undefined;
 }
 
@@ -53,7 +49,6 @@ export interface Options {
  */
 export type Client = HttpClient.Client;
 
-/** The options of `client`: the headers of each request, and the HTTP client that sends them. */
 export type ClientOptions = HttpClient.ClientOptions;
 
 /** A capability that the server lists, with its availability. */
@@ -106,9 +101,6 @@ export const handle = <R>(app: App.App<R>, request: Request, options: Options): 
       admitted instanceof Response ? Effect.succeed(admitted) : Effect.flatMap(Scope.make(), (scope) => respond(app, request, admitted.text, options, scope)),
   );
 
-/**
- * Screen a request and read its body (spec/bindings/http.md). The result is the rejection, or the body that was read.
- */
 async function admit(request: Request, options: Options): Promise<Response | { readonly text: string }> {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
   const screened = screenRequest(request, {
@@ -122,10 +114,6 @@ async function admit(request: Request, options: Options): Promise<Response | { r
   return "rejection" in body ? rejection(body.rejection) : body;
 }
 
-/**
- * Answer one API request that passed the screening, with a new session in `scope`. `body` is the body of the request.
- * The scope closes when the answer is ready, or, for a stream of server-sent events, when the stream ends.
- */
 const respond = <R>(app: App.App<R>, request: Request, body: string, options: Options, scope: Scope.Closeable): Effect.Effect<Response, never, R> =>
   Effect.gen(function* () {
     const url = new URL(request.url);
@@ -155,8 +143,6 @@ const respond = <R>(app: App.App<R>, request: Request, body: string, options: Op
     try {
       input = body === "" ? {} : JSON.parse(body);
     } catch {
-      // A body that is not JSON is `invalid-input`, the last kind in the order of the specification. An unknown id, or
-      // a capability that is not available, comes first.
       const failure = yield* failureBeforeInput(app, session, route);
       if (failure !== undefined) return json(HTTP_STATUS[failure.kind], failure);
       return json(422, callFailure("invalid-input", "The request body is not JSON."));
@@ -166,10 +152,6 @@ const respond = <R>(app: App.App<R>, request: Request, body: string, options: Op
     return json(httpStatus(outcome), isCallFailure(outcome) ? { kind: outcome.kind, message: outcome.message } : outcome);
   }).pipe(closeUnlessStreaming(scope));
 
-/**
- * The call failure `unknown-capability` or `unavailable` of a route, if one applies (spec/invocation.md#call-failures).
- * The session gives the same failures when it admits the call or the subscription.
- */
 const failureBeforeInput = <R>(
   app: App.App<R>,
   session: Session.Session<R>,
@@ -185,18 +167,12 @@ const failureBeforeInput = <R>(
     return availability.available ? undefined : callFailure("unavailable", availability.reason);
   });
 
-/** The capability or the event of a `POST` path. */
 function routeOf(path: string): { readonly kind: "capability" | "event"; readonly id: string } | undefined {
   if (path.startsWith("/capabilities/")) return { kind: "capability", id: decodeURIComponent(path.slice("/capabilities/".length)) };
   if (path.startsWith("/events/")) return { kind: "event", id: decodeURIComponent(path.slice("/events/".length)) };
   return undefined;
 }
 
-/**
- * Subscribe to an event (spec/bindings/http.md#events). A call failure before the first occurrence is a JSON answer.
- * If not, the answer is a stream of server-sent events. The stream closes `scope` when it ends, and the client closing
- * the stream cancels the subscription.
- */
 const subscribe = <R>(
   session: Session.Session<R>,
   id: string,
@@ -208,8 +184,6 @@ const subscribe = <R>(
 ): Effect.Effect<Response | Streaming> =>
   Effect.gen(function* () {
     const maxAge = url.searchParams.get("maxAgeMs");
-    // The session checks `maxAgeMs` after it looks up the id. Text that is not the decimal form of an integer that is 0
-    // or more becomes `NaN`, which the session rejects as `invalid-input`.
     const maxAgeMs = maxAge === null ? undefined : /^(0|[1-9][0-9]*)$/.test(maxAge) ? Number(maxAge) : Number.NaN;
     const cursor = request.headers.get("Last-Event-ID") ?? undefined;
     const started = yield* Effect.result(

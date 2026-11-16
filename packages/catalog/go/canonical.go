@@ -29,7 +29,6 @@ func CanonicalText(catalog map[string]any) (string, error) {
 	return out.String(), nil
 }
 
-// ordered is an object whose members are written in the order of keys.
 type ordered struct {
 	keys   []string
 	values map[string]any

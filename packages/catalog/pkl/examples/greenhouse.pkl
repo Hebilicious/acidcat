@@ -1,4 +1,3 @@
-/// A greenhouse with vents, a watering system and climate sensors, written with the Pkl catalog module.
 amends "../Catalog.pkl"
 
 title = "Backyard greenhouse"

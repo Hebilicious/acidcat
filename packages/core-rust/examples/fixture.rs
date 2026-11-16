@@ -1,20 +1,9 @@
-//! The conformance fixture (packages/cli/conformance/fixture.pkl), served by the Rust core. `acid-cat conform` tests
-//! it through each binding.
-//!
-//! ```sh
-//! cargo run --example fixture -- serve        # MCP at /mcp and HTTP at /api; writes the base URL on the first line
-//! cargo run --example fixture -- mcp-stdio    # MCP through standard input and standard output
-//! cargo run --example fixture -- cli <args>   # the command line
-//! cargo run --example fixture -- catalog      # the catalog in canonical form
-//! ```
-
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use acid_cat_core::{App, Application, Availability, Defect, Emitted, fail};
 
-/// The capabilities and the events of the fixture get its services.
 type Capability = acid_cat_core::Capability<Fixture>;
 type Event = acid_cat_core::Event<Fixture>;
 use schemars::JsonSchema;
@@ -22,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio::sync::{Notify, mpsc, watch};
 
-/// The services of the fixture. All the sessions of one provider share them.
 pub struct Fixture {
     switch: watch::Sender<Availability>,
     holds: Holds,
@@ -39,7 +27,6 @@ impl Default for Fixture {
     }
 }
 
-/// The calls to `fixture.hold` that hold now.
 #[derive(Default)]
 struct Holds {
     next: AtomicU64,
@@ -47,8 +34,6 @@ struct Holds {
 }
 
 impl Holds {
-    /// Hold until `release` releases the key. When the call is cancelled, the core drops this future, and the key
-    /// leaves `held`.
     async fn hold(&self, key: String, marker: Option<String>) {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let released = Arc::new(Notify::new());
@@ -84,7 +69,6 @@ impl Holds {
     }
 }
 
-/// The subscriptions to `fixture.watch` that are active now.
 #[derive(Default)]
 struct Watchers {
     next: AtomicU64,
@@ -102,7 +86,6 @@ impl Watchers {
             .collect()
     }
 
-    /// Give the value to each watch of the key. The result is the number of these watches.
     fn signal(&self, key: &str, value: &str) -> usize {
         self.watching
             .lock()
@@ -113,7 +96,6 @@ impl Watchers {
     }
 }
 
-/// Calls a function when it is dropped.
 struct Forget<F: FnMut()>(F);
 
 impl<F: FnMut()> Drop for Forget<F> {
@@ -163,7 +145,6 @@ struct Switch {
 #[schemars(transform = with_no_properties)]
 struct Nothing {}
 
-/// An input schema with `"properties": {}`: an input that takes no properties.
 fn with_no_properties(schema: &mut schemars::Schema) {
     schema.insert("properties".into(), Value::Object(Map::new()));
 }
@@ -223,7 +204,6 @@ struct Watch {
 
 const EVERYWHERE: [&str; 4] = ["app", "mcp", "cli", "api"];
 
-/// The fixture application.
 pub fn fixture() -> Arc<Application<Fixture>> {
     App::new()
         .title("Fixture")
@@ -335,7 +315,6 @@ pub fn fixture() -> Arc<Application<Fixture>> {
             .input::<Ticks>()
             .payload::<Tick>()
             .subscribe(|Ticks { count, gap, .. }, subscription| {
-                // A cursor that is not a count starts at the first tick.
                 let first = subscription.cursor().and_then(|cursor| cursor.parse::<i64>().ok()).filter(|position| *position >= 0).map_or(1, |position| position + 1);
                 futures::stream::iter((first..=count).map(move |n| {
                     let tick = Emitted::new(Tick { n }).event_id(n.to_string()).cursor(n.to_string());
@@ -400,7 +379,6 @@ async fn main() {
                     ..HttpOptions::default()
                 },
             );
-            // With `--webhook-ca <file>`, webhook delivery is on, and it trusts the certificate of the receiver of conform.
             let webhooks = args
                 .iter()
                 .position(|arg| arg == "--webhook-ca")
@@ -416,7 +394,6 @@ async fn main() {
                     max_subscriptions: 3,
                     ..WebhookOptions::default()
                 });
-            // The principal of a request is the token of the header `Authorization: Bearer <principal>`.
             let principal: Principal = Arc::new(|headers| {
                 headers
                     .get("authorization")?
@@ -435,7 +412,6 @@ async fn main() {
                     ..McpOptions::new("fixture", "0.0.0")
                 },
             );
-            // The view of the target `cli` through HTTP, for the command line that calls this server (`cli-remote`).
             let cli = HttpBinding::new(
                 app.clone(),
                 context.clone(),
@@ -479,7 +455,6 @@ async fn main() {
             .await;
             std::process::exit(code);
         }
-        // The command line, with each call and each subscription sent to the server at the URL.
         Some("cli-remote") => {
             use acid_cat_core::cli::{CliOptions, run_cli_process};
             use acid_cat_core::http::HttpClient;
@@ -501,8 +476,6 @@ async fn main() {
     }
 }
 
-/// The poll settings of the fixture: a small buffer and a short lease time, so that conform can test both. The tests
-/// give the same settings to conform.
 fn poll() -> acid_cat_core::mcp::PollOptions {
     acid_cat_core::mcp::PollOptions {
         buffer_limit: 5,

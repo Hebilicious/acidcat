@@ -1,7 +1,4 @@
 //! Write an AcidCat catalog in Rust, and render it to the JSON document the toolchain checks.
-//!
-//! This is an authoring library, not a runtime: a program uses it to produce `acidcat.catalog.json`, and nothing
-//! reads the catalog through it at runtime. See spec/catalog.md.
 
 mod canonical;
 
@@ -26,7 +23,6 @@ static TYPE_NAME: LazyLock<Regex> =
 static REFERENCE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^#/\$defs/([A-Za-z][A-Za-z0-9_]*)$").unwrap());
 
-/// How a target is served.
 #[derive(Clone, Debug, Default)]
 pub struct Target {
     /// The bindings that serve the target, such as `"typescript"` and `"webmcp"`.
@@ -36,7 +32,6 @@ pub struct Target {
     pub options: Option<Value>,
 }
 
-/// One capability.
 #[derive(Clone, Debug, Default)]
 pub struct Capability {
     /// What the capability does for its caller, written for people and agents.
@@ -55,7 +50,6 @@ pub struct Capability {
     pub state: Option<Schema>,
 }
 
-/// One event (spec/events.md).
 #[derive(Clone, Debug, Default)]
 pub struct Event {
     /// What happens, and when the provider sends an occurrence, written for people and agents.
@@ -69,7 +63,6 @@ pub struct Event {
     pub payload: Option<Schema>,
 }
 
-/// A catalog being written.
 #[derive(Debug, Default)]
 pub struct Catalog {
     title: Option<String>,
@@ -82,7 +75,6 @@ pub struct Catalog {
 }
 
 impl Catalog {
-    /// Start a catalog.
     pub fn new(title: Option<&str>, description: Option<&str>) -> Self {
         Self {
             title: title.map(str::to_owned),
@@ -91,7 +83,6 @@ impl Catalog {
         }
     }
 
-    /// Declare a target.
     pub fn target(&mut self, name: &str, target: Target) -> &mut Self {
         if self.targets.iter().any(|(existing, _)| existing == name) {
             self.duplicates
@@ -111,7 +102,6 @@ impl Catalog {
         json!({ "$ref": format!("#/$defs/{name}") })
     }
 
-    /// Declare a capability.
     pub fn capability(&mut self, id: &str, capability: Capability) -> &mut Self {
         if self.capabilities.iter().any(|(existing, _)| existing == id) {
             self.duplicates
@@ -121,7 +111,6 @@ impl Catalog {
         self
     }
 
-    /// Declare an event.
     pub fn event(&mut self, id: &str, event: Event) -> &mut Self {
         if self.events.iter().any(|(existing, _)| existing == id) {
             self.duplicates
@@ -225,7 +214,6 @@ impl Catalog {
         problems
     }
 
-    /// The problems of the id, the description, the audience and the input of a capability or an event.
     fn entry_problems(
         &self,
         id: &str,
@@ -257,12 +245,10 @@ impl Catalog {
         problems
     }
 
-    /// `true` when the schema, or the type that it refers to, describes an object.
     fn is_object(&self, schema: &Schema) -> bool {
         self.resolve(schema).get("type") == Some(&json!("object"))
     }
 
-    /// The catalog as a JSON value, or the rules it breaks.
     pub fn to_json(&self) -> Result<Value, Vec<String>> {
         let problems = self.validate();
         if !problems.is_empty() {
@@ -383,7 +369,6 @@ impl Catalog {
     }
 }
 
-/// The schemas of a capability or an event that are not JSON objects, such as the boolean schema `true`.
 fn schema_problems<'a>(
     id: &str,
     schemas: impl Iterator<Item = (String, &'a Schema)>,

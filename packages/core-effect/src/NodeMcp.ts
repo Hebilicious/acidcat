@@ -1,6 +1,3 @@
-/**
- * Run the MCP binding through standard input and standard output, as the main program of a Node.js process.
- */
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeStdio from "@effect/platform-node/NodeStdio";
 import { Effect } from "effect";

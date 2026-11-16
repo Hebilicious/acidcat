@@ -26,10 +26,8 @@ pub mod exit {
     pub const CANCELLED: i32 = 130;
 }
 
-/// The commands of the command line itself. No other command can have their names.
 const GENERIC_COMMANDS: [&str; 3] = ["call", "list", "watch"];
 
-/// The flags of `watch` that give the cursor and `maxAgeMs`. No input property of an event can have these names.
 const RESUME_FLAGS: [&str; 2] = ["cursor", "max-age-ms"];
 
 /// Where the command line writes, and the token that an interrupt cancels.
@@ -64,7 +62,6 @@ impl CliIo {
 pub type CommandRun<C> =
     Arc<dyn for<'a> Fn(Vec<String>, &'a mut CliIo, Arc<C>) -> BoxFuture<'a, i32> + Send + Sync>;
 
-/// A command that the application adds to the command line.
 pub struct CliCommand<C> {
     pub name: String,
     /// The text that the help gives for the command.
@@ -72,9 +69,7 @@ pub struct CliCommand<C> {
     pub run: CommandRun<C>,
 }
 
-/// The settings of the command line.
 pub struct CliOptions<C> {
-    /// The name of the program.
     pub name: String,
     pub version: String,
     /// The target that the command line serves. The default is `cli`.
@@ -110,11 +105,8 @@ impl<C> CliOptions<C> {
     }
 }
 
-/// Where the command line sends the calls and the subscriptions.
 enum Provider<C> {
-    /// A session in this process.
     Local(Session<C>),
-    /// The HTTP binding of a server.
     Remote(HttpClient),
 }
 
@@ -130,8 +122,6 @@ impl<C: Send + Sync + 'static> Provider<C> {
         }
     }
 
-    /// The availability of each capability, or the call failure when the server does not answer or `cancel` is
-    /// cancelled.
     async fn availability(
         &self,
         ids: &[String],
@@ -227,8 +217,6 @@ pub async fn run_cli_process<C: Send + Sync + 'static>(
     }
 }
 
-/// Cancel `cancel` on an interrupt. The handler is in place when this function returns, before the command runs: an
-/// interrupt that comes at once cancels the command, and does not end the process by the signal.
 fn listen_for_interrupt(cancel: CancellationToken) {
     #[cfg(unix)]
     {
@@ -281,7 +269,6 @@ pub async fn run_cli<C: Send + Sync + 'static>(
         None => Provider::Local(Session::open(app, &options.target, context.clone())),
         Some(client) => Provider::Remote(client.clone()),
     };
-    // The local session closes when the command ends.
     let local = match &provider {
         Provider::Local(session) => Some(session.clone()),
         Provider::Remote(_) => None,
@@ -536,7 +523,6 @@ pub async fn run_cli<C: Send + Sync + 'static>(
     }))
 }
 
-/// Subscribe to an event, and write each occurrence on one line (spec/bindings/cli.md#events).
 async fn watch<C: Send + Sync + 'static>(
     provider: &Provider<C>,
     view: &Value,
@@ -599,8 +585,6 @@ async fn watch<C: Send + Sync + 'static>(
     };
     let mut occurrences = match provider.subscribe(id, input, options).await {
         Ok(occurrences) => occurrences,
-        // An interrupt ends the subscription as cancelled, also before the subscription starts: nothing goes to
-        // standard error.
         Err(_) if io.cancel.is_cancelled() => return Ok(exit::CANCELLED),
         Err(failure) => return Ok(print(io, &Outcome::CallFailure(failure))),
     };
@@ -627,7 +611,6 @@ async fn watch<C: Send + Sync + 'static>(
     }
 }
 
-/// Write an outcome, and give its exit code.
 fn print(io: &mut CliIo, outcome: &Outcome) -> i32 {
     match outcome {
         Outcome::Value(value) => {
@@ -651,7 +634,6 @@ fn print(io: &mut CliIo, outcome: &Outcome) -> i32 {
     }
 }
 
-/// Split a flag into its name and its value after `=`, if it has one.
 fn split_flag(arg: &str) -> Option<(&str, Option<&str>)> {
     let flag = arg.strip_prefix("--")?;
     Some(match flag.split_once('=') {
@@ -660,10 +642,8 @@ fn split_flag(arg: &str) -> Option<(&str, Option<&str>)> {
     })
 }
 
-/// The arguments of `watch` without the resume flags, the cursor, and `maxAgeMs`.
 type Resume = (Vec<String>, Option<String>, Option<f64>);
 
-/// Take `--cursor` and `--max-age-ms` out of the arguments of `watch`.
 fn resume_flags(args: &[String]) -> Result<Resume, UsageError> {
     let mut rest = Vec::new();
     let mut cursor = None;
@@ -703,7 +683,6 @@ fn resume_flags(args: &[String]) -> Result<Resume, UsageError> {
     Ok((rest, cursor, max_age_ms))
 }
 
-/// The JSON object at a member, or an empty object.
 fn object_at<'a>(value: &'a Value, member: &str) -> &'a Map<String, Value> {
     static EMPTY: std::sync::LazyLock<Map<String, Value>> = std::sync::LazyLock::new(Map::new);
     value
@@ -718,7 +697,6 @@ fn is_string_enum(schema: &Value) -> Option<Vec<&str>> {
     (!values.is_empty() && strings.len() == values.len()).then_some(strings)
 }
 
-/// The schema of the items of a repeated flag, or `None` when the property does not give a repeated flag.
 fn repeated_items(property: &Value, definitions: &Map<String, Value>) -> Option<Value> {
     if property.get("type") != Some(&json!("array")) {
         return None;
@@ -746,7 +724,6 @@ fn flag_value(property: &Value) -> String {
     }
 }
 
-/// The flags of a command, as `usage` writes them: required flags first, each group in code point order of the names.
 fn cli_flags(input: &Value) -> Vec<String> {
     let properties = object_at(input, "properties");
     let definitions = object_at(input, "$defs");
@@ -781,7 +758,6 @@ fn cli_flags(input: &Value) -> Vec<String> {
         .collect()
 }
 
-/// The `usage` of a capability in `list`.
 fn usage(program: &str, id: &str, input: Option<&Value>) -> String {
     if let Some(input) = input
         && input.get("properties").is_none()
@@ -795,7 +771,6 @@ fn usage(program: &str, id: &str, input: Option<&Value>) -> String {
     words.join(" ")
 }
 
-/// The `usage` of an event in `list`.
 fn event_usage(program: &str, id: &str, input: Option<&Value>) -> String {
     let resume = "[--cursor <string>] [--max-age-ms <integer>]";
     if let Some(input) = input
@@ -811,12 +786,10 @@ fn event_usage(program: &str, id: &str, input: Option<&Value>) -> String {
     words.join(" ")
 }
 
-/// Make the input from the flags (spec/bindings/cli.md#commands).
 fn parse_flags(args: &[String], schema: &Value) -> Result<Map<String, Value>, UsageError> {
     let properties = object_at(schema, "properties");
     let definitions = object_at(schema, "$defs");
     let mut input = Map::new();
-    // The values of each repeated flag, in the order of the flags.
     let mut repeated: Vec<(String, Value, Vec<String>)> = Vec::new();
     let mut remaining = args.iter();
     while let Some(arg) = remaining.next() {
@@ -859,7 +832,6 @@ fn parse_flags(args: &[String], schema: &Value) -> Result<Map<String, Value>, Us
             },
         }
     }
-    // A repeated flag gives JSON text of the whole array, or one item for each occurrence.
     for (name, items, values) in repeated {
         let json_array = match values.as_slice() {
             [only] => serde_json::from_str::<Value>(only)
@@ -895,7 +867,6 @@ fn parse_flags(args: &[String], schema: &Value) -> Result<Map<String, Value>, Us
     Ok(input)
 }
 
-/// The value of one flag, from the schema of its property.
 fn value_of(name: &str, text: &str, property: &Value) -> Result<Value, UsageError> {
     if let Some(strings) = is_string_enum(property) {
         if !strings.contains(&text) {

@@ -6,7 +6,6 @@ import { Effect, Exit, Fiber, Layer, Scope } from "effect";
 
 import * as NodeServer from "../src/NodeServer.ts";
 
-/** Serve in a scope of its own, which `await using` closes at the end of the block. */
 async function serve(handler: NodeServer.WebHandler | NodeServer.Routes, options: NodeServer.ServeOptions) {
   const scope = Effect.runSync(Scope.make());
   const address = await Effect.runPromise(NodeServer.serve(handler, options).pipe(Scope.provide(scope)));

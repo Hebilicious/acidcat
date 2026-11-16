@@ -1,7 +1,3 @@
-/**
- * The CLI binding (spec/bindings/cli.md): a command line made from the catalog, with `effect/cli`. This module works
- * in all runtimes. `NodeCli` in `@acid-cat/core-effect/node` runs it in Node.js.
- */
 import {
   bundle,
   CLI_EXIT_CODES,
@@ -26,10 +22,6 @@ import * as App from "./App.ts";
 import type * as Http from "./Http.ts";
 import * as Session from "./Session.ts";
 
-/**
- * The options of the command line. `Commands` is the type of the commands of the application. Their errors and their
- * services are the errors and the services of the command line.
- */
 export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = readonly []> {
   readonly name: string;
   readonly version: string;
@@ -55,15 +47,12 @@ export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = r
   readonly remote?: Http.Client | undefined;
 }
 
-/** Where the command line sends the calls and the subscriptions: a session in this process, or a server. */
 interface Provider {
   readonly invoke: (id: string, input: unknown) => Effect.Effect<Outcome<unknown, unknown>>;
-  /** The availability of each capability, or the call failure when the server does not answer. */
   readonly availability: (ids: readonly string[]) => Effect.Effect<ReadonlyArray<Availability>, Session.CallFailed>;
   readonly subscribe: (id: string, input: unknown, resume: Resume) => Effect.Effect<Stream.Stream<Occurrence, Session.CallFailed>, Session.CallFailed, Scope.Scope>;
 }
 
-/** The provider of a session in this process. The session closes with the scope. */
 const local = <R>(app: App.App<R>, target: string): Effect.Effect<Provider, never, R | Scope.Scope> =>
   Effect.map(
     Session.make(app, { target }),
@@ -74,7 +63,6 @@ const local = <R>(app: App.App<R>, target: string): Effect.Effect<Provider, neve
     }),
   );
 
-/** The provider of the HTTP binding of a server. A capability that the server does not list is unavailable. */
 const remote = (client: Http.Client): Provider => ({
   invoke: client.invoke,
   availability: (ids) =>
@@ -124,10 +112,6 @@ export function exitCodeOf(error: CliError.CliError): number {
     : CLI_EXIT_CODES["invalid-input"];
 }
 
-/**
- * A command of the command line. Its handler needs `R`, the services of the capabilities and of the commands of the
- * application. `Command.provide` gives them. `E` is the errors of the commands of the application.
- */
 export type AppCommand<R, E = never> = Command.Command<string, {}, {}, E, R>;
 
 /**
@@ -150,13 +134,11 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   };
   const types = catalogView.$defs ?? {};
 
-  /** An interrupt cancels the call. The call failure `cancelled` goes to standard error (spec/bindings/cli.md#outcomes). */
   const cancelledByInterrupt = Effect.onInterrupt(() => printFailure({ kind: "cancelled", message: "The call was cancelled." }, CLI_EXIT_CODES.cancelled));
 
   const invoke = (id: string, input: unknown) =>
     Effect.scoped(Effect.flatMap(view, (provider) => provider.invoke(id, input))).pipe(Effect.flatMap(print), cancelledByInterrupt);
 
-  /** The flags of an input schema, one for each top-level property. */
   const flagsOf = (input: JsonObject | undefined) => {
     const schema = bundle(input ?? { type: "object" }, types);
     const properties = schemasIn(schema.properties);
@@ -228,10 +210,6 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     ).pipe(cancelledByInterrupt),
   ).pipe(Command.withDescription("List the capabilities, with their availability, and the events."));
 
-  /**
-   * Follow an event (spec/bindings/cli.md#events): each occurrence goes to standard output as one line of JSON. An
-   * interrupt cancels the subscription. `resume` gives the cursor and `maxAgeMs`.
-   */
   const follow = (id: string, input: unknown, resume: Resume) =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -244,13 +222,11 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
       }),
     ).pipe(Effect.onInterrupt(() => Effect.sync(() => (process.exitCode = CLI_WATCH_EXIT_CODES.cancelled))));
 
-  /** The flags that give the cursor and `maxAgeMs`. They are not properties of the input. */
   const resumeFlags = {
     cursor: Flag.String("cursor").pipe(Flag.withDescription("Resume after this cursor of an occurrence."), Flag.optional),
     "max-age-ms": Flag.Int("max-age-ms").pipe(Flag.withDescription("Do not replay occurrences older than this number of milliseconds."), Flag.optional),
   };
 
-  /** Follow an event with the cursor and `maxAgeMs` of the flags. `maxAgeMs` must not be negative. */
   const followWith = (id: string, input: unknown, cursor: Option.Option<string>, maxAgeMs: Option.Option<number>) =>
     Effect.suspend(() => {
       if (Option.isSome(maxAgeMs) && maxAgeMs.value < 0) {
@@ -297,9 +273,6 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     if (reserved.has(first)) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
     taken.add(first);
   }
-  // A shared prefix is a command that only contains other commands (spec/bindings/cli.md#commands), so the path of a
-  // capability must not be the start of the path of another capability. Ids are unique, so no two paths are the same.
-  // Each event is one command under `watch`, and no capability path starts with `watch`.
   for (const { path } of leaves) {
     const longer = leaves.find((other) => other.path.length > path.length && path.every((word, index) => other.path[index] === word));
     if (longer !== undefined) {
@@ -322,7 +295,6 @@ interface Leaf<R> {
   readonly leaf: AppCommand<R>;
 }
 
-/** Make the commands that only contain other commands, from the shared prefixes of the ids. */
 function group<R>(leaves: readonly Leaf<R>[], prefix: readonly string[]): AppCommand<R>[] {
   const commands: AppCommand<R>[] = [];
   const byWord = new Map<string, Leaf<R>[]>();
@@ -350,19 +322,11 @@ function group<R>(leaves: readonly Leaf<R>[], prefix: readonly string[]): AppCom
 const isStrings = Schema.is(Schema.Array(Schema.String));
 const isStringEnum = Schema.is(Schema.NonEmptyArray(Schema.String));
 
-/**
- * The schemas in a `properties` or `$defs` object, by name. A schema that is not an object, for example `true`, has no
- * keywords, so it becomes the empty schema.
- */
 function schemasIn(value: unknown): { readonly [name: string]: JsonObject } {
   if (!Predicate.isReadonlyObject(value)) return {};
   return Object.fromEntries(Object.entries(value).map(([name, schema]) => [name, Predicate.isReadonlyObject(schema) ? schema : {}]));
 }
 
-/**
- * The flag for one property of the input (spec/bindings/cli.md#commands). A repeated flag must occur at least once if
- * it is required.
- */
 function flagFor(name: string, property: JsonObject, definitions: JsonObject, required: boolean) {
   const items = cliRepeatedItems(property, definitions);
   const flag = describe(items === undefined ? scalarFlag(name, property) : repeatedFlag(name, items), property);
@@ -370,7 +334,6 @@ function flagFor(name: string, property: JsonObject, definitions: JsonObject, re
   return required ? flag : flag.pipe(Flag.optional);
 }
 
-/** The flag that takes one value of the type of `property`, or JSON text for a type with no flag of its own. */
 function scalarFlag(name: string, property: JsonObject): Flag.Flag<unknown> {
   if (isStringEnum(property.enum)) return Flag.Literals(name, property.enum);
   if (property.type === "integer") return Flag.Int(name);
@@ -380,10 +343,6 @@ function scalarFlag(name: string, property: JsonObject): Flag.Flag<unknown> {
   return Flag.String(name).pipe(Flag.withSchema(Schema.fromJsonString(Schema.Json)));
 }
 
-/**
- * A repeated flag. If it occurs exactly once with JSON text of an array, it gives that array. If not, each occurrence
- * gives one item of the type of `items`, in the order of the flags.
- */
 function repeatedFlag(name: string, items: JsonObject): Flag.Flag<unknown> {
   const primitive = itemPrimitive(items);
   const item = (value: string) =>
@@ -398,7 +357,6 @@ function repeatedFlag(name: string, items: JsonObject): Flag.Flag<unknown> {
   );
 }
 
-/** The parser of one item of a repeated flag: `items` is an `enum` of strings, `integer`, `number` or `string`. */
 function itemPrimitive(items: JsonObject): Primitive.Primitive<unknown> {
   if (isStringEnum(items.enum)) return Primitive.Choice(items.enum.map((value) => [value, value] as const));
   if (items.type === "integer") return Primitive.Int;
@@ -409,7 +367,6 @@ function itemPrimitive(items: JsonObject): Primitive.Primitive<unknown> {
 const describe = (flag: Flag.Flag<unknown>, property: JsonObject): Flag.Flag<unknown> =>
   typeof property.description === "string" ? flag.pipe(Flag.withDescription(property.description)) : flag;
 
-/** The input from the parsed flags: each flag that the user gave, and nothing for the others. */
 function inputFrom(parsed: Record<string, unknown>): Record<string, unknown> {
   const input: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(parsed)) {
@@ -422,7 +379,6 @@ function inputFrom(parsed: Record<string, unknown>): Record<string, unknown> {
   return input;
 }
 
-/** `true` if a text is JSON. */
 function isJsonText(text: string): boolean {
   try {
     JSON.parse(text);
@@ -432,14 +388,12 @@ function isJsonText(text: string): boolean {
   }
 }
 
-/** Write a call failure to standard error, and set the exit code. */
 const printFailure = (failure: CallFailure, code: number) =>
   Effect.gen(function* () {
     yield* Console.error(JSON.stringify({ kind: failure.kind, message: failure.message }));
     process.exitCode = code;
   });
 
-/** Write an outcome and set the exit code (spec/bindings/cli.md#outcomes). */
 const print = (outcome: Outcome<unknown, unknown>) =>
   Effect.gen(function* () {
     if (isCallFailure(outcome)) {

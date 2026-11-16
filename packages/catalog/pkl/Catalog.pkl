@@ -13,32 +13,23 @@
 ///   }
 /// }
 /// ```
-///
-/// The rules come from spec/catalog.md. This module checks them while the catalog is written. The JSON Schema in
-/// schemas/catalog.schema.json checks the rendered document.
 @ModuleInfo { minPklVersion = "0.30.0" }
 open module acidcat.Catalog
 
 /// The version of the AcidCat specification that this catalog follows.
 fixed acidcat: "0.1" = "0.1"
 
-/// A name for people.
 title: String?
 
-/// What the application is.
 description: String?
 
-/// The targets, keyed by name.
 targets: Mapping<TargetName, Target>
 
 /// Shared types, keyed by name, rendered as the catalog's `$defs`. Reference one with `module.ref("Name")`.
 types: Mapping<TypeName, Schema>
 
-/// The capabilities, keyed by id. Every audience entry must be one of [targets].
 capabilities: Mapping<Id, Capability>(audiencesAreDeclared(this))
 
-/// The events, keyed by id (spec/events.md). Every audience entry must be one of [targets]. An id must not also be
-/// the id of a capability.
 events: Mapping<Id, Event>(audiencesAreDeclared(this), idsAreNotCapabilities(this))
 
 /// Members that this specification does not define, rendered with an `x-` prefix.
@@ -50,7 +41,6 @@ typealias Id = String(length <= 128, matches(Regex(#"[a-z][a-z0-9]*(-[a-z0-9]+)*
 /// A target or binding name, optionally `prefix:name`.
 typealias TargetName = String(matches(Regex(#"[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?"#)))
 
-/// A shared type's name.
 typealias TypeName = String(matches(Regex(#"[A-Za-z][A-Za-z0-9_]*"#)))
 
 /// A JSON Schema 2020-12 schema, written as a Pkl object. A schema in a catalog is an object, never `true` or `false`.
@@ -132,8 +122,6 @@ local function audiencesAreDeclared(entries: Mapping<Id, Capability|Event>): Boo
 local function idsAreNotCapabilities(entries: Mapping<Id, Event>): Boolean =
   entries.keys.every((id) -> !capabilities.containsKey(id))
 
-/// Turns an object into the map it renders as: absent members dropped, empty `types`, `events`, `failures` and
-/// `extensions` dropped, `types` renamed `$defs`, and extensions merged in under their `x-` names.
 local function rendered(value: Typed): Map<String, Any> =
   let (members = value.toMap())
     members

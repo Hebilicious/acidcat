@@ -1,6 +1,3 @@
-/**
- * Sessions and handles (spec/invocation.md, spec/bindings/typescript.md).
- */
 import { AVAILABLE, CallFailureError, callFailure, isCallFailure, viewOf } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CatalogDocument, Emitted, Outcome, Result } from "@acid-cat/spec-ts";
 
@@ -10,9 +7,7 @@ import type { StandardSchemaV1 } from "./standard-schema.ts";
 import { DEFAULT_BUFFER_LIMIT, runSubscription } from "./subscription.ts";
 import type { Occurrences } from "./subscription.ts";
 
-/** The options of a subscription (spec/bindings/typescript.md#event-handles). */
 export interface SubscribeOptions {
-  /** Cancel the subscription. */
   readonly signal?: AbortSignal | undefined;
   /** Start after this position (spec/events.md#resuming). */
   readonly cursor?: string | undefined;
@@ -34,14 +29,11 @@ export interface EventHandle<Input = never, Payload = unknown> {
    * failure before the first occurrence rejects with a `CallFailureError`.
    */
   subscribe(input: Input, options?: SubscribeOptions): Promise<Occurrences<Payload>>;
-  /** A subscription with an input that is not trusted. The handle validates it first. */
   subscribeExternal(input: unknown, options?: SubscribeOptions): Promise<Occurrences<unknown>>;
 }
 
-/** The handle of an event, with the types of its schemas. `session.eventHandle` gives it. */
 export type EventHandleOf<E> = E extends EventDefinition<never, infer Input, infer Payload, string> ? EventHandle<Input, Payload> : never;
 
-/** The handle of an event that the session does not serve. Each subscription rejects as `unknown-capability`. */
 function eventOutsideView<Input, Payload>(event: { readonly id: string; readonly description: string }): EventHandle<Input, Payload> {
   const reject = () => Promise.reject(new CallFailureError(callFailure("unknown-capability", `There is no event ${event.id}.`)));
   return { id: event.id, description: event.description, audience: [], subscribe: reject, subscribeExternal: reject };
@@ -65,11 +57,9 @@ export interface Handle<Input = never, Value = unknown, Failure = unknown, State
   invokeExternal(input: unknown, options?: { readonly signal?: AbortSignal | undefined }): Promise<Result<unknown, unknown>>;
 }
 
-/** The handle of a capability, with the types of its schemas. `session.handle` gives it. */
 export type HandleOf<C> =
   C extends Capability<never, infer Input, infer Value, infer Failures, infer State, string> ? Handle<Input, Value, FailureOf<Failures>, State> : never;
 
-/** The handle of a capability that the session does not serve. */
 function outsideView<Input, Value, Failure, State>(capability: { readonly id: string; readonly description: string }): Handle<Input, Value, Failure, State> {
   const failure = callFailure("unknown-capability", `There is no capability ${capability.id}.`);
   const unavailable: Availability = { available: false, reason: failure.message };
@@ -92,7 +82,6 @@ export interface Session<Context = unknown> {
    * is first read.
    */
   readonly view: CatalogDocument;
-  /** The handles of the capabilities in the view, by id. Bindings use them. */
   readonly handles: ReadonlyMap<string, Handle>;
   /**
    * The handle of a capability, with the types of the capability. Only the capability object that the session serves
@@ -112,7 +101,6 @@ export interface Session<Context = unknown> {
     input: unknown,
     options?: { readonly signal?: AbortSignal | undefined },
   ) => Promise<Result<Value, FailureOf<Failures>>>;
-  /** The handles of the events in the view, by id. Bindings use them. */
   readonly eventHandles: ReadonlyMap<string, EventHandle>;
   /**
    * The handle of an event, with the types of the event. Only the event object that the session serves gets a handle
@@ -139,13 +127,11 @@ export interface Session<Context = unknown> {
    * complete, and wait for the calls.
    */
   readonly dispose: () => Promise<void>;
-  /** Close the session, as `dispose` does, at the end of the block of `await using session = createSession(…)`. */
   readonly [Symbol.asyncDispose]: () => Promise<void>;
 }
 
 export interface SessionOptions<Context> {
   readonly target: string;
-  /** The services that each `run` receives. */
   readonly context: Context;
   readonly toJsonSchema: ToJsonSchema;
   /** Record a defect. The default writes it to the console. */
@@ -157,13 +143,11 @@ export interface SessionOptions<Context> {
   readonly bufferLimit?: number | undefined;
 }
 
-/** A capability that the session serves, and its availability. */
 interface Served<Context> {
   readonly capability: AnyCapability<Context>;
   readonly availability: Observable<Availability>;
 }
 
-/** The input of a call, decoded: the issues, or the start of the work, which gives the checked result. */
 type Prepared<Context, T> = { readonly issues: readonly StandardSchemaV1.Issue[] } | { readonly start: (call: Call<Context>) => Promise<T> };
 
 /**
@@ -174,7 +158,6 @@ export const isMaxAgeMs = (maxAgeMs: number | undefined): boolean => maxAgeMs ==
 
 const always: Observable<Availability> = { getSnapshot: () => AVAILABLE, subscribe: () => ({ unsubscribe() {} }) };
 
-/** Open a session for a target. */
 export function createSession<Context>(app: App<Context>, options: SessionOptions<Context>): Session<Context> {
   const lifetime = new AbortController();
   const running = new Set<Promise<unknown>>();
@@ -190,10 +173,6 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     served.set(capability.id, { capability, availability });
   }
 
-  /**
-   * Run a call of a capability that the session serves: availability, then the decoded input, then the work, with
-   * cancellation. A defect is the call failure `internal`.
-   */
   async function perform<T>(id: string, entry: Served<Context>, prepare: () => Promise<Prepared<Context, T>>, signal?: AbortSignal): Promise<T | CallFailure> {
     if (lifetime.signal.aborted || signal?.aborted) return callFailure("cancelled", "The call was cancelled.");
     const availability = entry.availability.getSnapshot();
@@ -202,7 +181,6 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     try {
       prepared = await prepare();
     } catch (cause) {
-      // An input schema that throws is a defect, as a run that throws is.
       onDefect(id, cause);
       return callFailure("internal", "The capability failed.");
     }
@@ -215,7 +193,6 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     const cancelled = new Promise<CallFailure>((resolve) =>
       controller.signal.addEventListener("abort", () => resolve(callFailure("cancelled", "The call was cancelled."))),
     );
-    // The client or the session can abort during validation, before the listeners exist.
     if (lifetime.signal.aborted || signal?.aborted) controller.abort();
     const work = Promise.resolve()
       .then(() => prepared.start({ signal: controller.signal, context: options.context, target: options.target }))
@@ -223,7 +200,6 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
         onDefect(id, cause);
         return callFailure("internal", "The capability failed.");
       });
-    // The outcome settles when the work ends or when the call is cancelled, also if the work ignores the signal.
     const outcome = Promise.race([work, cancelled]);
     running.add(outcome);
     try {
@@ -235,7 +211,6 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     }
   }
 
-  /** A call with an input that is not trusted. The outcome is a result or a call failure. */
   async function invoke(id: string, input: unknown, signal?: AbortSignal): Promise<Outcome<unknown, unknown>> {
     if (lifetime.signal.aborted || signal?.aborted) return callFailure("cancelled", "The call was cancelled.");
     const entry = served.get(id);
@@ -248,14 +223,12 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     }, signal);
   }
 
-  /** Reject a call failure, as a handle does. */
   const settle = async <T>(outcome: Promise<Result<T, unknown> | CallFailure>): Promise<Result<T, unknown>> => {
     const settled = await outcome;
     if (isCallFailure(settled)) throw new CallFailureError(settled);
     return settled;
   };
 
-  /** The typed handle of a capability that the session serves, or the handle outside the view. */
   function handle<Input, Value, Failures, State, Id extends string>(
     capability: Capability<Context, Input, Value, Failures, State, Id>,
   ): Handle<Input, Value, FailureOf<Failures>, State> {
@@ -278,7 +251,6 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     };
   }
 
-  /** A typed call with an input that is not trusted: the input schema of the capability decodes it. */
   async function call<Input, Value, Failures, State, Id extends string>(
     capability: Capability<Context, Input, Value, Failures, State, Id>,
     input: unknown,
@@ -315,8 +287,6 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     });
   }
 
-  // --- Events (spec/events.md) ----------------------------------------------------------------------------------
-
   const servedEvents = new Map<string, AnyEventDefinition<Context>>();
   for (const event of app.events ?? []) {
     if (!event.audience.includes(options.target)) continue;
@@ -325,10 +295,6 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
   }
   const bufferLimit = options.bufferLimit ?? DEFAULT_BUFFER_LIMIT;
 
-  /**
-   * Start a subscription to an event that the session serves: the decoded input, then the provider, with cancellation.
-   * The result is the occurrences, or the call failure before the first occurrence.
-   */
   async function start<Source, Payload>(
     id: string,
     prepare: () => Promise<{ readonly issues: readonly StandardSchemaV1.Issue[] } | { readonly start: (subscription: Subscription<Context>) => AsyncIterable<Emitted<Source>> }>,
@@ -384,7 +350,6 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     return running.occurrences;
   }
 
-  /** A subscription with an input that is not trusted. The data of each occurrence is a copy in its JSON form. */
   async function subscribe(id: string, input: unknown, subscribeOptions?: SubscribeOptions): Promise<Occurrences<unknown> | CallFailure> {
     if (lifetime.signal.aborted || subscribeOptions?.signal?.aborted === true) return callFailure("cancelled", "The subscription was cancelled.");
     const event = servedEvents.get(id);
@@ -392,14 +357,12 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     return start(id, () => event.decode(input), (data: unknown) => checkPayload(event.payload, data, (value) => value), subscribeOptions);
   }
 
-  /** Reject a call failure, as an event handle does. */
   const opened = async <Payload>(subscription: Promise<Occurrences<Payload> | CallFailure>): Promise<Occurrences<Payload>> => {
     const settled = await subscription;
     if ("kind" in settled) throw new CallFailureError(settled);
     return settled;
   };
 
-  /** The typed handle of an event that the session serves, or the handle outside the view. */
   function eventHandle<Input, Payload, Id extends string>(event: EventDefinition<Context, Input, Payload, Id>): EventHandle<Input, Payload> {
     if (servedEvents.get(event.id) !== event) return eventOutsideView(event);
     const source = (input: Input, subscription: Subscription<Context>) => (event.input === undefined ? event.subscribe({}, subscription) : event.subscribe(input, subscription));
@@ -469,22 +432,16 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
   };
 }
 
-/** The message of the call failure `invalid-input`: each issue with its path. */
 function issueMessage(issues: readonly StandardSchemaV1.Issue[]): string {
   return issues
     .map((issue) => `${(issue.path ?? []).map((key) => (typeof key === "object" ? String(key.key) : String(key))).join(".") || "input"}: ${issue.message}`)
     .join("; ");
 }
 
-/** True if a value is an async iterable. */
 function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
   return typeof value === "object" && value !== null && Symbol.asyncIterator in value && typeof value[Symbol.asyncIterator] === "function";
 }
 
-/**
- * Check the data of an occurrence against the payload schema, and give a copy of the output of the schema. With no
- * payload schema, the data must be an empty object, and `empty` gives the value. Data that does not agree is a defect.
- */
 async function checkPayload<Payload>(schema: StandardSchemaV1<unknown, Payload> | undefined, data: unknown, empty: (value: unknown) => Payload): Promise<Payload> {
   if (schema === undefined) {
     if (typeof data !== "object" || data === null || Array.isArray(data) || Object.keys(data).length > 0) {
@@ -497,7 +454,6 @@ async function checkPayload<Payload>(schema: StandardSchemaV1<unknown, Payload> 
   return structuredClone(checked.value);
 }
 
-/** An observable whose values are copies, so that a client cannot change the data of the provider. */
 function detached<T>(source: Observable<T>): Observable<T> {
   return {
     getSnapshot: () => structuredClone(source.getSnapshot()),
@@ -505,7 +461,6 @@ function detached<T>(source: Observable<T>): Observable<T> {
   };
 }
 
-/** Check a result against the output schema or the failure schemas. A result that does not agree is a defect. */
 async function checkResult(capability: AnyCapability<never>, result: Result<unknown, unknown>): Promise<Outcome<unknown, unknown>> {
   if (result.ok) {
     if (capability.output === undefined) return { ok: true, value: result.value ?? null };
@@ -523,10 +478,6 @@ async function checkResult(capability: AnyCapability<never>, result: Result<unkn
   return { ok: false, error: { _tag: tag, ...data } };
 }
 
-/**
- * Check a result of a typed handle, as `checkResult` does. The values come from the output schema and from the failure
- * schema, so they have the types of the capability.
- */
 async function checkTyped<Context, Input, Value, Failures, State, Id extends string>(
   capability: Capability<Context, Input, Value, Failures, State, Id>,
   result: Result<Value, FailureOf<Failures>>,
@@ -541,7 +492,6 @@ async function checkTyped<Context, Input, Value, Failures, State, Id extends str
   return { ok: false, error: await checkFailure(result.error, result.error._tag, capability.failures) };
 }
 
-/** Check one failure against the schema of its tag. The result has the type of the failure with that tag. */
 async function checkFailure<Failures, Tag extends keyof Failures>(
   failure: unknown,
   tag: Tag,

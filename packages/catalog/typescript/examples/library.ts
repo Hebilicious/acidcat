@@ -1,4 +1,3 @@
-/** A lending-library catalog, written with the TypeScript catalog library. */
 import { Catalog } from "../src/index.ts";
 
 export function libraryCatalog(): Catalog {

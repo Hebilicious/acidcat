@@ -1,7 +1,3 @@
-/**
- * A command line with one capability, `probe.plan`, that returns its input. Its input has a required repeated flag,
- * `--days`, with items that are a `$ref`, and an optional repeated flag, `--hours`.
- */
 import { Effect, Layer, Schema } from "effect";
 
 import * as App from "../src/App.ts";

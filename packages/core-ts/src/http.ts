@@ -1,6 +1,3 @@
-/**
- * The HTTP binding (spec/bindings/http.md): JSON through HTTP.
- */
 import { CallFailureError, callFailure, httpEventMessage, httpStatus, isCallFailure, KEEPALIVE_MS, readBounded, screenRequest, SSE_MEDIA_TYPE } from "@acid-cat/spec-ts";
 import type { CallFailure, Rejection } from "@acid-cat/spec-ts";
 
@@ -11,7 +8,6 @@ import { createSession } from "./session.ts";
 import type { Session } from "./session.ts";
 import { idlePuller, textStream } from "./stream.ts";
 
-/** The options of `httpHandler`. Give `context` to share one context, or `createContext` to make one for each request. */
 export type HttpOptions<Context> = HttpSettings & ContextOption<Context>;
 
 export interface HttpSettings {
@@ -63,7 +59,6 @@ export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Con
       await session.dispose();
       await opened.release();
     };
-    // A stream of a subscription closes the session and releases the context when it ends.
     let streaming = false;
     try {
       if (request.method === "GET" && path === "/capabilities") {
@@ -78,7 +73,6 @@ export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Con
       if (route === undefined) return json(404, callFailure("unknown-capability", "There is no such route."));
 
       const id = decodedId(route.id);
-      // An id with a malformed escape names no capability and no event.
       if (id === undefined) return json(404, callFailure("unknown-capability", "There is no such route."));
       let input: unknown;
       try {
@@ -100,14 +94,12 @@ export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Con
   };
 }
 
-/** The capability or the event of a `POST` route, or `undefined` for another path. */
 function postRoute(path: string): { readonly kind: "capability" | "event"; readonly id: string } | undefined {
   if (path.startsWith("/capabilities/")) return { kind: "capability", id: path.slice("/capabilities/".length) };
   if (path.startsWith("/events/")) return { kind: "event", id: path.slice("/events/".length) };
   return undefined;
 }
 
-/** The id of a route with its escapes decoded, or `undefined` if an escape is malformed, as in `%E0`. */
 function decodedId(encoded: string): string | undefined {
   try {
     return decodeURIComponent(encoded);
@@ -134,10 +126,6 @@ function notJson(session: Session, kind: "capability" | "event", id: string, sig
   return callFailure("invalid-input", "The request body is not JSON.");
 }
 
-/**
- * Subscribe to an event (spec/bindings/http.md#events). A call failure before the first occurrence is a JSON answer.
- * After that, the answer is a stream of server-sent events, which closes the session when it ends.
- */
 async function subscribe(
   session: Session,
   id: string,
@@ -177,7 +165,6 @@ async function subscribe(
   return { response: new Response(body, { status: 200, headers: { "Content-Type": SSE_MEDIA_TYPE, "Cache-Control": "no-store" } }), streaming: true };
 }
 
-/** The call failure that ends a subscription. A subscription ends only with `internal`. */
 function internalOf(error: unknown): CallFailure {
   return error instanceof CallFailureError ? callFailure(error.kind, error.message) : callFailure("internal", "The event failed.");
 }

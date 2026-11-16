@@ -1,6 +1,3 @@
-//! A client of the HTTP binding (spec/bindings/http.md). The command line uses it to call the capabilities and follow
-//! the events of an application that runs in another process or on another machine.
-
 use std::collections::VecDeque;
 use std::sync::Arc;
 
@@ -14,7 +11,6 @@ use serde_json::Value;
 use crate::outcome::{Availability, CallFailure, Kind, Outcome};
 use crate::subscription::Occurrence;
 
-/// The largest answer that the client reads, in bytes.
 const MAXIMUM_ANSWER: usize = 64 * 1024 * 1024;
 
 /// A client of an HTTP binding at a base URL, for example `http://pi.local:8080/api`. Clones share the settings.
@@ -28,7 +24,6 @@ pub struct HttpClient {
 
 impl std::fmt::Debug for HttpClient {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // The headers can hold a token, so they are not shown.
         formatter
             .debug_struct("HttpClient")
             .field("base", &self.base)
@@ -40,8 +35,6 @@ impl HttpClient {
     /// A client of the HTTP binding at `base`, an `http` or `https` URL. The error tells what is wrong with the URL.
     pub fn new(base: &str) -> Result<Self, String> {
         let base = base.trim_end_matches('/').to_owned();
-        // A user name or a password is a credential: it must not reach an error message or a header. Give a token in
-        // a header instead. A query or a fragment cannot come before the paths of the binding.
         if base
             .split_once("://")
             .map_or(base.as_str(), |(_, rest)| rest)
@@ -88,7 +81,6 @@ impl HttpClient {
         self
     }
 
-    /// The base URL.
     pub fn base(&self) -> &str {
         &self.base
     }
@@ -100,8 +92,6 @@ impl HttpClient {
         if status != 200 {
             return Err(call_failure(&body));
         }
-        // Each item has a string `id` and a boolean `available`, and a string `reason` when it is unavailable. Any other
-        // answer is not an answer of the HTTP binding.
         let items = body.as_array().ok_or_else(not_an_answer)?;
         items
             .iter()
@@ -239,7 +229,6 @@ fn path_segment(id: &str) -> String {
         .collect()
 }
 
-/// The status and the JSON body of an answer.
 async fn read(answer: http::Response<Incoming>) -> Result<(u16, Value), CallFailure> {
     let status = answer.status().as_u16();
     let mut body = answer.into_body();
@@ -257,7 +246,6 @@ async fn read(answer: http::Response<Incoming>) -> Result<(u16, Value), CallFail
     Ok((status, json))
 }
 
-/// The call failure of an answer with a status that is not 200.
 fn call_failure(body: &Value) -> CallFailure {
     serde_json::from_value(body.clone()).unwrap_or_else(|_| not_an_answer())
 }
@@ -273,20 +261,16 @@ fn broken() -> CallFailure {
     CallFailure::new(Kind::Internal, "The connection to the server broke.")
 }
 
-/// The state of a stream of server-sent events.
 struct Reader {
     body: Incoming,
     buffer: Vec<u8>,
-    /// The messages that the reader has, and not yet given.
     ready: VecDeque<Result<Occurrence, CallFailure>>,
     event: String,
     data: Vec<String>,
-    /// The stream sent `complete` or `error`, or broke.
     ended: bool,
 }
 
 impl Reader {
-    /// Read the complete lines in the buffer.
     fn lines(&mut self) {
         // A line ends with CR LF, LF or CR. A CR at the end of the buffer waits for the next bytes, which can be its LF.
         while let Some(end) = self
@@ -325,7 +309,6 @@ impl Reader {
         }
     }
 
-    /// Give the message that a blank line ends.
     fn dispatch(&mut self) {
         let event = std::mem::take(&mut self.event);
         let data = std::mem::take(&mut self.data).join("\n");
@@ -346,7 +329,6 @@ impl Reader {
     }
 }
 
-/// The occurrences of a stream of server-sent events, as the HTTP binding sends them.
 fn server_sent_events(body: Incoming) -> BoxStream<'static, Result<Occurrence, CallFailure>> {
     let reader = Reader {
         body,
@@ -371,7 +353,7 @@ fn server_sent_events(body: Incoming) -> BoxStream<'static, Result<Occurrence, C
                         reader.lines();
                     }
                 }
-                // The body ended. A CR at its end ends a line. Then a stream that sent no `complete` broke.
+                // The body ended. A CR at its end ends a line.
                 _ if reader.buffer.last() == Some(&b'\r') => {
                     reader.buffer.push(b'\n');
                     reader.lines();
@@ -396,7 +378,6 @@ mod tests {
 
     use super::*;
 
-    /// A server that answers each request on one connection with `answer`, then closes it. The result is its base URL.
     async fn server(answer: &'static str) -> String {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();

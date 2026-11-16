@@ -1,6 +1,3 @@
-/**
- * The WebMCP binding (spec/bindings/webmcp.md): register capabilities as WebMCP tools in a web page.
- */
 import { bundle, CallFailureError, isCallFailure } from "@acid-cat/spec-ts";
 
 import type { Observable } from "./app.ts";
@@ -32,7 +29,6 @@ export interface Installation {
   readonly dispose: () => Promise<void>;
 }
 
-/** The WebMCP host of the page, if there is one (spec/bindings/webmcp.md#host). */
 export function findHost(): ModelContext | undefined {
   const scope: object = globalThis;
   const holders = ["document" in scope ? scope.document : undefined, "navigator" in scope ? scope.navigator : undefined];
@@ -43,7 +39,6 @@ export function findHost(): ModelContext | undefined {
   return undefined;
 }
 
-/** Tell if a value has a `registerTool` function. The result of `registerTool` is not known, as `ModelContext` says. */
 function isModelContext(value: unknown): value is ModelContext {
   return typeof value === "object" && value !== null && "registerTool" in value && typeof value.registerTool === "function";
 }
@@ -88,7 +83,6 @@ export function installWebMcp(session: Session, options: { readonly host?: Model
     };
   };
 
-  /** One update. If it fails, the tools stay as they were before the update. */
   async function pass(): Promise<void> {
     const wanted = new Set([...session.handles.values()].filter((handle) => handle.availability.getSnapshot().available).map((handle) => handle.id));
     const added = new Map<string, AbortController>();
@@ -112,7 +106,6 @@ export function installWebMcp(session: Session, options: { readonly host?: Model
     }
   }
 
-  /** Run updates one at a time. A request during an update causes one more update. */
   async function reconcile(): Promise<void> {
     if (lifetime.signal.aborted) return;
     if (running) {

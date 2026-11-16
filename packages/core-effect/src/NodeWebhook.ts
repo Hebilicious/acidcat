@@ -1,12 +1,3 @@
-/**
- * Send the requests of webhook delivery (spec/bindings/mcp.md#webhook) from Node.js, with only `node:https`. Give the
- * sender to the `webhooks` option of `Mcp.toWebHandler`.
- *
- * The sender protects the network of the server. For each request, it resolves the host name of the URL, and connects
- * only to an address that is globally routable. It connects to the address that it checked, with the host name in the
- * `Host` header and in TLS (SNI and the check of the certificate), so that the address cannot change between the check
- * and the connection. It does not follow redirects.
- */
 import { lookup as resolve } from "node:dns";
 import type { LookupAddress, LookupOptions } from "node:dns";
 import { request } from "node:https";
@@ -36,16 +27,22 @@ export interface SenderOptions {
   readonly maxResponseBytes?: number | undefined;
 }
 
-/** The code of the error when no address of a host is allowed. */
 const NOT_ALLOWED = "EADDRNOTALLOWED";
 
-/** A sender of webhook requests for Node.js. */
+/**
+ * Send the requests of webhook delivery (spec/bindings/mcp.md#webhook) from Node.js, with only `node:https`. Give the
+ * sender to the `webhooks` option of `Mcp.toWebHandler`.
+ *
+ * The sender protects the network of the server. For each request, it resolves the host name of the URL, and connects
+ * only to an address that is globally routable. It connects to the address that it checked, with the host name in the
+ * `Host` header and in TLS (SNI and the check of the certificate), so that the address cannot change between the check
+ * and the connection. It does not follow redirects.
+ */
 export function sender(options: SenderOptions = {}): WebhookSender {
   const allowed = (address: string) => options.allowPrivateNetworks === true || isGloballyRoutable(address);
   const ca = options.ca === undefined ? undefined : [...rootCertificates, ...(typeof options.ca === "string" ? [options.ca] : options.ca)];
   const maxResponseBytes = options.maxResponseBytes ?? 65_536;
 
-  /** Resolve the host name, and give only the addresses that the sender can connect to. */
   const lookup: LookupFunction = (hostname: string, lookupOptions: LookupOptions, callback) => {
     resolve(hostname, { ...lookupOptions, all: true }, (error: NodeJS.ErrnoException | null, addresses: LookupAddress[]) => {
       if (error !== null) return callback(error, "");
@@ -110,7 +107,6 @@ function notAllowed(hostname: string): NodeJS.ErrnoException {
   return error;
 }
 
-/** The category of an error of Node.js. */
 function reasonOf(error: NodeJS.ErrnoException): "connection_refused" | "timeout" | "tls_error" {
   const code = error.code ?? "";
   if (code === "ETIMEDOUT") return "timeout";

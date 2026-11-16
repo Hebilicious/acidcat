@@ -1,6 +1,3 @@
-/**
- * The CLI binding (spec/bindings/cli.md): a command line made from the catalog.
- */
 import {
   bundle,
   CallFailureError,
@@ -53,10 +50,8 @@ export interface CliOptions<Context> {
   readonly remote?: HttpClient | undefined;
 }
 
-/** Where the command line sends the calls and the subscriptions: a session in this process, or the HTTP binding of a server. */
 interface Provider {
   readonly view: CatalogDocument;
-  /** The availability of each capability of the view, or the call failure when the server does not answer. */
   readonly availability: (signal: AbortSignal | undefined) => Promise<ReadonlyMap<string, Availability> | CallFailure>;
   readonly invoke: (id: string, input: unknown, signal: AbortSignal | undefined) => Promise<Outcome<unknown, unknown>>;
   readonly subscribe: (id: string, input: unknown, options: { readonly signal?: AbortSignal | undefined; readonly cursor?: string; readonly maxAgeMs?: number }) => Promise<AsyncIterable<Occurrence> | CallFailure>;
@@ -83,7 +78,6 @@ function remoteProvider<Context>(app: App<Context>, options: CliOptions<Context>
     availability: async (signal) => {
       const served = await client.capabilities({ signal });
       if ("kind" in served) return served;
-      // A capability that the server does not list is unavailable.
       return new Map(Object.keys(view.capabilities).map((id) => [id, served.get(id) ?? unavailable("The server does not serve this capability.")]));
     },
     invoke: (id, input, signal) => client.invoke(id, input, { signal }),
@@ -98,16 +92,13 @@ export interface CliIo {
   readonly signal?: AbortSignal | undefined;
 }
 
-/** A command that the application adds to the command line. */
 export interface CliCommand<Context> {
   readonly name: string;
-  /** The text that the help gives for the command. */
   readonly description: string;
   /** Run the command with the arguments that come after its name. The result is the exit code. */
   run(args: readonly string[], io: CliIo & { readonly context: Context }): number | Promise<number>;
 }
 
-/** The commands of the command line itself. No other command can have their names. */
 const GENERIC_COMMANDS: readonly string[] = ["call", "list", "watch"];
 
 class UsageError extends Error {
@@ -144,8 +135,6 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   for (const { path } of commands) {
     if (path[0] !== undefined && GENERIC_COMMANDS.includes(path[0])) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
   }
-  // A shared prefix is a command that only contains other commands (spec/bindings/cli.md), so the path of a capability
-  // must not be the start of the path of another capability. Ids are unique, so no two paths are the same.
   for (const { path } of commands) {
     const longer = commands.find((other) => other.path.length > path.length && path.every((word, index) => other.path[index] === word));
     if (longer !== undefined) {
@@ -171,7 +160,6 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     return cliExitCode(outcome);
   };
 
-  /** Subscribe to an event, and write each occurrence on one line (spec/bindings/cli.md#events). */
   const watch = async (rest: readonly string[]): Promise<number> => {
     const [id, ...args] = rest;
     const { flagArgs, resume } = resumeFlags(args);
@@ -197,7 +185,6 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       }
     }
     const subscribed = await provider.subscribe(id, input, { signal: io.signal, ...resume });
-    // An interrupt ends the subscription as cancelled, also before the subscription starts: nothing goes to standard error.
     if ("kind" in subscribed) return io.signal?.aborted === true ? CLI_WATCH_EXIT_CODES.cancelled : print(subscribed);
     try {
       for await (const occurrence of subscribed) io.stdout(JSON.stringify(occurrence));
@@ -289,10 +276,6 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   }
 }
 
-/**
- * Take `--cursor` and `--max-age-ms` out of the arguments of `watch` (spec/bindings/cli.md#events). The result is the
- * other arguments, and the cursor and `maxAgeMs` of the subscription.
- */
 function resumeFlags(args: readonly string[]): { readonly flagArgs: string[]; readonly resume: { cursor?: string; maxAgeMs?: number } } {
   const flagArgs: string[] = [];
   const resume: { cursor?: string; maxAgeMs?: number } = {};
@@ -316,14 +299,11 @@ function resumeFlags(args: readonly string[]): { readonly flagArgs: string[]; re
   return { flagArgs, resume };
 }
 
-/** Make the input from the flags (spec/bindings/cli.md#commands). */
 function parseFlags(args: readonly string[], schema: JsonObject): Record<string, unknown> {
   const properties = objectOrEmpty(schema.properties);
   const definitions = objectOrEmpty(schema.$defs);
   const input: Record<string, unknown> = {};
-  // The values of each repeated flag, in the order of the flags.
   const repeated = new Map<string, { readonly items: JsonObject; readonly values: string[] }>();
-  // The loop and the value of a flag read the same iterator, so that a value is not read again as a flag.
   const remaining = args.values();
   for (const arg of remaining) {
     if (!arg.startsWith("--")) throw new UsageError(`Unexpected argument ${arg}.`, CLI_EXIT_CODES["invalid-input"]);
@@ -346,7 +326,6 @@ function parseFlags(args: readonly string[], schema: JsonObject): Record<string,
       repeated.set(name, flag);
     }
   }
-  // A repeated flag gives JSON text of the whole array, or one item for each occurrence.
   for (const [name, { items, values }] of repeated) {
     input[name] = cliJsonArray(values) ?? values.map((text) => valueOf(name, text, items));
   }
@@ -377,10 +356,8 @@ function valueOf(name: string, text: string, type: JsonObject): unknown {
   }
 }
 
-/** A value as a JSON object, or an empty object when it is not one. */
 const objectOrEmpty = (value: unknown): JsonObject => (isJsonObject(value) ? value : {});
 
-/** The capability `id` of a view. The view has it, because the session serves it. */
 function viewCapability(view: CatalogDocument, id: string): CatalogCapability {
   const capability = view.capabilities[id];
   if (capability === undefined) throw new Error(`The view of the session has no capability ${id}.`);

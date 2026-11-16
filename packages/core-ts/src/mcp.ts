@@ -1,7 +1,3 @@
-/**
- * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP, revision 2026-07-28. The server keeps no state
- * between requests, except poll leases and webhook subscriptions.
- */
 import { bundle, isJsonObject, KEEPALIVE_MS, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage } from "@acid-cat/spec-ts";
 import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
 
@@ -17,7 +13,6 @@ import { createSession } from "./session.ts";
 import type { Session } from "./session.ts";
 import { textStream } from "./stream.ts";
 
-/** The options of `mcpHandler`. Give `context` to share one context, or `createContext` to make one for each request. */
 export type McpOptions<Context> = McpSettings & ContextOption<Context>;
 
 export interface McpSettings {
@@ -45,14 +40,13 @@ export interface McpSettings {
    * request has an identity.
    */
   readonly principal?: ((request: Request) => string | undefined | Promise<string | undefined>) | undefined;
-  /** The settings of poll delivery: the lease time, the size of the buffer, `maxEvents` and `nextPollMs`. */
   readonly poll?: PollOptions | undefined;
   /**
    * Webhook delivery. It is off when this member is absent. `webhookDelivery` of `@acid-cat/core-ts/node` makes it.
    * A request to `events/subscribe` or `events/unsubscribe` with no principal gets `Forbidden`.
    */
   readonly webhooks?: WebhookDelivery | undefined;
-  /** The clock of the poll leases. The default is the clock of the system. Tests give a clock that they control. */
+  /** The clock of the poll leases. The default is the clock of the system. */
   readonly clock?: Clock | undefined;
 }
 
@@ -66,7 +60,7 @@ export interface McpHandler {
   readonly [Symbol.asyncDispose]: () => Promise<void>;
 }
 
-/** The members of a JSON-RPC request that the server reads. A request with no `id` is a notification. */
+/** A request with no `id` is a notification. */
 interface JsonRpcRequest {
   readonly id?: string | number | null;
   readonly method?: string | undefined;
@@ -76,10 +70,6 @@ interface JsonRpcRequest {
   readonly protocolVersion?: unknown;
 }
 
-/**
- * Read the members of a JSON-RPC request from a parsed body. A member that does not have its type is left out. An
- * `id` that is not a string or a number is `null`.
- */
 function readRequest(body: unknown): JsonRpcRequest {
   if (!isJsonObject(body)) return { params: {} };
   const { id, method, params } = body;
@@ -124,7 +114,6 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
       return rejection("not-utf8");
     }
 
-    // The context of the request. `createContext` can refuse the request here, before a session opens.
     const opened = await openContext<Context>(options, request);
     if ("refusal" in opened) return refusalResponse(opened.refusal);
     const unanswerable = revisionError(request, message);
@@ -134,10 +123,6 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
     }
     const id = message.id ?? null;
 
-    // The session of the request uses the context of the request. A poll lease or a webhook subscription that the
-    // request starts opens one more session, with the same context. Each open session holds the context. The last
-    // session to close releases it: the context lives until the answer is done and every lease and webhook
-    // subscription of the request has ended.
     let holders = 0;
     const open: OpenSession = async () => {
       holders += 1;
@@ -160,7 +145,6 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
       return { session, close };
     };
     const { session, close } = await open();
-    // The stream of `events/stream` closes the session and releases the context when it ends.
     let streaming = false;
     try {
       if (message.method === "events/stream" && message.id !== null && message.id !== undefined && servesEvents(session)) {
@@ -190,10 +174,6 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
   return Object.assign(handle, { close: closeAll, [Symbol.asyncDispose]: closeAll });
 }
 
-/**
- * The error answer of a request that does not name revision 2026-07-28 correctly, or the empty answer of a
- * notification. `undefined` for a request that the server answers.
- */
 function revisionError(request: Request, message: JsonRpcRequest): Response | undefined {
   // Revision 2026-07-28: each request names its revision in a header, and each request repeats it in `_meta`.
   const version = request.headers.get("MCP-Protocol-Version");
@@ -209,10 +189,8 @@ function revisionError(request: Request, message: JsonRpcRequest): Response | un
   return undefined;
 }
 
-/** The methods whose state outlives the request (spec/bindings/mcp.md#subscriptions-that-outlive-a-request). */
 const LONG_LIVED: ReadonlySet<string> = new Set(["events/poll", "events/subscribe", "events/unsubscribe"]);
 
-/** Answer `events/poll`, `events/subscribe` or `events/unsubscribe`. */
 async function longLived(method: string, params: JsonObject, principal: string | undefined, open: OpenSession, leases: PollLeases, webhooks: WebhookDelivery | undefined): Promise<RpcAnswer> {
   if (method === "events/poll") return leases.poll(principal, params, open);
   if (webhooks === undefined) return { error: unsupportedWebhook };
@@ -220,7 +198,6 @@ async function longLived(method: string, params: JsonObject, principal: string |
   return method === "events/subscribe" ? webhooks.subscribe(principal, params, open) : webhooks.unsubscribe(principal, params);
 }
 
-/** The `_meta` of a result: the information about the server. */
 const serverInfoOf = (options: McpSettings): JsonObject => ({ "io.modelcontextprotocol/serverInfo": { name: options.name, version: options.version } });
 
 async function answer(session: Session, message: JsonRpcRequest, options: McpSettings, signal: AbortSignal): Promise<Response> {
@@ -260,7 +237,6 @@ async function answer(session: Session, message: JsonRpcRequest, options: McpSet
   return error(404, id, -32601, `Method not found: ${message.method}`);
 }
 
-/** The tools of the available capabilities in the view of a session (spec/bindings/mcp.md#tools). */
 export function listTools(session: Session) {
   const types = session.view.$defs ?? {};
   return [...session.handles.values()]
@@ -279,7 +255,6 @@ export function listTools(session: Session) {
     });
 }
 
-/** True if the bundled output schema of a capability has `"type": "object"`. */
 export function hasObjectOutput(session: Session, id: string): boolean {
   const output = session.view.capabilities[id]?.output;
   return output !== undefined && bundle(output, session.view.$defs ?? {}).type === "object";

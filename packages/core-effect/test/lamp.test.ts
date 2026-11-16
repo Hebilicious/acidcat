@@ -9,14 +9,12 @@ import { App, Mcp, Session } from "../src/index.ts";
 import { Lamp, lamp, lampLayer, makeLampLayer } from "./lamp.ts";
 import { run } from "./run.ts";
 
-/** Run a test with a session for a target, and a lamp of its own. */
 const withSession = <A, E>(
   target: string,
   body: (session: Session.Session) => Effect.Effect<A, E, Lamp | Scope.Scope>,
   layer = lampLayer,
 ) => Effect.runPromise(Effect.scoped(Effect.flatMap(Session.make(lamp, { target }), body)).pipe(Effect.provide(Layer.fresh(layer))));
 
-/** The parts of a catalog that tell who can do what. */
 const shape = (catalog: CatalogDocument) =>
   Object.fromEntries(
     Object.entries(catalog.capabilities).map(([id, capability]) => [

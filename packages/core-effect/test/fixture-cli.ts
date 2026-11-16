@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/** The fixture as a command line, for the CLI tests. */
 import { writeFile } from "node:fs/promises";
 
 import { Effect, Layer } from "effect";

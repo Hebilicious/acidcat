@@ -1,12 +1,3 @@
-/**
- * Conformance checks for webhook delivery of the MCP events extension (spec/bindings/mcp.md#webhook), through HTTP.
- * conform runs an HTTPS receiver on 127.0.0.1 with the certificate that it gets. The deployment under test must trust
- * that certificate, allow deliveries to 127.0.0.1, and give the principal of `WebhookSettings` to each request with the
- * header `Authorization: Bearer <principal>`.
- *
- * Each check uses its own path on the receiver, so its URL is new: the server verifies it again, and the subscriptions
- * of one check, or of an earlier run of conform, never have the key of another check.
- */
 import { randomBytes, randomUUID } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import { createServer } from "node:https";
@@ -21,7 +12,6 @@ import type { Channel, Message } from "./mcp.ts";
 
 const RULE = "spec/bindings/mcp.md#webhook";
 
-/** The settings of the checks of webhook delivery. */
 export interface WebhookSettings {
   /** The principal that the deployment gives to a request with the header `Authorization: Bearer <principal>`. */
   readonly principal: string;
@@ -47,29 +37,21 @@ export interface WebhookSettings {
   readonly maxSubscriptions?: number | undefined;
 }
 
-/** One request that the receiver got. */
 interface Received {
   readonly headers: IncomingHttpHeaders;
   readonly text: string;
   readonly body: unknown;
 }
 
-/** The answer of the receiver to a request: a status, and a body. */
 interface Answer {
   readonly status: number;
   readonly body?: string;
 }
 
-/** Chooses the answer to a request. `index` counts the requests of the path that are not verifications, from 0. */
 type Answerer = (request: Received, index: number) => Answer | undefined;
 
-/** True if the body of a request is the control message `verification`. */
 const isVerification = (request: Received) => memberOf(request.body, "type") === "verification";
 
-/**
- * Start the receiver. By default, it answers a verification with its challenge, and each other request with 200. A
- * check can choose other answers for its path.
- */
 async function startReceiver(settings: WebhookSettings) {
   const received = new Map<string, Received[]>();
   const answerers = new Map<string, Answerer>();
@@ -99,7 +81,6 @@ async function startReceiver(settings: WebhookSettings) {
   const address = server.address();
   const port = typeof address === "object" && address !== null ? address.port : 0;
   return {
-    /** A new URL on the receiver, for one check. */
     url: (answer?: Answerer) => {
       const path = `/hook/${randomUUID()}`;
       if (answer !== undefined) answerers.set(path, answer);
@@ -113,20 +94,14 @@ async function startReceiver(settings: WebhookSettings) {
   };
 }
 
-/** A new Standard Webhooks secret. */
 const newSecret = () => `whsec_${randomBytes(32).toString("base64")}`;
 
-/** One header of a request, as text. */
 function header(request: Received, name: string): string {
   const value = request.headers[name];
   expect(typeof value === "string", `the request must have the header ${name}, got ${JSON.stringify(request.headers)}`);
   return value;
 }
 
-/**
- * Check the headers of a request of the server: the media type, the id, the timestamp, the subscription id, and a
- * signature with each secret. `type` is the type of a control message; with none, the request is an occurrence.
- */
 async function expectSigned(request: Received, subscription: string, secrets: readonly string[], type?: string): Promise<string> {
   expect(header(request, "content-type").startsWith("application/json"), `Content-Type must be application/json, got ${header(request, "content-type")}`);
   const id = header(request, "webhook-id");
@@ -144,13 +119,11 @@ async function expectSigned(request: Received, subscription: string, secrets: re
   return id;
 }
 
-/** The body of a delivery of an occurrence: the occurrence without `truncated`. */
 function expectDelivered(request: Received, name: string) {
   expect(isObject(request.body) && !("truncated" in request.body), `the body must be an occurrence without truncated, got ${request.text}`);
   return expectOccurrence(request.body, name);
 }
 
-/** The checks of webhook delivery through the MCP server at `url`. */
 export async function checkWebhook(checks: Checks, url: string, settings: WebhookSettings): Promise<void> {
   let receiver: Awaited<ReturnType<typeof startReceiver>>;
   try {
@@ -180,8 +153,6 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
     expect(isObject(result), `${method} must give a result, got ${JSON.stringify(message)}`);
     return result;
   };
-  /** Subscribe, and check the form of the result (spec/bindings/mcp.md#webhook). */
-  /** A client with its own principal. */
   interface Client {
     readonly channel: Channel;
     readonly principal: string;
@@ -205,10 +176,8 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
   };
   const unsubscribe = (name: string, input: JsonObject, hook: string, signal: AbortSignal, client: Client = main) =>
     client.channel.request("events/unsubscribe", unsubscribeParams(name, input, hook), signal);
-  /** End a subscription at the end of a check. It can be gone already. */
   const cleanup = (name: string, input: JsonObject, hook: string, client: Client = main) =>
     unsubscribe(name, input, hook, AbortSignal.timeout(checks.deadline), client).catch(() => undefined);
-  /** The requests of a URL that are not verifications. */
   const deliveries = (hook: { readonly received: () => readonly Received[] }) => hook.received().filter((each) => !isVerification(each));
   const atLeast = (hook: { readonly received: () => readonly Received[] }, number: number, signal: AbortSignal) =>
     until(`the receiver gets ${number} deliveries`, async () => deliveries(hook), (list) => list.length >= number, signal);
@@ -400,14 +369,12 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
       ["ttlMs: null", { ttlMs: null }, maxTtlMs],
       ["no ttlMs", {}, maxTtlMs],
     ] as const;
-    // One subscription at a time, so that the check stays under the limit of subscriptions of the principal.
     for (const [what, extra, granted] of cases) {
       const input = { key: randomUUID() };
       try {
         const before = Date.now();
         const { refreshBefore } = await subscribe("fixture.watch", input, hook.url, newSecret(), signal, extra);
         const after = Date.now();
-        // refreshBefore has a precision of one millisecond.
         expect(
           refreshBefore >= before + granted - 1 && refreshBefore <= after + granted + 1,
           `for ${what}, refreshBefore must be ${granted} ms after the request, got ${refreshBefore - before} ms after its start`,
@@ -444,8 +411,6 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
     const other = settings.otherPrincipal;
     const name = `a new subscription over the limit of a principal is ResourceExhausted, and a renewal still works${other === undefined ? "" : ", and another principal can still subscribe"}`;
     await checks.run(name, RULE, async (signal) => {
-      // The other principal has no subscription of another check, so the check knows its count. The first principal
-      // can have subscriptions of other checks that did not end yet.
       const client: Client = other === undefined ? main : { channel: httpChannel(url, { Authorization: `Bearer ${other}` }), principal: other };
       const hook = receiver.url();
       const created: JsonObject[] = [];

@@ -1,6 +1,3 @@
-//! A context for each request: the HTTP and MCP bindings make it from the head of the request, a capability reads the
-//! caller from it and the target from the call, and a refusal answers the request instead.
-
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -12,7 +9,6 @@ use http::Request;
 use http_body_util::{BodyExt, Full};
 use serde_json::{Value, json};
 
-/// The services of one request: who calls, and a counter of the contexts that are still alive.
 struct Caller {
     name: String,
     alive: Arc<AtomicUsize>,
@@ -68,7 +64,6 @@ fn app() -> Arc<acid_cat_core::Application<Caller>> {
         .expect("the application conforms")
 }
 
-/// Make a context from the token of `Authorization: Bearer <name>`, or refuse the request with 401.
 fn caller(
     alive: &Arc<AtomicUsize>,
 ) -> impl Fn(&http::request::Parts) -> std::future::Ready<Result<Caller, Refusal>> + Send + Sync + 'static
@@ -108,7 +103,6 @@ async fn answer(response: http::Response<acid_cat_core::remote::ResponseBody>) -
     )
 }
 
-/// A `POST` request with a JSON body, and the token of the caller if it has one.
 fn post(path: &str, token: Option<&str>) -> http::request::Builder {
     let mut request = Request::post(path).header("content-type", "application/json");
     if let Some(token) = token {

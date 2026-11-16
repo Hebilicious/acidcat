@@ -1,11 +1,9 @@
-// Package garage writes a garage-door catalog with the Go catalog library.
 package garage
 
 import "github.com/Hebilicious/acidcat/packages/catalog/go"
 
 type schema = catalog.Schema
 
-// Catalog returns the garage-door catalog.
 func Catalog() *catalog.Catalog {
 	c := catalog.New(
 		"Garage door",

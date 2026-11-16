@@ -1,7 +1,6 @@
 name: Semantic
 
 # The pull request title becomes the commit on main, because the repository allows squash merges only.
-# The commits in the pull request follow the same form.
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]

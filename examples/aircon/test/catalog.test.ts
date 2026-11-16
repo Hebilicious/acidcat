@@ -6,7 +6,6 @@ import { test } from "node:test";
 const directory = new URL("../catalog/", import.meta.url).pathname;
 const expected = readFileSync(new URL("../catalog/aircon.acidcat.json", import.meta.url), "utf-8");
 
-/** Runs a program of the catalog directory, and gives what it writes. */
 const output = (command: string, args: readonly string[], options: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) =>
   execFileSync(command, args, { cwd: options.cwd ?? directory, env: options.env ?? process.env, encoding: "utf-8" });
 

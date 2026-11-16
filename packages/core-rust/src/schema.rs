@@ -1,18 +1,9 @@
-//! Schemas: the schemas of Rust types, references, bundling, views and canonical JSON (spec/catalog.md).
-
 use std::collections::BTreeMap;
 
 use schemars::JsonSchema;
 use schemars::generate::SchemaSettings;
 use serde_json::{Map, Value, json};
 
-/// The JSON Schema 2020-12 schema of a Rust type, and the types that it refers to.
-///
-/// The schema follows these rules, so that it fits a catalog:
-///
-/// - it has no `$schema` member;
-/// - an `Option` field that is not required takes the value of its type, and not `null`;
-/// - an integer or a number has no `format` such as `int64`.
 pub(crate) fn schema_of<T: JsonSchema>() -> (Value, Map<String, Value>) {
     let mut generator = SchemaSettings::draft2020_12()
         .with(|settings| settings.meta_schema = None)
@@ -36,7 +27,6 @@ pub(crate) fn schema_of<T: JsonSchema>() -> (Value, Map<String, Value>) {
     (schema, types)
 }
 
-/// Apply the rules of [`schema_of`] at all levels of a schema.
 fn tidy(schema: &mut Value) {
     match schema {
         Value::Object(object) => {
@@ -73,8 +63,6 @@ fn tidy(schema: &mut Value) {
     }
 }
 
-/// Remove `null` from the values of an optional property: `"type": ["string", "null"]` becomes `"type": "string"`,
-/// and `{ "type": "null" }` leaves an `anyOf`.
 fn without_null(property: &mut Value) {
     let Some(object) = property.as_object_mut() else {
         return;
@@ -106,19 +94,16 @@ fn without_null(property: &mut Value) {
     }
 }
 
-/// The name of the type that a `$ref` of the form `#/$defs/<Name>` refers to.
 pub(crate) fn reference_name(schema: &Value) -> Option<&str> {
     schema.get("$ref")?.as_str()?.strip_prefix("#/$defs/")
 }
 
-/// The type that a schema's `$ref` refers to, or the schema itself.
 pub(crate) fn resolve<'a>(schema: &'a Value, types: &'a Map<String, Value>) -> &'a Value {
     reference_name(schema)
         .and_then(|name| types.get(name))
         .unwrap_or(schema)
 }
 
-/// The types that a schema uses, directly or through other types, in the order in which it finds them.
 pub(crate) fn types_used_by(schema: &Value, types: &Map<String, Value>) -> Map<String, Value> {
     fn collect(node: &Value, types: &Map<String, Value>, used: &mut Map<String, Value>) {
         match node {
@@ -143,8 +128,6 @@ pub(crate) fn types_used_by(schema: &Value, types: &Map<String, Value>) -> Map<S
     used
 }
 
-/// Bundle a schema (spec/catalog.md#bundling): copy the types that it uses into its `$defs`. A schema that is only a
-/// `$ref` becomes the type that it refers to.
 pub(crate) fn bundle(schema: &Value, types: &Map<String, Value>) -> Value {
     let base = match schema.as_object() {
         Some(object) if object.len() == 1 => resolve(schema, types).clone(),
@@ -161,7 +144,6 @@ pub(crate) fn bundle(schema: &Value, types: &Map<String, Value>) -> Value {
     bundled
 }
 
-/// The view of a target (spec/catalog.md#views).
 pub(crate) fn view_of(catalog: &Value, target: &str) -> Value {
     let empty = Map::new();
     let types = catalog
@@ -342,7 +324,6 @@ fn layout(digits: &str, n: i32) -> String {
     }
 }
 
-/// A JSON Schema validator for one schema of the catalog. The schema is bundled, so that each `$ref` resolves.
 pub(crate) struct Validator(jsonschema::Validator);
 
 impl Validator {
@@ -359,7 +340,6 @@ impl Validator {
             .map_err(|error| error.to_string())
     }
 
-    /// The issues of a value, each with its path, or `None` when the value agrees with the schema.
     pub(crate) fn issues(&self, value: &Value) -> Option<String> {
         let issues: Vec<String> = self
             .0

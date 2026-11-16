@@ -14,13 +14,11 @@ import { statusGet, Unit } from "../core-ts/aircon.ts";
 import { graphqlApi, graphqlWebSocket, schema, yoga } from "../apis/graphql.ts";
 import { openSession } from "../apis/shared.ts";
 
-/** A GraphQL response. Each error has the `code` of the call failure in its extensions. */
 const GraphQLResponse = z.object({
   data: z.unknown().optional(),
   errors: z.array(z.object({ message: z.string(), extensions: z.looseObject({ code: z.string() }) })).optional(),
 });
 
-/** The entries of the list of capabilities of the HTTP binding. */
 const CapabilityList = z.array(z.looseObject({ id: z.string() }));
 
 const post = async (handler: (request: Request) => Promise<Response>, query: string, headers: Record<string, string> = {}) => {
@@ -34,7 +32,6 @@ const post = async (handler: (request: Request) => Promise<Response>, query: str
   return { status: response.status, body: response.ok ? GraphQLResponse.parse(await response.json()) : undefined };
 };
 
-/** The code of the first error of a GraphQL response. */
 const errorCode = async (response: ReturnType<typeof post>) => (await response).body?.errors?.[0]?.extensions.code;
 
 test("queries and mutations call the capabilities", async () => {
@@ -66,7 +63,6 @@ test("the HTTP binding is at /api, and a foreign origin is rejected", async () =
   assert.equal((await post(api, "{ status { power } }", { Origin: "https://example.com" })).status, 403);
 });
 
-/** Wait until a condition is true, or fail after five seconds. */
 async function until(what: string, condition: () => boolean): Promise<void> {
   const end = Date.now() + 5000;
   while (!condition()) {
@@ -75,13 +71,8 @@ async function until(what: string, condition: () => boolean): Promise<void> {
   }
 }
 
-/** The data of a subscription result: the status that the subscription gives. */
 const StatusChanged = z.object({ data: z.object({ statusChanged: z.object({ power: z.boolean(), fan: z.string() }) }) });
 
-/**
- * Subscribe through one transport, change the unit with a mutation, and read the new status. Then end the
- * subscription, and wait until the event stops listening to the unit.
- */
 async function followThenEnd(unit: Unit, api: (request: Request) => Promise<Response>, subscription: AsyncIterableIterator<unknown>) {
   const before = unit.statusListeners;
   const first = subscription.next();
@@ -96,7 +87,6 @@ async function followThenEnd(unit: Unit, api: (request: Request) => Promise<Resp
 
 const SUBSCRIPTION = "subscription { statusChanged { power fan } }";
 
-/** A `ws` server on a free port, for GraphQL at `/graphql`. */
 async function webSocketServer() {
   const server = new WebSocketServer({ host: "127.0.0.1", port: 0, path: "/graphql" });
   await once(server, "listening");
@@ -150,10 +140,8 @@ test("a subscription through WebSockets, with the graphql-ws client, gets the ne
   const client = createWsClient({ url: `ws://127.0.0.1:${port}/graphql`, webSocketImpl: WebSocket, lazy: true, retryAttempts: 0 });
   try {
     await followThenEnd(unit, api, client.iterate({ query: SUBSCRIPTION }));
-    // A call failure has the same error as through HTTP.
     const failed = await client.iterate({ query: "mutation { setTemperature(celsius: 40) { __typename } }" }).next();
     assert.equal(GraphQLResponse.parse(failed.value).errors?.[0]?.extensions.code, "invalid-input");
-    // Two subscriptions on one connection: closing the connection closes its session, and so ends both.
     const before = unit.statusListeners;
     const [first, second] = [client.iterate({ query: SUBSCRIPTION }), client.iterate({ query: SUBSCRIPTION })];
     const pending = [first.next(), second.next()];

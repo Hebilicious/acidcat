@@ -1,6 +1,3 @@
-//! Webhook delivery (spec/bindings/mcp.md#webhook): the server sends the occurrences of each webhook subscription in
-//! HTTP `POST` requests to a URL of the client, signed as Standard Webhooks specifies.
-
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::net::IpAddr;
@@ -94,12 +91,10 @@ impl fmt::Debug for WebhookOptions {
     }
 }
 
-/// The category of a failure of a delivery or a verification.
 type WebhookError = &'static str;
 
 struct SubscriptionState {
     secret: String,
-    /// The secret before the last change, and the time until which the server still signs with it.
     previous: Option<(String, Instant)>,
     expires_at: SystemTime,
     deadline: Instant,
@@ -113,7 +108,6 @@ struct Subscription {
     key: String,
     principal: String,
     url: Uri,
-    /// Cancelled when the subscription ends. It stops the deliveries and the waits between attempts.
     ended: CancellationToken,
     state: Mutex<SubscriptionState>,
 }
@@ -125,7 +119,6 @@ impl Subscription {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// The secrets that sign a delivery now: the new secret, and the old secret during the grace time.
     fn secrets(&self) -> Vec<String> {
         let state = self.lock();
         let mut secrets = vec![state.secret.clone()];
@@ -138,23 +131,17 @@ impl Subscription {
     }
 }
 
-/// The webhook subscriptions of one server.
 pub(crate) struct Webhooks {
     options: WebhookOptions,
     tls: Arc<rustls::ClientConfig>,
     subscriptions: Mutex<HashMap<String, Arc<Subscription>>>,
-    /// A lock for each key that starts or renews, so that two requests with the same key do not start two subscriptions.
     starting: KeyGates<tokio::sync::Mutex<()>>,
-    /// The new subscriptions of each principal that are starting now, so that they count for the limit.
     admitted: Arc<Mutex<HashMap<String, usize>>>,
-    /// The pairs of principal and URL, as the client sent it, that agreed to get deliveries, while the process runs.
     verified: Mutex<HashSet<String>>,
     closed: CancellationToken,
-    /// The tasks that send the occurrences of the subscriptions. [`Webhooks::close`] waits for them.
     pumps: TaskTracker,
 }
 
-/// A new subscription that the limit admitted, and counts while it starts.
 struct Admitted {
     counts: Arc<Mutex<HashMap<String, usize>>>,
     principal: String,
@@ -162,7 +149,6 @@ struct Admitted {
 }
 
 impl Admitted {
-    /// Stop counting the subscription as starting. It runs once: when the subscription exists, or when the start fails.
     fn release(&mut self) {
         if std::mem::replace(&mut self.released, true) {
             return;
@@ -195,9 +181,8 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// The lifetime that the server grants for `ttlMs`: not more than the maximum and not less than the minimum, and the
-/// maximum when the request gives no `ttlMs`. The clamp is in milliseconds, before the conversion to a [`Duration`], so
-/// that a very large `ttlMs` such as `1e22` cannot overflow.
+/// The clamp is in milliseconds, before the conversion to a [`Duration`], so that a very large `ttlMs` such as
+/// `1e22` cannot overflow.
 fn granted_lifetime(ttl_ms: Option<f64>, min_ttl: Duration, max_ttl: Duration) -> Duration {
     let Some(ttl_ms) = ttl_ms else {
         return max_ttl;
@@ -222,7 +207,6 @@ impl Webhooks {
         })
     }
 
-    /// End all webhook subscriptions, and wait until their deliveries stop and their sessions close.
     pub(crate) async fn close(&self) {
         self.closed.cancel();
         let subscriptions: Vec<Arc<Subscription>> = lock(&self.subscriptions)
@@ -247,7 +231,6 @@ impl Webhooks {
         }
     }
 
-    /// Answer `events/subscribe`. The server checked the principal.
     pub(crate) async fn subscribe<C: Send + Sync + 'static>(
         self: &Arc<Self>,
         principal: &str,
@@ -297,22 +280,18 @@ impl Webhooks {
                 }
             },
         };
-        // The key has the URL as the client sent it, not the parsed URL.
         let key_value = json!([principal, raw_url, read.name, read.input]);
         let key = canonical_json(&key_value);
-        // The gate leaves the map of starting keys when this request ends, with success or failure.
         let gate = KeyGate::enter(&self.starting, &key);
         let _held = gate.lock.lock().await;
 
         let existing = lock(&self.subscriptions).get(&key).cloned();
         if let Some(subscription) = existing {
-            // A subscription with this key exists, so the event exists: an invalid maxAgeMs is the next failure.
             if read.max_age_ms.is_some_and(|value| !is_max_age_ms(value)) {
                 return Err(RpcError::invalid_params(
                     "maxAgeMs must be an integer that is 0 or more.",
                 ));
             }
-            // Renew: a new lifetime and the new secret. The cursor of the request changes nothing.
             {
                 let mut state = subscription.lock();
                 if state.secret != secret {
@@ -324,8 +303,6 @@ impl Webhooks {
             return Ok(result_of(&subscription));
         }
 
-        // The check and the count are one step, so that parallel new subscriptions of one principal cannot all pass the
-        // limit. A subscription that is starting counts until this request ends.
         let Some(mut admitted) = self.admit(principal) else {
             return Err(RpcError::new(
                 codes::RESOURCE_EXHAUSTED,
@@ -387,8 +364,6 @@ impl Webhooks {
                 last_error: None,
             }),
         });
-        // The subscription counts once: it leaves the starting count in the same step that adds it. The locks are taken
-        // in the order of `admit`: the subscriptions, then the starting counts.
         {
             let mut subscriptions = lock(&self.subscriptions);
             subscriptions.insert(key, subscription.clone());
@@ -396,7 +371,6 @@ impl Webhooks {
         }
         self.grant(&subscription, ttl_ms);
 
-        // End the subscription when its lifetime ends with no renewal.
         let (webhooks, timed) = (self.clone(), subscription.clone());
         tokio::spawn(async move {
             loop {
@@ -419,8 +393,6 @@ impl Webhooks {
         Ok(result_of(&subscription))
     }
 
-    /// Count a new subscription of `principal` that starts, if the limit admits it. The count ends when the result is
-    /// dropped.
     fn admit(&self, principal: &str) -> Option<Admitted> {
         let subscriptions = lock(&self.subscriptions);
         let mut admitted = lock(&self.admitted);
@@ -440,7 +412,6 @@ impl Webhooks {
         })
     }
 
-    /// Answer `events/unsubscribe`. The server checked the principal.
     pub(crate) fn unsubscribe(&self, principal: &str, params: &Map<String, Value>) -> RpcAnswer {
         let name = params.get("name").and_then(Value::as_str);
         let url = params
@@ -467,7 +438,6 @@ impl Webhooks {
         Ok(Map::new())
     }
 
-    /// Grant a lifetime: `ttlMs`, but not more than the maximum and not less than the minimum.
     fn grant(&self, subscription: &Subscription, ttl_ms: Option<f64>) {
         let lifetime = granted_lifetime(ttl_ms, self.options.min_ttl, self.options.max_ttl);
         let mut state = subscription.lock();
@@ -475,7 +445,6 @@ impl Webhooks {
         state.deadline = Instant::now() + lifetime;
     }
 
-    /// Send the occurrences of a subscription one at a time, in order, until the subscription ends.
     async fn pump(&self, subscription: &Subscription, mut occurrences: Occurrences) {
         loop {
             let next = tokio::select! {
@@ -483,7 +452,6 @@ impl Webhooks {
                 next = occurrences.next() => next,
             };
             match next {
-                // Complete: the subscription ends with no message.
                 None => return,
                 Some(Err(failure)) => {
                     let body = json!({ "type": "terminated", "error": { "code": codes::INTERNAL, "message": failure.message } });
@@ -526,7 +494,6 @@ impl Webhooks {
         }
     }
 
-    /// Send one delivery, with retries.
     async fn deliver(&self, subscription: &Subscription, webhook_id: &str, body: &str) -> Sent {
         let start = Instant::now();
         let mut attempt = 1;
@@ -566,7 +533,6 @@ impl Webhooks {
         }
     }
 
-    /// Verify that the endpoint agrees to get deliveries for this principal. The result is the reason of a failure.
     async fn verify(
         &self,
         principal: &str,
@@ -593,7 +559,6 @@ impl Webhooks {
             Ok(answer) => answer,
             Err(failure) => return Some(failure),
         };
-        // A 3xx status is http_4xx for a delivery, but challenge_failed for a verification.
         if (300..400).contains(&status) {
             return Some("challenge_failed");
         }
@@ -613,8 +578,6 @@ impl Webhooks {
         None
     }
 
-    /// Send one `POST` request, with the time limit of the deployment. The result is the status and the text of the
-    /// answer, or the category of the failure.
     async fn post(
         &self,
         url: &Uri,
@@ -627,8 +590,6 @@ impl Webhooks {
         }
     }
 
-    /// Resolve the host name, connect only to an address that the server accepts, with the host name in the `Host`
-    /// header and in TLS. Redirects are not followed.
     async fn send(
         &self,
         url: &Uri,
@@ -664,7 +625,6 @@ impl Webhooks {
             .await
             .map_err(|_| "connection_refused")?;
         let status = answer.status().as_u16();
-        // The server reads only the answer to a verification. It reads at most 64 KiB of it.
         let mut text = Vec::new();
         let mut answer_body = answer.into_body();
         while let Some(Ok(frame)) = answer_body.frame().await {
@@ -678,7 +638,6 @@ impl Webhooks {
     }
 }
 
-/// The result of `events/subscribe`.
 fn result_of(subscription: &Subscription) -> Map<String, Value> {
     let state = subscription.lock();
     let result = json!({
@@ -691,7 +650,6 @@ fn result_of(subscription: &Subscription) -> Map<String, Value> {
     result.as_object().cloned().unwrap_or_default()
 }
 
-/// The headers of a delivery, with a new timestamp and signature.
 fn headers(
     subscription_id: &str,
     secrets: &[String],
@@ -728,7 +686,6 @@ fn secret_bytes(secret: &str) -> Option<Vec<u8>> {
     (24..=64).contains(&bytes.len()).then_some(bytes)
 }
 
-/// A new `webhook-id`: `msg_` and random letters and digits, or `msg_<type>_` and random letters and digits.
 fn webhook_id(control: Option<&str>) -> String {
     const ALPHANUMERIC: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     let mut random = rand::rng();
@@ -749,7 +706,6 @@ fn status_error(status: u16) -> WebhookError {
     }
 }
 
-/// Compare two texts in constant time.
 fn same_text(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len()
         && a.iter()
@@ -805,7 +761,6 @@ mod tests {
 
     struct Services;
 
-    /// An application with one event that never gives an occurrence.
     fn application() -> Arc<Application<Services>> {
         App::new()
             .title("Test")
@@ -825,7 +780,6 @@ mod tests {
         Arc::new(move || Session::open(&app, "mcp", context.clone()))
     }
 
-    /// Webhooks that deliver to every URL with no verification.
     fn webhooks() -> Arc<Webhooks> {
         Webhooks::new(WebhookOptions {
             allow: Some(Arc::new(|_| true)),

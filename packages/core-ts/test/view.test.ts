@@ -7,7 +7,6 @@ import { createSession, httpHandler } from "../src/index.ts";
 import type { ToJsonSchema } from "../src/index.ts";
 import { fixture, options, readJson, toJsonSchema } from "./fixture.ts";
 
-/** A `toJsonSchema` that counts the schemas it writes. */
 function countedToJsonSchema() {
   const counts = { writes: 0 };
   const counted: ToJsonSchema = (schema) => {

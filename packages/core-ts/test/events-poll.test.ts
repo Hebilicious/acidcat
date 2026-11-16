@@ -9,7 +9,6 @@ import type { PollOptions } from "../src/index.ts";
 import { ManualClock } from "./manual-clock.ts";
 import { sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
 
-/** Wait until a condition is true, or fail after one second. */
 async function until(condition: () => boolean | Promise<boolean>): Promise<void> {
   const end = Date.now() + 1000;
   while (!(await condition())) {
@@ -27,7 +26,6 @@ function objectOf(text: string): JsonObject {
   return value;
 }
 
-/** The result of a poll, with its members checked. */
 interface PollResult {
   readonly events: readonly JsonObject[];
   readonly cursor: string;
@@ -45,7 +43,6 @@ function pollResult(message: JsonObject): PollResult {
   return { events: events.filter(isJsonObject), cursor, truncated, hasMore, nextPollMs };
 }
 
-/** The position of a poll cursor. */
 function positionOf(cursor: string) {
   const position = decodePollCursor(cursor);
   if (position === undefined) throw new Error("The cursor is not a poll cursor.");
@@ -97,15 +94,12 @@ test("poll: the first poll starts a lease, and the next polls read its occurrenc
   assert.equal(read.truncated, false);
   assert.deepEqual(positionOf(read.cursor), { lease: positionOf(start.cursor).lease, position: 2, provider: "1" });
 
-  // A poll with the last cursor and nothing new gives no occurrences, and the cursor of the request.
   const empty = await poll({ ...READINGS, cursor: read.cursor });
   assert.deepEqual(empty.events, []);
   assert.equal(empty.cursor, read.cursor);
-  // A poll with no cursor, while the lease exists, gives the cursor of the newest position.
   const newest = await poll(READINGS);
   assert.deepEqual(newest.events, []);
   assert.deepEqual(positionOf(newest.cursor), positionOf(read.cursor));
-  // Two polls with the same key read the same lease: one subscription.
   assert.equal(sensors.listeners, 1);
   await handler.close();
   assert.equal(sensors.listeners, 0);
@@ -120,7 +114,6 @@ test("poll: maxEvents limits the occurrences, and hasMore tells that more wait",
   const first = await poll({ ...READINGS, cursor: start.cursor, maxEvents: 2 });
   assert.deepEqual(celsius(first.events), [0, 1]);
   assert.equal(first.hasMore, true);
-  // The default of the deployment is 3.
   const second = await poll({ ...READINGS, cursor: first.cursor });
   assert.deepEqual(celsius(second.events), [2, 3, 4]);
   assert.equal(second.hasMore, false);
@@ -195,7 +188,6 @@ test("poll: maxAgeMs bounds the replay of a lease that resumes", async () => {
   await until(async () => (await poll({ ...READINGS, cursor: resumed.cursor })).events.length === 1);
   const read = await poll({ ...READINGS, cursor: resumed.cursor });
   assert.deepEqual(celsius(read.events), [2]);
-  // The provider skipped reading 1, so the occurrence and the result are truncated. The item has no truncated member.
   assert.equal(read.truncated, true);
   assert.equal(read.events[0]?.["truncated"], undefined);
   await handler.close();
@@ -208,7 +200,6 @@ test("poll: a cursor with no cursor of the provider, or a text that is not a cur
   assert.equal(positionOf(foreign.cursor).position, 0);
   const other = await poll({ name: "sensor.clock", cursor: "not a cursor" });
   assert.equal(other.truncated, true);
-  // A cursor of another lease, while a lease with the key exists, gives the newest position and truncated.
   const again = await poll({ name: "sensor.clock", cursor: foreign.cursor });
   assert.equal(again.truncated, true);
   assert.equal(positionOf(again.cursor).lease, positionOf(other.cursor).lease);
@@ -221,13 +212,11 @@ test("poll: a lease that gets no poll for the lease time ends, and its subscript
   const start = await poll(READINGS);
   await until(() => sensors.listeners === 1);
   clock.advance(59_000);
-  // Each poll renews the lease.
   await poll({ ...READINGS, cursor: start.cursor });
   clock.advance(59_000);
   assert.equal(sensors.listeners, 1);
   clock.advance(1000);
   await until(() => sensors.listeners === 0);
-  // The cursor is of a lease that does not exist: a new lease starts now, with truncated.
   const restarted = await poll({ ...READINGS, cursor: start.cursor });
   assert.equal(restarted.truncated, true);
   assert.notEqual(positionOf(restarted.cursor).lease, positionOf(start.cursor).lease);
@@ -253,7 +242,6 @@ test("poll: internal gives -32603 to the next poll, and the lease ends", async (
     return answer["error"] !== undefined;
   });
   assert.deepEqual(answer["error"], { code: -32603, message: "The event failed." });
-  // The lease is gone: the next poll starts a new lease.
   const restarted = pollResult(await rpc("events/poll", { name: "sensor.failing", cursor: start.cursor }));
   assert.notEqual(positionOf(restarted.cursor).lease, positionOf(start.cursor).lease);
   await handler.close();
@@ -269,17 +257,13 @@ test("poll: the principal is part of the key, so two principals have two leases"
   assert.notEqual(positionOf(alice.cursor).lease, positionOf(nobody.cursor).lease);
   sensors.emit("hall", 20);
   await until(async () => (await poll({ ...READINGS, cursor: alice.cursor }, "alice")).events.length === 1);
-  // The cursor of alice is not of a lease of bob: bob gets no occurrences of the lease of alice.
   const stolen = await poll({ ...READINGS, cursor: alice.cursor }, "bob");
   assert.equal(positionOf(stolen.cursor).lease, positionOf(bob.cursor).lease);
-  // Another input is another key.
   await poll({ name: "sensor.reading.changed", arguments: { room: "hall" } }, "alice");
   await until(() => sensors.listeners === 4);
   await handler.close();
   assert.equal(sensors.listeners, 0);
 });
-
-// --- Through stdio ---------------------------------------------------------------------------------------------------
 
 test("poll through stdio: leases, their occurrences, and the end of standard input ends them", async () => {
   const sensors = new Sensors();

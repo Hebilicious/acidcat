@@ -1,23 +1,16 @@
-/**
- * The air conditioner of `catalog/aircon.pkl`, written with @acid-cat/core-effect. The unit is simulated in memory.
- */
 import { AVAILABLE } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
 import { Context, Effect, Layer, Ref, Schema, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability, Event } from "@acid-cat/core-effect";
 
-// --- Types -------------------------------------------------------------------------------------------------------
-
 export const Mode = Schema.Literals(["cool", "heat", "dry", "fan", "auto"]).annotate({ identifier: "Mode" });
 export const FanSpeed = Schema.Literals(["auto", "low", "medium", "high"]).annotate({ identifier: "FanSpeed" });
 
-/** A target temperature that the unit accepts. */
 export const Celsius = Schema.Finite.check(Schema.isBetween({ minimum: 16, maximum: 31 }));
 
 export const Day = Schema.Literals(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]).annotate({ identifier: "Day" });
 
-/** An hour of the day, from 0 to 23. */
 const Hour = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 23 }));
 
 export const Schedule = Schema.Struct({ days: Schema.Array(Day), hours: Schema.Array(Hour) }).annotate({ identifier: "Schedule" });
@@ -34,19 +27,13 @@ export const Offline = Schema.TaggedStruct("Offline", { since: Schema.optional(S
 export const PoweredOff = Schema.TaggedStruct("PoweredOff", {});
 const UpToDate = Schema.TaggedStruct("UpToDate", { version: Schema.String });
 
-// --- The unit ----------------------------------------------------------------------------------------------------
-
-/** The simulated unit. Its refs are the state and the availability that the capabilities give to clients. */
 export class Unit extends Context.Service<
   Unit,
   {
     readonly status: SubscriptionRef.SubscriptionRef<typeof Status.Type>;
-    /** Available while the unit is online, and `unavailable("The unit is offline.")` while it is not. */
     readonly connection: SubscriptionRef.SubscriptionRef<Availability>;
     readonly firmware: string;
-    /** The days and hours when the unit turns on. */
     readonly schedule: Ref.Ref<typeof Schedule.Type>;
-    /** The number of subscriptions to `aircon.status.changed` that follow the status now. The tests read it. */
     readonly statusListeners: SubscriptionRef.SubscriptionRef<number>;
   }
 >()("aircon/Unit") {}
@@ -64,21 +51,17 @@ export const unitLayer = Layer.effect(
   }),
 );
 
-/** The ref of the status of the unit, if the unit is online. */
 const onlineStatus = Effect.gen(function* () {
   const unit = yield* Unit;
   if (!(yield* SubscriptionRef.get(unit.connection)).available) return yield* Effect.fail(Offline.make({}));
   return unit.status;
 });
 
-/** Change the unit if it is online. */
 const change = (update: (status: typeof Status.Type) => typeof Status.Type) =>
   Effect.gen(function* () {
     yield* SubscriptionRef.update(yield* onlineStatus, update);
     return null;
   });
-
-// --- The capabilities --------------------------------------------------------------------------------------------
 
 const everywhere = ["app", "taskbar", "cli", "mcp", "api"];
 const controls = ["app", "cli", "mcp", "api"];
@@ -159,9 +142,6 @@ export const firmwareUpdate = Capability.make({
   run: () => Effect.flatMap(Unit, (unit) => Effect.fail(UpToDate.make({ version: unit.firmware }))),
 });
 
-// --- The events --------------------------------------------------------------------------------------------------
-
-/** True if two statuses are the same. */
 const sameStatus = (a: typeof Status.Type, b: typeof Status.Type) => JSON.stringify(a) === JSON.stringify(b);
 
 export const statusChanged = Event.make({
@@ -170,8 +150,7 @@ export const statusChanged = Event.make({
   audience: everywhere,
   input: Schema.Struct({}),
   payload: Status,
-  // The changes of the ref start with the status of now. Each later status that is not the same is an occurrence. The
-  // count of listeners goes up when the stream starts, and down when it ends.
+  // The changes of the ref start with the status of now.
   subscribe: () =>
     Stream.unwrap(
       Effect.gen(function* () {
@@ -187,8 +166,6 @@ export const statusChanged = Event.make({
       Stream.map((status) => ({ data: status })),
     ),
 });
-
-// --- The application ---------------------------------------------------------------------------------------------
 
 export const aircon = App.make({
   title: "Living-room air conditioner",

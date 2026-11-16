@@ -1,8 +1,4 @@
-"""Write an AcidCat catalog in Python, and render it to the JSON document the toolchain checks.
-
-This is an authoring library, not a runtime: a program uses it to produce `acidcat.catalog.json`, and nothing reads
-the catalog through it at runtime. See spec/catalog.md.
-"""
+"""Write an AcidCat catalog in Python, and render it to the JSON document the toolchain checks."""
 
 from __future__ import annotations
 
@@ -137,7 +133,6 @@ class Catalog:
         return problems
 
     def _entry_problems(self, id: str, entry: dict[str, Any]) -> list[str]:
-        """The problems of the id, the description, the audience and the input of a capability or an event."""
         problems: list[str] = []
         audience = entry["audience"]
         if len(id) > 128 or not _ID.fullmatch(id):
@@ -153,7 +148,6 @@ class Catalog:
 
     @staticmethod
     def _schema_problems(id: str, schemas: Mapping[str, Any]) -> list[str]:
-        """The schemas of a capability or an event that are not JSON objects, such as the boolean schema True."""
         return [f"{id} {member} is not a JSON object" for member, schema in schemas.items() if schema is not None and not isinstance(schema, dict)]
 
     def to_json(self) -> dict[str, Any]:

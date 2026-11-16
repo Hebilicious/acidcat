@@ -1,12 +1,7 @@
-//! The Rust core passes `acid-cat conform` through each binding: MCP over HTTP (with the handshake, poll and webhook
-//! delivery), MCP over stdio, HTTP, and the command line, in the same process and for a server. Each test serves the
-//! conformance fixture (`examples/fixture.rs`), and runs `acid-cat conform` of the workspace with `pnpm exec`.
-
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
-/// The settings of the fixture that the tests give to conform: the poll settings and the webhook limits.
 const POLL: [&str; 4] = ["--poll-buffer", "5", "--poll-lease-ms", "5000"];
 const WEBHOOK_LIMITS: [&str; 6] = [
     "--webhook-min-ttl-ms",
@@ -17,12 +12,11 @@ const WEBHOOK_LIMITS: [&str; 6] = [
     "3",
 ];
 
-/// The root of the repository, where `pnpm exec acid-cat` runs.
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// The fixture program. Cargo builds the examples before the integration tests, beside the directory of the tests.
+/// Cargo builds the examples before the integration tests, beside the directory of the tests.
 fn fixture() -> PathBuf {
     let tests = std::env::current_exe().expect("the path of the test program");
     let target = tests
@@ -36,7 +30,6 @@ fn fixture() -> PathBuf {
     })
 }
 
-/// A fixture server, stopped when it is dropped.
 struct Server {
     child: Child,
     url: String,
@@ -68,8 +61,6 @@ impl Drop for Server {
     }
 }
 
-/// Run `acid-cat conform`, and check its report: no failure, no warning, and at least `minimum` checks, so that a
-/// binding cannot pass by running no checks.
 fn assert_conforms(args: &[&str], minimum: usize) {
     let output = Command::new("pnpm")
         .args(["exec", "acid-cat", "conform"])
@@ -99,8 +90,6 @@ fn assert_conforms(args: &[&str], minimum: usize) {
     );
 }
 
-/// A self-signed certificate for `localhost` and `127.0.0.1`, made by `openssl` in a temporary directory. The
-/// receiver of conform uses it, and the fixture trusts it.
 struct Certificate {
     directory: PathBuf,
 }

@@ -1,4 +1,3 @@
-/** Conformance checks for the CLI binding (spec/bindings/cli.md). Each check runs the command line as a process. */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -12,7 +11,6 @@ import { Checks, eventIdsOf, expect, expectEqual, expectOccurrence, idsOf, sorte
 
 const RULE = "spec/bindings/cli.md";
 
-/** The `usage` of each capability in the view of the fixture, after the name of the program. */
 const USAGES: { readonly [id: string]: string } = {
   "fixture.crash": "fixture crash",
   "fixture.echo": "fixture echo --text <string>",
@@ -27,19 +25,16 @@ const USAGES: { readonly [id: string]: string } = {
   "fixture.watching": "fixture watching",
 };
 
-/** The `usage` of each event in the view of the fixture, after the name of the program. */
 const EVENT_USAGES: { readonly [id: string]: string } = {
   "fixture.broken": "watch fixture.broken [--cursor <string>] [--max-age-ms <integer>]",
   "fixture.ticks": "watch fixture.ticks --count <integer> [--gap <integer>] [--key <string>] [--cursor <string>] [--max-age-ms <integer>]",
   "fixture.watch": "watch fixture.watch --key <string> [--marker <string>] [--cursor <string>] [--max-age-ms <integer>]",
 };
 
-/** An entry of the list that the `list` command gives. */
 type Entry = JsonObject & { readonly id: string };
 
 const isEntry = (value: unknown): value is Entry => isObject(value) && typeof value.id === "string";
 
-/** The list that the `list` command writes to standard output. The check fails when it is not a list of entries. */
 function entriesOf(stdout: string): readonly Entry[] {
   const list = parseJson(stdout);
   if (!isArrayOf(list, isEntry)) throw new Error(`list must give a list of objects with an id, got ${JSON.stringify(list)}`);
@@ -54,9 +49,8 @@ interface Run {
 }
 
 /**
- * Start the command line. When the signal aborts, the process is killed, and its run rejects. The rejection is observed
- * here too, so that a check that stops waiting first, for example at the deadline, records a failure and does not end
- * the process with an unhandled rejection.
+ * The rejection is observed here too, so that a check that stops waiting first, for example at the deadline, records a
+ * failure and does not end the process with an unhandled rejection.
  */
 function start(command: readonly string[], args: readonly string[], signal: AbortSignal) {
   const [program, ...programArgs] = command;
@@ -170,10 +164,8 @@ export async function checkCli(command: readonly string[], options: { readonly d
 
 const EVENTS = `${RULE}#events`;
 
-/** The checks of `watch` (spec/bindings/cli.md#events). */
 async function checkWatch(checks: Checks, command: readonly string[]): Promise<void> {
   const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
-  /** The lines of standard output, each one an occurrence of the event. */
   const occurrences = (stdout: string, id: string) =>
     stdout
       .split("\n")

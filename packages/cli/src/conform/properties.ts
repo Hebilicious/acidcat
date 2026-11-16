@@ -1,7 +1,3 @@
-/**
- * Property-based checks for the guarantees of spec/invocation.md#cancellation-and-concurrency, through each remote
- * binding. fast-check makes random sets of concurrent calls and cancellations.
- */
 import { randomUUID } from "node:crypto";
 
 import type { Outcome } from "@acid-cat/spec-ts";
@@ -16,7 +12,6 @@ import { mcpClient } from "./mcp.ts";
 
 const RULE = "spec/invocation.md#cancellation-and-concurrency";
 
-/** A call through one binding. When the signal aborts, the client stops the call and rejects with the reason of the signal. */
 export type Invoke = (id: string, input: JsonObject, signal?: AbortSignal) => Promise<Outcome<unknown, unknown>>;
 
 export function httpInvoke(base: string): Invoke {
@@ -38,7 +33,6 @@ export async function mcpInvoke(url: string, signal: AbortSignal): Promise<{ rea
   return { invoke: clientInvoke(client), close: () => client.close() };
 }
 
-/** Calls through a connected MCP client, with any transport. */
 export function clientInvoke(client: Client): Invoke {
   return async (id, input, signal) => {
     try {
@@ -70,7 +64,6 @@ const operation: fc.Arbitrary<Operation> = fc.oneof(
   fc.constant({ kind: "invalid" } as const),
 );
 
-/** The outcome that an operation must have. */
 function agrees(operation: Operation, outcome: Outcome<unknown, unknown>): boolean {
   switch (operation.kind) {
     case "echo":
@@ -97,7 +90,6 @@ const callFor = (invoke: Invoke, operation: Operation, signal: AbortSignal) => {
   }
 };
 
-/** How a call through a binding ended: with an outcome, or with a rejection. */
 type Settled = { readonly outcome: Outcome<unknown, unknown> } | { readonly rejected: unknown };
 
 const settle = (call: Promise<Outcome<unknown, unknown>>): Promise<Settled> =>
@@ -108,14 +100,9 @@ const settle = (call: Promise<Outcome<unknown, unknown>>): Promise<Settled> =>
 
 const describe = (settled: Settled): string => ("outcome" in settled ? JSON.stringify(settled.outcome) : `the rejection ${String(settled.rejected)}`);
 
-/**
- * True if a call ended as a cancellation: with the call failure `cancelled`, or with the rejection that the client gives
- * when it aborts the call, which is the reason of its signal. Any other rejection is not a cancellation.
- */
 const isCancellation = (settled: Settled, reason: unknown): boolean =>
   "outcome" in settled ? "kind" in settled.outcome && settled.outcome.kind === "cancelled" : settled.rejected === reason;
 
-/** The keys of the calls that hold now, as fixture.held gives them through the binding. */
 export async function heldKeys(invoke: Invoke, signal: AbortSignal): Promise<readonly string[]> {
   const outcome = await invoke("fixture.held", {}, signal);
   expect("ok" in outcome && outcome.ok, `fixture.held gave ${JSON.stringify(outcome)}`);
@@ -124,12 +111,6 @@ export async function heldKeys(invoke: Invoke, signal: AbortSignal): Promise<rea
   return keys;
 }
 
-/**
- * Start one call to fixture.hold for each flag, and wait until each call holds. Then cancel each call whose flag is
- * true, and release the others. Each cancelled call must end as a cancellation and stop holding. Each other call must
- * hold until it is released, and then give its own key. At the end, the cleanup releases every key, with a signal that
- * aborts `deadline` milliseconds later.
- */
 async function cancelSome(invoke: Invoke, flags: readonly boolean[], signal: AbortSignal, deadline: number): Promise<void> {
   const calls = flags.map((cancelled) => {
     const key = randomUUID();
@@ -162,7 +143,6 @@ async function cancelSome(invoke: Invoke, flags: readonly boolean[], signal: Abo
   }
 }
 
-/** Two calls or more, at least one of them cancelled and at least one not. */
 const cancellations = fc.array(fc.boolean(), { minLength: 2, maxLength: 5 }).filter((flags) => flags.includes(true) && flags.includes(false));
 
 export async function checkProperties(binding: string, invoke: Invoke, deadline: number): Promise<Checks> {

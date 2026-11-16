@@ -1,7 +1,3 @@
-/// The Pkl package of the AcidCat catalog module.
-///
-/// `pkl project package` writes the package into `.out/`. The release workflow attaches it to the GitHub release
-/// `acid-cat-catalog@<version>`, where pkg.pkl-lang.org finds it.
 amends "pkl:Project"
 
 package {

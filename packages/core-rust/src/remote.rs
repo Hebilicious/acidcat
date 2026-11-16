@@ -19,27 +19,21 @@ use serde_json::Value;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-/// An error of a body.
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-/// The body of a request that a binding reads.
 pub type RequestBody = UnsyncBoxBody<Bytes, BoxError>;
 
-/// The body of a response that a binding gives.
 pub type ResponseBody = UnsyncBoxBody<Bytes, Infallible>;
 
 /// The time with nothing sent on a stream after which a binding sends a keepalive or a heartbeat.
 pub const KEEPALIVE: Duration = Duration::from_secs(15);
 
-/// The default limit of a request body: 1 MiB.
 pub const DEFAULT_MAXIMUM_BYTES: usize = 1_048_576;
 
-/// A web request handler, as the bindings give it. [`serve`] serves handlers.
 pub trait Handler: Send + Sync + 'static {
     fn handle(&self, request: Request<RequestBody>) -> BoxFuture<'static, Response<ResponseBody>>;
 }
 
-/// Turn the body of a hyper request into a [`RequestBody`].
 pub fn request_body<B>(request: Request<B>) -> Request<RequestBody>
 where
     B: http_body::Body<Data = Bytes> + Send + 'static,
@@ -58,14 +52,12 @@ pub(crate) enum Rejection {
     NotUtf8,
 }
 
-/// The rules of a binding for the screening of a request.
 pub(crate) struct Rules<'a> {
     pub(crate) methods: &'a [Method],
     pub(crate) allowed_origins: &'a [String],
     pub(crate) maximum_bytes: usize,
 }
 
-/// The first rule that a request breaks before its body is read: method, origin, media type, declared length.
 pub(crate) fn screen<B>(request: &Request<B>, rules: &Rules<'_>) -> Option<Rejection> {
     if !rules.methods.contains(request.method()) {
         return Some(Rejection::Method);
@@ -99,8 +91,6 @@ pub(crate) fn screen<B>(request: &Request<B>, rules: &Rules<'_>) -> Option<Rejec
     None
 }
 
-/// Screen a request, and read its body as UTF-8 text. Count the bytes as they arrive, and stop at the limit.
-///
 /// Before a rejection, the server discards the rest of the body, up to a second limit, so that the client reads the
 /// answer and does not see a connection that closes while it sends.
 pub(crate) async fn read_request(
@@ -142,7 +132,6 @@ async fn read_bounded(body: &mut RequestBody, maximum_bytes: usize) -> Result<St
     String::from_utf8(bytes).map_err(|_| Rejection::NotUtf8)
 }
 
-/// Read and drop the rest of a body, up to `limit` bytes and for at most one second.
 async fn discard(body: &mut RequestBody, limit: usize) {
     let drain = async {
         let mut read = 0;
@@ -156,12 +145,10 @@ async fn discard(body: &mut RequestBody, limit: usize) {
     let _ = tokio::time::timeout(Duration::from_secs(1), drain).await;
 }
 
-/// The text of a header, if the request has it and it is text.
 pub(crate) fn header_text<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     headers.get(name).and_then(|value| value.to_str().ok())
 }
 
-/// A response with a JSON body.
 pub(crate) fn json_response(status: u16, body: &Value) -> Response<ResponseBody> {
     Response::builder()
         .status(status)
@@ -174,7 +161,6 @@ pub(crate) fn json_response(status: u16, body: &Value) -> Response<ResponseBody>
         .unwrap_or_else(|_| empty_response(500))
 }
 
-/// A response with no body.
 pub(crate) fn empty_response(status: u16) -> Response<ResponseBody> {
     let mut response = Response::new(Empty::new().map_err(|never| match never {}).boxed_unsync());
     *response.status_mut() =
@@ -182,8 +168,6 @@ pub(crate) fn empty_response(status: u16) -> Response<ResponseBody> {
     response
 }
 
-/// A stream of server-sent events: status 200, `text/event-stream` and `Cache-Control: no-store`. When the client
-/// closes the response, the server drops the stream.
 pub(crate) fn sse_response(stream: BoxStream<'static, String>) -> Response<ResponseBody> {
     let body =
         StreamBody::new(stream.map(|text| Ok::<_, Infallible>(Frame::data(Bytes::from(text)))));
@@ -197,7 +181,6 @@ pub(crate) fn sse_response(stream: BoxStream<'static, String>) -> Response<Respo
     response
 }
 
-/// One message of a stream of server-sent events, with the blank line that ends it.
 pub(crate) fn sse_message(event: Option<&str>, id: Option<&str>, data: &str) -> String {
     let mut lines = Vec::new();
     if let Some(event) = event {
@@ -216,7 +199,6 @@ pub(crate) fn sse_message(event: Option<&str>, id: Option<&str>, data: &str) -> 
     format!("{}\n\n", lines.join("\n"))
 }
 
-/// Calls a function when it is dropped: when a response or a stream ends in any way.
 pub(crate) struct OnDrop<F: FnMut()>(pub(crate) F);
 
 impl<F: FnMut()> Drop for OnDrop<F> {
@@ -266,7 +248,6 @@ impl Refusal {
                 http::HeaderName::try_from(name.as_str()),
                 http::HeaderValue::try_from(value.as_str()),
             ) {
-                // The body is JSON, so the media type of the answer is always application/json.
                 if name != header::CONTENT_TYPE {
                     response.headers_mut().append(name, value);
                 }
@@ -280,7 +261,6 @@ impl Refusal {
 pub type RequestContext<C> =
     Arc<dyn Fn(&http::request::Parts) -> BoxFuture<'static, Result<Arc<C>, Refusal>> + Send + Sync>;
 
-/// The context of the requests of a remote binding: one context for all requests, or one for each request.
 pub(crate) enum Contexts<C> {
     Shared(Arc<C>),
     PerRequest(RequestContext<C>),
@@ -307,7 +287,6 @@ impl<C: Send + Sync + 'static> Contexts<C> {
         }))
     }
 
-    /// The context of one request that passed the screening.
     pub(crate) async fn open(&self, parts: &http::request::Parts) -> Result<Arc<C>, Refusal> {
         match self {
             Contexts::Shared(context) => Ok(context.clone()),
@@ -330,7 +309,6 @@ impl Served {
         format!("http://{}", self.address)
     }
 
-    /// Stop the server.
     pub async fn close(self) {
         self.stop.cancel();
         let _ = self.task.await;

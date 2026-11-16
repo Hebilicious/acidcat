@@ -12,21 +12,18 @@ import { runWith } from "./run.ts";
 const remoteCli = new URL("./fixture-cli-remote.ts", import.meta.url).pathname;
 const TOKEN = "Bearer secret-token-of-the-test";
 
-/** Serve a handler until the test ends, and give its base URL. */
 async function serve(handler: NodeServer.WebHandler): Promise<{ readonly url: string; readonly close: () => Promise<void> }> {
   const scope = Effect.runSync(Scope.make());
   const { url } = await Effect.runPromise(NodeServer.serve(handler, { port: 0 }).pipe(Scope.provide(scope)));
   return { url, close: () => Effect.runPromise(Scope.close(scope, Exit.void)) };
 }
 
-/** The base URL of a server that does not answer: the port of a server that closed. */
 async function closedUrl(): Promise<string> {
   const server = await serve(() => new Response(null, { status: 204 }));
   await server.close();
   return server.url;
 }
 
-/** A stream of the chunks of a text, as bytes. */
 const bytes = (...chunks: string[]) => Stream.fromIterable(chunks.map((chunk) => new TextEncoder().encode(chunk)));
 
 const occurrence = (eventId: string) => ({ eventId, name: "fixture.watch", timestamp: "2026-01-01T00:00:00.000Z", data: { value: eventId } });
@@ -48,7 +45,6 @@ test("an answer that the HTTP binding does not give is internal", async (context
     if (path === "/no-ok/capabilities/fixture.echo") return Response.json({ value: 1 });
     if (path === "/bad-failure/capabilities/fixture.echo") return Response.json({ kind: "teapot", message: "no" }, { status: 418 });
     if (path === "/not-a-list/capabilities") return Response.json({ id: "fixture.echo" });
-    // A stream that ends before `complete`.
     if (path === "/cut/events/fixture.watch") return new Response(`event: next\ndata: ${JSON.stringify(occurrence("1"))}\n\n`, { headers: { "Content-Type": "text/event-stream" } });
     return new Response(null, { status: 404 });
   });
@@ -108,7 +104,7 @@ test("the reader of server-sent events reads comments, line ends, split chunks a
           "retry: 10\nevent: other\ndata: x\n\n",
           `event: next\r\nid: 1\r\ndata: ${first.slice(0, 10)}`,
           `${first.slice(10)}\r\n\r\n`,
-          // One occurrence in two lines of data: the reader joins them with a line feed, which is JSON white space.
+          // Server-sent events join two lines of data with a line feed, which is JSON white space.
           `event:next\rdata:${second.slice(0, second.indexOf(",") + 1)}\rdata: ${second.slice(second.indexOf(",") + 1)}\r\r`,
           "event: complete\ndata:\n\n",
           "event: next\ndata: not read\n\n",
@@ -172,8 +168,6 @@ test("a base URL with a user name, a password, a query or a fragment throws, wit
 });
 
 test("an interrupt before the server answers a subscription ends watch with 130, and writes nothing", async (context) => {
-  // A server that accepts the subscription and never answers. The interrupt comes while the command line waits for the
-  // answer, as when the server has started the subscription but its answer has not come yet.
   let received: () => void = () => undefined;
   const subscribed = new Promise<void>((resolve) => (received = resolve));
   let closed = false;
@@ -240,7 +234,6 @@ test("a cursor that is not a header value is invalid-input, and the client sends
 test("a 200 answer to a subscription that is not a stream of server-sent events is internal at once", async (context) => {
   let closed = false;
   const server = await serve(() => {
-    // A body that never ends: the client must not wait for its end.
     const body = new ReadableStream<Uint8Array>({
       start: (controller) => controller.enqueue(new TextEncoder().encode("{")),
       cancel: () => {

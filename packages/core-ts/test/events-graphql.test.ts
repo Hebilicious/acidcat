@@ -8,7 +8,6 @@ import type { Occurrence } from "../src/index.ts";
 import { readingChanged, sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
 import type { Reading } from "./sensors.ts";
 
-/** Wait until a condition is true, or fail after one second. */
 async function until(condition: () => boolean): Promise<void> {
   const end = Date.now() + 1000;
   while (!condition()) {
@@ -22,7 +21,6 @@ const ReadingType = new GraphQLObjectType<Reading>({
   fields: { room: { type: new GraphQLNonNull(GraphQLString) }, celsius: { type: new GraphQLNonNull(GraphQLFloat) } },
 });
 
-/** A GraphQL schema whose subscription field takes its source from an event handle. */
 function schemaFor(sensors: Sensors) {
   const session = createSession(sensorsApp, { target: "app", ...sensorOptions(sensors) });
   const handle = session.eventHandle(readingChanged);

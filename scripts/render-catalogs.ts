@@ -1,9 +1,3 @@
-/**
- * Render each Pkl catalog source to the `.acidcat.json` file beside it, then write each `.acidcat.json` file of the
- * repository in canonical form.
- *
- * Usage: node scripts/render-catalogs.ts
- */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";

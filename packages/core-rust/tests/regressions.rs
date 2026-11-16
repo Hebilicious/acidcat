@@ -1,7 +1,3 @@
-//! Tests of behaviors that `acid-cat conform` cannot check well: the order of the call failures of the command line,
-//! the cancellation of a stdio request on the next line, standard output that the client stops reading, and an
-//! interrupt of the command line before a server answers.
-
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -19,11 +15,8 @@ use tokio_util::sync::CancellationToken;
 type Capability = acid_cat_core::Capability<Services>;
 type Event = acid_cat_core::Event<Services>;
 
-/// The services of the test application.
 struct Services {
-    /// The availability of `test.off`. It is unavailable.
     switch: watch::Sender<Availability>,
-    /// The number of calls to `test.hold` that hold now.
     holding: AtomicUsize,
 }
 
@@ -36,7 +29,6 @@ impl Default for Services {
     }
 }
 
-/// Calls a function when it is dropped.
 struct OnDrop<F: FnMut()>(F);
 
 impl<F: FnMut()> Drop for OnDrop<F> {
@@ -55,7 +47,6 @@ struct Tick {
     n: i64,
 }
 
-/// The number of occurrences of `test.slow`.
 const SLOW_TICKS: i64 = 300;
 
 fn application() -> Arc<Application<Services>> {
@@ -111,7 +102,6 @@ fn application() -> Arc<Application<Services>> {
         .unwrap_or_else(|problems| panic!("the application does not conform: {problems:?}"))
 }
 
-/// Run the command line, and give its exit code and what it wrote.
 async fn cli(args: &[&str]) -> (i32, String) {
     let written = Arc::new(Mutex::new(String::new()));
     let (stdout, stderr) = (written.clone(), written.clone());
@@ -149,7 +139,6 @@ async fn the_command_line_checks_the_id_and_the_availability_before_the_json_tex
     assert!(text.contains("invalid-input"), "{text}");
 }
 
-/// A client of the stdio server: it writes lines to standard input, and reads lines of standard output.
 struct Client {
     input: DuplexStream,
     output: Lines<BufReader<DuplexStream>>,
@@ -157,7 +146,6 @@ struct Client {
 }
 
 impl Client {
-    /// Start the stdio server. `output_bytes` is the size of the pipe of standard output.
     fn start(context: Arc<Services>, output_bytes: usize) -> Client {
         let (input, server_input) = tokio::io::duplex(64 * 1024);
         let (server_output, output) = tokio::io::duplex(output_bytes);
@@ -199,7 +187,6 @@ impl Client {
         serde_json::from_str(&line).expect("each line is JSON")
     }
 
-    /// Read lines until the responses to the requests `ids`. The result is all the lines that the client read.
     async fn read_until_responses(&mut self, ids: &[i64]) -> Vec<Value> {
         let mut messages = Vec::new();
         let mut waiting: Vec<i64> = ids.to_vec();
@@ -216,7 +203,6 @@ impl Client {
     async fn close(self) {
         drop(self.input);
         let Client { output, server, .. } = self;
-        // Read the rest of standard output, so that the server can end.
         let reading = tokio::spawn(async move {
             let mut output = output;
             while let Ok(Some(_)) = output.next_line().await {}
@@ -253,7 +239,6 @@ async fn a_cancellation_on_the_line_after_its_request_cancels_the_call() {
         // The server does not answer a cancelled request: the next answer is the one to the ping.
         let answer = client.read().await;
         assert_eq!(answer.get("id"), Some(&json!(2)), "{answer}");
-        // The call never started, or it started and the cancellation ended it.
         let ended = tokio::time::timeout(Duration::from_secs(5), async {
             while context.holding.load(Ordering::SeqCst) > 0 {
                 tokio::time::sleep(Duration::from_millis(5)).await;
@@ -271,7 +256,6 @@ async fn a_client_that_stops_reading_gets_truncated_occurrences_and_still_gets_a
     client
         .write(&[request(1, "events/stream", json!({ "name": "test.slow" }))])
         .await;
-    // Do not read while the provider gives all its occurrences.
     tokio::time::sleep(Duration::from_millis(
         u64::try_from(SLOW_TICKS).unwrap_or(300) * 3,
     ))
@@ -314,7 +298,6 @@ async fn a_client_that_stops_reading_gets_truncated_occurrences_and_still_gets_a
 
 #[tokio::test]
 async fn an_interrupt_ends_list_of_a_server_that_does_not_answer_with_exit_code_130() {
-    // A server that accepts the connection and never answers.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -353,8 +336,6 @@ async fn an_interrupt_ends_list_of_a_server_that_does_not_answer_with_exit_code_
 
 #[tokio::test]
 async fn an_interrupt_before_the_answer_to_watch_exits_with_130_and_writes_nothing() {
-    // A server that reads the subscription and never answers. The interrupt comes while the command line waits for the
-    // answer, as when the server has started the subscription but its answer has not come yet.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let cancel = CancellationToken::new();

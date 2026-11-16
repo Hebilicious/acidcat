@@ -1,12 +1,3 @@
-/**
- * Serve one of the APIs on http://127.0.0.1:3000, with a simulated unit. `serve` from `@acid-cat/core-ts/node` serves the
- * web handler of the API on Node.js. The GraphQL API also serves its subscriptions through WebSockets, on
- * ws://127.0.0.1:3001/graphql, and the Cap'n Web API serves its sessions through WebSockets on ws://127.0.0.1:3001/rpc.
- * The Elysia API runs on the Node.js adapter of Elysia, `@elysiajs/node`, which also serves its WebSocket
- * ws://127.0.0.1:3000/status/follow on the same port.
- *
- * Usage: node apis/main.ts graphql|capnweb|elysia|mcp
- */
 import { once } from "node:events";
 
 import { serve } from "@acid-cat/core-ts/node";

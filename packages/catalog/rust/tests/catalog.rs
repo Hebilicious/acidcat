@@ -4,7 +4,6 @@ use serde_json::json;
 #[path = "../examples/player.rs"]
 mod player;
 
-/// Reads a file. The path is relative to this package.
 fn expected(path: &str) -> String {
     std::fs::read_to_string(format!("{}/{path}", env!("CARGO_MANIFEST_DIR")))
         .expect("the expected file exists")

@@ -1,9 +1,3 @@
-/**
- * Webhook delivery (spec/bindings/mcp.md#webhook): the answers to `events/subscribe` and `events/unsubscribe`, and the
- * deliveries of each webhook subscription. A subscription holds one subscription of an event, in a session of its own.
- * The subscriptions live in the scope of the server, not in the scope of a request. The sender does the HTTP requests,
- * so this module works in all runtimes.
- */
 import { callFailure, canonicalJson, isJsonObject, MCP_EVENT_ERRORS, MCP_WEBHOOK_DEFAULTS, mcpSubscribeError, webhookGrantMs, webhookSecretBytes, webhookSignature, webhookSubscriptionId } from "@acid-cat/spec-ts";
 import type { JsonObject, Occurrence, Resume, WebhookError } from "@acid-cat/spec-ts";
 import { Clock, Data, Effect, Exit, Fiber, Option, Schedule, Schema, Scope, Semaphore, Stream } from "effect";
@@ -39,7 +33,6 @@ export type WebhookSender = (request: WebhookRequest) => Effect.Effect<WebhookRe
 
 /** The settings of webhook delivery. Webhook delivery is off when the server has no settings. */
 export interface WebhookOptions {
-  /** Send the requests. */
   readonly sender: WebhookSender;
   /** The URLs that need no verification: they agree to get deliveries. With no function, each URL is verified. */
   readonly allow?: ((url: URL) => boolean) | undefined;
@@ -64,7 +57,6 @@ export interface WebhookOptions {
   readonly retryDelays?: Schedule.Schedule<unknown> | undefined;
 }
 
-/** A JSON-RPC error. */
 export interface RpcError {
   readonly code: number;
   readonly message: string;
@@ -96,7 +88,6 @@ const UnsubscribeParams = Schema.Struct({
   delivery: Schema.Struct({ url: Schema.String }),
 });
 
-/** One webhook subscription. */
 interface Hook {
   readonly id: string;
   readonly key: string;
@@ -112,7 +103,6 @@ interface Hook {
   worker: Fiber.Fiber<void> | undefined;
 }
 
-/** An attempt of a delivery that failed. A failure that is not retryable abandons the delivery. */
 class AttemptFailed extends Data.TaggedError("AttemptFailed")<{ readonly reason: WebhookError; readonly retryable: boolean }> {}
 
 const invalidParams = (message: string): WebhookAnswer => ({ error: { code: MCP_EVENT_ERRORS.invalidParams, message } });
@@ -121,7 +111,6 @@ const forbidden: WebhookAnswer = {
   error: { code: MCP_EVENT_ERRORS.forbidden, message: "Webhook delivery needs the identity of the client." },
 };
 
-/** The webhook subscriptions of a server, while the scope is open. When the scope closes, each subscription ends. */
 export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, never, Scope.Scope> =>
   Effect.gen(function* () {
     const limits = {
@@ -137,13 +126,10 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
     const serverScope = yield* Effect.scope;
 
     const hooks = new Map<string, Hook>();
-    /** The verifications that succeeded, by principal and URL, while the server runs. */
     const verified = new Set<string>();
-    /** The new subscriptions of each principal that are starting now, so that they count for the limit. */
     const starting = new Map<string, number>();
     const locks = new Map<string, { readonly semaphore: Semaphore.Semaphore; users: number }>();
 
-    /** Run an effect with the lock of a key. The lock exists only while an effect uses it. */
     const withKey = <A>(key: string, effect: Effect.Effect<A>): Effect.Effect<A> =>
       Effect.acquireUseRelease(
         Effect.sync(() => {
@@ -165,7 +151,6 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
     const secretsAt = (hook: Hook, now: number) =>
       hook.previous !== undefined && hook.previous.until > now ? [hook.secret, hook.previous.secret] : [hook.secret];
 
-    /** One attempt of a request, signed with the secrets of now. */
     const attempt = (url: URL, id: string, webhookId: string, body: string, secrets: (now: number) => readonly string[]) =>
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
@@ -183,10 +168,6 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
         );
       });
 
-    /**
-     * Deliver one message, with retries. The result is the category of the last failure, or `null` when the delivery
-     * succeeded. A delivery that fails each time is abandoned.
-     */
     const deliver = (hook: Hook, webhookId: string, body: string): Effect.Effect<WebhookError | null> =>
       attempt(hook.url, hook.id, webhookId, body, (now) => secretsAt(hook, now)).pipe(
         Effect.mapError((error) => new AttemptFailed({ reason: error.reason, retryable: true })),
@@ -206,10 +187,6 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
         ),
       );
 
-    /**
-     * Ask the endpoint whether it agrees to get deliveries: send a challenge, and compare the answer in constant time.
-     * The result is `undefined` when it agrees, or the reason when it does not.
-     */
     const verify = (url: URL, id: string, secret: string): Effect.Effect<WebhookError | undefined> => {
       const challenge = randomText(32);
       const body = JSON.stringify({ type: "verification", challenge });
@@ -225,7 +202,6 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
       );
     };
 
-    /** Send each occurrence of the subscription, one at a time and in order. The call failure `internal` sends `terminated`. */
     const run = (hook: Hook, subscription: Stream.Stream<Occurrence, { readonly message: string }>) =>
       Stream.runForEach(subscription, (occurrence) =>
         Effect.gen(function* () {
@@ -241,7 +217,6 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
         ),
       );
 
-    /** Wait until the lifetime of the subscription ends. */
     const expiry = (hook: Hook) =>
       Effect.gen(function* () {
         for (;;) {
@@ -262,7 +237,6 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
       },
     });
 
-    /** Start a new subscription: start the subscription of the event, verify the URL, and deliver. */
     const create = <R>(
       key: string,
       principal: string,
@@ -310,7 +284,6 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
           lastError: null,
           worker: undefined,
         };
-        // The subscription counts once: it leaves the starting count in the same step that adds it.
         release();
         hooks.set(key, hook);
         const cleanup = Effect.suspend(() => {
@@ -334,14 +307,12 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
         const url = parseUrl(params.delivery.url);
         if (url === undefined || url.protocol !== "https:") return invalidParams("The URL of a webhook must use https.");
         if (webhookSecretBytes(params.delivery.secret) === undefined) return invalidParams("The secret of a webhook must be whsec_ and the base64 of 24 to 64 bytes.");
-        // The key and the subscription id use the URL as the client sent it, so that the client can compute the id.
         const key = canonicalJson([principal, params.delivery.url, params.name, params.arguments ?? {}]);
         return yield* withKey(
           key,
           Effect.gen(function* () {
             const hook = hooks.get(key);
             if (hook === undefined) {
-              // The check and the count are one step, so that two new subscriptions cannot both pass the limit.
               const admitted = yield* Effect.sync(() => {
                 if (count(principal) >= maxSubscriptions) return false;
                 starting.set(principal, (starting.get(principal) ?? 0) + 1);
@@ -351,7 +322,6 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
                 return { error: { code: MCP_EVENT_ERRORS.resourceExhausted, message: "The principal has the maximum number of webhook subscriptions.", data: { limit: "subscriptions", max: maxSubscriptions } } };
               }
               let held = true;
-              /** Stop counting the subscription as starting. It runs once: when the subscription exists, or when the start fails. */
               const release = () => {
                 if (!held) return;
                 held = false;
@@ -361,12 +331,9 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
               };
               return yield* create(key, principal, params, url, open, release).pipe(Effect.ensuring(Effect.sync(release)));
             }
-            // A renewal starts no subscription, so the binding checks `maxAgeMs` here. The subscription exists, so the
-            // name is known, and the failure is `invalid-input`.
             const maxAgeMs = maxAgeOf(params.maxAgeMs);
             const issue = maxAgeMs === undefined ? undefined : resumeIssue({ maxAgeMs });
             if (issue !== undefined) return { error: mcpSubscribeError(callFailure("invalid-input", issue)) };
-            // Renew: a new lifetime, and the new secret. The old secret signs too, for the grace time.
             const now = yield* Clock.currentTimeMillis;
             hook.expiresAt = now + webhookGrantMs(params.ttlMs, limits);
             if (params.delivery.secret !== hook.secret) {
@@ -412,16 +379,13 @@ function parseJson(text: string): unknown {
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-/** Random letters and digits. */
 function randomText(length: number): string {
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(length));
   return Array.from(bytes, (byte) => LETTERS.charAt(byte % LETTERS.length)).join("");
 }
 
-/** A `webhook-id`: `msg_` and random letters and digits, or `msg_<type>_` and random letters and digits for a control message. */
 const messageId = (type?: string): string => (type === undefined ? `msg_${randomText(24)}` : `msg_${type}_${randomText(24)}`);
 
-/** Compare two texts in a time that depends only on their lengths. */
 function equalInConstantTime(a: string, b: string): boolean {
   const left = new TextEncoder().encode(a);
   const right = new TextEncoder().encode(b);

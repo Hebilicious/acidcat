@@ -1,9 +1,3 @@
-/**
- * Conformance checks for the MCP binding through standard input and standard output (spec/bindings/mcp.md#stdio). Each
- * check starts the server as a process. The protocol checks use the official MCP client, once with revision 2026-07-28
- * and once with the `initialize` handshake of revision 2025-11-25. The other checks write lines that a client never
- * writes, or end standard input during a call.
- */
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
@@ -21,18 +15,15 @@ import { checkProperties, clientInvoke, heldKeys } from "./properties.ts";
 
 const RULE = "spec/bindings/mcp.md#stdio";
 
-/** The two ways that a client opens the session: revision 2026-07-28, or the handshake of revision 2025-11-25. */
 const ERAS = [
   { revision: "2026-07-28", connects: "an MCP client connects with revision 2026-07-28", options: { versionNegotiation: { mode: { pin: "2026-07-28" } } } },
   { revision: "2025-11-25", connects: "an MCP client connects with the initialize handshake of revision 2025-11-25", options: {} },
 ] as const;
 
-/** The environment of the process: the environment of `conform`, without the variables that have no value. */
 function environment(): Record<string, string> {
   return Object.fromEntries(Object.entries(process.env).flatMap(([name, value]) => (value === undefined ? [] : [[name, value]])));
 }
 
-/** Start the server and connect an MCP client. `changes` counts each `notifications/tools/list_changed`. */
 async function connect(command: readonly string[], options: ClientOptions, changes: { count: number }, signal: AbortSignal): Promise<Client> {
   const [program, ...args] = command;
   if (program === undefined) throw new Error("the command that starts the MCP server is empty");
@@ -72,10 +63,6 @@ export async function checkMcpStdio(command: readonly string[], options: { reado
   return all;
 }
 
-/**
- * The checks of the events extension through one server process. The requests have revision 2026-07-28 in `_meta`, with
- * no handshake. `cancel` sends `notifications/cancelled` with the id of the `events/stream` request.
- */
 async function checkStdioEvents(command: readonly string[], options: { readonly deadline: number; readonly poll: PollSettings }): Promise<Checks> {
   const checks = new Checks("mcp-stdio events", options.deadline);
   const controller = new AbortController();
@@ -88,7 +75,6 @@ async function checkStdioEvents(command: readonly string[], options: { readonly 
   return checks;
 }
 
-/** A channel to a server process. Each wait stops when the signal of the check aborts. */
 function stdioChannel(server: ReturnType<typeof startRaw>): Channel {
   let next = 0;
   const send = (id: string, method: string, params: JsonObject) =>
@@ -129,7 +115,6 @@ function stdioChannel(server: ReturnType<typeof startRaw>): Channel {
   };
 }
 
-/** The server tells the client each change of the set of available tools. */
 async function checkChanges(checks: Checks, mcp: Client, changes: { readonly count: number }): Promise<void> {
   const set = (on: boolean, signal: AbortSignal) => mcp.callTool({ name: "fixture.switch.set", arguments: { on } }, { signal });
   const listsToggle = async (signal: AbortSignal) => (await mcp.listTools(undefined, { signal })).tools.some((tool) => tool.name === "fixture.toggle");
@@ -149,7 +134,7 @@ async function checkChanges(checks: Checks, mcp: Client, changes: { readonly cou
   });
 }
 
-/** `notifications/cancelled` cancels a call. The official client sends it when the signal of a call aborts. */
+/** The official client sends `notifications/cancelled` when the signal of a call aborts. */
 async function checkCancellation(checks: Checks, mcp: Client): Promise<void> {
   const invoke = clientInvoke(mcp);
   await checks.run("notifications/cancelled cancels the call", RULE, async (signal) => {
@@ -167,10 +152,6 @@ async function checkCancellation(checks: Checks, mcp: Client): Promise<void> {
   });
 }
 
-/**
- * A server process with its standard input and output, one JSON-RPC message on each line. `lines` holds each line of
- * standard output. When the signal aborts, the process is killed.
- */
 function startRaw(command: readonly string[], signal: AbortSignal) {
   const [program, ...args] = command;
   if (program === undefined) throw new Error("the command that starts the MCP server is empty");
@@ -198,7 +179,6 @@ function startRaw(command: readonly string[], signal: AbortSignal) {
   exited.catch(() => undefined);
   let next = 0;
   const write = (line: string) => child.stdin.write(`${line}\n`);
-  /** Send a request and wait for its response. */
   const request = async (method: string, params: JsonObject = {}): Promise<JsonObject> => {
     const id = `conform-${(next += 1)}`;
     write(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
@@ -207,7 +187,6 @@ function startRaw(command: readonly string[], signal: AbortSignal) {
   return { child, lines, messages, write, request, exited };
 }
 
-/** The `initialize` handshake of revision 2025-11-25, through a raw process. */
 async function handshake(server: ReturnType<typeof startRaw>, revision = "2025-11-25"): Promise<JsonObject> {
   const response = await server.request("initialize", { protocolVersion: revision, capabilities: {}, clientInfo: { name: "acid-cat-conform", version: "0.1.0" } });
   server.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }));
@@ -216,7 +195,6 @@ async function handshake(server: ReturnType<typeof startRaw>, revision = "2025-1
 
 async function checkLines(command: readonly string[], options: { readonly deadline: number }): Promise<Checks> {
   const checks = new Checks("mcp-stdio", options.deadline);
-  /** Run a body with a new server process, and kill the process at the end. */
   const withServer = (body: (server: ReturnType<typeof startRaw>, signal: AbortSignal) => Promise<void>) => async (signal: AbortSignal) => {
     const controller = new AbortController();
     const server = startRaw(command, AbortSignal.any([controller.signal, signal]));

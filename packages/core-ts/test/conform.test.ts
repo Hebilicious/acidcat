@@ -12,7 +12,6 @@ import type { Served } from "../src/node.ts";
 import { fixture, Holds, options, POLL, principalOf, Watchers, WEBHOOK_LIMITS } from "./fixture.ts";
 import { testCertificate } from "./webhook-receiver.ts";
 
-/** The checks of one run of `acid-cat conform`: no failure, no warning, and at least `minimum` checks, so that a binding cannot pass by running no checks. */
 function assertConforms(results: readonly Check[], minimum: number) {
   const failed = results.filter((result) => !result.passed);
   assert.deepEqual(failed, [], failed.map((result) => `${result.binding}: ${result.name}: ${result.detail}`).join("\n"));
@@ -20,16 +19,8 @@ function assertConforms(results: readonly Check[], minimum: number) {
   assert.ok(results.length >= minimum, `${results.length} checks, expected ${minimum} or more`);
 }
 
-/**
- * The test timeout of each binding. On a computer that runs many tests at the same time, the command line of a core can
- * take more than one minute, because each of its checks starts a new process. The test timeout of the task is one minute.
- */
 const CONFORM_TIMEOUT = 120_000;
 
-// One server serves the MCP and HTTP bindings to the tests below, and the HTTP binding of the target `cli` at `/cli` to the
-// command line that calls a server. Each binding has its own test, so that a slow binding
-// shows in the test report. The tests run at the same time, so the file takes the time of the slowest binding. Each
-// binding has its own services of the fixture, so that the checks of one binding do not change the state of another.
 describe("the TypeScript core passes acid-cat conform", { concurrency: true }, () => {
   const certificate = testCertificate();
   let mcp: McpHandler | undefined;
@@ -37,11 +28,8 @@ describe("the TypeScript core passes acid-cat conform", { concurrency: true }, (
   let url = "";
 
   before(async () => {
-    // A short wait before each new attempt of a delivery, so that the check of retries ends soon.
     const webhooks = webhookDelivery({ allowPrivateNetworks: true, ca: certificate.cert, retryDelayMs: () => 50, ...WEBHOOK_LIMITS });
     mcp = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...options(), poll: POLL, principal: principalOf, webhooks });
-    // The server writes the markers of the command line that calls it, because the server runs the calls. A watch does
-    // not keep the process of the tests running.
     const mark = (path: string) => writeFile(path, "");
     const cli = httpHandler(fixture, { allowedOrigins: [], target: "cli", base: "/cli", ...options(new Holds(mark), new Watchers(mark, false)) });
     served = await serve({ "/mcp": mcpHandshake(mcp), "/api": httpHandler(fixture, { allowedOrigins: [], base: "/api", ...options() }), "/cli": cli }, { port: 0 });

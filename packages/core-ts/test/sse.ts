@@ -1,17 +1,10 @@
-/**
- * A reader of a stream of server-sent events, for the tests. It gives each message with its fields, and each comment
- * line as a message with the event `comment`.
- */
-
 export interface SseMessage {
   readonly event?: string;
   readonly id?: string;
   readonly data: string;
-  /** The text of the message as the server sent it, without the blank line at its end. */
   readonly raw: string;
 }
 
-/** Read the messages of a response one at a time. `next` resolves with `undefined` at the end of the stream. */
 export function sseReader(response: Response) {
   if (response.body === null) throw new Error("The response has no body.");
   const reader = response.body.getReader();

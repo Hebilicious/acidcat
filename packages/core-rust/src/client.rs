@@ -1,5 +1,3 @@
-//! The HTTP client of the core: webhook deliveries, and the command line that calls a remote HTTP binding.
-
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
@@ -9,8 +7,6 @@ use http_body_util::Full;
 use hyper::client::conn::http1::SendRequest;
 use tokio::net::TcpStream;
 
-/// Connect to the server of a URL, `http` or `https`, with HTTP/1.1. Resolve the host name, and connect only to an
-/// address that `accepts` accepts. TLS checks the host name of the URL. The error is the category of the failure.
 pub(crate) async fn connect(
     url: &Uri,
     tls: &Arc<rustls::ClientConfig>,
@@ -62,7 +58,6 @@ pub(crate) async fn connect(
     Ok(sender)
 }
 
-/// The TLS settings of a client: the default authorities, and the trusted certificates of the deployment.
 pub(crate) fn tls_config(trusted: &[String]) -> rustls::ClientConfig {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let mut roots = rustls::RootCertStore {
@@ -105,8 +100,6 @@ pub(crate) fn tls_config(trusted: &[String]) -> rustls::ClientConfig {
     }
 }
 
-/// Checks the certificate of a server: a trusted certificate of the deployment, also a self-signed one, or a
-/// certificate that the authorities sign. The signatures of the handshake are always checked.
 #[derive(Debug)]
 struct Verifier {
     webpki: Arc<rustls::client::WebPkiServerVerifier>,

@@ -1,7 +1,3 @@
-/**
- * A capability, written in Effect: Effect Schema for its input, output and failures, and an Effect program that does
- * the operation. See spec/catalog.md#capabilities.
- */
 import type { Availability } from "@acid-cat/spec-ts";
 import { Effect, Schema } from "effect";
 import type { Stream, SubscriptionRef } from "effect";
@@ -9,21 +5,17 @@ import type { Stream, SubscriptionRef } from "effect";
 import { readable } from "./internal/changes.ts";
 import { describe } from "./internal/issues.ts";
 
-/** A schema that needs no services to decode or encode. */
 export type AnySchema = Schema.Codec<unknown, unknown, never, never>;
 
 /** The input that `run` gets when a capability has no input schema: the object that the client sent. */
 export type NoInput = { readonly [key: string]: unknown };
 
-/** A value that code can read and follow, but not change. */
 export interface Readable<A> {
-  /** The current value. */
   readonly get: () => A;
   /** The current value, then each change. */
   readonly changes: Stream.Stream<A>;
 }
 
-/** A failure of a call through a `Pipeline`. The failures of the capability are in `Failure`. */
 export type PipelineError =
   | { readonly _tag: "InvalidInput"; readonly message: string }
   | { readonly _tag: "Failure"; readonly error: unknown }
@@ -87,7 +79,6 @@ export interface Capability<
    * or the message of an input that does not decode. `make` builds it.
    */
   readonly prepare: (input: unknown) => Effect.Effect<Effect.Effect<Output["Type"], Failure["Type"], R>, string>;
-  /** The calls of the capability for code that does not know the types of its schemas. `make` builds it. */
   readonly pipeline: Pipeline<R>;
 }
 
@@ -109,10 +100,8 @@ export interface Any<R = unknown> {
   readonly pipeline: Pipeline<R>;
 }
 
-/** The services that a capability needs. */
 export type Services<C> = C extends Any<infer R> ? R : never;
 
-/** The members of a declaration that do not depend on the input. */
 export interface Declaration<Output extends AnySchema, Failure extends AnySchema, State extends AnySchema, Id extends string, RAvailability, RState> {
   readonly id: Id;
   readonly description: string;
@@ -120,15 +109,12 @@ export interface Declaration<Output extends AnySchema, Failure extends AnySchema
   readonly readOnly?: boolean | undefined;
   readonly output?: Output | undefined;
   readonly failures?: readonly Failure[] | undefined;
-  /** See `Capability.availability`. */
   readonly availability?: Effect.Effect<SubscriptionRef.SubscriptionRef<Availability>, never, RAvailability> | undefined;
-  /** See `Capability.state`. */
   readonly state?:
     | { readonly schema: State; readonly value: Effect.Effect<SubscriptionRef.SubscriptionRef<State["Type"]>, never, RState> }
     | undefined;
 }
 
-/** The declaration of a capability with an input schema. `run` gets the decoded input. */
 export interface WithInput<
   Input extends AnySchema,
   Output extends AnySchema,
@@ -143,31 +129,21 @@ export interface WithInput<
   readonly run: (input: Input["Type"]) => Effect.Effect<Output["Type"], Failure["Type"], R>;
 }
 
-/** The declaration of a capability with no input schema. `run` gets the object that the client sent. */
 export interface WithoutInput<Output extends AnySchema, Failure extends AnySchema, R, State extends AnySchema, Id extends string, RAvailability, RState>
   extends Declaration<Output, Failure, State, Id, RAvailability, RState> {
   readonly input?: undefined;
   readonly run: (input: NoInput) => Effect.Effect<Output["Type"], Failure["Type"], R>;
 }
 
-/**
- * `true` if a declaration has an input. TypeScript does not narrow a union on a property whose type is a type
- * parameter, so this check narrows it. In `With`, the input is an object. In `Without`, the input can only be
- * `undefined`. So an input that is not `undefined` decides the member.
- */
+/** TypeScript does not narrow a union on a property whose type is a type parameter, so this check narrows it. */
 function hasInput<With extends { readonly input: object }, Without extends { readonly input?: undefined }>(
   definition: With | Without,
 ): definition is With {
   return definition.input !== undefined;
 }
 
-/** The input of a capability with no input schema. */
 const AnyObject = Schema.Record(Schema.String, Schema.Unknown);
 
-/**
- * Declare a capability. The id keeps its literal type. The capability needs the services that `run`, `availability`
- * and `state` need. With no input schema, the type of the input of the capability is the empty struct.
- */
 export function make<
   Input extends AnySchema,
   R = never,
@@ -191,7 +167,6 @@ export function make<
 >(
   definition: WithoutInput<Output, Failure, R, State, Id, RAvailability, RState>,
 ): Capability<Schema.Struct<{}>, Output, Failure, NoInfer<R | RAvailability | RState>, State, Id>;
-/** Each declaration above is this function with `Input` set: the type of its input schema, or the empty struct. */
 export function make<
   Input extends AnySchema,
   R,
@@ -219,7 +194,6 @@ export function make<
   };
   const state = definition.state === undefined ? undefined : Effect.map(definition.state.value, readable);
   const parts = { output: definition.output, failures: definition.failures, state };
-  /** The capability, from the calls of one member of the declaration, which share the type `In` of their input. */
   const finish = <In>(
     calls: {
       readonly decode: (input: unknown) => Effect.Effect<In, string>;
@@ -257,10 +231,6 @@ export function make<
 
 const notInput = "input: The input does not agree with the input schema.";
 
-/**
- * The pipeline of a capability. `decode` takes an input that is not trusted, and `check` an input that is already
- * decoded. Both give the input of `run`, or the message of an invalid input.
- */
 function pipeline<In, Value, Error, R, RState>(parts: {
   readonly decode: (input: unknown) => Effect.Effect<In, string>;
   readonly check: (input: unknown) => Effect.Effect<In, string>;

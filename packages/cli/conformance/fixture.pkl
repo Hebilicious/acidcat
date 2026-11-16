@@ -1,5 +1,3 @@
-/// The conformance fixture. Each implementation serves this catalog, and `acid-cat conform` tests it through
-/// its bindings. Each capability shows one behavior.
 amends "../../catalog/pkl/Catalog.pkl"
 
 title = "AcidCat conformance fixture"

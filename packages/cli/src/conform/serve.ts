@@ -1,7 +1,3 @@
-/**
- * Serve a web request handler, `(request: Request) => Promise<Response>`, on a local port. Implementations use it
- * to run `acid-cat conform` against their bindings in a test.
- */
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -74,7 +70,7 @@ async function answer(
       return;
     }
     // Send the headers before the first chunk, so that the client of a stream of server-sent events gets the status
-    // before the first message. When the client closes the connection, the body is cancelled.
+    // before the first message.
     outgoing.flushHeaders();
     const reader = response.body.getReader();
     abort.signal.addEventListener("abort", () => void reader.cancel().catch(() => undefined), { once: true });
@@ -86,12 +82,7 @@ async function answer(
   }
 }
 
-/**
- * The body of an incoming request, as a web stream. The stream reads the request only when the handler reads the body,
- * and the request pauses after each chunk until the handler reads again. A request that the handler does not read stays
- * unread, so that Node.js discards it after the response. When the handler cancels the stream, the request discards the
- * rest of its body.
- */
+/** A request that the handler does not read stays unread, so that Node.js discards it after the response. */
 function bodyOf(incoming: IncomingMessage): ReadableStream<Uint8Array> {
   let open = true;
   let reading = false;

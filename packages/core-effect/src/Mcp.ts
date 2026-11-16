@@ -1,6 +1,3 @@
-/**
- * The MCP binding (spec/bindings/mcp.md): an MCP server through HTTP or through stdio, built on `effect/ai/McpServer`.
- */
 import { bundle, isJsonObject, KEEPALIVE_MS, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, mcpToolResult, readBounded, screenRequest, sseMessage, viewOf } from "@acid-cat/spec-ts";
 import type { JsonObject, Outcome, Rejection } from "@acid-cat/spec-ts";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberMap, Layer, Logger, Option, Queue, Schema, Scope, Semaphore, Sink, Stdio, Stream, SubscriptionRef } from "effect";
@@ -62,7 +59,6 @@ export interface Options {
    * `notifications/events/heartbeat`. The default is 15 000.
    */
   readonly heartbeatMs?: number | undefined;
-  /** The number of occurrences of one subscription that the session keeps for a slow client. See `Session.Options`. */
   readonly eventBuffer?: number | undefined;
   /**
    * The identity of the client of a request: the principal. A poll lease belongs to the principal of the request that
@@ -70,7 +66,6 @@ export interface Options {
    * principal. Check the credentials of the request here, for example a bearer token.
    */
   readonly principal?: ((request: Request) => Effect.Effect<Option.Option<string>>) | undefined;
-  /** The settings of poll delivery (spec/bindings/mcp.md#poll). */
   readonly poll?: PollOptions | undefined;
   /**
    * The settings of webhook delivery (spec/bindings/mcp.md#webhook). Webhook delivery is off when this member is
@@ -79,20 +74,17 @@ export interface Options {
   readonly webhooks?: WebhookOptions | undefined;
 }
 
-/** A web request handler for the MCP server, with `dispose`. */
 export interface WebHandler {
   (request: Request): Promise<Response>;
   /** End the poll leases and the webhook subscriptions, and release the shared services. */
   readonly dispose: () => Promise<void>;
 }
 
-/** The state that a server keeps between requests: the poll leases, and the webhook subscriptions if they are on. */
 interface Deliveries {
   readonly polls: Polls | undefined;
   readonly webhooks: Webhooks | undefined;
 }
 
-/** The poll leases and the webhook subscriptions of a server, while the scope is open. */
 const makeDeliveries = (options: Pick<Options, "poll" | "webhooks">): Effect.Effect<Deliveries, never, Scope.Scope> =>
   Effect.gen(function* () {
     const polls = yield* makePolls(options.poll);
@@ -167,16 +159,11 @@ export const makeHandle = <R>(app: App.App<R>, options: Options) =>
         ),
   );
 
-/** A request that passed the screening: the request with the body that was read, and the JSON of the body. */
 interface Admitted {
   readonly request: Request;
   readonly message: unknown;
 }
 
-/**
- * Screen a request and read its body (spec/bindings/mcp.md). The result is the rejection, or the request with the body
- * that was read and the signal of the request.
- */
 async function admit(request: Request, options: Pick<Options, "allowedOrigins" | "maximumBytes">): Promise<Admitted | Response> {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
   const screened = screenRequest(request, {
@@ -197,10 +184,6 @@ async function admit(request: Request, options: Pick<Options, "allowedOrigins" |
   return { request: new Request(request.url, { body: body.text, headers: request.headers, method: "POST", signal: request.signal }), message };
 }
 
-/**
- * Answer one MCP request that passed the screening, with a new session in `scope`. The binding answers the requests of
- * the events extension itself, when the view has events. The server of `effect/ai` answers the other requests.
- */
 const respond = <R>(app: App.App<R>, admitted: Admitted, options: Options, scope: Scope.Closeable, state: Deliveries & { readonly keep: Keep }) =>
   Effect.gen(function* () {
     const sessionOptions = { target: options.target ?? "mcp", eventBuffer: options.eventBuffer };
@@ -224,14 +207,9 @@ const respond = <R>(app: App.App<R>, admitted: Admitted, options: Options, scope
     return HttpServerResponse.toWeb(response);
   }).pipe(closeUnlessStreaming(scope));
 
-/** The request of the events extension in a request of revision 2026-07-28 through HTTP, or `undefined`. */
 const eventsRequestOf = (admitted: Admitted): McpEvents.EventsRequest | undefined =>
   admitted.request.headers.get("MCP-Protocol-Version") === MCP_PROTOCOL_VERSION ? McpEvents.eventsRequestOf(admitted.message) : undefined;
 
-/**
- * Answer a request of the events extension with the session of the request. A poll lease or a webhook subscription opens
- * a session of its own, with the services of the request.
- */
 const answerEvents = <R>(
   app: App.App<R>,
   session: Session.Session<R>,
@@ -256,10 +234,6 @@ const answerEvents = <R>(
     return yield* respondToEvents(session, events, request, answerOptions, scope);
   });
 
-/**
- * The options of `withEvents`: the options of `Options` that tell how the binding screens a request and serves the
- * events extension.
- */
 export type EventsOptions = Pick<
   Options,
   "allowedOrigins" | "target" | "maximumBytes" | "services" | "heartbeatMs" | "eventBuffer" | "principal" | "poll" | "webhooks"
@@ -321,11 +295,6 @@ export function withEvents<R, E>(
   return Object.assign(handler, { dispose });
 }
 
-/**
- * Answer a request of the events extension through HTTP. The headers follow the rules of the transport of revision
- * 2026-07-28. The answer to `events/stream` is a stream of server-sent events, with one JSON-RPC message in each
- * `data:` field. When the client closes the request, the subscription is cancelled.
- */
 const respondToEvents = <R>(
   session: Session.Session<R>,
   request: McpEvents.EventsRequest,
@@ -372,10 +341,6 @@ export const registerTools = (session: Session.Session, signal: AbortSignal = ne
     }
   });
 
-/**
- * The tool of a capability in the view of a session: its name, description, schemas and hints, and its call.
- * `annotations` go to `effect/ai`. `around` wraps each call, for example to cancel it.
- */
 const toolFor = (
   session: Session.Session,
   id: string,
@@ -417,16 +382,13 @@ export interface StdioOptions {
    * `notifications/events/heartbeat`. The default is 15 000.
    */
   readonly heartbeatMs?: number | undefined;
-  /** The number of occurrences of one subscription that the session keeps for a slow client. See `Session.Options`. */
   readonly eventBuffer?: number | undefined;
   /** The settings of poll delivery (spec/bindings/mcp.md#poll). The process has no principal. */
   readonly poll?: PollOptions | undefined;
 }
 
-/** A message of standard input for the events of the session: a request of the extension, or a cancellation. */
 type Inbound = { readonly _tag: "Request"; readonly request: McpEvents.EventsRequest } | { readonly _tag: "Cancel"; readonly id: McpEvents.RequestId };
 
-/** What standard input gives to the events of the session, and the ids of the `initialize` requests. */
 interface EventsInput {
   readonly inbox: Queue.Queue<Inbound>;
   readonly initializes: Set<McpEvents.RequestId>;
@@ -453,7 +415,6 @@ export const layerStdio = <R>(app: App.App<R>, options: StdioOptions) =>
           const session = yield* Session.make(app, sessionOptions);
           yield* serveTools(session);
           if (events === undefined) return;
-          // The poll leases live while the layer is open. Each one opens a session of its own, with the services of the layer.
           const context = yield* Effect.context<R>();
           const answerOptions: McpEvents.AnswerOptions<R> = {
             heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
@@ -481,14 +442,6 @@ export const layerStdio = <R>(app: App.App<R>, options: StdioOptions) =>
     }),
   );
 
-/**
- * Standard input, one JSON message on each line. The server answers a line that is not JSON with the JSON-RPC error
- * -32700, and keeps the session. An empty line is ignored.
- *
- * With `events`, the requests of the events extension go to its inbox, and not to the server. A cancellation goes to
- * both. The result of `initialize` gets no `extensions` member for events (spec/bindings/mcp.md#events): the server
- * of `effect/ai` declares the extension for all revisions.
- */
 const framed = (stdio: Stdio.Stdio, events: EventsInput | undefined): Stdio.Stdio => {
   const parseError = `${JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "The line is not JSON." } })}\n`;
   const parse = (line: string): { readonly json: unknown } | undefined => {
@@ -498,7 +451,6 @@ const framed = (stdio: Stdio.Stdio, events: EventsInput | undefined): Stdio.Stdi
       return undefined;
     }
   };
-  /** `true` if the server reads the message. */
   const route = (message: unknown): Effect.Effect<boolean> => {
     if (events === undefined || !isJsonObject(message)) return Effect.succeed(true);
     const request = McpEvents.eventsRequestOf(message);
@@ -526,7 +478,10 @@ const framed = (stdio: Stdio.Stdio, events: EventsInput | undefined): Stdio.Stdi
   return Stdio.make({ ...stdio, stdin, stdout });
 };
 
-/** A message of the server, without the events extension in its capabilities if it is the result of `initialize`. */
+/**
+ * The result of `initialize` gets no `extensions` member for events (spec/bindings/mcp.md#events): the server of
+ * `effect/ai` declares the extension for all revisions.
+ */
 function withoutEventsExtension(chunk: string, initializes: Set<McpEvents.RequestId>): string {
   if (initializes.size === 0) return chunk;
   let message: unknown;
@@ -547,11 +502,6 @@ function withoutEventsExtension(chunk: string, initializes: Set<McpEvents.Reques
   return `${JSON.stringify({ ...message, result: { ...result, capabilities: kept } })}\n`;
 }
 
-/**
- * Answer the requests of the events extension that standard input gives, while the scope is open. Each subscription
- * runs in its own fiber, by the id of its request. `notifications/cancelled` with that id interrupts the fiber. The
- * messages go to standard output, one at a time.
- */
 const serveEvents = <R>(session: Session.Session<R>, inbox: Queue.Queue<Inbound>, answerOptions: McpEvents.AnswerOptions<R>) =>
   Effect.gen(function* () {
     const stdio = yield* Stdio.Stdio;
@@ -583,7 +533,7 @@ export const serveStdio = <R>(app: App.App<R>, options: StdioOptions) =>
     const ended = yield* Deferred.make<void>();
     const input = Stdio.make({ ...stdio, stdin: stdio.stdin.pipe(Stream.ensuring(Deferred.done(ended, Exit.void))) });
     const server = layerStdio(app, options).pipe(Layer.provide(Layer.succeed(Stdio.Stdio, input)));
-    // When the server stops writing standard output, it interrupts its own fiber. That is a normal end too.
+    // The server of `effect/ai` interrupts its own fiber when it stops writing standard output. That is a normal end too.
     const fiber = yield* Effect.forkChild(Layer.launch(server), { startImmediately: true });
     yield* Effect.raceFirst(Effect.asVoid(Fiber.await(fiber)), Deferred.await(ended));
     yield* Fiber.interrupt(fiber);
@@ -591,11 +541,6 @@ export const serveStdio = <R>(app: App.App<R>, options: StdioOptions) =>
     if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause);
   });
 
-/**
- * Register one tool for each capability in the view of the session. A tool is listed and can be called only while its
- * capability is available. When the set of available capabilities changes, the server sends
- * `notifications/tools/list_changed`.
- */
 const serveTools = (session: Session.Session) =>
   Effect.gen(function* () {
     const server = yield* McpServer.McpServer;
@@ -605,13 +550,9 @@ const serveTools = (session: Session.Session) =>
       const ref = refs.availability(id);
       return ref === undefined || SubscriptionRef.getUnsafe(ref).available;
     };
-    // The availability of each capability, as the server last saw it in the stream of its changes. The server compares
-    // the values of the stream, not the values at the moment that it reads them: when a capability becomes available and
-    // then unavailable before the server reads the first change, the server still sees both changes, and tells both.
     const seen = new Map(ids.map((id) => [id, isAvailable(id)]));
     const seenIds = () => ids.filter((id) => seen.get(id) === true).join("\n");
     let listed = seenIds();
-    // Each availability gives its current value when the stream subscribes to it, then each change.
     const followed = ids.flatMap((id) => {
       const ref = refs.availability(id);
       return ref === undefined ? [] : [SubscriptionRef.changes(ref).pipe(Stream.map((availability) => ({ id, available: availability.available })))];
@@ -631,10 +572,6 @@ const serveTools = (session: Session.Session) =>
     for (const id of ids) yield* server.addTool(yield* toolFor(session, id, Context.make(McpSchema.EnabledWhen, () => isAvailable(id))));
   });
 
-/**
- * The schemas of a tool, and its result, in the types of `effect/ai`. The catalog makes each of them, so a value that
- * does not decode is a defect.
- */
 const decodeToolInput = (schema: JsonObject) => Effect.orDie(Schema.decodeUnknownEffect(McpSchema.ToolJson)(schema));
 const decodeToolOutput = (schema: unknown) => Effect.orDie(Schema.decodeUnknownEffect(McpSchema.ToolOutputJson)(schema));
 const decodeToolResult = (result: unknown) => Effect.orDie(Schema.decodeUnknownEffect(McpSchema.CallToolResult)(result));

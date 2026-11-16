@@ -1,10 +1,8 @@
-/** A test application with one capability for each behavior that the tests examine. */
 import { z } from "zod";
 
 import { AVAILABLE, capabilitiesFor, defineApp, defineCapability, eventsFor, fail, ok, unavailable } from "../src/index.ts";
 import type { Availability, Observable } from "../src/index.ts";
 
-/** A switch that the tests turn on and off, to change the availability of `fixture.toggle`. */
 export class Switch implements Observable<Availability> {
   #on = true;
   readonly #listeners = new Set<(value: Availability) => void>();
@@ -23,16 +21,11 @@ export class Switch implements Observable<Availability> {
     return { unsubscribe: () => this.#listeners.delete(listener) };
   }
 
-  /** The number of listeners, to test when a session subscribes. */
   get subscribers(): number {
     return this.#listeners.size;
   }
 }
 
-/**
- * The calls to `fixture.hold` that hold now, for all the sessions of one provider. `mark` writes the file of a marker. A
- * page cannot write files, so only the command line of the fixture gives it.
- */
 export class Holds {
   readonly #holding = new Set<{ readonly key: string; readonly stop: () => void }>();
   readonly #mark: ((path: string) => Promise<void>) | undefined;
@@ -41,7 +34,6 @@ export class Holds {
     this.#mark = mark;
   }
 
-  /** Hold until `release` releases the key, or until the signal aborts. */
   async hold(key: string, marker: string | undefined, signal: AbortSignal): Promise<void> {
     if (signal.aborted) return;
     const { promise: stopped, resolve } = Promise.withResolvers<void>();
@@ -74,35 +66,22 @@ export class Holds {
   }
 }
 
-/** Holds whose calls ignore cancellation: a call holds until it is released. The tests use them to see conform fail. */
 export class HoldsThatIgnoreCancellation extends Holds {
   override hold(key: string, marker: string | undefined): Promise<void> {
     return super.hold(key, marker, new AbortController().signal);
   }
 }
 
-/**
- * The subscriptions to `fixture.watch` that are active now, for all the sessions of one provider. `mark` writes the file
- * of a marker, as for `Holds`.
- */
 export class Watchers {
   readonly #watching = new Set<{ readonly key: string; readonly push: (value: string) => void }>();
   readonly #mark: ((path: string) => Promise<void>) | undefined;
   readonly #keepAlive: boolean;
 
-  /**
-   * With `keepAlive`, the default, each watch keeps the Node.js process running while it is active, so that the command
-   * line runs until the subscription ends.
-   */
   constructor(mark?: (path: string) => Promise<void>, keepAlive = true) {
     this.#mark = mark;
     this.#keepAlive = keepAlive;
   }
 
-  /**
-   * The values that `signal` gives for the key, from now until the signal aborts or the client returns. The watch starts
-   * when this function returns, before the first read, so that it gets each value from that time.
-   */
   watch(key: string, signal: AbortSignal): AsyncIterable<string> {
     const queue: string[] = [];
     let wake = () => {};
@@ -142,7 +121,6 @@ export class Watchers {
     return { [Symbol.asyncIterator]: () => iterator };
   }
 
-  /** Write the file of a marker, if this provider writes markers. */
   async mark(path: string): Promise<void> {
     await this.#mark?.(path);
   }
@@ -151,7 +129,6 @@ export class Watchers {
     return [...this.#watching].map((entry) => entry.key);
   }
 
-  /** Give the value to each watch of the key. Return the number of these watches. */
   signal(key: string, value: string): number {
     const watches = [...this.#watching].filter((entry) => entry.key === key);
     for (const entry of watches) entry.push(value);
@@ -159,11 +136,6 @@ export class Watchers {
   }
 }
 
-/**
- * Watchers whose subscriptions ignore cancellation: a watch stays active when its signal aborts, and when the
- * subscription returns. The tests use them to see conform fail. A watch keeps a command line running, but not the
- * process of the tests, unless `keepAlive` is `true`.
- */
 export class WatchersThatIgnoreCancellation extends Watchers {
   constructor(mark?: (path: string) => Promise<void>, keepAlive = false) {
     super(mark, keepAlive);
@@ -171,7 +143,7 @@ export class WatchersThatIgnoreCancellation extends Watchers {
 
   override watch(key: string): AsyncIterable<string> {
     const values = super.watch(key, new AbortController().signal)[Symbol.asyncIterator]();
-    // An iterator with no `return`: a `for await` loop that ends does not stop the watch.
+    // A `for await` loop that ends calls `return` on its iterator. This iterator has none, so the watch does not stop.
     return { [Symbol.asyncIterator]: () => ({ next: () => values.next() }) };
   }
 }
@@ -182,13 +154,11 @@ export interface Context {
   readonly watchers: Watchers;
 }
 
-/** The JSON Schema of a Zod schema. The fixtures use only Zod schemas. */
 export const toJsonSchema = (schema: unknown) => {
   if (!(schema instanceof z.ZodType)) throw new TypeError("The fixtures give only Zod schemas.");
   return z.toJSONSchema(schema, { target: "draft-2020-12" });
 };
 
-/** Read the JSON body of a response, and check it with a schema. */
 export const readJson = async <S extends z.ZodType>(response: Response, schema: S): Promise<z.output<S>> => schema.parse(await response.json());
 
 const Text = z.object({ text: z.string() });
@@ -212,7 +182,6 @@ const everywhere = ["app", "mcp", "cli", "api"];
 const capability = capabilitiesFor<Context>();
 const event = eventsFor<Context>();
 
-/** The position after a cursor of `fixture.ticks`. A cursor that is not a count starts at the first tick. */
 const after = (cursor: string | undefined): number => {
   const position = Number(cursor);
   return Number.isInteger(position) && position >= 0 ? position + 1 : 1;
@@ -352,7 +321,6 @@ export const fixture = defineApp<Context>({
       input: z.object({ key: z.string(), marker: z.string().optional() }),
       payload: Watched,
       async *subscribe({ key, marker }, { context, signal }) {
-        // The watch starts before the first await, so the subscription gets each signal after subscribe resolves.
         const values = context.watchers.watch(key, signal);
         if (marker !== undefined) await context.watchers.mark(marker);
         for await (const value of values) yield { data: { key, value } };
@@ -372,7 +340,6 @@ export const fixture = defineApp<Context>({
       id: "fixture.secret",
       description: "Only the app target can follow this event. It never gives an occurrence.",
       audience: ["app"],
-      // An iterator whose next() waits until the subscription ends, and gives no value.
       subscribe: (_, { signal }) => ({
         [Symbol.asyncIterator]: () => ({
           next: () =>
@@ -387,28 +354,14 @@ export const fixture = defineApp<Context>({
   ],
 });
 
-/**
- * The poll settings of the MCP servers of the fixture in the conformance tests: a small buffer and a short lease time, so
- * that conform can test both. The tests give the same settings to conform.
- */
 export const POLL = { bufferLimit: 5, leaseMs: 5000 } as const;
 
-/**
- * The limits of webhook delivery of the MCP server of the fixture in the conformance tests: short lifetimes and a small
- * number of subscriptions, so that conform can test them. The tests give the same limits to conform.
- */
 export const WEBHOOK_LIMITS = { minTtlMs: 1000, maxTtlMs: 5000, maxSubscriptions: 3 } as const;
 
-/** The principal of a request in the conformance tests: the token of the header `Authorization: Bearer <principal>`. */
 export const principalOf = (request: Request): string | undefined => /^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")?.[1];
 
-/** The options of a session or a binding of the fixture. */
 export const options = (holds = new Holds(), watchers = new Watchers()) => ({ context: { switch: new Switch(), holds, watchers }, toJsonSchema, onDefect: () => undefined });
 
-/**
- * An application with one capability, `held.wait`, that runs until its signal aborts. `started` resolves when the call
- * starts, and `seen.aborted` tells if the call saw the abort.
- */
 export function heldApp() {
   const started = Promise.withResolvers<void>();
   const seen = { aborted: false };

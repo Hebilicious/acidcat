@@ -1,7 +1,3 @@
-/**
- * `acid-cat conform`: test a running implementation through its bindings (spec/conformance.md). The implementation
- * serves the conformance fixture (conformance/fixture.acidcat.json), with its switch on.
- */
 import { DEADLINE } from "./check.ts";
 import type { Check } from "./check.ts";
 import { checkCli } from "./cli.ts";

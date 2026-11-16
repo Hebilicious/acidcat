@@ -1,5 +1,3 @@
-//! Sessions (spec/invocation.md#sessions): one client calls the capabilities of one target, and follows its events.
-
 use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
@@ -17,7 +15,6 @@ use crate::subscription::{Occurrences, Parts, prepare};
 /// limit (spec/events.md#slow-clients).
 pub const DEFAULT_BUFFER_LIMIT: usize = 256;
 
-/// Where a subscription starts, and how the client cancels it (spec/events.md#resuming).
 #[derive(Clone, Debug, Default)]
 pub struct SubscribeOptions {
     /// Start after this position.
@@ -29,7 +26,6 @@ pub struct SubscribeOptions {
     pub cancel: CancellationToken,
 }
 
-/// True if `maxAgeMs` is an integer that is 0 or more.
 pub(crate) fn is_max_age_ms(value: f64) -> bool {
     value.is_finite() && value >= 0.0 && value.fract() == 0.0 && value <= 9_007_199_254_740_991.0
 }
@@ -52,7 +48,7 @@ struct Inner<C> {
     buffer_limit: usize,
 }
 
-/// A session. Clones share the session. [`Session::close`] closes it.
+/// Clones share the session.
 pub struct Session<C> {
     inner: Arc<Inner<C>>,
 }
@@ -66,7 +62,6 @@ impl<C> Clone for Session<C> {
 }
 
 impl<C: Send + Sync + 'static> Session<C> {
-    /// Open a session for a target, with the services of the application.
     pub fn open(app: &Arc<Application<C>>, target: &str, context: Arc<C>) -> Self {
         Self::with_buffer_limit(app, target, context, DEFAULT_BUFFER_LIMIT)
     }

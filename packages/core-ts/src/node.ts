@@ -1,19 +1,9 @@
-/**
- * The functions that need Node.js. The main entry point, `@acid-cat/core-ts`, works in all runtimes.
- *
- * `webhookDelivery` sends the occurrences of webhook subscriptions of the MCP server through HTTP, with `node:https`.
- *
- * `serve` serves web request handlers, `(request: Request) => Promise<Response>`, such as the handlers of `mcpHandler`
- * and `httpHandler`, on Node.js, with only `node:http`. The server serves plain HTTP/1.1. For HTTPS, HTTP/2 or
- * middleware, use a library for web handlers.
- */
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 export { webhookDelivery } from "./webhook.ts";
 export type { WebhookOptions } from "./webhook.ts";
 
-/** A web request handler. */
 export type WebHandler = (request: Request) => Promise<Response> | Response;
 
 /**
@@ -39,7 +29,6 @@ export interface ServeOptions {
 export interface Served extends AsyncDisposable {
   /** The base URL, for example `http://127.0.0.1:3000`. */
   readonly url: string;
-  /** The port that the server listens on. */
   readonly port: number;
   /** Stop accepting connections, and resolve when the open requests are complete. */
   readonly close: () => Promise<void>;
@@ -73,7 +62,6 @@ export function serve(handler: WebHandler | Routes, options: ServeOptions = {}):
   });
 }
 
-/** The handler of a path, or `undefined` when no prefix matches. */
 function router(handler: WebHandler | Routes): (path: string) => WebHandler | undefined {
   if (typeof handler === "function") return () => handler;
   const prefixes = Object.keys(handler).sort((a, b) => b.length - a.length);
@@ -111,7 +99,6 @@ async function answer(incoming: IncomingMessage, outgoing: ServerResponse, route
   }
 }
 
-/** The web request of an incoming request. It throws when the request has no valid URL. */
 function requestOf(incoming: IncomingMessage, signal: AbortSignal): Request {
   const url = new URL(incoming.url ?? "/", `http://${incoming.headers.host ?? "localhost"}`);
   const headers = new Headers();
@@ -127,10 +114,6 @@ function requestOf(incoming: IncomingMessage, signal: AbortSignal): Request {
   return new Request(url, withBody);
 }
 
-/**
- * Write a web response. The body waits when the connection is full. When the client closes the connection, the body
- * is cancelled.
- */
 async function send(response: Response, outgoing: ServerResponse): Promise<void> {
   const headers: Record<string, string | string[]> = {};
   for (const [name, value] of response.headers) if (name !== "set-cookie") headers[name] = value;
@@ -160,7 +143,6 @@ async function send(response: Response, outgoing: ServerResponse): Promise<void>
   }
 }
 
-/** Resolve when the connection can take more data, or when it closes. */
 function drained(outgoing: ServerResponse): Promise<void> {
   return new Promise((resolve) => {
     const done = () => {
@@ -173,12 +155,7 @@ function drained(outgoing: ServerResponse): Promise<void> {
   });
 }
 
-/**
- * The body of an incoming request, as a web stream. The stream reads the request only when the handler reads the body,
- * and the request pauses after each chunk until the handler reads again. A request that the handler does not read stays
- * unread, so that Node.js discards it after the response. When the handler cancels the stream, the request discards the
- * rest of its body.
- */
+/** A request that the handler does not read stays unread, so that Node.js discards it after the response. */
 function bodyOf(incoming: IncomingMessage): ReadableStream<Uint8Array> {
   let open = true;
   let reading = false;

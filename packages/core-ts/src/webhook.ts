@@ -1,9 +1,3 @@
-/**
- * Webhook delivery through MCP (spec/bindings/mcp.md#webhook), on Node.js. The server sends the occurrences of each
- * webhook subscription in HTTP `POST` requests to a URL of the client, signed as Standard Webhooks specifies.
- *
- * This module uses `node:https`, `node:dns` and `node:crypto`. `@acid-cat/core-ts/node` exports it.
- */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns";
 import type { LookupAddress } from "node:dns";
@@ -32,7 +26,6 @@ import type { JsonRpcError, OpenSession, OwnSession, RpcAnswer, WebhookDelivery 
 import { isMaxAgeMs } from "./session.ts";
 import type { Occurrences } from "./subscription.ts";
 
-/** The settings of webhook delivery. Each limit has the default of spec/bindings/mcp.md#webhook. */
 export interface WebhookOptions {
   /**
    * The allowlist: a URL for which this function gives `true` gets deliveries with no verification. With no function,
@@ -69,7 +62,6 @@ export interface WebhookOptions {
   readonly clock?: Clock | undefined;
 }
 
-/** The answer of an endpoint: its status and its text, or the category of the failure. */
 type Posted = { readonly status: number; readonly text: string } | { readonly failure: WebhookError };
 
 interface Subscription {
@@ -79,10 +71,8 @@ interface Subscription {
   readonly url: URL;
   readonly own: OwnSession;
   readonly occurrences: Occurrences<unknown>;
-  /** Aborts when the subscription ends. It stops the waits between attempts. */
   readonly ended: AbortController;
   secret: string;
-  /** The secret before the last change, and the time until which the server still signs with it. */
   previous: { readonly secret: string; readonly until: number } | undefined;
   expiresAt: number;
   cancelExpiry: () => void;
@@ -110,16 +100,12 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     timeoutMs: settings.timeoutMs,
   };
   const subscriptions = new Map<string, Subscription>();
-  /** The subscriptions that start, by key. A second request with the same key waits for the first. */
   const starting = new Map<string, Promise<unknown>>();
-  /** The new subscriptions of each principal that are starting now, so that they count for the limit. */
   const admitted = new Map<string, number>();
-  /** The pairs of principal and URL, as the client sent it, that agreed to get deliveries, while the process runs. */
   const verified = new Set<string>();
   const pumps = new Set<Promise<void>>();
   let closed = false;
 
-  /** The headers of a delivery, with a new timestamp and signature. */
   async function headersOf(subscription: { readonly id: string; readonly secrets: readonly string[] }, webhookId: string, body: string): Promise<Record<string, string>> {
     const timestamp = Math.floor(clock.now() / 1000);
     return {
@@ -131,14 +117,9 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     };
   }
 
-  /** The secrets that sign a delivery now: the new secret, and the old secret during the grace time. */
   const secretsOf = (subscription: Subscription): string[] =>
     subscription.previous !== undefined && clock.now() < subscription.previous.until ? [subscription.secret, subscription.previous.secret] : [subscription.secret];
 
-  /**
-   * Send one delivery, with retries. The result is `delivered`, `abandoned`, or `stopped` when the subscription ended
-   * before the end of the attempts.
-   */
   async function deliver(subscription: Subscription, webhookId: string, body: string): Promise<"delivered" | "abandoned" | "stopped"> {
     const start = clock.now();
     for (let attempt = 1; ; attempt += 1) {
@@ -157,7 +138,6 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     }
   }
 
-  /** Send the occurrences of a subscription one at a time, in order, until the subscription ends. */
   async function pump(subscription: Subscription): Promise<void> {
     for (;;) {
       let step: IteratorResult<Occurrence<unknown>, undefined>;
@@ -169,7 +149,6 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
         await deliver(subscription, webhookIdOf("terminated"), body);
         return end(subscription);
       }
-      // Complete, or cancelled: the subscription ends with no message.
       if (step.done === true) return end(subscription);
       const { truncated, cursor: own, ...rest } = step.value;
       if (truncated === true) {
@@ -183,7 +162,6 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     }
   }
 
-  /** End a subscription: cancel it, close its session, and forget it. */
   async function end(subscription: Subscription): Promise<void> {
     if (subscription.ended.signal.aborted) return;
     subscription.ended.abort();
@@ -193,7 +171,6 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     await subscription.own.close();
   }
 
-  /** Grant a lifetime. When it ends with no renewal, the subscription is cancelled. */
   function grant(subscription: Subscription, ttlMs: number | null | undefined): void {
     const lifetime = webhookGrantMs(ttlMs, settings);
     subscription.expiresAt = clock.now() + lifetime;
@@ -201,7 +178,6 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     subscription.cancelExpiry = clock.schedule(() => void end(subscription), lifetime);
   }
 
-  /** Verify that the endpoint agrees to get deliveries for this principal. The result is the reason of a failure. */
   async function verify(principal: string, rawUrl: string, url: URL, id: string, secret: string): Promise<WebhookError | undefined> {
     const pair = canonicalJson([principal, rawUrl]);
     if (verified.has(pair) || options.allow?.(url) === true) return undefined;
@@ -227,17 +203,13 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     },
   });
 
-  /** Start a new subscription: subscribe in a session of its own, verify the endpoint, then send the occurrences. */
   async function start(principal: string, key: string, url: URL, secret: string, request: WebhookRequest, open: OpenSession): Promise<RpcAnswer> {
-    // The check and the count are one step, before the first await, so that parallel new subscriptions of one principal
-    // cannot all pass the limit. A subscription that is starting counts.
     const count = [...subscriptions.values()].filter((each) => each.principal === principal).length + (admitted.get(principal) ?? 0);
     if (count >= settings.maxSubscriptions) {
       return { error: { code: MCP_EVENT_ERRORS.resourceExhausted, message: "Too many webhook subscriptions.", data: { limit: "subscriptions", max: settings.maxSubscriptions } } };
     }
     admitted.set(principal, (admitted.get(principal) ?? 0) + 1);
     let held = true;
-    /** Stop counting the subscription as starting. It runs once: when the subscription exists, or when the start fails. */
     const release = () => {
       if (!held) return;
       held = false;
@@ -252,7 +224,6 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     }
   }
 
-  /** Start a subscription that the limit admitted. `release` runs in the same step that adds the subscription. */
   async function startAdmitted(principal: string, key: string, url: URL, secret: string, request: WebhookRequest, open: OpenSession, release: () => void): Promise<RpcAnswer> {
     const id = await webhookSubscriptionId(principal, request.rawUrl, request.name, request.input);
     const own = await open();
@@ -286,7 +257,6 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       lastDeliveryAt: null,
       lastError: null,
     };
-    // The subscription counts once: it leaves the starting count in the same step that adds it.
     release();
     subscriptions.set(key, subscription);
     grant(subscription, request.ttlMs);
@@ -302,14 +272,10 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       const { url, secret } = read;
       // The key has the URL as the client sent it, not the parsed URL (spec/bindings/mcp.md#webhook).
       const key = subscriptionKey(principal, read.rawUrl, read.name, read.input);
-      // Wait until no request with this key starts a subscription. Each waiter checks again after it wakes, because
-      // another waiter can start first.
       for (let pending = starting.get(key); pending !== undefined; pending = starting.get(key)) await pending.catch(() => undefined);
       const existing = subscriptions.get(key);
       if (existing !== undefined) {
-        // A subscription with this key exists, so the event exists: an invalid maxAgeMs is the next failure that applies.
         if (!isMaxAgeMs(read.maxAgeMs)) return invalidParams("maxAgeMs must be an integer that is 0 or more.");
-        // Renew: a new lifetime and the new secret. The cursor of the request changes nothing.
         if (existing.secret !== secret) {
           existing.previous = { secret: existing.secret, until: clock.now() + settings.rotationGraceMs };
           existing.secret = secret;
@@ -342,24 +308,19 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
   };
 }
 
-/** The parameters of `events/subscribe`, checked. */
 interface WebhookRequest {
   readonly name: string;
   readonly input: unknown;
   readonly cursor: string | undefined;
   readonly maxAgeMs: number | undefined;
   readonly ttlMs: number | null | undefined;
-  /** The URL to post to and to verify. */
   readonly url: URL;
-  /** `delivery.url` as the client sent it. The subscription key and the subscription id use it. */
   readonly rawUrl: string;
   readonly secret: string;
 }
 
-/** The key of a webhook subscription: the principal, `delivery.url` as the client sent it, the id, and the input. */
 const subscriptionKey = (principal: string, rawUrl: string, name: string, input: unknown): string => canonicalJson([principal, rawUrl, name, input]);
 
-/** Read and check the parameters of `events/subscribe`. */
 function readSubscribe(params: JsonObject): WebhookRequest | { readonly error: JsonRpcError } {
   const read = subscriptionParams(params);
   if ("error" in read) return read;
@@ -372,22 +333,17 @@ function readSubscribe(params: JsonObject): WebhookRequest | { readonly error: J
   return { ...read, ttlMs, url: new URL(url), rawUrl: url, secret };
 }
 
-/** The error `CallbackEndpointError`. */
 const callbackError = (reason: WebhookError): JsonRpcError => ({ code: MCP_EVENT_ERRORS.callbackEndpoint, message: "The callback endpoint did not agree to get deliveries.", data: { reason } });
 
-/** The category of a status that is not `2xx`. */
 const statusError = (status: number): WebhookError => (status >= 500 ? "http_5xx" : "http_4xx");
 
 const ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-/** A new `webhook-id`: `msg_` and random letters and digits, or `msg_<type>_` and random letters and digits for a control message. */
 function webhookIdOf(type?: string): string {
-  // 248 is the largest multiple of 62 below 256, so that each character is equally likely.
   const characters = [...randomBytes(48)].filter((byte) => byte < 248).slice(0, 24).map((byte) => ALPHANUMERIC.charAt(byte % 62));
   return `msg_${type === undefined ? "" : `${type}_`}${characters.join("")}`;
 }
 
-/** The `challenge` of the JSON answer to a verification, or `undefined`. */
 function challengeOf(text: string): string | undefined {
   try {
     const value: unknown = JSON.parse(text);
@@ -397,7 +353,6 @@ function challengeOf(text: string): string | undefined {
   }
 }
 
-/** Compare two texts in constant time. */
 function sameText(received: string | undefined, expected: string): boolean {
   if (received === undefined) return false;
   const a = Buffer.from(received);
@@ -405,26 +360,18 @@ function sameText(received: string | undefined, expected: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-// --- The network --------------------------------------------------------------------------------------------------
-
 interface Network {
   readonly allowPrivateNetworks: boolean;
   readonly ca: readonly (string | Buffer)[] | undefined;
   readonly timeoutMs: number;
 }
 
-/** The largest answer that the server reads, in bytes. The server reads only the answer to a verification. */
 const MAXIMUM_ANSWER_BYTES = 65_536;
 
-/** An error of the lookup: the host name has no address that the server can connect to. */
 class BlockedAddressError extends Error {
   readonly code = "EBLOCKEDADDRESS";
 }
 
-/**
- * Send one `POST` request. The server resolves the host name, and connects only to an address that it accepts. It
- * connects to that address, with the host name in the `Host` header and in TLS. It does not follow redirects.
- */
 function post(url: URL, headers: Record<string, string>, body: string, network: Network): Promise<Posted> {
   const host = url.hostname.startsWith("[") ? url.hostname.slice(1, -1) : url.hostname;
   const accepts = (address: string) => network.allowPrivateNetworks || isGloballyRoutable(address);
@@ -480,7 +427,6 @@ function post(url: URL, headers: Record<string, string>, body: string, network: 
   });
 }
 
-/** The category of an error of the network. */
 function failureOf(error: Error): WebhookError {
   const code = "code" in error && typeof error.code === "string" ? error.code : "";
   if (code === "ETIMEDOUT" || code === "ESOCKETTIMEDOUT") return "timeout";
