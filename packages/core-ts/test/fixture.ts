@@ -77,7 +77,7 @@ export class Watchers {
   readonly #mark: ((path: string) => Promise<void>) | undefined;
   readonly #keepAlive: boolean;
 
-  constructor(mark?: (path: string) => Promise<void>, keepAlive = true) {
+  constructor(mark?: (path: string) => Promise<void>, { keepAlive = true }: { readonly keepAlive?: boolean } = {}) {
     this.#mark = mark;
     this.#keepAlive = keepAlive;
   }
@@ -137,8 +137,8 @@ export class Watchers {
 }
 
 export class WatchersThatIgnoreCancellation extends Watchers {
-  constructor(mark?: (path: string) => Promise<void>, keepAlive = false) {
-    super(mark, keepAlive);
+  constructor(mark?: (path: string) => Promise<void>, { keepAlive = false }: { readonly keepAlive?: boolean } = {}) {
+    super(mark, { keepAlive });
   }
 
   override watch(key: string): AsyncIterable<string> {

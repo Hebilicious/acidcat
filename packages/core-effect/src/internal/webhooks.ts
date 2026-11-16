@@ -1,9 +1,9 @@
 import { callFailure, canonicalJson, isJsonObject, MCP_EVENT_ERRORS, MCP_WEBHOOK_DEFAULTS, mcpSubscribeError, webhookGrantMs, webhookSecretBytes, webhookSignature, webhookSubscriptionId } from "@acid-cat/spec-ts";
-import type { JsonObject, Occurrence, Resume, WebhookError } from "@acid-cat/spec-ts";
+import type { JsonObject, Occurrence, WebhookError } from "@acid-cat/spec-ts";
 import { Clock, Data, Effect, Exit, Fiber, Option, Schedule, Schema, Scope, Semaphore, Stream } from "effect";
 
 import type { Opener } from "./poll.ts";
-import { maxAgeOf, resumeIssue } from "./resume.ts";
+import { maxAgeFailure, maxAgeOf, resumeOf } from "./resume.ts";
 
 /** One HTTP `POST` to the URL of a webhook subscription. */
 export interface WebhookRequest {
@@ -249,13 +249,13 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
         const input = params.arguments ?? {};
         const id = yield* Effect.promise(() => webhookSubscriptionId(principal, params.delivery.url, params.name, input));
         const scope = yield* Scope.make();
-        const maxAgeMs = maxAgeOf(params.maxAgeMs);
-        const resume: Resume = {
-          ...(typeof params.cursor === "string" ? { cursor: params.cursor } : {}),
-          ...(maxAgeMs === undefined ? {} : { maxAgeMs }),
-        };
+        const maxAge = maxAgeOf(params.maxAgeMs);
         const session = yield* open(scope);
-        const started = yield* Effect.result(session.subscribe(params.name, input, resume).pipe(Scope.provide(scope)));
+        if (maxAge._tag === "Invalid") {
+          yield* Scope.close(scope, Exit.void);
+          return { error: mcpSubscribeError(maxAgeFailure(session.view.events, params.name, maxAge.issue)) };
+        }
+        const started = yield* Effect.result(session.subscribe(params.name, input, resumeOf(params.cursor, maxAge)).pipe(Scope.provide(scope)));
         if (started._tag === "Failure") {
           yield* Scope.close(scope, Exit.void);
           return { error: mcpSubscribeError({ kind: started.failure.kind, message: started.failure.message }) };
@@ -331,9 +331,8 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
               };
               return yield* create(key, principal, params, url, open, release).pipe(Effect.ensuring(Effect.sync(release)));
             }
-            const maxAgeMs = maxAgeOf(params.maxAgeMs);
-            const issue = maxAgeMs === undefined ? undefined : resumeIssue({ maxAgeMs });
-            if (issue !== undefined) return { error: mcpSubscribeError(callFailure("invalid-input", issue)) };
+            const maxAge = maxAgeOf(params.maxAgeMs);
+            if (maxAge._tag === "Invalid") return { error: mcpSubscribeError(callFailure("invalid-input", maxAge.issue)) };
             const now = yield* Clock.currentTimeMillis;
             hook.expiresAt = now + webhookGrantMs(params.ttlMs, limits);
             if (params.delivery.secret !== hook.secret) {

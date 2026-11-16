@@ -243,35 +243,22 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
           ...(resume.cursor === undefined ? {} : { cursor: resume.cursor }),
           ...(resume.maxAgeMs === undefined ? {} : { maxAgeMs: resume.maxAgeMs }),
         };
-        const queue = yield* Queue.sliding<{ readonly sequence: number; readonly occurrence: Occurrence<P> }, CallFailed | Cause.Done>(capacity);
-        let sequence = 0;
+        const buffer = yield* truncatingBuffer<P>(capacity);
         const provider = opener(where).pipe(
-          Stream.runForEach((emitted) =>
-            Effect.sync(() => {
-              const occurrence = occurrenceOf(id, emitted, newEventId, () => new Date());
-              Queue.offerUnsafe(queue, { sequence: sequence++, occurrence });
-            }),
-          ),
+          Stream.runForEach((emitted) => Effect.sync(() => buffer.offer(occurrenceOf(id, emitted, newEventId, () => new Date())))),
           Effect.exit,
           Effect.flatMap((exit) => {
-            if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) return Queue.end(queue);
+            if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) return buffer.end;
             const disagrees = Cause.findErrorOption(exit.cause)._tag === "Some";
             return Effect.logError(disagrees ? "An event gave a payload that does not agree with its schema" : "An event failed with a defect", Cause.pretty(exit.cause)).pipe(
-              Effect.andThen(Queue.fail(queue, new CallFailed(callFailure("internal", disagrees ? "The event gave a payload that does not agree with its schema." : "The event failed.")))),
+              Effect.andThen(buffer.fail(new CallFailed(callFailure("internal", disagrees ? "The event gave a payload that does not agree with its schema." : "The event failed.")))),
             );
           }),
-          Effect.onInterrupt(() => Queue.end(queue)),
+          Effect.onInterrupt(() => buffer.end),
         );
         const fiber = yield* FiberSet.run(running, inSession(provider));
         yield* Effect.addFinalizer(() => Fiber.interrupt(fiber));
-        let delivered = -1;
-        return Stream.fromQueue(queue).pipe(
-          Stream.map(({ sequence: next, occurrence }) => {
-            const skipped = next !== delivered + 1;
-            delivered = next;
-            return skipped && occurrence.truncated !== true ? { ...occurrence, truncated: true as const } : occurrence;
-          }),
-        );
+        return buffer.occurrences;
       });
 
     const subscribe: Session<R>["subscribe"] = (id, input, resume) => start(id, undefined, (event) => event.pipeline.prepare(input), resume);
@@ -311,6 +298,34 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
       perform,
     });
     return session;
+  });
+
+interface TruncatingBuffer<P> {
+  readonly offer: (occurrence: Occurrence<P>) => void;
+  readonly end: Effect.Effect<boolean>;
+  readonly fail: (failure: CallFailed) => Effect.Effect<boolean>;
+  readonly occurrences: Stream.Stream<Occurrence<P>, CallFailed>;
+}
+
+const truncatingBuffer = <P>(capacity: number): Effect.Effect<TruncatingBuffer<P>> =>
+  Effect.gen(function* () {
+    const queue = yield* Queue.sliding<{ readonly sequence: number; readonly occurrence: Occurrence<P> }, CallFailed | Cause.Done>(capacity);
+    let offered = 0;
+    let delivered = -1;
+    return {
+      offer: (occurrence) => {
+        Queue.offerUnsafe(queue, { sequence: offered++, occurrence });
+      },
+      end: Queue.end(queue),
+      fail: (failure) => Queue.fail(queue, failure),
+      occurrences: Stream.fromQueue(queue).pipe(
+        Stream.map(({ sequence, occurrence }) => {
+          const dropped = sequence !== delivered + 1;
+          delivered = sequence;
+          return dropped && occurrence.truncated !== true ? { ...occurrence, truncated: true as const } : occurrence;
+        }),
+      ),
+    };
   });
 
 const newEventId = (): string => globalThis.crypto.randomUUID();

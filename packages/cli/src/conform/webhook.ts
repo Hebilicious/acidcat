@@ -11,6 +11,7 @@ import { count, eventRequests, httpChannel } from "./mcp.ts";
 import type { Channel, Message } from "./mcp.ts";
 
 const RULE = "spec/bindings/mcp.md#webhook";
+const REFRESH_BEFORE_PRECISION_MS = 1;
 
 export interface WebhookSettings {
   /** The principal that the deployment gives to a request with the header `Authorization: Bearer <principal>`. */
@@ -376,7 +377,7 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
         const { refreshBefore } = await subscribe("fixture.watch", input, hook.url, newSecret(), signal, extra);
         const after = Date.now();
         expect(
-          refreshBefore >= before + granted - 1 && refreshBefore <= after + granted + 1,
+          refreshBefore >= before + granted - REFRESH_BEFORE_PRECISION_MS && refreshBefore <= after + granted + REFRESH_BEFORE_PRECISION_MS,
           `for ${what}, refreshBefore must be ${granted} ms after the request, got ${refreshBefore - before} ms after its start`,
         );
       } finally {

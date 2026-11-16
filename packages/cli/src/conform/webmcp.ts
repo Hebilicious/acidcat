@@ -190,6 +190,14 @@ function isBundled(schema: JsonObject): boolean {
   return bundled;
 }
 
+const requiredOf = (schema: JsonObject): readonly string[] => (isStringArray(schema.required) ? schema.required : []);
+
+function expectSameInputShape(tool: string, schema: JsonObject, input: JsonObject): void {
+  expectEqual(schema.type, "object", `type of the input schema of ${tool}`);
+  expectEqual(sorted(Object.keys(schema.properties ?? {})), sorted(Object.keys(input.properties ?? {})), `properties of ${tool}`);
+  expectEqual(sorted(requiredOf(schema)), sorted(requiredOf(input)), `required properties of ${tool}`);
+}
+
 const names = async (driver: WebMcpDriver, signal: AbortSignal) => sorted((await driver.tools(signal)).map((tool) => tool.name));
 
 async function heldKeys(driver: WebMcpDriver, signal: AbortSignal): Promise<readonly string[]> {
@@ -218,11 +226,7 @@ export async function checkWebMcp(driver: WebMcpDriver, options: { readonly dead
       expectEqual(tool.description, view[tool.name]?.description, `description of ${tool.name}`);
       const schema = tool.inputSchema;
       expect(isObject(schema), `the input schema of ${tool.name} must be an object`);
-      const input: JsonObject = view[tool.name]?.input ?? {};
-      const required = (object: JsonObject) => (isStringArray(object.required) ? object.required : []);
-      expectEqual(schema.type, "object", `type of the input schema of ${tool.name}`);
-      expectEqual(sorted(Object.keys(schema.properties ?? {})), sorted(Object.keys(input.properties ?? {})), `properties of ${tool.name}`);
-      expectEqual(sorted(required(schema)), sorted(required(input)), `required properties of ${tool.name}`);
+      expectSameInputShape(tool.name, schema, view[tool.name]?.input ?? {});
       expect(isBundled(schema), `the input schema of ${tool.name} must be bundled`);
     }
   });

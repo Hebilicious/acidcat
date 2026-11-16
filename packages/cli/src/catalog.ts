@@ -24,18 +24,6 @@ const KNOWN_MEMBERS = {
   event: ["description", "audience", "input", "payload"],
 };
 
-const decodeCatalog = (() => {
-  const { $defs, $schema: _schema, $id: _id, ...root } = catalogJsonSchema;
-  const definitions: JsonSchema.Definitions = $defs;
-  const schema = SchemaRepresentation.fromJsonSchemaDocument(
-    { dialect: "draft-2020-12", schema: root, definitions },
-    { patterns: "apply" },
-  );
-  // A schema imported from JSON Schema has no transformations, so its type side checks the same values and needs no
-  // services to decode.
-  return Schema.decodeUnknownResult(Schema.toType(schema));
-})();
-
 const optional = (object: JsonObject, key: string, isMember: (value: unknown) => boolean): boolean =>
   !Object.hasOwn(object, key) || isMember(object[key]);
 
@@ -70,6 +58,19 @@ export const isCatalog = (value: unknown): value is Catalog =>
   isRecordOf(value.capabilities, isCapability) &&
   optional(value, "events", (events) => isRecordOf(events, isEvent));
 
+const decodeCatalog = (() => {
+  const { $defs, $schema: _schema, $id: _id, ...root } = catalogJsonSchema;
+  const definitions: JsonSchema.Definitions = $defs;
+  const schema = SchemaRepresentation.fromJsonSchemaDocument(
+    { dialect: "draft-2020-12", schema: root, definitions },
+    { patterns: "apply" },
+  );
+  // A schema imported from JSON Schema has no transformations, so its type side checks the same values and needs no
+  // services to decode.
+  const catalog = Schema.toType(schema).pipe(Schema.refine(isCatalog, { message: "the members do not have the types of a catalog" }));
+  return Schema.decodeUnknownResult(catalog);
+})();
+
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
 
 /** Check a catalog. When `text` is given, the file must also be in canonical form. */
@@ -81,10 +82,7 @@ export function check(document: unknown, text?: string): Report {
     );
     return { errors, warnings: [] };
   }
-  if (!isCatalog(document)) {
-    return { errors: ["the catalog: the members do not have the types of a catalog"], warnings: [] };
-  }
-  const catalog = document;
+  const catalog = decoded.success;
   const errors = ruleErrors(catalog);
   const warnings = [...unknownMembers(catalog), ...(errors.length === 0 ? schemaWarnings(catalog) : [])];
   if (text !== undefined && text !== canonicalText(catalog)) {

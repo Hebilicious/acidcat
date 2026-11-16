@@ -4,12 +4,14 @@ export interface SseMessage {
   readonly data: string;
 }
 
+type SseFrame = { readonly type: "comment" } | { readonly type: "message"; readonly message: SseMessage };
+
 export function sseReader(response: Response) {
   if (response.body === null) throw new Error("the response has no body");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let text = "";
-  const read = async (): Promise<SseMessage | undefined> => {
+  const read = async (): Promise<SseFrame | undefined> => {
     for (;;) {
       const end = /\r?\n\r?\n/.exec(text);
       if (end !== null) {
@@ -25,18 +27,19 @@ export function sseReader(response: Response) {
   return {
     async next(): Promise<SseMessage | undefined> {
       for (;;) {
-        const message = await read();
-        if (message?.event !== "comment") return message;
+        const frame = await read();
+        if (frame === undefined) return undefined;
+        if (frame.type === "message") return frame.message;
       }
     },
     cancel: () => reader.cancel().catch(() => undefined),
   };
 }
 
-function parse(raw: string): SseMessage {
+function parse(raw: string): SseFrame {
   const fields: { event?: string; id?: string; data: string[] } = { data: [] };
   const lines = raw.split(/\r?\n/);
-  if (lines.every((line) => line.startsWith(":"))) return { event: "comment", data: "" };
+  if (lines.every((line) => line.startsWith(":"))) return { type: "comment" };
   for (const line of lines) {
     if (line.startsWith(":")) continue;
     const colon = line.indexOf(":");
@@ -46,5 +49,6 @@ function parse(raw: string): SseMessage {
     else if (name === "id") fields.id = value;
     else if (name === "data") fields.data.push(value);
   }
-  return { ...(fields.event === undefined ? {} : { event: fields.event }), ...(fields.id === undefined ? {} : { id: fields.id }), data: fields.data.join("\n") };
+  const message = { ...(fields.event === undefined ? {} : { event: fields.event }), ...(fields.id === undefined ? {} : { id: fields.id }), data: fields.data.join("\n") };
+  return { type: "message", message };
 }

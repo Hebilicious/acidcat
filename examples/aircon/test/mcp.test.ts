@@ -48,7 +48,7 @@ test("the server of the application has its own tools", async () => {
 
 test("the MCP binding serves one tool for each capability, on the same unit", async () => {
   const application = await connect("/mcp");
-  await application.callTool({ name: "set_controls", arguments: { power: true, fan: "high" } });
+  await application.callTool({ name: "set_controls", arguments: { power: true, mode: "heat", fan: "high", targetCelsius: 24 } });
 
   const binding = await connect("/capabilities/mcp");
   const { tools } = await binding.listTools();

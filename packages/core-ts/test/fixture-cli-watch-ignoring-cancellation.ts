@@ -6,4 +6,4 @@ import { fixture, Holds, options, WatchersThatIgnoreCancellation } from "./fixtu
 
 const mark = (path: string) => writeFile(path, "");
 
-cliMain(fixture, { name: "fixture", version: "0.0.0", ...options(new Holds(mark), new WatchersThatIgnoreCancellation(mark, true)) });
+cliMain(fixture, { name: "fixture", version: "0.0.0", ...options(new Holds(mark), new WatchersThatIgnoreCancellation(mark, { keepAlive: true })) });

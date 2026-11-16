@@ -14,6 +14,7 @@ const CLIENT_CAPABILITIES_KEY = "io.modelcontextprotocol/clientCapabilities";
 const SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo";
 
 const HANDSHAKE_VERSIONS = ["2025-11-25", "2025-06-18"] as const;
+const [LATEST_HANDSHAKE_VERSION] = HANDSHAKE_VERSIONS;
 
 const CURRENT_ONLY_MEMBERS = new Set(["_meta", "resultType", "ttlMs", "cacheScope"]);
 
@@ -36,7 +37,7 @@ async function answer(handler: WebHandler, request: Request, message: JsonObject
   const method = typeof message["method"] === "string" ? message["method"] : "";
   const params = isJsonObject(message["params"]) ? message["params"] : {};
   const ownMethod = method === "tools/list" || method === "tools/call" ? method : "server/discover";
-  const response = await handler(current(request, ownMethod, ownMethod === "server/discover" ? {} : params));
+  const response = await handler(asCurrentRevisionRequest(request, ownMethod, ownMethod === "server/discover" ? {} : params));
   if (!response.ok) return response;
   const reply = parseObject(await response.text()) ?? {};
   if (!("id" in message)) return new Response(null, { status: 202 });
@@ -54,7 +55,7 @@ function isHandshakeRequest(header: string | null, metaVersion: unknown): boolea
   return HANDSHAKE_VERSIONS.some((version) => version === header);
 }
 
-function current(request: Request, method: string, params: JsonObject): Request {
+function asCurrentRevisionRequest(request: Request, method: string, params: JsonObject): Request {
   const headers = new Headers(request.headers);
   headers.set("MCP-Protocol-Version", MCP_PROTOCOL_VERSION);
   headers.set("Mcp-Method", method);
@@ -77,7 +78,7 @@ function initializeResult(offered: unknown, discovered: JsonObject): JsonObject 
   const instructions = typeof discovered["instructions"] === "string" ? discovered["instructions"] : undefined;
   const capabilities = isJsonObject(discovered["capabilities"]) ? discovered["capabilities"] : {};
   return {
-    protocolVersion: HANDSHAKE_VERSIONS.find((each) => each === offered) ?? HANDSHAKE_VERSIONS[0],
+    protocolVersion: HANDSHAKE_VERSIONS.find((each) => each === offered) ?? LATEST_HANDSHAKE_VERSION,
     capabilities: { ...withoutEvents(capabilities), tools: { listChanged: false } },
     serverInfo: { name, version },
     ...(instructions === undefined ? {} : { instructions }),

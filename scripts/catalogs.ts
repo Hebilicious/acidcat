@@ -3,7 +3,9 @@ import path from "node:path";
 
 export const root = path.resolve(import.meta.dirname, "..");
 
-const ignored = ["**/node_modules/**", ".worktrees/**", ".moon/**", "**/target/**", "**/dist/**", "**/.out/**", "**/rejected/**"];
+export const GENERATED_DIRECTORIES = ["**/node_modules/**", ".worktrees/**", ".moon/**", "**/target/**", "**/dist/**", "**/.out/**"];
+const REJECTED_TEST_INPUTS = ["**/rejected/**"];
+const ignored = [...GENERATED_DIRECTORIES, ...REJECTED_TEST_INPUTS];
 
 export const pklSources = (): string[] =>
   globSync("**/*.pkl", { cwd: root, exclude: ignored })

@@ -136,11 +136,7 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
       }),
     ).pipe(Effect.forkIn(scope));
 
-    const follower = yield* session.changes.pipe(
-      Stream.runForEach(() => Queue.offer(requests, undefined)),
-      Effect.forkIn(scope, { startImmediately: true }),
-    );
-    yield* Queue.offer(requests, undefined);
+    const follower = yield* subscribeThenRead(session.changes, Queue.offer(requests, undefined), scope);
 
     const disposed = SubscriptionRef.set(status, { phase: "disposed", message: null });
 
@@ -168,4 +164,15 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
     );
 
     return Option.some<Installation>({ status, retry: Queue.offer(requests, undefined).pipe(Effect.asVoid), remove });
+  });
+
+/** A change that comes before the first `read` ends is not lost: the follow starts before it. */
+const subscribeThenRead = <A, X>(changes: Stream.Stream<A>, read: Effect.Effect<X>, scope: Scope.Scope): Effect.Effect<Fiber.Fiber<void>> =>
+  Effect.gen(function* () {
+    const follower = yield* changes.pipe(
+      Stream.runForEach(() => read),
+      Effect.forkIn(scope, { startImmediately: true }),
+    );
+    yield* read;
+    return follower;
   });

@@ -490,23 +490,51 @@ export function isGloballyRoutable(address: string): boolean {
   if (ipv4 !== undefined) return isGlobalIpv4(ipv4);
   const ipv6 = ipv6Words(address);
   if (ipv6 === undefined) return false;
-  const [a = 0, b = 0, c = 0, d = 0, e = 0, f = 0, g = 0, h = 0] = ipv6;
-  // IPv4-mapped (::ffff:a.b.c.d): check the IPv4 address.
-  if (a === 0 && b === 0 && c === 0 && d === 0 && e === 0 && f === 0xffff) return isGlobalIpv4([g >> 8, g & 255, h >> 8, h & 255]);
-  if (ipv6.every((word) => word === 0)) return false; // ::
-  if (a === 0 && b === 0 && c === 0 && d === 0 && e === 0 && f === 0 && g === 0 && h === 1) return false; // ::1
-  if (a === 0x64 && b === 0xff9b) return false; // 64:ff9b::/96 and 64:ff9b:1::/48
-  if (a === 0x100 && b === 0 && c === 0 && d === 0) return false; // 100::/64
-  if (a === 0x2001 && b < 0x200) return false; // 2001::/23
-  if (a === 0x2001 && b === 0xdb8) return false; // 2001:db8::/32
-  if (a === 0x2002) return false; // 2002::/16
-  if (a === 0x3fff && b < 0x1000) return false; // 3fff::/20
-  if (a === 0x5f00) return false; // 5f00::/16
-  if ((a & 0xfe00) === 0xfc00) return false; // fc00::/7
-  if ((a & 0xffc0) === 0xfe80) return false; // fe80::/10
-  if ((a & 0xff00) === 0xff00) return false; // ff00::/8
-  return (a & 0xe000) === 0x2000; // 2000::/3 is the global unicast range.
+  if (inIpv6Range(ipv6, IPV4_MAPPED)) {
+    const [g = 0, h = 0] = ipv6.slice(6);
+    return isGlobalIpv4([g >> 8, g & 255, h >> 8, h & 255]);
+  }
+  if (IPV6_NOT_GLOBAL.some((range) => inIpv6Range(ipv6, range))) return false;
+  return inIpv6Range(ipv6, IPV6_GLOBAL_UNICAST);
 }
+
+interface Ipv6Range {
+  readonly words: readonly number[];
+  readonly prefixLength: number;
+}
+
+function ipv6Range(cidr: string): Ipv6Range {
+  const [address = "", prefixLength = ""] = cidr.split("/");
+  const words = ipv6Words(address);
+  if (words === undefined || !/^\d+$/.test(prefixLength)) throw new Error(`${cidr} is not an IPv6 range`);
+  return { words, prefixLength: Number(prefixLength) };
+}
+
+function inIpv6Range(words: readonly number[], range: Ipv6Range): boolean {
+  return words.every((word, index) => {
+    const bits = Math.min(16, Math.max(0, range.prefixLength - 16 * index));
+    const mask = (0xffff << (16 - bits)) & 0xffff;
+    return (word & mask) === ((range.words[index] ?? 0) & mask);
+  });
+}
+
+const IPV4_MAPPED = ipv6Range("::ffff:0:0/96");
+const IPV6_GLOBAL_UNICAST = ipv6Range("2000::/3");
+const IPV6_NOT_GLOBAL = [
+  "::/128",
+  "::1/128",
+  "64:ff9b::/96",
+  "64:ff9b:1::/48",
+  "100::/64",
+  "2001::/23",
+  "2001:db8::/32",
+  "2002::/16",
+  "3fff::/20",
+  "5f00::/16",
+  "fc00::/7",
+  "fe80::/10",
+  "ff00::/8",
+].map(ipv6Range);
 
 function isGlobalIpv4([a = 0, b = 0, c = 0]: readonly number[]): boolean {
   if (a === 0 || a === 10 || a === 127) return false;
@@ -529,29 +557,30 @@ function ipv4Bytes(address: string): number[] | undefined {
   return bytes.every((byte) => byte <= 255) ? bytes : undefined;
 }
 
+function splitEmbeddedIpv4(address: string): { readonly hexadecimal: string; readonly ipv4Words: readonly number[] } {
+  const lastColon = address.lastIndexOf(":");
+  const ipv4 = lastColon === -1 ? undefined : ipv4Bytes(address.slice(lastColon + 1));
+  if (ipv4 === undefined) return { hexadecimal: address, ipv4Words: [] };
+  const [w = 0, x = 0, y = 0, z = 0] = ipv4;
+  const head = address.slice(0, lastColon + 1);
+  return { hexadecimal: head.endsWith("::") ? head : head.slice(0, -1), ipv4Words: [(w << 8) | x, (y << 8) | z] };
+}
+
 function ipv6Words(input: string): number[] | undefined {
   let address = input.startsWith("[") && input.endsWith("]") ? input.slice(1, -1) : input;
   const zone = address.indexOf("%");
   if (zone !== -1) address = address.slice(0, zone);
-  const tail: number[] = [];
-  const lastColon = address.lastIndexOf(":");
-  const ipv4 = lastColon === -1 ? undefined : ipv4Bytes(address.slice(lastColon + 1));
-  if (ipv4 !== undefined) {
-    const [w = 0, x = 0, y = 0, z = 0] = ipv4;
-    tail.push((w << 8) | x, (y << 8) | z);
-    address = address.slice(0, lastColon + 1);
-    if (!address.endsWith("::")) address = address.slice(0, -1);
-  }
-  const halves = address.split("::");
+  const { hexadecimal, ipv4Words } = splitEmbeddedIpv4(address);
+  const halves = hexadecimal.split("::");
   if (halves.length > 2) return undefined;
   const words = (text: string) => (text === "" ? [] : text.split(":"));
   const head = words(halves[0] ?? "");
   const rest = halves.length === 2 ? words(halves[1] ?? "") : [];
   if (![...head, ...rest].every((word) => /^[0-9a-fA-F]{1,4}$/.test(word))) return undefined;
-  const count = head.length + rest.length + tail.length;
+  const count = head.length + rest.length + ipv4Words.length;
   if (halves.length === 1 ? count !== 8 : count > 7) return undefined;
   const zeros = halves.length === 2 ? Array.from({ length: 8 - count }, () => 0) : [];
-  return [...head.map((word) => parseInt(word, 16)), ...zeros, ...rest.map((word) => parseInt(word, 16)), ...tail];
+  return [...head.map((word) => parseInt(word, 16)), ...zeros, ...rest.map((word) => parseInt(word, 16)), ...ipv4Words];
 }
 
 export interface McpToolResult {

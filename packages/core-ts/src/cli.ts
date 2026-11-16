@@ -162,6 +162,8 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     return cliExitCode(outcome);
   };
 
+  const printUnlessInterrupted = (failure: CallFailure): number => (io.signal?.aborted === true ? CLI_WATCH_EXIT_CODES.cancelled : print(failure));
+
   const watch = async (rest: readonly string[]): Promise<number> => {
     const [id, ...args] = rest;
     const { flagArgs, resume } = resumeFlags(args);
@@ -187,7 +189,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       }
     }
     const subscribed = await provider.subscribe(id, input, { signal: io.signal, ...resume });
-    if ("kind" in subscribed) return io.signal?.aborted === true ? CLI_WATCH_EXIT_CODES.cancelled : print(subscribed);
+    if ("kind" in subscribed) return printUnlessInterrupted(subscribed);
     try {
       for await (const occurrence of subscribed) io.stdout(JSON.stringify(occurrence));
     } catch (error) {
@@ -281,14 +283,14 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
 function resumeFlags(args: readonly string[]): { readonly flagArgs: string[]; readonly resume: { cursor?: string; maxAgeMs?: number } } {
   const flagArgs: string[] = [];
   const resume: { cursor?: string; maxAgeMs?: number } = {};
-  const remaining = args.values();
-  for (const arg of remaining) {
+  const flagsAndValues = args.values();
+  for (const arg of flagsAndValues) {
     const [name = "", inline] = arg.startsWith("--") ? arg.slice(2).split(/=(.*)/s, 2) : [];
     if (name !== "cursor" && name !== "max-age-ms") {
       flagArgs.push(arg);
       continue;
     }
-    const text = inline ?? remaining.next().value;
+    const text = inline ?? flagsAndValues.next().value;
     if (text === undefined) throw new UsageError(`The flag --${name} needs a value.`, CLI_EXIT_CODES["invalid-input"]);
     if (name === "cursor") {
       resume.cursor = text;
@@ -306,8 +308,8 @@ function parseFlags(args: readonly string[], schema: JsonObject): Record<string,
   const definitions = objectOrEmpty(schema.$defs);
   const input: Record<string, unknown> = {};
   const repeated = new Map<string, { readonly items: JsonObject; readonly values: string[] }>();
-  const remaining = args.values();
-  for (const arg of remaining) {
+  const flagsAndValues = args.values();
+  for (const arg of flagsAndValues) {
     if (!arg.startsWith("--")) throw new UsageError(`Unexpected argument ${arg}.`, CLI_EXIT_CODES["invalid-input"]);
     const [name = "", inline] = arg.slice(2).split(/=(.*)/s, 2);
     const property = properties[name];
@@ -317,7 +319,7 @@ function parseFlags(args: readonly string[], schema: JsonObject): Record<string,
       input[name] = inline === undefined ? true : inline === "true";
       continue;
     }
-    const text = inline ?? remaining.next().value;
+    const text = inline ?? flagsAndValues.next().value;
     if (text === undefined) throw new UsageError(`The flag --${name} needs a value.`, CLI_EXIT_CODES["invalid-input"]);
     const items = cliRepeatedItems(type, definitions);
     if (items === undefined) {

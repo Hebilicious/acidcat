@@ -31,21 +31,26 @@ impl std::fmt::Debug for HttpClient {
     }
 }
 
+fn reject_credentials(base: &str) -> Result<(), String> {
+    let authority = base
+        .split_once("://")
+        .map_or(base, |(_, rest)| rest)
+        .split('/')
+        .next()
+        .unwrap_or_default();
+    if authority.contains('@') {
+        return Err(
+            "The URL has a user name or a password. Give a token in a header instead.".into(),
+        );
+    }
+    Ok(())
+}
+
 impl HttpClient {
     /// A client of the HTTP binding at `base`, an `http` or `https` URL. The error tells what is wrong with the URL.
     pub fn new(base: &str) -> Result<Self, String> {
         let base = base.trim_end_matches('/').to_owned();
-        if base
-            .split_once("://")
-            .map_or(base.as_str(), |(_, rest)| rest)
-            .split('/')
-            .next()
-            .is_some_and(|authority| authority.contains('@'))
-        {
-            return Err(
-                "The URL has a user name or a password. Give a token in a header instead.".into(),
-            );
-        }
+        reject_credentials(&base)?;
         if base.contains(['?', '#']) {
             return Err(format!("{base} has a query or a fragment."));
         }

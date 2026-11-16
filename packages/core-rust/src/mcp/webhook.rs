@@ -22,7 +22,7 @@ use super::{
     subscription_params,
 };
 use crate::schema::canonical_json;
-use crate::session::{SubscribeOptions, is_max_age_ms};
+use crate::session::SubscribeOptions;
 use crate::subscription::Occurrences;
 
 /// Tells if a URL is in the allowlist of the deployment.
@@ -134,38 +134,51 @@ impl Subscription {
 pub(crate) struct Webhooks {
     options: WebhookOptions,
     tls: Arc<rustls::ClientConfig>,
-    subscriptions: Mutex<HashMap<String, Arc<Subscription>>>,
+    registry: Arc<Mutex<Registry>>,
     starting: KeyGates<tokio::sync::Mutex<()>>,
-    admitted: Arc<Mutex<HashMap<String, usize>>>,
     verified: Mutex<HashSet<String>>,
     closed: CancellationToken,
     pumps: TaskTracker,
 }
 
-struct Admitted {
-    counts: Arc<Mutex<HashMap<String, usize>>>,
-    principal: String,
-    released: bool,
+#[derive(Default)]
+struct Registry {
+    subscriptions: HashMap<String, Arc<Subscription>>,
+    admitted: HashMap<String, usize>,
 }
 
-impl Admitted {
-    fn release(&mut self) {
-        if std::mem::replace(&mut self.released, true) {
-            return;
-        }
-        let mut counts = lock(&self.counts);
-        if let Some(count) = counts.get_mut(&self.principal) {
+impl Registry {
+    fn release(&mut self, principal: &str) {
+        if let Some(count) = self.admitted.get_mut(principal) {
             *count -= 1;
             if *count == 0 {
-                counts.remove(&self.principal);
+                self.admitted.remove(principal);
             }
         }
     }
 }
 
+struct Admitted {
+    registry: Arc<Mutex<Registry>>,
+    principal: String,
+    added: bool,
+}
+
+impl Admitted {
+    fn add(mut self, key: String, subscription: Arc<Subscription>) {
+        let mut registry = lock(&self.registry);
+        registry.subscriptions.insert(key, subscription);
+        registry.release(&self.principal);
+        drop(registry);
+        self.added = true;
+    }
+}
+
 impl Drop for Admitted {
     fn drop(&mut self) {
-        self.release();
+        if !self.added {
+            lock(&self.registry).release(&self.principal);
+        }
     }
 }
 
@@ -198,9 +211,8 @@ impl Webhooks {
         Arc::new(Webhooks {
             options,
             tls,
-            subscriptions: Mutex::new(HashMap::new()),
+            registry: Arc::default(),
             starting: Mutex::new(HashMap::new()),
-            admitted: Arc::new(Mutex::new(HashMap::new())),
             verified: Mutex::new(HashSet::new()),
             closed: CancellationToken::new(),
             pumps: TaskTracker::new(),
@@ -209,7 +221,8 @@ impl Webhooks {
 
     pub(crate) async fn close(&self) {
         self.closed.cancel();
-        let subscriptions: Vec<Arc<Subscription>> = lock(&self.subscriptions)
+        let subscriptions: Vec<Arc<Subscription>> = lock(&self.registry)
+            .subscriptions
             .drain()
             .map(|(_, subscription)| subscription)
             .collect();
@@ -222,12 +235,13 @@ impl Webhooks {
 
     fn end(&self, subscription: &Arc<Subscription>) {
         subscription.ended.cancel();
-        let mut subscriptions = lock(&self.subscriptions);
-        if subscriptions
+        let mut registry = lock(&self.registry);
+        if registry
+            .subscriptions
             .get(&subscription.key)
             .is_some_and(|current| Arc::ptr_eq(current, subscription))
         {
-            subscriptions.remove(&subscription.key);
+            registry.subscriptions.remove(&subscription.key);
         }
     }
 
@@ -285,9 +299,9 @@ impl Webhooks {
         let gate = KeyGate::enter(&self.starting, &key);
         let _held = gate.lock.lock().await;
 
-        let existing = lock(&self.subscriptions).get(&key).cloned();
+        let existing = lock(&self.registry).subscriptions.get(&key).cloned();
         if let Some(subscription) = existing {
-            if read.max_age_ms.is_some_and(|value| !is_max_age_ms(value)) {
+            if read.max_age_ms.is_invalid() {
                 return Err(RpcError::invalid_params(
                     "maxAgeMs must be an integer that is 0 or more.",
                 ));
@@ -303,7 +317,7 @@ impl Webhooks {
             return Ok(result_of(&subscription));
         }
 
-        let Some(mut admitted) = self.admit(principal) else {
+        let Some(admitted) = self.admit(principal) else {
             return Err(RpcError::new(
                 codes::RESOURCE_EXHAUSTED,
                 "Too many webhook subscriptions.",
@@ -323,7 +337,7 @@ impl Webhooks {
         let session = open();
         let options = SubscribeOptions {
             cursor: read.cursor,
-            max_age_ms: read.max_age_ms,
+            max_age_ms: read.max_age_ms.subscribe_option(),
             cancel: CancellationToken::new(),
         };
         let occurrences = match session.subscribe(&read.name, read.input, options) {
@@ -364,11 +378,7 @@ impl Webhooks {
                 last_error: None,
             }),
         });
-        {
-            let mut subscriptions = lock(&self.subscriptions);
-            subscriptions.insert(key, subscription.clone());
-            admitted.release();
-        }
+        admitted.add(key, subscription.clone());
         self.grant(&subscription, ttl_ms);
 
         let (webhooks, timed) = (self.clone(), subscription.clone());
@@ -394,21 +404,21 @@ impl Webhooks {
     }
 
     fn admit(&self, principal: &str) -> Option<Admitted> {
-        let subscriptions = lock(&self.subscriptions);
-        let mut admitted = lock(&self.admitted);
-        let count = subscriptions
+        let mut registry = lock(&self.registry);
+        let count = registry
+            .subscriptions
             .values()
             .filter(|each| each.principal == principal)
             .count()
-            + admitted.get(principal).copied().unwrap_or(0);
+            + registry.admitted.get(principal).copied().unwrap_or(0);
         if count >= self.options.max_subscriptions {
             return None;
         }
-        *admitted.entry(principal.to_owned()).or_default() += 1;
+        *registry.admitted.entry(principal.to_owned()).or_default() += 1;
         Some(Admitted {
-            counts: self.admitted.clone(),
+            registry: self.registry.clone(),
             principal: principal.to_owned(),
-            released: false,
+            added: false,
         })
     }
 
@@ -428,7 +438,7 @@ impl Webhooks {
             .cloned()
             .unwrap_or_else(|| json!({}));
         let key = canonical_json(&json!([principal, url, name, input]));
-        let Some(subscription) = lock(&self.subscriptions).get(&key).cloned() else {
+        let Some(subscription) = lock(&self.registry).subscriptions.get(&key).cloned() else {
             return Err(
                 RpcError::new(codes::NOT_FOUND, "There is no such subscription.")
                     .with_data(json!({ "kind": "subscription" })),
@@ -571,7 +581,9 @@ impl Webhooks {
                 .and_then(Value::as_str)
                 .map(str::to_owned)
         });
-        if !answered.is_some_and(|answered| same_text(answered.as_bytes(), challenge.as_bytes())) {
+        if !answered
+            .is_some_and(|answered| constant_time_eq(answered.as_bytes(), challenge.as_bytes()))
+        {
             return Some("challenge_failed");
         }
         lock(&self.verified).insert(pair);
@@ -706,7 +718,7 @@ fn status_error(status: u16) -> WebhookError {
     }
 }
 
-fn same_text(a: &[u8], b: &[u8]) -> bool {
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len()
         && a.iter()
             .zip(b)
@@ -818,7 +830,8 @@ mod tests {
             .subscribe("principal", &request("test.quiet", json!(1e22)), &open)
             .await;
         assert!(result.is_ok(), "the subscription starts: {result:?}");
-        let expires_at = lock(&webhooks.subscriptions)
+        let expires_at = lock(&webhooks.registry)
+            .subscriptions
             .values()
             .map(|subscription| subscription.lock().expires_at)
             .next();
@@ -865,7 +878,7 @@ mod tests {
             webhooks.pumps.is_empty(),
             "close returns after each pump ends"
         );
-        assert!(lock(&webhooks.subscriptions).is_empty());
+        assert!(lock(&webhooks.registry).subscriptions.is_empty());
     }
 
     #[test]
@@ -887,7 +900,7 @@ mod tests {
         drop(first);
         assert!(webhooks.admit("principal").is_some());
         drop(second);
-        assert!(lock(&webhooks.admitted).is_empty());
+        assert!(lock(&webhooks.registry).admitted.is_empty());
     }
 
     #[tokio::test]
@@ -912,7 +925,7 @@ mod tests {
                 .is_ok()
         );
         assert!(
-            lock(&webhooks.admitted).is_empty(),
+            lock(&webhooks.registry).admitted.is_empty(),
             "the subscription left the starting count when it was added"
         );
         assert!(

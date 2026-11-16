@@ -8,9 +8,9 @@ export type Pulled<Payload> =
   | { readonly error: unknown };
 
 export function idlePuller<Payload>(occurrences: Occurrences<Payload>, idleMs: number): () => Promise<Pulled<Payload>> {
-  let pending: Promise<Pulled<Payload>> | undefined;
+  let nextKeptAcrossIdlePulls: Promise<Pulled<Payload>> | undefined;
   return async () => {
-    const next = (pending ??= occurrences.next().then(
+    const next = (nextKeptAcrossIdlePulls ??= occurrences.next().then(
       (step): Pulled<Payload> => ({ step }),
       (error: unknown): Pulled<Payload> => ({ error }),
     ));
@@ -20,7 +20,7 @@ export function idlePuller<Payload>(occurrences: Occurrences<Payload>, idleMs: n
     });
     try {
       const pulled = await Promise.race([next, idle]);
-      if (!("idle" in pulled)) pending = undefined;
+      if (!("idle" in pulled)) nextKeptAcrossIdlePulls = undefined;
       return pulled;
     } finally {
       clearTimeout(timer);

@@ -13,7 +13,7 @@ use super::{
     subscription_params,
 };
 use crate::schema::canonical_json;
-use crate::session::{Session, SubscribeOptions, is_max_age_ms};
+use crate::session::{Session, SubscribeOptions};
 use crate::subscription::Occurrence;
 
 /// The settings of poll delivery. Each one has the default of spec/bindings/mcp.md#poll.
@@ -168,10 +168,10 @@ impl PollLeases {
 
         let Some(lease) = lease else {
             let provider = position.and_then(|(_, _, provider)| provider);
-            let max_age_ms = if provider.is_none() && read.max_age_ms.is_none_or(is_max_age_ms) {
+            let max_age_ms = if provider.is_none() && !read.max_age_ms.is_invalid() {
                 None
             } else {
-                read.max_age_ms
+                read.max_age_ms.subscribe_option()
             };
             let lease = self.start(key, &read.name, read.input, provider, max_age_ms, open)?;
             let state = lease.lock();
@@ -183,7 +183,7 @@ impl PollLeases {
             ));
         };
 
-        if read.max_age_ms.is_some_and(|value| !is_max_age_ms(value)) {
+        if read.max_age_ms.is_invalid() {
             return Err(RpcError::invalid_params(
                 "maxAgeMs must be an integer that is 0 or more.",
             ));
@@ -380,7 +380,7 @@ mod tests {
         subscribes: AtomicUsize,
     }
 
-    fn application() -> Arc<Application<Services>> {
+    fn slow_starting_application() -> Arc<Application<Services>> {
         App::new()
             .title("Test")
             .target("mcp", ["mcp"])
@@ -401,7 +401,7 @@ mod tests {
     }
 
     fn opener(context: &Arc<Services>) -> OpenSession<Services> {
-        let app = application();
+        let app = slow_starting_application();
         let context = context.clone();
         Arc::new(move || Session::open(&app, "mcp", context.clone()))
     }

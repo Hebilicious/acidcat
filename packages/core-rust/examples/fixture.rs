@@ -1,3 +1,6 @@
+#[path = "../tests/fixture_settings/mod.rs"]
+mod fixture_settings;
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -389,9 +392,9 @@ async fn main() {
                         std::fs::read_to_string(file).expect("the certificate file can be read"),
                     ],
                     retry_delay: Arc::new(|_| std::time::Duration::from_millis(50)),
-                    min_ttl: std::time::Duration::from_millis(1000),
-                    max_ttl: std::time::Duration::from_millis(5000),
-                    max_subscriptions: 3,
+                    min_ttl: std::time::Duration::from_millis(fixture_settings::WEBHOOK_MIN_TTL_MS),
+                    max_ttl: std::time::Duration::from_millis(fixture_settings::WEBHOOK_MAX_TTL_MS),
+                    max_subscriptions: fixture_settings::WEBHOOK_MAX_SUBSCRIPTIONS,
                     ..WebhookOptions::default()
                 });
             let principal: Principal = Arc::new(|headers| {
@@ -478,8 +481,8 @@ async fn main() {
 
 fn poll() -> acid_cat_core::mcp::PollOptions {
     acid_cat_core::mcp::PollOptions {
-        buffer_limit: 5,
-        lease: std::time::Duration::from_millis(5000),
+        buffer_limit: fixture_settings::POLL_BUFFER,
+        lease: std::time::Duration::from_millis(fixture_settings::POLL_LEASE_MS),
         ..Default::default()
     }
 }

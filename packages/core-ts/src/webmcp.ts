@@ -60,8 +60,8 @@ export function installWebMcp(session: Session, options: { readonly host?: Model
   const registered = new Map<string, AbortController>();
   const calls = new Set<Promise<unknown>>();
   const types = session.view.$defs ?? {};
-  let running = false;
-  let dirty = false;
+  let updating = false;
+  let requestedDuringUpdate = false;
 
   const toolFor = (id: string): ModelContextTool => {
     const capability = session.view.capabilities[id];
@@ -108,25 +108,25 @@ export function installWebMcp(session: Session, options: { readonly host?: Model
 
   async function reconcile(): Promise<void> {
     if (lifetime.signal.aborted) return;
-    if (running) {
-      dirty = true;
+    if (updating) {
+      requestedDuringUpdate = true;
       return;
     }
-    running = true;
+    updating = true;
     try {
       do {
-        dirty = false;
+        requestedDuringUpdate = false;
         setStatus({ phase: "reconciling", message: null });
         try {
           await pass();
           setStatus({ phase: "ready", message: null });
         } catch (error) {
           setStatus({ phase: "failed", message: error instanceof Error ? error.message : "A tool could not be registered." });
-          dirty = false;
+          requestedDuringUpdate = false;
         }
-      } while (dirty && !lifetime.signal.aborted);
+      } while (requestedDuringUpdate && !lifetime.signal.aborted);
     } finally {
-      running = false;
+      updating = false;
     }
   }
 

@@ -23,7 +23,8 @@ import { sleep, systemClock } from "./clock.ts";
 import type { Clock } from "./clock.ts";
 import { endMessage, invalidParams, subscriptionParams } from "./mcp-events.ts";
 import type { JsonRpcError, OpenSession, OwnSession, RpcAnswer, WebhookDelivery } from "./mcp-events.ts";
-import { isMaxAgeMs } from "./session.ts";
+import { subscribeWithMaxAge } from "./session.ts";
+import type { MaxAge } from "./session.ts";
 import type { Occurrences } from "./subscription.ts";
 
 export interface WebhookOptions {
@@ -124,7 +125,7 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     const start = clock.now();
     for (let attempt = 1; ; attempt += 1) {
       if (subscription.ended.signal.aborted) return "stopped";
-      const posted = await post(subscription.url, await headersOf({ id: subscription.id, secrets: secretsOf(subscription) }, webhookId, body), body, network);
+      const posted = await postToAcceptedAddressWithoutRedirects(subscription.url, await headersOf({ id: subscription.id, secrets: secretsOf(subscription) }, webhookId, body), body, network);
       if ("status" in posted && posted.status >= 200 && posted.status < 300) {
         subscription.lastDeliveryAt = new Date(clock.now()).toISOString();
         subscription.lastError = null;
@@ -183,12 +184,12 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     if (verified.has(pair) || options.allow?.(url) === true) return undefined;
     const challenge = randomBytes(24).toString("base64url");
     const body = JSON.stringify({ type: "verification", challenge });
-    const posted = await post(url, await headersOf({ id, secrets: [secret] }, webhookIdOf("verification"), body), body, network);
+    const posted = await postToAcceptedAddressWithoutRedirects(url, await headersOf({ id, secrets: [secret] }, webhookIdOf("verification"), body), body, network);
     if ("failure" in posted) return posted.failure;
     // A 3xx status is http_4xx for a delivery, but challenge_failed for a verification (spec/bindings/mcp.md#webhook).
     if (posted.status >= 300 && posted.status < 400) return "challenge_failed";
     if (posted.status < 200 || posted.status >= 300) return statusError(posted.status);
-    if (!sameText(challengeOf(posted.text), challenge)) return "challenge_failed";
+    if (!constantTimeEquals(challengeOf(posted.text), challenge)) return "challenge_failed";
     verified.add(pair);
     return undefined;
   }
@@ -203,20 +204,26 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     },
   });
 
-  async function start(principal: string, key: string, url: URL, secret: string, request: WebhookRequest, open: OpenSession): Promise<RpcAnswer> {
+  /** Count a subscription that starts against the limit of its principal. The result lets it go, or is `undefined` at the limit. */
+  function admit(principal: string): (() => void) | undefined {
     const count = [...subscriptions.values()].filter((each) => each.principal === principal).length + (admitted.get(principal) ?? 0);
-    if (count >= settings.maxSubscriptions) {
-      return { error: { code: MCP_EVENT_ERRORS.resourceExhausted, message: "Too many webhook subscriptions.", data: { limit: "subscriptions", max: settings.maxSubscriptions } } };
-    }
+    if (count >= settings.maxSubscriptions) return undefined;
     admitted.set(principal, (admitted.get(principal) ?? 0) + 1);
     let held = true;
-    const release = () => {
+    return () => {
       if (!held) return;
       held = false;
       const left = (admitted.get(principal) ?? 1) - 1;
       if (left === 0) admitted.delete(principal);
       else admitted.set(principal, left);
     };
+  }
+
+  async function start(principal: string, key: string, url: URL, secret: string, request: WebhookRequest, open: OpenSession): Promise<RpcAnswer> {
+    const release = admit(principal);
+    if (release === undefined) {
+      return { error: { code: MCP_EVENT_ERRORS.resourceExhausted, message: "Too many webhook subscriptions.", data: { limit: "subscriptions", max: settings.maxSubscriptions } } };
+    }
     try {
       return await startAdmitted(principal, key, url, secret, request, open, release);
     } finally {
@@ -227,10 +234,7 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
   async function startAdmitted(principal: string, key: string, url: URL, secret: string, request: WebhookRequest, open: OpenSession, release: () => void): Promise<RpcAnswer> {
     const id = await webhookSubscriptionId(principal, request.rawUrl, request.name, request.input);
     const own = await open();
-    const subscribed = await own.session.subscribe(request.name, request.input, {
-      ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
-      ...(request.maxAgeMs === undefined ? {} : { maxAgeMs: request.maxAgeMs }),
-    });
+    const subscribed = await subscribeWithMaxAge(own.session, request.name, request.input, { cursor: request.cursor, maxAge: request.maxAge });
     if ("kind" in subscribed) {
       await own.close();
       return { error: mcpSubscribeError(subscribed) };
@@ -265,6 +269,16 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     return resultOf(subscription);
   }
 
+  function renew(existing: Subscription, request: WebhookRequest): RpcAnswer {
+    if (request.maxAge.kind === "invalid") return invalidParams("maxAgeMs must be an integer that is 0 or more.");
+    if (existing.secret !== request.secret) {
+      existing.previous = { secret: existing.secret, until: clock.now() + settings.rotationGraceMs };
+      existing.secret = request.secret;
+    }
+    grant(existing, request.ttlMs);
+    return resultOf(existing);
+  }
+
   return {
     async subscribe(principal, params, open) {
       const read = readSubscribe(params);
@@ -274,15 +288,7 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       const key = subscriptionKey(principal, read.rawUrl, read.name, read.input);
       for (let pending = starting.get(key); pending !== undefined; pending = starting.get(key)) await pending.catch(() => undefined);
       const existing = subscriptions.get(key);
-      if (existing !== undefined) {
-        if (!isMaxAgeMs(read.maxAgeMs)) return invalidParams("maxAgeMs must be an integer that is 0 or more.");
-        if (existing.secret !== secret) {
-          existing.previous = { secret: existing.secret, until: clock.now() + settings.rotationGraceMs };
-          existing.secret = secret;
-        }
-        grant(existing, read.ttlMs);
-        return resultOf(existing);
-      }
+      if (existing !== undefined) return renew(existing, read);
       const started = start(principal, key, url, secret, read, open);
       starting.set(key, started);
       return started.finally(() => {
@@ -312,7 +318,7 @@ interface WebhookRequest {
   readonly name: string;
   readonly input: unknown;
   readonly cursor: string | undefined;
-  readonly maxAgeMs: number | undefined;
+  readonly maxAge: MaxAge;
   readonly ttlMs: number | null | undefined;
   readonly url: URL;
   readonly rawUrl: string;
@@ -339,8 +345,14 @@ const statusError = (status: number): WebhookError => (status >= 500 ? "http_5xx
 
 const ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
+/** The largest multiple of the alphabet size that fits in a byte. Bytes below it map to each character equally often. */
+const UNBIASED_BYTE_LIMIT = Math.floor(256 / ALPHANUMERIC.length) * ALPHANUMERIC.length;
+
 function webhookIdOf(type?: string): string {
-  const characters = [...randomBytes(48)].filter((byte) => byte < 248).slice(0, 24).map((byte) => ALPHANUMERIC.charAt(byte % 62));
+  const characters = [...randomBytes(48)]
+    .filter((byte) => byte < UNBIASED_BYTE_LIMIT)
+    .slice(0, 24)
+    .map((byte) => ALPHANUMERIC.charAt(byte % ALPHANUMERIC.length));
   return `msg_${type === undefined ? "" : `${type}_`}${characters.join("")}`;
 }
 
@@ -353,7 +365,7 @@ function challengeOf(text: string): string | undefined {
   }
 }
 
-function sameText(received: string | undefined, expected: string): boolean {
+function constantTimeEquals(received: string | undefined, expected: string): boolean {
   if (received === undefined) return false;
   const a = Buffer.from(received);
   const b = Buffer.from(expected);
@@ -372,7 +384,7 @@ class BlockedAddressError extends Error {
   readonly code = "EBLOCKEDADDRESS";
 }
 
-function post(url: URL, headers: Record<string, string>, body: string, network: Network): Promise<Posted> {
+function postToAcceptedAddressWithoutRedirects(url: URL, headers: Record<string, string>, body: string, network: Network): Promise<Posted> {
   const host = url.hostname.startsWith("[") ? url.hostname.slice(1, -1) : url.hostname;
   const accepts = (address: string) => network.allowPrivateNetworks || isGloballyRoutable(address);
   // Node.js does not call the lookup for an address, so the server checks it here.

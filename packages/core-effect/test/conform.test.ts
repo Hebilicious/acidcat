@@ -22,7 +22,8 @@ function assertConforms(results: readonly Check[], minimum: number) {
   assert.ok(results.length >= minimum, `${results.length} checks, expected ${minimum} or more`);
 }
 
-const CONFORM_TIMEOUT = 120_000;
+const TASK_TEST_TIMEOUT = Number(process.env.TEST_TIMEOUT_MS ?? Number.POSITIVE_INFINITY);
+const CONFORM_TIMEOUT = 2 * TASK_TEST_TIMEOUT;
 
 const certificate = testCertificate();
 const writeMarker = (path: string) => Effect.promise(() => writeFile(path, ""));

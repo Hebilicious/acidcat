@@ -4,7 +4,7 @@ import type { CallFailure, Rejection } from "@acid-cat/spec-ts";
 import type { App, ToJsonSchema } from "./app.ts";
 import { openContext, refusalResponse } from "./context.ts";
 import type { ContextOption } from "./context.ts";
-import { createSession } from "./session.ts";
+import { createSession, maxAgeOfText, subscribeWithMaxAge } from "./session.ts";
 import type { Session } from "./session.ts";
 import { idlePuller, textStream } from "./stream.ts";
 
@@ -59,7 +59,7 @@ export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Con
       await session.dispose();
       await opened.release();
     };
-    let streaming = false;
+    let streamOwnsClose = false;
     try {
       if (request.method === "GET" && path === "/capabilities") {
         return json(
@@ -86,10 +86,10 @@ export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Con
         return json(httpStatus(outcome), isCallFailure(outcome) ? failureBody(outcome) : outcome);
       }
       const subscribed = await subscribe(session, id, input, url, request, { keepaliveMs: options.keepaliveMs ?? KEEPALIVE_MS, close });
-      streaming = subscribed.streaming;
+      streamOwnsClose = subscribed.streamOwnsClose;
       return subscribed.response;
     } finally {
-      if (!streaming) await close();
+      if (!streamOwnsClose) await close();
     }
   };
 }
@@ -133,17 +133,13 @@ async function subscribe(
   url: URL,
   request: Request,
   stream: { readonly keepaliveMs: number; readonly close: () => Promise<void> },
-): Promise<{ readonly response: Response; readonly streaming: boolean }> {
-  // The session checks maxAgeMs after the id of the event (spec/events.md#subscribing). A text that is not only digits is NaN.
-  const maxAge = url.searchParams.get("maxAgeMs");
-  const maxAgeMs = maxAge === null ? undefined : /^[0-9]+$/.test(maxAge) ? Number(maxAge) : Number.NaN;
-  const cursor = request.headers.get("Last-Event-ID") ?? undefined;
-  const subscribed = await session.subscribe(id, input, {
+): Promise<{ readonly response: Response; readonly streamOwnsClose: boolean }> {
+  const subscribed = await subscribeWithMaxAge(session, id, input, {
     signal: request.signal,
-    ...(cursor === undefined ? {} : { cursor }),
-    ...(maxAgeMs === undefined ? {} : { maxAgeMs }),
+    cursor: request.headers.get("Last-Event-ID") ?? undefined,
+    maxAge: maxAgeOfText(url.searchParams.get("maxAgeMs")),
   });
-  if ("kind" in subscribed) return { response: json(httpStatus(subscribed), failureBody(subscribed)), streaming: false };
+  if ("kind" in subscribed) return { response: json(httpStatus(subscribed), failureBody(subscribed)), streamOwnsClose: false };
 
   const pull = idlePuller(subscribed, stream.keepaliveMs);
   let ended = false;
@@ -153,7 +149,7 @@ async function subscribe(
     if ("idle" in pulled) return [httpEventMessage.keepalive()];
     if ("error" in pulled) {
       ended = true;
-      return [httpEventMessage.error(internalOf(pulled.error))];
+      return [httpEventMessage.error(callFailureOf(pulled.error))];
     }
     if (pulled.step.done === true) {
       ended = true;
@@ -162,10 +158,10 @@ async function subscribe(
     return [httpEventMessage.next(pulled.step.value)];
   };
   const body = textStream(produce, () => void subscribed.return(), stream.close);
-  return { response: new Response(body, { status: 200, headers: { "Content-Type": SSE_MEDIA_TYPE, "Cache-Control": "no-store" } }), streaming: true };
+  return { response: new Response(body, { status: 200, headers: { "Content-Type": SSE_MEDIA_TYPE, "Cache-Control": "no-store" } }), streamOwnsClose: true };
 }
 
-function internalOf(error: unknown): CallFailure {
+function callFailureOf(error: unknown): CallFailure {
   return error instanceof CallFailureError ? callFailure(error.kind, error.message) : callFailure("internal", "The event failed.");
 }
 

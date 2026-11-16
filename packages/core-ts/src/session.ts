@@ -154,7 +154,47 @@ type Prepared<Context, T> = { readonly issues: readonly StandardSchemaV1.Issue[]
  * True if `maxAgeMs` is absent, or an integer that is 0 or more (spec/events.md#resuming). A session rejects another
  * value as `invalid-input`, after it checks the id of the event.
  */
-export const isMaxAgeMs = (maxAgeMs: number | undefined): boolean => maxAgeMs === undefined || (Number.isSafeInteger(maxAgeMs) && maxAgeMs >= 0);
+const isMaxAgeMs = (maxAgeMs: number | undefined): boolean => maxAgeMs === undefined || (Number.isSafeInteger(maxAgeMs) && maxAgeMs >= 0);
+
+const INVALID_MAX_AGE = "maxAgeMs must be an integer that is 0 or more.";
+
+/** The `maxAgeMs` of a subscription request, as a binding reads it. */
+export type MaxAge = { readonly kind: "absent" } | { readonly kind: "valid"; readonly ms: number } | { readonly kind: "invalid" };
+
+/** Read the `maxAgeMs` of a JSON request. `null` is absent. */
+export function maxAgeOf(value: unknown): MaxAge {
+  if (value === undefined || value === null) return { kind: "absent" };
+  return typeof value === "number" && isMaxAgeMs(value) ? { kind: "valid", ms: value } : { kind: "invalid" };
+}
+
+/** Read the `maxAgeMs` of a query string. Only digits are valid. */
+export function maxAgeOfText(text: string | null): MaxAge {
+  if (text === null) return { kind: "absent" };
+  return /^[0-9]+$/.test(text) ? maxAgeOf(Number(text)) : { kind: "invalid" };
+}
+
+/**
+ * Subscribe with the `maxAgeMs` that a binding read. An invalid `maxAgeMs` gives the failures of `session.subscribe`
+ * in the same order: `cancelled`, then `unknown-capability`, then `invalid-input` (spec/events.md#subscribing).
+ */
+export function subscribeWithMaxAge(
+  session: Session,
+  id: string,
+  input: unknown,
+  options: { readonly signal?: AbortSignal | undefined; readonly cursor: string | undefined; readonly maxAge: MaxAge },
+): Promise<Occurrences<unknown> | CallFailure> {
+  const { signal, cursor, maxAge } = options;
+  if (maxAge.kind === "invalid") {
+    if (session.signal.aborted || signal?.aborted === true) return Promise.resolve(callFailure("cancelled", "The subscription was cancelled."));
+    if (!session.eventHandles.has(id)) return Promise.resolve(callFailure("unknown-capability", `There is no event ${id}.`));
+    return Promise.resolve(callFailure("invalid-input", INVALID_MAX_AGE));
+  }
+  return session.subscribe(id, input, {
+    ...(signal === undefined ? {} : { signal }),
+    ...(cursor === undefined ? {} : { cursor }),
+    ...(maxAge.kind === "valid" ? { maxAgeMs: maxAge.ms } : {}),
+  });
+}
 
 const always: Observable<Availability> = { getSnapshot: () => AVAILABLE, subscribe: () => ({ unsubscribe() {} }) };
 
@@ -177,14 +217,6 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     if (lifetime.signal.aborted || signal?.aborted) return callFailure("cancelled", "The call was cancelled.");
     const availability = entry.availability.getSnapshot();
     if (!availability.available) return callFailure("unavailable", availability.reason);
-    let prepared;
-    try {
-      prepared = await prepare();
-    } catch (cause) {
-      onDefect(id, cause);
-      return callFailure("internal", "The capability failed.");
-    }
-    if ("issues" in prepared) return callFailure("invalid-input", issueMessage(prepared.issues));
 
     const controller = new AbortController();
     const abort = () => controller.abort();
@@ -194,18 +226,31 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
       controller.signal.addEventListener("abort", () => resolve(callFailure("cancelled", "The call was cancelled."))),
     );
     if (lifetime.signal.aborted || signal?.aborted) controller.abort();
-    const work = Promise.resolve()
-      .then(() => prepared.start({ signal: controller.signal, context: options.context, target: options.target }))
-      .catch((cause: unknown) => {
+    try {
+      let prepared;
+      try {
+        prepared = await prepare();
+      } catch (cause) {
         onDefect(id, cause);
         return callFailure("internal", "The capability failed.");
-      });
-    const outcome = Promise.race([work, cancelled]);
-    running.add(outcome);
-    try {
-      return await outcome;
+      }
+      if ("issues" in prepared) return callFailure("invalid-input", issueMessage(prepared.issues));
+
+      const { start } = prepared;
+      const work = Promise.resolve()
+        .then(() => start({ signal: controller.signal, context: options.context, target: options.target }))
+        .catch((cause: unknown) => {
+          onDefect(id, cause);
+          return callFailure("internal", "The capability failed.");
+        });
+      const outcome = Promise.race([work, cancelled]);
+      running.add(outcome);
+      try {
+        return await outcome;
+      } finally {
+        running.delete(outcome);
+      }
     } finally {
-      running.delete(outcome);
       lifetime.signal.removeEventListener("abort", abort);
       signal?.removeEventListener("abort", abort);
     }
@@ -304,7 +349,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     const { signal } = subscribeOptions;
     const cancelled = () => lifetime.signal.aborted || signal?.aborted === true;
     if (cancelled()) return callFailure("cancelled", "The subscription was cancelled.");
-    if (!isMaxAgeMs(subscribeOptions.maxAgeMs)) return callFailure("invalid-input", "maxAgeMs must be an integer that is 0 or more.");
+    if (!isMaxAgeMs(subscribeOptions.maxAgeMs)) return callFailure("invalid-input", INVALID_MAX_AGE);
     let prepared;
     try {
       prepared = await prepare();

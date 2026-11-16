@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { check } from "@acid-cat/cli";
 import { z } from "zod";
 
-import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, httpHandler, installWebMcp, mcpHandler, ok, renderCatalog, runCli } from "../src/index.ts";
+import { AVAILABLE, CallFailureError, catalogOf, createSession, defineApp, defineCapability, httpHandler, installWebMcp, mcpHandler, ok, renderCatalog, runCli } from "../src/index.ts";
 import type { App, CliCommand, CliOptions, ModelContextTool, Outcome } from "../src/index.ts";
 import { fixture, heldApp, Holds, options, readJson, Switch, toJsonSchema, Watchers } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
@@ -97,6 +97,65 @@ test("an input schema that throws is internal, with no internal data, and the ca
   await using session = createSession(app, { target: "mcp", toJsonSchema, context: {}, onDefect: (id) => defects.push(id) });
   assert.deepEqual(await session.invoke("probe.throws", { n: 1 }), { kind: "internal", message: "The capability failed." });
   assert.deepEqual(defects, ["probe.throws"]);
+});
+
+test("an abort during input validation cancels the call", async () => {
+  let validationStarted = () => {};
+  const started = new Promise<void>((resolve) => (validationStarted = resolve));
+  let finishValidation = () => {};
+  const finished = new Promise<void>((resolve) => (finishValidation = resolve));
+  const app = defineApp({
+    targets: { mcp: { bindings: ["mcp"] } },
+    capabilities: [
+      defineCapability({
+        id: "probe.slow",
+        description: "The input schema waits.",
+        audience: ["mcp"],
+        input: z.object({}).refine(async () => {
+          validationStarted();
+          await finished;
+          return true;
+        }),
+        run: () => ok(null),
+      }),
+    ],
+  });
+  await using session = createSession(app, { target: "mcp", toJsonSchema, context: {} });
+  const controller = new AbortController();
+  const call = session.invoke("probe.slow", {}, { signal: controller.signal });
+  await started;
+  controller.abort();
+  finishValidation();
+  assert.deepEqual(await call, { kind: "cancelled", message: "The call was cancelled." });
+});
+
+test("an abort while the session reads the availability cancels the call", async () => {
+  const controller = new AbortController();
+  let abortedInRun: boolean | undefined;
+  const app = defineApp({
+    targets: { mcp: { bindings: ["mcp"] } },
+    capabilities: [
+      defineCapability({
+        id: "probe.aborts",
+        description: "Reading the availability aborts the call.",
+        audience: ["mcp"],
+        availability: () => ({
+          getSnapshot: () => {
+            controller.abort();
+            return AVAILABLE;
+          },
+          subscribe: () => ({ unsubscribe() {} }),
+        }),
+        run: (_input, { signal }) => {
+          abortedInRun = signal.aborted;
+          return ok(null);
+        },
+      }),
+    ],
+  });
+  await using session = createSession(app, { target: "mcp", toJsonSchema, context: {} });
+  assert.deepEqual(await session.invoke("probe.aborts", {}, { signal: controller.signal }), { kind: "cancelled", message: "The call was cancelled." });
+  assert.notEqual(abortedInRun, false);
 });
 
 test("a session subscribes to the availabilities only while it has listeners", async () => {

@@ -1,9 +1,8 @@
 import { globSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { root } from "./catalogs.ts";
+import { GENERATED_DIRECTORIES as ignored, root } from "./catalogs.ts";
 
-const ignored = ["**/node_modules/**", ".worktrees/**", ".moon/**", "**/target/**", "**/dist/**", "**/.out/**"];
 const problems: string[] = [];
 
 const sources = globSync("**/*.{ts,mts,cts,js,mjs,cjs}", { cwd: root, exclude: ignored });
