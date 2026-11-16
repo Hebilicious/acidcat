@@ -166,7 +166,7 @@ export function make<
   RState = never,
 >(
   definition: WithoutInput<Output, Failure, R, State, Id, RAvailability, RState>,
-): Capability<Schema.Struct<{}>, Output, Failure, NoInfer<R | RAvailability | RState>, State, Id>;
+): Capability<Schema.Codec<{}, never>, Output, Failure, NoInfer<R | RAvailability | RState>, State, Id>;
 export function make<
   Input extends AnySchema,
   R,

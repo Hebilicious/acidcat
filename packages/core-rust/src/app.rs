@@ -14,6 +14,7 @@ use serde_json::{Map, Value};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
+use crate::cli::CliAliases;
 use crate::outcome::{Availability, Defect, NoFailure, RunError, RunResult};
 use crate::schema::{Validator, schema_of, view_of};
 
@@ -138,6 +139,11 @@ impl<P> Emitted<P> {
 #[derive(Clone, Copy, Debug, Default, Serialize)]
 pub struct NoPayload {}
 
+/// The type of the fixed input of a capability or an event that has no input. It has no serialized form, so an alias
+/// cannot fix an input for such a definition.
+#[derive(Clone, Copy, Debug)]
+pub struct NoInput;
+
 type AvailabilityFn<C> = Arc<dyn Fn(&C) -> watch::Receiver<Availability> + Send + Sync>;
 
 pub(crate) trait StateSource: Send + Sync {
@@ -195,9 +201,10 @@ pub(crate) type ErasedSubscribe<C> = Arc<
         + Sync,
 >;
 
-/// A capability that is being declared. `I`, `O` and `F` are the types of the input, the value and the failures.
-/// Finish it with [`Capability::run`].
-pub struct Capability<C, I = (), O = (), F = NoFailure> {
+/// A capability that is being declared. `I`, `O` and `F` are the types of the input, the value and the failures. `X`
+/// is the type of a fixed input of an alias: `I`, or [`NoInput`] when the capability has no input. Finish it with
+/// [`Capability::run`].
+pub struct Capability<C, I = (), O = (), F = NoFailure, X = NoInput> {
     id: String,
     description: String,
     audience: Vec<String>,
@@ -210,6 +217,7 @@ pub struct Capability<C, I = (), O = (), F = NoFailure> {
     availability: Option<AvailabilityFn<C>>,
     state: Option<(Value, StateFn<C>)>,
     marker: PhantomData<fn(I) -> (O, F)>,
+    fixed_input: PhantomData<fn(X)>,
 }
 
 impl<C> Capability<C> {
@@ -227,12 +235,13 @@ impl<C> Capability<C> {
             availability: None,
             state: None,
             marker: PhantomData,
+            fixed_input: PhantomData,
         }
     }
 }
 
-impl<C, I, O, F> Capability<C, I, O, F> {
-    fn retype<I2, O2, F2>(self) -> Capability<C, I2, O2, F2> {
+impl<C, I, O, F, X> Capability<C, I, O, F, X> {
+    fn retype<I2, O2, F2, X2>(self) -> Capability<C, I2, O2, F2, X2> {
         Capability {
             id: self.id,
             description: self.description,
@@ -246,6 +255,7 @@ impl<C, I, O, F> Capability<C, I, O, F> {
             availability: self.availability,
             state: self.state,
             marker: PhantomData,
+            fixed_input: PhantomData,
         }
     }
 
@@ -296,7 +306,7 @@ impl<C, I, O, F> Capability<C, I, O, F> {
     }
 
     /// The input type. Its schema is the input schema of the capability.
-    pub fn input<T: JsonSchema + DeserializeOwned>(mut self) -> Capability<C, T, O, F> {
+    pub fn input<T: JsonSchema + DeserializeOwned>(mut self) -> Capability<C, T, O, F, T> {
         let (schema, types) = schema_of::<T>();
         self.input = Some(schema);
         self.add_types(types);
@@ -304,26 +314,26 @@ impl<C, I, O, F> Capability<C, I, O, F> {
     }
 
     /// The input type, with a schema that you write. The schema can refer to the types of [`App::types`].
-    pub fn input_schema<T: DeserializeOwned>(mut self, schema: Value) -> Capability<C, T, O, F> {
+    pub fn input_schema<T: DeserializeOwned>(mut self, schema: Value) -> Capability<C, T, O, F, T> {
         self.input = Some(schema);
         self.retype()
     }
 
     /// The type of the value. Its schema is the output schema of the capability.
-    pub fn output<T: JsonSchema + Serialize>(mut self) -> Capability<C, I, T, F> {
+    pub fn output<T: JsonSchema + Serialize>(mut self) -> Capability<C, I, T, F, X> {
         let (schema, types) = schema_of::<T>();
         self.output = Some(schema);
         self.add_types(types);
         self.retype()
     }
 
-    pub fn output_schema<T: Serialize>(mut self, schema: Value) -> Capability<C, I, T, F> {
+    pub fn output_schema<T: Serialize>(mut self, schema: Value) -> Capability<C, I, T, F, X> {
         self.output = Some(schema);
         self.retype()
     }
 
     /// The failures: an enum with `#[serde(tag = "_tag")]`. Each variant is one failure, and its name is the tag.
-    pub fn failures<T: JsonSchema + Serialize>(mut self) -> Capability<C, I, O, T> {
+    pub fn failures<T: JsonSchema + Serialize>(mut self) -> Capability<C, I, O, T, X> {
         let (schema, types) = schema_of::<T>();
         self.add_types(types);
         match failures_of(&schema) {
@@ -339,7 +349,7 @@ impl<C, I, O, F> Capability<C, I, O, F> {
     pub fn failure_schemas<T: Serialize, S: Into<String>>(
         mut self,
         failures: impl IntoIterator<Item = (S, Value)>,
-    ) -> Capability<C, I, O, T> {
+    ) -> Capability<C, I, O, T, X> {
         self.failures = failures
             .into_iter()
             .map(|(tag, schema)| (tag.into(), schema))
@@ -348,7 +358,7 @@ impl<C, I, O, F> Capability<C, I, O, F> {
     }
 }
 
-impl<C, I, O, F> Capability<C, I, O, F>
+impl<C, I, O, F, X> Capability<C, I, O, F, X>
 where
     C: Send + Sync + 'static,
     I: DeserializeOwned + Send + 'static,
@@ -357,7 +367,7 @@ where
 {
     /// The work of the capability. The future gives the value, a failure (with [`crate::fail`]) or a defect. When
     /// the call is cancelled, the core drops the future.
-    pub fn run<Run, Work>(self, run: Run) -> CapabilityDefinition<C>
+    pub fn run<Run, Work>(self, run: Run) -> CapabilityDefinition<C, X>
     where
         Run: Fn(I, Call<C>) -> Work + Send + Sync + 'static,
         Work: Future<Output = RunResult<O, F>> + Send + 'static,
@@ -390,6 +400,7 @@ where
             availability: self.availability,
             state: self.state,
             run,
+            fixed_input: PhantomData,
         }
     }
 }
@@ -420,7 +431,9 @@ fn failures_of(schema: &Value) -> Result<Vec<(String, Value)>, String> {
         .collect()
 }
 
-pub struct CapabilityDefinition<C> {
+/// A capability, ready for [`App::capability`]. `X` is the type of a fixed input of an alias: the input type, or
+/// [`NoInput`].
+pub struct CapabilityDefinition<C, X = NoInput> {
     pub(crate) id: String,
     pub(crate) description: String,
     pub(crate) audience: Vec<String>,
@@ -433,11 +446,33 @@ pub struct CapabilityDefinition<C> {
     pub(crate) availability: Option<AvailabilityFn<C>>,
     pub(crate) state: Option<(Value, StateFn<C>)>,
     pub(crate) run: ErasedRun<C>,
+    fixed_input: PhantomData<fn(X)>,
 }
 
-/// An event that is being declared. `I` and `P` are the types of the input and of the payload. Finish it with
-/// [`Event::subscribe`].
-pub struct Event<C, I = (), P = NoPayload> {
+impl<C, X> CapabilityDefinition<C, X> {
+    /// The definition without the type of its input, to keep definitions with different inputs in one list.
+    pub fn untyped(self) -> CapabilityDefinition<C> {
+        CapabilityDefinition {
+            id: self.id,
+            description: self.description,
+            audience: self.audience,
+            read_only: self.read_only,
+            input: self.input,
+            output: self.output,
+            failures: self.failures,
+            types: self.types,
+            problems: self.problems,
+            availability: self.availability,
+            state: self.state,
+            run: self.run,
+            fixed_input: PhantomData,
+        }
+    }
+}
+
+/// An event that is being declared. `I` and `P` are the types of the input and of the payload. `X` is the type of a
+/// fixed input of an alias: `I`, or [`NoInput`] when the event has no input. Finish it with [`Event::subscribe`].
+pub struct Event<C, I = (), P = NoPayload, X = NoInput> {
     id: String,
     description: String,
     audience: Vec<String>,
@@ -446,6 +481,7 @@ pub struct Event<C, I = (), P = NoPayload> {
     types: Map<String, Value>,
     problems: Vec<String>,
     marker: PhantomData<fn(I, C) -> P>,
+    fixed_input: PhantomData<fn(X)>,
 }
 
 impl<C> Event<C> {
@@ -459,12 +495,13 @@ impl<C> Event<C> {
             types: Map::new(),
             problems: Vec::new(),
             marker: PhantomData,
+            fixed_input: PhantomData,
         }
     }
 }
 
-impl<C, I, P> Event<C, I, P> {
-    fn retype<I2, P2>(self) -> Event<C, I2, P2> {
+impl<C, I, P, X> Event<C, I, P, X> {
+    fn retype<I2, P2, X2>(self) -> Event<C, I2, P2, X2> {
         Event {
             id: self.id,
             description: self.description,
@@ -474,6 +511,7 @@ impl<C, I, P> Event<C, I, P> {
             types: self.types,
             problems: self.problems,
             marker: PhantomData,
+            fixed_input: PhantomData,
         }
     }
 
@@ -496,33 +534,33 @@ impl<C, I, P> Event<C, I, P> {
     }
 
     /// The input type of a subscription. Its schema is the input schema of the event.
-    pub fn input<T: JsonSchema + DeserializeOwned>(mut self) -> Event<C, T, P> {
+    pub fn input<T: JsonSchema + DeserializeOwned>(mut self) -> Event<C, T, P, T> {
         let (schema, types) = schema_of::<T>();
         self.input = Some(schema);
         self.add_types(types);
         self.retype()
     }
 
-    pub fn input_schema<T: DeserializeOwned>(mut self, schema: Value) -> Event<C, T, P> {
+    pub fn input_schema<T: DeserializeOwned>(mut self, schema: Value) -> Event<C, T, P, T> {
         self.input = Some(schema);
         self.retype()
     }
 
     /// The type of the data of each occurrence. Its schema is the payload schema of the event.
-    pub fn payload<T: JsonSchema + Serialize>(mut self) -> Event<C, I, T> {
+    pub fn payload<T: JsonSchema + Serialize>(mut self) -> Event<C, I, T, X> {
         let (schema, types) = schema_of::<T>();
         self.payload = Some(schema);
         self.add_types(types);
         self.retype()
     }
 
-    pub fn payload_schema<T: Serialize>(mut self, schema: Value) -> Event<C, I, T> {
+    pub fn payload_schema<T: Serialize>(mut self, schema: Value) -> Event<C, I, T, X> {
         self.payload = Some(schema);
         self.retype()
     }
 }
 
-impl<C, I, P> Event<C, I, P>
+impl<C, I, P, X> Event<C, I, P, X>
 where
     C: Send + Sync + 'static,
     I: DeserializeOwned + Send + 'static,
@@ -531,7 +569,7 @@ where
     /// The provider of the event: a stream of occurrences for each subscription. An `Err` item, or a panic, ends the
     /// subscription with the call failure `internal`. The end of the stream ends the subscription as complete. When
     /// the subscription ends in another way, the core drops the stream.
-    pub fn subscribe<Provider, Occurrences>(self, provider: Provider) -> EventDefinition<C>
+    pub fn subscribe<Provider, Occurrences>(self, provider: Provider) -> EventDefinition<C, X>
     where
         Provider: Fn(I, Subscription<C>) -> Occurrences + Send + Sync + 'static,
         Occurrences: Stream<Item = Result<Emitted<P>, Defect>> + Send + 'static,
@@ -562,11 +600,14 @@ where
             types: self.types,
             problems: self.problems,
             subscribe,
+            fixed_input: PhantomData,
         }
     }
 }
 
-pub struct EventDefinition<C> {
+/// An event, ready for [`App::event`]. `X` is the type of a fixed input of an alias: the input type of a subscription,
+/// or [`NoInput`].
+pub struct EventDefinition<C, X = NoInput> {
     pub(crate) id: String,
     pub(crate) description: String,
     pub(crate) audience: Vec<String>,
@@ -575,6 +616,24 @@ pub struct EventDefinition<C> {
     types: Map<String, Value>,
     problems: Vec<String>,
     pub(crate) subscribe: ErasedSubscribe<C>,
+    fixed_input: PhantomData<fn(X)>,
+}
+
+impl<C, X> EventDefinition<C, X> {
+    /// The definition without the type of its input, to keep definitions with different inputs in one list.
+    pub fn untyped(self) -> EventDefinition<C> {
+        EventDefinition {
+            id: self.id,
+            description: self.description,
+            audience: self.audience,
+            input: self.input,
+            payload: self.payload,
+            types: self.types,
+            problems: self.problems,
+            subscribe: self.subscribe,
+            fixed_input: PhantomData,
+        }
+    }
 }
 
 pub(crate) struct ServedCapability<C> {
@@ -597,6 +656,7 @@ pub struct App<C> {
     title: Option<String>,
     description: Option<String>,
     targets: Vec<(String, Target)>,
+    cli_aliases: Vec<(String, CliAliases)>,
     types: Map<String, Value>,
     capabilities: Vec<CapabilityDefinition<C>>,
     events: Vec<EventDefinition<C>>,
@@ -615,6 +675,7 @@ impl<C: Send + Sync + 'static> App<C> {
             title: None,
             description: None,
             targets: Vec::new(),
+            cli_aliases: Vec::new(),
             types: Map::new(),
             capabilities: Vec::new(),
             events: Vec::new(),
@@ -656,19 +717,25 @@ impl<C: Send + Sync + 'static> App<C> {
         self
     }
 
+    /// The aliases of the command line of a target. The catalog writes them in `options.cli` of the target.
+    pub fn cli_aliases(mut self, target: impl Into<String>, aliases: CliAliases) -> Self {
+        self.cli_aliases.push((target.into(), aliases));
+        self
+    }
+
     /// A shared type for the schemas that you write: refer to it with `{ "$ref": "#/$defs/<name>" }`.
     pub fn r#type(mut self, name: impl Into<String>, schema: Value) -> Self {
         self.types.insert(name.into(), schema);
         self
     }
 
-    pub fn capability(mut self, capability: CapabilityDefinition<C>) -> Self {
-        self.capabilities.push(capability);
+    pub fn capability<X>(mut self, capability: CapabilityDefinition<C, X>) -> Self {
+        self.capabilities.push(capability.untyped());
         self
     }
 
-    pub fn event(mut self, event: EventDefinition<C>) -> Self {
-        self.events.push(event);
+    pub fn event<X>(mut self, event: EventDefinition<C, X>) -> Self {
+        self.events.push(event.untyped());
         self
     }
 
@@ -704,6 +771,34 @@ impl<C: Send + Sync + 'static> App<C> {
             merge(&event.types, &mut problems);
         }
         share_types(&mut self.capabilities, &mut self.events, &mut types);
+        for (name, aliases) in self.cli_aliases {
+            let Some((_, target)) = self.targets.iter_mut().find(|(each, _)| *each == name) else {
+                problems.push(format!("the aliases of the command line are for the target {name}, which is not a target of the application"));
+                continue;
+            };
+            let mut options = match target.options.take() {
+                None => Map::new(),
+                Some(Value::Object(options)) => options,
+                Some(_) => {
+                    problems.push(format!("target {name}: options must be an object"));
+                    continue;
+                }
+            };
+            if options.contains_key("cli") {
+                problems.push(format!("target {name}: give the aliases with App::cli_aliases or in options.cli, not in both"));
+            }
+            match aliases.into_options() {
+                Ok(cli) => {
+                    options.insert("cli".into(), cli);
+                }
+                Err(alias_problems) => problems.extend(
+                    alias_problems
+                        .into_iter()
+                        .map(|problem| format!("target {name}: {problem}")),
+                ),
+            }
+            target.options = Some(Value::Object(options));
+        }
 
         let mut document =
             catalog::Catalog::new(self.title.as_deref(), self.description.as_deref());

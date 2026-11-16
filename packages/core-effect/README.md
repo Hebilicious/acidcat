@@ -440,21 +440,18 @@ A subscription that cannot start has the exit code of its call failure. Each ite
 
 #### Aliases
 
-The `cli` target can give [aliases](../../spec/bindings/cli.md#aliases) in its options: short names for capabilities and events, with an optional fixed input. A command alias is one word, and a flag alias is `--` and one word. `default` names the default alias:
+The `cli` target can give [aliases](../../spec/bindings/cli.md#aliases) in its member `cli`: short names for capabilities and events, with an optional fixed input. A command alias is one word, and a flag alias is `--` and one word. `App.alias` takes the capability or the event, and the type of the fixed input is the encoded side of the input schema. `App.aliasDefault` also makes the alias the default alias. The catalog writes the aliases in `options.cli`:
 
 ```ts
 targets: {
   cli: {
     bindings: ["cli"],
-    options: {
-      cli: {
-        aliases: {
-          status: { capability: "aircon.status.get" },
-          "--on": { capability: "aircon.power.set", input: { on: true } },
-          "--off": { capability: "aircon.power.set", input: { on: false } },
-          follow: { event: "aircon.status.changed" },
-        },
-        default: "status",
+    cli: {
+      aliases: {
+        status: App.aliasDefault(statusGet),
+        "--on": App.alias(powerSet, { on: true }),
+        "--off": App.alias(powerSet, { on: false }),
+        follow: App.alias(statusChanged),
       },
     },
   },

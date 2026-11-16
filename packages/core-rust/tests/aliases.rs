@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-use acid_cat_core::cli::{CliCommand, CliIo, CliOptions, exit, run_cli};
+use acid_cat_core::cli::{CliAliases, CliCommand, CliIo, CliOptions, exit, run_cli};
 use acid_cat_core::{App, Application, CapabilityDefinition, Emitted, EventDefinition, Target};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -121,7 +121,7 @@ async fn the_command_line_stops_when_it_starts_if_an_alias_breaks_a_rule() {
     };
     let start = |aliases: Value| async move {
         run(
-            &probe(aliases, vec![ping(), power()]),
+            &probe(aliases, vec![ping(), power().untyped()]),
             CliOptions::new("probe", "0.0.0"),
             &["list"],
         )
@@ -214,6 +214,7 @@ fn readings() -> EventDefinition<()> {
         .input::<Reading>()
         .payload::<Reading>()
         .subscribe(|reading: Reading, _| futures::stream::iter([Ok(Emitted::new(reading))]))
+        .untyped()
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
@@ -232,7 +233,11 @@ async fn the_command_line_stops_when_it_starts_if_an_alias_of_an_event_or_the_de
     };
     let start = |settings: Value| async move {
         run(
-            &probe_with(settings, vec![ping(), helpful()], vec![readings()]),
+            &probe_with(
+                settings,
+                vec![ping(), helpful().untyped()],
+                vec![readings()],
+            ),
             CliOptions::new("probe", "0.0.0"),
             &["list"],
         )
@@ -301,4 +306,67 @@ async fn the_command_line_stops_when_it_starts_if_an_alias_of_an_event_or_the_de
     .await
     .expect("the aliases follow the rules");
     assert_eq!(code, exit::VALUE, "{text}");
+}
+
+#[test]
+fn cli_aliases_write_options_cli_with_one_default_command_alias_at_most() {
+    let build = |aliases: fn(CliAliases, &CapabilityDefinition<()>) -> CliAliases| {
+        let ping = ping();
+        App::new()
+            .target("cli", ["cli"])
+            .cli_aliases("cli", aliases(CliAliases::new(), &ping))
+            .capability(ping)
+            .build()
+    };
+    let app = build(|aliases, ping| aliases.alias_default("ping", ping).alias("--ping", ping))
+        .unwrap_or_else(|problems| panic!("the application does not conform: {problems:?}"));
+    assert_eq!(
+        app.catalog()["targets"]["cli"]["options"],
+        json!({ "cli": { "aliases": { "ping": { "capability": "probe.ping" }, "--ping": { "capability": "probe.ping" } }, "default": "ping" } })
+    );
+    let problems = |aliases| build(aliases).err().unwrap_or_default();
+    assert_eq!(
+        problems(|aliases, ping| aliases
+            .alias_default("ping", ping)
+            .alias_default("pong", ping)),
+        ["target cli: the aliases ping, pong are all default aliases. Give one at most"]
+    );
+    assert_eq!(
+        problems(|aliases, ping| aliases.alias_default("--ping", ping)),
+        ["target cli: the default alias --ping is a flag alias. Make it a command alias"]
+    );
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+struct Note {
+    text: Option<String>,
+    loud: Option<bool>,
+}
+
+#[test]
+fn a_property_of_the_fixed_input_that_is_none_stays_a_flag_of_the_alias() {
+    let note = Capability::new("probe.note", "Write a note.")
+        .audience(["cli"])
+        .input::<Note>()
+        .run(|_: Note, _| async move { Ok(()) });
+    let app = App::new()
+        .target("cli", ["cli"])
+        .cli_aliases(
+            "cli",
+            CliAliases::new().alias_with(
+                "shout",
+                &note,
+                Note {
+                    text: None,
+                    loud: Some(true),
+                },
+            ),
+        )
+        .capability(note)
+        .build()
+        .unwrap_or_else(|problems| panic!("the application does not conform: {problems:?}"));
+    assert_eq!(
+        app.catalog()["targets"]["cli"]["options"]["cli"]["aliases"]["shout"],
+        json!({ "capability": "probe.note", "input": { "loud": true } })
+    );
 }

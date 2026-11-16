@@ -1,16 +1,40 @@
 import { canonicalText } from "@acid-cat/catalog";
-import { objectInput, REFERENCE } from "@acid-cat/spec-ts";
+import { isJsonObject, objectInput, REFERENCE } from "@acid-cat/spec-ts";
 import type { CatalogCapability, CatalogDocument, CatalogEvent, JsonObject } from "@acid-cat/spec-ts";
 import { Predicate, Schema } from "effect";
 
 import type * as Capability from "./Capability.ts";
+import type { AnySchema } from "./Capability.ts";
 import type * as Event from "./Event.ts";
+
+/** An alias of the command line (spec/bindings/cli.md#aliases). Make it with `App.alias` or `App.aliasDefault`. */
+export interface Alias {
+  readonly member: "capability" | "event";
+  readonly id: string;
+  readonly input?: JsonObject | undefined;
+  readonly isDefault: boolean;
+}
+
+type Aliased<Input extends AnySchema> = { readonly id: string; readonly input?: Input | undefined } & ({ readonly run: unknown } | { readonly subscribe: unknown });
+
+const aliasOf = <Input extends AnySchema>(of: Aliased<Input>, input: Partial<Input["Encoded"]> | undefined, isDefault: boolean): Alias => {
+  if (input !== undefined && !isJsonObject(input)) throw new Error(`The fixed input of an alias of ${of.id} must be a JSON object.`);
+  return { member: "run" in of ? "capability" : "event", id: of.id, ...(input === undefined ? {} : { input }), isDefault };
+};
+
+/** An alias of a capability or an event. The fixed input has some properties of the input, in the encoded form of the input schema. */
+export const alias = <Input extends AnySchema>(of: Aliased<Input>, input?: NoInfer<Partial<Input["Encoded"]>>): Alias => aliasOf(of, input, false);
+
+/** The alias that runs when the program gets no arguments. It must be a command alias, and a target has one at most. */
+export const aliasDefault = <Input extends AnySchema>(of: Aliased<Input>, input?: NoInfer<Partial<Input["Encoded"]>>): Alias => aliasOf(of, input, true);
 
 export interface Target {
   /** The bindings that serve the target, for example `["mcp"]`. */
   readonly bindings: readonly string[];
   readonly description?: string | undefined;
   readonly options?: JsonObject | undefined;
+  /** The aliases of the command line. The catalog writes them in `options.cli`. */
+  readonly cli?: { readonly aliases: { readonly [name: string]: Alias } } | undefined;
 }
 
 export interface App<R = never> {
@@ -113,7 +137,7 @@ function write(app: App<unknown>): CatalogDocument {
         {
           bindings: target.bindings,
           ...(target.description === undefined ? {} : { description: target.description }),
-          ...(target.options === undefined ? {} : { options: target.options }),
+          ...optionsOf(name, target),
         },
       ]),
     ),
@@ -121,6 +145,21 @@ function write(app: App<unknown>): CatalogDocument {
     capabilities,
     ...(Object.keys(events).length === 0 ? {} : { events }),
   };
+}
+
+function optionsOf(name: string, target: Target): { readonly options?: JsonObject } {
+  if (target.cli === undefined) return target.options === undefined ? {} : { options: target.options };
+  if (target.options?.cli !== undefined) throw new Error(`Target ${name}: give the aliases in cli or in options.cli, not in both.`);
+  const aliases: Record<string, JsonObject> = {};
+  const defaults: string[] = [];
+  for (const [alias, { member, id, input, isDefault }] of Object.entries(target.cli.aliases)) {
+    aliases[alias] = { [member]: id, ...(input === undefined ? {} : { input }) };
+    if (isDefault) defaults.push(alias);
+  }
+  const [defaultAlias, ...others] = defaults;
+  if (others.length > 0) throw new Error(`Target ${name}: the aliases ${defaults.join(", ")} are all default aliases. Give one at most.`);
+  if (defaultAlias?.startsWith("--") === true) throw new Error(`Target ${name}: the default alias ${defaultAlias} is a flag alias. Make it a command alias.`);
+  return { options: { ...target.options, cli: { aliases, ...(defaultAlias === undefined ? {} : { default: defaultAlias }) } } };
 }
 
 function isObjectSchema(schema: JsonObject, types: { readonly [name: string]: JsonObject }): boolean {

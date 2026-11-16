@@ -48,8 +48,8 @@ export interface CapabilityParts<Context, Value, Failures, State, Id extends str
  * A capability with an input schema: an object schema, or a union of object schemas. The catalog writes a union with
  * `"type": "object"`. `run` receives the output of the schema.
  */
-export interface WithInput<Context, Input, Value, Failures> {
-  readonly input: StandardSchemaV1<unknown, Input>;
+export interface WithInput<Context, Input, Value, Failures, Encoded = unknown> {
+  readonly input: StandardSchemaV1<Encoded, Input>;
   readonly run: Run<Context, Input, Value, Failures>;
 }
 
@@ -58,8 +58,8 @@ export interface WithoutInput<Context, Value, Failures> {
   readonly run: Run<Context, EmptyInput, Value, Failures>;
 }
 
-export type CapabilityDeclaration<Context, Input, Value, Failures, State, Id extends string> = CapabilityParts<Context, Value, Failures, State, Id> &
-  (WithInput<Context, Input, Value, Failures> | WithoutInput<Context, Value, Failures>);
+export type CapabilityDeclaration<Context, Input, Value, Failures, State, Id extends string, Encoded = unknown> = CapabilityParts<Context, Value, Failures, State, Id> &
+  (WithInput<Context, Input, Value, Failures, Encoded> | WithoutInput<Context, Value, Failures>);
 
 export type Decoded<Context> =
   | { readonly issues: readonly StandardSchemaV1.Issue[] }
@@ -67,13 +67,15 @@ export type Decoded<Context> =
 
 export type Decode<Context> = (input: unknown) => Promise<Decoded<Context>>;
 
-export type Capability<Context = unknown, Input = EmptyInput, Value = null, Failures = {}, State = never, Id extends string = string> = CapabilityDeclaration<
+/** `Encoded` is the type that the input schema accepts: the JSON side of the input. */
+export type Capability<Context = unknown, Input = EmptyInput, Value = null, Failures = {}, State = never, Id extends string = string, Encoded = unknown> = CapabilityDeclaration<
   Context,
   Input,
   Value,
   Failures,
   State,
-  Id
+  Id,
+  Encoded
 > & { readonly decode: Decode<Context> };
 
 export interface AnyCapability<Context = never> {
@@ -101,10 +103,13 @@ export function defineCapability<
   Failures extends FailureData = {},
   State = never,
   const Id extends string = string,
->(declaration: CapabilityParts<Context, Value, Failures, State, Id> & WithInput<Context, Input, Value, Failures>): Capability<Context, Input, Value, Failures, State, Id>;
+  Encoded = unknown,
+>(
+  declaration: CapabilityParts<Context, Value, Failures, State, Id> & WithInput<Context, Input, Value, Failures, Encoded>,
+): Capability<Context, Input, Value, Failures, State, Id, Encoded>;
 export function defineCapability<Context = unknown, Value = null, Failures extends FailureData = {}, State = never, const Id extends string = string>(
   declaration: CapabilityParts<Context, Value, Failures, State, Id> & WithoutInput<Context, Value, Failures>,
-): Capability<Context, EmptyInput, Value, Failures, State, Id>;
+): Capability<Context, EmptyInput, Value, Failures, State, Id, never>;
 // TypeScript gives `run` no contextual type from a union of the two signatures above, so they are separate overloads.
 export function defineCapability<Context, Input, Value, Failures, State, Id extends string>(
   declaration: CapabilityDeclaration<Context, Input, Value, Failures, State, Id>,
@@ -129,12 +134,12 @@ function decoderOf<Context, Input, Value, Failures, State, Id extends string>(
 }
 
 export interface CapabilityFactory<Context> {
-  <Input, Value = null, Failures extends FailureData = {}, State = never, const Id extends string = string>(
-    declaration: CapabilityParts<Context, Value, Failures, State, Id> & WithInput<Context, Input, Value, Failures>,
-  ): Capability<Context, Input, Value, Failures, State, Id>;
+  <Input, Value = null, Failures extends FailureData = {}, State = never, const Id extends string = string, Encoded = unknown>(
+    declaration: CapabilityParts<Context, Value, Failures, State, Id> & WithInput<Context, Input, Value, Failures, Encoded>,
+  ): Capability<Context, Input, Value, Failures, State, Id, Encoded>;
   <Value = null, Failures extends FailureData = {}, State = never, const Id extends string = string>(
     declaration: CapabilityParts<Context, Value, Failures, State, Id> & WithoutInput<Context, Value, Failures>,
-  ): Capability<Context, EmptyInput, Value, Failures, State, Id>;
+  ): Capability<Context, EmptyInput, Value, Failures, State, Id, never>;
 }
 
 /**
@@ -174,8 +179,8 @@ export interface EventParts<Payload, Id extends string> {
   readonly payload?: StandardSchemaV1<unknown, Payload> | undefined;
 }
 
-export interface EventWithInput<Context, Input, Payload> {
-  readonly input: StandardSchemaV1<unknown, Input>;
+export interface EventWithInput<Context, Input, Payload, Encoded = unknown> {
+  readonly input: StandardSchemaV1<Encoded, Input>;
   readonly subscribe: Subscribe<Context, Input, Payload>;
 }
 
@@ -184,14 +189,21 @@ export interface EventWithoutInput<Context, Payload> {
   readonly subscribe: Subscribe<Context, EmptyInput, Payload>;
 }
 
-export type EventDeclaration<Context, Input, Payload, Id extends string> = EventParts<Payload, Id> &
-  (EventWithInput<Context, Input, Payload> | EventWithoutInput<Context, Payload>);
+export type EventDeclaration<Context, Input, Payload, Id extends string, Encoded = unknown> = EventParts<Payload, Id> &
+  (EventWithInput<Context, Input, Payload, Encoded> | EventWithoutInput<Context, Payload>);
 
 export type DecodedEvent<Context> =
   | { readonly issues: readonly StandardSchemaV1.Issue[] }
   | { readonly start: (subscription: Subscription<Context>) => AsyncIterable<Emitted<unknown>> };
 
-export type EventDefinition<Context = unknown, Input = EmptyInput, Payload = EmptyInput, Id extends string = string> = EventDeclaration<Context, Input, Payload, Id> & {
+/** `Encoded` is the type that the input schema accepts: the JSON side of the input. */
+export type EventDefinition<Context = unknown, Input = EmptyInput, Payload = EmptyInput, Id extends string = string, Encoded = unknown> = EventDeclaration<
+  Context,
+  Input,
+  Payload,
+  Id,
+  Encoded
+> & {
   readonly decode: (input: unknown) => Promise<DecodedEvent<Context>>;
 };
 
@@ -208,12 +220,12 @@ export interface AnyEventDefinition<Context = never> {
  * Declare an event. `Context` is the type of the services that `subscribe` receives. The other types come from the
  * schemas, and the id keeps its literal type.
  */
-export function defineEvent<Context = unknown, Input = EmptyInput, Payload = EmptyInput, const Id extends string = string>(
-  declaration: EventParts<Payload, Id> & EventWithInput<Context, Input, Payload>,
-): EventDefinition<Context, Input, Payload, Id>;
+export function defineEvent<Context = unknown, Input = EmptyInput, Payload = EmptyInput, const Id extends string = string, Encoded = unknown>(
+  declaration: EventParts<Payload, Id> & EventWithInput<Context, Input, Payload, Encoded>,
+): EventDefinition<Context, Input, Payload, Id, Encoded>;
 export function defineEvent<Context = unknown, Payload = EmptyInput, const Id extends string = string>(
   declaration: EventParts<Payload, Id> & EventWithoutInput<Context, Payload>,
-): EventDefinition<Context, EmptyInput, Payload, Id>;
+): EventDefinition<Context, EmptyInput, Payload, Id, never>;
 // TypeScript gives `subscribe` no contextual type from a union of the two signatures above, so they are separate overloads.
 export function defineEvent<Context, Input, Payload, Id extends string>(
   declaration: EventDeclaration<Context, Input, Payload, Id>,
@@ -235,18 +247,41 @@ export function defineEvent<Context, Input, Payload, Id extends string>(
 }
 
 export interface EventFactory<Context> {
-  <Input, Payload = EmptyInput, const Id extends string = string>(
-    declaration: EventParts<Payload, Id> & EventWithInput<Context, Input, Payload>,
-  ): EventDefinition<Context, Input, Payload, Id>;
-  <Payload = EmptyInput, const Id extends string = string>(declaration: EventParts<Payload, Id> & EventWithoutInput<Context, Payload>): EventDefinition<Context, EmptyInput, Payload, Id>;
+  <Input, Payload = EmptyInput, const Id extends string = string, Encoded = unknown>(
+    declaration: EventParts<Payload, Id> & EventWithInput<Context, Input, Payload, Encoded>,
+  ): EventDefinition<Context, Input, Payload, Id, Encoded>;
+  <Payload = EmptyInput, const Id extends string = string>(declaration: EventParts<Payload, Id> & EventWithoutInput<Context, Payload>): EventDefinition<Context, EmptyInput, Payload, Id, never>;
 }
 
 export const eventsFor = <Context>(): EventFactory<Context> => defineEvent;
+
+/** An alias of the command line (spec/bindings/cli.md#aliases). Make it with `cliAlias` or `cliAliasDefault`. */
+export interface CliAlias {
+  readonly member: "capability" | "event";
+  readonly id: string;
+  readonly input?: JsonObject | undefined;
+  readonly isDefault: boolean;
+}
+
+type Aliased<Encoded> = { readonly id: string; readonly input?: StandardSchemaV1<Encoded, unknown> | undefined } & ({ readonly run: unknown } | { readonly subscribe: unknown });
+
+const aliasOf = <Encoded>(of: Aliased<Encoded>, input: Partial<Encoded> | undefined, isDefault: boolean): CliAlias => {
+  if (input !== undefined && !isJsonObject(input)) throw new Error(`The fixed input of an alias of ${of.id} must be a JSON object.`);
+  return { member: "run" in of ? "capability" : "event", id: of.id, ...(input === undefined ? {} : { input }), isDefault };
+};
+
+/** An alias of a capability or an event. The fixed input has some properties of the input, in the form that the input schema accepts. */
+export const cliAlias = <Encoded>(of: Aliased<Encoded>, input?: NoInfer<Partial<Encoded>>): CliAlias => aliasOf(of, input, false);
+
+/** The alias that runs when the program gets no arguments. It must be a command alias, and a target has one at most. */
+export const cliAliasDefault = <Encoded>(of: Aliased<Encoded>, input?: NoInfer<Partial<Encoded>>): CliAlias => aliasOf(of, input, true);
 
 export interface Target {
   readonly bindings: readonly string[];
   readonly description?: string | undefined;
   readonly options?: JsonObject | undefined;
+  /** The aliases of the command line. The catalog writes them in `options.cli`. */
+  readonly cli?: { readonly aliases: { readonly [name: string]: CliAlias } } | undefined;
 }
 
 export interface App<Context = unknown> {
@@ -337,7 +372,7 @@ function write(app: App<never>, toJsonSchema: ToJsonSchema): CatalogDocument {
         {
           bindings: target.bindings,
           ...(target.description === undefined ? {} : { description: target.description }),
-          ...(target.options === undefined ? {} : { options: target.options }),
+          ...optionsOf(name, target),
         },
       ]),
     ),
@@ -345,6 +380,21 @@ function write(app: App<never>, toJsonSchema: ToJsonSchema): CatalogDocument {
     capabilities,
     ...(Object.keys(events).length === 0 ? {} : { events }),
   };
+}
+
+function optionsOf(name: string, target: Target): { readonly options?: JsonObject } {
+  if (target.cli === undefined) return target.options === undefined ? {} : { options: target.options };
+  if (target.options?.cli !== undefined) throw new Error(`Target ${name}: give the aliases in cli or in options.cli, not in both.`);
+  const aliases: Record<string, JsonObject> = {};
+  const defaults: string[] = [];
+  for (const [alias, { member, id, input, isDefault }] of Object.entries(target.cli.aliases)) {
+    aliases[alias] = { [member]: id, ...(input === undefined ? {} : { input }) };
+    if (isDefault) defaults.push(alias);
+  }
+  const [defaultAlias, ...others] = defaults;
+  if (others.length > 0) throw new Error(`Target ${name}: the aliases ${defaults.join(", ")} are all default aliases. Give one at most.`);
+  if (defaultAlias?.startsWith("--") === true) throw new Error(`Target ${name}: the default alias ${defaultAlias} is a flag alias. Make it a command alias.`);
+  return { options: { ...target.options, cli: { aliases, ...(defaultAlias === undefined ? {} : { default: defaultAlias }) } } };
 }
 
 /** The catalog of an application, as text in canonical form. */

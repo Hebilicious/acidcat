@@ -99,7 +99,7 @@ export function make<Input extends AnySchema, R = never, Payload extends AnySche
 ): Event<Input, Payload, R, Id>;
 export function make<R = never, Payload extends AnySchema = typeof EmptyPayload, const Id extends string = string>(
   definition: WithoutInput<Payload, R, Id>,
-): Event<Schema.Struct<{}>, Payload, R, Id>;
+): Event<Schema.Codec<{}, never>, Payload, R, Id>;
 export function make<Input extends AnySchema, R, Payload extends AnySchema, const Id extends string>(
   definition: WithInput<Input, Payload, R, Id> | WithoutInput<Payload, R, Id>,
 ): Event<Input, Payload, R, Id> {

@@ -194,15 +194,12 @@ export const aircon = App.make({
     taskbar: { description: "A desktop taskbar widget showing the status and a power toggle.", bindings: ["typescript"] },
     cli: {
       bindings: ["cli"],
-      options: {
-        cli: {
-          aliases: {
-            status: { capability: "aircon.status.get" },
-            "--on": { capability: "aircon.power.set", input: { on: true } },
-            "--off": { capability: "aircon.power.set", input: { on: false } },
-            follow: { event: "aircon.status.changed" },
-          },
-          default: "status",
+      cli: {
+        aliases: {
+          status: App.aliasDefault(statusGet),
+          "--on": App.alias(powerSet, { on: true }),
+          "--off": App.alias(powerSet, { on: false }),
+          follow: App.alias(statusChanged),
         },
       },
     },

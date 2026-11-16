@@ -41,6 +41,21 @@ acid-cat format --write greenhouse.acidcat.json
 
 `events` declares the [events](../../../spec/events.md) that clients can subscribe to. The module checks that each audience names a target, that each input and payload is an object or a reference, and that no id is also the id of a capability.
 
+The member `cli` of a target gives the options of the [command line](../../../spec/bindings/cli.md#aliases), and renders as `options.cli`. Its classes `CliOptions` and `CliAlias` reject a misspelled member name. `acid-cat check` checks the rules of the aliases:
+
+```pkl
+["cli"] {
+  bindings { "cli" }
+  cli {
+    aliases {
+      ["vents"] { capability = "greenhouse.vents.set" }
+      ["--open"] { capability = "greenhouse.vents.set"; input { percent = 100 } }
+    }
+    default = "vents"
+  }
+}
+```
+
 The full example is [`examples/greenhouse.pkl`](examples/greenhouse.pkl), a greenhouse. It amends [`Catalog.pkl`](Catalog.pkl) by its path. Its canonical JSON is [`examples/greenhouse.acidcat.json`](examples/greenhouse.acidcat.json). The root `moon run check` renders each `.pkl` catalog that has an `.acidcat.json` file beside it, and compares the two. It also checks that each committed catalog file is in [canonical form](../../../spec/catalog.md#canonical-form).
 
 `moon run catalog-pkl:test` packages the module into `.out/`, then evaluates the example. The package does not contain the example. The evaluation checks the catalog rules of the example.

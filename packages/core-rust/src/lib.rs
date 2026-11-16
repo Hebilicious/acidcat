@@ -10,7 +10,7 @@ mod subscription;
 
 pub use app::{
     App, Application, Call, Capability, CapabilityDefinition, Emitted, Event, EventDefinition,
-    NoPayload, StateWatch, Subscription, Target,
+    NoInput, NoPayload, StateWatch, Subscription, Target,
 };
 pub use outcome::{
     Availability, CallFailure, Defect, Kind, NoFailure, Outcome, RunError, RunResult, fail,

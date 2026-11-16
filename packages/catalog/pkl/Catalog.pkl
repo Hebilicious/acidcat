@@ -64,8 +64,36 @@ class Target {
   /// Who the target is for.
   description: String?
 
-  /// Settings for the bindings, in a form each binding defines.
-  options: Dynamic?
+  /// Settings for the bindings, in a form each binding defines. Give the options of the command line in [cli].
+  options: Dynamic(!toMap().containsKey("cli"))?
+
+  /// The options of the command line, rendered as `options.cli`.
+  cli: CliOptions?
+
+  /// Members that this specification does not define, rendered with an `x-` prefix.
+  extensions: Mapping<String, Any>
+}
+
+/// The options of the command line of a target (spec/bindings/cli.md#aliases).
+class CliOptions {
+  /// The aliases, by name.
+  aliases: Mapping<String, CliAlias>
+
+  /// The alias that runs when the program gets no arguments.
+  default: String?
+
+  /// Members that this specification does not define, rendered with an `x-` prefix.
+  extensions: Mapping<String, Any>
+}
+
+/// An alias of a capability or an event.
+class CliAlias {
+  capability: Id?
+
+  event: Id?
+
+  /// The fixed input: some properties of the input.
+  input: Dynamic?
 
   /// Members that this specification does not define, rendered with an `x-` prefix.
   extensions: Mapping<String, Any>
@@ -129,10 +157,16 @@ local function rendered(value: Typed): Map<String, Any> =
       .mapKeys((name, _) -> if (name == "types") "$defs" else name)
       + (members["extensions"] as Mapping).toMap().mapKeys((name, _) -> "x-\(name)")
 
+local function renderedTarget(target: Target): Map<String, Any> =
+  if (target.cli == null) rendered(target)
+  else rendered(target).remove("cli").put("options", (target.options?.toMap() ?? Map()).put("cli", target.cli))
+
 output {
   renderer = new JsonRenderer {
     converters {
-      [Target] = (target) -> rendered(target)
+      [Target] = (target) -> renderedTarget(target)
+      [CliOptions] = (options) -> rendered(options)
+      [CliAlias] = (alias) -> rendered(alias)
       [Capability] = (capability) -> rendered(capability)
       [Event] = (event) -> rendered(event)
     }

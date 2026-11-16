@@ -360,19 +360,17 @@ cliMain(aircon, { name: "aircon", version: "0.1.0", context: { unit }, toJsonSch
 
 #### Aliases
 
-The `cli` target can give [aliases](../../spec/bindings/cli.md#aliases) in its options: short names for capabilities, with an optional fixed input. A command alias is one word, and a flag alias is `--` and one word:
+The `cli` target can give [aliases](../../spec/bindings/cli.md#aliases) in its member `cli`: short names for capabilities, with an optional fixed input. A command alias is one word, and a flag alias is `--` and one word. `cliAlias` takes the capability or the event, and the type of the fixed input comes from the input schema. The catalog writes the aliases in `options.cli`:
 
 ```ts
 targets: {
   cli: {
     bindings: ["cli"],
-    options: {
-      cli: {
-        aliases: {
-          status: { capability: "aircon.status.get" },
-          "--on": { capability: "aircon.power.set", input: { on: true } },
-          "--off": { capability: "aircon.power.set", input: { on: false } },
-        },
+    cli: {
+      aliases: {
+        status: cliAlias(statusGet),
+        "--on": cliAlias(powerSet, { on: true }),
+        "--off": cliAlias(powerSet, { on: false }),
       },
     },
   },
@@ -386,7 +384,7 @@ node cli.ts status    # the same call as: node cli.ts aircon status get
 
 The properties of the fixed input are not flags of the alias. The other properties are flags, with the rules above. `list` gives the usage of the aliases of each capability and each event in `aliases`, and the help lists them.
 
-An alias can also name an event: `follow: { event: "aircon.status.changed" }` makes `node cli.ts follow` the same as `node cli.ts watch aircon.status.changed`, with `--cursor` and `--max-age-ms`. `default: "status"` in `options.cli` makes `status` the default alias: `node cli.ts` with no arguments runs it, and so does a first flag that is not a flag alias, for example `node cli.ts --flag`. `--help` still writes the help. If an alias breaks a rule, `runCli` rejects and `cliMain` stops the program with an error when it starts. A command of the application must not have the name of an alias.
+An alias can also name an event: `follow: cliAlias(statusChanged)` makes `node cli.ts follow` the same as `node cli.ts watch aircon.status.changed`, with `--cursor` and `--max-age-ms`. `status: cliAliasDefault(statusGet)` makes `status` the default alias: `node cli.ts` with no arguments runs it, and so does a first flag that is not a flag alias, for example `node cli.ts --flag`. `--help` still writes the help. If an alias breaks a rule, `runCli` rejects and `cliMain` stops the program with an error when it starts. A command of the application must not have the name of an alias.
 
 ### Command line of a server
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { AVAILABLE, capabilitiesFor, defineApp, eventsFor, fail, ok, unavailable } from "@acid-cat/core-ts";
+import { AVAILABLE, capabilitiesFor, cliAlias, cliAliasDefault, defineApp, eventsFor, fail, ok, unavailable } from "@acid-cat/core-ts";
 import type { Availability, Observable, ToJsonSchema } from "@acid-cat/core-ts";
 
 export const Mode = z.enum(["cool", "heat", "dry", "fan", "auto"]).meta({ id: "Mode" });
@@ -220,15 +220,12 @@ export const aircon = defineApp<Context>({
     taskbar: { description: "A desktop taskbar widget showing the status and a power toggle.", bindings: ["typescript"] },
     cli: {
       bindings: ["cli"],
-      options: {
-        cli: {
-          aliases: {
-            status: { capability: "aircon.status.get" },
-            "--on": { capability: "aircon.power.set", input: { on: true } },
-            "--off": { capability: "aircon.power.set", input: { on: false } },
-            follow: { event: "aircon.status.changed" },
-          },
-          default: "status",
+      cli: {
+        aliases: {
+          status: cliAliasDefault(statusGet),
+          "--on": cliAlias(powerSet, { on: true }),
+          "--off": cliAlias(powerSet, { on: false }),
+          follow: cliAlias(statusChanged),
         },
       },
     },

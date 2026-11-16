@@ -43,7 +43,7 @@ AIRCON_URL=http://localhost:8081/cli node core-effect/cli.ts aircon power set --
 AIRCON_URL=http://localhost:8082/cli core-rust/target/debug/aircon cli aircon power set --on
 ```
 
-The `cli` target gives four [aliases](../../spec/bindings/cli.md#aliases) in its options. `status` calls `aircon.status.get`, and it is the default alias. `--on` and `--off` call `aircon.power.set` with the fixed input `{ "on": true }` or `{ "on": false }`. `follow` subscribes to the event `aircon.status.changed`:
+The `cli` target gives four [aliases](../../spec/bindings/cli.md#aliases). Each core gives them from the capability and event objects, and the catalog writes them in `options.cli`. `status` calls `aircon.status.get`, and it is the default alias. `--on` and `--off` call `aircon.power.set` with the fixed input `{ "on": true }` or `{ "on": false }`. `follow` subscribes to the event `aircon.status.changed`:
 
 ```sh
 node core-ts/cli.ts --on

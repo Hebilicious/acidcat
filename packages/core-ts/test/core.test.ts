@@ -4,8 +4,8 @@ import { test } from "node:test";
 import { check } from "@acid-cat/cli";
 import { z } from "zod";
 
-import { AVAILABLE, CallFailureError, catalogOf, createSession, defineApp, defineCapability, httpHandler, installWebMcp, mcpHandler, ok, renderCatalog, runCli } from "../src/index.ts";
-import type { App, CliCommand, CliOptions, ModelContextTool, Outcome } from "../src/index.ts";
+import { AVAILABLE, CallFailureError, catalogOf, cliAlias, cliAliasDefault, createSession, defineApp, defineCapability, httpHandler, installWebMcp, mcpHandler, ok, renderCatalog, runCli } from "../src/index.ts";
+import type { App, CliAlias, CliCommand, CliOptions, ModelContextTool, Outcome } from "../src/index.ts";
 import { fixture, heldApp, Holds, options, readJson, Switch, toJsonSchema, Watchers } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
 
@@ -510,6 +510,17 @@ test("the command line stops when it starts if an alias breaks a rule", async ()
   await assert.rejects(run({ probe: { capability: "probe.ping" } }), /the alias probe has the name of the first word/);
   await assert.rejects(run({ gone: { capability: "probe.gone" } }), /the alias gone refers to probe.gone/);
   assert.equal((await run({ ping: { capability: "probe.ping" } })).code, 0);
+});
+
+test("cliAlias writes options.cli, with one default command alias at most", () => {
+  const ping = defineCapability({ id: "probe.ping", description: "Ping.", audience: ["cli"], run: () => ok(null) });
+  const write = (aliases: Record<string, CliAlias>) =>
+    catalogOf(defineApp({ targets: { cli: { bindings: ["cli"], cli: { aliases } } }, capabilities: [ping] }), { toJsonSchema }).targets.cli?.options;
+  assert.deepEqual(write({ ping: cliAliasDefault(ping), "--ping": cliAlias(ping) }), {
+    cli: { aliases: { ping: { capability: "probe.ping" }, "--ping": { capability: "probe.ping" } }, default: "ping" },
+  });
+  assert.throws(() => write({ ping: cliAliasDefault(ping), pong: cliAliasDefault(ping) }), /the aliases ping, pong are all default aliases/);
+  assert.throws(() => write({ "--ping": cliAliasDefault(ping) }), /the default alias --ping is a flag alias/);
 });
 
 test("the command line stops when it starts if the path of a capability is the start of the path of another", async () => {
