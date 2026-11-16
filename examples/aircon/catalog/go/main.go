@@ -113,6 +113,12 @@ func airconCatalog() *catalog.Catalog {
 			Output:   schedule,
 			Failures: offlineOnly,
 		}).
+		Capability("aircon.status.export", catalog.Capability{
+			Description: "Write the status to a JSON file. A cancelled call can still write the file.",
+			Audience:    []string{"cli"},
+			Input:       schema{"type": "object", "required": []any{"path"}, "properties": schema{"path": schema{"type": "string"}}},
+			Failures:    map[string]schema{"Offline": offline, "WriteFailed": {"type": "object"}},
+		}).
 		Capability("aircon.firmware.update", catalog.Capability{
 			Description: "Install the latest firmware. The unit restarts and is offline for about a minute.",
 			Audience:    []string{"app"},

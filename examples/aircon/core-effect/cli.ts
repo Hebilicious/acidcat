@@ -1,7 +1,11 @@
 #!/usr/bin/env node
+import { writeFile } from "node:fs/promises";
+
 import { Http } from "@acid-cat/core-effect";
 import { NodeCli } from "@acid-cat/core-effect/node";
-import { aircon, unitLayer } from "./aircon.ts";
+import { Layer } from "effect";
+
+import { aircon, Files, unitLayer } from "./aircon.ts";
 
 const url = process.env.AIRCON_URL;
 let remote: Http.Client | undefined;
@@ -14,4 +18,4 @@ if (url !== undefined) {
   }
 }
 
-NodeCli.main(aircon, unitLayer, { name: "aircon", version: "0.1.0", remote });
+NodeCli.main(aircon, Layer.merge(unitLayer, Layer.succeed(Files, { writeFile })), { name: "aircon", version: "0.1.0", remote });

@@ -160,6 +160,13 @@ fn aircon_catalog() -> Catalog {
             failures: offline_only(),
             ..Capability::default()
         })
+        .capability("aircon.status.export", Capability {
+            description: "Write the status to a JSON file. A cancelled call can still write the file.".into(),
+            audience: strings(&["cli"]),
+            input: Some(json!({ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } })),
+            failures: vec![("Offline".into(), offline.clone()), ("WriteFailed".into(), json!({ "type": "object" }))],
+            ..Capability::default()
+        })
         .capability("aircon.firmware.update", Capability {
             description: "Install the latest firmware. The unit restarts and is offline for about a minute.".into(),
             audience: strings(&["app"]),

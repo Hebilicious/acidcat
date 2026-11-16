@@ -264,6 +264,31 @@
         }
       }
     },
+    "aircon.status.export": {
+      "description": "Write the status to a JSON file. A cancelled call can still write the file.",
+      "audience": [
+        "cli"
+      ],
+      "input": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "failures": {
+        "Offline": {
+          "$ref": "#/$defs/Offline"
+        },
+        "WriteFailed": {
+          "type": "object"
+        }
+      }
+    },
     "aircon.status.get": {
       "description": "Read the unit's power, mode, fan speed, target temperature and room temperature.",
       "audience": [

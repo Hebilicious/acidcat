@@ -88,6 +88,21 @@ enum FirmwareFailure {
     },
 }
 
+#[derive(Serialize, JsonSchema)]
+#[serde(tag = "_tag")]
+enum ExportFailure {
+    Offline {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        since: Option<String>,
+    },
+    WriteFailed {},
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct Export {
+    path: String,
+}
+
 #[derive(Deserialize, JsonSchema)]
 struct Power {
     on: bool,
@@ -130,6 +145,7 @@ pub struct Unit {
     online: watch::Sender<Availability>,
     firmware: String,
     schedule: Mutex<Schedule>,
+    files: bool,
 }
 
 impl Default for Unit {
@@ -149,6 +165,7 @@ impl Default for Unit {
                 days: Vec::new(),
                 hours: Vec::new(),
             }),
+            files: false,
         }
     }
 }
@@ -323,6 +340,26 @@ pub fn aircon() -> Arc<Application<Unit>> {
         )
         .capability(
             Capability::new(
+                "aircon.status.export",
+                "Write the status to a JSON file. A cancelled call can still write the file.",
+            )
+            .audience(["cli"])
+            .input::<Export>()
+            .failures::<ExportFailure>()
+            .run(|Export { path }, call| async move {
+                let unit = call.context();
+                if !unit.is_online() {
+                    return fail(ExportFailure::Offline { since: None });
+                }
+                let text = serde_json::to_string(&*unit.status.borrow()).unwrap_or_default();
+                if !unit.files || std::fs::write(path, text).is_err() {
+                    return fail(ExportFailure::WriteFailed {});
+                }
+                Ok(())
+            }),
+        )
+        .capability(
+            Capability::new(
                 "aircon.firmware.update",
                 "Install the latest firmware. The unit restarts and is offline for about a minute.",
             )
@@ -377,6 +414,10 @@ async fn main() {
         Some("cli") => {
             use acid_cat_core::cli::{CliOptions, run_cli_process};
             use acid_cat_core::http::HttpClient;
+            let unit = Arc::new(Unit {
+                files: true,
+                ..Unit::default()
+            });
             let mut options = CliOptions::new("aircon", "0.1.0");
             if let Ok(url) = std::env::var("AIRCON_URL") {
                 match HttpClient::new(&url) {

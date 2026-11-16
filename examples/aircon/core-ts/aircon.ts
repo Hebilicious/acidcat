@@ -14,6 +14,7 @@ export const Status = z
 export const Offline = z.object({ _tag: z.literal("Offline"), since: z.string().optional() }).meta({ id: "Offline" });
 export const PoweredOff = z.object({ _tag: z.literal("PoweredOff") });
 const UpToDate = z.object({ _tag: z.literal("UpToDate"), version: z.string() });
+const WriteFailed = z.object({ _tag: z.literal("WriteFailed") });
 
 export type State = z.infer<typeof Status> & { online: boolean; firmware: string };
 
@@ -94,6 +95,7 @@ export class Unit {
 
 export interface Context {
   readonly unit: Unit;
+  readonly writeFile?: (path: string, text: string) => Promise<void>;
 }
 
 const capability = capabilitiesFor<Context>();
@@ -173,6 +175,23 @@ export const scheduleSet = capability({
   },
 });
 
+export const statusExport = capability({
+  id: "aircon.status.export",
+  description: "Write the status to a JSON file. A cancelled call can still write the file.",
+  audience: ["cli"],
+  input: z.object({ path: z.string() }),
+  failures: { Offline, WriteFailed },
+  run: async ({ path }, { context }) => {
+    const { online, firmware: _firmware, ...status } = context.unit.state;
+    if (!online) return fail({ _tag: "Offline" });
+    if (context.writeFile === undefined) return fail({ _tag: "WriteFailed" });
+    return context.writeFile(path, JSON.stringify(status)).then(
+      () => ok(null),
+      () => fail({ _tag: "WriteFailed" }),
+    );
+  },
+});
+
 export const firmwareUpdate = capability({
   id: "aircon.firmware.update",
   description: "Install the latest firmware. The unit restarts and is offline for about a minute.",
@@ -203,7 +222,7 @@ export const aircon = defineApp<Context>({
     mcp: { description: "Agents, through an MCP server.", bindings: ["mcp"] },
     api: { description: "Home-automation systems and scripts.", bindings: ["http"] },
   },
-  capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, scheduleSet, firmwareUpdate],
+  capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, scheduleSet, statusExport, firmwareUpdate],
   events: [statusChanged],
 });
 
