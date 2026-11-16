@@ -9,5 +9,8 @@ __pycache__/
 .local/
 CLAUDE.local.md
 
+# Temporary files of a task, at the root of its worktree.
+.tmp/
+
 # Task worktrees, one for each branch.
 .worktrees/
