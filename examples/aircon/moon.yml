@@ -29,6 +29,8 @@ tasks:
       - "/packages/catalog/rust/Cargo.toml"
       - "/packages/core-rust/src/**/*.rs"
       - "/packages/core-rust/Cargo.toml"
+    outputs:
+      - "core-rust/target/debug/aircon"
     toolchains: ["system"]
 
   test:
