@@ -42,10 +42,15 @@ impl Occurrence {
 
 pub(crate) const INTERNAL_MESSAGE: &str = "The event failed.";
 
+enum Ending {
+    Complete,
+    Failed(CallFailure),
+}
+
 struct State {
     buffer: VecDeque<Occurrence>,
     dropped: bool,
-    ending: Option<Option<CallFailure>>,
+    ending: Option<Ending>,
     closed: bool,
 }
 
@@ -62,7 +67,7 @@ impl Shared {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    fn end(&self, how: Option<CallFailure>) {
+    fn end(&self, how: Ending) {
         {
             let mut state = self.lock();
             if state.ending.is_none() && !state.closed {
@@ -113,7 +118,10 @@ impl Occurrences {
                 }
                 if let Some(ending) = state.ending.take() {
                     state.closed = true;
-                    return ending.map(Err);
+                    return match ending {
+                        Ending::Complete => None,
+                        Ending::Failed(failure) => Some(Err(failure)),
+                    };
                 }
             }
             notified.await;
@@ -187,18 +195,21 @@ async fn pump(shared: Arc<Shared>, parts: Parts) {
     } = parts;
     let fail = |defect: Defect| {
         on_defect(&defect);
-        shared.end(Some(CallFailure::new(Kind::Internal, INTERNAL_MESSAGE)));
+        shared.end(Ending::Failed(CallFailure::new(
+            Kind::Internal,
+            INTERNAL_MESSAGE,
+        )));
     };
     loop {
         let item = tokio::select! {
             biased;
             () = shared.stop.cancelled() => return,
-            () = closing.cancelled() => return shared.end(None),
+            () = closing.cancelled() => return shared.end(Ending::Complete),
             item = AssertUnwindSafe(source.next()).catch_unwind() => item,
         };
         let emitted = match item {
             Err(panic) => return fail(Defect::from_panic(panic)),
-            Ok(None) => return shared.end(None),
+            Ok(None) => return shared.end(Ending::Complete),
             Ok(Some(Err(defect))) => return fail(defect),
             Ok(Some(Ok(emitted))) => emitted,
         };

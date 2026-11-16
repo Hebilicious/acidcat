@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::outcome::{CallFailure, Kind, Outcome};
 use crate::schema::bundle;
-use crate::session::{Session, SubscribeOptions};
+use crate::session::{Session, SubscribeOptions, is_max_age_ms};
 use crate::subscription::Occurrences;
 
 pub use http::{McpBinding, McpOptions, Principal};
@@ -101,7 +101,12 @@ pub(crate) fn server_info(name: &str, version: &str) -> Value {
 
 pub(crate) type OpenSession<C> = Arc<dyn Fn() -> Session<C> + Send + Sync>;
 
-pub(crate) type KeyGates<L> = Mutex<HashMap<String, Arc<L>>>;
+pub(crate) type KeyGates<L> = Mutex<HashMap<String, Gate<L>>>;
+
+pub(crate) struct Gate<L> {
+    lock: Arc<L>,
+    holders: usize,
+}
 
 pub(crate) struct KeyGate<'a, L> {
     gates: &'a KeyGates<L>,
@@ -111,11 +116,16 @@ pub(crate) struct KeyGate<'a, L> {
 
 impl<'a, L: Default> KeyGate<'a, L> {
     pub(crate) fn enter(gates: &'a KeyGates<L>, key: &str) -> Self {
-        let lock = lock_gates(gates).entry(key.to_owned()).or_default().clone();
+        let mut gates_by_key = lock_gates(gates);
+        let gate = gates_by_key.entry(key.to_owned()).or_insert_with(|| Gate {
+            lock: Arc::default(),
+            holders: 0,
+        });
+        gate.holders += 1;
         KeyGate {
             gates,
             key: key.to_owned(),
-            lock,
+            lock: gate.lock.clone(),
         }
     }
 }
@@ -123,17 +133,16 @@ impl<'a, L: Default> KeyGate<'a, L> {
 impl<L> Drop for KeyGate<'_, L> {
     fn drop(&mut self) {
         let mut gates = lock_gates(self.gates);
-        if gates
-            .get(&self.key)
-            .is_some_and(|current| Arc::ptr_eq(current, &self.lock))
-            && Arc::strong_count(&self.lock) == 2
-        {
-            gates.remove(&self.key);
+        if let Some(gate) = gates.get_mut(&self.key) {
+            gate.holders -= 1;
+            if gate.holders == 0 {
+                gates.remove(&self.key);
+            }
         }
     }
 }
 
-fn lock_gates<L>(gates: &KeyGates<L>) -> std::sync::MutexGuard<'_, HashMap<String, Arc<L>>> {
+fn lock_gates<L>(gates: &KeyGates<L>) -> std::sync::MutexGuard<'_, HashMap<String, Gate<L>>> {
     gates
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -270,7 +279,38 @@ pub(crate) struct SubscriptionParams {
     pub(crate) name: String,
     pub(crate) input: Value,
     pub(crate) cursor: Option<String>,
-    pub(crate) max_age_ms: Option<f64>,
+    pub(crate) max_age_ms: MaxAge,
+}
+
+pub(crate) enum MaxAge {
+    Absent,
+    Valid(u64),
+    Invalid,
+}
+
+impl MaxAge {
+    fn read(value: Option<&Value>) -> Self {
+        match value {
+            None | Some(Value::Null) => MaxAge::Absent,
+            Some(Value::Number(number)) => match number.as_f64() {
+                Some(ms) if is_max_age_ms(ms) => MaxAge::Valid(ms as u64),
+                _ => MaxAge::Invalid,
+            },
+            Some(_) => MaxAge::Invalid,
+        }
+    }
+
+    pub(crate) fn is_invalid(&self) -> bool {
+        matches!(self, MaxAge::Invalid)
+    }
+
+    pub(crate) fn subscribe_option(&self) -> Option<f64> {
+        match self {
+            MaxAge::Absent => None,
+            MaxAge::Valid(ms) => Some(*ms as f64),
+            MaxAge::Invalid => Some(f64::NAN),
+        }
+    }
 }
 
 pub(crate) fn subscription_params(
@@ -281,11 +321,7 @@ pub(crate) fn subscription_params(
         Some(Value::String(cursor)) => Some(cursor.clone()),
         Some(_) => return Err(RpcError::invalid_params("cursor must be a string or null.")),
     };
-    let max_age_ms = match params.get("maxAgeMs") {
-        None | Some(Value::Null) => None,
-        Some(Value::Number(number)) => Some(number.as_f64().unwrap_or(f64::NAN)),
-        Some(_) => Some(f64::NAN),
-    };
+    let max_age_ms = MaxAge::read(params.get("maxAgeMs"));
     Ok(SubscriptionParams {
         name: params
             .get("name")
@@ -340,7 +376,7 @@ impl EventStream {
                 read.input,
                 SubscribeOptions {
                     cursor: read.cursor,
-                    max_age_ms: read.max_age_ms,
+                    max_age_ms: read.max_age_ms.subscribe_option(),
                     cancel: CancellationToken::new(),
                 },
             )
@@ -414,6 +450,25 @@ impl EventStream {
                 }
                 Some(vec![self.notification("active", active), event])
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn max_age_ms_is_absent_valid_or_invalid() {
+        let read = |value: Value| MaxAge::read(Some(&value)).subscribe_option();
+        assert_eq!(MaxAge::read(None).subscribe_option(), None);
+        assert_eq!(read(Value::Null), None);
+        assert_eq!(read(json!(5000)), Some(5000.0));
+        for invalid in [json!(-1), json!(1.5), json!(1e300), json!("5000")] {
+            assert!(
+                MaxAge::read(Some(&invalid)).is_invalid(),
+                "{invalid} is invalid"
+            );
         }
     }
 }

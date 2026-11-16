@@ -531,7 +531,11 @@ async fn watch<C: Send + Sync + 'static>(
     args: &[String],
     io: &mut CliIo,
 ) -> Result<i32, UsageError> {
-    let (flags, cursor, max_age_ms) = resume_flags(args)?;
+    let Resume {
+        flags,
+        cursor,
+        max_age_ms,
+    } = resume_flags(args)?;
     let Some((id, flags)) = flags.split_first() else {
         return Err(usage_error("Give the id of an event.", exit::INVALID_INPUT));
     };
@@ -642,17 +646,21 @@ fn split_flag(arg: &str) -> Option<(&str, Option<&str>)> {
     })
 }
 
-type Resume = (Vec<String>, Option<String>, Option<f64>);
+struct Resume {
+    flags: Vec<String>,
+    cursor: Option<String>,
+    max_age_ms: Option<f64>,
+}
 
 fn resume_flags(args: &[String]) -> Result<Resume, UsageError> {
-    let mut rest = Vec::new();
+    let mut flags = Vec::new();
     let mut cursor = None;
     let mut max_age_ms = None;
     let mut remaining = args.iter();
     while let Some(arg) = remaining.next() {
         let Some((name, inline)) = split_flag(arg).filter(|(name, _)| RESUME_FLAGS.contains(name))
         else {
-            rest.push(arg.clone());
+            flags.push(arg.clone());
             continue;
         };
         let text = inline
@@ -680,7 +688,11 @@ fn resume_flags(args: &[String]) -> Result<Resume, UsageError> {
             })?);
         }
     }
-    Ok((rest, cursor, max_age_ms))
+    Ok(Resume {
+        flags,
+        cursor,
+        max_age_ms,
+    })
 }
 
 fn object_at<'a>(value: &'a Value, member: &str) -> &'a Map<String, Value> {

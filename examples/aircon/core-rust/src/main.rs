@@ -74,7 +74,10 @@ enum ModeFailure {
 
 #[derive(Serialize, JsonSchema)]
 #[serde(tag = "_tag")]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "The capability is unavailable while the unit is offline, so it never fails with Offline. The tag stays in the catalog, as in the Pkl source."
+)]
 enum FirmwareFailure {
     Offline {
         #[serde(skip_serializing_if = "Option::is_none")]
