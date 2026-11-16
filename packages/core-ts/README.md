@@ -386,6 +386,45 @@ The properties of the fixed input are not flags of the alias. The other properti
 
 An alias can also name an event: `follow: cliAlias(statusChanged)` makes `node cli.ts follow` the same as `node cli.ts watch aircon.status.changed`, with `--cursor` and `--max-age-ms`. `status: cliAliasDefault(statusGet)` makes `status` the default alias: `node cli.ts` with no arguments runs it, and so does a first flag that is not a flag alias, for example `node cli.ts --flag`. `--help` still writes the help. If an alias breaks a rule, `runCli` rejects and `cliMain` stops the program with an error when it starts. A command of the application must not have the name of an alias.
 
+#### Human output
+
+The command line writes JSON for programs, and a form of the output for a person. `cliMain` writes the human form when standard output is a terminal, the environment variable `CI` is not set, and no coding agent is detected. These variables tell a coding agent: `AI_AGENT`, `CLAUDECODE`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `GEMINI_CLI`, `OPENCODE`, `AMP_CURRENT_THREAD_ID`, `AUGMENT_AGENT`, `QWEN_CODE_SESSION_ID`, `PI_CODING_AGENT`, `CRUSH` and `COPILOT_AGENT`. A variable is set when its value is not empty, `0`, `false`, `no` or `off`. In all other cases, the output is JSON. `--output human` or `--output json`, as the first argument, chooses the form. Agents and scripts can give `--output json` to be sure of JSON. `runCli` writes JSON, unless its `io` has `output: "human"` or the arguments give `--output human`. The human form has colors only on a terminal, and only when `NO_COLOR` is not set.
+
+The exit code and the stream of each outcome are the same in the two forms. Help, usage and `--version` do not change. In the human form:
+
+- A value goes through the formatter of its capability. With no formatter, it has the generic layout. A `null` value writes nothing.
+- A failure goes through the formatter of its tag. With no formatter, the failure object has the generic layout.
+- A call failure goes to standard error as `error (<kind>): <message>`.
+- `watch` writes one block for each occurrence: the formatter of the event for its `data`, or the generic layout. Before an occurrence with `truncated: true`, it writes `(some occurrences were lost)`.
+- `list` writes the commands of the capabilities and of the events, with their descriptions.
+
+The generic layout writes an object as one `key  value` line for each scalar member, and as `key:` and an indented block for each other member. An array of scalars is one line, with `, ` between the items. An array of flat objects is a table. Another array is a list with `- `.
+
+`cliFormat` makes a formatter. Give the formatters in the option `formats` of `cliMain` and `runCli`. `cliFormat` takes the capability or the event, and the types of the value, of each failure and of the payload come from their schemas. A formatter gets the value decoded from its JSON form with its schema, and `ui`: `bold`, `dim`, `ok`, `warn` and `error` style a text, and `table(header, rows)` writes a table. If the value does not decode, or the formatter throws, the command line writes the generic layout. Two formats for one id, or a format for an id that is not in the view, make `runCli` reject when it starts.
+
+```ts
+import { cliFormat, cliMain } from "@acid-cat/core-ts";
+import type { CliUi } from "@acid-cat/core-ts";
+
+const statusText = (status: z.infer<typeof Status>, ui: CliUi) => `${ui.bold(status.power ? "on" : "off")} · ${status.mode}`;
+
+cliMain(aircon, {
+  name: "aircon",
+  version: "0.1.0",
+  context: { unit },
+  toJsonSchema,
+  formats: [
+    cliFormat(statusGet, { value: statusText, failures: { Offline: (_, ui) => ui.error("offline") } }),
+    cliFormat(statusChanged, statusText),
+  ],
+});
+```
+
+```sh
+node cli.ts --output human aircon status get   # off · cool
+node cli.ts --output json aircon status get    # {"power":false,"mode":"cool",…}
+```
+
 ### Command line of a server
 
 The command line can serve a view of an application that runs on a server ([Server](../../spec/bindings/cli.md#server)). Give the option `remote` of `cliMain` and `runCli` a client of the HTTP binding of the server: `httpClient(url, { headers?, fetch? })`. The commands, the flags and the help still come from the view in the program. Each call is `POST {url}/capabilities/{id}`, `list` gets the availability from `GET {url}/capabilities`, and `watch` is `POST {url}/events/{id}`, with the cursor in `Last-Event-ID` and `maxAgeMs` in the query.

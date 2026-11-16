@@ -19,13 +19,18 @@ const withArgs = (args: readonly string[]) =>
     Effect.map(Stdio.Stdio, (stdio) => ({ ...stdio, args: Effect.succeed(args) })),
   );
 
+const terminal = Layer.effect(
+  Cli.Terminal,
+  Effect.flatMap(Effect.service(Stdio.Stdio), (stdio) => Effect.map(stdio.stdoutIsTerminal, (stdoutIsTerminal) => ({ stdoutIsTerminal, environment: process.env }))),
+);
+
 export function main<R, E, const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(
   app: App.App<R>,
   layer: Layer.Layer<R | Command.Services<Commands[number]>, E>,
   options: Cli.Options<Commands>,
   args: readonly string[] = process.argv.slice(2),
 ): void {
-  const services = Layer.provideMerge(withArgs(args), NodeServices.layer);
+  const services = Layer.provideMerge(Layer.merge(withArgs(args), terminal), NodeServices.layer);
   Cli.run(app, options).pipe(Effect.provide(Layer.merge(layer, services)), afterInterruptHandlers, NodeRuntime.runMain);
 }
 
@@ -33,5 +38,5 @@ export function runCommand<Name extends string, Input, ContextInput, E>(
   command: Command.Command<Name, Input, ContextInput, E, Command.Environment>,
   options: { readonly version: string },
 ): void {
-  Cli.runCommand(command, options).pipe(Effect.provide(NodeServices.layer), afterInterruptHandlers, NodeRuntime.runMain);
+  Cli.runCommand(command, options).pipe(Effect.provide(Layer.provideMerge(terminal, NodeServices.layer)), afterInterruptHandlers, NodeRuntime.runMain);
 }

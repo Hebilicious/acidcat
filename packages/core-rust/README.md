@@ -133,6 +133,44 @@ An `Option` field that is not required takes the value of its type, not `null`. 
 
 The command line has the [aliases](../../spec/bindings/cli.md#aliases) of its target. Give them with `App::cli_aliases(target, CliAliases::new()...)`: `.alias(name, &definition)`, `.alias_with(name, &definition, fixed)` for a fixed input, and `.alias_default(name, &definition)` or `.alias_default_with(name, &definition, fixed)` for the default alias. Each takes a `CapabilityDefinition<C, X>` or an `EventDefinition<C, X>`, where `X` is the type of the input, so bind the definition before you give it to `App::capability` or `App::event`. The fixed input is a value of `X`, for example `.alias_with("--on", &power_set, Power { on: true })`. A property that serializes to `null`, such as an `Option` that is `None`, is not fixed: it stays a flag of the alias. A required property (not an `Option`) is always fixed, because each value of `X` has it. A definition with no input has `X = NoInput`, a type with no serialized form, so `alias_with` gives a type error for it. To keep definitions with different inputs in one list, call `.untyped()` on each. The catalog writes the aliases in `options.cli` of the target. An alias of a capability calls it, and an alias of an event subscribes to it as `watch` does. With no arguments, or with a first flag that is not a flag alias, the command line runs the default alias. An alias that breaks a rule stops the command line when it starts.
 
+### The form of the output
+
+The command line writes JSON for programs, and text for a person (the human form). The first argument `--output json` or `--output human` (or `--output=human`) chooses the form. Without it, `cli_main` and `run_cli_process` write the human form only when standard output is a terminal, the environment variable `CI` is not truthy, and no variable of a coding agent is truthy (`AI_AGENT`, `CLAUDECODE`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `GEMINI_CLI`, `OPENCODE`, `AMP_CURRENT_THREAD_ID`, `AUGMENT_AGENT`, `QWEN_CODE_SESSION_ID`, `PI_CODING_AGENT`, `CRUSH`, `COPILOT_AGENT`). A variable is truthy when it is set and its value is not empty, `0`, `false`, `no` or `off`. `cli::output_form(is_terminal, env)` gives this choice. `run_cli` writes JSON unless `CliOptions::output` says otherwise. Agents and scripts give `--output json`.
+
+The human form has color only when standard output is a terminal and `NO_COLOR` is unset or empty. The exit code and the stream of each outcome are the same in each form. Help, usage and usage errors do not change.
+
+| Outcome | Human form |
+| --- | --- |
+| Value | The format of the value, or the generic layout. A `null` value writes nothing |
+| Failure | The format of the failures, or the generic layout of the failure object |
+| Call failure | `error (<kind>): <message>` on standard error |
+| Occurrence | The format of the payload, or the generic layout of `data`. Before an occurrence with `truncated`, the line `(some occurrences were lost)` |
+| `list` | The section `Capabilities`, then the section `Events`, with the command and the description of each one |
+
+Give the formats with `CliOptions::formats(CliFormats::new()...)`:
+
+```rust,ignore
+fn power(status: &Status, ui: &CliUi) -> String {
+    ui.bold(if status.power { "on" } else { "off" })
+}
+
+let formats = CliFormats::new()
+    .capability(&status_get, power)
+    .failure(&status_get, |failure: &Offline, ui| match failure {
+        Offline::Offline {} => ui.error("offline"),
+    })
+    .event(&status_changed, power);
+cli_main(app, context, CliOptions::new("aircon", "1.0.0").formats(formats)).await;
+```
+
+- Each method takes the definition, as the alias methods do. A `CapabilityDefinition<C, X, O, F>` keeps the type of the value `O` and of the failures `F`, and an `EventDefinition<C, X, P>` keeps the type of the payload `P`. So bind each definition before you give it to `App::capability` or `App::event`. `untyped()` removes these types.
+- `failure` takes one function for the failure enum. Match each tag in it.
+- A format gets the value decoded again with `serde_json::from_value`, so the type must derive `Deserialize`. When the value does not decode, or the format panics, the command line writes the generic layout. The exit code does not change.
+- `ui` is a `CliUi`: `bold`, `dim`, `ok` (green), `warn` (yellow) and `error` (red) style a text, and `table(header, rows)` aligns columns.
+- Two formats for the same value of one definition, or a format for a capability or an event that is not in the view of the target, stop the command line when it starts.
+
+The generic layout writes a string as it is, a number as JSON, and an array of scalars as its items joined with `, ` (`(none)` when it is empty). An array of flat objects is a table with a header row. Another array is a list, one `- ` item for each element. An object writes one `key  value` line for each scalar member, with the values aligned, and `key:` with the indented layout for each other member. An empty object is `(empty)`.
+
 `McpBinding` and `HttpBinding` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. To use another server, give each request to `handle` after `remote::request_body`.
 
 Each request of a remote binding has its own session. With `new`, all requests share one context.

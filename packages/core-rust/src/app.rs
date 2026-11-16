@@ -367,7 +367,7 @@ where
 {
     /// The work of the capability. The future gives the value, a failure (with [`crate::fail`]) or a defect. When
     /// the call is cancelled, the core drops the future.
-    pub fn run<Run, Work>(self, run: Run) -> CapabilityDefinition<C, X>
+    pub fn run<Run, Work>(self, run: Run) -> CapabilityDefinition<C, X, O, F>
     where
         Run: Fn(I, Call<C>) -> Work + Send + Sync + 'static,
         Work: Future<Output = RunResult<O, F>> + Send + 'static,
@@ -401,6 +401,7 @@ where
             state: self.state,
             run,
             fixed_input: PhantomData,
+            outcome: PhantomData,
         }
     }
 }
@@ -432,8 +433,8 @@ fn failures_of(schema: &Value) -> Result<Vec<(String, Value)>, String> {
 }
 
 /// A capability, ready for [`App::capability`]. `X` is the type of a fixed input of an alias: the input type, or
-/// [`NoInput`].
-pub struct CapabilityDefinition<C, X = NoInput> {
+/// [`NoInput`]. `O` and `F` are the types of the value and of the failures, which a format of the command line gets.
+pub struct CapabilityDefinition<C, X = NoInput, O = (), F = NoFailure> {
     pub(crate) id: String,
     pub(crate) description: String,
     pub(crate) audience: Vec<String>,
@@ -447,10 +448,12 @@ pub struct CapabilityDefinition<C, X = NoInput> {
     pub(crate) state: Option<(Value, StateFn<C>)>,
     pub(crate) run: ErasedRun<C>,
     fixed_input: PhantomData<fn(X)>,
+    outcome: PhantomData<fn() -> (O, F)>,
 }
 
-impl<C, X> CapabilityDefinition<C, X> {
-    /// The definition without the type of its input, to keep definitions with different inputs in one list.
+impl<C, X, O, F> CapabilityDefinition<C, X, O, F> {
+    /// The definition without the types of its input, its value and its failures, to keep definitions with
+    /// different types in one list.
     pub fn untyped(self) -> CapabilityDefinition<C> {
         CapabilityDefinition {
             id: self.id,
@@ -466,6 +469,7 @@ impl<C, X> CapabilityDefinition<C, X> {
             state: self.state,
             run: self.run,
             fixed_input: PhantomData,
+            outcome: PhantomData,
         }
     }
 }
@@ -569,7 +573,7 @@ where
     /// The provider of the event: a stream of occurrences for each subscription. An `Err` item, or a panic, ends the
     /// subscription with the call failure `internal`. The end of the stream ends the subscription as complete. When
     /// the subscription ends in another way, the core drops the stream.
-    pub fn subscribe<Provider, Occurrences>(self, provider: Provider) -> EventDefinition<C, X>
+    pub fn subscribe<Provider, Occurrences>(self, provider: Provider) -> EventDefinition<C, X, P>
     where
         Provider: Fn(I, Subscription<C>) -> Occurrences + Send + Sync + 'static,
         Occurrences: Stream<Item = Result<Emitted<P>, Defect>> + Send + 'static,
@@ -601,13 +605,14 @@ where
             problems: self.problems,
             subscribe,
             fixed_input: PhantomData,
+            payload_type: PhantomData,
         }
     }
 }
 
 /// An event, ready for [`App::event`]. `X` is the type of a fixed input of an alias: the input type of a subscription,
-/// or [`NoInput`].
-pub struct EventDefinition<C, X = NoInput> {
+/// or [`NoInput`]. `P` is the type of the payload, which a format of the command line gets.
+pub struct EventDefinition<C, X = NoInput, P = NoPayload> {
     pub(crate) id: String,
     pub(crate) description: String,
     pub(crate) audience: Vec<String>,
@@ -617,10 +622,12 @@ pub struct EventDefinition<C, X = NoInput> {
     problems: Vec<String>,
     pub(crate) subscribe: ErasedSubscribe<C>,
     fixed_input: PhantomData<fn(X)>,
+    payload_type: PhantomData<fn() -> P>,
 }
 
-impl<C, X> EventDefinition<C, X> {
-    /// The definition without the type of its input, to keep definitions with different inputs in one list.
+impl<C, X, P> EventDefinition<C, X, P> {
+    /// The definition without the types of its input and its payload, to keep definitions with different types in
+    /// one list.
     pub fn untyped(self) -> EventDefinition<C> {
         EventDefinition {
             id: self.id,
@@ -632,6 +639,7 @@ impl<C, X> EventDefinition<C, X> {
             problems: self.problems,
             subscribe: self.subscribe,
             fixed_input: PhantomData,
+            payload_type: PhantomData,
         }
     }
 }
@@ -729,12 +737,12 @@ impl<C: Send + Sync + 'static> App<C> {
         self
     }
 
-    pub fn capability<X>(mut self, capability: CapabilityDefinition<C, X>) -> Self {
+    pub fn capability<X, O, F>(mut self, capability: CapabilityDefinition<C, X, O, F>) -> Self {
         self.capabilities.push(capability.untyped());
         self
     }
 
-    pub fn event<X>(mut self, event: EventDefinition<C, X>) -> Self {
+    pub fn event<X, P>(mut self, event: EventDefinition<C, X, P>) -> Self {
         self.events.push(event.untyped());
         self
     }

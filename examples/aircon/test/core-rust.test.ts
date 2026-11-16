@@ -8,6 +8,7 @@ import { type TestContext, test } from "node:test";
 
 import { check } from "@acid-cat/cli";
 
+import { POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 
@@ -61,6 +62,30 @@ test("the Rust command line takes one repeated flag for each item, or JSON text 
   assert.equal(notADay.code, 3);
   assert.equal(notAnHour.code, 3);
   assert.match(list.stdout, /"usage": "aircon aircon schedule set --days <mon\|tue\|wed\|thu\|fri\|sat\|sun>\.\.\. \[--hours <integer>\.\.\.\]"/);
+});
+
+test("the Rust command line writes the human form with --output human, and its formats", async () => {
+  const [status, fallback, poweredOff, schedule, list, unknown, json, plain, xml] = await Promise.all([
+    cli("--output", "human", "aircon", "status", "get"),
+    cli("--output", "human"),
+    cli("--output", "human", "aircon", "mode", "set", "--mode", "heat"),
+    cli("--output", "human", "aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18"),
+    cli("--output", "human", "list"),
+    cli("--output", "human", "call", "nope"),
+    cli("--output", "json", "aircon", "status", "get"),
+    cli("aircon", "status", "get"),
+    cli("--output", "xml", "status"),
+  ]);
+  assert.deepEqual([status.code, status.stdout], [0, `${STATUS_OFF}\n`]);
+  assert.deepEqual([fallback.code, fallback.stdout], [0, `${STATUS_OFF}\n`]);
+  assert.deepEqual([poweredOff.code, poweredOff.stdout], [1, `${POWERED_OFF_LAYOUT}\n`]);
+  assert.deepEqual([schedule.code, schedule.stdout], [0, `${SCHEDULE_LAYOUT}\n`]);
+  assert.ok(list.stdout.startsWith("Capabilities\n  aircon status get "), list.stdout);
+  assert.ok(list.stdout.includes("\nEvents\n  watch aircon.status.changed"), list.stdout);
+  assert.equal(unknown.code, 2);
+  assert.ok(unknown.stderr.startsWith("error (unknown-capability): "), unknown.stderr);
+  assert.deepEqual([json.code, json.stdout], [0, plain.stdout]);
+  assert.equal(xml.code, 3);
 });
 
 async function startRemote(context: TestContext) {
@@ -136,6 +161,23 @@ test("the Rust command line controls the unit of a server, and watch follows its
   const exited = new Promise<number | null>((resolve) => watch.on("close", resolve));
   watch.kill("SIGINT");
   assert.equal(await exited, 130);
+});
+
+test("the Rust command line writes the human form of a server's value and occurrences", async (context) => {
+  const remote = await startRemote(context);
+  const status = await finish(remote("--output", "human", "aircon", "status", "get"));
+  assert.deepEqual([status.code, status.stdout], [0, (await cli("--output", "human", "aircon", "status", "get")).stdout]);
+
+  const watch = remote("--output", "human", "watch", "aircon.status.changed");
+  context.after(() => watch.kill());
+  let watched = "";
+  watch.stdout.setEncoding("utf-8").on("data", (chunk: string) => (watched += chunk));
+  for (let turn = 0; !watched.includes("\n"); turn++) {
+    assert.ok(turn < 100, "watch writes an occurrence");
+    assert.equal((await finish(remote(turn % 2 === 0 ? "--on" : "--off"))).code, 0);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.ok([STATUS_ON, STATUS_OFF].includes(watched.slice(0, watched.indexOf("\n"))), watched);
 });
 
 test("aircon.status.export writes a file through the command line", async (context) => {

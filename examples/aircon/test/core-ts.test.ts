@@ -10,9 +10,10 @@ import { test } from "node:test";
 import { check } from "@acid-cat/cli";
 import type { z } from "zod";
 
-import { aircon, fanSet, firmwareUpdate, modeSet, Offline, PoweredOff, powerSet, Status, statusChanged, statusGet, toJsonSchema, Unit } from "../core-ts/aircon.ts";
+import { aircon, fanSet, firmwareUpdate, formats, modeSet, Offline, PoweredOff, powerSet, Status, statusChanged, statusGet, toJsonSchema, Unit } from "../core-ts/aircon.ts";
 import { CallFailureError, catalogOf, createSession, renderCatalog, runCli } from "@acid-cat/core-ts";
 import type { Result } from "@acid-cat/core-ts";
+import { OFFLINE, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import { run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 
@@ -192,6 +193,41 @@ test("an array input takes one repeated flag for each item, or JSON text of the 
   assert.match(list.stdout, /"usage": "aircon aircon schedule set --days <mon\|tue\|wed\|thu\|fri\|sat\|sun>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });
 
+test("the command line writes the human form with --output human", async () => {
+  const cli = (...args: string[]) => run(new URL("../core-ts/cli.ts", import.meta.url).pathname, ...args);
+  const [status, defaultAlias, poweredOff, schedule, list, unknown, json, plain, xml] = await Promise.all([
+    cli("--output", "human", "aircon", "status", "get"),
+    cli("--output", "human"),
+    cli("--output", "human", "aircon", "mode", "set", "--mode", "heat"),
+    cli("--output=human", "aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18"),
+    cli("--output", "human", "list"),
+    cli("--output", "human", "call", "nope"),
+    cli("--output", "json", "aircon", "status", "get"),
+    cli("aircon", "status", "get"),
+    cli("--output", "xml", "status"),
+  ]);
+  assert.deepEqual([status.code, status.stdout], [0, `${STATUS_OFF}\n`]);
+  assert.deepEqual([defaultAlias.code, defaultAlias.stdout], [0, `${STATUS_OFF}\n`]);
+  assert.deepEqual([poweredOff.code, poweredOff.stdout], [1, `${POWERED_OFF_LAYOUT}\n`]);
+  assert.deepEqual([schedule.code, schedule.stdout], [0, `${SCHEDULE_LAYOUT}\n`]);
+  assert.equal(list.code, 0);
+  assert.ok(list.stdout.startsWith("Capabilities\n  aircon status get "));
+  assert.ok(list.stdout.includes("\nEvents\n  watch aircon.status.changed"));
+  assert.equal(unknown.code, 2);
+  assert.ok(unknown.stderr.startsWith("error (unknown-capability): "));
+  assert.deepEqual([json.code, json.stdout], [0, plain.stdout]);
+  assert.deepEqual([xml.code, xml.stderr], [3, "The option --output must be human or json.\n"]);
+
+  const unit = new Unit();
+  unit.change({ online: false });
+  const out: string[] = [];
+  const offline = await runCli(aircon, { name: "aircon", version: "0.1.0", context: { unit }, toJsonSchema, formats }, ["--output", "human", "aircon", "status", "get"], {
+    stdout: (text) => out.push(text),
+    stderr: () => undefined,
+  });
+  assert.deepEqual([offline, out], [1, [OFFLINE]]);
+});
+
 function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<{ readonly code: number | null; readonly stdout: string }> {
   let stdout = "";
   child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));
@@ -221,12 +257,17 @@ test("the TypeScript command line controls the unit of a server, and watch follo
   assert.equal(status.code, 0);
   assert.partialDeepStrictEqual(JSON.parse(status.stdout), { power: true });
   assert.partialDeepStrictEqual(JSON.parse((await run(cliPath, "aircon", "status", "get")).stdout), { power: false });
+  assert.equal((await finish(remote("--output", "human", "aircon", "status", "get"))).stdout, `${STATUS_ON}\n`);
 
   const watch = remote("watch", "aircon.status.changed");
   context.after(() => watch.kill());
   let watched = "";
   watch.stdout.setEncoding("utf-8").on("data", (chunk: string) => (watched += chunk));
-  for (let turn = 0; !watched.includes("\n"); turn++) {
+  const humanWatch = remote("--output", "human", "watch", "aircon.status.changed");
+  context.after(() => humanWatch.kill());
+  let humanWatched = "";
+  humanWatch.stdout.setEncoding("utf-8").on("data", (chunk: string) => (humanWatched += chunk));
+  for (let turn = 0; !watched.includes("\n") || !humanWatched.includes("\n"); turn++) {
     assert.ok(turn < 100, "watch writes an occurrence");
     assert.equal((await finish(remote("aircon", "fan", "set", "--speed", turn % 2 === 0 ? "low" : "high"))).code, 0);
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -234,6 +275,7 @@ test("the TypeScript command line controls the unit of a server, and watch follo
   const line = watched.slice(0, watched.indexOf("\n"));
   assert.partialDeepStrictEqual(JSON.parse(line), { name: "aircon.status.changed", data: { power: true } });
   assert.match(line, /"fan":"(low|high)"/);
+  assert.match(humanWatched.slice(0, humanWatched.indexOf("\n")), /^on · cool · fan (low|high) · target 22°C · room 25°C$/);
   const exited = new Promise<number | null>((resolve) => watch.on("close", resolve));
   watch.kill("SIGINT");
   assert.equal(await exited, 130);

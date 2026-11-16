@@ -111,7 +111,9 @@ A call failure before the first occurrence has the exit code of the table in [Ou
 
 ## Outcomes
 
-All output is JSON. A result goes to standard output. A call failure goes to standard error as `{ "kind", "message" }`.
+The output is JSON. A result goes to standard output. A call failure goes to standard error as `{ "kind", "message" }`.
+
+A core MAY also write a form of the output for a person. That form, and the way to choose it, are a concern of the core. When standard output is not a terminal, the output MUST be JSON, unless the user asks for another form. The exit code and the stream of each outcome are the same in each form.
 
 | Outcome | Standard output | Exit code |
 | --- | --- | --- |

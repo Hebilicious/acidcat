@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use acid_cat_core::cli::CliAliases;
+use acid_cat_core::cli::{CliAliases, CliFormats, CliUi};
 use acid_cat_core::{App, Application, Availability, Emitted, RunResult, Target, fail};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ struct Schedule {
     hours: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Status {
     power: bool,
@@ -54,7 +54,7 @@ struct Status {
     room_celsius: f64,
 }
 
-#[derive(Serialize, JsonSchema)]
+#[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "_tag")]
 enum Offline {
     Offline {
@@ -226,7 +226,25 @@ fn target(description: &str, bindings: &[&str]) -> Target {
     }
 }
 
-pub fn aircon() -> Arc<Application<Unit>> {
+fn word(value: impl Serialize) -> String {
+    match serde_json::to_value(value) {
+        Ok(serde_json::Value::String(word)) => word,
+        _ => String::new(),
+    }
+}
+
+fn status_text(status: &Status, ui: &CliUi) -> String {
+    format!(
+        "{} · {} · fan {} · target {}°C · room {}°C",
+        ui.bold(if status.power { "on" } else { "off" }),
+        word(status.mode),
+        word(status.fan),
+        status.target_celsius,
+        status.room_celsius
+    )
+}
+
+pub fn aircon() -> (Arc<Application<Unit>>, CliFormats) {
     let status_get = Capability::new(
         "aircon.status.get",
         "Read the unit's power, mode, fan speed, target temperature and room temperature.",
@@ -277,7 +295,18 @@ pub fn aircon() -> Arc<Application<Unit>> {
             })
         });
 
-    App::new()
+    let formats = CliFormats::new()
+        .capability(&status_get, status_text)
+        .failure(&status_get, |Offline::Offline { since }: &Offline, ui| {
+            let since = since
+                .as_ref()
+                .map(|since| format!(" since {since}"))
+                .unwrap_or_default();
+            format!("{}{since}", ui.error("offline"))
+        })
+        .event(&status_changed, status_text);
+
+    let app = App::new()
         .title("Living-room air conditioner")
         .description("Control and monitor one split-unit air conditioner on the home network.")
         // WebMCP runs in a web page, so this program serves no WebMCP tools.
@@ -408,13 +437,14 @@ pub fn aircon() -> Arc<Application<Unit>> {
         )
         .event(status_changed)
         .build()
-        .unwrap_or_else(|problems| panic!("the air conditioner does not conform: {problems:?}"))
+        .unwrap_or_else(|problems| panic!("the air conditioner does not conform: {problems:?}"));
+    (app, formats)
 }
 
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let app = aircon();
+    let (app, formats) = aircon();
     let unit = Arc::new(Unit::default());
     match args.first().map(String::as_str) {
         Some("catalog") => print!("{}", app.render_catalog()),
@@ -425,7 +455,7 @@ async fn main() {
                 files: true,
                 ..Unit::default()
             });
-            let mut options = CliOptions::new("aircon", "0.1.0");
+            let mut options = CliOptions::new("aircon", "0.1.0").formats(formats);
             if let Ok(url) = std::env::var("AIRCON_URL") {
                 match HttpClient::new(&url) {
                     Ok(client) => options = options.remote(client),
@@ -480,7 +510,7 @@ mod tests {
     #[tokio::test]
     async fn the_unit_works_through_a_session() {
         let unit = Arc::new(Unit::default());
-        let session = Session::open(&aircon(), "mcp", unit.clone());
+        let session = Session::open(&aircon().0, "mcp", unit.clone());
         let cancel = CancellationToken::new();
         assert_eq!(
             session
@@ -514,7 +544,7 @@ mod tests {
     async fn aircon_status_changed_gives_the_new_status_after_each_change_and_nothing_for_the_same_status()
      {
         let unit = Arc::new(Unit::default());
-        let session = Session::open(&aircon(), "app", unit.clone());
+        let session = Session::open(&aircon().0, "app", unit.clone());
         let cancel = CancellationToken::new();
         let mut occurrences = session
             .subscribe(
@@ -563,7 +593,7 @@ mod tests {
     #[tokio::test]
     async fn the_state_of_aircon_status_get_gives_copies_and_each_change() {
         let unit = Arc::new(Unit::default());
-        let session = Session::open(&aircon(), "app", unit.clone());
+        let session = Session::open(&aircon().0, "app", unit.clone());
         let mut state = session
             .state("aircon.status.get")
             .expect("aircon.status.get has state");
@@ -580,10 +610,40 @@ mod tests {
         assert!(session.state("aircon.power.set").is_none());
     }
 
+    fn human_text(name: &str) -> String {
+        let declaration = format!("export const {name} = \"");
+        include_str!("../../test/human.ts")
+            .lines()
+            .find_map(|line| line.strip_prefix(&declaration)?.strip_suffix("\";"))
+            .unwrap_or_else(|| panic!("test/human.ts has the string {name}"))
+            .to_owned()
+    }
+
+    #[tokio::test]
+    async fn the_human_form_of_aircon_status_get_is_offline_while_the_unit_is_offline() {
+        use acid_cat_core::cli::{CliIo, CliOptions, run_cli};
+
+        let (app, formats) = aircon();
+        let unit = Arc::new(Unit::default());
+        unit.set_online(false);
+        let written = Arc::new(Mutex::new(String::new()));
+        let stdout = written.clone();
+        let mut io = CliIo {
+            stdout: Box::new(move |text| stdout.lock().unwrap().push_str(text)),
+            stderr: Box::new(|text| panic!("no text on standard error: {text}")),
+            cancel: CancellationToken::new(),
+        };
+        let args = ["--output", "human", "aircon", "status", "get"].map(String::from);
+        let options = CliOptions::new("aircon", "0.1.0").formats(formats);
+        let code = run_cli(&app, unit, &options, &args, &mut io).await;
+        assert_eq!(code, Ok(1));
+        assert_eq!(*written.lock().unwrap(), human_text("OFFLINE"));
+    }
+
     #[tokio::test]
     async fn aircon_firmware_update_is_unavailable_while_the_unit_is_offline() {
         let unit = Arc::new(Unit::default());
-        let session = Session::open(&aircon(), "app", unit.clone());
+        let session = Session::open(&aircon().0, "app", unit.clone());
         let cancel = CancellationToken::new();
         assert_eq!(
             session

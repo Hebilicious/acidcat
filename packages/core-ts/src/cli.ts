@@ -24,6 +24,8 @@ import {
 import type { Availability, CallFailure, CatalogCapability, CatalogDocument, CliAlias, JsonObject, Occurrence, Outcome } from "@acid-cat/spec-ts";
 
 import { catalogOf } from "./app.ts";
+import { cliFormatErrors, cliLayout, cliListText, cliUi, defaultCliOutput } from "./cli-human.ts";
+import type { CliFormat, CliOutput, CliRender } from "./cli-human.ts";
 import type { App, ToJsonSchema } from "./app.ts";
 import type { HttpClient } from "./http-client.ts";
 import { createSession } from "./session.ts";
@@ -52,6 +54,11 @@ export interface CliOptions<Context> {
    * example `httpHandler(app, { target: "cli", … })`. The commands of the application still get `context`.
    */
   readonly remote?: HttpClient | undefined;
+  /**
+   * The formatters of the human form of the output, made with `cliFormat`. Give one format at most for each capability
+   * or event of the view. A value with no formatter has the generic layout.
+   */
+  readonly formats?: readonly CliFormat[] | undefined;
 }
 
 interface Provider {
@@ -94,6 +101,10 @@ export interface CliIo {
   readonly stdout: (text: string) => void;
   readonly stderr: (text: string) => void;
   readonly signal?: AbortSignal | undefined;
+  /** The form of the output when the arguments do not give `--output`. The default is `"json"`. */
+  readonly output?: CliOutput | undefined;
+  /** Style the human form with ANSI colors. The default is `false`. */
+  readonly color?: boolean | undefined;
 }
 
 export interface CliCommand<Context> {
@@ -118,7 +129,9 @@ class UsageError extends Error {
 
 /**
  * Run the command line as the main program of the process. An interrupt (`SIGINT`) cancels the call or the subscription.
- * The default arguments are the arguments of the process.
+ * The default arguments are the arguments of the process. The output is in the human form when standard output is a
+ * terminal and no CI and no coding agent is detected, and JSON in all other cases. `--output human` or `--output json`
+ * as the first argument chooses the form.
  */
 export function main<Context>(app: App<Context>, options: CliOptions<Context>, args: readonly string[] = process.argv.slice(2)): void {
   const interrupt = new AbortController();
@@ -127,13 +140,21 @@ export function main<Context>(app: App<Context>, options: CliOptions<Context>, a
     stdout: (text) => process.stdout.write(`${text}\n`),
     stderr: (text) => process.stderr.write(`${text}\n`),
     signal: interrupt.signal,
+    output: defaultCliOutput(process.stdout.isTTY, process.env),
+    color: process.stdout.isTTY && (process.env.NO_COLOR ?? "") === "",
   }).then((code) => {
     process.exitCode = code;
   });
 }
 
 /** Run the command line with arguments. The result is the exit code (spec/bindings/cli.md#outcomes). */
-export async function runCli<Context>(app: App<Context>, options: CliOptions<Context>, args: readonly string[], io: CliIo): Promise<number> {
+export async function runCli<Context>(app: App<Context>, options: CliOptions<Context>, argv: readonly string[], io: CliIo): Promise<number> {
+  const chosen = outputOption(argv);
+  if (chosen === undefined) {
+    io.stderr("The option --output must be human or json.");
+    return CLI_EXIT_CODES["invalid-input"];
+  }
+  const { output = io.output ?? "json", args } = chosen;
   const provider = options.remote === undefined ? localProvider(app, options) : remoteProvider(app, options, options.remote);
   const view = provider.view;
   const types = view.$defs ?? {};
@@ -160,6 +181,19 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   const aliasUsages = (kind: CliAlias["kind"], id: string): readonly string[] =>
     aliases.filter((alias) => alias.kind === kind && alias.id === id).map(aliasUsage);
 
+  const formats = options.formats ?? [];
+  const formatErrors = cliFormatErrors(formats, Object.keys(view.capabilities), Object.keys(view.events ?? {}));
+  if (formatErrors.length > 0) throw new Error(formatErrors.join("\n"));
+  const formatOf = (id: string): CliFormat | undefined => formats.find((format) => format.id === id);
+  const ui = cliUi(io.color === true);
+  const render = async (format: CliRender | undefined, json: unknown): Promise<string> => {
+    try {
+      return (await format?.(json, ui)) ?? cliLayout(json);
+    } catch {
+      return cliLayout(json);
+    }
+  };
+
   const added = options.commands ?? [];
   const taken = new Set([...GENERIC_COMMANDS, ...commands.flatMap(({ path }) => path.slice(0, 1)), ...aliases.map(({ name }) => name)]);
   for (const command of added) {
@@ -167,14 +201,28 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     taken.add(command.name);
   }
 
-  const printFailure = (failure: CallFailure) => io.stderr(JSON.stringify({ kind: failure.kind, message: failure.message }));
-  const print = (outcome: Outcome<unknown, unknown>): number => {
+  const printFailure = (failure: CallFailure) =>
+    io.stderr(output === "human" ? `${ui.error("error")} (${failure.kind}): ${failure.message}` : JSON.stringify({ kind: failure.kind, message: failure.message }));
+  const printHuman = async (id: string, outcome: Exclude<Outcome<unknown, unknown>, CallFailure>): Promise<void> => {
+    const format = formatOf(id);
+    if (outcome.ok) {
+      const value = jsonOf(outcome.value);
+      if (value !== null) io.stdout(await render(format?.value, value));
+      return;
+    }
+    const failure = jsonOf(outcome.error);
+    const tag = isJsonObject(failure) && typeof failure._tag === "string" ? failure._tag : undefined;
+    io.stdout(await render(tag === undefined ? undefined : format?.failures.get(tag), failure));
+  };
+  const print = async (outcome: Outcome<unknown, unknown>, id?: string): Promise<number> => {
     if (isCallFailure(outcome)) printFailure(outcome);
+    else if (output === "human" && id !== undefined) await printHuman(id, outcome);
     else io.stdout(JSON.stringify(outcome.ok ? outcome.value : outcome.error, null, 2));
     return cliExitCode(outcome);
   };
+  const invoke = async (id: string, input: unknown): Promise<number> => await print(await provider.invoke(id, input, io.signal), id);
 
-  const printUnlessInterrupted = (failure: CallFailure): number => (io.signal?.aborted === true ? CLI_WATCH_EXIT_CODES.cancelled : print(failure));
+  const printUnlessInterrupted = async (failure: CallFailure): Promise<number> => (io.signal?.aborted === true ? CLI_WATCH_EXIT_CODES.cancelled : await print(failure));
 
   const watch = async (rest: readonly string[]): Promise<number> => {
     const [id, ...args] = rest;
@@ -207,7 +255,14 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     const subscribed = await provider.subscribe(id, input, { signal: io.signal, ...resume });
     if ("kind" in subscribed) return printUnlessInterrupted(subscribed);
     try {
-      for await (const occurrence of subscribed) io.stdout(JSON.stringify(occurrence));
+      for await (const occurrence of subscribed) {
+        if (output === "json") {
+          io.stdout(JSON.stringify(occurrence));
+          continue;
+        }
+        if (occurrence.truncated === true) io.stdout("(some occurrences were lost)");
+        io.stdout(await render(formatOf(id)?.value, jsonOf(occurrence.data)));
+      }
     } catch (error) {
       if (io.signal?.aborted === true) return CLI_WATCH_EXIT_CODES.cancelled;
       printFailure(error instanceof CallFailureError ? { kind: error.kind, message: error.message } : { kind: "internal", message: "The event failed." });
@@ -225,7 +280,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     }
     const { flagArgs, resume } = alias.kind === "event" ? resumeFlags(rest) : { flagArgs: rest, resume: {} };
     const run = async (input: unknown): Promise<number> =>
-      alias.kind === "event" ? await follow(alias.id, input, resume) : print(await provider.invoke(alias.id, input, io.signal));
+      alias.kind === "event" ? await follow(alias.id, input, resume) : await invoke(alias.id, input);
     const schema = cliAliasInput(view, alias) ?? NO_FLAGS;
     if (schema.properties !== undefined) return await run({ ...alias.input, ...parseFlags(flagArgs, schema) });
     const [text = "{}", extra] = flagArgs;
@@ -269,6 +324,18 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     if (first === "list") {
       const availability = await provider.availability(io.signal);
       if ("kind" in availability) return print(availability);
+      if (output === "human") {
+        io.stdout(
+          cliListText(
+            Object.entries(view.capabilities).map(([id, capability]) => {
+              const state = availability.get(id) ?? unavailable("There is no such capability.");
+              return { id, description: capability.description, unavailable: state.available ? undefined : state.reason };
+            }),
+            Object.entries(view.events ?? {}).map(([id, event]) => ({ id, description: event.description })),
+          ),
+        );
+        return CLI_EXIT_CODES.value;
+      }
       io.stdout(
         JSON.stringify(
           [
@@ -315,7 +382,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
         if (state !== undefined && !state.available) return print({ kind: "unavailable", message: state.reason });
         return print({ kind: "invalid-input", message: "The input is not JSON." });
       }
-      return print(await provider.invoke(id, input, io.signal));
+      return await invoke(id, input);
     }
     if (first === "watch") return await watch(rest);
     const alias = aliases.find(({ name }) => name === first);
@@ -335,7 +402,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       io.stdout(usage(options.name, match.path, capability.description, schema));
       return CLI_EXIT_CODES.value;
     }
-    return print(await provider.invoke(match.id, parseFlags(flagArgs, schema), io.signal));
+    return await invoke(match.id, parseFlags(flagArgs, schema));
   } catch (error) {
     if (!(error instanceof UsageError)) throw error;
     io.stderr(error.message);
@@ -344,6 +411,19 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     await provider.dispose();
   }
 }
+
+function outputOption(args: readonly string[]): { readonly output?: CliOutput; readonly args: readonly string[] } | undefined {
+  const [first, ...rest] = args;
+  if (first !== "--output" && first?.startsWith("--output=") !== true) return { args };
+  const [value, ...others] = first === "--output" ? rest : [first.slice("--output=".length), ...rest];
+  if (value !== "human" && value !== "json") return undefined;
+  return { output: value, args: others };
+}
+
+const jsonOf = (value: unknown): unknown => {
+  const text = JSON.stringify(value);
+  return text === undefined ? null : JSON.parse(text);
+};
 
 type Resume = { cursor?: string; maxAgeMs?: number };
 

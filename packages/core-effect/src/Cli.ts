@@ -20,12 +20,18 @@ import {
 } from "@acid-cat/spec-ts";
 import { unavailable } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CatalogDocument, JsonObject, Occurrence, Outcome, Resume } from "@acid-cat/spec-ts";
-import { Console, Context, Effect, Logger, Option, Predicate, Schema, Scope, Stdio, Stream } from "effect";
+import { Console, Context, Effect, Exit, Logger, Option, Predicate, Schema, Scope, Stdio, Stream } from "effect";
 import { Argument, CliConfig, CliError, CliOutput, Command, CommandSpec, Flag, Primitive } from "effect/cli";
 
 import * as App from "./App.ts";
+import type { AnySchema } from "./Capability.ts";
 import type * as Http from "./Http.ts";
+import { formOf, hasColor, layout, ui } from "./internal/human.ts";
+import type { Environment, Form, Ui } from "./internal/human.ts";
 import * as Session from "./Session.ts";
+
+export { formOf, layout } from "./internal/human.ts";
+export type { Environment, Form, Ui } from "./internal/human.ts";
 
 export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = readonly []> {
   readonly name: string;
@@ -50,6 +56,47 @@ export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = r
    * binding with the same target, so that both have the same view.
    */
   readonly remote?: Http.Client | undefined;
+  /**
+   * How the human form of the output writes the outcomes of some capabilities and the occurrences of some events. Make
+   * each one with `App.format`. Without a format, the human form writes the generic layout of the value. `command`
+   * throws if two formats have the same id, or if the id of a format is not in the view of `target`.
+   */
+  readonly formats?: readonly App.Format[] | undefined;
+}
+
+/**
+ * Standard output, and the environment of the process, that decide the form of the output when the arguments do not
+ * give `--output`. The default is no terminal, so the form is JSON. `NodeCli` gives the ones of the process.
+ */
+export interface Terminal {
+  readonly stdoutIsTerminal: boolean;
+  readonly environment: Environment;
+}
+
+export const Terminal = Context.Reference<Terminal>("@acid-cat/core-effect/Cli/Terminal", {
+  defaultValue: () => ({ stdoutIsTerminal: false, environment: {} }),
+});
+
+interface Presentation {
+  readonly form: Form;
+  readonly ui: Ui;
+}
+
+const Presentation = Context.Reference<Presentation>("@acid-cat/core-effect/Cli/Presentation", { defaultValue: () => ({ form: "json", ui: ui(false) }) });
+
+const OUTPUT_ERROR = "The option --output must be human or json.";
+
+function chosenForm(args: readonly string[]): { readonly form: Form | undefined; readonly rest: readonly string[] } | undefined {
+  const [first, ...rest] = args;
+  if (first === "--output") {
+    const [value, ...others] = rest;
+    return value === "human" || value === "json" ? { form: value, rest: others } : undefined;
+  }
+  if (first?.startsWith("--output=") === true) {
+    const value = first.slice("--output=".length);
+    return value === "human" || value === "json" ? { form: value, rest } : undefined;
+  }
+  return { form: undefined, rest: args };
 }
 
 interface AliasEntry {
@@ -157,8 +204,8 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   options: { readonly version: string },
 ): Effect.Effect<void | number, Exclude<E, CliError.CliError>, R | Command.Environment> => {
   const aliases = Context.get(command.annotations, Aliases);
-  const program = Effect.gen(function* () {
-    const args = yield* (yield* Stdio.Stdio).args;
+  const dispatch = (args: readonly string[]) =>
+    Effect.gen(function* () {
     const runWith = Command.runWith(command, { version: options.version });
     if (aliases.length === 0) return yield* runWith(args);
     const { builtIns } = yield* CliConfig.CliConfig;
@@ -178,6 +225,18 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
     const startsDefault = first === undefined || (first.startsWith("--") && !taken.has(longFlagName(first)));
     if (fallback !== undefined && startsDefault) return yield* runAlias(fallback, args);
     return yield* runWith(args);
+  });
+  const program = Effect.gen(function* () {
+    const chosen = chosenForm(yield* (yield* Stdio.Stdio).args);
+    if (chosen === undefined) {
+      yield* Console.error(OUTPUT_ERROR);
+      process.exitCode = CLI_EXIT_CODES["invalid-input"];
+      return;
+    }
+    const terminal = yield* Terminal;
+    const form = chosen.form ?? formOf(terminal.stdoutIsTerminal, terminal.environment);
+    const presentation: Presentation = { form, ui: ui(hasColor(form, terminal.stdoutIsTerminal, terminal.environment)) };
+    return yield* Effect.provideService(dispatch(chosen.rest), Presentation, presentation);
   });
   return Effect.catchIf(
     program,
@@ -260,10 +319,31 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   };
   const types = catalogView.$defs ?? {};
 
+  const formats = new Map<string, App.Format>();
+  for (const format of options.formats ?? []) {
+    if (formats.has(format.id)) throw new Error(`There are two formats for ${format.id}.`);
+    const members = format.member === "event" ? (catalogView.events ?? {}) : catalogView.capabilities;
+    if (ownMember(members, format.id) === undefined) throw new Error(`The format of ${format.id} refers to a ${format.member} that is not in the view of the target ${target}.`);
+    formats.set(format.id, format);
+  }
+
+  const print = (id: string, outcome: Outcome<unknown, unknown>) =>
+    Effect.gen(function* () {
+      const { form, ui } = yield* Presentation;
+      if (isCallFailure(outcome)) yield* writeCallFailure(outcome);
+      else if (form === "json") yield* Console.log(JSON.stringify(outcome.ok ? outcome.value : outcome.error, null, 2));
+      else if (outcome.ok) yield* writeText(humanValue(formats.get(id), outcome.value, ui));
+      else yield* writeText(humanFailure(formats.get(id), outcome.error, ui));
+      process.exitCode = cliExitCode(outcome);
+    });
+
   const cancelledByInterrupt = Effect.onInterrupt(() => printFailure({ kind: "cancelled", message: "The call was cancelled." }, CLI_EXIT_CODES.cancelled));
 
   const invoke = (id: string, input: unknown) =>
-    Effect.scoped(Effect.flatMap(view, (provider) => provider.invoke(id, input))).pipe(Effect.flatMap(print), cancelledByInterrupt);
+    Effect.scoped(Effect.flatMap(view, (provider) => provider.invoke(id, input))).pipe(
+      Effect.flatMap((outcome) => print(id, outcome)),
+      cancelledByInterrupt,
+    );
 
   const flagsOf = (input: JsonObject | undefined) => flagsOfBundled(cliInputSchema(input ?? { type: "object" }, types));
 
@@ -296,13 +376,13 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
         // The call failures of the id come before invalid-input (spec/invocation.md#call-failures).
         return Effect.scoped(
           Effect.gen(function* () {
-            if (ownMember(catalogView.capabilities, id) === undefined) return yield* print({ kind: "unknown-capability", message: `There is no capability ${id}.` });
+            if (ownMember(catalogView.capabilities, id) === undefined) return yield* print(id, { kind: "unknown-capability", message: `There is no capability ${id}.` });
             const provider = yield* view;
             const availability = yield* Effect.result(provider.availability([id]));
-            if (availability._tag === "Failure") return yield* print(availability.failure);
+            if (availability._tag === "Failure") return yield* print(id, availability.failure);
             const [state] = availability.success;
-            if (state !== undefined && !state.available) return yield* print({ kind: "unavailable", message: state.reason });
-            return yield* print({ kind: "invalid-input", message: "The input is not JSON." });
+            if (state !== undefined && !state.available) return yield* print(id, { kind: "unavailable", message: state.reason });
+            return yield* print(id, { kind: "invalid-input", message: "The input is not JSON." });
           }),
         );
       }
@@ -329,7 +409,16 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
         const provider = yield* view;
         const capabilities = Object.entries(catalogView.capabilities);
         const availability = yield* Effect.result(provider.availability(capabilities.map(([id]) => id)));
-        if (availability._tag === "Failure") return yield* print(availability.failure);
+        if (availability._tag === "Failure") return yield* print("", availability.failure);
+        if ((yield* Presentation).form === "human") {
+          const listed = capabilities.map(([id, capability], index) => {
+            const state = availability.success[index];
+            const reason = state === undefined || state.available ? "" : ` (unavailable: ${state.reason})`;
+            return [commandPath(id).join(" "), `${capability.description}${reason}`] as const;
+          });
+          const events = Object.entries(catalogView.events ?? {}).map(([id, event]) => [`watch ${id}`, event.description] as const);
+          return yield* Console.log([...section("Capabilities", listed), ...(events.length === 0 ? [] : section("Events", events))].join("\n"));
+        }
         const entries = [];
         for (const [index, [id, capability]] of capabilities.entries()) {
           const usage = cliUsage(options.name, id, capability.input === undefined ? undefined : cliInputSchema(capability.input, types));
@@ -359,7 +448,12 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
         const provider = yield* view;
         const started = yield* Effect.result(provider.subscribe(id, input, resume));
         if (started._tag === "Failure") return yield* printFailure(started.failure, CLI_EXIT_CODES[started.failure.kind]);
-        const ended = yield* Effect.result(Stream.runForEach(started.success, (occurrence) => Console.log(JSON.stringify(occurrence))));
+        const { form, ui } = yield* Presentation;
+        const write = (occurrence: Occurrence) =>
+          form === "json"
+            ? Console.log(JSON.stringify(occurrence))
+            : writeText([...(occurrence.truncated === true ? [LOST] : []), humanValue(formats.get(id), occurrence.data, ui)].join("\n"));
+        const ended = yield* Effect.result(Stream.runForEach(started.success, write));
         if (ended._tag === "Failure") return yield* printFailure(ended.failure, CLI_WATCH_EXIT_CODES.internal);
         process.exitCode = CLI_WATCH_EXIT_CODES.complete;
       }),
@@ -409,7 +503,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     return followCommand(id, id, schema, undefined, (made) => made.pipe(Command.withDescription(event.description)));
   });
   const watch = Command.make("watch").pipe(
-    Command.withDescription("Follow an event by its id. Each occurrence goes to standard output as one line of JSON."),
+    Command.withDescription("Follow an event by its id. Each occurrence goes to standard output."),
     Command.withSubcommands(watchers),
   );
 
@@ -562,18 +656,48 @@ function isJsonText(text: string): boolean {
   }
 }
 
+const writeCallFailure = (failure: CallFailure) =>
+  Effect.gen(function* () {
+    const { form, ui } = yield* Presentation;
+    yield* Console.error(form === "json" ? JSON.stringify({ kind: failure.kind, message: failure.message }) : `${ui.error("error")} (${failure.kind}): ${failure.message}`);
+  });
+
 const printFailure = (failure: CallFailure, code: number) =>
   Effect.gen(function* () {
-    yield* Console.error(JSON.stringify({ kind: failure.kind, message: failure.message }));
+    yield* writeCallFailure(failure);
     process.exitCode = code;
   });
 
-const print = (outcome: Outcome<unknown, unknown>) =>
-  Effect.gen(function* () {
-    if (isCallFailure(outcome)) {
-      yield* Console.error(JSON.stringify({ kind: outcome.kind, message: outcome.message }));
-    } else {
-      yield* Console.log(JSON.stringify(outcome.ok ? outcome.value : outcome.error, null, 2));
-    }
-    process.exitCode = cliExitCode(outcome);
+const LOST = "(some occurrences were lost)";
+
+const writeText = (text: string) => (text === "" ? Effect.void : Console.log(text));
+
+function section(title: string, rows: readonly (readonly [string, string])[]): readonly string[] {
+  const width = Math.max(...rows.map(([first]) => first.length));
+  return [title, ...rows.map(([first, text]) => `  ${first.padEnd(width)}  ${text}`.trimEnd())];
+}
+
+const humanValue = (format: App.Format | undefined, json: unknown, ui: Ui): string =>
+  json === null ? "" : formatted(json, format?.schema, format?.value, ui);
+
+function humanFailure(format: App.Format | undefined, json: unknown, ui: Ui): string {
+  const tag = Predicate.hasProperty(json, "_tag") && typeof json._tag === "string" ? json._tag : undefined;
+  const formatter = tag === undefined ? undefined : format?.failures?.[tag];
+  const schemas = format?.failureSchemas ?? [];
+  const tagged = (formatter === undefined ? undefined : (failure: unknown, ui: Ui) => {
+    if (!Predicate.hasProperty(failure, "_tag") || failure._tag !== tag) throw new Error(`The failure does not decode to the tag ${tag}.`);
+    return formatter(failure, ui);
   });
+  return formatted(json, schemas.length === 0 ? undefined : Schema.Union(schemas), tagged, ui);
+}
+
+function formatted(json: unknown, schema: AnySchema | undefined, formatter: ((value: unknown, ui: Ui) => string) | undefined, ui: Ui): string {
+  if (formatter === undefined) return layout(json);
+  const decoded = schema === undefined ? Exit.succeed(json) : Schema.decodeUnknownExit(schema)(json);
+  if (Exit.isFailure(decoded)) return layout(json);
+  try {
+    return formatter(decoded.value, ui);
+  } catch {
+    return layout(json);
+  }
+}
