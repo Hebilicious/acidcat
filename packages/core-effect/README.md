@@ -440,7 +440,7 @@ A subscription that cannot start has the exit code of its call failure. Each ite
 
 #### Aliases
 
-The `cli` target can give [aliases](../../spec/bindings/cli.md#aliases) in its options: short names for capabilities, with an optional fixed input. A command alias is one word, and a flag alias is `--` and one word:
+The `cli` target can give [aliases](../../spec/bindings/cli.md#aliases) in its options: short names for capabilities and events, with an optional fixed input. A command alias is one word, and a flag alias is `--` and one word. `default` names the default alias:
 
 ```ts
 targets: {
@@ -452,7 +452,9 @@ targets: {
           status: { capability: "aircon.status.get" },
           "--on": { capability: "aircon.power.set", input: { on: true } },
           "--off": { capability: "aircon.power.set", input: { on: false } },
+          follow: { event: "aircon.status.changed" },
         },
+        default: "status",
       },
     },
   },
@@ -462,9 +464,13 @@ targets: {
 ```sh
 node cli.ts --on      # the same call as: node cli.ts aircon power set --on
 node cli.ts status    # the same call as: node cli.ts aircon status get
+node cli.ts follow    # the same subscription as: node cli.ts watch aircon.status.changed
+node cli.ts           # the default alias: node cli.ts status
 ```
 
-The properties of the fixed input are not flags of the alias. The other properties are flags, with the rules above. `list` gives the usage of the aliases of each capability in `aliases`, and the help lists them. If an alias breaks a rule, `Cli.command` throws, so the program stops with an error when it starts. A command of the application must not have the name of an alias.
+The properties of the fixed input are not flags of the alias. The other properties are flags, with the rules above. An alias of an event subscribes as `watch` does, with the same exit codes, and also takes `--cursor` and `--max-age-ms`. `list` gives the usage of the aliases of each capability and each event in `aliases`, and the help lists them. If an alias breaks a rule, `Cli.command` throws, so the program stops with an error when it starts. A command of the application must not have the name of an alias.
+
+With no arguments, the program runs the default alias. If the first argument starts with `--`, and it is not `--help`, `--version`, a flag alias or a global flag, the program runs the default alias with all the arguments as its flags. `Cli.runCommand` stops with a defect when it starts if a flag of the default alias has the name of a global flag of `effect/cli` or of the application.
 
 ### Command line of a server
 

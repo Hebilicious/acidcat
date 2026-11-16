@@ -29,7 +29,8 @@ func airconCatalog() *catalog.Catalog {
 				"status": schema{"capability": "aircon.status.get"},
 				"--on":   schema{"capability": "aircon.power.set", "input": schema{"on": true}},
 				"--off":  schema{"capability": "aircon.power.set", "input": schema{"on": false}},
-			}},
+				"follow": schema{"event": "aircon.status.changed"},
+			}, "default": "status"},
 		}}).
 		Target("mcp", catalog.Target{Description: "Agents, through an MCP server.", Bindings: []string{"mcp"}}).
 		Target("api", catalog.Target{Description: "Home-automation systems and scripts.", Bindings: []string{"http"}})

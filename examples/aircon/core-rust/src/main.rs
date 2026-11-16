@@ -254,8 +254,10 @@ pub fn aircon() -> Arc<Application<Unit>> {
                         "aliases": {
                             "status": { "capability": "aircon.status.get" },
                             "--on": { "capability": "aircon.power.set", "input": { "on": true } },
-                            "--off": { "capability": "aircon.power.set", "input": { "on": false } }
-                        }
+                            "--off": { "capability": "aircon.power.set", "input": { "on": false } },
+                            "follow": { "event": "aircon.status.changed" }
+                        },
+                        "default": "status"
                     }
                 })),
             },

@@ -33,7 +33,9 @@ def aircon_catalog() -> Catalog:
                     "status": {"capability": "aircon.status.get"},
                     "--on": {"capability": "aircon.power.set", "input": {"on": True}},
                     "--off": {"capability": "aircon.power.set", "input": {"on": False}},
-                }
+                    "follow": {"event": "aircon.status.changed"},
+                },
+                "default": "status",
             }
         },
     )

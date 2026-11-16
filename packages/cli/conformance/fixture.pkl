@@ -17,7 +17,11 @@ targets {
           ["raw"] { capability = "fixture.raw" }
           ["held-keys"] { capability = "fixture.held" }
           ["fixed-note"] { capability = "fixture.note"; input { text = "fixed" } }
+          ["ticks"] { event = "fixture.ticks"; input { count = 2 } }
+          ["broken-ticks"] { event = "fixture.broken" }
+          ["echoes"] { event = "fixture.echoes" }
         }
+        ["default"] = "quick"
       }
     }
   }
@@ -229,6 +233,12 @@ events {
     description = "Give the occurrence n = 1, then fail with a defect."
     audience = allTargets
     payload = tick
+  }
+  ["fixture.echoes"] {
+    description = "Give one occurrence whose data is the input, then end."
+    audience { "cli" }
+    input { type = "object" }
+    payload { type = "object" }
   }
   ["fixture.secret"] {
     description = "Only the app target can follow this event. It never gives an occurrence."

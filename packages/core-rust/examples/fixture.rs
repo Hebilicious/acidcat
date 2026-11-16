@@ -239,8 +239,12 @@ pub fn fixture() -> Arc<Application<Fixture>> {
                             "held-keys": { "capability": "fixture.held" },
                             "--hello": { "capability": "fixture.echo", "input": { "text": "hello" } },
                             "quick": { "capability": "fixture.flags", "input": { "mode": "fast" } },
-                            "fixed-note": { "capability": "fixture.note", "input": { "text": "fixed" } }
-                        }
+                            "fixed-note": { "capability": "fixture.note", "input": { "text": "fixed" } },
+                            "ticks": { "event": "fixture.ticks", "input": { "count": 2 } },
+                            "broken-ticks": { "event": "fixture.broken" },
+                            "echoes": { "event": "fixture.echoes" }
+                        },
+                        "default": "quick"
                     }
                 })),
                 ..Target::default()
@@ -400,6 +404,13 @@ pub fn fixture() -> Arc<Application<Fixture>> {
                 .audience(EVERYWHERE)
                 .payload::<Tick>()
                 .subscribe(|(), _| futures::stream::iter([Ok(Emitted::new(Tick { n: 1 })), Err(Defect::new("secret internal detail"))])),
+        )
+        .event(
+            Event::new("fixture.echoes", "Give one occurrence whose data is the input, then end.")
+                .audience(["cli"])
+                .input_schema::<Map<String, Value>>(json!({ "type": "object" }))
+                .payload_schema::<Map<String, Value>>(json!({ "type": "object" }))
+                .subscribe(|input, _| futures::stream::iter([Ok(Emitted::new(input))])),
         )
         .event(
             Event::new("fixture.secret", "Only the app target can follow this event. It never gives an occurrence.")

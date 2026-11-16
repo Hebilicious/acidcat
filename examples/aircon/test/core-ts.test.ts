@@ -131,11 +131,36 @@ test("the aliases of the command line call their capabilities with their fixed i
   assert.equal((await cli("--off")).code, 0);
   assert.equal(unit.state.power, false);
   assert.equal((await cli("--on", "--on", "false")).code, 3);
+  assert.partialDeepStrictEqual(JSON.parse((await cli()).stdout), { power: false }, "the default alias is status");
   const list: unknown = JSON.parse((await cli("list")).stdout);
   assert.ok(Array.isArray(list));
   assert.partialDeepStrictEqual(list.find((item: unknown) => typeof item === "object" && item !== null && "id" in item && item.id === "aircon.power.set"), {
     aliases: ["aircon --off", "aircon --on"],
   });
+});
+
+test("the alias follow of the command line writes each change of the status", async () => {
+  const unit = new Unit();
+  const interrupt = new AbortController();
+  const lines: string[] = [];
+  const followed = runCli(aircon, { name: "aircon", version: "0.1.0", context: { unit }, toJsonSchema }, ["follow"], {
+    stdout: (text) => {
+      lines.push(text);
+      interrupt.abort();
+    },
+    stderr: () => undefined,
+    signal: interrupt.signal,
+  });
+  const session = createSession(aircon, { target: "cli", context: { unit }, toJsonSchema });
+  // The subscription can start after the first change, so change the status until an occurrence comes.
+  for (let on = true; lines.length === 0; on = !on) {
+    await session.invoke("aircon.power.set", { on });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(await followed, 130);
+  await session.dispose();
+  const [first = ""] = lines;
+  assert.partialDeepStrictEqual(JSON.parse(first), { name: "aircon.status.changed" });
 });
 
 test("the command line runs a capability, and a flag follows a $ref to its type", async () => {

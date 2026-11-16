@@ -87,9 +87,29 @@ test("the Rust command line has the aliases of the catalog", async (context) => 
   assert.equal((await finish(remote("--off"))).code, 0);
   assert.partialDeepStrictEqual(JSON.parse((await finish(remote("status"))).stdout), { power: false });
   assert.equal((await finish(remote("--on", "--on"))).code, 3);
+  const fallback = await finish(remote());
+  assert.equal(fallback.code, 0, fallback.stderr);
+  assert.partialDeepStrictEqual(JSON.parse(fallback.stdout), { power: false }, "the default alias is status");
   const list = await cli("list");
   assert.match(list.stdout, /"aliases": \[\n\s*"aircon --off",\n\s*"aircon --on"\n\s*\]/);
-  assert.match((await cli("--help")).stdout, /\nAliases:\n {2}--off\n {2}--on\n {2}status\n$/);
+  assert.match(list.stdout, /"aliases": \[\n\s*"aircon follow \[--cursor <string>\] \[--max-age-ms <integer>\]"\n\s*\]/);
+  assert.match((await cli("--help")).stdout, /\nAliases:\n {2}--off\n {2}--on\n {2}follow \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}status\n$/);
+
+  const follow = remote("follow");
+  context.after(() => follow.kill());
+  let followed = "";
+  follow.stdout.setEncoding("utf-8").on("data", (chunk: string) => (followed += chunk));
+  // Change the status until the subscription writes its first occurrence: a change before the subscription starts is
+  // not in it.
+  for (let turn = 0; !followed.includes("\n"); turn++) {
+    assert.ok(turn < 100, "follow writes an occurrence");
+    assert.equal((await finish(remote(turn % 2 === 0 ? "--on" : "--off"))).code, 0);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.partialDeepStrictEqual(JSON.parse(followed.slice(0, followed.indexOf("\n"))), { name: "aircon.status.changed" });
+  const exited = new Promise<number | null>((resolve) => follow.on("close", resolve));
+  follow.kill("SIGINT");
+  assert.equal(await exited, 130);
 });
 
 test("the Rust command line controls the unit of a server, and watch follows its changes", async (context) => {

@@ -210,30 +210,41 @@ export const CLI_ALIAS_NAME = /^(--)?[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
 export interface CliAlias {
   readonly name: string;
-  readonly capability: string;
+  readonly kind: "capability" | "event";
+  readonly id: string;
   readonly input?: JsonObject;
 }
 
+export interface CliAliases {
+  /** The aliases, in code point order of their names. An alias that breaks a rule is not here. */
+  readonly aliases: readonly CliAlias[];
+  readonly default: CliAlias | undefined;
+  readonly errors: readonly string[];
+}
+
 /**
- * The aliases of a target in `options.cli.aliases` (spec/bindings/cli.md#aliases), in code point order of their names,
- * and the rules that they break. `catalog` is a catalog or the view of the target. An alias that breaks a rule is not in
- * `aliases`.
+ * The aliases of a target in `options.cli.aliases`, and its default alias in `options.cli.default`
+ * (spec/bindings/cli.md#aliases). `catalog` is a catalog or the view of the target.
  */
-export function cliAliases(catalog: CatalogDocument, target: string): { readonly aliases: readonly CliAlias[]; readonly errors: readonly string[] } {
+export function cliAliases(catalog: CatalogDocument, target: string): CliAliases {
+  const none: CliAliases = { aliases: [], default: undefined, errors: [] };
   const declared = ownMember(catalog.targets, target);
   const settings = declared === undefined || !isJsonObject(declared.options) ? undefined : ownMember(declared.options, "cli");
-  if (declared === undefined || settings === undefined) return { aliases: [], errors: [] };
+  if (declared === undefined || settings === undefined) return none;
   const where = `target ${target}`;
-  if (!isJsonObject(settings)) return { aliases: [], errors: [`${where}: options.cli must be an object`] };
+  if (!isJsonObject(settings)) return { ...none, errors: [`${where}: options.cli must be an object`] };
   const errors: string[] = [];
   if (!declared.bindings.includes("cli")) errors.push(`${where}: has options.cli, but not the binding cli`);
-  const members = settings.aliases;
-  if (members === undefined) return { aliases: [], errors };
-  if (!isJsonObject(members)) return { aliases: [], errors: [...errors, `${where}: options.cli.aliases must be an object`] };
+  const declaredAliases = ownMember(settings, "aliases");
+  const members = declaredAliases === undefined ? {} : declaredAliases;
+  if (!isJsonObject(members)) return { ...none, errors: [...errors, `${where}: options.cli.aliases must be an object`] };
 
   const types = catalog.$defs ?? {};
-  const visible = Object.entries(catalog.capabilities).filter(([, capability]) => (capability.audience ?? []).includes(target));
-  const firstWords = new Set(visible.map(([id]) => commandPath(id)[0]));
+  const inView = (entries: { readonly [id: string]: { readonly audience?: readonly string[]; readonly input?: JsonObject } } | undefined) =>
+    Object.entries(entries ?? {}).filter(([, entry]) => (entry.audience ?? []).includes(target));
+  const capabilities = new Map(inView(catalog.capabilities).map(([id, capability]) => [id, capability.input]));
+  const events = new Map(inView(catalog.events).map(([id, event]) => [id, event.input]));
+  const firstWords = new Set([...capabilities.keys()].map((id) => commandPath(id)[0]));
   const aliases: CliAlias[] = [];
   for (const name of Object.keys(members).sort(byCodePoint)) {
     const problem = (text: string) => errors.push(`${where}: the alias ${name} ${text}`);
@@ -250,46 +261,83 @@ export function cliAliases(catalog: CatalogDocument, target: string): { readonly
       problem("has the name of the first word of the command of a capability");
       continue;
     }
-    if (!isJsonObject(value) || typeof value.capability !== "string") {
-      problem("must be an object with the id of a capability in capability");
+    if (!isJsonObject(value) || typeof (value.capability ?? value.event) !== "string" || (value.capability !== undefined && value.event !== undefined)) {
+      problem("must be an object with the id of a capability in capability, or the id of an event in event");
       continue;
     }
-    const unknown = Object.keys(value).filter((key) => key !== "capability" && key !== "input" && !key.startsWith("x-"));
+    const unknown = Object.keys(value).filter((key) => key !== "capability" && key !== "event" && key !== "input" && !key.startsWith("x-"));
     if (unknown.length > 0) {
       problem(`has the unknown member ${unknown.join(", ")}`);
       continue;
     }
-    const capability = visible.find(([id]) => id === value.capability)?.[1];
-    if (capability === undefined) {
-      problem(`refers to ${value.capability}, which is not a capability in the view of the target`);
+    const kind = typeof value.event === "string" ? "event" : "capability";
+    const id = typeof value.event === "string" ? value.event : typeof value.capability === "string" ? value.capability : "";
+    const entries = kind === "event" ? events : capabilities;
+    if (!entries.has(id)) {
+      problem(`refers to ${id}, which is not ${kind === "event" ? "an event" : "a capability"} in the view of the target`);
       continue;
     }
     if (value.input === undefined) {
-      aliases.push({ name, capability: value.capability });
+      aliases.push({ name, kind, id });
       continue;
     }
     if (!isJsonObject(value.input)) {
       problem("must have an object as its input");
       continue;
     }
-    const properties = capability.input === undefined ? undefined : resolveType(capability.input, types).properties;
+    const input = entries.get(id);
+    const properties = input === undefined ? undefined : resolveType(input, types).properties;
     if (!isJsonObject(properties)) {
-      problem(`has a fixed input, but the input schema of ${value.capability} has no properties`);
+      problem(`has a fixed input, but the input schema of ${id} has no properties`);
       continue;
     }
     const extra = Object.keys(value.input).filter((key) => !Object.hasOwn(properties, key));
     if (extra.length > 0) {
-      problem(`has the fixed input ${extra.join(", ")}, which is not a property of the input of ${value.capability}`);
+      problem(`has the fixed input ${extra.join(", ")}, which is not a property of the input of ${id}`);
       continue;
     }
-    aliases.push({ name, capability: value.capability, input: value.input });
+    aliases.push({ name, kind, id, input: value.input });
   }
-  return { aliases, errors };
+
+  const named = settings.default;
+  if (named === undefined) return { aliases, default: undefined, errors };
+  const fallback = typeof named === "string" ? aliases.find((alias) => alias.name === named) : undefined;
+  if (typeof named !== "string" || named.startsWith("--") || (fallback === undefined && !Object.hasOwn(members, named))) {
+    errors.push(`${where}: options.cli.default must be the name of a command alias`);
+    return { aliases, default: undefined, errors };
+  }
+  if (fallback === undefined) return { aliases, default: undefined, errors };
+  const flags = cliAliasFlagNames(catalog, fallback);
+  for (const reserved of CLI_RESERVED_FLAGS) {
+    if (flags.includes(reserved.slice(2))) errors.push(`${where}: the default alias ${fallback.name} has the flag ${reserved}, which is a flag of the command line`);
+  }
+  for (const alias of aliases) {
+    if (alias.name.startsWith("--") && flags.includes(alias.name.slice(2))) {
+      errors.push(`${where}: the alias ${alias.name} has the name of a flag of the default alias ${fallback.name}`);
+    }
+  }
+  return { aliases, default: fallback, errors };
 }
 
 /**
- * The input schema of an alias (spec/bindings/cli.md#aliases): the input schema of its capability, from
- * `cliInputSchema`, without the properties of the fixed input. The flags of the alias come from it.
+ * The input schema of an alias (spec/bindings/cli.md#aliases): the input schema of its capability or its event, from
+ * `cliInputSchema`, without the properties of the fixed input. The flags of the alias come from it. `catalog` is a
+ * catalog or the view that has the alias.
+ */
+export function cliAliasInput(catalog: CatalogDocument, alias: CliAlias): JsonObject | undefined {
+  const entry = alias.kind === "event" ? ownMember(catalog.events ?? {}, alias.id) : ownMember(catalog.capabilities, alias.id);
+  return entry?.input === undefined ? undefined : cliAliasSchema(cliInputSchema(entry.input, catalog.$defs ?? {}), alias.input);
+}
+
+/** The names of the flags of an alias, without `--`: its input properties, and the cursor flags of an event. */
+export function cliAliasFlagNames(catalog: CatalogDocument, alias: CliAlias): readonly string[] {
+  const properties = cliAliasInput(catalog, alias)?.properties;
+  return [...(isJsonObject(properties) ? Object.keys(properties) : []), ...(alias.kind === "event" ? CLI_RESUME_FLAGS : [])];
+}
+
+/**
+ * An input schema from `cliInputSchema`, without the properties of the fixed input of an alias
+ * (spec/bindings/cli.md#aliases).
  */
 export function cliAliasSchema(input: JsonObject, fixed: JsonObject | undefined): JsonObject {
   if (fixed === undefined || !isJsonObject(input.properties)) return input;
@@ -301,11 +349,12 @@ export function cliAliasSchema(input: JsonObject, fixed: JsonObject | undefined)
 
 /**
  * The `usage` of an alias in `list` (spec/bindings/cli.md#aliases). `input` is the input schema of the alias, from
- * `cliAliasSchema`, or `undefined` when the capability has no input.
+ * `cliAliasInput`, or `undefined` when it has no input. The usage of an alias of an event ends with the cursor flags.
  */
-export function cliAliasUsage(program: string, name: string, input: JsonObject | undefined): string {
-  if (input !== undefined && input.properties === undefined) return `${program} ${name} '<json>'`;
-  return [program, name, ...(input === undefined ? [] : cliFlags(input))].join(" ");
+export function cliAliasUsage(program: string, alias: Pick<CliAlias, "name" | "kind">, input: JsonObject | undefined): string {
+  const flags = input === undefined ? [] : input.properties === undefined ? ["'<json>'"] : cliFlags(input);
+  const resume = alias.kind === "event" ? ["[--cursor <string>] [--max-age-ms <integer>]"] : [];
+  return [program, alias.name, ...flags, ...resume].join(" ");
 }
 
 const isOneOf = (names: readonly string[], name: string): boolean => names.includes(name);

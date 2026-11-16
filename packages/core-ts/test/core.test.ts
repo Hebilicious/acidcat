@@ -465,7 +465,7 @@ test("a command of the application must not have the name of another command", a
 
 test("the help lists the aliases, and <alias> --help gives the usage of the alias", async () => {
   const run = (...args: string[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options() }, ...args);
-  assert.match((await run("--help")).stdout, /\nAliases:\n {2}--hello\n {2}fixed-note \[--loud\]\n {2}held-keys\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>$/);
+  assert.match((await run("--help")).stdout, /\nAliases:\n {2}--hello\n {2}broken-ticks \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}echoes '<json>' \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}fixed-note \[--loud\]\n {2}held-keys\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n {2}ticks \[--gap <integer>\] \[--key <string>\] \[--cursor <string>\] \[--max-age-ms <integer>\]$/);
   assert.equal((await run("say", "--help")).stdout, "Usage: fixture say --text <string>\n\nReturn the input text.");
 });
 

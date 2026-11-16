@@ -4,7 +4,7 @@ import {
   CLI_RESUME_FLAGS,
   CLI_WATCH_EXIT_CODES,
   cliAliases,
-  cliAliasSchema,
+  cliAliasInput,
   cliAliasUsage,
   cliEventUsage,
   cliExitCode,
@@ -154,14 +154,11 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     const taken = CLI_RESUME_FLAGS.find((flag) => isJsonObject(properties) && flag in properties);
     if (taken !== undefined) throw new Error(`The input of the event ${id} has a property ${taken}, which is a flag of watch.`);
   }
-  const { aliases, errors: aliasErrors } = cliAliases(view, options.target ?? "cli");
+  const { aliases, default: defaultAlias, errors: aliasErrors } = cliAliases(view, options.target ?? "cli");
   if (aliasErrors.length > 0) throw new Error(aliasErrors.join("\n"));
-  const aliasSchema = (alias: CliAlias): JsonObject | undefined => {
-    const input = viewCapability(view, alias.capability).input;
-    return input === undefined ? undefined : cliAliasSchema(cliInputSchema(input, types), alias.input);
-  };
-  const aliasUsages = (id: string): readonly string[] =>
-    aliases.filter((alias) => alias.capability === id).map((alias) => cliAliasUsage(options.name, alias.name, aliasSchema(alias)));
+  const aliasUsage = (alias: CliAlias): string => cliAliasUsage(options.name, alias, cliAliasInput(view, alias));
+  const aliasUsages = (kind: CliAlias["kind"], id: string): readonly string[] =>
+    aliases.filter((alias) => alias.kind === kind && alias.id === id).map(aliasUsage);
 
   const added = options.commands ?? [];
   const taken = new Set([...GENERIC_COMMANDS, ...commands.flatMap(({ path }) => path.slice(0, 1)), ...aliases.map(({ name }) => name)]);
@@ -203,6 +200,10 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
         }
       }
     }
+    return await follow(id, input, resume);
+  };
+
+  const follow = async (id: string, input: unknown, resume: Resume): Promise<number> => {
     const subscribed = await provider.subscribe(id, input, { signal: io.signal, ...resume });
     if ("kind" in subscribed) return printUnlessInterrupted(subscribed);
     try {
@@ -215,11 +216,49 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     return io.signal?.aborted === true ? CLI_WATCH_EXIT_CODES.cancelled : CLI_WATCH_EXIT_CODES.complete;
   };
 
+  const runAlias = async (alias: CliAlias, rest: readonly string[]): Promise<number> => {
+    const entry = alias.kind === "event" ? view.events?.[alias.id] : view.capabilities[alias.id];
+    if (entry === undefined) throw new Error(`The view of the session has no ${alias.kind} ${alias.id}.`);
+    if (rest.includes("--help") || rest.includes("-h")) {
+      io.stdout([`Usage: ${aliasUsage(alias)}`, "", entry.description].join("\n"));
+      return CLI_EXIT_CODES.value;
+    }
+    const { flagArgs, resume } = alias.kind === "event" ? resumeFlags(rest) : { flagArgs: rest, resume: {} };
+    const run = async (input: unknown): Promise<number> =>
+      alias.kind === "event" ? await follow(alias.id, input, resume) : print(await provider.invoke(alias.id, input, io.signal));
+    const schema = cliAliasInput(view, alias) ?? NO_FLAGS;
+    if (schema.properties !== undefined) return await run({ ...alias.input, ...parseFlags(flagArgs, schema) });
+    const [text = "{}", extra] = flagArgs;
+    if (extra !== undefined) throw new UsageError(`Unexpected argument ${extra}.`, CLI_EXIT_CODES["invalid-input"]);
+    let input: unknown;
+    try {
+      input = JSON.parse(text);
+    } catch {
+      // unavailable comes before invalid-input (spec/invocation.md#call-failures).
+      if (alias.kind === "capability") {
+        const availability = await provider.availability(io.signal);
+        if ("kind" in availability) return print(availability);
+        const state = availability.get(alias.id);
+        if (state !== undefined && !state.available) return print({ kind: "unavailable", message: state.reason });
+      }
+      return print({ kind: "invalid-input", message: "The input is not JSON." });
+    }
+    return await run(input);
+  };
+
+  const argsWithDefaultAlias = (): readonly string[] => {
+    const [head] = args;
+    if (defaultAlias === undefined) return args;
+    if (head === undefined) return [defaultAlias.name];
+    const flagOfProgram = head === "--help" || head === "--version" || aliases.some(({ name }) => name === head);
+    return head.startsWith("--") && !flagOfProgram ? [defaultAlias.name, ...args] : args;
+  };
+
   try {
-    const [first, ...rest] = args;
+    const [first, ...rest] = argsWithDefaultAlias();
     if (first === undefined || first === "--help" || first === "-h") {
       const description = options.description ?? app.description ?? app.title ?? options.name;
-      const aliasLines = aliases.map((alias) => cliAliasUsage(options.name, alias.name, aliasSchema(alias)).slice(options.name.length + 1));
+      const aliasLines = aliases.map((alias) => aliasUsage(alias).slice(options.name.length + 1));
       io.stdout(help(options.name, description, commands.map(({ path }) => path.join(" ")), Object.keys(view.events ?? {}).length > 0, added, aliasLines));
       return CLI_EXIT_CODES.value;
     }
@@ -234,7 +273,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
         JSON.stringify(
           [
             ...Object.entries(view.capabilities).map(([id, capability]) => {
-              const usages = aliasUsages(id);
+              const usages = aliasUsages("capability", id);
               return {
                 kind: "capability",
                 id,
@@ -244,12 +283,16 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
                 ...(usages.length > 0 ? { aliases: usages } : {}),
               };
             }),
-          ...Object.entries(view.events ?? {}).map(([id, event]) => ({
-            kind: "event",
-            id,
-            description: event.description,
-            usage: cliEventUsage(options.name, id, event.input === undefined ? undefined : cliInputSchema(event.input, types)),
-          })),
+          ...Object.entries(view.events ?? {}).map(([id, event]) => {
+            const usages = aliasUsages("event", id);
+            return {
+              kind: "event",
+              id,
+              description: event.description,
+              usage: cliEventUsage(options.name, id, event.input === undefined ? undefined : cliInputSchema(event.input, types)),
+              ...(usages.length > 0 ? { aliases: usages } : {}),
+            };
+          }),
         ],
           null,
           2,
@@ -276,29 +319,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     }
     if (first === "watch") return await watch(rest);
     const alias = aliases.find(({ name }) => name === first);
-    if (alias !== undefined) {
-      const capability = viewCapability(view, alias.capability);
-      const schema = aliasSchema(alias) ?? NO_FLAGS;
-      if (rest.includes("--help") || rest.includes("-h")) {
-        io.stdout([`Usage: ${cliAliasUsage(options.name, alias.name, aliasSchema(alias))}`, "", capability.description].join("\n"));
-        return CLI_EXIT_CODES.value;
-      }
-      if (schema.properties !== undefined) return print(await provider.invoke(alias.capability, { ...alias.input, ...parseFlags(rest, schema) }, io.signal));
-      const [text = "{}", extra] = rest;
-      if (extra !== undefined) throw new UsageError(`Unexpected argument ${extra}.`, CLI_EXIT_CODES["invalid-input"]);
-      let input: unknown;
-      try {
-        input = JSON.parse(text);
-      } catch {
-        // unavailable comes before invalid-input (spec/invocation.md#call-failures).
-        const availability = await provider.availability(io.signal);
-        if ("kind" in availability) return print(availability);
-        const state = availability.get(alias.capability);
-        if (state !== undefined && !state.available) return print({ kind: "unavailable", message: state.reason });
-        return print({ kind: "invalid-input", message: "The input is not JSON." });
-      }
-      return print(await provider.invoke(alias.capability, input, io.signal));
-    }
+    if (alias !== undefined) return await runAlias(alias, rest);
     const command = added.find(({ name }) => name === first);
     if (command !== undefined) return await command.run(rest, { ...io, context: options.context });
 
@@ -324,9 +345,11 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   }
 }
 
-function resumeFlags(args: readonly string[]): { readonly flagArgs: string[]; readonly resume: { cursor?: string; maxAgeMs?: number } } {
+type Resume = { cursor?: string; maxAgeMs?: number };
+
+function resumeFlags(args: readonly string[]): { readonly flagArgs: string[]; readonly resume: Resume } {
   const flagArgs: string[] = [];
-  const resume: { cursor?: string; maxAgeMs?: number } = {};
+  const resume: Resume = {};
   const flagsAndValues = args.values();
   for (const arg of flagsAndValues) {
     const [name = "", inline] = arg.startsWith("--") ? arg.slice(2).split(/=(.*)/s, 2) : [];

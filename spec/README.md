@@ -29,7 +29,7 @@ These terms have these meanings in all documents.
 | **Audience** | The targets that can use a capability or an event. A capability or an event with no audience is not available to any target |
 | **View** | The part of the catalog that one target can see. A view is a catalog |
 | **Binding** | The rules that make one kind of surface from a view. A **protocol binding** makes a surface on the network or in a terminal, for example MCP or a command line. A **language binding** makes a surface in code, for example TypeScript. See [Bindings](bindings/README.md) |
-| **Alias** | A short name for a capability on the command line. A **command alias** is one word, and a **flag alias** is `--` and one word. The **fixed input** of an alias is the part of the input that the alias always gives. See [CLI binding](bindings/cli.md#aliases) |
+| **Alias** | A short name for a capability or an event on the command line. A **command alias** is one word, and a **flag alias** is `--` and one word. The **fixed input** of an alias is the part of the input that the alias always gives. The **default alias** runs when the command line gets no command. See [CLI binding](bindings/cli.md#aliases) |
 | **Transport** | How a protocol binding carries messages between a client and a server, for example HTTP, or the standard input and output of a process (stdio) |
 | **Provider** | The code that does the operations |
 | **Client** | A program or a person that calls capabilities through a binding |

@@ -22,7 +22,7 @@ const KNOWN_MEMBERS = {
   target: ["bindings", "description", "options"],
   capability: ["description", "audience", "input", "output", "failures", "readOnly", "state"],
   event: ["description", "audience", "input", "payload"],
-  cliOptions: ["aliases"],
+  cliOptions: ["aliases", "default"],
 };
 
 const optional = (object: JsonObject, key: string, isMember: (value: unknown) => boolean): boolean =>

@@ -118,17 +118,22 @@
           "additionalProperties": {
             "$ref": "#/$defs/cliAlias"
           }
+        },
+        "default": {
+          "description": "The name of the default alias: a command alias that runs when the command line gets no command.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
         }
       }
     },
     "cliAlias": {
-      "description": "A short name for a capability: its id, and an optional fixed input. Other members start with x-; acid-cat check rejects other members.",
+      "description": "A short name for a capability or an event: its id in capability or event, and an optional fixed input. Other members start with x-; acid-cat check rejects other members, and an alias with both or neither of capability and event.",
       "type": "object",
-      "required": [
-        "capability"
-      ],
       "properties": {
         "capability": {
+          "$ref": "#/$defs/id"
+        },
+        "event": {
           "$ref": "#/$defs/id"
         },
         "input": {

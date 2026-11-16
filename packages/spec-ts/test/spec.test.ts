@@ -25,6 +25,7 @@ import {
   cliUsage,
   cliAliases,
   cliAliasSchema,
+  cliAliasInput,
   cliAliasUsage,
   commandPath,
   fail,
@@ -336,8 +337,8 @@ test("cliAliases reads the aliases of a target and reports the rules that they b
   } as const;
   const { aliases, errors } = cliAliases(catalog, "cli");
   assert.deepEqual(aliases, [
-    { name: "--on", capability: "aircon.power.set", input: { on: true } },
-    { name: "status", capability: "aircon.status.get" },
+    { name: "--on", kind: "capability", id: "aircon.power.set", input: { on: true } },
+    { name: "status", kind: "capability", id: "aircon.status.get" },
   ]);
   assert.deepEqual(errors, [
     "target cli: the alias --help has the name of a command or a flag of the command line",
@@ -350,7 +351,10 @@ test("cliAliases reads the aliases of a target and reports the rules that they b
     "target cli: the alias raw has a fixed input, but the input schema of aircon.raw.send has no properties",
   ]);
   assert.deepEqual(cliAliases(catalog, "mcp").errors, ["target mcp: has options.cli, but not the binding cli"]);
-  assert.deepEqual(cliAliases(catalog, "api"), { aliases: [], errors: [] });
+  assert.deepEqual(cliAliases(catalog, "api"), { aliases: [], default: undefined, errors: [] });
+  assert.deepEqual(cliAliases({ ...catalog, targets: { cli: { bindings: ["cli"], options: { cli: { aliases: null } } } } }, "cli").errors, [
+    "target cli: options.cli.aliases must be an object",
+  ]);
 });
 
 test("an alias takes flags for the properties that are not in its fixed input", () => {
@@ -361,9 +365,59 @@ test("an alias takes flags for the properties that are not in its fixed input", 
   };
   const schema = cliAliasSchema(input, { mode: "cool" });
   assert.deepEqual(schema, { type: "object", required: ["speed"], properties: { speed: { type: "integer" }, quiet: { type: "boolean" } } });
-  assert.equal(cliAliasUsage("aircon", "cool", schema), "aircon cool --speed <integer> [--quiet]");
+  assert.equal(cliAliasUsage("aircon", { name: "cool", kind: "capability" }, schema), "aircon cool --speed <integer> [--quiet]");
   assert.deepEqual(cliAliasSchema(input, { mode: "cool", speed: 1 }).required, undefined);
-  assert.equal(cliAliasUsage("aircon", "--on", cliAliasSchema({ type: "object", required: ["on"], properties: { on: { type: "boolean" } } }, { on: true })), "aircon --on");
-  assert.equal(cliAliasUsage("aircon", "status", undefined), "aircon status");
-  assert.equal(cliAliasUsage("aircon", "raw", { type: "object" }), "aircon raw '<json>'");
+  assert.equal(cliAliasUsage("aircon", { name: "--on", kind: "capability" }, cliAliasSchema({ type: "object", required: ["on"], properties: { on: { type: "boolean" } } }, { on: true })), "aircon --on");
+  assert.equal(cliAliasUsage("aircon", { name: "status", kind: "capability" }, undefined), "aircon status");
+  assert.equal(cliAliasUsage("aircon", { name: "raw", kind: "capability" }, { type: "object" }), "aircon raw '<json>'");
+  assert.equal(cliAliasUsage("aircon", { name: "follow", kind: "event" }, undefined), "aircon follow [--cursor <string>] [--max-age-ms <integer>]");
+  assert.equal(cliAliasUsage("aircon", { name: "feed", kind: "event" }, { type: "object" }), "aircon feed '<json>' [--cursor <string>] [--max-age-ms <integer>]");
+});
+
+test("an alias can name an event, and the default alias runs with no command", () => {
+  const catalog = {
+    acidcat: "0.1",
+    targets: {
+      cli: {
+        bindings: ["cli"],
+        options: {
+          cli: {
+            aliases: {
+              build: { capability: "css.tokens.build" },
+              "--minify": { capability: "css.tokens.build", input: { minify: true } },
+              follow: { event: "css.tokens.built", input: { theme: "dark" } },
+              both: { capability: "css.tokens.build", event: "css.tokens.built" },
+              secret: { event: "css.tokens.hidden" },
+            },
+            default: "build",
+          },
+        },
+      },
+    },
+    capabilities: {
+      "css.tokens.build": { description: "", audience: ["cli"], input: { type: "object", properties: { minify: { type: "boolean" }, out: { type: "string" } } } },
+    },
+    events: {
+      "css.tokens.built": { description: "", audience: ["cli"], input: { type: "object", properties: { theme: { type: "string" }, full: { type: "boolean" } } } },
+      "css.tokens.hidden": { description: "", audience: [] },
+    },
+  } as const;
+  const result = cliAliases(catalog, "cli");
+  assert.deepEqual(result.aliases.map(({ name, kind, id }) => [name, kind, id]), [
+    ["--minify", "capability", "css.tokens.build"],
+    ["build", "capability", "css.tokens.build"],
+    ["follow", "event", "css.tokens.built"],
+  ]);
+  assert.equal(result.default?.name, "build");
+  assert.deepEqual(result.errors, [
+    "target cli: the alias both must be an object with the id of a capability in capability, or the id of an event in event",
+    "target cli: the alias secret refers to css.tokens.hidden, which is not an event in the view of the target",
+    "target cli: the alias --minify has the name of a flag of the default alias build",
+  ]);
+  const follow = result.aliases.find(({ name }) => name === "follow");
+  assert.ok(follow !== undefined);
+  assert.equal(cliAliasUsage("css", follow, cliAliasInput(catalog, follow)), "css follow [--full] [--cursor <string>] [--max-age-ms <integer>]");
+  const withDefault = (value: string) => cliAliases({ ...catalog, targets: { cli: { bindings: ["cli"], options: { cli: { aliases: { build: { capability: "css.tokens.build" } }, default: value } } } } }, "cli").errors;
+  assert.deepEqual(withDefault("nothing"), ["target cli: options.cli.default must be the name of a command alias"]);
+  assert.deepEqual(withDefault("build"), []);
 });
