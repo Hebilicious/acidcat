@@ -1,4 +1,4 @@
-import type { FailureData, FailureSchemas } from "./app.ts";
+import type { EmptyInput, FailureData, FailureSchemas } from "./app.ts";
 import type { StandardSchemaV1 } from "./standard-schema.ts";
 
 export type CliOutput = "human" | "json";
@@ -33,7 +33,7 @@ type FailureFormats<Failures> = { readonly [Tag in keyof Failures]?: Format<{ re
 
 interface CapabilityFormats<Value, Failures> {
   readonly value?: Format<Value> | undefined;
-  readonly failures?: FailureFormats<Failures> | undefined;
+  readonly failures?: ([keyof Failures] extends [never] ? never : FailureFormats<Failures>) | undefined;
 }
 
 interface Formattable<Value, Failures extends FailureData> {
@@ -68,7 +68,7 @@ export function cliFormat<Value, Failures extends FailureData>(
 ): CliFormat;
 export function cliFormat<Value, Failures extends FailureData>(
   of: Formattable<Value, Failures> | FormattableEvent<Value>,
-  formats: Format<Value> | CapabilityFormats<Value, Failures>,
+  formats: Format<Value | EmptyInput> | CapabilityFormats<Value | EmptyInput, Failures>,
 ): CliFormat {
   const schema = "run" in of ? of.output : of.payload;
   const { value, failures } = typeof formats === "function" ? { value: formats, failures: undefined } : formats;
@@ -84,7 +84,7 @@ export function cliFormat<Value, Failures extends FailureData>(
   return {
     member: "run" in of ? "capability" : "event",
     id: of.id,
-    ...(schema === undefined || value === undefined ? {} : { value: renderWith(schema, value) }),
+    ...(value === undefined ? {} : { value: schema === undefined ? emptyRender(value) : renderWith(schema, value) }),
     failures: failureRenders,
   };
 }
@@ -97,6 +97,11 @@ function renderWith<Value>(schema: StandardSchemaV1<unknown, Value>, format: For
     return decoded.issues === undefined ? format(decoded.value, ui) : undefined;
   };
 }
+
+const emptyRender =
+  (format: Format<EmptyInput>): CliRender =>
+  async (json, ui) =>
+    isRecord(json) && Object.keys(json).length === 0 ? format({}, ui) : undefined;
 
 function failureRender<Failures extends FailureData, Tag extends keyof Failures & string>(
   tag: Tag,

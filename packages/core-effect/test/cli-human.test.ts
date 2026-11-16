@@ -66,6 +66,7 @@ test("the command line stops when it starts if two formats have one id, or a for
   assert.throws(() => Cli.command(probe, options([format, format])), /There are two formats for probe.level/);
   const hidden = Capability.make({ id: "probe.hidden", description: "Hide.", audience: ["mcp"], run: () => Effect.succeed(null) });
   assert.throws(() => Cli.command(probe, options([App.format(hidden, () => "")])), /probe.hidden refers to a capability that is not in the view/);
+  assert.throws(() => App.format(level, { failures: Object.fromEntries([["Bogus", () => "x"]]) }), /The capability probe.level has no failure Bogus\./);
 });
 
 test("the generic layout writes objects, tables and other arrays", () => {
@@ -80,6 +81,7 @@ test("the generic layout writes objects, tables and other arrays", () => {
     ],
     events: [{ kind: "start", details: { by: "timer" } }, "stop", []],
     none: [],
+    notes: [{ label: "a", note: null }],
   };
   const expected = [
     "name   unit",
@@ -101,6 +103,9 @@ test("the generic layout writes objects, tables and other arrays", () => {
     "  - stop",
     "  - (none)",
     "none   (none)",
+    "notes:",
+    "  label  note",
+    "  a      null",
   ].join("\n");
   assert.equal(Cli.layout(value), expected);
   assert.equal(Cli.layout(null), "");

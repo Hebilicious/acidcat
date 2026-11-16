@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { z } from "zod";
 
 import { cliLayout, defaultCliOutput } from "../src/cli-human.ts";
-import { cliFormat, defineApp, defineCapability, fail, ok, runCli } from "../src/index.ts";
+import { cliFormat, defineApp, defineCapability, defineEvent, fail, ok, runCli } from "../src/index.ts";
 import type { CliFormat, ToJsonSchema } from "../src/index.ts";
 
 const Probe = z.object({ name: z.string(), celsius: z.number() });
@@ -21,19 +21,35 @@ const read = defineCapability({
 
 const clock = defineCapability({ id: "probe.clock", description: "Read the clock of the probe.", audience: ["cli"], output: z.date(), run: () => ok(new Date(0)) });
 
-const app = defineApp({ targets: { cli: { bindings: ["cli"] } }, capabilities: [read, clock] });
+const tick = defineEvent({
+  id: "probe.tick",
+  description: "A tick of the probe occurred.",
+  audience: ["cli"],
+  async *subscribe() {
+    yield { data: {} };
+  },
+});
+
+const app = defineApp({ targets: { cli: { bindings: ["cli"] } }, capabilities: [read, clock], events: [tick] });
 
 const toJsonSchema: ToJsonSchema = (schema) => {
   if (!(schema instanceof z.ZodType)) throw new Error("The probe has only Zod schemas.");
   return z.toJSONSchema(schema, { unrepresentable: "any" });
 };
 
-const cli = async (formats: readonly CliFormat[], ...args: string[]) => {
+const run = async (formats: readonly CliFormat[], args: readonly string[]) => {
   const out: string[] = [];
   const code = await runCli(app, { name: "probe", version: "0.0.0", context: {}, toJsonSchema, formats }, ["--output", "human", ...args], {
     stdout: (text) => out.push(text),
     stderr: () => undefined,
   });
+  return { code, out };
+};
+
+const writes = async (formats: readonly CliFormat[], ...args: string[]) => (await run(formats, args)).out;
+
+const cli = async (formats: readonly CliFormat[], ...args: string[]) => {
+  const { code, out } = await run(formats, args);
   return { code, stdout: out.join("\n") };
 };
 
@@ -64,14 +80,22 @@ test("a formatter that throws, and a value that does not decode, give the generi
   assert.deepEqual(await cli(throwing, "probe", "clock"), { code: 0, stdout: "1970-01-01T00:00:00.000Z" }, "the JSON form of a date is not a date");
 });
 
-test("two formats for one id are an error when the command line starts", async () => {
+test("the formatter of an event with no payload schema gets an empty object, and an empty text writes nothing", async () => {
+  assert.deepEqual(await writes([cliFormat(tick, () => "tick!")], "watch", "probe.tick"), ["tick!"]);
+  assert.deepEqual(await writes([cliFormat(read, () => "")], "probe", "read"), []);
+});
+
+test("two formats for one id, and a formatter of an unknown failure, are errors", async () => {
   await assert.rejects(cli([cliFormat(read, () => "one"), cliFormat(read, () => "two")], "probe", "read"), /Two formats are for probe\.read/);
+  assert.throws(() => cliFormat(read, { failures: Object.fromEntries([["Bogus", () => "x"]]) }), /The capability probe\.read has no failure Bogus\./);
 });
 
 test("a formatter has the types of the value and the failures of its capability", () => {
   const wrong = () => [
     // @ts-expect-error probe.read has no failure Brokn.
     cliFormat(read, { failures: { Brokn: () => "" } }),
+    // @ts-expect-error probe.clock has no failures.
+    cliFormat(clock, { failures: { Bogus: () => "" } }),
     // @ts-expect-error The value of probe.read has no property kelvin.
     cliFormat(read, (probe) => String(probe.kelvin)),
   ];
@@ -90,6 +114,7 @@ test("the generic layout writes nested objects, tables and other arrays", () => 
     ],
     log: [{ event: "start", detail: { by: "timer" } }, "restart"],
     extra: {},
+    notes: [{ label: "a", note: null }],
   };
   assert.equal(
     cliLayout(value),
@@ -112,6 +137,9 @@ test("the generic layout writes nested objects, tables and other arrays", () => 
       "  - restart",
       "extra:",
       "  (empty)",
+      "notes:",
+      "  label  note",
+      "  a      null",
     ].join("\n"),
   );
   assert.equal(cliLayout(null), "");

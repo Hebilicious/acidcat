@@ -1,3 +1,4 @@
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 use acid_cat_core::cli::{CliFormats, CliIo, CliOptions, OutputForm, exit, run_cli};
@@ -64,8 +65,27 @@ async fn run(formats: CliFormats, args: &[&str]) -> Result<(i32, String), String
     Ok((code, text))
 }
 
-#[tokio::test]
-async fn a_value_that_does_not_decode_and_a_format_that_panics_give_the_generic_layout() {
+const IN_CHILD: &str = "ACID_CAT_HUMAN_TEST_CHILD";
+
+/// The default panic hook writes to standard error of the process, and the test harness captures it. So the test runs
+/// again in a child process, and the parent reads standard error of the child.
+#[test]
+fn a_value_that_does_not_decode_and_a_format_that_panics_give_the_generic_layout() {
+    let name = "a_value_that_does_not_decode_and_a_format_that_panics_give_the_generic_layout";
+    if std::env::var_os(IN_CHILD).is_none() {
+        let output = Command::new(std::env::current_exe().expect("the path of the test program"))
+            .args(["--exact", name, "--nocapture"])
+            .env(IN_CHILD, "1")
+            .output()
+            .expect("the test program runs");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "the child test fails: {stderr}");
+        assert!(
+            !stderr.contains("the format fails"),
+            "standard error: {stderr}"
+        );
+        return;
+    }
     let formats = || {
         CliFormats::new()
             .capability(&count(), |count: &Count, _| {
@@ -73,12 +93,15 @@ async fn a_value_that_does_not_decode_and_a_format_that_panics_give_the_generic_
             })
             .failure(&jam(), |_: &Jammed, _| panic!("the format fails"))
     };
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("a runtime");
     assert_eq!(
-        run(formats(), &["probe", "count", "--count", "2"]).await,
+        runtime.block_on(run(formats(), &["probe", "count", "--count", "2"])),
         Ok((exit::VALUE, "n  2".into()))
     );
     assert_eq!(
-        run(formats(), &["probe", "jam"]).await,
+        runtime.block_on(run(formats(), &["probe", "jam"])),
         Ok((exit::FAILURE, "_tag  Jammed\nat    3".into()))
     );
 }

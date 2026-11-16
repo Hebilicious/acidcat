@@ -1,5 +1,6 @@
+use std::cell::Cell;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
@@ -264,12 +265,35 @@ impl CliFormats {
             .iter()
             .find(|format| format.of == of && format.id == id);
         if let Some(format) = format
-            && let Ok(Some(text)) = catch_unwind(AssertUnwindSafe(|| (format.format)(value, ui)))
+            && let Ok(Some(text)) = without_panic_message(|| (format.format)(value, ui))
         {
             return text;
         }
         layout(value)
     }
+}
+
+thread_local! {
+    static IN_FORMAT: Cell<bool> = const { Cell::new(false) };
+}
+
+static QUIET_HOOK: Once = Once::new();
+
+/// The panic hook runs before `catch_unwind` catches the panic, and the default hook writes the panic to standard
+/// error. The hook that this installs skips the previous hook while the current thread is in a format.
+fn without_panic_message<T>(call: impl FnOnce() -> T) -> std::thread::Result<T> {
+    QUIET_HOOK.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            if !IN_FORMAT.get() {
+                previous(info);
+            }
+        }));
+    });
+    let outer = IN_FORMAT.replace(true);
+    let result = catch_unwind(AssertUnwindSafe(call));
+    IN_FORMAT.set(outer);
+    result
 }
 
 pub(crate) fn layout(value: &Value) -> String {
@@ -353,7 +377,11 @@ fn array_lines(items: &[Value]) -> Vec<String> {
             .map(|row| {
                 columns
                     .iter()
-                    .map(|column| row.get(*column).map(layout).unwrap_or_default())
+                    .map(|column| {
+                        row.get(*column)
+                            .map(|cell| lines(cell).join("\n"))
+                            .unwrap_or_default()
+                    })
                     .collect()
             })
             .collect();
@@ -378,16 +406,16 @@ fn object_lines(members: &Map<String, Value>) -> Vec<String> {
     if members.is_empty() {
         return vec!["(empty)".into()];
     }
-    let width = members
+    let key_width = members
         .iter()
         .filter(|(_, value)| is_one_line(value))
-        .map(|(key, _)| key.chars().count())
+        .map(|(key, _)| width(key))
         .max()
         .unwrap_or(0);
     let mut result = Vec::new();
     for (key, value) in members {
         if is_one_line(value) {
-            let padding = " ".repeat(width - key.chars().count());
+            let padding = " ".repeat(key_width - width(key));
             result.push(
                 format!("{key}{padding}  {}", lines(value).join(" "))
                     .trim_end()
@@ -407,9 +435,14 @@ fn object_lines(members: &Map<String, Value>) -> Vec<String> {
 
 fn table(header: &[&str], rows: &[Vec<&str>]) -> Vec<String> {
     let all: Vec<&[&str]> = std::iter::once(header)
-        .chain(rows.iter().map(Vec::as_slice))
+        .chain(rows.iter().map(|row| &row[..row.len().min(header.len())]))
         .collect();
     aligned(&all)
+}
+
+/// The width of a text in UTF-16 code units, as the TypeScript cores measure it with `length`.
+fn width(text: &str) -> usize {
+    text.encode_utf16().count()
 }
 
 pub(crate) fn aligned(all: &[&[&str]]) -> Vec<String> {
@@ -417,7 +450,7 @@ pub(crate) fn aligned(all: &[&[&str]]) -> Vec<String> {
     let widths: Vec<usize> = (0..columns)
         .map(|column| {
             all.iter()
-                .map(|row| row.get(column).map_or(0, |cell| cell.chars().count()))
+                .map(|row| row.get(column).map_or(0, |cell| width(cell)))
                 .max()
                 .unwrap_or(0)
         })
@@ -427,9 +460,9 @@ pub(crate) fn aligned(all: &[&[&str]]) -> Vec<String> {
             let cells: Vec<String> = widths
                 .iter()
                 .enumerate()
-                .map(|(column, width)| {
+                .map(|(column, column_width)| {
                     let cell = row.get(column).copied().unwrap_or("");
-                    format!("{cell}{}", " ".repeat(width - cell.chars().count()))
+                    format!("{cell}{}", " ".repeat(column_width - width(cell)))
                 })
                 .collect();
             cells.join("  ").trim_end().to_owned()
@@ -480,7 +513,9 @@ mod tests {
                 { "at": "08:00", "note": "warm", "celsius": 23 }
             ],
             "mixed": [1, { "a": 1, "bb": [2, 3] }, [4, [5]]],
-            "nothing": {}
+            "nothing": {},
+            "glyphs": [{ "name": "😀😀", "n": 1 }, { "name": "ab", "n": 2 }],
+            "notes": [{ "label": "a", "note": null }]
         });
         assert_eq!(
             layout(&value),
@@ -507,9 +542,20 @@ mod tests {
                 "    - 5",
                 "nothing:",
                 "  (empty)",
+                "glyphs:",
+                "  name  n",
+                "  😀😀  1",
+                "  ab    2",
+                "notes:",
+                "  label  note",
+                "  a      null",
             ]
             .join("\n")
         );
         assert_eq!(layout(&Value::Null), "");
+        assert_eq!(
+            CliUi::new(false).table(&["h"], &[vec!["😀😀", "x"], vec!["ab", "y"]]),
+            "h\n😀😀\nab"
+        );
     }
 }

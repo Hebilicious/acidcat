@@ -48,7 +48,9 @@ type Tag<Failure> = Failure extends { readonly _tag: infer T extends string } ? 
 
 export interface CapabilityFormats<Value, Failure> {
   readonly value?: ((value: Value, ui: Ui) => string) | undefined;
-  readonly failures?: { readonly [T in Tag<Failure>]?: (failure: Extract<Failure, { readonly _tag: T }>, ui: Ui) => string } | undefined;
+  readonly failures?:
+    | ([Tag<Failure>] extends [never] ? never : { readonly [T in Tag<Failure>]?: (failure: Extract<Failure, { readonly _tag: T }>, ui: Ui) => string })
+    | undefined;
 }
 
 type Formatted<Output extends AnySchema, Failure extends AnySchema> = {
@@ -78,6 +80,10 @@ export function format(of: Formatted<AnySchema, AnySchema> | FormattedEvent<AnyS
     return { member: "event", id: of.id, schema: of.payload, value: formats };
   }
   const { value, failures } = typeof formats === "function" ? { value: formats, failures: undefined } : { value: undefined, ...formats };
+  const tags = (of.failures ?? []).map(failureTag);
+  for (const tag of Object.keys(failures ?? {})) {
+    if (!tags.includes(tag)) throw new Error(`The capability ${of.id} has no failure ${tag}.`);
+  }
   return { member: "capability", id: of.id, schema: of.output, value, failureSchemas: of.failures, failures };
 }
 
@@ -223,6 +229,11 @@ function isObjectSchema(schema: JsonObject, types: { readonly [name: string]: Js
 
 /** The catalog of an application, as text in canonical form. */
 export const render = (app: App<unknown>): string => canonicalText(document(app));
+
+function failureTag(failure: Schema.Top): string | undefined {
+  const { schema, definitions } = Schema.toJsonSchemaDocument(failure);
+  return tagOf(schema, definitions);
+}
 
 function tagOf(schema: JsonObject, types: { readonly [name: string]: JsonObject }): string | undefined {
   const name = typeof schema.$ref === "string" ? REFERENCE.exec(schema.$ref)?.[1] : undefined;

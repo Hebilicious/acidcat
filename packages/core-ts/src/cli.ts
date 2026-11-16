@@ -193,6 +193,10 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       return cliLayout(json);
     }
   };
+  const show = async (format: CliRender | undefined, json: unknown): Promise<void> => {
+    const text = await render(format, json);
+    if (text !== "") io.stdout(text);
+  };
 
   const added = options.commands ?? [];
   const taken = new Set([...GENERIC_COMMANDS, ...commands.flatMap(({ path }) => path.slice(0, 1)), ...aliases.map(({ name }) => name)]);
@@ -207,12 +211,12 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     const format = formatOf(id);
     if (outcome.ok) {
       const value = jsonOf(outcome.value);
-      if (value !== null) io.stdout(await render(format?.value, value));
+      if (value !== null) await show(format?.value, value);
       return;
     }
     const failure = jsonOf(outcome.error);
     const tag = isJsonObject(failure) && typeof failure._tag === "string" ? failure._tag : undefined;
-    io.stdout(await render(tag === undefined ? undefined : format?.failures.get(tag), failure));
+    await show(tag === undefined ? undefined : format?.failures.get(tag), failure);
   };
   const print = async (outcome: Outcome<unknown, unknown>, id?: string): Promise<number> => {
     if (isCallFailure(outcome)) printFailure(outcome);
@@ -261,7 +265,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
           continue;
         }
         if (occurrence.truncated === true) io.stdout("(some occurrences were lost)");
-        io.stdout(await render(formatOf(id)?.value, jsonOf(occurrence.data)));
+        await show(formatOf(id)?.value, jsonOf(occurrence.data));
       }
     } catch (error) {
       if (io.signal?.aborted === true) return CLI_WATCH_EXIT_CODES.cancelled;

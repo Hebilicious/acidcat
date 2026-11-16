@@ -189,8 +189,8 @@ function parentUsageError(commandPath: readonly string[]): { readonly message: s
 /**
  * Run a command that `command` made, after the application changed it: for example with its own flags
  * (`Command.withGlobalFlags`), or with services that depend on them (`Command.provide`). Usage errors set the exit
- * code with `exitCodeOf`. Other failures of the command stay in the error channel. Standard output carries only JSON,
- * so the logs and the usage errors go to standard error.
+ * code with `exitCodeOf`. Other failures of the command stay in the error channel. Standard output carries only the
+ * outcomes, so the logs and the usage errors go to standard error.
  *
  * When the first argument is the name of an alias (spec/bindings/cli.md#aliases), the subcommand of the alias makes
  * the call or the subscription, and `<alias> --help` writes the usage of the alias. With a default alias, the program
