@@ -24,6 +24,10 @@ jobs:
 
       - run: moon run catalog-pkl:test
 
+      - name: Check the version
+        run: |
+          test "$(tr -d '[:space:]' < packages/catalog/pkl/version.txt)" = "${GITHUB_REF_NAME#acid-cat-catalog@}"
+
       - name: Attach the package to the release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -42,6 +42,12 @@ tasks:
       - ".oxlintrc.json"
       - "scripts/check-escapes.ts"
 
+  npm-packages:
+    description: "Check that the npm packages are in publishing order: each package after the workspace packages that it depends on."
+    command: "node"
+    args: ["scripts/check-npm-packages.ts"]
+    inputs: ["scripts/npm-packages.ts", "scripts/check-npm-packages.ts", "packages/**/package.json"]
+
   typecheck:
     description: "Type-check the scripts."
     command: "tsc"
@@ -51,4 +57,4 @@ tasks:
   verify:
     description: "Every check: the catalogs, the lint, the toolchain, every catalog library, and every core."
     command: "noop"
-    deps: ["check", "lint", "typecheck", "spec-ts:build", "mcp-handshake:build", "catalog-typescript:build", "cli:build", "core-effect:build", "core-ts:build", "spec-ts:test", "spec-ts:typecheck", "mcp-handshake:test", "mcp-handshake:typecheck", "cli:test", "cli:typecheck", "core-effect:test", "core-effect:typecheck", "core-ts:test", "core-ts:typecheck", "example-aircon:test", "example-aircon:typecheck", "catalog-typescript:test", "catalog-typescript:typecheck", "catalog-python:test", "catalog-python:package", "catalog-go:test", "catalog-rust:test", "catalog-rust:package", "core-rust:test", "core-rust:package", "catalog-pkl:test"]
+    deps: ["check", "lint", "npm-packages", "typecheck", "spec-ts:build", "mcp-handshake:build", "catalog-typescript:build", "cli:build", "core-effect:build", "core-ts:build", "spec-ts:test", "spec-ts:typecheck", "mcp-handshake:test", "mcp-handshake:typecheck", "cli:test", "cli:typecheck", "core-effect:test", "core-effect:typecheck", "core-ts:test", "core-ts:typecheck", "example-aircon:test", "example-aircon:typecheck", "catalog-typescript:test", "catalog-typescript:typecheck", "catalog-python:test", "catalog-python:package", "catalog-go:test", "catalog-rust:test", "catalog-rust:package", "core-rust:test", "core-rust:package", "catalog-pkl:test"]
