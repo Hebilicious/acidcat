@@ -15,6 +15,7 @@ import { run } from "./run.ts";
 
 const program = (file: string) => (...args: string[]) => run(new URL(file, import.meta.url).pathname, ...args);
 
+const cli = program("./fixture-cli.ts");
 const cliWithFlag = program("./fixture-cli-flags.ts");
 const cliWithCommand = program("./fixture-cli-commands.ts");
 
@@ -104,6 +105,28 @@ describe("the command line of an application", { concurrency: true }, () => {
     const help = (await cliWithCommand("--help")).stdout;
     assert.match(help, /DESCRIPTION\n {2}The fixture, with a command of its own\./);
     assert.match(help, /\n {2}position +Write the position of the switch\./);
+  });
+
+  test("a usage error writes the help and the error to standard error, and help and version still go to standard output", async () => {
+    const [unknownFlag, missingFlag, unknownCommand] = await Promise.all([
+      cli("fixture", "echo", "--nope", "x"),
+      cli("fixture", "echo"),
+      cli("fixture", "nothing"),
+    ]);
+    assert.deepEqual(
+      [unknownFlag, missingFlag, unknownCommand].map((run) => [run.code, run.stdout]),
+      [[3, ""], [3, ""], [2, ""]],
+    );
+    assert.match(unknownFlag.stderr, /USAGE\n {2}fixture fixture echo[\s\S]*Unrecognized flag: --nope/);
+
+    const requests = await Promise.all([cli("--help"), cli("-h"), cli("fixture", "echo", "--help"), cli("fixture", "echo", "-h")]);
+    for (const help of requests) {
+      assert.equal(help.code, 0);
+      assert.match(help.stdout, /USAGE/);
+    }
+    const version = await cli("--version");
+    assert.equal(version.code, 0);
+    assert.match(version.stdout, /0\.0\.0/);
   });
 });
 

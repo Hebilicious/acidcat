@@ -16,7 +16,7 @@ import {
 import { unavailable } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CatalogDocument, JsonObject, Occurrence, Outcome, Resume } from "@acid-cat/spec-ts";
 import { Console, Effect, Logger, Option, Predicate, Schema, Scope, Stream } from "effect";
-import { Argument, CliError, Command, Flag, Primitive } from "effect/cli";
+import { Argument, CliError, CliOutput, Command, Flag, Primitive } from "effect/cli";
 
 import * as App from "./App.ts";
 import type * as Http from "./Http.ts";
@@ -84,10 +84,25 @@ export const run = <R, const Commands extends ReadonlyArray<Command.Command.Any>
   runCommand(command(app, options), options);
 
 /**
+ * The default presenter of `effect/cli` writes the help of an invalid invocation to standard output, but standard
+ * output must be empty for exit codes 2 and 3 (spec/bindings/cli.md#outcomes).
+ */
+const usageErrorsOnStderr: CliOutput.Presenter = {
+  present: (event) =>
+    event._tag === "InvalidInvocation"
+      ? Effect.gen(function* () {
+          const formatter = yield* CliOutput.Formatter;
+          yield* Console.error(formatter.formatHelpDoc(event.helpDoc));
+          yield* Console.error(formatter.formatErrors(event.errors));
+        })
+      : CliOutput.defaultPresenter.present(event),
+};
+
+/**
  * Run a command that `command` made, after the application changed it: for example with its own flags
  * (`Command.withGlobalFlags`), or with services that depend on them (`Command.provide`). Usage errors set the exit
  * code with `exitCodeOf`. Other failures of the command stay in the error channel. Standard output carries only JSON,
- * so the logs go to standard error.
+ * so the logs and the usage errors go to standard error.
  */
 export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   command: Command.Command<Name, Input, ContextInput, E, R>,
@@ -98,7 +113,7 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
     CliError.isCliError,
     (error) => Effect.sync(() => (process.exitCode = exitCodeOf(error))),
     Effect.fail,
-  ).pipe(Effect.provideService(Logger.LogToStderr, true));
+  ).pipe(Effect.provideService(Logger.LogToStderr, true), Effect.provideService(CliOutput.Presenter, usageErrorsOnStderr));
 
 /**
  * The exit code for a usage error (spec/bindings/cli.md#exit-codes). `effect/cli` shows the help for each usage error,
