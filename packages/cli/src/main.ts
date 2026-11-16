@@ -1,7 +1,12 @@
 #!/usr/bin/env node
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as NodeChildProcessSpawner from "@effect/platform-node-shared/NodeChildProcessSpawner";
+import * as NodeFileSystem from "@effect/platform-node-shared/NodeFileSystem";
+import * as NodePath from "@effect/platform-node-shared/NodePath";
+import * as NodeRuntime from "@effect/platform-node-shared/NodeRuntime";
+import * as NodeStdio from "@effect/platform-node-shared/NodeStdio";
+import * as NodeTerminal from "@effect/platform-node-shared/NodeTerminal";
 import { canonicalText } from "@acid-cat/catalog";
-import { Console, Effect, FileSystem, Option } from "effect";
+import { Console, Effect, FileSystem, Layer, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 
 import packageJson from "../package.json" with { type: "json" };
@@ -187,8 +192,13 @@ const acidCat = Command.make("acid-cat").pipe(
   Command.withSubcommands([checkCommand, formatCommand, viewCommand, conformCommand]),
 );
 
+const nodeServices = Layer.provideMerge(
+  NodeChildProcessSpawner.layer,
+  Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeStdio.layer, NodeTerminal.layer),
+);
+
 acidCat.pipe(
   Command.run({ version: packageJson.version }),
-  Effect.provide(NodeServices.layer),
+  Effect.provide(nodeServices),
   NodeRuntime.runMain,
 );

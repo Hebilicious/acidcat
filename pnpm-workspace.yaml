@@ -14,7 +14,6 @@ allowBuilds:
 # published packages do not hold `effect` back while a platform package moves on. The lockfile keeps the installs exact.
 catalog:
   "@modelcontextprotocol/client": 2.4.0
-  "@effect/platform-node": ^4.1.3
   "@effect/platform-node-shared": ^4.1.3
   "@elysiajs/node": 1.4.5
   "@pothos/core": 4.17.0
@@ -39,7 +38,7 @@ catalog:
 
 catalogs:
   peers:
-    "@effect/platform-node": ^4.0.0
+    "@effect/platform-node-shared": ^4.0.0
     effect: ^4.0.0
     playwright: ^1.64.0
 

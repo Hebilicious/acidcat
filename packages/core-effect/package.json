@@ -107,17 +107,17 @@
     "@acid-cat/spec-ts": "workspace:*"
   },
   "peerDependencies": {
-    "@effect/platform-node": "catalog:peers",
+    "@effect/platform-node-shared": "catalog:peers",
     "effect": "catalog:peers"
   },
   "peerDependenciesMeta": {
-    "@effect/platform-node": {
+    "@effect/platform-node-shared": {
       "optional": true
     }
   },
   "devDependencies": {
     "@acid-cat/cli": "workspace:*",
-    "@effect/platform-node": "catalog:",
+    "@effect/platform-node-shared": "catalog:",
     "@types/node": "catalog:",
     "effect": "catalog:",
     "esbuild": "catalog:",

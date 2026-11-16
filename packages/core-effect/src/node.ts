@@ -1,9 +1,9 @@
 /**
  * The modules that need Node.js. The main entry point, `@acid-cat/core-effect`, works in all runtimes.
  *
- * `NodeCli` and `NodeMcp` need `@effect/platform-node`. `NodeServer` and `NodeWebhook` need only Node.js. Import them
+ * `NodeCli` and `NodeMcp` need `@effect/platform-node-shared`. `NodeServer` and `NodeWebhook` need only Node.js. Import them
  * from `@acid-cat/core-effect/NodeServer` and `@acid-cat/core-effect/NodeWebhook` to serve without
- * `@effect/platform-node`.
+ * `@effect/platform-node-shared`.
  */
 export * as NodeCli from "./NodeCli.ts";
 export * as NodeServer from "./NodeServer.ts";

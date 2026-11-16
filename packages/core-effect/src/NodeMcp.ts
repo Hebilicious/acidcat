@@ -1,5 +1,5 @@
-import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
-import * as NodeStdio from "@effect/platform-node/NodeStdio";
+import * as NodeRuntime from "@effect/platform-node-shared/NodeRuntime";
+import * as NodeStdio from "@effect/platform-node-shared/NodeStdio";
 import { Effect } from "effect";
 import type { Layer } from "effect";
 
