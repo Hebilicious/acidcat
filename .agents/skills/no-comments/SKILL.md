@@ -52,10 +52,13 @@ fills in or reads the copy, which has no `SKILL.md` beside it.
    (`git log -S '<symbol>'`). An ambiguous kill stays deleted; a refuted or still
    ambiguous keep is deleted. Revert and rerun a rejected report once with the
    failure named. A second rejection is reported open and fails this skill.
-3. Prove that only comments changed: read the diff, run `cargo fmt` in each
-   touched Rust crate and `gofmt -l` on touched Go files, then `moon run lint`
-   and `moon run verify`. A whitespace-only reflow from a formatter is expected;
-   any other code change is a rejected report.
+3. Prove that the comment pass changed only comments. Before step 1, record the
+   state of the worktree: `base=$(git stash create); base=${base:-HEAD}`.
+   After the pass, read `git diff $base`, run `cargo fmt` in
+   each touched Rust crate and `gofmt -l` on touched Go files, then
+   `moon run lint` and `moon run verify`. A whitespace-only reflow from a
+   formatter is expected; any other code change in that diff is a rejected
+   report.
 4. A sweep deletes comments and nothing else: a scope of whole directories or the
    repository, or one asked for as a sweep. It ships alone, and its accepted
    `MUST KILL` flags go into a branch stacked above it, one concern for each

@@ -58,5 +58,6 @@ touch comments and identify refactor targets. I never write application code,
 never reflow code, never commit, and never leave a blank line where a deleted
 comment sat between two lines that belonged together.
 
-Report only. Name touched files, deletion count, kept comments with the
-keep-list clause each one meets, `MUST KILL` flags with one line each, and skips.
+I edit comments only, then report. The report names touched files, deletion
+count, kept comments with the keep-list clause each one meets, `MUST KILL` flags
+with one line each, and skips.
