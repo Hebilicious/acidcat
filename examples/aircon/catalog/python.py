@@ -118,6 +118,13 @@ def aircon_catalog() -> Catalog:
         failures={"Offline": offline},
     )
     catalog.capability(
+        "aircon.status.export",
+        description="Write the status to a JSON file. A cancelled call can still write the file.",
+        audience=["cli"],
+        input={"type": "object", "required": ["path"], "properties": {"path": {"type": "string"}}},
+        failures={"Offline": offline, "WriteFailed": {"type": "object"}},
+    )
+    catalog.capability(
         "aircon.firmware.update",
         description="Install the latest firmware. The unit restarts and is offline for about a minute.",
         audience=["app"],

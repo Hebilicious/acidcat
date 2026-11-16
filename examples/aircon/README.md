@@ -51,6 +51,14 @@ The input of `aircon.schedule.set` has two arrays: `days`, with items of the sha
 aircon aircon schedule set --days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]
 ```
 
+## Command line only
+
+`aircon.status.export` writes the status to a file. Its audience is only `cli`, so the MCP server, WebMCP and the APIs do not have it. Only the command line gives the file system to its sessions. The other programs fail with `unknown-capability`, except the server of the remote command line: it serves the `cli` target, and fails with `WriteFailed`.
+
+```sh
+node core-ts/cli.ts aircon status export --path status.json
+```
+
 ## MCP server through stdio
 
 Each application also has an MCP server through [stdio](../../spec/bindings/mcp.md#stdio), for MCP clients that start a local process. It serves the view of the `mcp` target. For example, give an MCP client one of these commands, with the root of the repository as its working directory:

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable } from "node:stream";
 import { test } from "node:test";
@@ -189,4 +192,12 @@ test("the TypeScript command line controls the unit of a server, and watch follo
   const exited = new Promise<number | null>((resolve) => watch.on("close", resolve));
   watch.kill("SIGINT");
   assert.equal(await exited, 130);
+});
+
+test("aircon.status.export writes a file through the command line", async (context) => {
+  const folder = await mkdtemp(join(tmpdir(), "aircon-"));
+  context.after(() => rm(folder, { recursive: true, force: true }));
+  const file = join(folder, "status.json");
+  assert.equal((await run(new URL("../core-ts/cli.ts", import.meta.url).pathname, "aircon", "status", "export", "--path", file)).code, 0);
+  assert.partialDeepStrictEqual(JSON.parse(await readFile(file, "utf-8")), { power: false });
 });

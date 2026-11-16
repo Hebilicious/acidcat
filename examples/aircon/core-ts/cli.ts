@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { writeFile } from "node:fs/promises";
+
 import { cliMain, httpClient } from "@acid-cat/core-ts";
 import type { HttpClient } from "@acid-cat/core-ts";
 import { aircon, toJsonSchema, Unit } from "./aircon.ts";
@@ -13,4 +15,4 @@ if (url !== undefined) {
     process.exit(2);
   }
 }
-cliMain(aircon, { name: "aircon", version: "0.1.0", context: { unit: new Unit() }, toJsonSchema, remote });
+cliMain(aircon, { name: "aircon", version: "0.1.0", context: { unit: new Unit(), writeFile }, toJsonSchema, remote });

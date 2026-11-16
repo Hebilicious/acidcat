@@ -1,6 +1,6 @@
 import { AVAILABLE } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer, Ref, Schema, Stream, SubscriptionRef } from "effect";
+import { Context, Effect, Layer, Option, Ref, Schema, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability, Event } from "@acid-cat/core-effect";
 
@@ -26,6 +26,7 @@ export const Status = Schema.Struct({
 export const Offline = Schema.TaggedStruct("Offline", { since: Schema.optional(Schema.String) }).annotate({ identifier: "Offline" });
 export const PoweredOff = Schema.TaggedStruct("PoweredOff", {});
 const UpToDate = Schema.TaggedStruct("UpToDate", { version: Schema.String });
+const WriteFailed = Schema.TaggedStruct("WriteFailed", {});
 
 export class Unit extends Context.Service<
   Unit,
@@ -50,6 +51,8 @@ export const unitLayer = Layer.effect(
     };
   }),
 );
+
+export class Files extends Context.Service<Files, { readonly writeFile: (path: string, text: string) => Promise<void> }>()("aircon/Files") {}
 
 const onlineStatus = Effect.gen(function* () {
   const unit = yield* Unit;
@@ -133,6 +136,22 @@ export const scheduleSet = Capability.make({
     }),
 });
 
+export const statusExport = Capability.make({
+  id: "aircon.status.export",
+  description: "Write the status to a JSON file. A cancelled call can still write the file.",
+  audience: ["cli"],
+  input: Schema.Struct({ path: Schema.String }),
+  failures: [Offline, WriteFailed],
+  run: ({ path }) =>
+    Effect.gen(function* () {
+      const status = yield* Effect.flatMap(onlineStatus, SubscriptionRef.get);
+      const files = yield* Effect.serviceOption(Files);
+      if (Option.isNone(files)) return yield* Effect.fail(WriteFailed.make({}));
+      yield* Effect.tryPromise({ try: () => files.value.writeFile(path, JSON.stringify(status)), catch: () => WriteFailed.make({}) });
+      return null;
+    }),
+});
+
 export const firmwareUpdate = Capability.make({
   id: "aircon.firmware.update",
   description: "Install the latest firmware. The unit restarts and is offline for about a minute.",
@@ -177,6 +196,6 @@ export const aircon = App.make({
     mcp: { description: "Agents, through an MCP server.", bindings: ["mcp"] },
     api: { description: "Home-automation systems and scripts.", bindings: ["http"] },
   },
-  capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, scheduleSet, firmwareUpdate],
+  capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, scheduleSet, statusExport, firmwareUpdate],
   events: [statusChanged],
 });

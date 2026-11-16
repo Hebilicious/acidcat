@@ -114,6 +114,10 @@ const webmcp = installWebMcp(session); // undefined when the browser has no WebM
 
 Both TypeScript cores serve WebMCP: `installWebMcp` in `@acid-cat/core-ts`, and `WebMcp.install` in `@acid-cat/core-effect`. [`examples/aircon`](examples/aircon/README.md#webmcp) has a web page of the air conditioner for each of them, with its WebMCP tools and a test in Chromium. The Rust core does not serve WebMCP, because WebMCP runs in a web page.
 
+## 🧳 Capabilities for one environment
+
+A command line runs on the computer of its user. An MCP server often does not. A capability that only works in one place, such as writing a local file, gets only that target in its audience, and the program that runs there gives the session what the work needs. In the example, `aircon.status.export` has the audience `cli`: MCP and WebMCP clients do not see it, and only the command line gives the file system ([example](examples/aircon/README.md#command-line-only)).
+
 ## 📚 Specification
 
 | Document | Contents |
