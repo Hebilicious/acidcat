@@ -3,7 +3,7 @@ import type { CallFailure, Resume } from "@acid-cat/spec-ts";
 
 const MAX_AGE_ISSUE = "maxAgeMs: Expected an integer that is 0 or more.";
 
-const isMaxAgeMs = (value: number): boolean => Number.isInteger(value) && value >= 0;
+const isMaxAgeMs = (value: number): boolean => Number.isSafeInteger(value) && value >= 0;
 
 export const resumeIssue = (resume: Resume): string | undefined =>
   resume.maxAgeMs === undefined || isMaxAgeMs(resume.maxAgeMs) ? undefined : MAX_AGE_ISSUE;
@@ -20,9 +20,13 @@ export const maxAgeOf = (value: unknown): MaxAge =>
       ? { _tag: "Valid", maxAgeMs: value }
       : { _tag: "Invalid", issue: MAX_AGE_ISSUE };
 
+/** The session rejects this value as `invalid-input`, after its checks for a closed session and an unknown event. */
+const REJECTED_MAX_AGE_MS = Number.NaN;
+
 export const resumeOf = (cursor: unknown, maxAge: MaxAge): Resume => ({
   ...(typeof cursor === "string" ? { cursor } : {}),
   ...(maxAge._tag === "Valid" ? { maxAgeMs: maxAge.maxAgeMs } : {}),
+  ...(maxAge._tag === "Invalid" ? { maxAgeMs: REJECTED_MAX_AGE_MS } : {}),
 });
 
 /**

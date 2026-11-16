@@ -145,7 +145,6 @@ export const answer = <R>(session: Session.Session<R>, request: EventsRequest, o
     }
     const { name, cursor } = params.success;
     const maxAge = maxAgeOf(params.success.maxAgeMs);
-    if (maxAge._tag === "Invalid") return message(errorMessage(request.id, mcpSubscribeError(maxAgeFailure(view.events, name, maxAge.issue))));
     const started = yield* Effect.result(session.subscribe(name, params.success.arguments ?? {}, resumeOf(cursor, maxAge)));
     if (started._tag === "Failure") {
       const failure: CallFailure = { kind: started.failure.kind, message: started.failure.message };
