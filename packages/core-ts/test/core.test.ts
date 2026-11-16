@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { check } from "@acid-cat/cli";
 import { z } from "zod";
 
-import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, httpHandler, installWebMcp, mcpHandler, ok, renderCatalog, runCli } from "../src/index.ts";
+import { AVAILABLE, CallFailureError, catalogOf, createSession, defineApp, defineCapability, httpHandler, installWebMcp, mcpHandler, ok, renderCatalog, runCli } from "../src/index.ts";
 import type { App, CliCommand, CliOptions, ModelContextTool, Outcome } from "../src/index.ts";
 import { fixture, heldApp, Holds, options, readJson, Switch, toJsonSchema, Watchers } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
@@ -127,6 +127,35 @@ test("an abort during input validation cancels the call", async () => {
   controller.abort();
   finishValidation();
   assert.deepEqual(await call, { kind: "cancelled", message: "The call was cancelled." });
+});
+
+test("an abort while the session reads the availability cancels the call", async () => {
+  const controller = new AbortController();
+  let abortedInRun: boolean | undefined;
+  const app = defineApp({
+    targets: { mcp: { bindings: ["mcp"] } },
+    capabilities: [
+      defineCapability({
+        id: "probe.aborts",
+        description: "Reading the availability aborts the call.",
+        audience: ["mcp"],
+        availability: () => ({
+          getSnapshot: () => {
+            controller.abort();
+            return AVAILABLE;
+          },
+          subscribe: () => ({ unsubscribe() {} }),
+        }),
+        run: (_input, { signal }) => {
+          abortedInRun = signal.aborted;
+          return ok(null);
+        },
+      }),
+    ],
+  });
+  await using session = createSession(app, { target: "mcp", toJsonSchema, context: {} });
+  assert.deepEqual(await session.invoke("probe.aborts", {}, { signal: controller.signal }), { kind: "cancelled", message: "The call was cancelled." });
+  assert.notEqual(abortedInRun, false);
 });
 
 test("a session subscribes to the availabilities only while it has listeners", async () => {

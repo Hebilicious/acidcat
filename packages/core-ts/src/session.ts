@@ -225,6 +225,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     const cancelled = new Promise<CallFailure>((resolve) =>
       controller.signal.addEventListener("abort", () => resolve(callFailure("cancelled", "The call was cancelled."))),
     );
+    if (lifetime.signal.aborted || signal?.aborted) controller.abort();
     try {
       let prepared;
       try {
