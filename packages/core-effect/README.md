@@ -104,7 +104,7 @@ const Status = Schema.Struct({ power: Schema.Boolean, celsius: Schema.Int }).ann
 
 export const statusChanged = Event.make({
   id: "aircon.status.changed",
-  description: "The status of the unit changed. The occurrence gives the new status.",
+  description: "The status of the unit changed.",
   audience: ["app", "mcp"],
   input: Schema.Struct({}),
   payload: Status,

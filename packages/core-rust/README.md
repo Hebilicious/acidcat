@@ -66,7 +66,7 @@ async fn main() {
                 }),
         )
         .event(
-            Event::new("aircon.status.changed", "The status of the unit changed. The occurrence gives the new status.")
+            Event::new("aircon.status.changed", "The status of the unit changed.")
                 .audience(["mcp"])
                 .payload::<Status>()
                 .subscribe(|(), _subscription| futures::stream::iter([Ok(Emitted::new(Status { power: true }))])),

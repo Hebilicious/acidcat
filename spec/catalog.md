@@ -110,7 +110,7 @@ An **event** is a kind of thing that happens in the application, and that client
 {
   "events": {
     "aircon.status.changed": {
-      "description": "The status of the unit changed. The occurrence gives the new status.",
+      "description": "The status of the unit changed.",
       "audience": ["app", "mcp"],
       "input": { "type": "object", "properties": {} },
       "payload": { "$ref": "#/$defs/Status" }

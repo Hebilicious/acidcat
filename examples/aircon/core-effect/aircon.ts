@@ -166,7 +166,7 @@ const sameStatus = (a: typeof Status.Type, b: typeof Status.Type) => JSON.string
 
 export const statusChanged = Event.make({
   id: "aircon.status.changed",
-  description: "The status of the unit changed. The occurrence gives the new status.",
+  description: "The status of the unit changed.",
   audience: everywhere,
   input: Schema.Struct({}),
   payload: Status,

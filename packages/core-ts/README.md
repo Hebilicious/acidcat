@@ -54,7 +54,7 @@ const event = eventsFor<{ unit: Unit }>();
 
 export const statusChanged = event({
   id: "aircon.status.changed",
-  description: "The status of the unit changed. The occurrence gives the new status.",
+  description: "The status of the unit changed.",
   audience: ["app", "mcp"],
   input: z.object({}),
   payload: Status,

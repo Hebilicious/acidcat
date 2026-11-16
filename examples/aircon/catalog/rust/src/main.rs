@@ -173,7 +173,7 @@ fn aircon_catalog() -> Catalog {
             ..Capability::default()
         })
         .event("aircon.status.changed", Event {
-            description: "The status of the unit changed. The occurrence gives the new status.".into(),
+            description: "The status of the unit changed.".into(),
             audience: everywhere,
             input: Some(json!({ "type": "object", "properties": {} })),
             payload: Some(status),

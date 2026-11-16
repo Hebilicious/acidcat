@@ -102,7 +102,7 @@ export function airconCatalog(): Catalog {
       failures: { Offline: offline, UpToDate: { type: "object", properties: { version: { type: "string" } } } },
     })
     .event("aircon.status.changed", {
-      description: "The status of the unit changed. The occurrence gives the new status.",
+      description: "The status of the unit changed.",
       audience: everywhere,
       input: { type: "object", properties: {} },
       payload: status,

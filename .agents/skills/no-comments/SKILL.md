@@ -53,7 +53,8 @@ fills in or reads the copy, which has no `SKILL.md` beside it.
    ambiguous keep is deleted. Revert and rerun a rejected report once with the
    failure named. A second rejection is reported open and fails this skill.
 3. Prove that the comment pass changed only comments. Before step 1, record the
-   state of the worktree: `base=$(git stash create); base=${base:-HEAD}`.
+   state of the worktree, untracked files included:
+   `git add -A && base=$(git write-tree)`.
    After the pass, read `git diff $base`, run `cargo fmt` in
    each touched Rust crate and `gofmt -l` on touched Go files, then
    `moon run lint` and `moon run verify`. A whitespace-only reflow from a

@@ -124,7 +124,7 @@ func airconCatalog() *catalog.Catalog {
 			},
 		}).
 		Event("aircon.status.changed", catalog.Event{
-			Description: "The status of the unit changed. The occurrence gives the new status.",
+			Description: "The status of the unit changed.",
 			Audience:    everywhere,
 			Input:       schema{"type": "object", "properties": schema{}},
 			Payload:     status,
