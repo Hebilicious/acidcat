@@ -186,6 +186,17 @@ test("a command of the application must not have the name of another command", (
   assert.throws(() => Cli.command(fixture, { ...options, commands: [named("report"), named("report")] }), /The command report of the application/);
 });
 
+test("App.alias writes options.cli, with one default command alias at most", () => {
+  const ping = Capability.make({ id: "probe.ping", description: "Ping.", audience: ["cli"], run: () => Effect.succeed(null) });
+  const write = (aliases: { readonly [name: string]: App.Alias }) =>
+    App.document(App.make({ targets: { cli: { bindings: ["cli"], cli: { aliases } } }, capabilities: [ping] })).targets.cli?.options;
+  assert.deepEqual(write({ ping: App.aliasDefault(ping), "--ping": App.alias(ping) }), {
+    cli: { aliases: { ping: { capability: "probe.ping" }, "--ping": { capability: "probe.ping" } }, default: "ping" },
+  });
+  assert.throws(() => write({ ping: App.aliasDefault(ping), pong: App.aliasDefault(ping) }), /the aliases ping, pong are all default aliases/);
+  assert.throws(() => write({ "--ping": App.aliasDefault(ping) }), /the default alias --ping is a flag alias/);
+});
+
 test("the command line stops when it starts if an alias breaks a rule", () => {
   const ping = Capability.make({ id: "probe.ping", description: "Ping.", audience: ["cli"], run: () => Effect.succeed(null) });
   const appOf = (aliases: { readonly [name: string]: unknown }) =>

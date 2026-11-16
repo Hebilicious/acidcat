@@ -5,10 +5,11 @@ use std::sync::Arc;
 
 use futures::future::BoxFuture;
 use futures::stream::{BoxStream, StreamExt};
+use serde::Serialize;
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::app::Application;
+use crate::app::{Application, CapabilityDefinition, EventDefinition};
 use crate::http::HttpClient;
 use crate::outcome::{Availability, CallFailure, Kind, Outcome};
 use crate::schema::{cli_input_schema, resolve};
@@ -31,6 +32,156 @@ const GENERIC_COMMANDS: [&str; 3] = ["call", "list", "watch"];
 const RESUME_FLAGS: [&str; 2] = ["cursor", "max-age-ms"];
 
 const RESERVED_FLAGS: [&str; 2] = ["--help", "--version"];
+
+/// A capability or an event that an alias names: a [`CapabilityDefinition`] or an [`EventDefinition`].
+pub trait Aliased {
+    /// The type of a fixed input: the type of the input of the capability, or of a subscription to the event, or
+    /// [`NoInput`](crate::NoInput), which an alias cannot fix.
+    type Input;
+
+    /// The member of the alias that holds the id, `capability` or `event`, and the id.
+    fn alias_of(&self) -> (&'static str, &str);
+}
+
+impl<C, X> Aliased for CapabilityDefinition<C, X> {
+    type Input = X;
+
+    fn alias_of(&self) -> (&'static str, &str) {
+        ("capability", &self.id)
+    }
+}
+
+impl<C, X> Aliased for EventDefinition<C, X> {
+    type Input = X;
+
+    fn alias_of(&self) -> (&'static str, &str) {
+        ("event", &self.id)
+    }
+}
+
+/// The aliases of the command line of a target (spec/bindings/cli.md#aliases). Give them to
+/// [`App::cli_aliases`](crate::App::cli_aliases), which writes them in `options.cli` of the target.
+#[derive(Clone, Debug, Default)]
+pub struct CliAliases {
+    aliases: Map<String, Value>,
+    defaults: Vec<String>,
+    problems: Vec<String>,
+}
+
+impl CliAliases {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// An alias of a capability or an event.
+    pub fn alias(mut self, name: impl Into<String>, of: &impl Aliased) -> Self {
+        let (member, id) = of.alias_of();
+        self.aliases.insert(name.into(), json!({ member: id }));
+        self
+    }
+
+    /// An alias of a capability or an event, with a fixed input. Each property of `fixed` that serializes to `null`,
+    /// such as an `Option` that is `None`, is not fixed: it stays a flag of the alias.
+    ///
+    /// The fixed input has the type of the input of the definition:
+    ///
+    /// ```compile_fail
+    /// # use acid_cat_core::{Capability, cli::CliAliases};
+    /// # #[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+    /// # struct Power { on: bool }
+    /// let power = Capability::<()>::new("power.set", "Turn the power on or off.")
+    ///     .input::<Power>()
+    ///     .run(|_: Power, _| async { Ok(()) });
+    /// CliAliases::new().alias_with("--on", &power, Power { onn: true });
+    /// ```
+    ///
+    /// ```compile_fail
+    /// # use acid_cat_core::{Capability, cli::CliAliases};
+    /// # #[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+    /// # struct Power { on: bool }
+    /// let power = Capability::<()>::new("power.set", "Turn the power on or off.")
+    ///     .input::<Power>()
+    ///     .run(|_: Power, _| async { Ok(()) });
+    /// CliAliases::new().alias_with("--on", &power, Power { on: "yes" });
+    /// ```
+    ///
+    /// A definition with no input takes no fixed input:
+    ///
+    /// ```compile_fail
+    /// # use acid_cat_core::{Capability, cli::CliAliases};
+    /// let ping = Capability::<()>::new("ping", "Ping.").run(|(), _| async { Ok(()) });
+    /// CliAliases::new().alias_with("loud", &ping, acid_cat_core::NoInput);
+    /// ```
+    pub fn alias_with<Of: Aliased<Input: Serialize>>(
+        mut self,
+        name: impl Into<String>,
+        of: &Of,
+        fixed: Of::Input,
+    ) -> Self {
+        let name = name.into();
+        let (member, id) = of.alias_of();
+        match serde_json::to_value(fixed) {
+            Ok(Value::Object(mut input)) => {
+                input.retain(|_, value| !value.is_null());
+                self.aliases
+                    .insert(name, json!({ member: id, "input": input }));
+            }
+            _ => self.problems.push(format!(
+                "the fixed input of the alias {name} must serialize to a JSON object"
+            )),
+        }
+        self
+    }
+
+    /// The alias that runs when the program gets no arguments. It must be a command alias, and a target has one at most.
+    pub fn alias_default(self, name: impl Into<String>, of: &impl Aliased) -> Self {
+        let name = name.into();
+        let mut aliases = self.alias(name.clone(), of);
+        aliases.defaults.push(name);
+        aliases
+    }
+
+    /// The default alias, with a fixed input as in [`CliAliases::alias_with`].
+    pub fn alias_default_with<Of: Aliased<Input: Serialize>>(
+        self,
+        name: impl Into<String>,
+        of: &Of,
+        fixed: Of::Input,
+    ) -> Self {
+        let name = name.into();
+        let mut aliases = self.alias_with(name.clone(), of, fixed);
+        aliases.defaults.push(name);
+        aliases
+    }
+
+    pub(crate) fn into_options(self) -> Result<Value, Vec<String>> {
+        let mut options = Map::new();
+        options.insert("aliases".into(), Value::Object(self.aliases));
+        let mut problems = self.problems;
+        match self.defaults.as_slice() {
+            [] => {}
+            [name] if name.starts_with("--") => {
+                problems.push(format!(
+                    "the default alias {name} is a flag alias. Make it a command alias"
+                ));
+            }
+            [name] => {
+                options.insert("default".into(), Value::String(name.clone()));
+            }
+            names => {
+                problems.push(format!(
+                    "the aliases {} are all default aliases. Give one at most",
+                    names.join(", ")
+                ));
+            }
+        }
+        if problems.is_empty() {
+            Ok(Value::Object(options))
+        } else {
+            Err(problems)
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AliasKind {

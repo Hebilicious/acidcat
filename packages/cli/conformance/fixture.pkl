@@ -8,21 +8,19 @@ targets {
   ["mcp"] { bindings { "mcp" } }
   ["cli"] {
     bindings { "cli" }
-    options {
-      ["cli"] {
-        ["aliases"] {
-          ["say"] { capability = "fixture.echo" }
-          ["--hello"] { capability = "fixture.echo"; input { text = "hello" } }
-          ["quick"] { capability = "fixture.flags"; input { mode = "fast" } }
-          ["raw"] { capability = "fixture.raw" }
-          ["held-keys"] { capability = "fixture.held" }
-          ["fixed-note"] { capability = "fixture.note"; input { text = "fixed" } }
-          ["ticks"] { event = "fixture.ticks"; input { count = 2 } }
-          ["broken-ticks"] { event = "fixture.broken" }
-          ["echoes"] { event = "fixture.echoes" }
-        }
-        ["default"] = "quick"
+    cli {
+      aliases {
+        ["say"] { capability = "fixture.echo" }
+        ["--hello"] { capability = "fixture.echo"; input { text = "hello" } }
+        ["quick"] { capability = "fixture.flags"; input { mode = "fast" } }
+        ["raw"] { capability = "fixture.raw" }
+        ["held-keys"] { capability = "fixture.held" }
+        ["fixed-note"] { capability = "fixture.note"; input { text = "fixed" } }
+        ["ticks"] { event = "fixture.ticks"; input { count = 2 } }
+        ["broken-ticks"] { event = "fixture.broken" }
+        ["echoes"] { event = "fixture.echoes" }
       }
+      default = "quick"
     }
   }
   ["api"] { bindings { "http" } }

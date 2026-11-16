@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use acid_cat_core::cli::CliAliases;
 use acid_cat_core::{App, Application, Availability, Emitted, RunResult, Target, fail};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -103,7 +104,7 @@ struct Export {
     path: String,
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Serialize, Deserialize, JsonSchema)]
 struct Power {
     on: bool,
 }
@@ -226,6 +227,56 @@ fn target(description: &str, bindings: &[&str]) -> Target {
 }
 
 pub fn aircon() -> Arc<Application<Unit>> {
+    let status_get = Capability::new(
+        "aircon.status.get",
+        "Read the unit's power, mode, fan speed, target temperature and room temperature.",
+    )
+    .audience(EVERYWHERE)
+    .read_only()
+    .output::<Status>()
+    .failures::<Offline>()
+    .state(|unit: &Unit| unit.status.subscribe())
+    .run(|(), call| async move {
+        let unit = call.context();
+        if !unit.is_online() {
+            return fail(Offline::Offline { since: None });
+        }
+        Ok(unit.status.borrow().clone())
+    });
+    let power_set = Capability::new("aircon.power.set", "Turn the unit on or off.")
+        .audience(EVERYWHERE)
+        .input::<Power>()
+        .failures::<Offline>()
+        .run(|Power { on }, call| async move {
+            call.context().change::<Offline>(|status| status.power = on)
+        });
+    let status_changed = Event::new("aircon.status.changed", "The status of the unit changed.")
+        .audience(EVERYWHERE)
+        .input::<NoInput>()
+        .payload::<Status>()
+        .subscribe(|_, subscription| {
+            // The receiver is made when the subscription starts, so the subscription gets each change after it.
+            let changes = subscription.context().changes.subscribe();
+            futures::stream::unfold(changes, |mut changes| async move {
+                let mut skipped = false;
+                loop {
+                    match changes.recv().await {
+                        Ok(status) => {
+                            let occurrence = Emitted::new(status);
+                            let occurrence = if skipped {
+                                occurrence.truncated()
+                            } else {
+                                occurrence
+                            };
+                            return Some((Ok(occurrence), changes));
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => skipped = true,
+                        Err(broadcast::error::RecvError::Closed) => return None,
+                    }
+                }
+            })
+        });
+
     App::new()
         .title("Living-room air conditioner")
         .description("Control and monitor one split-unit air conditioner on the home network.")
@@ -244,56 +295,22 @@ pub fn aircon() -> Arc<Application<Unit>> {
                 &["typescript"],
             ),
         )
-        .target_with(
+        .target("cli", ["cli"])
+        .cli_aliases(
             "cli",
-            Target {
-                bindings: vec!["cli".into()],
-                description: None,
-                options: Some(serde_json::json!({
-                    "cli": {
-                        "aliases": {
-                            "status": { "capability": "aircon.status.get" },
-                            "--on": { "capability": "aircon.power.set", "input": { "on": true } },
-                            "--off": { "capability": "aircon.power.set", "input": { "on": false } },
-                            "follow": { "event": "aircon.status.changed" }
-                        },
-                        "default": "status"
-                    }
-                })),
-            },
+            CliAliases::new()
+                .alias_default("status", &status_get)
+                .alias_with("--on", &power_set, Power { on: true })
+                .alias_with("--off", &power_set, Power { on: false })
+                .alias("follow", &status_changed),
         )
         .target_with("mcp", target("Agents, through an MCP server.", &["mcp"]))
         .target_with(
             "api",
             target("Home-automation systems and scripts.", &["http"]),
         )
-        .capability(
-            Capability::new(
-                "aircon.status.get",
-                "Read the unit's power, mode, fan speed, target temperature and room temperature.",
-            )
-            .audience(EVERYWHERE)
-            .read_only()
-            .output::<Status>()
-            .failures::<Offline>()
-            .state(|unit: &Unit| unit.status.subscribe())
-            .run(|(), call| async move {
-                let unit = call.context();
-                if !unit.is_online() {
-                    return fail(Offline::Offline { since: None });
-                }
-                Ok(unit.status.borrow().clone())
-            }),
-        )
-        .capability(
-            Capability::new("aircon.power.set", "Turn the unit on or off.")
-                .audience(EVERYWHERE)
-                .input::<Power>()
-                .failures::<Offline>()
-                .run(|Power { on }, call| async move {
-                    call.context().change::<Offline>(|status| status.power = on)
-                }),
-        )
+        .capability(status_get)
+        .capability(power_set)
         .capability(
             Capability::new("aircon.mode.set", "Choose how the unit runs.")
                 .audience(CONTROLS)
@@ -389,34 +406,7 @@ pub fn aircon() -> Arc<Application<Unit>> {
                 })
             }),
         )
-        .event(
-            Event::new("aircon.status.changed", "The status of the unit changed.")
-                .audience(EVERYWHERE)
-                .input::<NoInput>()
-                .payload::<Status>()
-                .subscribe(|_, subscription| {
-                    // The receiver is made when the subscription starts, so the subscription gets each change after it.
-                    let changes = subscription.context().changes.subscribe();
-                    futures::stream::unfold(changes, |mut changes| async move {
-                        let mut skipped = false;
-                        loop {
-                            match changes.recv().await {
-                                Ok(status) => {
-                                    let occurrence = Emitted::new(status);
-                                    let occurrence = if skipped {
-                                        occurrence.truncated()
-                                    } else {
-                                        occurrence
-                                    };
-                                    return Some((Ok(occurrence), changes));
-                                }
-                                Err(broadcast::error::RecvError::Lagged(_)) => skipped = true,
-                                Err(broadcast::error::RecvError::Closed) => return None,
-                            }
-                        }
-                    })
-                }),
-        )
+        .event(status_changed)
         .build()
         .unwrap_or_else(|problems| panic!("the air conditioner does not conform: {problems:?}"))
 }

@@ -1,4 +1,4 @@
-export { capabilitiesFor, catalogOf, defineApp, defineCapability, defineEvent, eventsFor, renderCatalog } from "./app.ts";
+export { capabilitiesFor, catalogOf, cliAlias, cliAliasDefault, defineApp, defineCapability, defineEvent, eventsFor, renderCatalog } from "./app.ts";
 export type {
   AnyCapability,
   AnyEventDefinition,
@@ -7,6 +7,7 @@ export type {
   Capability,
   CapabilityDeclaration,
   CapabilityFactory,
+  CliAlias,
   EmptyInput,
   EventDeclaration,
   EventDefinition,
