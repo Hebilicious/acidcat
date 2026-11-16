@@ -16,7 +16,7 @@ import {
 import { unavailable } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CatalogDocument, JsonObject, Occurrence, Outcome, Resume } from "@acid-cat/spec-ts";
 import { Console, Effect, Logger, Option, Predicate, Schema, Scope, Stream } from "effect";
-import { Argument, CliError, Command, Flag, Primitive } from "effect/cli";
+import { Argument, CliError, CliOutput, Command, Flag, Primitive } from "effect/cli";
 
 import * as App from "./App.ts";
 import type * as Http from "./Http.ts";
@@ -84,10 +84,45 @@ export const run = <R, const Commands extends ReadonlyArray<Command.Command.Any>
   runCommand(command(app, options), options);
 
 /**
+ * The default presenter of `effect/cli` writes the help of an invalid invocation to standard output, but standard
+ * output must be empty for exit codes 2 and 3 (spec/bindings/cli.md#outcomes).
+ */
+const usageErrorsOnStderr: CliOutput.Presenter = {
+  present: (event) =>
+    event._tag === "InvalidInvocation"
+      ? Effect.gen(function* () {
+          const formatter = yield* CliOutput.Formatter;
+          yield* Console.error(formatter.formatHelpDoc(event.helpDoc));
+          yield* Console.error(formatter.formatErrors(event.errors));
+        })
+      : event._tag === "Help" && event.reason === "Implicit"
+        ? Effect.gen(function* () {
+            const usage = parentUsageError(event.commandPath);
+            if (usage === undefined) return yield* CliOutput.defaultPresenter.present(event);
+            const formatter = yield* CliOutput.Formatter;
+            yield* Console.error(formatter.formatHelpDoc(event.helpDoc));
+            yield* Console.error(usage.message);
+          })
+        : CliOutput.defaultPresenter.present(event),
+};
+
+/**
+ * `effect/cli` shows the help of a command that only contains other commands when it runs with no subcommand, as if the
+ * help was asked for. Below the root, that run is a usage error: `watch` with no event id, or a shared prefix alone.
+ */
+function parentUsageError(commandPath: readonly string[]): { readonly message: string; readonly code: number } | undefined {
+  const words = commandPath.slice(1);
+  if (words.length === 0) return undefined;
+  return words.join(" ") === "watch"
+    ? { message: "Give the id of an event.", code: CLI_EXIT_CODES["invalid-input"] }
+    : { message: `There is no command ${words.join(" ")}.`, code: CLI_EXIT_CODES["unknown-capability"] };
+}
+
+/**
  * Run a command that `command` made, after the application changed it: for example with its own flags
  * (`Command.withGlobalFlags`), or with services that depend on them (`Command.provide`). Usage errors set the exit
  * code with `exitCodeOf`. Other failures of the command stay in the error channel. Standard output carries only JSON,
- * so the logs go to standard error.
+ * so the logs and the usage errors go to standard error.
  */
 export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   command: Command.Command<Name, Input, ContextInput, E, R>,
@@ -98,15 +133,15 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
     CliError.isCliError,
     (error) => Effect.sync(() => (process.exitCode = exitCodeOf(error))),
     Effect.fail,
-  ).pipe(Effect.provideService(Logger.LogToStderr, true));
+  ).pipe(Effect.provideService(Logger.LogToStderr, true), Effect.provideService(CliOutput.Presenter, usageErrorsOnStderr));
 
 /**
  * The exit code for a usage error (spec/bindings/cli.md#exit-codes). `effect/cli` shows the help for each usage error,
- * and gives the errors in the `errors` of `ShowHelp`. Help with no errors is a request for help.
+ * and gives the errors in the `errors` of `ShowHelp`. Help with no errors is a request for help, or a command that only contains other commands with no subcommand.
  */
 export function exitCodeOf(error: CliError.CliError): number {
+  if (error._tag === "ShowHelp" && error.errors.length === 0) return parentUsageError(error.commandPath)?.code ?? CLI_EXIT_CODES.value;
   const errors: readonly CliError.CliError[] = error._tag === "ShowHelp" ? error.errors : [error];
-  if (errors.length === 0) return CLI_EXIT_CODES.value;
   return errors.some((inner) => inner._tag === "UnknownSubcommand")
     ? CLI_EXIT_CODES["unknown-capability"]
     : CLI_EXIT_CODES["invalid-input"];

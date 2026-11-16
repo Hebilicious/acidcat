@@ -68,6 +68,12 @@ function start(command: readonly string[], args: readonly string[], signal: Abor
   return { child, run };
 }
 
+async function expectUsageError(result: Promise<Run>, code: number): Promise<void> {
+  const { code: actual, stdout } = await result;
+  expectEqual(actual, code, "exit code");
+  expectEqual(stdout, "", "standard output");
+}
+
 export async function checkCli(command: readonly string[], options: { readonly deadline: number }): Promise<Checks> {
   const checks = new Checks("cli", options.deadline);
   const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
@@ -89,15 +95,17 @@ export async function checkCli(command: readonly string[], options: { readonly d
   });
   for (const [name, args, code] of [
     ["an unknown command has exit code 2", ["fixture", "nothing"], 2],
+    ["a shared prefix alone has exit code 2", ["fixture"], 2],
     ["a capability outside the view has exit code 2", ["call", "fixture.hidden"], 2],
     ["a missing required flag has exit code 3", ["fixture", "echo"], 3],
+    ["an unknown flag has exit code 3", ["fixture", "echo", "--text", "hello", "--nope", "x"], 3],
     ["a flag that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--ratio", "soon"], 3],
     ["an item of a repeated flag that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--steps", "1", "--steps", "soon"], 3],
     ["an item of a repeated flag as JSON text that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--steps", '[1,"soon"]'], 3],
     ["invalid input through call has exit code 3", ["call", "fixture.echo", '{"text":1}'], 3],
   ] as const) {
     await checks.run(name, `${RULE}#outcomes`, async (signal) => {
-      expectEqual((await run(signal, ...args)).code, code, "exit code");
+      await expectUsageError(run(signal, ...args), code);
     });
   }
   await checks.run("an interrupt cancels the call with exit code 130", `${RULE}#commands`, async (signal) => {
@@ -207,6 +215,7 @@ async function checkWatch(checks: Checks, command: readonly string[]): Promise<v
     expect(/"kind":"internal"/.test(result.stderr), `standard error must contain the call failure internal, got ${JSON.stringify(result.stderr)}`);
   });
   for (const [name, args, code] of [
+    ["watch with no event id has exit code 3", ["watch"], 3],
     ["watch with invalid input has exit code 3", ["watch", "fixture.ticks", "--count", "101"], 3],
     ["watch with a missing required flag has exit code 3", ["watch", "fixture.ticks"], 3],
     ["watch of an event outside the view has exit code 2", ["watch", "fixture.secret"], 2],
@@ -214,7 +223,7 @@ async function checkWatch(checks: Checks, command: readonly string[]): Promise<v
     ["watch with a --max-age-ms that is a fraction has exit code 3", ["watch", "fixture.ticks", "--count", "1", "--max-age-ms", "1.5"], 3],
   ] as const) {
     await checks.run(name, EVENTS, async (signal) => {
-      expectEqual((await run(signal, ...args)).code, code, "exit code");
+      await expectUsageError(run(signal, ...args), code);
     });
   }
   await checks.run("an interrupt cancels watch with exit code 130", EVENTS, async (signal) => {
