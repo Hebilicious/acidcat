@@ -79,30 +79,40 @@ impl Drop for Server {
 
 fn assert_conforms(args: &[&str], minimum: usize) {
     let output = Command::new("pnpm")
-        .args(["exec", "acid-cat", "conform"])
+        .args(["exec", "acid-cat", "conform", "--output", "json"])
         .args(args)
         .current_dir(repository())
         .output()
         .expect("pnpm runs acid-cat conform");
-    let report = String::from_utf8_lossy(&output.stdout);
-    let problems: Vec<&str> = report
-        .lines()
-        .filter(|line| line.starts_with('✗') || line.starts_with('!'))
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+            panic!(
+                "conform writes no JSON report ({error}):\n{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            )
+        });
+    let problems: Vec<&serde_json::Value> = report["checks"]
+        .as_array()
+        .expect("the report has checks")
+        .iter()
+        .filter(|check| check["passed"] == false || check["warning"] == true)
         .collect();
-    let passed = report.lines().filter(|line| line.starts_with('✓')).count();
     assert!(
         problems.is_empty(),
-        "conform reports problems:\n{report}\n{}",
-        String::from_utf8_lossy(&output.stderr)
+        "conform reports problems: {problems:#?}"
     );
     assert!(
         output.status.success(),
-        "conform failed:\n{report}\n{}",
+        "conform failed:\n{report:#}\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
+    let passed = report["passed"]
+        .as_u64()
+        .expect("the report counts the checks that pass");
     assert!(
-        passed >= minimum,
-        "{passed} checks passed, expected {minimum} or more:\n{report}"
+        passed >= minimum as u64,
+        "{passed} checks passed, expected {minimum} or more"
     );
 }
 
@@ -219,21 +229,14 @@ fn the_fixture_writes_a_catalog_that_conforms() {
     ));
     std::fs::write(&file, &output.stdout).expect("the catalog is written");
     let check = Command::new("pnpm")
-        .args(["exec", "acid-cat", "check"])
+        .args(["exec", "acid-cat", "check", "--strict", "--output", "json"])
         .arg(&file)
         .current_dir(repository())
         .output()
         .expect("pnpm runs acid-cat check");
     let _ = std::fs::remove_file(&file);
-    assert!(
-        check.status.success(),
-        "acid-cat check: {}{}",
-        String::from_utf8_lossy(&check.stdout),
-        String::from_utf8_lossy(&check.stderr)
-    );
-    assert!(
-        !String::from_utf8_lossy(&check.stdout).contains("warning"),
-        "acid-cat check warns: {}",
-        String::from_utf8_lossy(&check.stdout)
-    );
+    let report: serde_json::Value =
+        serde_json::from_slice(&check.stdout).expect("acid-cat check writes a JSON report");
+    assert!(check.status.success(), "acid-cat check: {report:#}");
+    assert_eq!(report["conforms"], true, "acid-cat check: {report:#}");
 }

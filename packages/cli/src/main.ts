@@ -24,20 +24,37 @@ const files = Argument.String("catalog").pipe(
   Argument.variadic({ min: 1 }),
 );
 
+const output = Flag.Literals("output", ["human", "json"]).pipe(
+  Flag.withDescription("human: text for a person. json: one JSON document on standard output, for a script or an agent"),
+  Flag.withDefault("human"),
+);
+
+const printJson = (value: unknown) => Effect.sync(() => process.stdout.write(`${JSON.stringify(value)}\n`));
+
 const checkCommand = Command.make(
   "check",
   {
     files,
     strict: Flag.Boolean("strict").pipe(Flag.withDescription("Fail on warnings too"), Flag.withDefault(false)),
+    output,
   },
-  Effect.fn(function* ({ files, strict }) {
+  Effect.fn(function* ({ files, strict, output }) {
     let failed = false;
+    const reports = [];
     for (const file of files) {
       const { text, document } = yield* readCatalog(file);
       const report = check(document, text);
-      for (const error of report.errors) yield* Console.error(`${file}: error: ${error}`);
-      for (const warning of report.warnings) yield* Console.error(`${file}: warning: ${warning}`);
+      reports.push({ file, ...report });
       failed ||= report.errors.length > 0 || (strict && report.warnings.length > 0);
+    }
+    if (output === "json") {
+      yield* printJson({ conforms: !failed, catalogs: reports });
+      if (failed) return yield* fail;
+      return;
+    }
+    for (const { file, errors, warnings } of reports) {
+      for (const error of errors) yield* Console.error(`${file}: error: ${error}`);
+      for (const warning of warnings) yield* Console.error(`${file}: warning: ${warning}`);
     }
     if (failed) return yield* fail;
     yield* Console.log(files.length === 1 ? "The catalog conforms." : "Every catalog conforms.");
@@ -125,6 +142,7 @@ const conformCommand = Command.make(
       Flag.withDescription("The time, in milliseconds, that each check has to settle. A check that does not settle in this time fails"),
       Flag.withDefault(DEADLINE),
     ),
+    output,
   },
   Effect.fn(function* (options) {
     const value = (option: Option.Option<string>) => (Option.isSome(option) ? option.value : undefined);
@@ -172,11 +190,16 @@ const conformCommand = Command.make(
       yield* Console.error("Give at least one binding: --mcp, --mcp-stdio, --http, --cli or --webmcp.");
       return yield* fail;
     }
+    const failed = results.filter((result) => !result.passed).length;
+    const warnings = results.filter((result) => result.warning === true).length;
+    if (options.output === "json") {
+      yield* printJson({ passed: results.length - failed, failed, warnings, checks: results });
+      if (failed > 0) return yield* fail;
+      return;
+    }
     for (const result of results) {
       yield* Console.log(`${result.warning === true ? "!" : result.passed ? "✓" : "✗"} ${result.binding}: ${result.name} (${result.rule})${result.detail ? `\n    ${result.detail}` : ""}`);
     }
-    const failed = results.filter((result) => !result.passed).length;
-    const warnings = results.filter((result) => result.warning === true).length;
     yield* Console.log(`\n${results.length - failed} passed, ${failed} failed${warnings === 0 ? "" : `, ${warnings} with a warning`}.`);
     if (failed > 0) return yield* fail;
   }),

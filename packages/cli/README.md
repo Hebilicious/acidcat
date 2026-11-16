@@ -3,10 +3,10 @@
 The AcidCat command line. npm package: `@acid-cat/cli`. It gives the `acid-cat` command. Use it at build time, in CI or by hand, to check catalogs and to test implementations. Do not use it in an application at run time.
 
 ```sh
-acid-cat check [--strict] <catalog.json ...>  # check catalogs
+acid-cat check [--strict] [--output json] <catalog.json ...>  # check catalogs
 acid-cat format [--write] <catalog.json ...>  # write catalogs in canonical form
 acid-cat view <catalog.json> <target>         # write the view of one target
-acid-cat conform --mcp <url> [--mcp-handshake] --mcp-stdio "<command>" --http <url> --cli "<command>" --webmcp <url> [--deadline <ms>] [--max-bytes <n>]  # test an implementation
+acid-cat conform --mcp <url> [--mcp-handshake] --mcp-stdio "<command>" --http <url> --cli "<command>" --webmcp <url> [--deadline <ms>] [--max-bytes <n>] [--output json]  # test an implementation
   [--poll-buffer <n>] [--poll-lease-ms <ms>] [--webhook-principal <name> --webhook-cert <file> --webhook-key <file>]
   [--webhook-other-principal <name>] [--webhook-min-ttl-ms <ms>] [--webhook-max-ttl-ms <ms>] [--webhook-max-subscriptions <n>]
 ```
@@ -18,6 +18,15 @@ pnpm add -D @acid-cat/cli
 ```
 
 It needs Node.js 24 or later. `acid-cat conform --webmcp <url>` also needs [Playwright](https://playwright.dev) and Chromium.
+
+## Output
+
+`check` and `conform` take `--output human` (the default) or `--output json`. Human output is text for a person. JSON output is one JSON document on standard output, for a script or an agent. It writes nothing to standard error. The exit code is the same in both modes.
+
+- `check`: `{ "conforms": boolean, "catalogs": [{ "file", "errors": [string], "warnings": [string] }] }`. `conforms` is `false` when the exit code is 1.
+- `conform`: `{ "passed": number, "failed": number, "warnings": number, "checks": [{ "binding", "name", "rule", "passed", "warning"?, "detail"? }] }`.
+
+An error in the options, for example `conform` with no binding, goes to standard error as text in both modes, with the exit code 1.
 
 ## check
 
