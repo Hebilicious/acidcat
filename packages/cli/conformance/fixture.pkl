@@ -6,11 +6,36 @@ description = "One capability or event for each behavior that acid-cat conform t
 targets {
   ["app"] { bindings { "typescript"; "webmcp" } }
   ["mcp"] { bindings { "mcp" } }
-  ["cli"] { bindings { "cli" } }
+  ["cli"] {
+    bindings { "cli" }
+    options {
+      ["cli"] {
+        ["aliases"] {
+          ["say"] { capability = "fixture.echo" }
+          ["--hello"] { capability = "fixture.echo"; input { text = "hello" } }
+          ["quick"] { capability = "fixture.flags"; input { mode = "fast" } }
+          ["raw"] { capability = "fixture.raw" }
+          ["held-keys"] { capability = "fixture.held" }
+          ["fixed-note"] { capability = "fixture.note"; input { text = "fixed" } }
+        }
+      }
+    }
+  }
   ["api"] { bindings { "http" } }
 }
 
 local allTargets = new Listing { "app"; "mcp"; "cli"; "api" }
+
+types {
+  ["Note"] {
+    type = "object"
+    required { "text" }
+    properties {
+      text { type = "string" }
+      loud { type = "boolean" }
+    }
+  }
+}
 
 local text = new Dynamic {
   type = "object"
@@ -127,6 +152,18 @@ capabilities {
     audience { "cli" }
     input = flags
     output = flags
+  }
+  ["fixture.note"] {
+    description = "Return the input. The input schema is a $ref with a description beside it."
+    audience { "cli" }
+    input = (module.ref("Note")) { description = "The note." }
+    output = module.ref("Note")
+  }
+  ["fixture.raw"] {
+    description = "Return the input. The input schema has no top-level properties member."
+    audience { "cli" }
+    input { type = "object" }
+    output { type = "object" }
   }
   ["fixture.signal"] {
     description = "Give an occurrence of fixture.watch to each subscription that watches the key. Return the number of these subscriptions."

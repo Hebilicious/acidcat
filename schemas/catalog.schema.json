@@ -97,6 +97,41 @@
           "type": "string"
         },
         "options": {
+          "type": "object",
+          "properties": {
+            "cli": {
+              "$ref": "#/$defs/cliOptions"
+            }
+          }
+        }
+      }
+    },
+    "cliOptions": {
+      "description": "The settings of the CLI binding. See spec/bindings/cli.md#aliases.",
+      "type": "object",
+      "properties": {
+        "aliases": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^(--)?[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/cliAlias"
+          }
+        }
+      }
+    },
+    "cliAlias": {
+      "description": "A short name for a capability: its id, and an optional fixed input. Other members start with x-; acid-cat check rejects other members.",
+      "type": "object",
+      "required": [
+        "capability"
+      ],
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/id"
+        },
+        "input": {
           "type": "object"
         }
       }

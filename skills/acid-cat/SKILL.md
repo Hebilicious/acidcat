@@ -71,7 +71,7 @@ Each target of the catalog lists its bindings. Each binding serves the **view** 
 | `mcp` through HTTP | An MCP server at `/mcp` | `mcpHandler` | `Mcp.toWebHandler` | `mcp::McpBinding` |
 | `mcp` through stdio | A local MCP server that a client starts | `mcpStdioMain` | `NodeMcp.main` | `mcp::serve_stdio` |
 | `http` | JSON at `POST /capabilities/<id>` | `httpHandler` | `Http.toWebHandler` | `http::HttpBinding` |
-| `cli` | A command for each capability | `cliMain` | `NodeCli.main` | `cli::cli_main` |
+| `cli` | A command for each capability, and the aliases of the target | `cliMain` | `NodeCli.main` | `cli::cli_main` |
 | `webmcp` | Tools of a web page for the agents of the browser | `installWebMcp` | `WebMcp.install` | None |
 
 The MCP and HTTP bindings give web handlers. On Node.js, the server of the core serves them: `serve` from `@acid-cat/core-ts/node`, or `NodeServer` from `@acid-cat/core-effect`. In Rust, `remote::serve` of `acid-cat-core` serves them. It is plain HTTP. TLS ends in the platform, before it. See [references/bindings.md](references/bindings.md) for the options and the traps of each binding.

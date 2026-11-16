@@ -1,10 +1,13 @@
 import {
-  bundle,
   CLI_EXIT_CODES,
   CLI_RESUME_FLAGS,
   CLI_WATCH_EXIT_CODES,
+  cliAliases,
+  cliAliasSchema,
+  cliAliasUsage,
   cliEventUsage,
   cliExitCode,
+  cliInputSchema,
   cliJsonArray,
   cliRepeatedItems,
   cliResolve,
@@ -12,11 +15,12 @@ import {
   commandPath,
   isCallFailure,
   isJsonObject,
+  ownMember,
 } from "@acid-cat/spec-ts";
 import { unavailable } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CatalogDocument, JsonObject, Occurrence, Outcome, Resume } from "@acid-cat/spec-ts";
-import { Console, Effect, Logger, Option, Predicate, Schema, Scope, Stream } from "effect";
-import { Argument, CliError, CliOutput, Command, Flag, Primitive } from "effect/cli";
+import { Console, Context, Effect, Logger, Option, Predicate, Schema, Scope, Stdio, Stream } from "effect";
+import { Argument, CliConfig, CliError, CliOutput, Command, CommandSpec, Flag, Primitive } from "effect/cli";
 
 import * as App from "./App.ts";
 import type * as Http from "./Http.ts";
@@ -46,6 +50,20 @@ export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = r
    */
   readonly remote?: Http.Client | undefined;
 }
+
+interface AliasEntry {
+  readonly name: string;
+  readonly usage: string;
+  readonly description: string;
+}
+
+const Aliases = Context.Reference<ReadonlyArray<AliasEntry>>("@acid-cat/core-effect/Cli/Aliases", { defaultValue: () => [] });
+
+/**
+ * `effect/cli` reads a flag alias such as `--on` as a flag, never as a command, so `runCommand` selects the subcommand
+ * of each alias by this other name. The arguments of a process cannot contain NUL, so no user can give it.
+ */
+const aliasWord = (name: string): string => `\u0000${name}`;
 
 interface Provider {
   readonly invoke: (id: string, input: unknown) => Effect.Effect<Outcome<unknown, unknown>>;
@@ -123,17 +141,75 @@ function parentUsageError(commandPath: readonly string[]): { readonly message: s
  * (`Command.withGlobalFlags`), or with services that depend on them (`Command.provide`). Usage errors set the exit
  * code with `exitCodeOf`. Other failures of the command stay in the error channel. Standard output carries only JSON,
  * so the logs and the usage errors go to standard error.
+ *
+ * When the first argument is the name of an alias (spec/bindings/cli.md#aliases), the subcommand of the alias makes
+ * the call, and `<alias> --help` writes the usage of the alias. The help of the root command ends with the aliases. The
+ * program stops with a defect when it starts if the name of a flag alias is the name of a global flag: a flag of
+ * `effect/cli`, such as `--log-level`, or a flag of the application.
  */
 export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   command: Command.Command<Name, Input, ContextInput, E, R>,
   options: { readonly version: string },
-): Effect.Effect<void | number, Exclude<E, CliError.CliError>, R | Command.Environment> =>
-  Effect.catchIf(
-    Command.run(command, { version: options.version }),
+): Effect.Effect<void | number, Exclude<E, CliError.CliError>, R | Command.Environment> => {
+  const aliases = Context.get(command.annotations, Aliases);
+  const program = Effect.gen(function* () {
+    const args = yield* (yield* Stdio.Stdio).args;
+    const runWith = Command.runWith(command, { version: options.version });
+    if (aliases.length === 0) return yield* runWith(args);
+    const { builtIns } = yield* CliConfig.CliConfig;
+    const taken = new Set(globalFlagsOfEveryCommand(command, builtIns).flatMap(flagNames));
+    const clash = aliases.find(({ name }) => name.startsWith("--") && taken.has(name.slice(2)));
+    if (clash !== undefined) return yield* Effect.die(new Error(`The alias ${clash.name} has the name of a flag of the command line.`));
+    const [first, ...rest] = args;
+    const alias = aliases.find(({ name }) => name === first);
+    if (alias === undefined) return yield* runWith(args);
+    if (rest.includes("--help") || rest.includes("-h")) return yield* Console.log(`Usage: ${alias.usage}\n\n${alias.description}`);
+    return yield* runWith([aliasWord(alias.name), ...rest]);
+  });
+  return Effect.catchIf(
+    program,
     CliError.isCliError,
     (error) => Effect.sync(() => (process.exitCode = exitCodeOf(error))),
     Effect.fail,
-  ).pipe(Effect.provideService(Logger.LogToStderr, true), Effect.provideService(CliOutput.Presenter, usageErrorsOnStderr));
+  ).pipe(
+    Effect.updateService(
+      CliOutput.Formatter,
+      (formatter): CliOutput.Formatter => ({
+        formatHelpDoc: (doc) => withAliases(formatter.formatHelpDoc(doc), doc),
+        formatCliError: (error) => formatter.formatCliError(error),
+        formatError: (error) => formatter.formatError(error),
+        formatVersion: (name, version) => formatter.formatVersion(name, version),
+        formatErrors: (errors) => formatter.formatErrors(errors),
+      }),
+    ),
+    Effect.provideService(Logger.LogToStderr, true),
+    Effect.provideService(CliOutput.Presenter, usageErrorsOnStderr),
+  );
+};
+
+type BuiltIns = CliConfig.CliConfig.Service["builtIns"];
+
+const globalFlagsOfSpec = (spec: CommandSpec.Spec): readonly CommandSpec.Flag[] => spec.flags.filter(({ scope }) => scope._tag === "Global");
+
+function globalFlagsOfEveryCommand(command: Command.Command.Any, builtIns: BuiltIns): readonly CommandSpec.Flag[] {
+  const flags: CommandSpec.Flag[] = [];
+  const visit = (at: readonly string[]): void => {
+    const spec = CommandSpec.resolve(command, at, { builtIns });
+    if (Option.isNone(spec)) return;
+    flags.push(...globalFlagsOfSpec(spec.value));
+    for (const subcommand of spec.value.subcommands) visit([...at, subcommand.name]);
+  };
+  visit([command.name]);
+  return flags;
+}
+
+const flagNames = (flag: CommandSpec.Flag): readonly string[] => [flag.name, ...flag.aliases, ...(flag.negation === undefined ? [] : [flag.negation])];
+
+function withAliases(help: string, doc: { readonly annotations: Context.Context<never> }): string {
+  const aliases = Context.get(doc.annotations, Aliases);
+  if (aliases.length === 0) return help;
+  return [help, "", "ALIASES", ...aliases.map(({ usage }) => `  ${usage.slice(usage.indexOf(" ") + 1)}`)].join("\n");
+}
 
 /**
  * The exit code for a usage error (spec/bindings/cli.md#exit-codes). `effect/cli` shows the help for each usage error,
@@ -174,8 +250,9 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   const invoke = (id: string, input: unknown) =>
     Effect.scoped(Effect.flatMap(view, (provider) => provider.invoke(id, input))).pipe(Effect.flatMap(print), cancelledByInterrupt);
 
-  const flagsOf = (input: JsonObject | undefined) => {
-    const schema = bundle(input ?? { type: "object" }, types);
+  const flagsOf = (input: JsonObject | undefined) => flagsOfBundled(cliInputSchema(input ?? { type: "object" }, types));
+
+  const flagsOfBundled = (schema: JsonObject) => {
     const properties = schemasIn(schema.properties);
     const required = new Set(isStrings(schema.required) ? schema.required : []);
     const definitions = isJsonObject(schema.$defs) ? schema.$defs : {};
@@ -195,33 +272,65 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     return { path, leaf };
   });
 
+  const invokeJson = (id: string, text: string) =>
+    Effect.suspend(() => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        // The call failures of the id come before invalid-input (spec/invocation.md#call-failures).
+        return Effect.scoped(
+          Effect.gen(function* () {
+            if (ownMember(catalogView.capabilities, id) === undefined) return yield* print({ kind: "unknown-capability", message: `There is no capability ${id}.` });
+            const provider = yield* view;
+            const availability = yield* Effect.result(provider.availability([id]));
+            if (availability._tag === "Failure") return yield* print(availability.failure);
+            const [state] = availability.success;
+            if (state !== undefined && !state.available) return yield* print({ kind: "unavailable", message: state.reason });
+            return yield* print({ kind: "invalid-input", message: "The input is not JSON." });
+          }),
+        );
+      }
+      return invoke(id, parsed);
+    });
+
+  const { aliases, errors: aliasErrors } = cliAliases(catalogView, target);
+  if (aliasErrors.length > 0) throw new Error(aliasErrors.join("\n"));
+  const aliasCommands = aliases.map((alias) => {
+    const capability = catalogView.capabilities[alias.capability];
+    if (capability === undefined) throw new Error(`The alias ${alias.name} refers to ${alias.capability}, which is not in the view.`);
+    const schema = capability.input === undefined ? undefined : cliAliasSchema(cliInputSchema(capability.input, types), alias.input);
+    const entry: AliasEntry = {
+      name: alias.name,
+      usage: cliAliasUsage(options.name, alias.name, schema),
+      description: capability.description,
+    };
+    const finish = <Input>(made: Command.Command<string, Input, {}, never, R>) =>
+      made.pipe(Command.withDescription(capability.description), Command.unlisted, Command.withAlias(aliasWord(alias.name)));
+    const subcommand =
+      schema !== undefined && schema.properties === undefined
+        ? finish(
+            Command.make(
+              entry.name,
+              { input: Argument.String("input").pipe(Argument.withDescription("The input as JSON"), Argument.withDefault("{}")) },
+              ({ input }) => invokeJson(alias.capability, input),
+            ),
+          )
+        : finish(
+            Command.make(entry.name, flagsOfBundled(schema ?? { type: "object" }), (parsed: Record<string, unknown>) =>
+              invoke(alias.capability, { ...alias.input, ...inputFrom(parsed) }),
+            ),
+          );
+    return { capability: alias.capability, entry, subcommand };
+  });
+
   const call = Command.make(
     "call",
     {
       id: Argument.String("id").pipe(Argument.withDescription("The id of the capability")),
       input: Argument.String("input").pipe(Argument.withDescription("The input as JSON"), Argument.withDefault("{}")),
     },
-    ({ id, input }) =>
-      Effect.suspend(() => {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(input);
-        } catch {
-          // The call failures of the id come before invalid-input (spec/invocation.md#call-failures).
-          return Effect.scoped(
-            Effect.gen(function* () {
-              if (catalogView.capabilities[id] === undefined) return yield* print({ kind: "unknown-capability", message: `There is no capability ${id}.` });
-              const provider = yield* view;
-              const availability = yield* Effect.result(provider.availability([id]));
-              if (availability._tag === "Failure") return yield* print(availability.failure);
-              const [state] = availability.success;
-              if (state !== undefined && !state.available) return yield* print({ kind: "unavailable", message: state.reason });
-              return yield* print({ kind: "invalid-input", message: "The input is not JSON." });
-            }),
-          );
-        }
-        return invoke(id, parsed);
-      }),
+    ({ id, input }) => invokeJson(id, input),
   ).pipe(Command.withDescription("Call a capability by its id, with its input as JSON."));
 
   const list = Command.make("list", {}, () =>
@@ -233,11 +342,19 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
         if (availability._tag === "Failure") return yield* print(availability.failure);
         const entries = [];
         for (const [index, [id, capability]] of capabilities.entries()) {
-          const usage = cliUsage(options.name, id, capability.input === undefined ? undefined : bundle(capability.input, types));
-          entries.push({ kind: "capability", id, description: capability.description, ...availability.success[index], usage });
+          const usage = cliUsage(options.name, id, capability.input === undefined ? undefined : cliInputSchema(capability.input, types));
+          const usages = aliasCommands.flatMap(({ capability, entry }) => (capability === id ? [entry.usage] : []));
+          entries.push({
+            kind: "capability",
+            id,
+            description: capability.description,
+            ...availability.success[index],
+            usage,
+            ...(usages.length > 0 ? { aliases: usages } : {}),
+          });
         }
         for (const [id, event] of Object.entries(catalogView.events ?? {})) {
-          const usage = cliEventUsage(options.name, id, event.input === undefined ? undefined : bundle(event.input, types));
+          const usage = cliEventUsage(options.name, id, event.input === undefined ? undefined : cliInputSchema(event.input, types));
           entries.push({ kind: "event", id, description: event.description, usage });
         }
         yield* Console.log(JSON.stringify(entries, null, 2));
@@ -274,7 +391,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     });
 
   const watchers = Object.entries(catalogView.events ?? {}).map(([id, event]) => {
-    const schema = event.input === undefined ? undefined : bundle(event.input, types);
+    const schema = event.input === undefined ? undefined : cliInputSchema(event.input, types);
     const properties = schema === undefined ? {} : schemasIn(schema.properties);
     for (const name of CLI_RESUME_FLAGS) {
       if (name in properties) throw new Error(`The input of the event ${id} has a property ${name}, which is a flag of watch.`);
@@ -316,6 +433,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
       throw new Error(`The command ${path.join(" ")} is also the start of the command ${longer.path.join(" ")}. A shared prefix only contains other commands.`);
     }
   }
+  for (const { name } of aliases) taken.add(name);
   for (const added of options.commands ?? []) {
     if (taken.has(added.name)) throw new Error(`The command ${added.name} of the application has the same name as another command.`);
     taken.add(added.name);
@@ -323,7 +441,11 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
 
   return Command.make(options.name).pipe(
     Command.withDescription(options.description ?? app.description ?? app.title ?? options.name),
-    Command.withSubcommands([call, list, watch, ...group(leaves, []), ...(options.commands ?? [])]),
+    Command.withSubcommands([call, list, watch, ...group(leaves, []), ...aliasCommands.map(({ subcommand }) => subcommand), ...(options.commands ?? [])]),
+    Command.annotate(
+      Aliases,
+      aliasCommands.map(({ entry }) => entry),
+    ),
   );
 }
 
@@ -367,7 +489,6 @@ function schemasIn(value: unknown): { readonly [name: string]: JsonObject } {
 function flagFor(name: string, property: JsonObject, definitions: JsonObject, required: boolean) {
   const items = cliRepeatedItems(property, definitions);
   const flag = describe(items === undefined ? scalarFlag(name, property) : repeatedFlag(name, items), property);
-  if (property.type === "boolean" && !required) return flag.pipe(Flag.withDefault(false));
   return required ? flag : flag.pipe(Flag.optional);
 }
 
@@ -405,15 +526,12 @@ const describe = (flag: Flag.Flag<unknown>, property: JsonObject): Flag.Flag<unk
   typeof property.description === "string" ? flag.pipe(Flag.withDescription(property.description)) : flag;
 
 function inputFrom(parsed: Record<string, unknown>): Record<string, unknown> {
-  const input: Record<string, unknown> = {};
-  for (const [name, value] of Object.entries(parsed)) {
-    if (Option.isOption(value)) {
-      if (Option.isSome(value)) input[name] = value.value;
-    } else if (value !== undefined) {
-      input[name] = value;
-    }
-  }
-  return input;
+  // The entries go through `Object.fromEntries`, so that a flag name such as `__proto__` is an ordinary key.
+  const entries = Object.entries(parsed).flatMap(([name, value]): [string, unknown][] => {
+    if (Option.isOption(value)) return Option.isSome(value) ? [[name, value.value]] : [];
+    return value === undefined ? [] : [[name, value]];
+  });
+  return Object.fromEntries(entries);
 }
 
 function isJsonText(text: string): boolean {

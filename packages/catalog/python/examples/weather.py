@@ -21,7 +21,7 @@ def weather_catalog() -> Catalog:
         "logger",
         description="Scripts that store readings for later study.",
         bindings=["http"],
-        options={"basePath": "/station", "rateLimit": {"perMinute": 30}},
+        options={"http": {"basePath": "/station", "rateLimit": {"perMinute": 30}}},
     )
     catalog.target("agents", description="Assistants, through an MCP server.", bindings=["mcp"])
 

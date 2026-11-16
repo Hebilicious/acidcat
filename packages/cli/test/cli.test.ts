@@ -103,6 +103,13 @@ test("a catalog that breaks a rule gets an error", () => {
 });
 
 const rejected: Readonly<Record<string, readonly string[]>> = {
+  "cli-alias.json": [
+    "target shop: the alias --buy has the fixed input count, which is not a property of the input of shop.item.buy",
+    "target shop: the alias gone refers to shop.item.gone, which is not a capability in the view of the target",
+    "target shop: the alias list has the name of a command or a flag of the command line",
+    "target shop: the alias odd has the unknown member extra",
+  ],
+  "cli-alias-name.json": ['["targets"]["shop"]["options"]["cli"]["aliases"]["Shop"]: Expected a string matching the RegExp ^(--)?[a-z][a-z0-9]*(-[a-z0-9]+)*$'],
   "audience-inherited-name.json": ["shop.item.get: the audience names constructor, which is not a target"],
   "event-audience.json": ["shop.order.ready: the audience names till, which is not a target"],
   "event-id-is-a-capability.json": ["shop.order.ready: the id is both a capability and an event"],
@@ -147,6 +154,13 @@ test("view rejects a target name that only an object inherits, such as construct
 test("an unknown member of an event without an x- prefix gets a warning", () => {
   const events = { "bakery.order.ready": { description: "x", audience: ["shop"], "x-icon": "bell", icon: "bell" } };
   assert.deepEqual(check({ ...bakery, events }).warnings, ["bakery.order.ready: unknown member icon; give extensions an x- prefix"]);
+});
+
+test("an unknown member of options.cli without an x- prefix gets a warning, and other members of options get none", () => {
+  const kitchen = { ...bakery.targets.kitchen, options: { cli: { aliases: {}, "x-color": "red", color: "red" }, mcp: { color: "red" } } };
+  assert.deepEqual(check({ ...bakery, targets: { ...bakery.targets, kitchen } }).warnings, [
+    "target kitchen options.cli: unknown member color; give extensions an x- prefix",
+  ]);
 });
 
 test("a catalog that does not match the catalog schema gets an error with its path", () => {

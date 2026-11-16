@@ -21,7 +21,28 @@
     "cli": {
       "bindings": [
         "cli"
-      ]
+      ],
+      "options": {
+        "cli": {
+          "aliases": {
+            "--off": {
+              "capability": "aircon.power.set",
+              "input": {
+                "on": false
+              }
+            },
+            "--on": {
+              "capability": "aircon.power.set",
+              "input": {
+                "on": true
+              }
+            },
+            "status": {
+              "capability": "aircon.status.get"
+            }
+          }
+        }
+      }
     },
     "mcp": {
       "bindings": [

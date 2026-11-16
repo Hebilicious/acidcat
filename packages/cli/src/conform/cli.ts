@@ -17,6 +17,8 @@ const USAGES: { readonly [id: string]: string } = {
   "fixture.flags": "fixture flags --mode <fast|slow> [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]",
   "fixture.held": "fixture held",
   "fixture.hold": "fixture hold --key <string> [--marker <string>]",
+  "fixture.note": "fixture note --text <string> [--loud]",
+  "fixture.raw": "call fixture.raw '<json>'",
   "fixture.refuse": "fixture refuse",
   "fixture.release": "fixture release --key <string>",
   "fixture.switch.set": "fixture switch set --on",
@@ -30,6 +32,16 @@ const EVENT_USAGES: { readonly [id: string]: string } = {
   "fixture.ticks": "watch fixture.ticks --count <integer> [--gap <integer>] [--key <string>] [--cursor <string>] [--max-age-ms <integer>]",
   "fixture.watch": "watch fixture.watch --key <string> [--marker <string>] [--cursor <string>] [--max-age-ms <integer>]",
 };
+
+const ALIAS_USAGES: { readonly [id: string]: readonly string[] } = {
+  "fixture.echo": ["--hello", "say --text <string>"],
+  "fixture.flags": ["quick [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]"],
+  "fixture.held": ["held-keys"],
+  "fixture.note": ["fixed-note [--loud]"],
+  "fixture.raw": ["raw '<json>'"],
+};
+
+const ALIASES = `${RULE}#aliases`;
 
 type Entry = JsonObject & { readonly id: string };
 
@@ -165,9 +177,66 @@ export async function checkCli(command: readonly string[], options: { readonly d
       expectEqual(rest.join(" "), kind === "event" ? EVENT_USAGES[id] : USAGES[id], `usage of ${id} after the name of the program`);
     }
   });
+  await checkAliases(checks, command);
   await checkWatch(checks, command);
 
   return checks;
+}
+
+async function checkAliases(checks: Checks, command: readonly string[]): Promise<void> {
+  const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
+  const expectOutput = (result: Run, expected: JsonObject) => {
+    expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
+    const output = parseJson(result.stdout);
+    expect(isDeepStrictEqual(output, expected), `standard output: expected ${JSON.stringify(expected)}, got ${JSON.stringify(output)}`);
+  };
+
+  await checks.run("a command alias calls its capability with the flags", ALIASES, async (signal) => {
+    expectOutput(await run(signal, "say", "--text", "hi"), { text: "hi" });
+  });
+  await checks.run("a flag alias calls its capability with its fixed input", ALIASES, async (signal) => {
+    expectOutput(await run(signal, "--hello"), { text: "hello" });
+  });
+  await checks.run("the input of an alias is its fixed input with the properties of the flags", ALIASES, async (signal) => {
+    expectOutput(await run(signal, "quick", "--count", "2", "--steps", "1", "--steps", "2"), { mode: "fast", count: 2, steps: [1, 2] });
+  });
+  await checks.run("an alias of a capability whose input schema has no properties takes the input as JSON text", ALIASES, async (signal) => {
+    expectOutput(await run(signal, "raw", '{"a":[1]}'), { a: [1] });
+    expectOutput(await run(signal, "raw"), {});
+  });
+  await checks.run("the flags of an alias come from the type that the $ref of the input schema refers to, whatever other keys it has", ALIASES, async (signal) => {
+    expectOutput(await run(signal, "fixed-note"), { text: "fixed" });
+    expectOutput(await run(signal, "fixed-note", "--loud"), { text: "fixed", loud: true });
+  });
+  await checks.run("an alias of a capability with no input takes no argument", ALIASES, async (signal) => {
+    const result = await run(signal, "held-keys");
+    expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
+    expect(isArrayOf(memberOf(parseJson(result.stdout), "keys"), (key) => typeof key === "string"), `standard output must have the keys, got ${result.stdout}`);
+  });
+  for (const [name, args, code] of [
+    ["a flag of a property of the fixed input has exit code 3", ["quick", "--mode", "slow"], 3],
+    ["a missing required flag of an alias has exit code 3", ["say"], 3],
+    ["an alias with input that is not JSON has exit code 3", ["raw", "{"], 3],
+    ["JSON text to an alias of a capability whose input schema refers to a type with properties has exit code 3", ["fixed-note", '{"text":"override"}'], 3],
+    ["an argument to an alias of a capability with no input has exit code 3", ["held-keys", "{}"], 3],
+  ] as const) {
+    await checks.run(name, ALIASES, async (signal) => {
+      expectEqual((await run(signal, ...args)).code, code, "exit code");
+    });
+  }
+  await checks.run("list gives the usage of the aliases of each capability", ALIASES, async (signal) => {
+    const entries = entriesOf((await run(signal, "list")).stdout);
+    for (const { id, kind, aliases } of entries) {
+      const expected = kind === "capability" ? ALIAS_USAGES[id] : undefined;
+      if (expected === undefined) {
+        expect(aliases === undefined, `${id} has no alias, so its item must not have aliases, got ${JSON.stringify(aliases)}`);
+        continue;
+      }
+      expect(isArrayOf(aliases, (usage) => typeof usage === "string"), `the aliases of ${id} must be a list of strings, got ${JSON.stringify(aliases)}`);
+      const rest = aliases.map((usage) => usage.split(" ").slice(1).join(" "));
+      expectEqual(rest, expected, `the usage of the aliases of ${id} after the name of the program`);
+    }
+  });
 }
 
 const EVENTS = `${RULE}#events`;

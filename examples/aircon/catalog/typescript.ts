@@ -15,7 +15,18 @@ export function airconCatalog(): Catalog {
       description: "A desktop taskbar widget showing the status and a power toggle.",
       bindings: ["typescript"],
     })
-    .target("cli", { bindings: ["cli"] })
+    .target("cli", {
+      bindings: ["cli"],
+      options: {
+        cli: {
+          aliases: {
+            status: { capability: "aircon.status.get" },
+            "--on": { capability: "aircon.power.set", input: { on: true } },
+            "--off": { capability: "aircon.power.set", input: { on: false } },
+          },
+        },
+      },
+    })
     .target("mcp", { description: "Agents, through an MCP server.", bindings: ["mcp"] })
     .target("api", { description: "Home-automation systems and scripts.", bindings: ["http"] });
 

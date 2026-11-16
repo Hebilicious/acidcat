@@ -438,6 +438,34 @@ These two flags are not properties of the input. If the input schema of an event
 
 A subscription that cannot start has the exit code of its call failure. Each item of `list` has `kind`: `"capability"` or `"event"`. The items of the events come after the items of the capabilities, with their `usage`, which ends with `[--cursor <string>] [--max-age-ms <integer>]`. Standard output carries only JSON, so the logs of Effect go to standard error.
 
+#### Aliases
+
+The `cli` target can give [aliases](../../spec/bindings/cli.md#aliases) in its options: short names for capabilities, with an optional fixed input. A command alias is one word, and a flag alias is `--` and one word:
+
+```ts
+targets: {
+  cli: {
+    bindings: ["cli"],
+    options: {
+      cli: {
+        aliases: {
+          status: { capability: "aircon.status.get" },
+          "--on": { capability: "aircon.power.set", input: { on: true } },
+          "--off": { capability: "aircon.power.set", input: { on: false } },
+        },
+      },
+    },
+  },
+},
+```
+
+```sh
+node cli.ts --on      # the same call as: node cli.ts aircon power set --on
+node cli.ts status    # the same call as: node cli.ts aircon status get
+```
+
+The properties of the fixed input are not flags of the alias. The other properties are flags, with the rules above. `list` gives the usage of the aliases of each capability in `aliases`, and the help lists them. If an alias breaks a rule, `Cli.command` throws, so the program stops with an error when it starts. A command of the application must not have the name of an alias.
+
 ### Command line of a server
 
 The command line can serve a view of an application that runs on a server ([Server](../../spec/bindings/cli.md#server)). It is then a client of the HTTP binding of that application. `Http.client(base, options)` makes the client, and the option `remote` of the command line takes it:

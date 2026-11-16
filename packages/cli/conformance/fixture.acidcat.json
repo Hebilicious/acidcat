@@ -17,12 +17,61 @@
     "cli": {
       "bindings": [
         "cli"
-      ]
+      ],
+      "options": {
+        "cli": {
+          "aliases": {
+            "--hello": {
+              "capability": "fixture.echo",
+              "input": {
+                "text": "hello"
+              }
+            },
+            "fixed-note": {
+              "capability": "fixture.note",
+              "input": {
+                "text": "fixed"
+              }
+            },
+            "held-keys": {
+              "capability": "fixture.held"
+            },
+            "quick": {
+              "capability": "fixture.flags",
+              "input": {
+                "mode": "fast"
+              }
+            },
+            "raw": {
+              "capability": "fixture.raw"
+            },
+            "say": {
+              "capability": "fixture.echo"
+            }
+          }
+        }
+      }
     },
     "mcp": {
       "bindings": [
         "mcp"
       ]
+    }
+  },
+  "$defs": {
+    "Note": {
+      "properties": {
+        "loud": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
     }
   },
   "capabilities": {
@@ -218,6 +267,31 @@
         "required": [
           "key"
         ],
+        "type": "object"
+      }
+    },
+    "fixture.note": {
+      "description": "Return the input. The input schema is a $ref with a description beside it.",
+      "audience": [
+        "cli"
+      ],
+      "input": {
+        "$ref": "#/$defs/Note",
+        "description": "The note."
+      },
+      "output": {
+        "$ref": "#/$defs/Note"
+      }
+    },
+    "fixture.raw": {
+      "description": "Return the input. The input schema has no top-level properties member.",
+      "audience": [
+        "cli"
+      ],
+      "input": {
+        "type": "object"
+      },
+      "output": {
         "type": "object"
       }
     },

@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 use crate::app::Application;
 use crate::http::HttpClient;
 use crate::outcome::{Availability, CallFailure, Kind, Outcome};
-use crate::schema::{bundle, resolve};
+use crate::schema::{cli_input_schema, resolve};
 use crate::session::{Session, SubscribeOptions};
 use crate::subscription::Occurrence;
 
@@ -29,6 +29,15 @@ pub mod exit {
 const GENERIC_COMMANDS: [&str; 3] = ["call", "list", "watch"];
 
 const RESUME_FLAGS: [&str; 2] = ["cursor", "max-age-ms"];
+
+const RESERVED_FLAGS: [&str; 2] = ["--help", "--version"];
+
+#[derive(Clone, Debug)]
+struct Alias {
+    name: String,
+    capability: String,
+    fixed_input: Option<Map<String, Value>>,
+}
 
 /// Where the command line writes, and the token that an interrupt cancels.
 pub struct CliIo {
@@ -316,7 +325,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
     for id in &event_ids {
         let input = view
             .pointer(&format!("/events/{id}/input"))
-            .map(|input| bundle(input, &types));
+            .map(|input| cli_input_schema(input, &types));
         if let Some(flag) = RESUME_FLAGS.iter().find(|flag| {
             input
                 .as_ref()
@@ -329,10 +338,15 @@ pub async fn run_cli<C: Send + Sync + 'static>(
             ));
         }
     }
+    let (aliases, alias_errors) = cli_aliases(&view, &options.target);
+    if !alias_errors.is_empty() {
+        return Err(alias_errors.join("\n"));
+    }
     let mut taken: Vec<String> = GENERIC_COMMANDS
         .iter()
         .map(|name| (*name).to_owned())
         .chain(commands.iter().map(|(_, path)| path[0].clone()))
+        .chain(aliases.iter().map(|alias| alias.name.clone()))
         .collect();
     for command in &options.commands {
         if taken.contains(&command.name) {
@@ -350,7 +364,17 @@ pub async fn run_cli<C: Send + Sync + 'static>(
             .cloned()
             .unwrap_or_else(|| json!({}))
     };
-    let schema_of = |entry: &Value| entry.get("input").map(|input| bundle(input, &types));
+    let schema_of = |entry: &Value| {
+        entry
+            .get("input")
+            .map(|input| cli_input_schema(input, &types))
+    };
+    let alias_schema_of = |alias: &Alias| {
+        schema_of(&capability(&alias.capability))
+            .map(|input| alias_schema(&input, alias.fixed_input.as_ref()))
+    };
+    let alias_usage_of =
+        |alias: &Alias| alias_usage(&options.name, &alias.name, alias_schema_of(alias).as_ref());
     let result: Result<i32, UsageError> = async {
         let first = args.first().map(String::as_str);
         match first {
@@ -385,6 +409,14 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                         .iter()
                         .map(|command| format!("  {}  {}", command.name, command.description)),
                 );
+                if !aliases.is_empty() {
+                    lines.push(String::new());
+                    lines.push("Aliases:".into());
+                    lines.extend(aliases.iter().map(|alias| {
+                        let usage = alias_usage_of(alias);
+                        format!("  {}", &usage[options.name.len() + 1..])
+                    }));
+                }
                 (io.stdout)(&lines.join("\n"));
                 Ok(exit::VALUE)
             }
@@ -412,6 +444,14 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                         "usage".into(),
                         json!(usage(&options.name, id, schema_of(&entry).as_ref())),
                     );
+                    let usages: Vec<String> = aliases
+                        .iter()
+                        .filter(|alias| alias.capability == *id)
+                        .map(alias_usage_of)
+                        .collect();
+                    if !usages.is_empty() {
+                        item.insert("aliases".into(), json!(usages));
+                    }
                     entries.push(Value::Object(item));
                 }
                 for id in &event_ids {
@@ -465,6 +505,21 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 Ok(print(io, &outcome))
             }
             Some("watch") => watch(&provider, &view, &types, &options.name, &args[1..], io).await,
+            Some(name) if aliases.iter().any(|alias| alias.name == name) => {
+                let Some(alias) = aliases.iter().find(|alias| alias.name == name) else {
+                    return Ok(exit::UNKNOWN_CAPABILITY);
+                };
+                call_alias(
+                    &provider,
+                    alias,
+                    &capability(&alias.capability),
+                    alias_schema_of(alias),
+                    &options.name,
+                    &args[1..],
+                    io,
+                )
+                .await
+            }
             Some(name) if options.commands.iter().any(|command| command.name == name) => {
                 let command = options
                     .commands
@@ -523,6 +578,64 @@ pub async fn run_cli<C: Send + Sync + 'static>(
     }))
 }
 
+async fn call_alias<C: Send + Sync + 'static>(
+    provider: &Provider<C>,
+    alias: &Alias,
+    capability: &Value,
+    schema: Option<Value>,
+    program: &str,
+    args: &[String],
+    io: &mut CliIo,
+) -> Result<i32, UsageError> {
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        let description = capability
+            .get("description")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let usage = alias_usage(program, &alias.name, schema.as_ref());
+        (io.stdout)(&format!("Usage: {usage}\n\n{description}"));
+        return Ok(exit::VALUE);
+    }
+    let schema = schema.unwrap_or_else(no_flags);
+    let input = if schema.get("properties").is_some() {
+        let mut input = alias.fixed_input.clone().unwrap_or_default();
+        input.extend(parse_flags(args, &schema)?);
+        Value::Object(input)
+    } else {
+        if let Some(extra) = args.get(1) {
+            return Err(usage_error(
+                format!("Unexpected argument {extra}."),
+                exit::INVALID_INPUT,
+            ));
+        }
+        let Ok(input) = serde_json::from_str::<Value>(args.first().map_or("{}", String::as_str))
+        else {
+            // Text that is not JSON is invalid input, but cancelled and unavailable come first
+            // (spec/invocation.md#call-failures).
+            let failure = if io.cancel.is_cancelled() {
+                CallFailure::cancelled()
+            } else {
+                match provider
+                    .availability(std::slice::from_ref(&alias.capability), &io.cancel)
+                    .await
+                {
+                    Err(failure) => failure,
+                    Ok(availability) => match availability.into_iter().next() {
+                        Some(Availability::Unavailable { reason }) => {
+                            CallFailure::new(Kind::Unavailable, reason)
+                        }
+                        _ => CallFailure::new(Kind::InvalidInput, "The input is not JSON."),
+                    },
+                }
+            };
+            return Ok(print(io, &Outcome::CallFailure(failure)));
+        };
+        input
+    };
+    let outcome = provider.invoke(&alias.capability, input, &io.cancel).await;
+    Ok(print(io, &outcome))
+}
+
 async fn watch<C: Send + Sync + 'static>(
     provider: &Provider<C>,
     view: &Value,
@@ -544,7 +657,7 @@ async fn watch<C: Send + Sync + 'static>(
         .get("events")
         .and_then(|events| events.get(id.as_str()))
     {
-        let schema = bundle(
+        let schema = cli_input_schema(
             event.get("input").unwrap_or(&json!({ "type": "object" })),
             types,
         );
@@ -794,6 +907,189 @@ fn event_usage(program: &str, id: &str, input: Option<&Value>) -> String {
         .into_iter()
         .chain(input.map(cli_flags).unwrap_or_default())
         .chain([resume.to_owned()])
+        .collect();
+    words.join(" ")
+}
+
+fn is_alias_name(name: &str) -> bool {
+    let word = name.strip_prefix("--").unwrap_or(name);
+    word.starts_with(|first: char| first.is_ascii_lowercase())
+        && word.split('-').all(|part| {
+            !part.is_empty()
+                && part
+                    .chars()
+                    .all(|letter| letter.is_ascii_lowercase() || letter.is_ascii_digit())
+        })
+}
+
+fn cli_aliases(view: &Value, target: &str) -> (Vec<Alias>, Vec<String>) {
+    let Some(declared) = view.get("targets").and_then(|targets| targets.get(target)) else {
+        return (Vec::new(), Vec::new());
+    };
+    let Some(settings) = declared
+        .get("options")
+        .filter(|options| options.is_object())
+        .and_then(|options| options.get("cli"))
+    else {
+        return (Vec::new(), Vec::new());
+    };
+    let place = format!("target {target}");
+    let Some(settings) = settings.as_object() else {
+        return (
+            Vec::new(),
+            vec![format!("{place}: options.cli must be an object")],
+        );
+    };
+    let mut errors = Vec::new();
+    let has_cli = declared
+        .get("bindings")
+        .and_then(Value::as_array)
+        .is_some_and(|bindings| bindings.iter().any(|binding| binding == "cli"));
+    if !has_cli {
+        errors.push(format!("{place}: has options.cli, but not the binding cli"));
+    }
+    let Some(members) = settings.get("aliases") else {
+        return (Vec::new(), errors);
+    };
+    let Some(members) = members.as_object() else {
+        errors.push(format!("{place}: options.cli.aliases must be an object"));
+        return (Vec::new(), errors);
+    };
+
+    let types = object_at(view, "$defs");
+    let capabilities = object_at(view, "capabilities");
+    let first_words: Vec<&str> = capabilities
+        .keys()
+        .filter_map(|id| id.split('.').next())
+        .collect();
+    let mut names: Vec<&String> = members.keys().collect();
+    names.sort();
+    let mut aliases = Vec::new();
+    for name in names {
+        let mut problem = |text: String| errors.push(format!("{place}: the alias {name} {text}"));
+        if !is_alias_name(name) {
+            problem("must be one word, or -- and one word, with the letters a-z, the digits 0-9 and single hyphens".into());
+            continue;
+        }
+        let reserved = if name.starts_with("--") {
+            RESERVED_FLAGS.contains(&name.as_str())
+        } else {
+            GENERIC_COMMANDS.contains(&name.as_str())
+        };
+        if reserved {
+            problem("has the name of a command or a flag of the command line".into());
+            continue;
+        }
+        if first_words.contains(&name.as_str()) {
+            problem("has the name of the first word of the command of a capability".into());
+            continue;
+        }
+        let value = &members[name];
+        let Some(id) = value.get("capability").and_then(Value::as_str) else {
+            problem("must be an object with the id of a capability in capability".into());
+            continue;
+        };
+        let unknown: Vec<&str> = value
+            .as_object()
+            .into_iter()
+            .flat_map(Map::keys)
+            .map(String::as_str)
+            .filter(|key| *key != "capability" && *key != "input" && !key.starts_with("x-"))
+            .collect();
+        if !unknown.is_empty() {
+            problem(format!("has the unknown member {}", unknown.join(", ")));
+            continue;
+        }
+        let Some(capability) = capabilities.get(id) else {
+            problem(format!(
+                "refers to {id}, which is not a capability in the view of the target"
+            ));
+            continue;
+        };
+        let Some(fixed) = value.get("input") else {
+            aliases.push(Alias {
+                name: name.clone(),
+                capability: id.to_owned(),
+                fixed_input: None,
+            });
+            continue;
+        };
+        let Some(fixed) = fixed.as_object() else {
+            problem("must have an object as its input".into());
+            continue;
+        };
+        let properties = capability
+            .get("input")
+            .and_then(|input| resolve(input, types).get("properties"))
+            .and_then(Value::as_object);
+        let Some(properties) = properties else {
+            problem(format!(
+                "has a fixed input, but the input schema of {id} has no properties"
+            ));
+            continue;
+        };
+        let extra: Vec<&str> = fixed
+            .keys()
+            .filter(|key| !properties.contains_key(*key))
+            .map(String::as_str)
+            .collect();
+        if !extra.is_empty() {
+            problem(format!(
+                "has the fixed input {}, which is not a property of the input of {id}",
+                extra.join(", ")
+            ));
+            continue;
+        }
+        aliases.push(Alias {
+            name: name.clone(),
+            capability: id.to_owned(),
+            fixed_input: Some(fixed.clone()),
+        });
+    }
+    (aliases, errors)
+}
+
+fn no_flags() -> Value {
+    json!({ "type": "object", "properties": {} })
+}
+
+fn alias_schema(input: &Value, fixed: Option<&Map<String, Value>>) -> Value {
+    let (Some(fixed), Some(properties)) =
+        (fixed, input.get("properties").and_then(Value::as_object))
+    else {
+        return input.clone();
+    };
+    let kept: Map<String, Value> = properties
+        .iter()
+        .filter(|(name, _)| !fixed.contains_key(*name))
+        .map(|(name, property)| (name.clone(), property.clone()))
+        .collect();
+    let required: Vec<Value> = input
+        .get("required")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|name| name.as_str().is_some_and(|name| !fixed.contains_key(name)))
+        .cloned()
+        .collect();
+    let mut schema = input.as_object().cloned().unwrap_or_default();
+    schema.remove("required");
+    schema.insert("properties".into(), Value::Object(kept));
+    if !required.is_empty() {
+        schema.insert("required".into(), Value::Array(required));
+    }
+    Value::Object(schema)
+}
+
+fn alias_usage(program: &str, name: &str, input: Option<&Value>) -> String {
+    if let Some(input) = input
+        && input.get("properties").is_none()
+    {
+        return format!("{program} {name} '<json>'");
+    }
+    let words: Vec<String> = [program.to_owned(), name.to_owned()]
+        .into_iter()
+        .chain(input.map(cli_flags).unwrap_or_default())
         .collect();
     words.join(" ")
 }

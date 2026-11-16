@@ -244,7 +244,22 @@ pub fn aircon() -> Arc<Application<Unit>> {
                 &["typescript"],
             ),
         )
-        .target("cli", ["cli"])
+        .target_with(
+            "cli",
+            Target {
+                bindings: vec!["cli".into()],
+                description: None,
+                options: Some(serde_json::json!({
+                    "cli": {
+                        "aliases": {
+                            "status": { "capability": "aircon.status.get" },
+                            "--on": { "capability": "aircon.power.set", "input": { "on": true } },
+                            "--off": { "capability": "aircon.power.set", "input": { "on": false } }
+                        }
+                    }
+                })),
+            },
+        )
         .target_with("mcp", target("Agents, through an MCP server.", &["mcp"]))
         .target_with(
             "api",

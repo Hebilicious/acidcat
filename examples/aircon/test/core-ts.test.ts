@@ -118,6 +118,26 @@ test("session.handle gives an always unavailable handle for a capability outside
   await session.dispose();
 });
 
+test("the aliases of the command line call their capabilities with their fixed input", async () => {
+  const unit = new Unit();
+  const cli = async (...args: string[]) => {
+    const out: string[] = [];
+    const code = await runCli(aircon, { name: "aircon", version: "0.1.0", context: { unit }, toJsonSchema }, args, { stdout: (text) => out.push(text), stderr: () => undefined });
+    return { code, stdout: out.join("\n") };
+  };
+  assert.equal((await cli("--on")).code, 0);
+  assert.equal(unit.state.power, true);
+  assert.partialDeepStrictEqual(JSON.parse((await cli("status")).stdout), { power: true });
+  assert.equal((await cli("--off")).code, 0);
+  assert.equal(unit.state.power, false);
+  assert.equal((await cli("--on", "--on", "false")).code, 3);
+  const list: unknown = JSON.parse((await cli("list")).stdout);
+  assert.ok(Array.isArray(list));
+  assert.partialDeepStrictEqual(list.find((item: unknown) => typeof item === "object" && item !== null && "id" in item && item.id === "aircon.power.set"), {
+    aliases: ["aircon --off", "aircon --on"],
+  });
+});
+
 test("the command line runs a capability, and a flag follows a $ref to its type", async () => {
   const cli = (...args: string[]) => run(new URL("../core-ts/cli.ts", import.meta.url).pathname, ...args);
   const [status, poweredOff, unknownMode] = await Promise.all([cli("aircon", "status", "get"), cli("aircon", "mode", "set", "--mode", "heat"), cli("aircon", "mode", "set", "--mode", "boil")]);

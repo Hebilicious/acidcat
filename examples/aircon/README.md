@@ -43,6 +43,14 @@ AIRCON_URL=http://localhost:8081/cli node core-effect/cli.ts aircon power set --
 AIRCON_URL=http://localhost:8082/cli core-rust/target/debug/aircon cli aircon power set --on
 ```
 
+The `cli` target gives three [aliases](../../spec/bindings/cli.md#aliases) in its options: `status` calls `aircon.status.get`, and `--on` and `--off` call `aircon.power.set` with the fixed input `{ "on": true }` or `{ "on": false }`:
+
+```sh
+node core-ts/cli.ts --on
+node core-effect/cli.ts status
+cargo run --manifest-path core-rust/Cargo.toml -- cli --off
+```
+
 The command line has one command for each capability in the view of the `cli` target. A flag of a shared type, for example `--mode`, accepts only the values of that type.
 
 The input of `aircon.schedule.set` has two arrays: `days`, with items of the shared type `Day`, and `hours`, with integer items. Each one is a repeated flag. Each occurrence of the flag gives one item, in the order of the flags, so the command above sets the days `["mon", "fri"]` and the hours `[7, 18]`. A repeated flag that occurs once can also give the whole array as JSON text: `--days '["mon","fri"]'` gives the same days. `list` gives the usage of each command. The usage of a repeated flag ends with `...`:

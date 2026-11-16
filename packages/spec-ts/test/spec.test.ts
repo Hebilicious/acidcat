@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   bundle,
+  cliInputSchema,
   byCodePoint,
   canonicalJson,
   cliFlags,
@@ -22,6 +23,9 @@ import {
   cliExitCode,
   cliJsonArray,
   cliUsage,
+  cliAliases,
+  cliAliasSchema,
+  cliAliasUsage,
   commandPath,
   fail,
   httpEventMessage,
@@ -164,6 +168,14 @@ test("a schema resolves to the type that its $ref refers to, whatever other keys
   assert.equal(resolveType(plain, types), plain);
 });
 
+test("the CLI binding reads the bundled type that the $ref of an input schema refers to, whatever other keys it has", () => {
+  const types = { Input: { type: "object", properties: { level: { $ref: "#/$defs/Level" } } }, Level: { type: "integer" } };
+  const expected = { ...types.Input, $defs: { Level: types.Level } };
+  assert.deepEqual(cliInputSchema({ $ref: "#/$defs/Input", description: "The input." }, types), expected);
+  assert.deepEqual(cliInputSchema({ $ref: "#/$defs/Input" }, types), expected);
+  assert.deepEqual(cliInputSchema(types.Level, types), types.Level);
+});
+
 test("an input that is a union of objects becomes an object schema", () => {
   const types = { ById: { type: "object", properties: { id: { type: "integer" } } }, Name: { type: "string" } };
   const union = { anyOf: [{ type: "object", properties: { name: { type: "string" } } }, { $ref: "#/$defs/ById" }] };
@@ -287,4 +299,71 @@ test("only globally routable addresses are allowed for webhooks", () => {
   ]) {
     assert.equal(isGloballyRoutable(address), false, address);
   }
+});
+
+test("cliAliases reads the aliases of a target and reports the rules that they break", () => {
+  const catalog = {
+    acidcat: "0.1",
+    targets: {
+      cli: {
+        bindings: ["cli"],
+        options: {
+          cli: {
+            aliases: {
+              status: { capability: "aircon.status.get", "x-note": "The status of the unit." },
+              "--on": { capability: "aircon.power.set", input: { on: true } },
+              list: { capability: "aircon.status.get" },
+              aircon: { capability: "aircon.status.get" },
+              "--help": { capability: "aircon.status.get" },
+              Bad: { capability: "aircon.status.get" },
+              hidden: { capability: "aircon.secret.get" },
+              loud: { capability: "aircon.power.set", input: { volume: 1 } },
+              raw: { capability: "aircon.raw.send", input: {} },
+              odd: { capability: "aircon.status.get", extra: 1 },
+            },
+          },
+        },
+      },
+      mcp: { bindings: ["mcp"], options: { cli: { aliases: {} } } },
+    },
+    $defs: { Power: { type: "object", required: ["on"], properties: { on: { type: "boolean" } } } },
+    capabilities: {
+      "aircon.status.get": { description: "", audience: ["cli"] },
+      "aircon.power.set": { description: "", audience: ["cli"], input: { $ref: "#/$defs/Power" } },
+      "aircon.raw.send": { description: "", audience: ["cli"], input: { type: "object" } },
+      "aircon.secret.get": { description: "", audience: ["mcp"] },
+    },
+  } as const;
+  const { aliases, errors } = cliAliases(catalog, "cli");
+  assert.deepEqual(aliases, [
+    { name: "--on", capability: "aircon.power.set", input: { on: true } },
+    { name: "status", capability: "aircon.status.get" },
+  ]);
+  assert.deepEqual(errors, [
+    "target cli: the alias --help has the name of a command or a flag of the command line",
+    "target cli: the alias Bad must be one word, or -- and one word, with the letters a-z, the digits 0-9 and single hyphens",
+    "target cli: the alias aircon has the name of the first word of the command of a capability",
+    "target cli: the alias hidden refers to aircon.secret.get, which is not a capability in the view of the target",
+    "target cli: the alias list has the name of a command or a flag of the command line",
+    "target cli: the alias loud has the fixed input volume, which is not a property of the input of aircon.power.set",
+    "target cli: the alias odd has the unknown member extra",
+    "target cli: the alias raw has a fixed input, but the input schema of aircon.raw.send has no properties",
+  ]);
+  assert.deepEqual(cliAliases(catalog, "mcp").errors, ["target mcp: has options.cli, but not the binding cli"]);
+  assert.deepEqual(cliAliases(catalog, "api"), { aliases: [], errors: [] });
+});
+
+test("an alias takes flags for the properties that are not in its fixed input", () => {
+  const input = {
+    type: "object",
+    required: ["mode", "speed"],
+    properties: { mode: { type: "string", enum: ["cool", "heat"] }, speed: { type: "integer" }, quiet: { type: "boolean" } },
+  };
+  const schema = cliAliasSchema(input, { mode: "cool" });
+  assert.deepEqual(schema, { type: "object", required: ["speed"], properties: { speed: { type: "integer" }, quiet: { type: "boolean" } } });
+  assert.equal(cliAliasUsage("aircon", "cool", schema), "aircon cool --speed <integer> [--quiet]");
+  assert.deepEqual(cliAliasSchema(input, { mode: "cool", speed: 1 }).required, undefined);
+  assert.equal(cliAliasUsage("aircon", "--on", cliAliasSchema({ type: "object", required: ["on"], properties: { on: { type: "boolean" } } }, { on: true })), "aircon --on");
+  assert.equal(cliAliasUsage("aircon", "status", undefined), "aircon status");
+  assert.equal(cliAliasUsage("aircon", "raw", { type: "object" }), "aircon raw '<json>'");
 });

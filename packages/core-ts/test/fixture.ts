@@ -177,6 +177,7 @@ const Flags = z.object({
   steps: z.array(z.number().int()).optional(),
   tags: z.array(z.string()).optional(),
 });
+const Note = z.object({ text: z.string(), loud: z.boolean().optional() }).meta({ id: "Note" });
 
 const everywhere = ["app", "mcp", "cli", "api"];
 const capability = capabilitiesFor<Context>();
@@ -193,7 +194,21 @@ export const fixture = defineApp<Context>({
   targets: {
     app: { bindings: ["typescript", "webmcp"] },
     mcp: { bindings: ["mcp"] },
-    cli: { bindings: ["cli"] },
+    cli: {
+      bindings: ["cli"],
+      options: {
+        cli: {
+          aliases: {
+            say: { capability: "fixture.echo" },
+            "--hello": { capability: "fixture.echo", input: { text: "hello" } },
+            quick: { capability: "fixture.flags", input: { mode: "fast" } },
+            raw: { capability: "fixture.raw" },
+            "held-keys": { capability: "fixture.held" },
+            "fixed-note": { capability: "fixture.note", input: { text: "fixed" } },
+          },
+        },
+      },
+    },
     api: { bindings: ["http"] },
   },
   capabilities: [
@@ -281,6 +296,22 @@ export const fixture = defineApp<Context>({
       audience: ["cli"],
       input: Flags,
       output: Flags,
+      run: (input) => ok(input),
+    }),
+    defineCapability({
+      id: "fixture.note",
+      description: "Return the input. The input schema is a $ref with a description beside it.",
+      audience: ["cli"],
+      input: Note.describe("The note."),
+      output: Note,
+      run: (input) => ok(input),
+    }),
+    defineCapability({
+      id: "fixture.raw",
+      description: "Return the input. The input schema has no top-level properties member.",
+      audience: ["cli"],
+      input: z.record(z.string(), z.unknown()),
+      output: z.record(z.string(), z.unknown()),
       run: (input) => ok(input),
     }),
     capability({

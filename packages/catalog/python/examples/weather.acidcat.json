@@ -21,9 +21,11 @@
       ],
       "description": "Scripts that store readings for later study.",
       "options": {
-        "basePath": "/station",
-        "rateLimit": {
-          "perMinute": 30
+        "http": {
+          "basePath": "/station",
+          "rateLimit": {
+            "perMinute": 30
+          }
         }
       }
     }

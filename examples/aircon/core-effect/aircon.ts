@@ -192,7 +192,18 @@ export const aircon = App.make({
   targets: {
     app: { description: "The phone, desktop and web apps that people use.", bindings: ["typescript", "webmcp", "acme:swift", "acme:kotlin"] },
     taskbar: { description: "A desktop taskbar widget showing the status and a power toggle.", bindings: ["typescript"] },
-    cli: { bindings: ["cli"] },
+    cli: {
+      bindings: ["cli"],
+      options: {
+        cli: {
+          aliases: {
+            status: { capability: "aircon.status.get" },
+            "--on": { capability: "aircon.power.set", input: { on: true } },
+            "--off": { capability: "aircon.power.set", input: { on: false } },
+          },
+        },
+      },
+    },
     mcp: { description: "Agents, through an MCP server.", bindings: ["mcp"] },
     api: { description: "Home-automation systems and scripts.", bindings: ["http"] },
   },

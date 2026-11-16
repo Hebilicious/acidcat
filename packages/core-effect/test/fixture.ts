@@ -130,6 +130,8 @@ const Flags = Schema.Struct({
   tags: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+const Note = Schema.Struct({ text: Schema.String, loud: Schema.optionalKey(Schema.Boolean) }).annotate({ identifier: "Note" });
+
 const everywhere = ["app", "mcp", "cli", "api"];
 
 export const echo = Capability.make({
@@ -163,7 +165,21 @@ export const fixture = App.make({
   targets: {
     app: { bindings: ["typescript", "webmcp"] },
     mcp: { bindings: ["mcp"] },
-    cli: { bindings: ["cli"] },
+    cli: {
+      bindings: ["cli"],
+      options: {
+        cli: {
+          aliases: {
+            say: { capability: "fixture.echo" },
+            "--hello": { capability: "fixture.echo", input: { text: "hello" } },
+            quick: { capability: "fixture.flags", input: { mode: "fast" } },
+            raw: { capability: "fixture.raw" },
+            "held-keys": { capability: "fixture.held" },
+            "fixed-note": { capability: "fixture.note", input: { text: "fixed" } },
+          },
+        },
+      },
+    },
     api: { bindings: ["http"] },
   },
   capabilities: [
@@ -225,6 +241,24 @@ export const fixture = App.make({
       audience: ["cli"],
       input: Flags,
       output: Flags,
+      run: (input) => Effect.succeed(input),
+    }),
+    Capability.make({
+      id: "fixture.note",
+      description: "Return the input. The input schema is a $ref with a description beside it.",
+      audience: ["cli"],
+      // Effect writes the description of a schema with an identifier into its type. The description of a suspended
+      // schema stays beside the $ref.
+      input: Schema.suspend(() => Note).annotate({ description: "The note." }),
+      output: Note,
+      run: (input) => Effect.succeed(input),
+    }),
+    Capability.make({
+      id: "fixture.raw",
+      description: "Return the input. The input schema has no top-level properties member.",
+      audience: ["cli"],
+      input: Schema.Record(Schema.String, Schema.Unknown),
+      output: Schema.Record(Schema.String, Schema.Unknown),
       run: (input) => Effect.succeed(input),
     }),
     Capability.make({

@@ -5,13 +5,13 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use acid_cat_core::{App, Application, Availability, Defect, Emitted, fail};
+use acid_cat_core::{App, Application, Availability, Defect, Emitted, Target, fail};
 
 type Capability = acid_cat_core::Capability<Fixture>;
 type Event = acid_cat_core::Event<Fixture>;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 use tokio::sync::{Notify, mpsc, watch};
 
 pub struct Fixture {
@@ -189,6 +189,20 @@ struct Flags {
     tags: Option<Vec<String>>,
 }
 
+#[derive(Serialize, Deserialize, JsonSchema)]
+struct Note {
+    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    loud: Option<bool>,
+}
+
+/// The input of fixture.note. schemars writes a transparent newtype as the `$ref` of the type that it wraps, with the
+/// description beside it.
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+#[schemars(description = "The note.")]
+struct NoteInput(Note);
+
 #[derive(Deserialize, JsonSchema)]
 struct Ticks {
     #[schemars(range(min = 0, max = 100))]
@@ -213,7 +227,25 @@ pub fn fixture() -> Arc<Application<Fixture>> {
         .description("One capability or event for each behavior that acid-cat conform tests.")
         .target("app", ["typescript", "webmcp"])
         .target("mcp", ["mcp"])
-        .target("cli", ["cli"])
+        .target_with(
+            "cli",
+            Target {
+                bindings: vec!["cli".into()],
+                options: Some(json!({
+                    "cli": {
+                        "aliases": {
+                            "say": { "capability": "fixture.echo" },
+                            "raw": { "capability": "fixture.raw" },
+                            "held-keys": { "capability": "fixture.held" },
+                            "--hello": { "capability": "fixture.echo", "input": { "text": "hello" } },
+                            "quick": { "capability": "fixture.flags", "input": { "mode": "fast" } },
+                            "fixed-note": { "capability": "fixture.note", "input": { "text": "fixed" } }
+                        }
+                    }
+                })),
+                ..Target::default()
+            },
+        )
         .target("api", ["http"])
         .on_defect(|_, _| {})
         .capability(
@@ -254,6 +286,20 @@ pub fn fixture() -> Arc<Application<Fixture>> {
                 .read_only()
                 .output::<Keys>()
                 .run(|(), call| async move { Ok(Keys { keys: call.context().holds.held() }) }),
+        )
+        .capability(
+            Capability::new("fixture.note", "Return the input. The input schema is a $ref with a description beside it.")
+                .audience(["cli"])
+                .input::<NoteInput>()
+                .output::<Note>()
+                .run(|NoteInput(note), _| async move { Ok(note) }),
+        )
+        .capability(
+            Capability::new("fixture.raw", "Return the input. The input schema has no top-level properties member.")
+                .audience(["cli"])
+                .input_schema::<Map<String, Value>>(json!({ "type": "object" }))
+                .output_schema::<Map<String, Value>>(json!({ "type": "object" }))
+                .run(|input, _| async move { Ok(input) }),
         )
         .capability(
             Capability::new("fixture.release", "Release the calls to fixture.hold that hold the key.")

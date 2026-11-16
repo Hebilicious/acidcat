@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
-import { test } from "node:test";
+import { type TestContext, test } from "node:test";
 
 import { check } from "@acid-cat/cli";
 
@@ -63,7 +63,7 @@ test("the Rust command line takes one repeated flag for each item, or JSON text 
   assert.match(list.stdout, /"usage": "aircon aircon schedule set --days <mon\|tue\|wed\|thu\|fri\|sat\|sun>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });
 
-test("the Rust command line controls the unit of a server, and watch follows its changes", async (context) => {
+async function startRemote(context: TestContext) {
   const server = spawn(aircon, ["serve"], { stdio: ["ignore", "pipe", "inherit"] });
   context.after(() => server.kill());
   const url = await new Promise<string>((resolve, reject) => {
@@ -74,7 +74,26 @@ test("the Rust command line controls the unit of a server, and watch follows its
       if (text.includes("\n")) resolve(text.slice(0, text.indexOf("\n")).trim());
     });
   });
-  const remote = (...args: string[]) => spawn(aircon, ["cli", ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  return (...args: string[]) => spawn(aircon, ["cli", ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+}
+
+test("the Rust command line has the aliases of the catalog", async (context) => {
+  const remote = await startRemote(context);
+  const on = await finish(remote("--on"));
+  assert.equal(on.code, 0, on.stderr);
+  const status = await finish(remote("status"));
+  assert.equal(status.code, 0, status.stderr);
+  assert.partialDeepStrictEqual(JSON.parse(status.stdout), { power: true });
+  assert.equal((await finish(remote("--off"))).code, 0);
+  assert.partialDeepStrictEqual(JSON.parse((await finish(remote("status"))).stdout), { power: false });
+  assert.equal((await finish(remote("--on", "--on"))).code, 3);
+  const list = await cli("list");
+  assert.match(list.stdout, /"aliases": \[\n\s*"aircon --off",\n\s*"aircon --on"\n\s*\]/);
+  assert.match((await cli("--help")).stdout, /\nAliases:\n {2}--off\n {2}--on\n {2}status\n$/);
+});
+
+test("the Rust command line controls the unit of a server, and watch follows its changes", async (context) => {
+  const remote = await startRemote(context);
 
   assert.equal((await finish(remote("aircon", "power", "set", "--on"))).code, 0);
   const status = await finish(remote("aircon", "status", "get"));
