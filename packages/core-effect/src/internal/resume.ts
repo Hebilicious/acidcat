@@ -1,9 +1,33 @@
-import type { Resume } from "@acid-cat/spec-ts";
+import { callFailure } from "@acid-cat/spec-ts";
+import type { CallFailure, Resume } from "@acid-cat/spec-ts";
+
+const MAX_AGE_ISSUE = "maxAgeMs: Expected an integer that is 0 or more.";
+
+const isMaxAgeMs = (value: number): boolean => Number.isInteger(value) && value >= 0;
 
 export const resumeIssue = (resume: Resume): string | undefined =>
-  resume.maxAgeMs === undefined || (Number.isInteger(resume.maxAgeMs) && resume.maxAgeMs >= 0)
-    ? undefined
-    : "maxAgeMs: Expected an integer that is 0 or more.";
+  resume.maxAgeMs === undefined || isMaxAgeMs(resume.maxAgeMs) ? undefined : MAX_AGE_ISSUE;
 
-export const maxAgeOf = (value: unknown): number | undefined =>
-  value === undefined || value === null ? undefined : typeof value === "number" ? value : Number.NaN;
+export type MaxAge =
+  | { readonly _tag: "Absent" }
+  | { readonly _tag: "Valid"; readonly maxAgeMs: number }
+  | { readonly _tag: "Invalid"; readonly issue: string };
+
+export const maxAgeOf = (value: unknown): MaxAge =>
+  value === undefined || value === null
+    ? { _tag: "Absent" }
+    : typeof value === "number" && isMaxAgeMs(value)
+      ? { _tag: "Valid", maxAgeMs: value }
+      : { _tag: "Invalid", issue: MAX_AGE_ISSUE };
+
+export const resumeOf = (cursor: unknown, maxAge: MaxAge): Resume => ({
+  ...(typeof cursor === "string" ? { cursor } : {}),
+  ...(maxAge._tag === "Valid" ? { maxAgeMs: maxAge.maxAgeMs } : {}),
+});
+
+/**
+ * The call failure of an invalid `maxAgeMs`. An unknown event comes before an invalid `maxAgeMs`
+ * (spec/events.md#subscribing).
+ */
+export const maxAgeFailure = (events: object | undefined, name: string, issue: string): CallFailure =>
+  Object.hasOwn(events ?? {}, name) ? callFailure("invalid-input", issue) : callFailure("unknown-capability", `There is no event ${name}.`);

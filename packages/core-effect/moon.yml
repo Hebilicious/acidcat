@@ -20,8 +20,9 @@ tasks:
     deps: ["cli:browser"]
     description: "Test sessions, handles and the MCP, HTTP, CLI and WebMCP bindings, with the test applications of the package and the air conditioner."
     command: "node"
-    args: ["--test", "--test-timeout=60000", "test/"]
+    args: ["--test", "--test-timeout=$TEST_TIMEOUT_MS", "test/"]
     env:
+      TEST_TIMEOUT_MS: "60000"
       NODE_COMPILE_CACHE: "node_modules/.cache/node-compile-cache"
     inputs: ["src/**/*.ts", "test/**/*.ts", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/cli/src/**/*.ts", "/packages/cli/conformance/*.acidcat.json"]
 

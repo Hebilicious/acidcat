@@ -5,8 +5,8 @@ import * as App from "../src/App.ts";
 import * as Event from "../src/Event.ts";
 import * as NodeCli from "../src/NodeCli.ts";
 
-const name = process.argv[2] === "max-age-ms" ? "max-age-ms" : "cursor";
-process.argv.splice(2, 1);
+const [flag, ...args] = process.argv.slice(2);
+const name = flag === "max-age-ms" ? "max-age-ms" : "cursor";
 
 const app = App.make({
   title: "Reserved",
@@ -24,4 +24,4 @@ const app = App.make({
   ],
 });
 
-NodeCli.main(app, Layer.empty, { name: "reserved", version: "0.0.0" });
+NodeCli.main(app, Layer.empty, { name: "reserved", version: "0.0.0" }, args);

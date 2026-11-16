@@ -26,12 +26,14 @@ export type Services<Capabilities extends readonly Capability.Any[], Events exte
   | Capability.Services<Capabilities[number]>
   | Event.Services<Events[number]>;
 
+type EachNeedsOnly<Members extends readonly unknown[], Member> = Members & readonly Member[];
+
 export const make = <const Capabilities extends readonly Capability.Any[], const Events extends readonly Event.Any[] = readonly []>(app: {
   readonly title?: string;
   readonly description?: string;
   readonly targets: { readonly [name: string]: Target };
-  readonly capabilities: Capabilities & readonly Capability.Any<Services<Capabilities, Events>>[];
-  readonly events?: Events & readonly Event.Any<Services<Capabilities, Events>>[];
+  readonly capabilities: EachNeedsOnly<Capabilities, Capability.Any<Services<Capabilities, Events>>>;
+  readonly events?: EachNeedsOnly<Events, Event.Any<Services<Capabilities, Events>>>;
 }): App<Services<Capabilities, Events>> => app;
 
 const documents = new WeakMap<App<unknown>, CatalogDocument>();
