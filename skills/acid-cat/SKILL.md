@@ -19,7 +19,7 @@ The specification is at https://github.com/Hebilicious/acidcat/tree/main/spec. R
 - **Each audience is explicit.** A capability or an event with no audience is available to no target. Give agents (`mcp` and WebMCP targets) only the capabilities that they must have.
 - **A failure is data.** Declare each failure that a capability can return, by tag, in `failures`. A failure value has its tag in `_tag`. A defect (an exception) becomes the call failure `internal`, and its details stay on the server.
 - **Inputs carry no identity.** No user id, token or credential in an input. The session holds the identity of the client.
-- **Descriptions are for people and for agents.** Tell what the capability does, its effects, and the effects that stay after a cancellation.
+- **Descriptions are for people and for agents.** In one sentence, tell what the capability does, or what the event is and when it happens. Add the effects that stay after a cancellation. Do not repeat the audience, the schemas or the failures.
 - **The core validates each input.** Do not validate the input again in `run`. Put each constraint in the schema (`minimum`, `maxLength`, `enum`, …) so that the catalog, the agents and the validation agree.
 
 ## Where the catalog comes from
