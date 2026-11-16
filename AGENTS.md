@@ -2,7 +2,7 @@
 
 This repository contains the AcidCat specification and its packages. Read [README.md](README.md), [spec/README.md](spec/README.md) and [packages/README.md](packages/README.md) first.
 
-If `.local/AGENTS.md` exists, read it too. The `.local/` directory contains private notes. It is not part of the repository. Never copy its contents, or the names in it, into a tracked file.
+The `.local/` directory contains private notes. It is not part of the repository. Never copy its contents, or the names in it, into a tracked file.
 
 ## Principles
 
@@ -51,6 +51,27 @@ When a design decision is made for something that does not exist yet, build it. 
 - The skill [`skills/acid-cat`](skills/acid-cat/SKILL.md) tells agents how to build with AcidCat. When a change adds or changes a rule of the catalog, a core, a binding or a command of `acid-cat`, change the skill in the same pull request. `gh skill publish --dry-run .` validates it.
 - Release by merging the release pull request of release-please. Do not change a version or a `CHANGELOG.md` by hand. See [Publishing](packages/README.md#publishing).
 
+## Verification
+
+Verify each change against what it must do. Do not hunt for edge cases until a reviewer finds nothing: a new reviewer always finds a new edge case, and each fix adds code that the next reviewer attacks.
+
+1. **Acceptance checks first.** Before you write code, write down what done means as checks that run: conform checks, tests, or commands with the output that they must give. Each check comes from what the user asked for, or from a rule of the specification.
+2. **Design before code.** For a change that crosses a function boundary or more than one core, sketch at least two designs that differ in their shape, not in details. Choose the design that each core can serve in its own style with the least code. A design that makes a core fight its own library is the wrong design.
+3. **Verify against the checks.** An agent that did not write the code runs the change as a user would, on the parent commit and on the head, and gives `PASS`, `PASS+NOTES` or `FAIL` for each check. Green CI is not a verdict.
+4. **One adversarial pass.** Give the diff, the specification and what the user asked for to a panel of two or three different models, in parallel and one time. Each reviewer tries to break the change. A finding has the command that it ran, the output, and how that output breaks what the user asked for. Leave out style, and risks that need a future change. When two models find the same failure, it is likely real.
+5. **Triage each finding.** Fix it, or dismiss it with a reason. Dismiss a finding that needs an unusual setup that no user is likely to have. A finding that needs a new rule in the specification must name the client that relies on that rule ("Simple and permissive"). Then check only the diff of the fixes, one time.
+6. **Attack the premise.** When two fixes rest on the same premise, stop. Write the premise down, and test it before you write another fix. Often the design is wrong, not the code.
+7. **Encode what repeats.** When the same manual step or the same fix comes back, make a script, a test, a lint rule or a Moon task do it.
+8. **Hand off** the pull request with the result of each check, each finding, and what you fixed or dismissed, and why.
+
+Give each round of work to a new subagent, with the full scope in its brief: what the user asked for, the acceptance checks, the earlier findings, and the branch. Do not add work to a subagent that already returned.
+
+| Role | Model |
+| --- | --- |
+| Adversarial panel | Codex `gpt-6.1-sol` with reasoning `high`, and Claude Opus 5.5, through `delegate_task` |
+| Implementer | Claude Opus 5.5 with medium effort: the `opus-medium` agent |
+| Verifier | A model that did not write the code |
+
 ## Branches and pull requests
 
 - Never work directly on `main`. GitHub blocks pushes to `main`. Changes go in through a pull request that is merged with a squash merge.
@@ -59,7 +80,7 @@ When a design decision is made for something that does not exist yet, build it. 
 - Commit titles and pull request titles are semantic: `type(scope): subject`, for example `fix(catalog): reject duplicate ids`. The types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore` and `revert`. The scope is required. Add `!` after the scope for a breaking change. The `semantic` check (`scripts/check-semantic.sh`) enforces this. The pull request title becomes the commit on `main`.
 - Push the branch and open a pull request against `main` with `gh pr create --base main --head <branch>`. A pull request that closes an issue says `Closes #<number>` in its body.
 - When a change is too large for one pull request, use `gh stack` (see `.agents/skills/gh-stack`): one branch and one pull request for each layer, in one worktree. Use it when the work splits into layers that a reviewer can read one at a time.
-- Before you hand off a pull request, review its diff with a reviewer that did not write it: a subagent that gets the diff and the specification, not the author's summary. Fix what it confirms, and list in the pull request what it found and what you fixed.
+- Before you hand off a pull request, verify it as [Verification](#verification) tells.
 - A human reviews each pull request. Hand off the pull request URL. Merge only after the human accepts the work, or when the human explicitly says to merge without review.
 - Each session owns its own branch. Do not push to, rebase or merge a branch that another session owns.
 - The session that merges a branch makes CI pass on it. Rebase on `main`, fix what fails, and merge only when every required check is green. Never skip or weaken a check to make it pass.
