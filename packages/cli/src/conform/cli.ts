@@ -95,6 +95,7 @@ export async function checkCli(command: readonly string[], options: { readonly d
   });
   for (const [name, args, code] of [
     ["an unknown command has exit code 2", ["fixture", "nothing"], 2],
+    ["a shared prefix alone has exit code 2", ["fixture"], 2],
     ["a capability outside the view has exit code 2", ["call", "fixture.hidden"], 2],
     ["a missing required flag has exit code 3", ["fixture", "echo"], 3],
     ["an unknown flag has exit code 3", ["fixture", "echo", "--text", "hello", "--nope", "x"], 3],
@@ -214,6 +215,7 @@ async function checkWatch(checks: Checks, command: readonly string[]): Promise<v
     expect(/"kind":"internal"/.test(result.stderr), `standard error must contain the call failure internal, got ${JSON.stringify(result.stderr)}`);
   });
   for (const [name, args, code] of [
+    ["watch with no event id has exit code 3", ["watch"], 3],
     ["watch with invalid input has exit code 3", ["watch", "fixture.ticks", "--count", "101"], 3],
     ["watch with a missing required flag has exit code 3", ["watch", "fixture.ticks"], 3],
     ["watch of an event outside the view has exit code 2", ["watch", "fixture.secret"], 2],

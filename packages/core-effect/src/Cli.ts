@@ -95,8 +95,28 @@ const usageErrorsOnStderr: CliOutput.Presenter = {
           yield* Console.error(formatter.formatHelpDoc(event.helpDoc));
           yield* Console.error(formatter.formatErrors(event.errors));
         })
-      : CliOutput.defaultPresenter.present(event),
+      : event._tag === "Help" && event.reason === "Implicit"
+        ? Effect.gen(function* () {
+            const usage = parentUsageError(event.commandPath);
+            if (usage === undefined) return yield* CliOutput.defaultPresenter.present(event);
+            const formatter = yield* CliOutput.Formatter;
+            yield* Console.error(formatter.formatHelpDoc(event.helpDoc));
+            yield* Console.error(usage.message);
+          })
+        : CliOutput.defaultPresenter.present(event),
 };
+
+/**
+ * `effect/cli` shows the help of a command that only contains other commands when it runs with no subcommand, as if the
+ * help was asked for. Below the root, that run is a usage error: `watch` with no event id, or a shared prefix alone.
+ */
+function parentUsageError(commandPath: readonly string[]): { readonly message: string; readonly code: number } | undefined {
+  const words = commandPath.slice(1);
+  if (words.length === 0) return undefined;
+  return words.join(" ") === "watch"
+    ? { message: "Give the id of an event.", code: CLI_EXIT_CODES["invalid-input"] }
+    : { message: `There is no command ${words.join(" ")}.`, code: CLI_EXIT_CODES["unknown-capability"] };
+}
 
 /**
  * Run a command that `command` made, after the application changed it: for example with its own flags
@@ -117,11 +137,11 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
 
 /**
  * The exit code for a usage error (spec/bindings/cli.md#exit-codes). `effect/cli` shows the help for each usage error,
- * and gives the errors in the `errors` of `ShowHelp`. Help with no errors is a request for help.
+ * and gives the errors in the `errors` of `ShowHelp`. Help with no errors is a request for help, or a command that only contains other commands with no subcommand.
  */
 export function exitCodeOf(error: CliError.CliError): number {
+  if (error._tag === "ShowHelp" && error.errors.length === 0) return parentUsageError(error.commandPath)?.code ?? CLI_EXIT_CODES.value;
   const errors: readonly CliError.CliError[] = error._tag === "ShowHelp" ? error.errors : [error];
-  if (errors.length === 0) return CLI_EXIT_CODES.value;
   return errors.some((inner) => inner._tag === "UnknownSubcommand")
     ? CLI_EXIT_CODES["unknown-capability"]
     : CLI_EXIT_CODES["invalid-input"];
