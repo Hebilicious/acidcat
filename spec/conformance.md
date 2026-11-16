@@ -15,7 +15,8 @@ A catalog conforms if:
 - each `$ref` refers to a type in `$defs`;
 - no schema in a capability or in an event has its own `$defs`;
 - each input, output, failure, state and payload schema, and each type in `$defs`, is a JSON object, not `true` or `false`;
-- each schema is a valid JSON Schema 2020-12 schema.
+- each schema is a valid JSON Schema 2020-12 schema;
+- each [alias](bindings/cli.md#aliases) in `options.cli.aliases` follows the rules of the CLI binding.
 
 A catalog that is not in [canonical form](catalog.md#canonical-form) gets a warning. A member that this specification does not define and that does not start with `x-` gets a warning.
 
@@ -50,6 +51,8 @@ A provider and its bindings conform for a target if, through each binding of the
 | `fixture.toggle` | Available only while the switch is on. Its input schema has no properties |
 | `fixture.switch.set` | Turns the switch on or off |
 | `fixture.flags` | Returns its input. The input has one property for each kind of command-line flag. Only the `cli` target can use it |
+| `fixture.raw` | Returns its input. The input schema has no top-level `properties` member. Only the `cli` target can use it |
+| `fixture.note` | Returns its input. The input schema is a `$ref` to the type `Note`, with a `description` beside it. Only the `cli` target can use it |
 | `fixture.signal` | Gives an occurrence of `fixture.watch` with `{ "key", "value" }` to each subscription that watches its `key`. Returns `{ "delivered": <number> }`: the number of these subscriptions |
 | `fixture.watching` | Returns `{ "keys": [...] }`: the keys of the subscriptions to `fixture.watch` that are active now, one entry for each subscription. It is read-only |
 
@@ -59,6 +62,17 @@ A provider and its bindings conform for a target if, through each binding of the
 | `fixture.watch` | Gives an occurrence each time that `fixture.signal` gets its `key`. It never ends by itself. With a `marker`, it writes a file at that path when the subscription starts |
 | `fixture.broken` | Gives the occurrence `{ "n": 1 }`, then fails with a defect |
 | `fixture.secret` | Only the `app` target can use it. It never gives an occurrence |
+
+The `cli` target has six [aliases](bindings/cli.md#aliases):
+
+| Alias | Capability | Fixed input |
+| --- | --- | --- |
+| `say` | `fixture.echo` | None |
+| `--hello` | `fixture.echo` | `{ "text": "hello" }` |
+| `quick` | `fixture.flags` | `{ "mode": "fast" }` |
+| `raw` | `fixture.raw` | None |
+| `held-keys` | `fixture.held` | None |
+| `fixed-note` | `fixture.note` | `{ "text": "fixed" }` |
 
 All the sessions of one provider share the calls that hold and the subscriptions to `fixture.watch`. Thus `fixture.held` and `fixture.watching` through one request give the keys of other requests, and `fixture.signal` reaches the subscriptions of other requests. A provider that serves the CLI binding MUST write the file of a `marker`, for `fixture.hold` and for `fixture.watch`. Other providers MAY ignore `marker`.
 
@@ -72,7 +86,7 @@ acid-cat conform --mcp <url> [--mcp-handshake] --mcp-stdio "<command>" --http <b
   [--webhook-other-principal <name>] [--webhook-min-ttl-ms <ms>] [--webhook-max-ttl-ms <ms>] [--webhook-max-subscriptions <n>]
 ```
 
-Give one or more bindings. `--mcp` tests the MCP binding through HTTP, and `--mcp-stdio` tests it through stdio. For each binding, `acid-cat conform` tests the rules above. It uses the official MCP client for MCP, and sends requests that a client never sends to test rejections. With `--mcp-handshake`, it also tests the `initialize` handshake of revision `2025-11-25` through HTTP. For MCP through stdio, it starts the server as a process. It tests the session with revision `2026-07-28` and with the `initialize` handshake of revision `2025-11-25`. It also tests the changes of the tools, `notifications/cancelled`, lines that are not JSON, and the end of standard input. For WebMCP, it opens the page in a browser, gives the page a test host as `modelContext`, and calls the tools that the page registers. For the CLI, it interrupts a call and examines the exit code. It also tests that an unknown command, a shared prefix alone, an unknown flag and input that is not valid write nothing to standard output, through the commands and through `watch`, and that `watch` with no event id writes nothing to standard output. For events, through HTTP, MCP with each transport and the CLI, it tests the list of the events, the call failures before the first occurrence, the form, the data and the order of the occurrences, an occurrence with `truncated: true` in the form of each binding, the cursor, each end of a subscription, and cancellation. Through MCP, it also tests `server/discover`, `events/list` with the delivery modes of the server, the subscription id of each message, and two subscriptions at the same time. With `--mcp-handshake`, it tests that `initialize` does not declare the events extension. Through the CLI, it also tests `watch --cursor`, a `--max-age-ms` that is not valid, and the usage of each event.
+Give one or more bindings. `--mcp` tests the MCP binding through HTTP, and `--mcp-stdio` tests it through stdio. For each binding, `acid-cat conform` tests the rules above. It uses the official MCP client for MCP, and sends requests that a client never sends to test rejections. With `--mcp-handshake`, it also tests the `initialize` handshake of revision `2025-11-25` through HTTP. For MCP through stdio, it starts the server as a process. It tests the session with revision `2026-07-28` and with the `initialize` handshake of revision `2025-11-25`. It also tests the changes of the tools, `notifications/cancelled`, lines that are not JSON, and the end of standard input. For WebMCP, it opens the page in a browser, gives the page a test host as `modelContext`, and calls the tools that the page registers. For the CLI, it interrupts a call and examines the exit code. It also tests that an unknown command, a shared prefix alone, an unknown flag and input that is not valid write nothing to standard output, through the commands and through `watch`, and that `watch` with no event id writes nothing to standard output. For events, through HTTP, MCP with each transport and the CLI, it tests the list of the events, the call failures before the first occurrence, the form, the data and the order of the occurrences, an occurrence with `truncated: true` in the form of each binding, the cursor, each end of a subscription, and cancellation. Through MCP, it also tests `server/discover`, `events/list` with the delivery modes of the server, the subscription id of each message, and two subscriptions at the same time. With `--mcp-handshake`, it tests that `initialize` does not declare the events extension. Through the CLI, it also tests `watch --cursor`, a `--max-age-ms` that is not valid, the usage of each event, and each alias: its call, its fixed input, a flag of a property of the fixed input, the input as JSON text, an argument to an alias of a capability with no input, a fixed input of an input schema that is a `$ref` with other members, and its usage in `list`.
 
 Through MCP with each transport, it tests [poll delivery](bindings/mcp.md#poll) when `events/list` gives `poll`. If not, it gives a warning, and `events/poll` must answer `Unsupported`. It tests each row of the table of poll requests, the form of each result, `maxEvents` and `hasMore`, the failures before the first occurrence, which start no lease, and the error `-32603` after a defect. Two rules depend on settings of the deployment, so conform tests them only when it gets these settings. `--poll-buffer <n>` gives the size of the buffer, from 1 to 97: conform tests a cursor older than the buffer. `--poll-lease-ms <ms>` gives the lease time, which must be shorter than the deadline: conform tests that a lease with no poll ends, and cancels its subscription.
 

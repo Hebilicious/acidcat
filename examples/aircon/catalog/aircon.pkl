@@ -14,6 +14,15 @@ targets {
   }
   ["cli"] {
     bindings { "cli" }
+    options {
+      ["cli"] {
+        ["aliases"] {
+          ["status"] { capability = "aircon.status.get" }
+          ["--on"] { capability = "aircon.power.set"; input { on = true } }
+          ["--off"] { capability = "aircon.power.set"; input { on = false } }
+        }
+      }
+    }
   }
   ["mcp"] {
     description = "Agents, through an MCP server."

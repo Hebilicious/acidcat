@@ -75,7 +75,7 @@ A **target** is a group of clients that can use a set of capabilities, for examp
 | --- | --- | --- |
 | `bindings` | Yes | The bindings that serve the target, for example `["typescript", "webmcp"]` |
 | `description` | No | The clients of the target |
-| `options` | No | Settings for the bindings. Each binding defines its settings |
+| `options` | No | Settings for the bindings. Each binding defines its settings, and keeps them in a member with the name of the binding, for example the [aliases](bindings/cli.md#aliases) of the CLI binding in `options.cli` |
 
 - A target name matches `[a-z][a-z0-9-]*`. It can have a second part after a colon, as in `acme:panel`.
 - The application chooses its target names. This specification reserves no target name.

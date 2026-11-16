@@ -1,5 +1,5 @@
 import { canonicalText } from "@acid-cat/catalog";
-import { bundle, eventSchemasOf, REFERENCE, resolveType, schemasOf, viewOf, visitObjects } from "@acid-cat/spec-ts";
+import { bundle, cliAliases, eventSchemasOf, REFERENCE, resolveType, schemasOf, viewOf, visitObjects } from "@acid-cat/spec-ts";
 import type { CatalogCapability, CatalogDocument as Catalog, CatalogEvent } from "@acid-cat/spec-ts";
 import { Result, Schema, SchemaIssue, SchemaRepresentation } from "effect";
 import type { JsonSchema } from "effect";
@@ -22,6 +22,7 @@ const KNOWN_MEMBERS = {
   target: ["bindings", "description", "options"],
   capability: ["description", "audience", "input", "output", "failures", "readOnly", "state"],
   event: ["description", "audience", "input", "payload"],
+  cliOptions: ["aliases"],
 };
 
 const optional = (object: JsonObject, key: string, isMember: (value: unknown) => boolean): boolean =>
@@ -116,6 +117,7 @@ function ruleErrors(catalog: Catalog): string[] {
       }
     }
   }
+  for (const target of Object.keys(catalog.targets)) errors.push(...cliAliases(catalog, target).errors);
   return errors;
 }
 
@@ -133,9 +135,12 @@ function unknownMembers(catalog: Catalog): string[] {
       .map((key) => `${where}: unknown member ${key}; give extensions an x- prefix`);
   return [
     ...unknown("the catalog", catalog, KNOWN_MEMBERS.catalog),
-    ...Object.entries(catalog.targets).flatMap(([name, target]) =>
-      unknown(`target ${name}`, target, KNOWN_MEMBERS.target),
-    ),
+    ...Object.entries(catalog.targets).flatMap(([name, target]) => [
+      ...unknown(`target ${name}`, target, KNOWN_MEMBERS.target),
+      ...(isObject(target.options) && isObject(target.options.cli)
+        ? unknown(`target ${name} options.cli`, target.options.cli, KNOWN_MEMBERS.cliOptions)
+        : []),
+    ]),
     ...Object.entries(catalog.capabilities).flatMap(([id, capability]) =>
       unknown(id, capability, KNOWN_MEMBERS.capability),
     ),

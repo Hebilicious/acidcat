@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable } from "node:stream";
 import { test } from "node:test";
+import type { TestContext } from "node:test";
 
 import { check } from "@acid-cat/cli";
 import { Effect, Fiber, Layer, Schema, Stream } from "effect";
@@ -127,11 +128,12 @@ function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<R
   });
 }
 
-test("the Effect command line controls the unit of a server, and watch follows its changes", async (context) => {
-  const cliPath = new URL("../core-effect/cli.ts", import.meta.url).pathname;
+const cliPath = new URL("../core-effect/cli.ts", import.meta.url).pathname;
+
+async function startServer(context: TestContext): Promise<string> {
   const server = spawn(process.execPath, [new URL("../core-effect/serve.ts", import.meta.url).pathname], { stdio: ["ignore", "pipe", "inherit"] });
   context.after(() => server.kill());
-  const url = await new Promise<string>((resolve, reject) => {
+  return await new Promise<string>((resolve, reject) => {
     server.on("error", reject);
     let text = "";
     server.stdout.setEncoding("utf-8").on("data", (chunk: string) => {
@@ -139,6 +141,23 @@ test("the Effect command line controls the unit of a server, and watch follows i
       if (text.includes("\n")) resolve(text.slice(0, text.indexOf("\n")).trim());
     });
   });
+}
+
+test("the aliases of the Effect command line call their capabilities with their fixed input", async (context) => {
+  const url = await startServer(context);
+  const remote = (...args: string[]) =>
+    finish(spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 }));
+  assert.equal((await remote("--on")).code, 0);
+  const on = await remote("status");
+  assert.equal(on.code, 0);
+  assert.partialDeepStrictEqual(JSON.parse(on.stdout), { power: true });
+  assert.equal((await remote("--off")).code, 0);
+  assert.partialDeepStrictEqual(JSON.parse((await remote("status")).stdout), { power: false });
+  assert.equal((await remote("--on", "--on", "false")).code, 3);
+});
+
+test("the Effect command line controls the unit of a server, and watch follows its changes", async (context) => {
+  const url = await startServer(context);
   const remote = (...args: string[]) =>
     spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
 

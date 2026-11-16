@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 
-import { Effect } from "effect";
-import { Command } from "effect/cli";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { Cause, Effect, Exit } from "effect";
+import { Command, Flag, GlobalFlag } from "effect/cli";
 
 import { App, Capability, Cli } from "../src/index.ts";
 import { CliListing, decodeText } from "./decode.ts";
@@ -20,6 +21,8 @@ const cliWithFlag = program("./fixture-cli-flags.ts");
 const cliWithCommand = program("./fixture-cli-commands.ts");
 
 const cliWithRepeated = program("./fixture-cli-repeated.ts");
+
+const cliWithInherited = program("./fixture-cli-inherited.ts");
 
 const toggle = (stdout: string) =>
   decodeText(CliListing, stdout)
@@ -104,7 +107,44 @@ describe("the command line of an application", { concurrency: true }, () => {
   test("the help gives the description of the options and the commands of the application", async () => {
     const help = (await cliWithCommand("--help")).stdout;
     assert.match(help, /DESCRIPTION\n {2}The fixture, with a command of its own\./);
-    assert.match(help, /\n {2}position +Write the position of the switch\./);
+    assert.match(help, /\n {2}position +Write the position of the switch\.\n\nALIASES\n/);
+  });
+
+  test("the help lists the aliases, and <alias> --help gives the usage of the alias", async () => {
+    const [help, sayHelp, helloHelp] = await Promise.all([cli("--help"), cli("say", "--help"), cli("--hello", "--help")]);
+    assert.match(help.stdout, /\nALIASES\n {2}--hello\n {2}fixed-note \[--loud\]\n {2}held-keys\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n$/);
+    assert.doesNotMatch(help.stdout, /alias --hello/);
+    assert.deepEqual(sayHelp, { code: 0, stdout: "Usage: fixture say --text <string>\n\nReturn the input text.\n", stderr: "" });
+    assert.equal(helloHelp.stdout, "Usage: fixture --hello\n\nReturn the input text.\n");
+  });
+
+  test("a usage error of a flag alias shows the alias as the user gives it, and no other name selects the alias", async () => {
+    const [unknownFlag, otherName] = await Promise.all([cli("--hello", "--text", "x"), cli("alias --hello")]);
+    assert.equal(unknownFlag.code, 3);
+    assert.equal(unknownFlag.stdout, "");
+    assert.match(unknownFlag.stderr, /\nUSAGE\n {2}fixture --hello \[flags\]\n/);
+    assert.match(unknownFlag.stderr, /Unrecognized flag: --text in command fixture --hello\n/);
+    assert.equal(otherName.code, 2);
+    assert.match(otherName.stderr, /Unknown subcommand "alias --hello" for "fixture"/);
+  });
+
+  test("a flag is a property of the input itself, not a name that every object inherits", async () => {
+    const [fixed, changed, alias, command, missing] = await Promise.all([
+      cliWithInherited("go"),
+      cliWithInherited("go", "--constructor", '"changed"'),
+      cliWithInherited("go", "--toString", "x"),
+      cliWithInherited("probe", "name", "--constructor", "own", "--toString", "x"),
+      cliWithInherited("probe", "name", "--text", "no constructor"),
+    ]);
+    assert.deepEqual(JSON.parse(fixed.stdout), { constructor: "fixed" });
+    assert.equal(changed.code, 3);
+    assert.equal(alias.code, 3);
+    assert.equal(command.code, 3);
+    assert.equal(missing.code, 3);
+  });
+
+  test("the input schema of fixture.note is a $ref with a description beside it", () => {
+    assert.deepEqual(App.document(fixture).capabilities["fixture.note"]?.input, { $ref: "#/$defs/Note", description: "The note." });
   });
 
   test("a usage error writes the help and the error to standard error, and help and version still go to standard output", async () => {
@@ -140,10 +180,36 @@ test("the description of the command line is the option, else the description of
 test("a command of the application must not have the name of another command", () => {
   const options = { name: "fixture", version: "0.0.0" };
   const named = (name: string) => Command.make(name);
-  for (const name of ["call", "list", "fixture"]) {
+  for (const name of ["call", "list", "fixture", "say"]) {
     assert.throws(() => Cli.command(fixture, { ...options, commands: [named(name)] }), new RegExp(`The command ${name} of the application`));
   }
   assert.throws(() => Cli.command(fixture, { ...options, commands: [named("report"), named("report")] }), /The command report of the application/);
+});
+
+test("the command line stops when it starts if an alias breaks a rule", () => {
+  const ping = Capability.make({ id: "probe.ping", description: "Ping.", audience: ["cli"], run: () => Effect.succeed(null) });
+  const appOf = (aliases: { readonly [name: string]: unknown }) =>
+    App.make({ targets: { cli: { bindings: ["cli"], options: { cli: { aliases } } } }, capabilities: [ping] });
+  const options = { name: "probe", version: "0.0.0" };
+  assert.throws(() => Cli.command(appOf({ list: { capability: "probe.ping" } }), options), /the alias list has the name of a command/);
+  assert.throws(() => Cli.command(appOf({ probe: { capability: "probe.ping" } }), options), /the alias probe has the name of the first word/);
+  assert.throws(() => Cli.command(appOf({ gone: { capability: "probe.gone" } }), options), /the alias gone refers to probe.gone/);
+  assert.doesNotThrow(() => Cli.command(appOf({ ping: { capability: "probe.ping" } }), options));
+});
+
+test("the command line stops when it starts if a flag alias has the name of a global flag", async () => {
+  const ping = Capability.make({ id: "probe.ping", description: "Ping.", audience: ["cli"], run: () => Effect.succeed(null) });
+  const switchFlag = GlobalFlag.Setting("switch")({ flag: Flag.Boolean("switch") });
+  const start = (name: string) => {
+    const app = App.make({ targets: { cli: { bindings: ["cli"], options: { cli: { aliases: { [name]: { capability: "probe.ping" } } } } } }, capabilities: [ping] });
+    const command = Cli.command(app, { name: "probe", version: "0.0.0" }).pipe(Command.withGlobalFlags([switchFlag]));
+    return Effect.runPromiseExit(Cli.runCommand(command, { version: "0.0.0" }).pipe(Effect.provide(NodeServices.layer)));
+  };
+  for (const name of ["--log-level", "--completions", "--switch", "--no-switch"]) {
+    const exit = await start(name);
+    assert.ok(Exit.isFailure(exit), `${name} stops the command line`);
+    assert.match(Cause.pretty(exit.cause), new RegExp(`The alias ${name} has the name of a flag of the command line`));
+  }
 });
 
 test("the path of a capability must not be the start of the path of another capability", () => {

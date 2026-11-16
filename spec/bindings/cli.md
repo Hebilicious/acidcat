@@ -5,7 +5,7 @@ A protocol binding that serves a view as a command line. The commands come from 
 ## Commands
 
 - **Names.** Each capability in the view is a command. The segments of the id give the path of the command: `aircon.power.set` becomes `aircon power set`. A shared prefix is a command that only contains other commands.
-- **Input.** Each top-level property of the input schema becomes a flag with the same name, for example `--celsius 22` or `--celsius=22`. If the input schema is a `$ref`, use the type that it refers to. If a property schema is a `$ref`, use the type that it refers to. A property in `required` is a required flag. The provider validates the input against the schema.
+- **Input.** Each top-level property of the input schema becomes a flag with the same name, for example `--celsius 22` or `--celsius=22`. If the input schema has a `$ref`, use the type that it refers to, also when the schema has other members, such as a `description`. If a property schema is a `$ref`, use the type that it refers to. A property in `required` is a required flag. The provider validates the input against the schema.
 
   | Property schema | Flag value |
   | --- | --- |
@@ -23,7 +23,7 @@ A protocol binding that serves a view as a command line. The commands come from 
 
   A required repeated flag MUST occur at least once. If an optional repeated flag does not occur, the input does not have the property. An `array` with other items, or with no `items` schema, takes JSON text.
 
-- **Generic commands.** `call <id> [input]` calls a capability with its input as JSON text. The default input is `{}`. Use `call` when the input schema has no top-level `properties` member. `list` writes a JSON array: one item for each capability of the view, then one item for each event of the view. A capability has `kind: "capability"`, `id`, `description`, `available` and `usage`. An event has `kind: "event"`, `id`, `description` and `usage`.
+- **Generic commands.** `call <id> [input]` calls a capability with its input as JSON text. The default input is `{}`. Use `call` when the input schema has no top-level `properties` member. `list` writes a JSON array: one item for each capability of the view, then one item for each event of the view. A capability has `kind: "capability"`, `id`, `description`, `available` and `usage`. A capability with one or more [aliases](#aliases) also has `aliases`: the usage of each alias, in code point order of the names of the aliases. An event has `kind: "event"`, `id`, `description` and `usage`.
 - **Usage.** The `usage` of a capability is one line of text that tells how to call it. Each part has one space before it:
 
   1. The name of the program.
@@ -43,7 +43,46 @@ A protocol binding that serves a view as a command line. The commands come from 
   If a property schema or an `items` schema is a `$ref`, use the type that it refers to. A capability with no input schema, or with `"properties": {}`, has no flags. For example, with the program name `aircon`: `aircon power set --on`, `aircon fan set --speed <auto|low|medium|high>`, `aircon schedule set --days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]` and `aircon status get`.
 - **Cancellation.** An interrupt (`SIGINT`) cancels the call.
 
-An application MAY add its own commands and flags. The name of a command of the application is one word. This name MUST NOT be `call`, `list`, `watch`, the name of a different command of the application, or the first word of the path of a capability. If a name breaks this rule, if two commands have the same path, or if two flags have the same name, the program MUST stop with an error when it starts.
+An application MAY add its own commands and flags. The name of a command of the application is one word. This name MUST NOT be `call`, `list`, `watch`, the name of a different command of the application, the name of an alias, or the first word of the path of a capability. If a name breaks this rule, if two commands have the same path, or if two flags have the same name, the program MUST stop with an error when it starts.
+
+## Aliases
+
+An **alias** is a short name for a capability. The catalog gives the aliases of a target in the options of the target, in `options.cli.aliases`. Each key is the name of an alias. Each value is an object:
+
+| Member | Required | Value |
+| --- | --- | --- |
+| `capability` | Yes | The id of the capability. The capability MUST be in the view of the target |
+| `input` | No | A JSON object: the **fixed input**. Each key MUST be a top-level property of the input schema of the capability |
+
+An alias can also have members whose names start with `x-`. A program ignores them. An alias MUST NOT have other members.
+
+```json
+{
+  "targets": {
+    "cli": {
+      "bindings": ["cli"],
+      "options": {
+        "cli": {
+          "aliases": {
+            "status": { "capability": "aircon.status.get" },
+            "--on": { "capability": "aircon.power.set", "input": { "on": true } },
+            "--off": { "capability": "aircon.power.set", "input": { "on": false } }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+- **Target.** A target that has `options.cli` MUST have the binding `cli`.
+- **Names.** A **command alias** has a name that is one word. A **flag alias** has a name that is `--` and one word. Each word matches `[a-z][a-z0-9]*(-[a-z0-9]+)*`. The name of a command alias MUST NOT be `call`, `list`, `watch`, the name of a command of the application, or the first word of the path of a capability. The name of a flag alias MUST NOT be `--help`, `--version`, or the name of a different flag of the program, for example a flag that the application adds.
+- **Call.** The name of an alias is the first argument: `aircon status`, `aircon --on`. The flags come after the name, with the rules of [Commands](#commands). The flags come from the properties of the input schema that are not in the fixed input. A property in the fixed input is not a flag: a flag with its name is not valid. The input of the call is the fixed input with the properties of the flags. The provider validates this input, fixed input included, as it validates the input of each call. An alias and the command of its capability make the same call. `<name> --help` writes the usage of the alias.
+- **No input.** If the capability has no input schema, the alias has no flags, and takes no other argument.
+- **No properties.** If the capability has an input schema with no top-level `properties` member, the alias takes the input as JSON text, as `call` does: `<name> [input]`. The default input is `{}`. Such an alias MUST NOT have a fixed input.
+- **Usage.** The usage of an alias is the name of the program, the name of the alias, then the flags as in [Commands](#commands), with only the properties that are not in the fixed input. If the capability has an input schema with no top-level `properties` member, the usage is the name of the program, the name of the alias, and `'<json>'`. For example: `aircon status`, `aircon --on` and `aircon --off`.
+
+If an alias breaks a rule of this section, the program MUST stop with an error when it starts. `acid-cat check` rejects a catalog with an alias that breaks a rule of this section.
 
 ## Events
 
@@ -96,6 +135,8 @@ The command line can serve a view of an application that runs in another process
 Different exit codes let a script or an agent know if "the capability said no" or "the call did not run", without reading text.
 
 One line of JSON for each occurrence lets a script read occurrences one at a time, for example with `jq`, while the subscription continues.
+
+An alias is in the catalog, and not only in the code of the program. Thus `acid-cat check` tests it, `list` gives it to agents, and each core serves the same aliases. A flag alias, such as `--on`, gives a command line the form of a switch, which the commands of the capabilities cannot have, because each id has two or more segments.
 
 A repeated flag is easier to type than JSON text, and it needs fewer quotes in a shell. A repeated flag also takes JSON text of the whole array. Thus a script can give JSON text to each array flag, with simple items or not.
 

@@ -30,6 +30,13 @@ fn aircon_catalog() -> Catalog {
             "cli",
             Target {
                 bindings: strings(&["cli"]),
+                options: Some(json!({
+                    "cli": { "aliases": {
+                        "status": { "capability": "aircon.status.get" },
+                        "--on": { "capability": "aircon.power.set", "input": { "on": true } },
+                        "--off": { "capability": "aircon.power.set", "input": { "on": false } }
+                    } }
+                })),
                 ..Target::default()
             },
         )

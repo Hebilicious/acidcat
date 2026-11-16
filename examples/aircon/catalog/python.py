@@ -24,7 +24,19 @@ def aircon_catalog() -> Catalog:
         description="A desktop taskbar widget showing the status and a power toggle.",
         bindings=["typescript"],
     )
-    catalog.target("cli", bindings=["cli"])
+    catalog.target(
+        "cli",
+        bindings=["cli"],
+        options={
+            "cli": {
+                "aliases": {
+                    "status": {"capability": "aircon.status.get"},
+                    "--on": {"capability": "aircon.power.set", "input": {"on": True}},
+                    "--off": {"capability": "aircon.power.set", "input": {"on": False}},
+                }
+            }
+        },
+    )
     catalog.target("mcp", description="Agents, through an MCP server.", bindings=["mcp"])
     catalog.target("api", description="Home-automation systems and scripts.", bindings=["http"])
 

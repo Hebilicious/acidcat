@@ -123,7 +123,7 @@ export const cliExitCode = (outcome: Outcome<unknown, unknown>): number =>
 
 /**
  * The flags of a command, as `usage` writes them (spec/bindings/cli.md#commands): required flags first, each group in
- * code point order of the names. `input` is the bundled input schema.
+ * code point order of the names. `input` is from `cliInputSchema`.
  */
 export function cliFlags(input: JsonObject): string[] {
   const properties = objectOrEmpty(input.properties);
@@ -182,7 +182,7 @@ function flagValue(property: JsonObject): string {
 }
 
 /**
- * The `usage` of a capability in `list` (spec/bindings/cli.md#commands). `input` is the bundled input schema, or
+ * The `usage` of a capability in `list` (spec/bindings/cli.md#commands). `input` is from `cliInputSchema`, or
  * `undefined` when the capability has no input.
  */
 export function cliUsage(program: string, id: string, input: JsonObject | undefined): string {
@@ -191,7 +191,7 @@ export function cliUsage(program: string, id: string, input: JsonObject | undefi
 }
 
 /**
- * The `usage` of an event in `list` (spec/bindings/cli.md#events). `input` is the bundled input schema, or `undefined`
+ * The `usage` of an event in `list` (spec/bindings/cli.md#events). `input` is from `cliInputSchema`, or `undefined`
  * when the event has no input.
  */
 export function cliEventUsage(program: string, id: string, input: JsonObject | undefined): string {
@@ -199,6 +199,116 @@ export function cliEventUsage(program: string, id: string, input: JsonObject | u
   if (input !== undefined && input.properties === undefined) return `${program} watch ${id} '<json>' ${resume}`;
   return [program, "watch", id, ...(input === undefined ? [] : cliFlags(input)), resume].join(" ");
 }
+
+/** The commands of the command line itself (spec/bindings/cli.md#commands). No alias or command of an application can have their names. */
+export const CLI_GENERIC_COMMANDS = ["call", "list", "watch"] as const;
+
+/** The flags that no flag alias can have as its name (spec/bindings/cli.md#aliases). */
+export const CLI_RESERVED_FLAGS = ["--help", "--version"] as const;
+
+export const CLI_ALIAS_NAME = /^(--)?[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+
+export interface CliAlias {
+  readonly name: string;
+  readonly capability: string;
+  readonly input?: JsonObject;
+}
+
+/**
+ * The aliases of a target in `options.cli.aliases` (spec/bindings/cli.md#aliases), in code point order of their names,
+ * and the rules that they break. `catalog` is a catalog or the view of the target. An alias that breaks a rule is not in
+ * `aliases`.
+ */
+export function cliAliases(catalog: CatalogDocument, target: string): { readonly aliases: readonly CliAlias[]; readonly errors: readonly string[] } {
+  const declared = ownMember(catalog.targets, target);
+  const settings = declared === undefined || !isJsonObject(declared.options) ? undefined : ownMember(declared.options, "cli");
+  if (declared === undefined || settings === undefined) return { aliases: [], errors: [] };
+  const where = `target ${target}`;
+  if (!isJsonObject(settings)) return { aliases: [], errors: [`${where}: options.cli must be an object`] };
+  const errors: string[] = [];
+  if (!declared.bindings.includes("cli")) errors.push(`${where}: has options.cli, but not the binding cli`);
+  const members = settings.aliases;
+  if (members === undefined) return { aliases: [], errors };
+  if (!isJsonObject(members)) return { aliases: [], errors: [...errors, `${where}: options.cli.aliases must be an object`] };
+
+  const types = catalog.$defs ?? {};
+  const visible = Object.entries(catalog.capabilities).filter(([, capability]) => (capability.audience ?? []).includes(target));
+  const firstWords = new Set(visible.map(([id]) => commandPath(id)[0]));
+  const aliases: CliAlias[] = [];
+  for (const name of Object.keys(members).sort(byCodePoint)) {
+    const problem = (text: string) => errors.push(`${where}: the alias ${name} ${text}`);
+    const value = members[name];
+    if (!CLI_ALIAS_NAME.test(name)) {
+      problem("must be one word, or -- and one word, with the letters a-z, the digits 0-9 and single hyphens");
+      continue;
+    }
+    if (name.startsWith("--") ? isOneOf(CLI_RESERVED_FLAGS, name) : isOneOf(CLI_GENERIC_COMMANDS, name)) {
+      problem("has the name of a command or a flag of the command line");
+      continue;
+    }
+    if (firstWords.has(name)) {
+      problem("has the name of the first word of the command of a capability");
+      continue;
+    }
+    if (!isJsonObject(value) || typeof value.capability !== "string") {
+      problem("must be an object with the id of a capability in capability");
+      continue;
+    }
+    const unknown = Object.keys(value).filter((key) => key !== "capability" && key !== "input" && !key.startsWith("x-"));
+    if (unknown.length > 0) {
+      problem(`has the unknown member ${unknown.join(", ")}`);
+      continue;
+    }
+    const capability = visible.find(([id]) => id === value.capability)?.[1];
+    if (capability === undefined) {
+      problem(`refers to ${value.capability}, which is not a capability in the view of the target`);
+      continue;
+    }
+    if (value.input === undefined) {
+      aliases.push({ name, capability: value.capability });
+      continue;
+    }
+    if (!isJsonObject(value.input)) {
+      problem("must have an object as its input");
+      continue;
+    }
+    const properties = capability.input === undefined ? undefined : resolveType(capability.input, types).properties;
+    if (!isJsonObject(properties)) {
+      problem(`has a fixed input, but the input schema of ${value.capability} has no properties`);
+      continue;
+    }
+    const extra = Object.keys(value.input).filter((key) => !Object.hasOwn(properties, key));
+    if (extra.length > 0) {
+      problem(`has the fixed input ${extra.join(", ")}, which is not a property of the input of ${value.capability}`);
+      continue;
+    }
+    aliases.push({ name, capability: value.capability, input: value.input });
+  }
+  return { aliases, errors };
+}
+
+/**
+ * The input schema of an alias (spec/bindings/cli.md#aliases): the input schema of its capability, from
+ * `cliInputSchema`, without the properties of the fixed input. The flags of the alias come from it.
+ */
+export function cliAliasSchema(input: JsonObject, fixed: JsonObject | undefined): JsonObject {
+  if (fixed === undefined || !isJsonObject(input.properties)) return input;
+  const properties = Object.fromEntries(Object.entries(input.properties).filter(([name]) => !Object.hasOwn(fixed, name)));
+  const required = stringsOf(input.required).filter((name) => !Object.hasOwn(fixed, name));
+  const { required: _, ...rest } = input;
+  return { ...rest, properties, ...(required.length > 0 ? { required } : {}) };
+}
+
+/**
+ * The `usage` of an alias in `list` (spec/bindings/cli.md#aliases). `input` is the input schema of the alias, from
+ * `cliAliasSchema`, or `undefined` when the capability has no input.
+ */
+export function cliAliasUsage(program: string, name: string, input: JsonObject | undefined): string {
+  if (input !== undefined && input.properties === undefined) return `${program} ${name} '<json>'`;
+  return [program, name, ...(input === undefined ? [] : cliFlags(input))].join(" ");
+}
+
+const isOneOf = (names: readonly string[], name: string): boolean => names.includes(name);
 
 /** The flags of `watch` that give the cursor and `maxAgeMs`. No input property of an event can have these names. */
 export const CLI_RESUME_FLAGS = ["cursor", "max-age-ms"] as const;
@@ -726,6 +836,15 @@ export function bundle(schema: JsonObject, types: { readonly [name: string]: Jso
   const base = Object.keys(schema).length === 1 ? resolveType(schema, types) : schema;
   const used = typesUsedBy(base, types);
   return used.size === 0 ? base : { ...base, $defs: Object.fromEntries(used) };
+}
+
+/**
+ * The input schema that the CLI binding reads (spec/bindings/cli.md#commands): the bundled type that the `$ref` of the
+ * schema refers to, whatever other keys the schema has, as `resolveType` gives it. The flags, the usage and the choice
+ * of JSON text come from it.
+ */
+export function cliInputSchema(schema: JsonObject, types: { readonly [name: string]: JsonObject }): JsonObject {
+  return bundle(resolveType(schema, types), types);
 }
 
 /** The view of a target (spec/catalog.md#views). */

@@ -24,7 +24,13 @@ func airconCatalog() *catalog.Catalog {
 			Description: "A desktop taskbar widget showing the status and a power toggle.",
 			Bindings:    []string{"typescript"},
 		}).
-		Target("cli", catalog.Target{Bindings: []string{"cli"}}).
+		Target("cli", catalog.Target{Bindings: []string{"cli"}, Options: schema{
+			"cli": schema{"aliases": schema{
+				"status": schema{"capability": "aircon.status.get"},
+				"--on":   schema{"capability": "aircon.power.set", "input": schema{"on": true}},
+				"--off":  schema{"capability": "aircon.power.set", "input": schema{"on": false}},
+			}},
+		}}).
 		Target("mcp", catalog.Target{Description: "Agents, through an MCP server.", Bindings: []string{"mcp"}}).
 		Target("api", catalog.Target{Description: "Home-automation systems and scripts.", Bindings: []string{"http"}})
 

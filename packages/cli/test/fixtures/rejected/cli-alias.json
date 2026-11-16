@@ -1,0 +1,54 @@
+{
+  "acidcat": "0.1",
+  "targets": {
+    "shop": {
+      "bindings": [
+        "cli"
+      ],
+      "options": {
+        "cli": {
+          "aliases": {
+            "list": {
+              "capability": "shop.item.get"
+            },
+            "--buy": {
+              "capability": "shop.item.buy",
+              "input": {
+                "count": 1
+              }
+            },
+            "gone": {
+              "capability": "shop.item.gone"
+            },
+            "odd": {
+              "capability": "shop.item.get",
+              "extra": 1
+            }
+          }
+        }
+      }
+    }
+  },
+  "capabilities": {
+    "shop.item.get": {
+      "description": "Get an item.",
+      "audience": [
+        "shop"
+      ]
+    },
+    "shop.item.buy": {
+      "description": "Buy an item.",
+      "audience": [
+        "shop"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

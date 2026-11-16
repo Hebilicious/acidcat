@@ -144,6 +144,12 @@ pub(crate) fn bundle(schema: &Value, types: &Map<String, Value>) -> Value {
     bundled
 }
 
+/// The input schema that the CLI binding reads (spec/bindings/cli.md#commands): the bundled type that the `$ref` of the
+/// schema refers to, whatever other keys the schema has. The flags, the usage and the choice of JSON text come from it.
+pub(crate) fn cli_input_schema(schema: &Value, types: &Map<String, Value>) -> Value {
+    bundle(resolve(schema, types), types)
+}
+
 pub(crate) fn view_of(catalog: &Value, target: &str) -> Value {
     let empty = Map::new();
     let types = catalog

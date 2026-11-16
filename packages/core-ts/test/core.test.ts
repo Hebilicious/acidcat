@@ -443,7 +443,7 @@ test("a command of the application runs beside the commands of the capabilities,
   const run = (...args: string[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options(), commands: [position] }, ...args);
   assert.deepEqual(await run("position", "switch"), { code: 0, stdout: "switch: on", stderr: "" });
   assert.equal((await run("fixture", "echo", "--text", "hi")).code, 0);
-  assert.match((await run("--help")).stdout, /\n {2}list\n {2}watch <id> \[flags\] \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}position {2}Write the position of the switch\.$/);
+  assert.match((await run("--help")).stdout, /\n {2}list\n {2}watch <id> \[flags\] \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}position {2}Write the position of the switch\.\n\nAliases:\n/);
 });
 
 test("the help gives the description of the options, else the description of the application, else its title", async () => {
@@ -457,10 +457,59 @@ test("the help gives the description of the options, else the description of the
 test("a command of the application must not have the name of another command", async () => {
   const named = (name: string): CliCommand<Context> => ({ name, description: "A command.", run: () => 0 });
   const run = (commands: CliCommand<Context>[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options(), commands }, "list");
-  for (const name of ["call", "list", "fixture"]) {
+  for (const name of ["call", "list", "fixture", "say"]) {
     await assert.rejects(run([named(name)]), new RegExp(`The command ${name} of the application`));
   }
   await assert.rejects(run([named("report"), named("report")]), /The command report of the application/);
+});
+
+test("the help lists the aliases, and <alias> --help gives the usage of the alias", async () => {
+  const run = (...args: string[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options() }, ...args);
+  assert.match((await run("--help")).stdout, /\nAliases:\n {2}--hello\n {2}fixed-note \[--loud\]\n {2}held-keys\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>$/);
+  assert.equal((await run("say", "--help")).stdout, "Usage: fixture say --text <string>\n\nReturn the input text.");
+});
+
+test("the input schema of fixture.note is a $ref with a description beside it", () => {
+  assert.deepEqual(catalogOf(fixture, { toJsonSchema }).capabilities["fixture.note"]?.input, { description: "The note.", $ref: "#/$defs/Note" });
+});
+
+test("a flag is a property of the input itself, not a name that every object inherits", async () => {
+  const calls: unknown[] = [];
+  const app = defineApp<Context>({
+    targets: { cli: { bindings: ["cli"], options: { cli: { aliases: { go: { capability: "probe.name", input: { constructor: "fixed" } } } } } } },
+    capabilities: [
+      defineCapability({
+        id: "probe.name",
+        description: "Echo.",
+        audience: ["cli"],
+        input: z.object({ constructor: z.string(), text: z.string().optional() }),
+        run: (input) => {
+          calls.push(input);
+          return ok(input);
+        },
+      }),
+    ],
+  });
+  const run = (...args: string[]) => commandLine(app, { name: "probe", version: "0.0.0", ...options() }, ...args);
+  assert.deepEqual(JSON.parse((await run("go")).stdout), { constructor: "fixed" });
+  assert.equal((await run("go", "--constructor", '"changed"')).code, 3);
+  assert.equal((await run("go", "--toString", "x")).code, 3);
+  assert.equal((await run("probe", "name", "--constructor", "own", "--toString", "x")).code, 3);
+  assert.equal((await run("probe", "name", "--text", "no constructor")).code, 3);
+  assert.deepEqual(calls, [{ constructor: "fixed" }]);
+});
+
+test("the command line stops when it starts if an alias breaks a rule", async () => {
+  const app = (aliases: { readonly [name: string]: unknown }) =>
+    defineApp<Context>({
+      targets: { cli: { bindings: ["cli"], options: { cli: { aliases } } } },
+      capabilities: [defineCapability({ id: "probe.ping", description: "Ping.", audience: ["cli"], run: () => ok(null) })],
+    });
+  const run = (aliases: { readonly [name: string]: unknown }) => commandLine(app(aliases), { name: "probe", version: "0.0.0", ...options() }, "list");
+  await assert.rejects(run({ list: { capability: "probe.ping" } }), /the alias list has the name of a command/);
+  await assert.rejects(run({ probe: { capability: "probe.ping" } }), /the alias probe has the name of the first word/);
+  await assert.rejects(run({ gone: { capability: "probe.gone" } }), /the alias gone refers to probe.gone/);
+  assert.equal((await run({ ping: { capability: "probe.ping" } })).code, 0);
 });
 
 test("the command line stops when it starts if the path of a capability is the start of the path of another", async () => {
