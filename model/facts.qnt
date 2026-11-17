@@ -1,5 +1,5 @@
 // The plain facts that every core shares: names, numbers and the templates of messages. No rule reads them, so they
-// need no proofs. A flag that a rule of cli-output.qnt reads is a list of characters.
+// need no proofs. A command or a flag that a rule reads is a list of characters.
 module facts {
   type RpcCode = NoCode | Code(int)
 
@@ -33,7 +33,7 @@ module facts {
     ("internal", 500),
   ]
 
-  pure val CLI_GENERIC_COMMANDS: List[str] = ["call", "list", "watch"]
+  pure val CLI_GENERIC_COMMANDS: List[List[str]] = [["c", "a", "l", "l"], ["l", "i", "s", "t"], ["w", "a", "t", "c", "h"]]
 
   pure val PROGRAM_FLAGS: List[List[str]] = [["-", "-", "h", "e", "l", "p"], ["-", "-", "v", "e", "r", "s", "i", "o", "n"]]
 
@@ -102,7 +102,7 @@ module factsData {
     cliExitCodes: List[(str, int)],
     cliWatchExitCodes: List[(str, int)],
     httpStatus: List[(str, int)],
-    cliGenericCommands: List[str],
+    cliGenericCommands: List[List[str]],
     programFlags: List[List[str]],
     resumeFlags: List[List[str]],
     keepaliveMs: int,

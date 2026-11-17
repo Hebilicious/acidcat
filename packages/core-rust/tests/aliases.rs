@@ -128,46 +128,13 @@ async fn the_command_line_stops_when_it_starts_if_an_alias_breaks_a_rule() {
         )
         .await
     };
-    for (aliases, message) in [
-        (
-            json!({ "list": { "capability": "probe.ping" } }),
-            "target cli: the alias list has the name of a command or a flag of the command line",
-        ),
-        (
-            json!({ "--help": { "capability": "probe.ping" } }),
-            "target cli: the alias --help has the name of a command or a flag of the command line",
-        ),
-        (
-            json!({ "--version": { "capability": "probe.ping" } }),
-            "target cli: the alias --version has the name of a command or a flag of the command line",
-        ),
-        (
-            json!({ "probe": { "capability": "probe.ping" } }),
-            "target cli: the alias probe has the name of the first word of the command of a capability",
-        ),
-        (
-            json!({ "gone": { "capability": "probe.gone" } }),
-            "target cli: the alias gone refers to probe.gone, which is not a capability in the view of the target",
-        ),
-        (
-            json!({ "Bad": { "capability": "probe.ping" } }),
-            "target cli: the alias Bad must be one word, or -- and one word, with the letters a-z, the digits 0-9 and single hyphens",
-        ),
-        (
-            json!({ "odd": { "capability": "probe.ping", "extra": 1 } }),
-            "target cli: the alias odd has the unknown member extra",
-        ),
-        (
-            json!({ "loud": { "capability": "probe.ping", "input": { "volume": 1 } } }),
-            "target cli: the alias loud has a fixed input, but the input schema of probe.ping has no properties",
-        ),
-        (
-            json!({ "--on": { "capability": "probe.power.set", "input": { "volume": 1 } } }),
-            "target cli: the alias --on has the fixed input volume, which is not a property of the input of probe.power.set",
-        ),
-    ] {
-        assert_eq!(start(aliases).await, Err(message.to_owned()));
-    }
+    assert_eq!(
+        start(json!({ "list": { "capability": "probe.ping" } })).await,
+        Err(
+            "target cli: the alias list has the name of a command or a flag of the command line"
+                .to_owned()
+        )
+    );
     let (code, text) = start(json!({ "ping": { "capability": "probe.ping", "x-note": "Ping." } }))
         .await
         .expect("the aliases follow the rules");
@@ -244,62 +211,15 @@ async fn the_command_line_stops_when_it_starts_if_an_alias_of_an_event_or_the_de
         )
         .await
     };
-    for (settings, message) in [
-        (
-            json!({ "aliases": { "both": { "capability": "probe.ping", "event": "probe.readings" } } }),
-            "target cli: the alias both must be an object with the id of a capability in capability, or the id of an event in event",
-        ),
-        (
-            json!({ "aliases": { "neither": { "input": {} } } }),
-            "target cli: the alias neither must be an object with the id of a capability in capability, or the id of an event in event",
-        ),
-        (
-            json!({ "aliases": { "gone": { "event": "probe.gone" } } }),
-            "target cli: the alias gone refers to probe.gone, which is not an event in the view of the target",
-        ),
-        (
-            json!({ "aliases": { "pinged": { "event": "probe.ping" } } }),
-            "target cli: the alias pinged refers to probe.ping, which is not an event in the view of the target",
-        ),
-        (
-            json!({ "aliases": { "hall": { "event": "probe.readings", "input": { "floor": 1 } } } }),
-            "target cli: the alias hall has the fixed input floor, which is not a property of the input of probe.readings",
-        ),
-        (
-            json!({ "aliases": { "hall": { "event": "probe.readings", "extra": 1 } } }),
-            "target cli: the alias hall has the unknown member extra",
-        ),
-        (
-            json!({ "aliases": { "--ping": { "capability": "probe.ping" } }, "default": "--ping" }),
-            "target cli: options.cli.default must be the name of a command alias",
-        ),
-        (
-            json!({ "default": "ping" }),
-            "target cli: options.cli.default must be the name of a command alias",
-        ),
-        (
-            json!({ "aliases": { "ping": { "capability": "probe.ping" } }, "default": 1 }),
-            "target cli: options.cli.default must be the name of a command alias",
-        ),
-        (
-            json!({ "aliases": { "gone": { "capability": "probe.gone" } }, "default": "gone" }),
-            "target cli: the alias gone refers to probe.gone, which is not a capability in the view of the target",
-        ),
-        (
-            json!({ "aliases": { "aid": { "capability": "probe.helpful" } }, "default": "aid" }),
-            "target cli: the default alias aid has the flag --help, which is a flag of the command line",
-        ),
-        (
-            json!({ "aliases": {
-                "follow": { "event": "probe.readings" },
-                "--cursor": { "capability": "probe.ping" },
-                "--room": { "capability": "probe.ping" }
-            }, "default": "follow" }),
-            "target cli: the alias --cursor has the name of a flag of the default alias follow\ntarget cli: the alias --room has the name of a flag of the default alias follow",
-        ),
-    ] {
-        assert_eq!(start(settings).await, Err(message.to_owned()));
-    }
+    assert_eq!(
+        start(json!({ "aliases": {
+            "follow": { "event": "probe.readings" },
+            "--cursor": { "capability": "probe.ping" },
+            "--room": { "capability": "probe.ping" }
+        }, "default": "follow" }))
+        .await,
+        Err("target cli: the alias --cursor has the name of a flag of the default alias follow\ntarget cli: the alias --room has the name of a flag of the default alias follow".to_owned())
+    );
     let (code, text) = start(json!({
         "aliases": { "hall": { "event": "probe.readings", "input": { "room": "hall" }, "x-note": "The hall." } },
         "default": "hall"

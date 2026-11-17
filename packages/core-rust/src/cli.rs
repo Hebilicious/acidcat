@@ -16,6 +16,8 @@ use crate::schema::{cli_input_schema, resolve};
 use crate::session::{Session, SubscribeOptions};
 use crate::subscription::Occurrence;
 
+#[cfg(test)]
+mod alias_cases;
 mod human;
 mod output;
 mod output_generated;

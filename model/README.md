@@ -22,6 +22,14 @@ The project is not a package. No registry receives it. It is in `model/` at the 
 
 The model does not cover the human layout, the formatters, or the input and output of the process. The tests of each core cover them.
 
+[`cli-aliases.qnt`](cli-aliases.qnt) models the check of the aliases of a target ([Aliases](../spec/bindings/cli.md#aliases)). Its input is abstract: the capabilities and the events, each with its id, whether it is in the view of the target, and an input schema with properties, with no properties or no input schema; whether the target has the binding `cli`; `options.cli`, with its aliases and its default alias. Each alias has a name and a value: not an object, or an object with `capability`, `event`, a fixed input and other members. The output is the list of errors, the accepted aliases and the default alias:
+
+- `options.cli` that is not an object, a target with no binding `cli`, and `options.cli.aliases` that is not an object.
+- The checks of each alias, in code point order of the names, and the first problem of each alias only: a name that is not one word or `--` and one word; a name of a command or a flag of the command line (`CLI_GENERIC_COMMANDS`, `PROGRAM_FLAGS`); a name that is the first word of the id of a capability in the view; a value that does not give exactly one id; a member that is not `capability`, `event`, `input` or a member that starts with `x-`; an id that is not in the view; a fixed input that is not an object; a fixed input for an input schema with no properties; and a key of the fixed input that is not a property.
+- The default alias: it must be the name of a command alias. The checks of its flags apply only when the alias is accepted: a flag with the name of a flag of the program, and a flag alias with the name of a flag of the default alias. The flags of an alias of an event include the flags of `watch` (`RESUME_FLAGS`).
+
+Each problem has the key of its template in `ALIAS_MESSAGES` and the parts that fill it. The generator fills the templates. The model does not cover the names of the commands and the flags that the application adds. The start of each core checks them with the commands of the application and the output flags.
+
 Quint has no operations on strings. A text that a rule reads character by character is a list of characters, for example `["-", "-", "j", "s", "o", "n"]`. A text that the rules only write, such as a message, is a list of pieces. Quint strings have no escapes, so the model writes a control character or a Unicode space in angle brackets, for example `<TAB>`. The generator writes the real character. The template of a message is the message with a placeholder for each part, for example `The option {name} must be {values}.`
 
 ## Shared facts
@@ -79,11 +87,17 @@ The bounds are `MOST_SEGMENTS`, `MOST_AFTER` and `MOST_NAMES` in the module, and
 - The choice of the form: each default, terminal state, 4 environments and 6 lists of arguments, with the form or the exit code and the message.
 - The help: the line of 7 output flags, with values in an order that is not the code point order.
 
+[`cli-alias-cases.qnt`](cli-alias-cases.qnt) makes every case of a bounded domain of the aliases, with 4 capabilities and 3 events in a fixed catalog:
+
+- The target: each kind of `options.cli`, with and without the binding `cli`.
+- One alias: each of 11 names, each of 24 values and 4 default aliases (none, not text, the alias, and a name that is not an alias).
+- Two aliases: each pair of 5 names in reverse order, each pair of 6 values, with the second name as the default alias.
+
 ## Tasks
 
 | Task | What it does |
 | --- | --- |
-| `moon run model:test` | Run the examples of the model, and type-check the other modules. |
+| `moon run model:test` | Run the examples of the models, and type-check the other modules. |
 | `moon run model:prove` | Prove each property with `quint verify`. `moon run model:prove -- lastOutputFlagWins` proves only the properties that it names. `moon run verify` does not run it: the workflow `prove.yml` proves each property in its own job when a pull request changes `model/`, `.prototools` or `pnpm-lock.yaml`. The proofs read only the model, so a change to the code of a core does not change their result; the tests of the cases check the code of each core. It runs one Apalache server for each 7 GB of memory, up to one for each property, and proves the properties in parallel. On a computer with 30 GB of memory and 22 cores, it takes about 7 minutes. The longest proof takes about 5.5 minutes, and its Java and Z3 processes use up to about 1.8 GB. |
 | `moon run model:generate` | Write the data and the cases into each core. |
 | `moon run model:check` | Run `test`, then fail if a file in spec-ts or in a core is not the output of the model. `moon run verify` runs it. |
@@ -97,6 +111,7 @@ Apalache runs on Java. proto installs Java from [`.prototools`](../.prototools).
 - The shared facts of [`facts.qnt`](#shared-facts), into spec-ts and the Rust core.
 - The data: the variables of CI and of the coding agents, the false values, the characters that the trim removes, the flags of the program (`--help`, `--version`), the flags of `watch`, the reserved flags with their descriptions, the exit code of a bad value, the template of each message (the messages of the output flags, and the messages of a view that the command line cannot serve) and of each line of the help, the names of the forms, and the words and separators of the lists.
 - The cases: the automatic form, the check, the reading, the choice of the form and the help, each with its expected result.
+- The cases of the aliases, into spec-ts and the Rust core, each with its errors, its accepted aliases and its default alias.
 
 The generator fails on a value of the model that it does not know, for example a new variant.
 
@@ -116,7 +131,7 @@ To change a rule:
    | `@acid-cat/core-effect` | `packages/core-effect/src/internal/output.generated.ts` | `packages/core-effect/test/fixtures/cli-output-cases.json` |
    | `acid-cat-core` | `packages/core-rust/src/cli/output_generated.rs` | `packages/core-rust/tests/fixtures/cli_output_cases.json` |
 
-   It also writes the shared facts into `packages/spec-ts/src/facts.generated.ts` and `packages/core-rust/src/facts_generated.rs`.
+   It also writes the shared facts into `packages/spec-ts/src/facts.generated.ts` and `packages/core-rust/src/facts_generated.rs`, and the cases of the aliases into `packages/spec-ts/test/fixtures/cli-alias-cases.json` and `packages/core-rust/tests/fixtures/cli_alias_cases.json`. `packages/spec-ts/test/alias-cases.test.ts` runs them against `cliAliases`, which `@acid-cat/core-ts`, `@acid-cat/core-effect` and `acid-cat check` use. `packages/core-rust/src/cli/alias_cases.rs` runs them against `cli_aliases`. It is a unit test, because `cli_aliases` is private. Cargo compiles it only for the tests, so the package builds without the cases file.
 
 4. When the model has a new value in the data or a new kind of case, change the emitters and the readers of [`scripts/generate.ts`](scripts/generate.ts), and the test of the cases in each core.
 5. Change the functions of each core until its test of the cases passes. Do not change a generated file by hand. `moon run model:check` fails when a generated file is not the output of the model.

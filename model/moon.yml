@@ -11,7 +11,7 @@ toolchains:
 tasks:
   test:
     description: "Run the tests of the models, and type-check the modules of the properties."
-    script: "quint test cli-output.qnt && quint typecheck cli-output-properties.qnt && quint typecheck cli-output-cases.qnt && quint typecheck facts.qnt"
+    script: "quint test cli-output.qnt && quint test cli-aliases.qnt && quint typecheck cli-output-properties.qnt && quint typecheck cli-output-cases.qnt && quint typecheck cli-alias-cases.qnt && quint typecheck facts.qnt"
     inputs: ["*.qnt", "package.json", "/pnpm-workspace.yaml"]
 
   prove:
@@ -47,6 +47,8 @@ tasks:
       - "/packages/core-ts/test/fixtures/cli-output-cases.json"
       - "/packages/core-effect/test/fixtures/cli-output-cases.json"
       - "/packages/core-rust/tests/fixtures/cli_output_cases.json"
+      - "/packages/spec-ts/test/fixtures/cli-alias-cases.json"
+      - "/packages/core-rust/tests/fixtures/cli_alias_cases.json"
 
   typecheck:
     description: "Type-check the scripts."
