@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.13.0...@acid-cat/core-effect@0.13.1) (2026-11-17)
+
+
+### Miscellaneous Chores
+
+* **@acid-cat/core-effect:** Synchronize npm versions
+
 ## [0.13.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.12.1...@acid-cat/core-effect@0.13.0) (2026-11-17)
 
 
