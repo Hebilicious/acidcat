@@ -50,6 +50,8 @@ The HTTP stream uses the framing of the GraphQL over server-sent events protocol
 
 On the command line, each input property is a flag. An array of simple values takes one flag for each item, `aircon schedule set --days mon --days fri --hours 7`, or the whole array as JSON text, `--days '["mon","fri"]'`.
 
+The command line writes JSON, for scripts and agents. An application can also give it a form for a person: the application chooses the flags that select the form, such as `--output human` or `--json`, and gives a typed formatter for each capability or event. Without a formatter, the command line prints a generic layout of the value. The human form is off by default. With `default: "auto"`, it is the default only on a terminal with no CI and no coding agent ([core-ts](packages/core-ts/README.md), [core-effect](packages/core-effect/README.md), [core-rust](packages/core-rust/README.md)).
+
 The catalog is checked at build time. Programs do not read it at run time.
 
 ## 🧭 How it works
