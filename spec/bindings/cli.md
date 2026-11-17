@@ -23,6 +23,7 @@ A protocol binding that serves a view as a command line. The commands come from 
 
   A required repeated flag MUST occur at least once. If an optional repeated flag does not occur, the input does not have the property. An `array` with other items, or with no `items` schema, takes JSON text.
 
+- **First `--`.** A program MUST ignore a first argument `--`: `aircon -- status` is `aircon status`. Package runners, such as `pnpm` and `npx`, pass this `--` to the program. A `--` after the first argument is an argument.
 - **Generic commands.** `call <id> [input]` calls a capability with its input as JSON text. The default input is `{}`. Use `call` when the input schema has no top-level `properties` member. `list` writes a JSON array: one item for each capability of the view, then one item for each event of the view. A capability has `kind: "capability"`, `id`, `description`, `available` and `usage`. A capability with one or more [aliases](#aliases) also has `aliases`: the usage of each alias, in code point order of the names of the aliases. An event has `kind: "event"`, `id`, `description` and `usage`, and `aliases` in the same way.
 - **Usage.** The `usage` of a capability is one line of text that tells how to call it. Each part has one space before it:
 

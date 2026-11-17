@@ -197,7 +197,7 @@ impl CliOutput {
     ) -> Result<(Option<OutputForm>, Vec<String>), String> {
         let mut rest = Vec::new();
         let mut form = None;
-        let mut items = args.iter();
+        let mut items = program_arguments(args).iter();
         while let Some(arg) = items.next() {
             if arg == "--" || (rest.is_empty() && command_names.contains(&arg.as_str())) {
                 rest.push(arg.clone());
@@ -234,6 +234,14 @@ impl CliOutput {
             }
         }
         Ok((form, rest))
+    }
+}
+
+/// Package runners, such as `pnpm` and `npx`, pass a `--` before the arguments of the program.
+pub(super) fn program_arguments(args: &[String]) -> &[String] {
+    match args {
+        [first, rest @ ..] if first == "--" => rest,
+        _ => args,
     }
 }
 

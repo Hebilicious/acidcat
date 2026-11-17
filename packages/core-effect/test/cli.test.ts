@@ -104,6 +104,12 @@ describe("the command line of an application", { concurrency: true }, () => {
     assert.equal(echo.code, 0);
   });
 
+  test("a first -- is not an argument", async () => {
+    const [plain, dashed] = await Promise.all([cli("say", "--text", "hi"), cli("--", "say", "--text", "hi")]);
+    assert.equal(plain.code, 0);
+    assert.deepEqual(dashed, plain);
+  });
+
   test("the help gives the description of the options and the commands of the application", async () => {
     const help = (await cliWithCommand("--help")).stdout;
     assert.match(help, /DESCRIPTION\n {2}The fixture, with a command of its own\./);

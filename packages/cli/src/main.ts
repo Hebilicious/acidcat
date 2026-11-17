@@ -227,8 +227,8 @@ const acidCat = Command.make("acid-cat").pipe(
   Command.withSubcommands([checkCommand, formatCommand, viewCommand, conformCommand]),
 );
 
-acidCat.pipe(
-  Command.run({ version: packageJson.version }),
-  Effect.provide(NodeServices.layer),
-  NodeRuntime.runMain,
-);
+// Package runners, such as `pnpm` and `npx`, pass a `--` before the arguments of the program.
+const args = process.argv.slice(2);
+const programArguments = args[0] === "--" ? args.slice(1) : args;
+
+Command.runWith(acidCat, { version: packageJson.version })(programArguments).pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);

@@ -152,6 +152,7 @@ test("the aliases of the Effect command line call their capabilities with their 
   const on = await remote("status");
   assert.equal(on.code, 0);
   assert.partialDeepStrictEqual(JSON.parse(on.stdout), { power: true });
+  assert.partialDeepStrictEqual(JSON.parse((await remote("--", "status")).stdout), { power: true }, "a first -- is not an argument");
   assert.equal((await remote("--off")).code, 0);
   assert.partialDeepStrictEqual(JSON.parse((await remote("status")).stdout), { power: false });
   assert.equal((await remote("--on", "--on", "false")).code, 3);

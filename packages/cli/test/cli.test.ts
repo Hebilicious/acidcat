@@ -155,6 +155,14 @@ test("view rejects a target name that only an object inherits, such as construct
   assert.match(result.stderr, /there is no target constructor/);
 });
 
+test("a first -- is not an argument", () => {
+  const main = fileURLToPath(new URL("../src/main.ts", import.meta.url));
+  const fixture = fileURLToPath(new URL("./fixtures/bakery.acidcat.json", import.meta.url));
+  const result = spawnSync(process.execPath, [main, "--", "check", fixture], { encoding: "utf-8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, "The catalog conforms.\n");
+});
+
 test("an unknown member of an event without an x- prefix gets a warning", () => {
   const events = { "bakery.order.ready": { description: "x", audience: ["shop"], "x-icon": "bell", icon: "bell" } };
   assert.deepEqual(check({ ...bakery, events }).warnings, ["bakery.order.ready: unknown member icon; give extensions an x- prefix"]);

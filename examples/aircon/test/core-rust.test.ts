@@ -111,6 +111,7 @@ test("the Rust command line has the aliases of the catalog", async (context) => 
   const status = await finish(remote("status"));
   assert.equal(status.code, 0, status.stderr);
   assert.partialDeepStrictEqual(JSON.parse(status.stdout), { power: true });
+  assert.partialDeepStrictEqual(JSON.parse((await finish(remote("--", "status"))).stdout), { power: true }, "a first -- is not an argument");
   assert.equal((await finish(remote("--off"))).code, 0);
   assert.partialDeepStrictEqual(JSON.parse((await finish(remote("status"))).stdout), { power: false });
   assert.equal((await finish(remote("--on", "--on"))).code, 3);

@@ -17,7 +17,7 @@ Install it as a development dependency, and run it with `pnpm exec acid-cat …`
 pnpm add -D @acid-cat/cli
 ```
 
-It needs Node.js 24 or later. `acid-cat conform --webmcp <url>` also needs [Playwright](https://playwright.dev) and Chromium.
+It ignores a first argument `--`, which package runners such as `pnpm` and `npx` pass to it: `pnpm acid-cat -- check` is `acid-cat check`. It needs Node.js 24 or later. `acid-cat conform --webmcp <url>` also needs [Playwright](https://playwright.dev) and Chromium.
 
 ## Output
 

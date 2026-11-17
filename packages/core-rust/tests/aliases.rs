@@ -142,6 +142,13 @@ async fn the_command_line_stops_when_it_starts_if_an_alias_breaks_a_rule() {
 }
 
 #[test]
+fn a_first_double_dash_is_not_an_argument() {
+    let plain = fixture_cli(&["say", "--text", "hi"]);
+    assert_eq!(plain.0, exit::VALUE);
+    assert_eq!(fixture_cli(&["--", "say", "--text", "hi"]), plain);
+}
+
+#[test]
 fn the_input_schema_of_fixture_note_is_a_ref_with_a_description_beside_it() {
     let catalog = Command::new(fixture())
         .arg("catalog")

@@ -218,7 +218,14 @@ module cliOutput {
         }
     }
 
-  pure def outputChoice(flags: List[OutputFlag], args: List[Text], commands: List[Text]): Outcome = {
+  // Package runners, such as `pnpm` and `npx`, pass a `--` before the arguments of the program.
+  pure def programArguments(args: List[Text]): List[Text] =
+    if (args.length() > 0 and args[0] == END_OF_FLAGS) args.slice(1, args.length()) else args
+
+  pure def outputChoice(flags: List[OutputFlag], args: List[Text], commands: List[Text]): Outcome =
+    readOutputFlags(flags, programArguments(args), commands)
+
+  pure def readOutputFlags(flags: List[OutputFlag], args: List[Text], commands: List[Text]): Outcome = {
     val start = { rest: [], chosen: ByDefault, stopped: false, awaiting: NotAwaiting, failure: NoFailure }
     val reading = args.foldl(start, (state, arg) => read(flags, commands, state, arg))
     match reading.failure {
@@ -397,6 +404,9 @@ module cliOutput {
       assert(outputChoice(FLAGS, [F_FLAG, TEXT, JSON_FLAG], []) == Parsed({ chosen: ByFlag(Json), rest: [] })),
       assert(outputChoice(FLAGS, [JSON_FLAG, ["-", "-", "f", "o", "r", "m", "a", "t", "=", "t", "e", "x", "t"]], []) == Parsed({ chosen: ByFlag(Human), rest: [] })),
       assert(outputChoice(FLAGS, [JSON_FLAG, END_OF_FLAGS, F_FLAG], []) == Parsed({ chosen: ByFlag(Json), rest: [END_OF_FLAGS, F_FLAG] })),
+      assert(outputChoice(FLAGS, [END_OF_FLAGS, JSON_FLAG, x], []) == Parsed({ chosen: ByFlag(Json), rest: [x] })),
+      assert(outputChoice(FLAGS, [END_OF_FLAGS, END_OF_FLAGS, JSON_FLAG], []) == Parsed({ chosen: ByDefault, rest: [END_OF_FLAGS, JSON_FLAG] })),
+      assert(outputChoice(FLAGS, [END_OF_FLAGS], []) == Parsed({ chosen: ByDefault, rest: [] })),
       assert(outputChoice(FLAGS, [deploy, F_FLAG], [deploy]) == Parsed({ chosen: ByDefault, rest: [deploy, F_FLAG] })),
       assert(outputChoice(FLAGS, [x, deploy, JSON_FLAG], [deploy]) == Parsed({ chosen: ByFlag(Json), rest: [x, deploy] })),
       assert(outputChoice(FLAGS, [["-", "-", "j", "s", "o", "n", "=", "1"]], []) == Parsed({ chosen: ByDefault, rest: [["-", "-", "j", "s", "o", "n", "=", "1"]] })),

@@ -620,7 +620,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
     };
     let result: Result<i32, UsageError> = async {
         let (form, args) = match &options.output {
-            None => (OutputForm::Json, args.to_vec()),
+            None => (OutputForm::Json, output::program_arguments(args).to_vec()),
             Some(output) => {
                 let command_names: Vec<&str> = options
                     .commands

@@ -28,7 +28,7 @@ import type { HelpDoc } from "effect/cli";
 import * as App from "./App.ts";
 import type { AnySchema } from "./Capability.ts";
 import type * as Http from "./Http.ts";
-import { filled, formOf, hasColor, layout, outputErrors, outputFlagHelp, outputRun, ui } from "./internal/human.ts";
+import { filled, formOf, hasColor, layout, outputErrors, outputFlagHelp, outputRun, programArguments, ui } from "./internal/human.ts";
 import type { Environment, Form, OutputFlag, Ui } from "./internal/human.ts";
 import { MESSAGES, PROGRAM_FLAGS, RESERVED_FLAGS } from "./internal/output.generated.ts";
 import * as Session from "./Session.ts";
@@ -254,7 +254,7 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   });
   const program = Effect.gen(function* () {
     const args = yield* (yield* Stdio.Stdio).args;
-    if (settings === undefined) return yield* dispatch(args);
+    if (settings === undefined) return yield* dispatch(programArguments(args));
     const { output, commands } = settings;
     const { builtIns } = yield* CliConfig.CliConfig;
     const clashes = outputErrors(output.flags ?? [], flagsOfCommandLine(command, builtIns));

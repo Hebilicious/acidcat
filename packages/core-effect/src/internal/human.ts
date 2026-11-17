@@ -94,10 +94,13 @@ export function outputFlagHelp(flag: OutputFlag): string {
 
 export type OutputChoice = { readonly form: Form | undefined; readonly args: readonly string[]; readonly error?: undefined } | { readonly error: string };
 
+// Package runners, such as `pnpm` and `npx`, pass a `--` before the arguments of the program.
+export const programArguments = (args: readonly string[]): readonly string[] => (args[0] === "--" ? args.slice(1) : args);
+
 export function outputChoice(flags: readonly OutputFlag[], args: readonly string[], commandNames: readonly string[]): OutputChoice {
   const rest: string[] = [];
   let form: Form | undefined;
-  const items = args.values();
+  const items = programArguments(args).values();
   for (const arg of items) {
     if (arg === "--" || (rest.length === 0 && commandNames.includes(arg))) {
       rest.push(arg, ...items);
