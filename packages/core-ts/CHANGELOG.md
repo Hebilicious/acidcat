@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.13.0...@acid-cat/core-ts@0.13.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **core-ts:** give HandleOf and EventHandleOf the input type of the input schema only ([#178](https://github.com/Hebilicious/acidcat/issues/178)) ([92efe12](https://github.com/Hebilicious/acidcat/commit/92efe1224a6471f1e7088355a61662494c155acc))
+
 ## [0.13.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.12.1...@acid-cat/core-ts@0.13.0) (2026-11-17)
 
 
