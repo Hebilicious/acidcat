@@ -16,7 +16,8 @@ The project is not a package. No registry receives it. It is in `model/` at the 
 
 - The automatic form: human when standard output is a terminal, `CI` is not truthy, and no variable of a coding agent is truthy. A variable is truthy when it is set to a value that is not `""`, `0`, `false`, `no` or `off`, after trimming and in any case. Trimming removes only the characters of `TRIM_CHARACTERS`: space, U+0009, U+000A, U+000B, U+000C and U+000D. The case changes only for the ASCII letters `A` to `Z`.
 - The check of the output flags when the command line starts, with its messages: a flag with no name, a name that is not valid, a name of another output flag, a name of another flag of the command line, and a flag with no values.
-- The reading of the output flags in the arguments: until the first `--`, and until an application command that is the first remaining argument; `--name value`, `--name=value` and `-x value`; `-x=value` is not an output flag; the last flag wins; a missing or unknown value stops the command line with exit code 3.
+- The first argument `--`: the program ignores it, before it reads the other arguments.
+- The reading of the output flags in the arguments: until the first `--` that is not the first argument, and until an application command that is the first remaining argument; `--name value`, `--name=value` and `-x value`; `-x=value` is not an output flag; the last flag wins; a missing or unknown value stops the command line with exit code 3.
 - The choice of the form: an output flag, else the default `json`, else the automatic form for the default `auto`.
 - The messages, the line of the help of each output flag, and the lists in them. A list joins its last two items with a word and the others with `, `: `a, b or c`. The message of a bad value and the help give the values in code point order.
 

@@ -48,7 +48,7 @@ An event, such as `aircon.status.changed`, gives a stream of **occurrences** to 
 
 The HTTP stream uses the framing of the GraphQL over server-sent events protocol. The WebMCP binding does not serve events.
 
-On the command line, each input property is a flag. An array of simple values takes one flag for each item, `aircon schedule set --days mon --days fri --hours 7`, or the whole array as JSON text, `--days '["mon","fri"]'`.
+On the command line, each input property is a flag. An array of simple values takes one flag for each item, `aircon schedule set --days mon --days fri --hours 7`, or the whole array as JSON text, `--days '["mon","fri"]'`. The program ignores a first `--`, which package runners such as `pnpm` and `npx` pass to it: `pnpm exec aircon -- status` runs `aircon status`.
 
 The command line writes JSON, for scripts and agents. An application can also give it a form for a person: the application chooses the flags that select the form, such as `--output human` or `--json`, and gives a typed formatter for each capability or event. Without a formatter, the command line prints a generic layout of the value. The human form is off by default. With `default: "auto"`, it is the default only on a terminal with no CI and no coding agent ([core-ts](packages/core-ts/README.md), [core-effect](packages/core-effect/README.md), [core-rust](packages/core-rust/README.md)).
 

@@ -197,20 +197,20 @@ module cliOutputArguments {
     val reachesStop = startsWithCommand(plain, commands) or stopsAt(stopper, plain, commands)
     val args = plain.append(stopper).concat(if (reachesStop) after else [])
     val offTerminal = accepted(flags) and not(isTerminal)
-    offTerminal implies decide(fallback, isTerminal, env, outputChoice(flags, args, commands)) == Proceeds({ form: Json, rest: args })
+    offTerminal implies decide(fallback, isTerminal, env, readOutputFlags(flags, args, commands)) == Proceeds({ form: Json, rest: args })
   }
 
   val argumentsAfterTheStopStay = {
     val plain = plainArgs(segments)
     val args = joinedArgs(segments).append(stopper).concat(after)
     val stops = readable and not(startsWithCommand(plain, commands)) and stopsAt(stopper, plain, commands)
-    stops implies outputChoice(flags, args, commands) == Parsed({ chosen: lastChosen(flags, segments), rest: plain.append(stopper).concat(after) })
+    stops implies readOutputFlags(flags, args, commands) == Parsed({ chosen: lastChosen(flags, segments), rest: plain.append(stopper).concat(after) })
   }
 
   val lastOutputFlagWins = {
     val chosen = lastChosen(flags, segments)
     val withFlag = readable and not(startsWithCommand(plainArgs(segments), commands)) and chosen != ByDefault
-    withFlag implies outputChoice(flags, joinedArgs(segments), commands) == Parsed({ chosen: chosen, rest: plainArgs(segments) })
+    withFlag implies readOutputFlags(flags, joinedArgs(segments), commands) == Parsed({ chosen: chosen, rest: plainArgs(segments) })
   }
 
   val badValueStops = match flagNamed(flags, bad.name) {
@@ -221,7 +221,7 @@ module cliOutputArguments {
         val args = joinedArgs(segments).concat(bad.args).concat(if (bad.value == []) [] else after)
         val failure = { flag: bad.name, values: valueNames(values) }
         (readable and not(startsWithCommand(plainArgs(segments), commands))) implies and {
-          outputChoice(flags, args, commands) == BadValue(failure),
+          readOutputFlags(flags, args, commands) == BadValue(failure),
           decide(fallback, isTerminal, env, BadValue(failure)) == Stops({ exitCode: INVALID_INPUT_EXIT_CODE, flag: failure.flag, values: failure.values }),
         }
       }

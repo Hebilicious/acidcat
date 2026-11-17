@@ -189,10 +189,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   const outputErrors = cliOutputErrors(outputFlags, takenFlags(view, aliases));
   if (outputErrors.length > 0) throw new Error(outputErrors.join("\n"));
   const added = options.commands ?? [];
-  const chosen: CliOutputRun =
-    options.output === undefined
-      ? { form: "json", args: argv }
-      : cliOutputRun(outputFlags, argv, added.map(({ name }) => name), options.output.default, () => io.output ?? "json");
+  const chosen: CliOutputRun = cliOutputRun(outputFlags, argv, added.map(({ name }) => name), options.output?.default, () => io.output ?? "json");
   const args = chosen.exitCode === undefined ? chosen.args : [];
   const output: CliForm = chosen.exitCode === undefined ? chosen.form : "json";
   const formatOf = (id: string): CliFormat | undefined => formats.find((format) => format.id === id);

@@ -129,6 +129,7 @@ test("the aliases of the command line call their capabilities with their fixed i
   assert.equal((await cli("--on")).code, 0);
   assert.equal(unit.state.power, true);
   assert.partialDeepStrictEqual(JSON.parse((await cli("status")).stdout), { power: true });
+  assert.partialDeepStrictEqual(JSON.parse((await cli("--", "status")).stdout), { power: true }, "a first -- is not an argument");
   assert.equal((await cli("--off")).code, 0);
   assert.equal(unit.state.power, false);
   assert.equal((await cli("--on", "--on", "false")).code, 3);

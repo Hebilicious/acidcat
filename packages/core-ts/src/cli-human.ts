@@ -243,10 +243,13 @@ export function cliOutputFlagHelp(flag: CliOutputFlag): string {
 
 export type CliOutputChoice = { readonly form?: CliForm | undefined; readonly args: readonly string[]; readonly error?: undefined } | { readonly error: string };
 
+// Package runners, such as `pnpm` and `npx`, pass a `--` before the arguments of the program.
+const programArguments = (args: readonly string[]): readonly string[] => (args[0] === "--" ? args.slice(1) : args);
+
 export function cliOutputChoice(flags: readonly CliOutputFlag[], args: readonly string[], commandNames: readonly string[]): CliOutputChoice {
   const rest: string[] = [];
   let form: CliForm | undefined;
-  const items = args.values();
+  const items = programArguments(args).values();
   for (const arg of items) {
     if (arg === "--" || (rest.length === 0 && commandNames.includes(arg))) {
       rest.push(arg, ...items);
