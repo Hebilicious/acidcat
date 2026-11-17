@@ -129,7 +129,7 @@ An `Option` field that is not required takes the value of its type, not `null`. 
 | MCP through HTTP | `mcp::McpBinding::new(app, context, McpOptions::new(name, version))`. It serves revision `2026-07-28`, and the `initialize` handshake of earlier revisions. Poll delivery is on. Webhook delivery is on with `McpOptions::webhooks`, and the principal of each request comes from `McpOptions::principal` |
 | MCP through stdio | `mcp::serve_stdio(app, context, McpStdioOptions::new(name, version))` |
 | HTTP | `http::HttpBinding::new(app, context, HttpOptions::default())` |
-| CLI | `cli::cli_main(app, context, CliOptions::new(name, version))`. An interrupt cancels the call or the subscription. With `CliOptions::remote`, it calls a server: see [A command line for a server](#a-command-line-for-a-server) |
+| CLI | `cli::cli_main(app, context, CliOptions::new(name, version))`. An interrupt cancels the call or the subscription. If the process has not exited `cli::INTERRUPT_GRACE` (one second) after the interrupt, for example because a capability blocks a thread of the runtime, it exits with 130 and writes nothing more. A second interrupt exits with 130 at once. `cli::run_cli_process` does the same, and gives the exit code in place of the exit. With `CliOptions::remote`, it calls a server: see [A command line for a server](#a-command-line-for-a-server) |
 
 When the command line breaks a rule of the binding, for example two commands with the same path, `cli_main` and `run_cli_process` write the message to standard error and give the exit code 5 (`internal`).
 

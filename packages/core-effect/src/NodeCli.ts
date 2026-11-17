@@ -1,6 +1,6 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { CLI_EXIT_CODES } from "@acid-cat/spec-ts";
+import { CLI_EXIT_CODES, INTERRUPT_GRACE_MS } from "@acid-cat/spec-ts";
 import { Console, Effect, Layer, Stdio } from "effect";
 import type { Command } from "effect/cli";
 
@@ -13,6 +13,17 @@ import * as Cli from "./Cli.ts";
  * the call.
  */
 const afterInterruptHandlers = <A, E, R>(program: Effect.Effect<A, E, R>) => Effect.andThen(Effect.yieldNow, program);
+
+// `NodeRuntime.runMain` keeps the process running until the main fiber ends, so a fiber that cannot be interrupted
+// keeps it running for ever.
+const exitAfterInterruptGrace = () => {
+  let interrupted = false;
+  process.on("SIGINT", () => {
+    if (interrupted) process.exit(CLI_EXIT_CODES.cancelled);
+    interrupted = true;
+    setTimeout(() => process.exit(CLI_EXIT_CODES.cancelled), INTERRUPT_GRACE_MS).unref();
+  });
+};
 
 const withArgs = (args: readonly string[]) =>
   Layer.effect(
@@ -40,6 +51,7 @@ export function main<R, E, const Commands extends ReadonlyArray<Command.Command.
   args: readonly string[] = process.argv.slice(2),
 ): void {
   const services = Layer.provideMerge(Layer.merge(withArgs(args), terminal), NodeServices.layer);
+  exitAfterInterruptGrace();
   Effect.suspend(() => Cli.run(app, options)).pipe(stopOnBrokenRule, Effect.provide(Layer.merge(layer, services)), afterInterruptHandlers, NodeRuntime.runMain);
 }
 
@@ -47,5 +59,6 @@ export function runCommand<Name extends string, Input, ContextInput, E>(
   command: Command.Command<Name, Input, ContextInput, E, Command.Environment>,
   options: { readonly version: string },
 ): void {
+  exitAfterInterruptGrace();
   Cli.runCommand(command, options).pipe(stopOnBrokenRule, Effect.provide(Layer.provideMerge(terminal, NodeServices.layer)), afterInterruptHandlers, NodeRuntime.runMain);
 }

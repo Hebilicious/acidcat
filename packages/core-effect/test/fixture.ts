@@ -21,20 +21,30 @@ export class Holds extends Context.Service<
   }
 >()("fixture/Holds") {}
 
-export const holdsLayer = (mark?: (path: string) => Effect.Effect<void>) =>
+export interface Marker {
+  readonly write: (path: string) => Effect.Effect<void>;
+  readonly remove: (path: string) => Effect.Effect<void>;
+}
+
+export const holdsLayer = (marker?: Marker, { ignoreInterruption = false }: { readonly ignoreInterruption?: boolean } = {}) =>
   Layer.sync(Holds, () => {
     const holding = new Set<{ readonly key: string; readonly released: Deferred.Deferred<void> }>();
+    const hold = (key: string, path: string | undefined) =>
+      Effect.acquireUseRelease(
+        Effect.map(Deferred.make<void>(), (released) => {
+          const entry = { key, released };
+          holding.add(entry);
+          return entry;
+        }),
+        (entry) => Effect.andThen(path === undefined || marker === undefined ? Effect.void : marker.write(path), Deferred.await(entry.released)),
+        (entry) =>
+          Effect.andThen(
+            Effect.sync(() => holding.delete(entry)),
+            path === undefined || marker === undefined ? Effect.void : marker.remove(path),
+          ),
+      );
     return {
-      hold: (key, marker) =>
-        Effect.acquireUseRelease(
-          Effect.map(Deferred.make<void>(), (released) => {
-            const entry = { key, released };
-            holding.add(entry);
-            return entry;
-          }),
-          (entry) => Effect.andThen(marker === undefined || mark === undefined ? Effect.void : mark(marker), Deferred.await(entry.released)),
-          (entry) => Effect.sync(() => holding.delete(entry)),
-        ),
+      hold: ignoreInterruption ? (key, path) => Effect.uninterruptible(hold(key, path)) : hold,
       held: Effect.sync(() => [...holding].map((entry) => entry.key)),
       release: (key) =>
         Effect.forEach(
@@ -54,14 +64,14 @@ export class Watchers extends Context.Service<
   }
 >()("fixture/Watchers") {}
 
-export const watchersLayer = (mark?: (path: string) => Effect.Effect<void>) =>
+export const watchersLayer = (marker?: Marker) =>
   Layer.effect(
     Watchers,
     Effect.gen(function* () {
       const signals = yield* PubSub.unbounded<{ readonly key: string; readonly value: string }>();
       const watching = new Set<{ readonly key: string }>();
       return {
-        watch: (key, marker) =>
+        watch: (key, path) =>
           Stream.unwrap(
             Effect.gen(function* () {
               const subscription = yield* Effect.acquireRelease(
@@ -72,7 +82,7 @@ export const watchersLayer = (mark?: (path: string) => Effect.Effect<void>) =>
                 }),
                 ({ entry }) => Effect.sync(() => watching.delete(entry)),
               );
-              if (marker !== undefined && mark !== undefined) yield* mark(marker);
+              if (path !== undefined && marker !== undefined) yield* Effect.acquireRelease(marker.write(path), () => marker.remove(path));
               return Stream.fromSubscription(subscription.subscription).pipe(
                 Stream.filter((signal) => signal.key === key),
                 Stream.map((signal) => signal.value),
@@ -198,7 +208,7 @@ export const fixture = App.make({
     Capability.make({
       id: "fixture.hold",
       description:
-        "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held gives the key. With a marker, the call writes a file at that path when it starts to hold.",
+        "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held gives the key. With a marker, the call writes a file at that path when it starts to hold, and deletes the file when it ends.",
       audience: everywhere,
       input: Schema.Struct({ key: Schema.String, marker: Schema.optionalKey(Schema.String) }),
       output: Key,
@@ -303,7 +313,7 @@ export const fixture = App.make({
     }),
     Event.make({
       id: "fixture.watch",
-      description: "Give an occurrence each time that fixture.signal gets the key. Never end. With a marker, write a file at that path when the subscription starts.",
+      description: "Give an occurrence each time that fixture.signal gets the key. Never end. With a marker, write a file at that path when the subscription starts, and delete the file when it ends.",
       audience: everywhere,
       input: Schema.Struct({ key: Schema.String, marker: Schema.optionalKey(Schema.String) }),
       payload: Watched,

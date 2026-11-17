@@ -1,8 +1,11 @@
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
 
 mod fixture_settings;
+
+use acid_cat_core::cli::{INTERRUPT_GRACE, exit};
 
 use fixture_settings::{
     POLL_BUFFER, POLL_LEASE_MS, WEBHOOK_MAX_SUBSCRIPTIONS, WEBHOOK_MAX_TTL_MS, WEBHOOK_MIN_TTL_MS,
@@ -27,6 +30,9 @@ fn webhook_limit_flags() -> Vec<String> {
         WEBHOOK_MAX_SUBSCRIPTIONS.to_string(),
     ]
 }
+
+const DEADLINE: Duration = Duration::from_secs(10);
+const SECOND_INTERRUPT: Duration = Duration::from_millis(100);
 
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -208,6 +214,101 @@ fn through_http() {
 fn through_the_command_line() {
     let command = format!("{} cli", fixture().display());
     assert_conforms(&["--cli", &command], 20);
+}
+
+#[cfg(unix)]
+struct Interrupted {
+    code: Option<i32>,
+    stderr: String,
+    after_interrupt: Duration,
+}
+
+#[cfg(unix)]
+fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
+    let directory = std::env::temp_dir().join(format!(
+        "acid-cat-core-rust-interrupt-{}-{interrupts}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&directory).expect("the directory is made");
+    let marker = directory.join("held");
+    let mut child = Command::new(fixture())
+        .args(["cli-blocking", "fixture", "hold", "--key", "k", "--marker"])
+        .arg(&marker)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the fixture starts");
+    let start = Instant::now();
+    while !marker.exists() {
+        assert!(
+            start.elapsed() < DEADLINE,
+            "the call did not write its marker file"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let interrupt = || {
+        Command::new("kill")
+            .args(["-INT", &child.id().to_string()])
+            .status()
+            .expect("kill runs");
+    };
+    let interrupted = Instant::now();
+    interrupt();
+    if interrupts == 2 {
+        // Unix merges a signal that is still pending with the next one of the same kind.
+        std::thread::sleep(SECOND_INTERRUPT);
+        interrupt();
+    }
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("the status of the fixture") {
+            break Some(status);
+        }
+        if interrupted.elapsed() > DEADLINE {
+            child.kill().expect("the fixture stops");
+            break None;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    let elapsed = interrupted.elapsed();
+    let mut stderr = String::new();
+    if status.is_some() {
+        std::io::Read::read_to_string(
+            &mut child.stderr.take().expect("standard error"),
+            &mut stderr,
+        )
+        .expect("standard error is text");
+    }
+    let _ = std::fs::remove_dir_all(&directory);
+    Interrupted {
+        code: status.and_then(|status| status.code()),
+        stderr,
+        after_interrupt: elapsed,
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_call_that_blocks_exits_with_130_after_the_grace_period_or_at_once_after_a_second_interrupt() {
+    let once = interrupted_blocking_call(1);
+    assert_eq!(
+        (once.code, once.stderr.as_str()),
+        (Some(exit::CANCELLED), "")
+    );
+    assert!(
+        once.after_interrupt >= INTERRUPT_GRACE,
+        "exited {:?} after the interrupt, before the grace period",
+        once.after_interrupt
+    );
+    let twice = interrupted_blocking_call(2);
+    assert_eq!(
+        (twice.code, twice.stderr.as_str()),
+        (Some(exit::CANCELLED), "")
+    );
+    assert!(
+        twice.after_interrupt < INTERRUPT_GRACE,
+        "exited {:?} after two interrupts, not at once",
+        twice.after_interrupt
+    );
 }
 
 #[test]

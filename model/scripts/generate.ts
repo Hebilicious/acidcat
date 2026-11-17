@@ -155,6 +155,7 @@ const watchExitCodes = numbered(field(facts, "cliWatchExitCodes"));
 const httpStatuses = numbered(field(facts, "httpStatus"));
 const genericCommands = list(field(facts, "cliGenericCommands")).map(text);
 const keepaliveMs = integer(field(facts, "keepaliveMs"));
+const interruptGraceMs = integer(field(facts, "interruptGraceMs"));
 const sseMediaType = string(field(facts, "sseMediaType"));
 const mcpProtocolVersion = string(field(facts, "mcpProtocolVersion"));
 const mcpEventsExtension = string(field(facts, "mcpEventsExtension"));
@@ -399,6 +400,8 @@ const specFacts = [
   "",
   `export const KEEPALIVE_MS = ${keepaliveMs};`,
   "",
+  `export const INTERRUPT_GRACE_MS = ${interruptGraceMs};`,
+  "",
   `export const SSE_MEDIA_TYPE = ${JSON.stringify(sseMediaType)};`,
   "",
   `export const MCP_PROTOCOL_VERSION = ${JSON.stringify(mcpProtocolVersion)};`,
@@ -516,6 +519,7 @@ const rustFacts = [
   rustList("GENERIC_COMMANDS", genericCommands),
   "",
   rustConst("KEEPALIVE_MS", "u64", String(keepaliveMs)),
+  rustConst("INTERRUPT_GRACE_MS", "u64", String(interruptGraceMs)),
   rustConst("SSE_MEDIA_TYPE", "&str", rustString(sseMediaType)),
   "",
   rustConst("MCP_PROTOCOL_VERSION", "&str", rustString(mcpProtocolVersion)),

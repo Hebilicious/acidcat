@@ -16,6 +16,7 @@ import {
   cliResolve,
   cliUsage,
   commandPath,
+  INTERRUPT_GRACE_MS,
   isCallFailure,
   isJsonObject,
   ownMember,
@@ -137,12 +138,19 @@ class UsageError extends Error {
 
 /**
  * Run the command line as the main program of the process. An interrupt (`SIGINT`) cancels the call or the subscription.
- * The default arguments are the arguments of the process. With `default: "auto"` in the option `output`, the form is
- * human when standard output is a terminal and no CI and no coding agent is detected, and JSON in all other cases.
+ * If the run has not ended `INTERRUPT_GRACE_MS` after the interrupt, or at a second interrupt, the process exits with
+ * code 130. The default arguments are the arguments of the process. With `default: "auto"` in the option `output`, the
+ * form is human when standard output is a terminal and no CI and no coding agent is detected, and JSON in all other
+ * cases.
  */
 export function main<Context>(app: App<Context>, options: CliOptions<Context>, args: readonly string[] = process.argv.slice(2)): void {
   const interrupt = new AbortController();
-  process.once("SIGINT", () => interrupt.abort());
+  const onInterrupt = () => {
+    if (interrupt.signal.aborted) process.exit(CLI_EXIT_CODES.cancelled);
+    interrupt.abort();
+    setTimeout(() => process.exit(CLI_EXIT_CODES.cancelled), INTERRUPT_GRACE_MS).unref();
+  };
+  process.on("SIGINT", onInterrupt);
   void runCli(app, options, args, {
     stdout: (text) => process.stdout.write(`${text}\n`),
     stderr: (text) => process.stderr.write(`${text}\n`),

@@ -3,13 +3,13 @@ import { after, before, describe, test } from "node:test";
 
 import { conform } from "@acid-cat/cli";
 import type { Check } from "@acid-cat/cli";
-import { writeFile } from "node:fs/promises";
 
 import { Effect, Exit, Layer, Option, Schedule, Scope } from "effect";
 
 import { Http, Mcp, Session, WebMcp } from "../src/index.ts";
 import * as NodeServer from "../src/NodeServer.ts";
 import * as NodeWebhook from "../src/NodeWebhook.ts";
+import { fileMarker } from "./file-marker.ts";
 import { fixture, fixtureLayer, holdsLayer, POLL, switchLayer, watchersLayer, WEBHOOK_LIMITS } from "./fixture.ts";
 import { testCertificate } from "./webhook-receiver.ts";
 
@@ -26,7 +26,6 @@ const TASK_TEST_TIMEOUT = Number(process.env.TEST_TIMEOUT_MS ?? Number.POSITIVE_
 const CONFORM_TIMEOUT = 2 * TASK_TEST_TIMEOUT;
 
 const certificate = testCertificate();
-const writeMarker = (path: string) => Effect.promise(() => writeFile(path, ""));
 const mcp = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), {
   name: "fixture",
   version: "0.0.0",
@@ -44,7 +43,7 @@ before(async () => {
       {
         "/mcp": Mcp.withHandshake(mcp),
         "/api": Http.toWebHandler(fixture, Layer.fresh(fixtureLayer), { allowedOrigins: [], base: "/api" }),
-        "/cli": Http.toWebHandler(fixture, Layer.fresh(Layer.mergeAll(switchLayer, holdsLayer(writeMarker), watchersLayer(writeMarker))), {
+        "/cli": Http.toWebHandler(fixture, Layer.fresh(Layer.mergeAll(switchLayer, holdsLayer(fileMarker), watchersLayer(fileMarker))), {
           allowedOrigins: [],
           base: "/cli",
           target: "cli",

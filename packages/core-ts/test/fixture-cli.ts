@@ -1,9 +1,6 @@
 #!/usr/bin/env node
-import { writeFile } from "node:fs/promises";
-
 import { cliMain } from "../src/index.ts";
+import { fileMarker } from "./file-marker.ts";
 import { fixture, Holds, options, Watchers } from "./fixture.ts";
 
-const mark = (path: string) => writeFile(path, "");
-
-cliMain(fixture, { name: "fixture", version: "0.0.0", ...options(new Holds(mark), new Watchers(mark)) });
+cliMain(fixture, { name: "fixture", version: "0.0.0", ...options(new Holds(fileMarker), new Watchers(fileMarker)) });

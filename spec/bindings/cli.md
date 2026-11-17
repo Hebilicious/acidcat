@@ -42,7 +42,7 @@ A protocol binding that serves a view as a command line. The commands come from 
   | Other | `--name <json>` | `[--name <json>]` |
 
   If a property schema or an `items` schema is a `$ref`, use the type that it refers to. A capability with no input schema, or with `"properties": {}`, has no flags. For example, with the program name `aircon`: `aircon power set --on`, `aircon fan set --speed <auto|low|medium|high>`, `aircon schedule set --days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]` and `aircon status get`.
-- **Cancellation.** An interrupt (`SIGINT`) cancels the call.
+- **Cancellation.** An interrupt (`SIGINT`) cancels the call. If the call has not ended within a grace period after the interrupt, the program SHOULD exit with code 130. At a second interrupt, it SHOULD exit with code 130 at once.
 
 An application MAY add its own commands and flags. The name of a command of the application is one word. This name MUST NOT be `call`, `list`, `watch`, the name of a different command of the application, the name of an alias, or the first word of the path of a capability. If a name breaks this rule, if two commands have the same path, or if two flags have the same name, the program MUST stop with an error when it starts.
 
@@ -100,7 +100,7 @@ If an alias breaks a rule of this section, the program MUST stop with an error w
 - **Cursor.** `--cursor <cursor>` gives the cursor, and `--max-age-ms <integer>` gives `maxAgeMs`. Each occurrence on standard output has its cursor, so a script can keep the last cursor, and resume with it after the program stops. These two flags are not properties of the input. If the input schema of an event has a top-level property `cursor` or `max-age-ms`, the program MUST stop with an error when it starts.
 - **Usage.** The `usage` of an event is the name of the program, `watch`, the id, the flags as for a capability, and then `[--cursor <string>] [--max-age-ms <integer>]`. If the input schema has no top-level `properties` member, it is the name of the program, `watch <id> '<json>'`, and the same two flags.
 - **Occurrences.** Each occurrence goes to standard output as its JSON on one line, as soon as it comes.
-- **Cancellation.** An interrupt (`SIGINT`) cancels the subscription.
+- **Cancellation.** An interrupt (`SIGINT`) cancels the subscription. If the subscription has not ended within a grace period after the interrupt, the program SHOULD exit with code 130, and write nothing to standard error. At a second interrupt, it SHOULD exit in the same way at once.
 
 | End | Standard error | Exit code |
 | --- | --- | --- |

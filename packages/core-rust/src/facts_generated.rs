@@ -62,6 +62,7 @@ pub mod exit {
 pub(crate) const GENERIC_COMMANDS: [&str; 3] = ["call", "list", "watch"];
 
 pub(crate) const KEEPALIVE_MS: u64 = 15000;
+pub(crate) const INTERRUPT_GRACE_MS: u64 = 1000;
 pub(crate) const SSE_MEDIA_TYPE: &str = "text/event-stream";
 
 pub(crate) const MCP_PROTOCOL_VERSION: &str = "2026-07-28";

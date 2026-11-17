@@ -140,13 +140,14 @@ export async function checkCli(command: readonly string[], options: { readonly d
     try {
       const { child, run } = start(command, ["fixture", "hold", "--key", "interrupt", "--marker", marker], signal);
       const ended = () => child.exitCode !== null || child.signalCode !== null;
-      await until("the call writes its marker file", async () => existsSync(marker) || ended(), (ready) => ready, signal);
-      if (!ended()) child.kill("SIGINT");
+      const state = await until("the call writes its marker file", async () => (existsSync(marker) ? "marked" : ended() ? "ended" : "waiting"), (each) => each !== "waiting", signal);
+      if (state === "marked") child.kill("SIGINT");
       const result = await run;
-      expect(existsSync(marker), `the call must hold before the interrupt, but the command line ended with ${result.code}: ${result.stderr}`);
+      expect(state === "marked", `the call must hold before the interrupt, but the command line ended with ${result.code}: ${result.stderr}`);
       expect(result.signal === null, `the process must exit, not end by the signal ${result.signal}`);
       expectEqual(result.code, 130, "exit code");
       expectEqual(result.stdout, "", "standard output");
+      await until("the call ends and deletes its marker file", async () => !existsSync(marker), (ended) => ended, signal);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -367,14 +368,15 @@ async function checkWatch(checks: Checks, command: readonly string[]): Promise<v
     try {
       const { child, run: watched } = start(command, ["watch", "fixture.watch", "--key", "interrupt", "--marker", marker], signal);
       const ended = () => child.exitCode !== null || child.signalCode !== null;
-      await until("the subscription writes its marker file", async () => existsSync(marker) || ended(), (ready) => ready, signal);
-      if (!ended()) child.kill("SIGINT");
+      const state = await until("the subscription writes its marker file", async () => (existsSync(marker) ? "marked" : ended() ? "ended" : "waiting"), (each) => each !== "waiting", signal);
+      if (state === "marked") child.kill("SIGINT");
       const result = await watched;
-      expect(existsSync(marker), `the subscription must start before the interrupt, but the command line ended with ${result.code}: ${result.stderr}`);
+      expect(state === "marked", `the subscription must start before the interrupt, but the command line ended with ${result.code}: ${result.stderr}`);
       expect(result.signal === null, `the process must exit, not end by the signal ${result.signal}`);
       expectEqual(result.code, 130, "exit code");
       expectEqual(result.stdout, "", "standard output");
       expectEqual(result.stderr, "", "standard error");
+      await until("the subscription ends and deletes its marker file", async () => !existsSync(marker), (ended) => ended, signal);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

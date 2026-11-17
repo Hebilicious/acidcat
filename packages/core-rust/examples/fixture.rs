@@ -34,6 +34,7 @@ impl Default for Fixture {
 struct Holds {
     next: AtomicU64,
     holding: Mutex<HashMap<u64, (String, Arc<Notify>)>>,
+    blocks_its_thread: bool,
 }
 
 impl Holds {
@@ -47,8 +48,11 @@ impl Holds {
         let _forget = Forget(|| {
             self.holding.lock().unwrap().remove(&id);
         });
-        if let Some(marker) = marker {
-            let _ = std::fs::write(marker, "");
+        let _marker = marker.map(MarkerFileWhileAlive::write);
+        if self.blocks_its_thread {
+            loop {
+                std::thread::park();
+            }
         }
         released.notified().await;
     }
@@ -100,6 +104,21 @@ impl Watchers {
 }
 
 struct Forget<F: FnMut()>(F);
+
+struct MarkerFileWhileAlive(String);
+
+impl MarkerFileWhileAlive {
+    fn write(path: String) -> MarkerFileWhileAlive {
+        let _ = std::fs::write(&path, "");
+        MarkerFileWhileAlive(path)
+    }
+}
+
+impl Drop for MarkerFileWhileAlive {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
 
 impl<F: FnMut()> Drop for Forget<F> {
     fn drop(&mut self) {
@@ -274,7 +293,7 @@ pub fn fixture() -> Arc<Application<Fixture>> {
         .capability(
             Capability::new(
                 "fixture.hold",
-                "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held gives the key. With a marker, the call writes a file at that path when it starts to hold.",
+                "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held gives the key. With a marker, the call writes a file at that path when it starts to hold, and deletes the file when it ends.",
             )
             .audience(EVERYWHERE)
             .input::<Hold>()
@@ -378,7 +397,7 @@ pub fn fixture() -> Arc<Application<Fixture>> {
         .event(
             Event::new(
                 "fixture.watch",
-                "Give an occurrence each time that fixture.signal gets the key. Never end. With a marker, write a file at that path when the subscription starts.",
+                "Give an occurrence each time that fixture.signal gets the key. Never end. With a marker, write a file at that path when the subscription starts, and delete the file when it ends.",
             )
             .audience(EVERYWHERE)
             .input::<Watch>()
@@ -390,9 +409,7 @@ pub fn fixture() -> Arc<Application<Fixture>> {
                     let id = context.watchers.next.fetch_add(1, Ordering::Relaxed);
                     context.watchers.watching.lock().unwrap().insert(id, (key.clone(), sender));
                     let _forget = Forget(|| { context.watchers.watching.lock().unwrap().remove(&id); });
-                    if let Some(marker) = marker {
-                        let _ = std::fs::write(marker, "");
-                    }
+                    let _marker = marker.map(MarkerFileWhileAlive::write);
                     while let Some(value) = values.recv().await {
                         yield Ok(Emitted::new(Watched { key: key.clone(), value }));
                     }
@@ -529,8 +546,28 @@ async fn main() {
             .await;
             std::process::exit(code);
         }
+        Some("cli-blocking") => {
+            use acid_cat_core::cli::{CliOptions, run_cli_process};
+            let context = Fixture {
+                holds: Holds {
+                    blocks_its_thread: true,
+                    ..Holds::default()
+                },
+                ..Fixture::default()
+            };
+            let code = run_cli_process(
+                app,
+                Arc::new(context),
+                CliOptions::new("fixture", "0.0.0"),
+                args[1..].to_vec(),
+            )
+            .await;
+            std::process::exit(code);
+        }
         _ => {
-            eprintln!("Usage: fixture <catalog|serve|mcp-stdio|cli|cli-remote> [args]");
+            eprintln!(
+                "Usage: fixture <catalog|serve|mcp-stdio|cli|cli-blocking|cli-remote> [args]"
+            );
             std::process::exit(2);
         }
     }
