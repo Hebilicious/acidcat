@@ -50,6 +50,7 @@ When a design decision is made for something that does not exist yet, build it. 
 - Each published package has the license file of the repository, and a task in `moon run verify` that builds or packages it the way that its registry receives it.
 - A feature reaches every surface of the examples: each API in `examples/` uses it, with a test. Do not list a surface as not done because no one named it.
 - The skill [`skills/acid-cat`](skills/acid-cat/SKILL.md) tells agents how to build with AcidCat. When a change adds or changes a rule of the catalog, a core, a binding or a command of `acid-cat`, change the skill in the same pull request. `gh skill publish --dry-run .` validates it.
+- When a change adds or changes a feature that a user of AcidCat sees, update each document that describes that feature, in the same pull request: the root [README.md](README.md) (its overview of the surfaces, the packages and the roadmap), the README of each package that the change touches, the README of each example that uses the feature, and the skill. A new feature that the root README does not mention is not done.
 - Release by merging the release pull request of release-please. Do not change a version or a `CHANGELOG.md` by hand. See [Publishing](packages/README.md#publishing).
 
 ## Verification
