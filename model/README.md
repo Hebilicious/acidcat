@@ -65,6 +65,8 @@ A message is a template with a named placeholder for each part, for example `The
 
 [`cli-output-properties.qnt`](cli-output-properties.qnt) has two state machines. Each one chooses its inputs with `nondet` from small finite domains in `init`. `quint verify --max-steps=0` then proves each invariant for every choice.
 
+The properties of the arguments are about `readOutputFlags`: the reading of the arguments after the program ignores a first `--`. `outputChoice` is `programArguments`, then `readOutputFlags`.
+
 | Property | Invariant | Module |
 | --- | --- | --- |
 | P1. Off a terminal, with no output flag before the stop, the form is JSON for each default, and the arguments stay unchanged and in order. The arguments after `--`, or after an application command that is the first remaining argument, can be output flags. | `notTerminalGivesJson` | `cliOutputArguments` |
