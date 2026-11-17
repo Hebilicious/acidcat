@@ -5,6 +5,7 @@ use std::sync::{Arc, Once};
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
+use super::output_generated::{AGENT_VARIABLES, CI_VARIABLE, FALSE_VALUES, TRIM_CHARACTERS};
 use crate::app::{CapabilityDefinition, EventDefinition};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -14,27 +15,12 @@ pub enum OutputForm {
     Human,
 }
 
-const AGENT_VARIABLES: [&str; 12] = [
-    "AI_AGENT",
-    "CLAUDECODE",
-    "CODEX_THREAD_ID",
-    "CURSOR_AGENT",
-    "GEMINI_CLI",
-    "OPENCODE",
-    "AMP_CURRENT_THREAD_ID",
-    "AUGMENT_AGENT",
-    "QWEN_CODE_SESSION_ID",
-    "PI_CODING_AGENT",
-    "CRUSH",
-    "COPILOT_AGENT",
-];
-
 fn is_truthy(value: Option<String>) -> bool {
     value.is_some_and(|value| {
-        !matches!(
-            value.trim().to_lowercase().as_str(),
-            "" | "0" | "false" | "no" | "off"
-        )
+        let value = value
+            .trim_matches(|c| TRIM_CHARACTERS.contains(&c))
+            .to_ascii_lowercase();
+        !FALSE_VALUES.contains(&value.as_str())
     })
 }
 
@@ -42,7 +28,7 @@ fn is_truthy(value: Option<String>) -> bool {
 /// output is a terminal, `CI` is not truthy and no variable of a coding agent is truthy. `env` gives the value of an
 /// environment variable.
 pub fn output_form(is_terminal: bool, env: impl Fn(&str) -> Option<String>) -> OutputForm {
-    let automated = std::iter::once("CI")
+    let automated = std::iter::once(CI_VARIABLE)
         .chain(AGENT_VARIABLES)
         .any(|name| is_truthy(env(name)));
     if is_terminal && !automated {
@@ -475,29 +461,6 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-
-    #[test]
-    fn output_form_is_human_only_in_a_terminal_with_no_ci_and_no_agent() {
-        let with = |variables: &'static [(&'static str, &'static str)]| {
-            move |name: &str| {
-                variables
-                    .iter()
-                    .find(|(each, _)| *each == name)
-                    .map(|(_, value)| (*value).to_owned())
-            }
-        };
-        assert_eq!(output_form(true, with(&[])), OutputForm::Human);
-        assert_eq!(
-            output_form(true, with(&[("CLAUDECODE", "1")])),
-            OutputForm::Json
-        );
-        assert_eq!(output_form(true, with(&[("CI", "true")])), OutputForm::Json);
-        assert_eq!(
-            output_form(true, with(&[("CLAUDECODE", "0")])),
-            OutputForm::Human
-        );
-        assert_eq!(output_form(false, with(&[])), OutputForm::Json);
-    }
 
     #[test]
     fn the_generic_layout_writes_objects_tables_and_lists() {

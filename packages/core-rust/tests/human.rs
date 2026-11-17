@@ -216,7 +216,7 @@ async fn output_flags_are_anywhere_the_last_one_wins_and_an_output_flag_can_take
         (
             exit::INVALID_INPUT,
             String::new(),
-            "The option -f must be text or json.".into()
+            "The option -f must be json or text.".into()
         )
     );
     let (code, help, _) = ran(&["--help"]).await;
@@ -224,7 +224,7 @@ async fn output_flags_are_anywhere_the_last_one_wins_and_an_output_flag_can_take
     assert!(help.contains("Usage: probe <command> [flags]"), "{help}");
     assert!(
         help.ends_with(
-            "\n\nOutput:\n  -h, --human  Write the human form.\n  --json, --no-human  Write JSON.\n  --format, -f <text|json>  The form of the output: text is the human form and json is JSON."
+            "\n\nOutput:\n  -h, --human  Write the human form.\n  --json, --no-human  Write JSON.\n  --format, -f <json|text>  The form of the output: json is JSON and text is the human form."
         ),
         "{help}"
     );
@@ -300,7 +300,7 @@ async fn the_default_form_is_json_and_auto_gives_the_human_form_only_on_a_termin
 }
 
 #[tokio::test]
-async fn the_command_line_stops_when_it_starts_if_an_output_flag_has_a_name_that_is_not_valid_or_taken()
+async fn the_command_line_stops_when_it_starts_if_an_output_flag_has_the_name_of_a_flag_of_watch_an_alias_or_an_input()
  {
     let fails = async |names: &[&str]| {
         let output = CliOutput::new().switch(names.iter().copied(), OutputForm::Json);
@@ -318,22 +318,6 @@ async fn the_command_line_stops_when_it_starts_if_an_output_flag_has_a_name_that
         (
             &["--count"],
             "The output flag --count has the same name as a flag of the capability probe.count.",
-        ),
-        (
-            &["--json", "--json"],
-            "The output flag --json has the same name as another output flag.",
-        ),
-        (
-            &["format"],
-            "The output flag format is not a valid name. Give --<word> or -<letter or digit>.",
-        ),
-        (
-            &["-ab"],
-            "The output flag -ab is not a valid name. Give --<word> or -<letter or digit>.",
-        ),
-        (
-            &["--version"],
-            "The output flag --version has the same name as the flag --version.",
         ),
     ];
     for (names, message) in expected {

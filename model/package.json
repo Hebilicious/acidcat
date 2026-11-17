@@ -1,0 +1,13 @@
+{
+  "name": "@acid-cat/model",
+  "private": true,
+  "description": "The formal models of the rules that each core must follow, written in Quint, and the generator of the data and the cases that each core uses.",
+  "license": "MIT",
+  "type": "module",
+  "devDependencies": {
+    "@acid-cat/spec-ts": "workspace:*",
+    "@informalsystems/quint": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

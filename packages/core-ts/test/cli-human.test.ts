@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
 
-import { cliLayout, cliOutputChoice, defaultCliOutput } from "../src/cli-human.ts";
+import { cliLayout } from "../src/cli-human.ts";
 import { cliAlias, cliFormat, defineApp, defineCapability, defineEvent, fail, ok, runCli } from "../src/index.ts";
 import type { CliCommand, CliForm, CliFormat, CliOutput, ToJsonSchema } from "../src/index.ts";
 
@@ -56,14 +56,6 @@ const cli = async (formats: readonly CliFormat[], ...args: string[]) => {
   const { code, out } = await run(formats, args);
   return { code, stdout: out.join("\n") };
 };
-
-test("the form of the output is human only on a terminal, with no CI and no coding agent", () => {
-  assert.equal(defaultCliOutput(true, {}), "human");
-  assert.equal(defaultCliOutput(true, { CLAUDECODE: "1" }), "json");
-  assert.equal(defaultCliOutput(true, { CI: "true" }), "json");
-  assert.equal(defaultCliOutput(true, { CLAUDECODE: "0" }), "human");
-  assert.equal(defaultCliOutput(false, {}), "json");
-});
 
 test("a formatter that throws, and a value that does not decode, give the generic layout with the same exit code", async () => {
   const throwing = [
@@ -170,13 +162,13 @@ test("output flags are anywhere in the arguments, the last one wins, and an outp
   assert.deepEqual(await runWith(output, ["-h", "probe", "read"]), { code: 0, out: [PROBE_TEXT], err: [] });
   assert.deepEqual(await runWith(output, ["probe", "read", "--human", "--json"]), { code: 0, out: [PROBE_JSON], err: [] });
   assert.deepEqual(await runWith(output, ["probe", "read", "--format=text"]), { code: 0, out: [PROBE_TEXT], err: [] });
-  assert.deepEqual(await runWith(output, ["probe", "read", "-f"]), { code: 3, out: [], err: ["The option -f must be text or json."] });
+  assert.deepEqual(await runWith(output, ["probe", "read", "-f"]), { code: 3, out: [], err: ["The option -f must be json or text."] });
   const help = await runWith(output, ["--help"]);
   assert.equal(help.code, 0);
   assert.match(help.out.join("\n"), /^Usage: probe <command> \[flags\]$/m);
   assert.match(
     help.out.join("\n"),
-    /\n\nOutput:\n {2}-h, --human {2}Write the human form\.\n {2}--json, --no-human {2}Write JSON\.\n {2}--format, -f <text\|json> {2}The form of the output: text is the human form and json is JSON\.$/,
+    /\n\nOutput:\n {2}-h, --human {2}Write the human form\.\n {2}--json, --no-human {2}Write JSON\.\n {2}--format, -f <json\|text> {2}The form of the output: json is JSON and text is the human form\.$/,
   );
 });
 
@@ -205,11 +197,6 @@ test("an application command gets its arguments unchanged and the chosen form, a
   ]);
 });
 
-test("output flags stop at --", () => {
-  const flags = [{ names: ["--json"], form: "json" }] as const;
-  assert.deepEqual(cliOutputChoice(flags, ["probe", "read", "--json", "--", "--json"], []), { form: "json", args: ["probe", "read", "--", "--json"] });
-});
-
 test("the default form is json, and auto gives the human form only on a terminal", async () => {
   const human = [{ names: ["--human"], form: "human" }] as const;
   assert.deepEqual(await runWith({ flags: human }, ["probe", "read"], "human"), { code: 0, out: [PROBE_JSON], err: [] });
@@ -218,13 +205,9 @@ test("the default form is json, and auto gives the human form only on a terminal
   assert.deepEqual(await runWith({ default: "auto" }, ["probe", "read"]), { code: 0, out: [PROBE_JSON], err: [] });
 });
 
-test("the command line stops when it starts if an output flag has a name that is not valid or that is taken", async () => {
+test("the command line stops when it starts if an output flag has the name of a flag of watch, an alias or an input", async () => {
   const fails = (names: readonly string[], message: string) => assert.rejects(runWith({ flags: [{ names, form: "json" }] }, ["probe", "read"]), { message });
   await fails(["--cursor"], "The output flag --cursor has the same name as the flag --cursor of watch.");
   await fails(["--now"], "The output flag --now has the same name as the flag alias --now.");
   await fails(["--broken"], "The output flag --broken has the same name as a flag of the capability probe.read.");
-  await fails(["--json", "--json"], "The output flag --json has the same name as another output flag.");
-  await fails(["format"], "The output flag format is not a valid name. Give --<word> or -<letter or digit>.");
-  await fails(["-ab"], "The output flag -ab is not a valid name. Give --<word> or -<letter or digit>.");
-  await fails(["--version"], "The output flag --version has the same name as the flag --version.");
 });

@@ -12,6 +12,7 @@ projects:
   catalog-rust: "packages/catalog/rust"
   core-rust: "packages/core-rust"
   catalog-pkl: "packages/catalog/pkl"
+  model: "model"
 
 defaultProject: "acid-cat"
 telemetry: false

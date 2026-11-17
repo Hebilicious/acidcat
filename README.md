@@ -189,7 +189,7 @@ See [packages/README.md](packages/README.md).
 
 ## 🛠️ Development
 
-[proto](https://moonrepo.dev/proto) installs the tools in `.prototools`: Moon, Node, pnpm, Pkl, Python, uv, Go and Rust. [Moon](https://moonrepo.dev) runs the tasks.
+[proto](https://moonrepo.dev/proto) installs the tools in `.prototools`: Moon, Node, pnpm, Pkl, Python, uv, Go, Rust and Java (for the Apalache model checker). [Moon](https://moonrepo.dev) runs the tasks.
 
 ```sh
 proto install
@@ -197,12 +197,15 @@ pnpm install
 moon run verify
 ```
 
-CI runs `moon run verify` on each push to `main` and on each pull request. Changes go into `main` only through a pull request, with a squash merge. The `semantic` check requires the pull request title and each commit title to have the form `type(scope): subject`, for example `fix(catalog): reject duplicate ids`.
+CI runs `moon run verify` on each push to `main` and on each pull request. The rules that each core must follow in the same way have a formal model in Quint, in [`model/`](model/README.md). `quint verify` proves its properties, and each core runs every case that the model generates.
+
+Changes go into `main` only through a pull request, with a squash merge. The `semantic` check requires the pull request title and each commit title to have the form `type(scope): subject`, for example `fix(catalog): reject duplicate ids`.
 
 | Command | Use |
 | --- | --- |
 | `moon run examples` | Render every Pkl catalog, and write every catalog of the repository in canonical form |
 | `moon run check` | Check that every catalog of the repository is rendered, canonical and conforms |
+| `moon run model:generate` | Write the data and the cases of the formal models into each core. See [model/README.md](model/README.md) |
 | `moon run lint` | Lint all TypeScript with type information, and check that no code turns the type checks off |
 | `moon run :test` | Test all packages |
 | `moon run verify` | Do all checks and tests |

@@ -6,7 +6,6 @@ import { Cause, Console, Effect, Exit, Layer, Schema, Stdio } from "effect";
 import { Command, Flag, GlobalFlag } from "effect/cli";
 
 import { App, Capability, Cli } from "../src/index.ts";
-import { outputChoice } from "../src/internal/human.ts";
 
 const Level = Schema.Struct({ level: Schema.Number });
 const Empty = Schema.TaggedStruct("Empty", {});
@@ -53,14 +52,6 @@ const runWith = <const Commands extends ReadonlyArray<Command.Command.Any> = rea
   });
 
 const runHuman = (formats: readonly App.Format[], ...args: string[]) => runWith({ default: "auto", formats }, args, true);
-
-test("the form is human only at a terminal with no CI and no coding agent", () => {
-  assert.equal(Cli.formOf(true, {}), "human");
-  assert.equal(Cli.formOf(true, { CLAUDECODE: "1" }), "json");
-  assert.equal(Cli.formOf(true, { CI: "true" }), "json");
-  assert.equal(Cli.formOf(true, { CLAUDECODE: "0" }), "human");
-  assert.equal(Cli.formOf(false, {}), "json");
-});
 
 test("a formatter that throws, or a value that does not decode, gives the generic layout with the same exit code", async () => {
   const throws = App.format(level, () => {
@@ -161,13 +152,13 @@ test("output flags are anywhere in the arguments, the last one wins, and an outp
   assert.deepEqual(short, { code: 0, stdout: LEVEL_TEXT, stderr: "" });
   assert.deepEqual(last, { code: 0, stdout: LEVEL_JSON, stderr: "" });
   assert.deepEqual(inline, { code: 0, stdout: LEVEL_TEXT, stderr: "" });
-  assert.deepEqual(missing, { code: 3, stdout: "", stderr: "The option -f must be text or json." });
+  assert.deepEqual(missing, { code: 3, stdout: "", stderr: "The option -f must be json or text." });
   assert.equal(help.code, 0);
   assert.match(help.stdout, /USAGE/);
   assert.doesNotMatch(help.stdout, /--help, -h/);
   assert.match(
     help.stdout,
-    /\n\nOUTPUT FLAGS\n {2}-h, --human {2}Write the human form\.\n {2}--json, --no-human {2}Write JSON\.\n {2}--format, -f <text\|json> {2}The form of the output: text is the human form and json is JSON\.$/,
+    /\n\nOUTPUT FLAGS\n {2}-h, --human {2}Write the human form\.\n {2}--json, --no-human {2}Write JSON\.\n {2}--format, -f <json\|text> {2}The form of the output: json is JSON and text is the human form\.$/,
   );
 });
 
@@ -191,11 +182,6 @@ test("an application command gets its arguments unchanged and the chosen form, a
     { json: true, file: "prod", form: "json" },
     { json: true, file: "stage", form: "human" },
   ]);
-});
-
-test("output flags stop at --", () => {
-  const flags = [{ names: ["--json"], form: "json" }] as const;
-  assert.deepEqual(outputChoice(flags, ["probe", "level", "--json", "--", "--json"], []), { form: "json", args: ["probe", "level", "--", "--json"] });
 });
 
 test("the command line stops when it starts if an output flag has the name of a flag of effect/cli or of the application", async () => {
@@ -227,14 +213,10 @@ test("the default form is json, and auto gives the human form only at a terminal
   );
 });
 
-test("the command line stops when it starts if an output flag has a name that is not valid or that is taken", () => {
+test("the command line stops when it starts if an output flag has the name of a flag of watch, an alias or an input", () => {
   const fails = (names: readonly string[], message: string) =>
     assert.throws(() => Cli.command(probe, { name: "probe", version: "0.0.0", output: { flags: [{ names, form: "json" }] } }), { message });
   fails(["--cursor"], "The output flag --cursor has the same name as the flag --cursor of watch.");
   fails(["--now"], "The output flag --now has the same name as the flag alias --now.");
   fails(["--litres"], "The output flag --litres has the same name as a flag of the capability probe.fill.");
-  fails(["--json", "--json"], "The output flag --json has the same name as another output flag.");
-  fails(["format"], "The output flag format is not a valid name. Give --<word> or -<letter or digit>.");
-  fails(["-ab"], "The output flag -ab is not a valid name. Give --<word> or -<letter or digit>.");
-  fails(["--version"], "The output flag --version has the same name as the flag --version.");
 });

@@ -1,4 +1,10 @@
 use super::human::{CliFormats, OutputForm};
+use super::output_generated::{
+    AND_WORD, BAD_NAME_MESSAGE, BAD_VALUE_MESSAGE, HUMAN_FORM_NAME, INVALID_INPUT_EXIT_CODE,
+    JSON_FORM_NAME, LIST_SEPARATOR, MEANING_MESSAGE, NAME_SEPARATOR, NO_NAME_MESSAGE,
+    NO_VALUES_MESSAGE, OR_WORD, SAME_AS_OTHER_MESSAGE, SAME_AS_OUTPUT_FLAG_MESSAGE,
+    SWITCH_HELP_MESSAGE, VALUE_SEPARATOR, VALUES_HELP_MESSAGE,
+};
 
 /// The form of the output when the arguments give no output flag.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -89,61 +95,73 @@ impl CliOutput {
         self
     }
 
-    pub(crate) fn problems(&self, other_flags: &[(String, String)]) -> Vec<String> {
+    /// The problems of the output flags, with the other flags of the command line and what each one is.
+    #[doc(hidden)]
+    pub fn problems(&self, other_flags: &[(String, String)]) -> Vec<String> {
         let mut problems = Vec::new();
         let mut seen: Vec<&str> = Vec::new();
         for flag in &self.flags {
             let first = flag.names.first();
             if first.is_none() {
-                problems.push("An output flag has no name.".to_owned());
+                problems.push(NO_NAME_MESSAGE.to_owned());
             }
             for name in &flag.names {
                 if !is_long_name(name) && !is_short_name(name) {
-                    problems.push(format!(
-                        "The output flag {name} is not a valid name. Give --<word> or -<letter or digit>."
-                    ));
+                    problems.push(filled(BAD_NAME_MESSAGE, &[("name", name)]));
                     continue;
                 }
                 if seen.contains(&name.as_str()) {
-                    problems.push(format!(
-                        "The output flag {name} has the same name as another output flag."
-                    ));
+                    problems.push(filled(SAME_AS_OUTPUT_FLAG_MESSAGE, &[("name", name)]));
                 }
                 seen.push(name);
                 if let Some((_, other)) = other_flags.iter().find(|(other, _)| other == name) {
-                    problems.push(format!(
-                        "The output flag {name} has the same name as {other}."
+                    problems.push(filled(
+                        SAME_AS_OTHER_MESSAGE,
+                        &[("name", name), ("other", other)],
                     ));
                 }
             }
             if let (Some(first), Choice::Values(values)) = (first, &flag.choice)
                 && values.is_empty()
             {
-                problems.push(format!("The output flag {first} has no values."));
+                problems.push(filled(NO_VALUES_MESSAGE, &[("name", first)]));
             }
         }
         problems
     }
 
-    pub(crate) fn help_lines(&self) -> Vec<String> {
+    /// The line of the help of each output flag.
+    #[doc(hidden)]
+    pub fn help_lines(&self) -> Vec<String> {
         self.flags
             .iter()
             .map(|flag| {
-                let names = flag.names.join(", ");
+                let names = flag.names.join(NAME_SEPARATOR);
                 match &flag.choice {
-                    Choice::Form(form) => format!("{names}  Write {}.", form_name(*form)),
+                    Choice::Form(form) => filled(
+                        SWITCH_HELP_MESSAGE,
+                        &[("names", &names), ("form", form_name(*form))],
+                    ),
                     Choice::Values(values) => {
-                        let words: Vec<&str> =
-                            values.iter().map(|(value, _)| value.as_str()).collect();
+                        let values = sorted(values);
+                        let words: Vec<&str> = values.iter().map(|(value, _)| *value).collect();
                         let meanings: Vec<String> = values
                             .iter()
-                            .map(|(value, form)| format!("{value} is {}", form_name(*form)))
+                            .map(|(value, form)| {
+                                filled(
+                                    MEANING_MESSAGE,
+                                    &[("value", value), ("form", form_name(*form))],
+                                )
+                            })
                             .collect();
                         let meanings: Vec<&str> = meanings.iter().map(String::as_str).collect();
-                        format!(
-                            "{names} <{}>  The form of the output: {}.",
-                            words.join("|"),
-                            joined(&meanings, "and")
+                        filled(
+                            VALUES_HELP_MESSAGE,
+                            &[
+                                ("names", &names),
+                                ("values", &words.join(VALUE_SEPARATOR)),
+                                ("meanings", &joined(&meanings, AND_WORD)),
+                            ],
                         )
                     }
                 }
@@ -151,7 +169,28 @@ impl CliOutput {
             .collect()
     }
 
-    pub(crate) fn choose(
+    /// The form and the remaining arguments, or the exit code and the message of a bad output flag. `auto` gives the
+    /// form of [`OutputDefault::Auto`].
+    #[doc(hidden)]
+    pub fn decide(
+        &self,
+        args: &[String],
+        command_names: &[&str],
+        auto: impl FnOnce() -> OutputForm,
+    ) -> Result<(OutputForm, Vec<String>), (i32, String)> {
+        let (chosen, rest) = self
+            .choose(args, command_names)
+            .map_err(|message| (INVALID_INPUT_EXIT_CODE, message))?;
+        let form = chosen.unwrap_or_else(|| match self.default {
+            OutputDefault::Auto => auto(),
+            OutputDefault::Json => OutputForm::Json,
+        });
+        Ok((form, rest))
+    }
+
+    /// The form that the output flags in the arguments choose, and the other arguments, or the message of a bad value.
+    #[doc(hidden)]
+    pub fn choose(
         &self,
         args: &[String],
         command_names: &[&str],
@@ -183,10 +222,10 @@ impl CliOutput {
                         .map(|(_, chosen)| *chosen);
                     let Some(chosen) = chosen else {
                         let words: Vec<&str> =
-                            values.iter().map(|(value, _)| value.as_str()).collect();
-                        return Err(format!(
-                            "The option {name} must be {}.",
-                            joined(&words, "or")
+                            sorted(values).iter().map(|(value, _)| *value).collect();
+                        return Err(filled(
+                            BAD_VALUE_MESSAGE,
+                            &[("name", name), ("values", &joined(&words, OR_WORD))],
                         ));
                     };
                     form = Some(chosen);
@@ -198,19 +237,55 @@ impl CliOutput {
     }
 }
 
+fn filled(template: &str, parts: &[(&str, &str)]) -> String {
+    let mut text = String::new();
+    let mut rest = template;
+    while let Some(open) = rest.find('{') {
+        let (before, from_brace) = rest.split_at(open);
+        text.push_str(before);
+        let part = from_brace.find('}').and_then(|close| {
+            parts
+                .iter()
+                .find(|(name, _)| *name == &from_brace[1..close])
+                .map(|(_, value)| (close, *value))
+        });
+        match part {
+            Some((close, value)) => {
+                text.push_str(value);
+                rest = &from_brace[close + 1..];
+            }
+            None => {
+                text.push('{');
+                rest = &from_brace[1..];
+            }
+        }
+    }
+    text.push_str(rest);
+    text
+}
+
 fn joined(values: &[&str], word: &str) -> String {
     match values.split_last() {
         Some((last, others)) if !others.is_empty() => {
-            format!("{} {word} {last}", others.join(", "))
+            format!("{} {word} {last}", others.join(LIST_SEPARATOR))
         }
         _ => values.join(""),
     }
 }
 
+fn sorted(values: &[(String, OutputForm)]) -> Vec<(&str, OutputForm)> {
+    let mut sorted: Vec<(&str, OutputForm)> = values
+        .iter()
+        .map(|(value, form)| (value.as_str(), *form))
+        .collect();
+    sorted.sort_by_key(|(left, _)| *left);
+    sorted
+}
+
 fn form_name(form: OutputForm) -> &'static str {
     match form {
-        OutputForm::Human => "the human form",
-        OutputForm::Json => "JSON",
+        OutputForm::Human => HUMAN_FORM_NAME,
+        OutputForm::Json => JSON_FORM_NAME,
     }
 }
 
@@ -232,21 +307,4 @@ fn is_short_name(name: &str) -> bool {
     chars.next() == Some('-')
         && chars.next().is_some_and(|c| c.is_ascii_alphanumeric())
         && chars.next().is_none()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn output_flags_stop_at_double_dash() {
-        let output = CliOutput::new().switch(["--json"], OutputForm::Json);
-        let args: Vec<String> = ["probe", "count", "--json", "--", "--json"]
-            .iter()
-            .map(|arg| (*arg).to_owned())
-            .collect();
-        let (form, rest) = output.choose(&args, &[]).unwrap();
-        assert_eq!(form, Some(OutputForm::Json));
-        assert_eq!(rest, ["probe", "count", "--", "--json"]);
-    }
 }

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .out/
+_apalache-out/
 .moon/cache/
 .moon/docker/
 __pycache__/

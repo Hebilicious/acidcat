@@ -1,0 +1,54 @@
+language: "typescript"
+layer: "automation"
+
+project:
+  title: "@acid-cat/model"
+  description: "The formal models of the rules that each core follows, in Quint, and the generator of the data and the cases that each core uses."
+
+toolchains:
+  default: ["javascript", "node", "pnpm"]
+
+tasks:
+  test:
+    description: "Run the tests of the models, and type-check the modules of the properties."
+    script: "quint test cli-output.qnt && quint typecheck cli-output-properties.qnt && quint typecheck cli-output-cases.qnt"
+    inputs: ["*.qnt", "package.json", "/pnpm-workspace.yaml"]
+
+  prove:
+    description: "Prove each property of the models with quint verify (Apalache), or only the invariants named after `--`. Apalache needs Java, which proto installs."
+    command: "node"
+    args: ["scripts/prove.ts"]
+    inputs: ["*.qnt", "scripts/prove.ts", "package.json", "/pnpm-workspace.yaml", "/.prototools"]
+
+  generate:
+    description: "Write the data and the cases of the models into each core."
+    command: "node"
+    args: ["scripts/generate.ts"]
+    inputs: ["*.qnt", "scripts/generate.ts", "package.json", "/pnpm-workspace.yaml", "/packages/spec-ts/src/**/*.ts"]
+    options:
+      runInCI: false
+      cache: false
+
+  check:
+    description: "Check that the data and the cases in each core are the output of the models."
+    command: "node"
+    args: ["scripts/generate.ts", "--check"]
+    deps: ["test"]
+    inputs:
+      - "*.qnt"
+      - "scripts/generate.ts"
+      - "package.json"
+      - "/pnpm-workspace.yaml"
+      - "/packages/spec-ts/src/**/*.ts"
+      - "/packages/core-ts/src/cli-output.generated.ts"
+      - "/packages/core-effect/src/internal/output.generated.ts"
+      - "/packages/core-rust/src/cli/output_generated.rs"
+      - "/packages/core-ts/test/fixtures/cli-output-cases.json"
+      - "/packages/core-effect/test/fixtures/cli-output-cases.json"
+      - "/packages/core-rust/tests/fixtures/cli_output_cases.json"
+
+  typecheck:
+    description: "Type-check the scripts."
+    command: "tsc"
+    args: ["-p", "."]
+    inputs: ["scripts/**/*.ts", "tsconfig.json", "/tsconfig.base.json"]

@@ -17,7 +17,7 @@ These packages work with an implementation in any language.
 
 ## Reference implementation in TypeScript
 
-These packages show one way to implement the specification. Reference implementations in more languages will follow. An implementation in another language does not use these packages: it follows the specification, and `acid-cat conform` tests it.
+These packages show one way to implement the specification. Reference implementations in more languages will follow. An implementation in another language does not use these packages: it follows the specification, and `acid-cat conform` tests it. A core in this repository also takes the rules that each core shares from the formal model in [`model/`](../model/README.md): it reads the generated data, and its tests run every case that the model generates.
 
 | Package | Directory | Registry name | Use |
 | --- | --- | --- | --- |

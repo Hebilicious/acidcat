@@ -1,4 +1,18 @@
 import type { EmptyInput, FailureData, FailureSchemas } from "./app.ts";
+import {
+  AGENT_VARIABLES,
+  AND_WORD,
+  CI_VARIABLE,
+  FALSE_VALUES,
+  FORM_NAMES,
+  INVALID_INPUT_EXIT_CODE,
+  LIST_SEPARATOR,
+  MESSAGES,
+  NAME_SEPARATOR,
+  OR_WORD,
+  TRIM_CHARACTERS,
+  VALUE_SEPARATOR,
+} from "./cli-output.generated.ts";
 import type { StandardSchemaV1 } from "./standard-schema.ts";
 
 export type CliForm = "human" | "json";
@@ -156,27 +170,20 @@ export function cliFormatErrors(formats: readonly CliFormat[], capabilities: rea
   return errors;
 }
 
-const AGENT_VARIABLES: readonly string[] = [
-  "AI_AGENT",
-  "CLAUDECODE",
-  "CODEX_THREAD_ID",
-  "CURSOR_AGENT",
-  "GEMINI_CLI",
-  "OPENCODE",
-  "AMP_CURRENT_THREAD_ID",
-  "AUGMENT_AGENT",
-  "QWEN_CODE_SESSION_ID",
-  "PI_CODING_AGENT",
-  "CRUSH",
-  "COPILOT_AGENT",
-];
+function trimmed(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && TRIM_CHARACTERS.includes(value.charAt(start))) start += 1;
+  while (end > start && TRIM_CHARACTERS.includes(value.charAt(end - 1))) end -= 1;
+  return value.slice(start, end);
+}
 
-const FALSE_VALUES: readonly string[] = ["", "0", "false", "no", "off"];
+const asciiLowercase = (value: string): string => value.replaceAll(/[A-Z]/g, (letter) => letter.toLowerCase());
 
-const isTruthy = (value: string | undefined): boolean => value !== undefined && !FALSE_VALUES.includes(value.trim().toLowerCase());
+const isTruthy = (value: string | undefined): boolean => value !== undefined && !FALSE_VALUES.includes(asciiLowercase(trimmed(value)));
 
 export function defaultCliOutput(isTerminal: boolean, env: { readonly [name: string]: string | undefined }): CliForm {
-  if (!isTerminal || isTruthy(env.CI) || AGENT_VARIABLES.some((name) => isTruthy(env[name]))) return "json";
+  if (!isTerminal || isTruthy(env[CI_VARIABLE]) || AGENT_VARIABLES.some((name) => isTruthy(env[name]))) return "json";
   return "human";
 }
 
@@ -189,33 +196,49 @@ export function cliOutputErrors(flags: readonly CliOutputFlag[], otherFlags: Rea
   const seen = new Set<string>();
   for (const flag of flags) {
     const [first] = flag.names;
-    if (first === undefined) errors.push("An output flag has no name.");
+    if (first === undefined) errors.push(MESSAGES.noName);
     for (const name of flag.names) {
       if (!LONG_NAME.test(name) && !SHORT_NAME.test(name)) {
-        errors.push(`The output flag ${name} is not a valid name. Give --<word> or -<letter or digit>.`);
+        errors.push(filled(MESSAGES.badName, { name }));
         continue;
       }
-      if (seen.has(name)) errors.push(`The output flag ${name} has the same name as another output flag.`);
+      if (seen.has(name)) errors.push(filled(MESSAGES.sameAsOutputFlag, { name }));
       seen.add(name);
       const other = otherFlags.get(name);
-      if (other !== undefined) errors.push(`The output flag ${name} has the same name as ${other}.`);
+      if (other !== undefined) errors.push(filled(MESSAGES.sameAsOther, { name, other }));
     }
-    if (first !== undefined && flag.values !== undefined && Object.keys(flag.values).length === 0) errors.push(`The output flag ${first} has no values.`);
+    if (first !== undefined && flag.values !== undefined && Object.keys(flag.values).length === 0) errors.push(filled(MESSAGES.noValues, { name: first }));
   }
   return errors;
 }
 
-const joined = (values: readonly string[], word: string): string =>
-  values.length < 2 ? values.join("") : `${values.slice(0, -1).join(", ")} ${word} ${values.at(-1) ?? ""}`;
+const filled = (template: string, parts: { readonly [name: string]: string }): string =>
+  template.replaceAll(/\{(\w+)\}/g, (placeholder, name: string) => parts[name] ?? placeholder);
 
-const FORM_NAMES: { readonly [form in CliForm]: string } = { human: "the human form", json: "JSON" };
+const joined = (values: readonly string[], word: string): string =>
+  values.length < 2 ? values.join("") : `${values.slice(0, -1).join(LIST_SEPARATOR)} ${word} ${values.at(-1) ?? ""}`;
+
+const codePoints = (text: string): number[] => Array.from(text, (character) => character.codePointAt(0) ?? 0);
+
+function byCodePoint(left: string, right: string): number {
+  const others = codePoints(right);
+  for (const [index, code] of codePoints(left).entries()) {
+    const other = others[index];
+    if (other === undefined) return 1;
+    if (code !== other) return code - other;
+  }
+  return codePoints(left).length - others.length;
+}
+
+const sortedValues = (values: { readonly [value: string]: CliForm }): readonly (readonly [string, CliForm])[] =>
+  Object.entries(values).sort(([left], [right]) => byCodePoint(left, right));
 
 export function cliOutputFlagHelp(flag: CliOutputFlag): string {
-  const names = flag.names.join(", ");
-  if (flag.values === undefined) return `${names}  Write ${FORM_NAMES[flag.form]}.`;
-  const values = Object.entries(flag.values);
-  const meanings = values.map(([value, form]) => `${value} is ${FORM_NAMES[form]}`);
-  return `${names} <${values.map(([value]) => value).join("|")}>  The form of the output: ${joined(meanings, "and")}.`;
+  const names = flag.names.join(NAME_SEPARATOR);
+  if (flag.values === undefined) return filled(MESSAGES.switchHelp, { names, form: FORM_NAMES[flag.form] });
+  const values = sortedValues(flag.values);
+  const meanings = values.map(([value, form]) => filled(MESSAGES.meaning, { value, form: FORM_NAMES[form] }));
+  return filled(MESSAGES.valuesHelp, { names, values: values.map(([value]) => value).join(VALUE_SEPARATOR), meanings: joined(meanings, AND_WORD) });
 }
 
 export type CliOutputChoice = { readonly form?: CliForm | undefined; readonly args: readonly string[]; readonly error?: undefined } | { readonly error: string };
@@ -241,10 +264,24 @@ export function cliOutputChoice(flags: readonly CliOutputFlag[], args: readonly 
     }
     const value = inline ?? items.next().value;
     const chosen = value === undefined || !Object.hasOwn(flag.values, value) ? undefined : flag.values[value];
-    if (chosen === undefined) return { error: `The option ${name} must be ${joined(Object.keys(flag.values), "or")}.` };
+    if (chosen === undefined) return { error: filled(MESSAGES.badValue, { name, values: joined(sortedValues(flag.values).map(([each]) => each), OR_WORD) }) };
     form = chosen;
   }
   return { form, args: rest };
+}
+
+export type CliOutputRun = { readonly form: CliForm; readonly args: readonly string[]; readonly exitCode?: undefined } | { readonly exitCode: number; readonly error: string };
+
+export function cliOutputRun(
+  flags: readonly CliOutputFlag[],
+  args: readonly string[],
+  commandNames: readonly string[],
+  fallback: "auto" | "json" | undefined,
+  auto: () => CliForm,
+): CliOutputRun {
+  const chosen = cliOutputChoice(flags, args, commandNames);
+  if (chosen.error !== undefined) return { exitCode: INVALID_INPUT_EXIT_CODE, error: chosen.error };
+  return { form: chosen.form ?? (fallback === "auto" ? auto() : "json"), args: chosen.args };
 }
 
 const style =
