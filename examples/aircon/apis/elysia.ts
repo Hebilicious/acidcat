@@ -6,7 +6,8 @@ import type { ElysiaConfig } from "elysia";
 import { z } from "zod";
 
 import { fanSet, FanSpeed, Mode, modeSet, powerSet, statusChanged, statusGet, temperatureSet } from "../core-ts/aircon.ts";
-import type { Context, Offline, PoweredOff } from "../core-ts/aircon.ts";
+import type * as Types from "../catalog/aircon.types.ts";
+import type { Context } from "../core-ts/aircon.ts";
 import { forbidden, foreignOrigin, httpBinding, openSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
 
@@ -17,7 +18,7 @@ const Settings = z.object({
   targetCelsius: z.number().optional(),
 });
 
-type ChangeFailure = z.infer<typeof Offline> | z.infer<typeof PoweredOff>;
+type ChangeFailure = Types.AirconPowerSetFailure | Types.AirconModeSetFailure | Types.AirconFanSetFailure | Types.AirconTemperatureSetFailure;
 
 async function change(session: Session<Context>, { power, mode, fan, targetCelsius }: z.infer<typeof Settings>) {
   let result: Result<null, ChangeFailure> = ok(null);

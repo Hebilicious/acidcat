@@ -1,11 +1,12 @@
 # @acid-cat/cli
 
-The AcidCat command line. npm package: `@acid-cat/cli`. It gives the `acid-cat` command. Use it at build time, in CI or by hand, to check catalogs and to test implementations. Do not use it in an application at run time.
+The AcidCat command line. npm package: `@acid-cat/cli`. It gives the `acid-cat` command. Use it at build time, in CI or by hand, to check catalogs, to write their types, and to test implementations. Do not use it in an application at run time.
 
 ```sh
 acid-cat check [--strict] [--output json] <catalog.json ...>  # check catalogs
 acid-cat format [--write] <catalog.json ...>  # write catalogs in canonical form
 acid-cat view <catalog.json> <target>         # write the view of one target
+acid-cat types typescript <catalog.json> [--target <name>]  # write the TypeScript types of a catalog
 acid-cat conform --mcp <url> [--mcp-handshake] --mcp-stdio "<command>" --http <url> --cli "<command>" --webmcp <url> [--deadline <ms>] [--max-bytes <n>] [--output json]  # test an implementation
   [--poll-buffer <n>] [--poll-lease-ms <ms>] [--webhook-principal <name> --webhook-cert <file> --webhook-key <file>]
   [--webhook-other-principal <name>] [--webhook-min-ttl-ms <ms>] [--webhook-max-ttl-ms <ms>] [--webhook-max-subscriptions <n>]
@@ -45,6 +46,39 @@ The exit code is 0 if there are no errors. It is 1 if there are errors. With `--
 
 `view` writes the [view](../../spec/catalog.md#views) of one target: the capabilities and the events that the target can use, and the types that they use. A view with no events has no `events` member.
 
+## types
+
+`types typescript` writes the TypeScript types of a catalog to standard output. With `--target <name>`, it writes only the types of the view of that target. Redirect the output to a file, commit the file, and check it in CI as you check the catalog: write it again, and fail when it differs. A library can then export these explicit types instead of types that it infers from its schemas, so that JSR sees no slow types. The same catalog gives the same bytes. In code, `typescriptTypes(catalog)` from `@acid-cat/cli` gives `{ ok: true, text }` or `{ ok: false, errors }`.
+
+The file starts with the line `// Written by \`acid-cat types typescript\`. Do not change this file by hand.` Then it has these types, in the order of the canonical form:
+
+| Type | From |
+| --- | --- |
+| `<Name>` | Each type in `$defs`, and each inline schema with a `title` outside `$defs`. The place that uses the schema refers to the name |
+| `<Prefix>Input`, `<Prefix>Value`, `<Prefix>Failure`, `<Prefix>State` | Each capability. The prefix is the id in PascalCase: `aircon.power.set` gives `AirconPowerSet`, and `fixture.hold-on` gives `FixtureHoldOn`. `State` is present only when the capability has `state` |
+| `<Prefix>Input`, `<Prefix>Payload` | Each event |
+| `Capabilities` | An interface that maps each capability id to `{ input, value, failure, state? }` |
+| `Events` | An interface that maps each event id to `{ input, payload }`, when the catalog has events |
+
+A missing input or payload is `{ readonly [key: string]: never }`, an empty object. So is an input or a payload with `"properties": {}`. A missing output is `null`. A failure is the union of `{ readonly _tag: "<Tag>" }` with the type of each tag, or `never` when there are no failures. A `description` becomes a JSDoc comment on the type or on the property.
+
+Each type accepts every JSON value that its schema accepts, and is as narrow as these keywords let it be:
+
+| Schema | Type |
+| --- | --- |
+| `$ref: "#/$defs/X"` | `X` |
+| `{}` and `{ "not": {} }` | `unknown` and `never` |
+| `const`, `enum` | A literal, or a union of literals, with only the literals that `type` accepts |
+| `type` | `string`, `number` (also for `integer`), `boolean`, `null`, an array or an object. An array of types gives a union |
+| `properties`, `required` | `{ readonly name: T; readonly other?: U }`. A key that is not an identifier is quoted |
+| An object with no properties | `{ readonly [key: string]: T }`, where `T` comes from `additionalProperties`, or is `unknown` |
+| `items`, `prefixItems` | `readonly T[]`, or a tuple: `readonly [T, U?, ...V[]]`. An item after `minItems` is optional |
+| `anyOf`, `oneOf`, `allOf` | A union, a union, an intersection |
+
+An object that declares properties has no index signature: a TypeScript object type already accepts an object with more members. Other keywords, such as `pattern`, `minimum`, `not`, `if` and `patternProperties`, make the type wider, never narrower. The output compiles with `tsc --strict --isolatedDeclarations`. It exports only type aliases and interfaces.
+
+Errors give exit code 1, with one line on standard error for each problem, and nothing on standard output: a file that is not a catalog, an unknown target, two types with the same name (for example the capabilities `a.b-c` and `a-b.c`, or a title that names another type), and a title or a type name that is not a TypeScript name. `acid-cat types` with no language, or with a language other than `typescript`, also gives exit code 1.
+
 ## conform
 
 `conform` tests a running implementation of the [conformance fixture](conformance/fixture.pkl) through its bindings (see [Conformance](../../spec/conformance.md#acid-cat-conform)):
@@ -72,6 +106,7 @@ The command line is an [Effect](https://effect.website) program that uses `effec
 | File | Contents |
 | --- | --- |
 | `src/catalog.ts` | The catalog rules, views and bundling |
+| `src/typescript.ts` | The TypeScript types of a catalog, for `acid-cat types typescript` |
 | `src/main.ts` | The commands |
 | `src/conform/` | The conformance checks, and `serve`, which serves web handlers on a local port for the tests |
 | `conformance/` | The conformance fixture, in Pkl and in JSON |

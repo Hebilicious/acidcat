@@ -31,7 +31,7 @@ interface Handle<Input, Value, Failure, State = never> {
 - **Listing.** A session gives all its handles. A handle that is not in the view of the target is always unavailable.
 - **Cancellation.** `options.signal` cancels one call. The session has its own signal. It cancels all the work of the session.
 - **State.** `snapshot` observes the [state](../invocation.md#state) of the capability. It is present when the capability has `state`. A handle MAY have a `snapshot` for code in the same process when the catalog has no `state`. Each value from `getSnapshot` or from a listener is a copy. It is not the data of the provider.
-- **Types.** Each type in `$defs` becomes a named TypeScript type. `Input`, `Value`, `Failure` and `State` come from the schemas of the capability. You can also write them by hand and check them against the catalog.
+- **Types.** Each type in `$defs` becomes a named TypeScript type. `Input`, `Value`, `Failure` and `State` come from the schemas of the capability. `acid-cat types typescript <catalog.json>` is one way to write these types: it writes `<Prefix>Input`, `<Prefix>Value`, `<Prefix>Failure` and `<Prefix>State` for each capability, where the prefix is the id in PascalCase, such as `AirconPowerSet` for `aircon.power.set`. You can also write them by hand and check them against the catalog.
 
 ## Event handles
 
@@ -75,7 +75,7 @@ interface EventHandle<Input, Payload> {
 
 - **Cancellation.** `return()` of the iterator cancels the subscription. It MUST work while a `next()` waits: that `next()` then resolves with `done: true`. `options.signal` also cancels the subscription, and so does the signal of the session. A `for await` loop that stops early calls `return()`.
 - **Listing.** A session gives all its event handles. A subscription to an event that is not in the view of the target fails as `unknown-capability`.
-- **Types.** `Input` and `Payload` come from the schemas of the event.
+- **Types.** `Input` and `Payload` come from the schemas of the event. `acid-cat types typescript` writes them as `<Prefix>Input` and `<Prefix>Payload`.
 
 A GraphQL server can use an event handle as the source of a subscription. The `subscribe` resolver of a field returns the promise of `subscribe`. GraphQL calls `return()` when the client ends the subscription, through WebSockets or through server-sent events.
 

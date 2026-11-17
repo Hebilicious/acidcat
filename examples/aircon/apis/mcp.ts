@@ -19,6 +19,7 @@ import {
   Unit,
   unitLayer,
 } from "../core-effect/aircon.ts";
+import type * as Types from "../catalog/aircon.types.ts";
 
 const GetStatus = Tool.make("get_status", {
   description: "Read the power, mode, fan speed, target temperature and room temperature of the air conditioner.",
@@ -52,7 +53,8 @@ const handlers = AirconTools.toLayer(
         Effect.scoped,
         Effect.provideContext(services),
       );
-    const status = (session: Session.Session<Unit>) => session.execute(statusGet, {});
+    const status = (session: Session.Session<Unit>): Effect.Effect<Types.AirconStatusGetValue, Types.AirconStatusGetFailure | Session.CallFailed> =>
+      session.execute(statusGet, {});
     return {
       get_status: () => withSession(status),
       set_controls: (controls) =>

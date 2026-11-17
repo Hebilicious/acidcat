@@ -10,23 +10,24 @@ toolchains:
 
 tasks:
   examples:
-    description: "Render every Pkl catalog, write every catalog of the repository in canonical form, and write the GraphQL schema of the example."
+    description: "Render every Pkl catalog, write every catalog of the repository in canonical form, write the TypeScript types of the example catalog, and write the GraphQL schema of the example."
     command: "node"
     args: ["scripts/render-catalogs.ts"]
     deps: ["example-aircon:schema"]
-    inputs: ["**/*.pkl", "**/*.acidcat.json", "scripts/catalogs.ts", "scripts/render-catalogs.ts", "packages/catalog/typescript/src/**/*.ts"]
+    inputs: ["**/*.pkl", "**/*.acidcat.json", "scripts/catalogs.ts", "scripts/render-catalogs.ts", "packages/catalog/typescript/src/**/*.ts", "packages/cli/src/**/*.ts"]
     toolchains: ["system"]
     options:
       runInCI: false
       cache: false
 
   check:
-    description: "Check that every Pkl catalog is rendered, and that every catalog of the repository is canonical and conforms."
+    description: "Check that every Pkl catalog is rendered, that every catalog of the repository is canonical and conforms, and that the committed TypeScript types of the example catalog are up to date."
     command: "node"
     args: ["scripts/check-examples.ts"]
     inputs:
       - "**/*.pkl"
       - "**/*.acidcat.json"
+      - "**/*.types.ts"
       - "schemas/**/*.json"
       - "scripts/catalogs.ts"
       - "scripts/check-examples.ts"

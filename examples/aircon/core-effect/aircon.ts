@@ -4,6 +4,8 @@ import { Context, Effect, Layer, Option, Ref, Schema, Stream, SubscriptionRef } 
 
 import { App, Capability, Event } from "@acid-cat/core-effect";
 
+import type * as Types from "../catalog/aircon.types.ts";
+
 export const Mode = Schema.Literals(["cool", "heat", "dry", "fan", "auto"]).annotate({ identifier: "Mode" });
 export const FanSpeed = Schema.Literals(["auto", "low", "medium", "high"]).annotate({ identifier: "FanSpeed" });
 
@@ -23,7 +25,7 @@ export const Status = Schema.Struct({
   roomCelsius: Schema.Finite,
 }).annotate({ identifier: "Status" });
 
-export const Offline = Schema.TaggedStruct("Offline", { since: Schema.optional(Schema.String) }).annotate({ identifier: "Offline" });
+export const Offline = Schema.TaggedStruct("Offline", { since: Schema.optionalKey(Schema.String) }).annotate({ identifier: "Offline" });
 export const PoweredOff = Schema.TaggedStruct("PoweredOff", {});
 const UpToDate = Schema.TaggedStruct("UpToDate", { version: Schema.String });
 const WriteFailed = Schema.TaggedStruct("WriteFailed", {});
@@ -31,10 +33,10 @@ const WriteFailed = Schema.TaggedStruct("WriteFailed", {});
 export class Unit extends Context.Service<
   Unit,
   {
-    readonly status: SubscriptionRef.SubscriptionRef<typeof Status.Type>;
+    readonly status: SubscriptionRef.SubscriptionRef<Types.Status>;
     readonly connection: SubscriptionRef.SubscriptionRef<Availability>;
     readonly firmware: string;
-    readonly schedule: Ref.Ref<typeof Schedule.Type>;
+    readonly schedule: Ref.Ref<Types.Schedule>;
     readonly statusListeners: SubscriptionRef.SubscriptionRef<number>;
   }
 >()("aircon/Unit") {}
@@ -43,10 +45,10 @@ export const unitLayer = Layer.effect(
   Unit,
   Effect.gen(function* () {
     return {
-      status: yield* SubscriptionRef.make<typeof Status.Type>({ power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 }),
+      status: yield* SubscriptionRef.make<Types.Status>({ power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 }),
       connection: yield* SubscriptionRef.make<Availability>(AVAILABLE),
       firmware: "1.0.0",
-      schedule: yield* Ref.make<typeof Schedule.Type>({ days: [], hours: [] }),
+      schedule: yield* Ref.make<Types.Schedule>({ days: [], hours: [] }),
       statusListeners: yield* SubscriptionRef.make(0),
     };
   }),
@@ -60,7 +62,7 @@ const onlineStatus = Effect.gen(function* () {
   return unit.status;
 });
 
-const change = (update: (status: typeof Status.Type) => typeof Status.Type) =>
+const change = (update: (status: Types.Status) => Types.Status) =>
   Effect.gen(function* () {
     yield* SubscriptionRef.update(yield* onlineStatus, update);
     return null;
@@ -161,7 +163,7 @@ export const firmwareUpdate = Capability.make({
   run: () => Effect.flatMap(Unit, (unit) => Effect.fail(UpToDate.make({ version: unit.firmware }))),
 });
 
-const sameStatus = (a: typeof Status.Type, b: typeof Status.Type) => JSON.stringify(a) === JSON.stringify(b);
+const sameStatus = (a: Types.Status, b: Types.Status) => JSON.stringify(a) === JSON.stringify(b);
 
 export const statusChanged = Event.make({
   id: "aircon.status.changed",

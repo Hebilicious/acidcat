@@ -1,8 +1,9 @@
 import { App, Cli } from "@acid-cat/core-effect";
 
-import { Status, statusChanged, statusGet } from "./aircon.ts";
+import type * as Types from "../catalog/aircon.types.ts";
+import { statusChanged, statusGet } from "./aircon.ts";
 
-const statusText = ({ power, mode, fan, targetCelsius, roomCelsius }: typeof Status.Type, ui: Cli.Ui) =>
+const statusText = ({ power, mode, fan, targetCelsius, roomCelsius }: Types.Status, ui: Cli.Ui) =>
   `${ui.bold(power ? "on" : "off")} · ${mode} · fan ${fan} · target ${targetCelsius}°C · room ${roomCelsius}°C`;
 
 export const output: Cli.Output = {

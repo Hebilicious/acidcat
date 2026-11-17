@@ -1,12 +1,6 @@
 import type { CallFailure, Outcome } from "@acid-cat/spec-ts";
 
-export interface Status {
-  readonly power: boolean;
-  readonly mode: string;
-  readonly fan: string;
-  readonly targetCelsius: number;
-  readonly roomCelsius: number;
-}
+import type { Status } from "../catalog/aircon.types.ts";
 
 export interface ToolStatus {
   readonly phase: string;

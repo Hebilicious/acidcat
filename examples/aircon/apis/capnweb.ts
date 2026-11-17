@@ -2,14 +2,14 @@ import { RpcSession, RpcTarget, newHttpBatchRpcResponse } from "capnweb";
 import type { RpcStub, RpcTransport } from "capnweb";
 import type { Session } from "@acid-cat/core-ts";
 import type { WebSocket, WebSocketServer } from "ws";
-import type { z } from "zod";
 
 import { fanSet, modeSet, powerSet, statusChanged, statusGet, temperatureSet } from "../core-ts/aircon.ts";
-import type { Context, FanSpeed, Mode, Status } from "../core-ts/aircon.ts";
+import type * as Types from "../catalog/aircon.types.ts";
+import type { Context } from "../core-ts/aircon.ts";
 import { forbidden, foreignOrigin, httpBinding, openSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
 
-export type StatusListener = (status: z.infer<typeof Status>) => void;
+export type StatusListener = (status: Types.AirconStatusChangedPayload) => void;
 
 export class Following extends RpcTarget {
   readonly #stop: () => void;
@@ -40,11 +40,11 @@ export class AirconApi extends RpcTarget {
     return this.#session.call(powerSet, { on });
   }
 
-  setMode(mode: z.infer<typeof Mode>) {
+  setMode(mode: Types.Mode) {
     return this.#session.call(modeSet, { mode });
   }
 
-  setFan(speed: z.infer<typeof FanSpeed>) {
+  setFan(speed: Types.FanSpeed) {
     return this.#session.call(fanSet, { speed });
   }
 
@@ -67,7 +67,7 @@ export class AirconApi extends RpcTarget {
   }
 }
 
-async function deliver(occurrences: AsyncIterable<{ readonly data: z.infer<typeof Status> }>, client: RpcStub<StatusListener>) {
+async function deliver(occurrences: AsyncIterable<{ readonly data: Types.AirconStatusChangedPayload }>, client: RpcStub<StatusListener>) {
   try {
     for await (const occurrence of occurrences) await client(occurrence.data);
   } catch {

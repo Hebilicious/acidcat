@@ -1,7 +1,7 @@
 {
   "name": "@acid-cat/cli",
   "version": "0.13.0",
-  "description": "The AcidCat command line: check, format and view catalogs, and test implementations.",
+  "description": "The AcidCat command line: check, format and view catalogs, write their TypeScript types, and test implementations.",
   "keywords": [
     "acidcat",
     "cli",

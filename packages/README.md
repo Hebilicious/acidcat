@@ -8,7 +8,7 @@ These packages work with an implementation in any language.
 
 | Package | Directory | Registry name | Use |
 | --- | --- | --- | --- |
-| Command line | [`cli/`](cli) | npm `@acid-cat/cli` | Check, format and view catalogs, and test implementations with `acid-cat conform` |
+| Command line | [`cli/`](cli) | npm `@acid-cat/cli` | Check, format and view catalogs, write their TypeScript types with `acid-cat types typescript`, and test implementations with `acid-cat conform` |
 | Catalog library for TypeScript | [`catalog/typescript/`](catalog/typescript) | npm `@acid-cat/catalog` | Write a catalog in TypeScript |
 | Catalog library for Python | [`catalog/python/`](catalog/python) | PyPI `acid-cat-catalog` | Write a catalog in Python |
 | Catalog library for Go | [`catalog/go/`](catalog/go) | Go `github.com/Hebilicious/acidcat/packages/catalog/go` | Write a catalog in Go |

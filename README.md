@@ -97,6 +97,8 @@ capabilities {
 
 The best way to write a catalog is in Pkl, with a catalog library, or from the code of the application. A tool then writes the JSON, in [canonical form](spec/catalog.md#canonical-form). JSON written by hand is also a catalog, if it conforms. The same catalog in [TypeScript](examples/aircon/catalog/typescript.ts), [Python](examples/aircon/catalog/python.py), [Go](examples/aircon/catalog/go/main.go) or [Rust](examples/aircon/catalog/rust/src/main.rs) gives the same bytes: [`aircon.acidcat.json`](examples/aircon/catalog/aircon.acidcat.json). [`examples/aircon`](examples/aircon/README.md) also serves the air conditioner with both TypeScript cores and the Rust core: as a command line, as a web page with WebMCP tools, through MCP, and through APIs.
 
+`acid-cat types typescript <catalog.json>` writes the TypeScript types of a catalog: a type for each type in `$defs`, and the input, value, failure, state and payload of each capability and event. Commit the file, and check it in CI as you check the catalog. A library can then export these explicit types instead of types that it infers from its schemas. [`aircon.types.ts`](examples/aircon/catalog/aircon.types.ts) is the file for the air conditioner. Its APIs and both TypeScript cores use it.
+
 ## 🌐 WebMCP: agents in your web page
 
 [WebMCP](spec/bindings/webmcp.md) gives a browser agent the capabilities of the page that it is on. The agent does not read the screen or click buttons. It calls the same capabilities as your user interface, in the page, with the session, the state and the sign-in of the person who uses it.
@@ -142,7 +144,7 @@ These tools work with an implementation in any language.
 
 | Package | Use |
 | --- | --- |
-| [`@acid-cat/cli`](packages/cli) | 🛠️ `acid-cat check`, `format` and `view` for catalogs. `acid-cat conform` tests a running implementation through its bindings |
+| [`@acid-cat/cli`](packages/cli) | 🛠️ `acid-cat check`, `format` and `view` for catalogs. `acid-cat types typescript` writes the TypeScript types of a catalog. `acid-cat conform` tests a running implementation through its bindings |
 | [`@acid-cat/catalog`](packages/catalog/typescript) | ✍️ Write a catalog in TypeScript |
 | [`acid-cat-catalog`](packages/catalog/python) | 🐍 Write a catalog in Python |
 | [`github.com/Hebilicious/acidcat/packages/catalog/go`](packages/catalog/go) | 🐹 Write a catalog in Go |
@@ -182,6 +184,8 @@ gh skill install Hebilicious/acidcat acid-cat
 ## 🗺️ Roadmap
 
 - [x] `acid-cat conform`: test a running implementation through each binding
+- [x] `acid-cat types typescript`: write the TypeScript types of a catalog
+- [ ] `acid-cat types` for more languages
 - [x] A reference implementation in TypeScript: `@acid-cat/spec-ts`, `@acid-cat/core-effect` and `@acid-cat/core-ts`
 - [x] A reference implementation in Rust: `acid-cat-core`
 - [ ] Reference implementations in more languages

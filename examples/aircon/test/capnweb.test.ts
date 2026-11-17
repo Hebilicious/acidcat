@@ -6,10 +6,9 @@ import { serve } from "@acid-cat/cli";
 import type { Served } from "@acid-cat/cli";
 import { newHttpBatchRpcSession, newWebSocketRpcSession } from "capnweb";
 import { WebSocket as NodeWebSocket, WebSocketServer } from "ws";
-import type { z } from "zod";
 
 import { Unit } from "../core-ts/aircon.ts";
-import type { Status } from "../core-ts/aircon.ts";
+import type * as Types from "../catalog/aircon.types.ts";
 import { capnwebApi, capnwebWebSocket } from "../apis/capnweb.ts";
 import type { AirconApi } from "../apis/capnweb.ts";
 
@@ -69,7 +68,7 @@ test("followStatus calls the listener with each new status, and disposing its re
   using ws = await webSocketServer(unit);
   using api = newWebSocketRpcSession<AirconApi>(ws.url);
   const before = unit.statusListeners;
-  const statuses: z.infer<typeof Status>[] = [];
+  const statuses: Types.AirconStatusChangedPayload[] = [];
   const following = await api.followStatus((status) => void statuses.push(status));
   assert.equal(unit.statusListeners, before + 1, "the subscription has started when followStatus resolves");
   assert.deepEqual(await api.setPower(true), { ok: true, value: null });

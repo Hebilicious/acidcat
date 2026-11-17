@@ -8,9 +8,9 @@ import type { Readable } from "node:stream";
 import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
-import type { z } from "zod";
 
-import { aircon, fanSet, firmwareUpdate, modeSet, Offline, PoweredOff, powerSet, Status, output, statusChanged, statusGet, toJsonSchema, Unit } from "../core-ts/aircon.ts";
+import type * as Types from "../catalog/aircon.types.ts";
+import { aircon, fanSet, firmwareUpdate, modeSet, powerSet, output, statusChanged, statusGet, toJsonSchema, Unit } from "../core-ts/aircon.ts";
 import { CallFailureError, catalogOf, createSession, renderCatalog, runCli } from "@acid-cat/core-ts";
 import type { Result } from "@acid-cat/core-ts";
 import { OFFLINE, OUTPUT_ERROR, OUTPUT_FLAG_LINES, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
@@ -65,9 +65,9 @@ test("a handle gives the state as copies, and each change", async () => {
   const session = createSession(aircon, { target: "app", context: { unit }, toJsonSchema });
   const { snapshot } = session.handle(statusGet);
   assert.ok(snapshot, "aircon.status.get has state");
-  const off: z.infer<typeof Status> = { power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 };
+  const off: Types.Status = { power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 };
   assert.deepEqual(snapshot.getSnapshot(), off);
-  const seen: z.infer<typeof Status>[] = [];
+  const seen: Types.Status[] = [];
   snapshot.subscribe((value) => seen.push(value));
   await session.invoke("aircon.power.set", { on: true });
   assert.deepEqual(seen, [{ ...off, power: true }]);
@@ -80,16 +80,16 @@ test("a handle gives the state as copies, and each change", async () => {
 test("session.handle gives a handle with the types of its capability", async () => {
   const session = createSession(aircon, { target: "app", context: { unit: new Unit() }, toJsonSchema });
   const power = session.handle(powerSet);
-  const powered: Result<null, z.infer<typeof Offline>> = await power.execute({ on: true });
+  const powered: Result<Types.AirconPowerSetValue, Types.AirconPowerSetFailure> = await power.execute({ on: true });
   assert.deepEqual(powered, { ok: true, value: null });
 
   const mode = session.handle(modeSet);
-  const moded: Result<null, z.infer<typeof Offline> | z.infer<typeof PoweredOff>> = await mode.execute({ mode: "heat" });
+  const moded: Result<Types.AirconModeSetValue, Types.AirconModeSetFailure> = await mode.execute({ mode: "heat" });
   assert.deepEqual(moded, { ok: true, value: null });
 
   const status = session.handle(statusGet);
-  const value: Result<z.infer<typeof Status>, z.infer<typeof Offline>> = await status.execute({});
-  const snapshot: z.infer<typeof Status> | undefined = status.snapshot?.getSnapshot();
+  const value: Result<Types.AirconStatusGetValue, Types.AirconStatusGetFailure> = await status.execute({});
+  const snapshot: Types.AirconStatusGetState | undefined = status.snapshot?.getSnapshot();
   assert.deepEqual(value, { ok: true, value: snapshot });
 
   const wrongCalls = () => {

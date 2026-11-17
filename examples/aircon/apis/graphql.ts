@@ -5,10 +5,10 @@ import { GraphQLError } from "graphql";
 import { useServer } from "graphql-ws/use/ws";
 import { createYoga } from "graphql-yoga";
 import type { WebSocketServer } from "ws";
-import type { z } from "zod";
 
 import { fanSet, FanSpeed, Mode, modeSet, powerSet, statusChanged, statusGet, temperatureSet } from "../core-ts/aircon.ts";
-import type { Context as AirconContext, Offline, PoweredOff, Status } from "../core-ts/aircon.ts";
+import type * as Types from "../catalog/aircon.types.ts";
+import type { Context as AirconContext } from "../core-ts/aircon.ts";
 import { forbidden, foreignOrigin, httpBinding, openSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
 
@@ -21,7 +21,7 @@ const builder = new SchemaBuilder<{ Context: Context; DefaultFieldNullability: f
 const ModeType = builder.enumType("Mode", { values: Mode.options });
 const FanSpeedType = builder.enumType("FanSpeed", { values: FanSpeed.options });
 
-const StatusType = builder.objectRef<z.infer<typeof Status>>("Status").implement({
+const StatusType = builder.objectRef<Types.Status>("Status").implement({
   description: "The power, mode, fan speed, target temperature and room temperature of the unit.",
   fields: (t) => ({
     power: t.exposeBoolean("power"),
@@ -32,7 +32,7 @@ const StatusType = builder.objectRef<z.infer<typeof Status>>("Status").implement
   }),
 });
 
-const OfflineType = builder.objectRef<z.infer<typeof Offline>>("Offline").implement({
+const OfflineType = builder.objectRef<Types.AirconStatusGetFailure>("Offline").implement({
   description: "The unit is not on the network.",
   fields: (t) => ({
     _tag: t.exposeString("_tag"),
@@ -40,14 +40,14 @@ const OfflineType = builder.objectRef<z.infer<typeof Offline>>("Offline").implem
   }),
 });
 
-const PoweredOffType = builder.objectRef<z.infer<typeof PoweredOff>>("PoweredOff").implement({
+const PoweredOffType = builder.objectRef<Extract<Types.AirconModeSetFailure, { readonly _tag: "PoweredOff" }>>("PoweredOff").implement({
   description: "The unit is off, so it cannot change its mode.",
   fields: (t) => ({ _tag: t.exposeString("_tag") }),
 });
 
-const statusOrOffline = (value: z.infer<typeof Status> | z.infer<typeof Offline>) => ("_tag" in value ? OfflineType : StatusType);
+const statusOrOffline = (value: Types.AirconStatusGetValue | Types.AirconStatusGetFailure) => ("_tag" in value ? OfflineType : StatusType);
 
-const statusOrFailure = (value: z.infer<typeof Status> | z.infer<typeof Offline> | z.infer<typeof PoweredOff>) => {
+const statusOrFailure = (value: Types.AirconStatusGetValue | Types.AirconModeSetFailure) => {
   if (!("_tag" in value)) return StatusType;
   return value._tag === "Offline" ? OfflineType : PoweredOffType;
 };

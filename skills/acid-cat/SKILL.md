@@ -33,6 +33,17 @@ When several implementations share one catalog, each implementation has a test t
 
 Commit the source and the JSON together. Add a check to the build that writes the JSON again and fails when it differs.
 
+## TypeScript types from the catalog
+
+`acid-cat types typescript catalog.acidcat.json > catalog.types.ts` writes the TypeScript types of a catalog. Add `--target <name>` for the types of the view of one target. The file has:
+
+- a type for each type in `$defs`, with its name, and a type for each inline schema with a `title`, with the title as its name;
+- for each capability, `<Prefix>Input`, `<Prefix>Value`, `<Prefix>Failure`, and `<Prefix>State` when it has `state`. The prefix is the id in PascalCase: `aircon.power.set` gives `AirconPowerSet`, `fixture.hold-on` gives `FixtureHoldOn`. The failure is a union of `{ readonly _tag: "<Tag>" }` with the type of each tag, or `never`;
+- for each event, `<Prefix>Input` and `<Prefix>Payload`;
+- the interfaces `Capabilities` and `Events`, which map each id to its types.
+
+Each type accepts every value that its schema accepts. A keyword that a TypeScript type cannot express, such as `pattern` or `not`, makes the type wider. An object that declares properties has no index signature. Arrays and members are readonly. The command fails, with exit code 1, when two types get the same name, or when a title is not a TypeScript name. Commit the file, and add a check to the build that writes it again and fails when it differs, as for the JSON. Use these types where the code declares an input, a value, a failure or a payload, for example the public types of a library: they are explicit, so JSR sees no slow types. Types written by hand are also allowed.
+
 ## Choose a core
 
 | Core | Package | Style |
@@ -81,6 +92,7 @@ The MCP and HTTP bindings give web handlers. On Node.js, the server of the core 
 ```sh
 acid-cat check --strict catalog.acidcat.json   # the catalog conforms, and is in canonical form
 acid-cat view catalog.acidcat.json mcp          # the view of one target
+acid-cat types typescript catalog.acidcat.json  # the TypeScript types of the catalog
 acid-cat conform --mcp http://127.0.0.1:3000/mcp --http http://127.0.0.1:3000/api \
   --cli "node cli.ts" --mcp-stdio "node mcp.ts" \
   --webmcp http://127.0.0.1:3000/page            # each binding of a running implementation

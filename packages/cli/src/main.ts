@@ -8,6 +8,7 @@ import packageJson from "../package.json" with { type: "json" };
 import { check, isCatalog, viewOf } from "./catalog.ts";
 import { conform, DEADLINE } from "./conform/index.ts";
 import { parseJson } from "./json.ts";
+import { typescriptTypes } from "./typescript.ts";
 
 class UnreadableFile extends Data.TaggedError("UnreadableFile")<{ readonly file: string; readonly reason: string }> {}
 
@@ -116,6 +117,38 @@ const viewCommand = Command.make(
   }, Effect.catchTag("UnreadableFile", reportUnreadable)),
 ).pipe(Command.withDescription("Print the view of one target."));
 
+const typescriptCommand = Command.make(
+  "typescript",
+  {
+    file: Argument.String("catalog").pipe(Argument.withDescription("A catalog file")),
+    target: Flag.String("target").pipe(Flag.withDescription("Write only the types of the view of this target"), Flag.optional),
+  },
+  Effect.fn(function* ({ file, target }) {
+    const { document: catalog } = yield* readCatalog(file);
+    if (!isCatalog(catalog)) {
+      yield* Console.error(`${file}: error: the file is not a catalog; run \`acid-cat check ${file}\``);
+      return yield* fail;
+    }
+    if (Option.isSome(target) && !Object.hasOwn(catalog.targets, target.value)) {
+      yield* Console.error(`${file}: error: there is no target ${target.value}`);
+      return yield* fail;
+    }
+    const types = typescriptTypes(Option.isSome(target) ? viewOf(catalog, target.value) : catalog);
+    if (!types.ok) {
+      for (const error of types.errors) yield* Console.error(`${file}: error: ${error}`);
+      return yield* fail;
+    }
+    yield* Effect.sync(() => process.stdout.write(types.text));
+  }, Effect.catchTag("UnreadableFile", reportUnreadable)),
+).pipe(Command.withDescription("Print the TypeScript types of a catalog, or of the view of one target."));
+
+const typesCommand = Command.make("types", {}, () =>
+  Effect.andThen(Console.error("Give a language: acid-cat types typescript <catalog.json>"), fail),
+).pipe(
+  Command.withDescription("Print the types of a catalog in a programming language."),
+  Command.withSubcommands([typescriptCommand]),
+);
+
 const url = (name: string, description: string) =>
   Flag.String(name).pipe(Flag.withDescription(description), Flag.optional);
 
@@ -223,8 +256,8 @@ const conformCommand = Command.make(
 ).pipe(Command.withDescription("Test a running implementation of the conformance fixture through its bindings."));
 
 const acidCat = Command.make("acid-cat").pipe(
-  Command.withDescription("Check, format and view AcidCat catalogs, and test implementations."),
-  Command.withSubcommands([checkCommand, formatCommand, viewCommand, conformCommand]),
+  Command.withDescription("Check, format and view AcidCat catalogs, write their types, and test implementations."),
+  Command.withSubcommands([checkCommand, formatCommand, viewCommand, typesCommand, conformCommand]),
 );
 
 // Package runners, such as `pnpm` and `npx`, pass a `--` before the arguments of the program.

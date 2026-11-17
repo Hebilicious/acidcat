@@ -3,6 +3,8 @@ import { z } from "zod";
 import { AVAILABLE, capabilitiesFor, cliAlias, cliAliasDefault, cliFormat, defineApp, eventsFor, fail, ok, unavailable } from "@acid-cat/core-ts";
 import type { Availability, CliOutput, CliUi, Observable, ToJsonSchema } from "@acid-cat/core-ts";
 
+import type * as Types from "../catalog/aircon.types.ts";
+
 export const Mode = z.enum(["cool", "heat", "dry", "fan", "auto"]).meta({ id: "Mode" });
 export const FanSpeed = z.enum(["auto", "low", "medium", "high"]).meta({ id: "FanSpeed" });
 export const Day = z.enum(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]).meta({ id: "Day" });
@@ -11,17 +13,17 @@ export const Schedule = z.object({ days: z.array(Day), hours: z.array(Hour) }).m
 export const Status = z
   .object({ power: z.boolean(), mode: Mode, fan: FanSpeed, targetCelsius: z.number(), roomCelsius: z.number() })
   .meta({ id: "Status" });
-export const Offline = z.object({ _tag: z.literal("Offline"), since: z.string().optional() }).meta({ id: "Offline" });
+export const Offline = z.object({ _tag: z.literal("Offline"), since: z.string().exactOptional() }).meta({ id: "Offline" });
 export const PoweredOff = z.object({ _tag: z.literal("PoweredOff") });
 const UpToDate = z.object({ _tag: z.literal("UpToDate"), version: z.string() });
 const WriteFailed = z.object({ _tag: z.literal("WriteFailed") });
 
-export type State = z.infer<typeof Status> & { online: boolean; firmware: string };
+export type State = Types.Status & { online: boolean; firmware: string };
 
 export class Unit {
-  readonly #statusListeners = new Set<(value: z.infer<typeof Status>) => void>();
+  readonly #statusListeners = new Set<(value: Types.Status) => void>();
 
-  readonly status: Observable<z.infer<typeof Status>> = {
+  readonly status: Observable<Types.Status> = {
     getSnapshot: () => {
       const { online: _online, firmware: _firmware, ...status } = this.state;
       return status;
@@ -33,7 +35,7 @@ export class Unit {
   };
 
   state: State = { power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25, online: true, firmware: "1.0.0" };
-  schedule: z.infer<typeof Schedule> = { days: [], hours: [] };
+  schedule: Types.Schedule = { days: [], hours: [] };
   readonly #listeners = new Set<(value: Availability) => void>();
 
   readonly online: Observable<Availability> = {
@@ -44,12 +46,12 @@ export class Unit {
     },
   };
 
-  statusChanges(signal: AbortSignal): AsyncIterable<z.infer<typeof Status>> {
-    const queue: z.infer<typeof Status>[] = [];
+  statusChanges(signal: AbortSignal): AsyncIterable<Types.Status> {
+    const queue: Types.Status[] = [];
     let last = JSON.stringify(this.status.getSnapshot());
     let wake = () => {};
     let open = true;
-    const listener = (status: z.infer<typeof Status>) => {
+    const listener = (status: Types.Status) => {
       const text = JSON.stringify(status);
       if (text === last) return;
       last = text;
@@ -65,7 +67,7 @@ export class Unit {
     this.#statusListeners.add(listener);
     signal.addEventListener("abort", stop, { once: true });
     if (signal.aborted) stop();
-    const iterator: AsyncIterator<z.infer<typeof Status>, undefined> = {
+    const iterator: AsyncIterator<Types.Status, undefined> = {
       next: async () => {
         for (;;) {
           const status = queue.shift();
@@ -165,13 +167,14 @@ export const scheduleSet = capability({
   id: "aircon.schedule.set",
   description: "Turn the unit on at each given hour, on each given day. The default hour is 7.",
   audience: controls,
-  input: z.object({ days: z.array(Day), hours: z.array(Hour).optional() }),
+  input: z.object({ days: z.array(Day), hours: z.array(Hour).exactOptional() }),
   output: Schedule,
   failures: { Offline },
   run: ({ days, hours = [7] }, { context }) => {
     if (!context.unit.state.online) return fail({ _tag: "Offline" });
-    context.unit.schedule = { days, hours };
-    return ok(context.unit.schedule);
+    const schedule = { days, hours };
+    context.unit.schedule = schedule;
+    return ok(schedule);
   },
 });
 
@@ -236,7 +239,7 @@ export const aircon = defineApp<Context>({
   events: [statusChanged],
 });
 
-const statusText = ({ power, mode, fan, targetCelsius, roomCelsius }: z.infer<typeof Status>, ui: CliUi): string =>
+const statusText = ({ power, mode, fan, targetCelsius, roomCelsius }: Types.Status, ui: CliUi): string =>
   `${ui.bold(power ? "on" : "off")} · ${mode} · fan ${fan} · target ${targetCelsius}°C · room ${roomCelsius}°C`;
 
 export const output: CliOutput = {

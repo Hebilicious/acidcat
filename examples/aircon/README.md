@@ -4,7 +4,7 @@ One air conditioner, described once and served to every surface. The unit is sim
 
 | Directory | Contents |
 | --- | --- |
-| [`catalog/`](catalog) | The catalog, written in Pkl, TypeScript, Python, Go and Rust. Each language gives the same bytes |
+| [`catalog/`](catalog) | The catalog, written in Pkl, TypeScript, Python, Go and Rust. Each language gives the same bytes. Also the TypeScript types of the catalog, `aircon.types.ts` |
 | [`core-ts/`](core-ts) | The application on [`@acid-cat/core-ts`](../../packages/core-ts), with Zod, its command line, its MCP server through stdio, its server for a remote command line (`serve.ts`), and its web page with WebMCP tools (`page.ts`, `serve-page.ts`) |
 | [`core-effect/`](core-effect) | The application on [`@acid-cat/core-effect`](../../packages/core-effect), fully in Effect, its command line, its MCP server through stdio, its server for a remote command line (`serve.ts`), and its web page with WebMCP tools (`page.ts`, `serve-page.ts`) |
 | [`core-rust/`](core-rust) | The application on [`acid-cat-core`](../../packages/core-rust), in Rust, one program with its command line, its MCP server through stdio, and its server for a remote command line (`aircon serve`) |
@@ -19,6 +19,8 @@ The example imports the packages by their names, for example `@acid-cat/core-ts`
 [`catalog/aircon.pkl`](catalog/aircon.pkl) is the source of the catalog. [`catalog/aircon.acidcat.json`](catalog/aircon.acidcat.json) is the catalog in canonical form. `moon run examples` writes it from the Pkl source.
 
 Each catalog library writes the same catalog in its own language: [`typescript.ts`](catalog/typescript.ts), [`python.py`](catalog/python.py), [`go/main.go`](catalog/go/main.go) and [`rust/src/main.rs`](catalog/rust/src/main.rs). Each program writes the catalog to its output. The test checks that each output is exactly `aircon.acidcat.json`.
+
+[`catalog/aircon.types.ts`](catalog/aircon.types.ts) has the TypeScript types of the catalog. `moon run examples` writes it with `acid-cat types typescript`, and `moon run check` fails when it is not up to date. Both TypeScript cores, the web page and each API use these types for the status, the inputs, the values, the failures and the payload: for example `Types.Status`, `Types.AirconModeSetFailure` and `Types.AirconStatusChangedPayload`. [`test/types.test.ts`](test/types.test.ts) checks that these types and the types that each TypeScript core infers for its handles are the same, apart from readonly arrays. The handle of a capability with no input schema in `@acid-cat/core-effect` takes any object, so for these capabilities the test checks only that the handle takes the input of the catalog.
 
 ## Application and command line
 
@@ -143,7 +145,7 @@ All APIs reject origins that they do not allow.
 Each API calls the capabilities through a session, so it gets the same outcomes as all other surfaces:
 
 - **One session for each client.** A session serves one client (see [Sessions](../../spec/invocation.md#sessions)). Each request, or each Cap'n Web batch, opens its own session with `await using session = openSession(options)`. A WebSocket connection, of GraphQL or of Cap'n Web, is one session. The session closes when the block ends. The unit is a service in the context, so all sessions share it.
-- **Typed calls.** An API gets input that is not trusted. `session.call(powerSet, input)` checks it with the input schema of the capability, and gives a result with the types of the capability, with no cast. The MCP server checks the parameters of its tools with Effect Schema, then calls the session of `@acid-cat/core-effect`.
+- **Typed calls.** An API gets input that is not trusted. `session.call(powerSet, input)` checks it with the input schema of the capability, and gives a result with the types of the capability, with no cast. The MCP server checks the parameters of its tools with Effect Schema, then calls the session of `@acid-cat/core-effect`. Each API declares the values and the failures that it gives with the types of [`catalog/aircon.types.ts`](catalog/aircon.types.ts).
 - **Subscriptions.** Each API follows the event through `session.eventHandle(statusChanged).subscribe(…)`, and stops the subscription when its client stops or goes away. A request with a stream of server-sent events keeps its session open until the stream ends. A WebSocket connection opens its session when the client connects, and closes it when the connection closes, which ends each subscription of the connection.
   - GraphQL: the `subscribe` resolver of `statusChanged` returns the promise of `subscribe`, and its `resolve` gives the data of each occurrence. GraphQL calls `return()` of the iterator when the client ends the subscription.
   - Cap'n Web: `followStatus` subscribes with a signal, and calls the listener of the client with each occurrence. It returns a `Following` object. When the client disposes it, when the connection breaks, or when the listener throws, the signal aborts.
