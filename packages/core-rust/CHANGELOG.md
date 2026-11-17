@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.2.0...crates-core/v0.2.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **cli:** ignore a first argument --, which package runners pass to the program ([#167](https://github.com/Hebilicious/acidcat/issues/167)) ([fdd3b9a](https://github.com/Hebilicious/acidcat/commit/fdd3b9a92b4c52fa5f2c239188797b160f5c533a))
+
 ## [0.2.0](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.1.2...crates-core/v0.2.0) (2026-11-17)
 
 
