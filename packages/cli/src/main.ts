@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { canonicalText } from "@acid-cat/catalog";
-import { Console, Effect, FileSystem, Option } from "effect";
+import { Console, Data, Effect, FileSystem, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 
 import packageJson from "../package.json" with { type: "json" };
@@ -9,11 +9,27 @@ import { check, isCatalog, viewOf } from "./catalog.ts";
 import { conform, DEADLINE } from "./conform/index.ts";
 import { parseJson } from "./json.ts";
 
-const readCatalog = Effect.fn("readCatalog")(function* (file: string) {
+class UnreadableFile extends Data.TaggedError("UnreadableFile")<{ readonly file: string; readonly reason: string }> {}
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+const readText = Effect.fn("readText")(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
-  const text = yield* fs.readFileString(file);
-  return { text, document: parseJson(text) };
+  return yield* fs
+    .readFileString(file)
+    .pipe(Effect.mapError((error) => new UnreadableFile({ file, reason: `the file cannot be read: ${error.message}` })));
 });
+
+const readCatalog = Effect.fn("readCatalog")(function* (file: string) {
+  const text = yield* readText(file);
+  const document = yield* Effect.try({
+    try: () => parseJson(text),
+    catch: (error) => new UnreadableFile({ file, reason: `the file is not JSON: ${messageOf(error)}` }),
+  });
+  return { text, document };
+});
+
+const reportUnreadable = (error: UnreadableFile) => Effect.andThen(Console.error(`${error.file}: error: ${error.reason}`), fail);
 
 const fail = Effect.sync(() => {
   process.exitCode = 1;
@@ -24,20 +40,39 @@ const files = Argument.String("catalog").pipe(
   Argument.variadic({ min: 1 }),
 );
 
+const output = Flag.Literals("output", ["human", "json"]).pipe(
+  Flag.withDescription("human: text for a person. json: one JSON document on standard output, for a script or an agent"),
+  Flag.withDefault("human"),
+);
+
+const printJson = (value: unknown) => Effect.sync(() => process.stdout.write(`${JSON.stringify(value)}\n`));
+
 const checkCommand = Command.make(
   "check",
   {
     files,
     strict: Flag.Boolean("strict").pipe(Flag.withDescription("Fail on warnings too"), Flag.withDefault(false)),
+    output,
   },
-  Effect.fn(function* ({ files, strict }) {
+  Effect.fn(function* ({ files, strict, output }) {
     let failed = false;
+    const reports = [];
     for (const file of files) {
-      const { text, document } = yield* readCatalog(file);
-      const report = check(document, text);
-      for (const error of report.errors) yield* Console.error(`${file}: error: ${error}`);
-      for (const warning of report.warnings) yield* Console.error(`${file}: warning: ${warning}`);
+      const report = yield* readCatalog(file).pipe(
+        Effect.map(({ text, document }) => check(document, text)),
+        Effect.catchTag("UnreadableFile", (error) => Effect.succeed({ errors: [error.reason], warnings: [] })),
+      );
+      reports.push({ file, ...report });
       failed ||= report.errors.length > 0 || (strict && report.warnings.length > 0);
+    }
+    if (output === "json") {
+      yield* printJson({ conforms: !failed, catalogs: reports });
+      if (failed) return yield* fail;
+      return;
+    }
+    for (const { file, errors, warnings } of reports) {
+      for (const error of errors) yield* Console.error(`${file}: error: ${error}`);
+      for (const warning of warnings) yield* Console.error(`${file}: warning: ${warning}`);
     }
     if (failed) return yield* fail;
     yield* Console.log(files.length === 1 ? "The catalog conforms." : "Every catalog conforms.");
@@ -58,7 +93,7 @@ const formatCommand = Command.make(
       if (write) yield* fs.writeFileString(file, text);
       else yield* Effect.sync(() => process.stdout.write(text));
     }
-  }),
+  }, Effect.catchTag("UnreadableFile", reportUnreadable)),
 ).pipe(Command.withDescription("Write catalogs in canonical form."));
 
 const viewCommand = Command.make(
@@ -78,7 +113,7 @@ const viewCommand = Command.make(
       return yield* fail;
     }
     yield* Effect.sync(() => process.stdout.write(canonicalText(viewOf(catalog, target))));
-  }),
+  }, Effect.catchTag("UnreadableFile", reportUnreadable)),
 ).pipe(Command.withDescription("Print the view of one target."));
 
 const url = (name: string, description: string) =>
@@ -125,12 +160,12 @@ const conformCommand = Command.make(
       Flag.withDescription("The time, in milliseconds, that each check has to settle. A check that does not settle in this time fails"),
       Flag.withDefault(DEADLINE),
     ),
+    output,
   },
   Effect.fn(function* (options) {
     const value = (option: Option.Option<string>) => (Option.isSome(option) ? option.value : undefined);
     const words = (option: Option.Option<string>) => value(option)?.split(/\s+/).filter((word) => word !== "");
     const optionalInt = (option: Option.Option<number>) => (Option.isSome(option) ? option.value : undefined);
-    const fs = yield* FileSystem.FileSystem;
     const webhookOptions = [options.webhookPrincipal, options.webhookCert, options.webhookKey];
     const given = webhookOptions.filter(Option.isSome).length;
     if (given !== 0 && given !== 3) {
@@ -146,8 +181,8 @@ const conformCommand = Command.make(
       Option.isSome(options.webhookPrincipal) && Option.isSome(options.webhookCert) && Option.isSome(options.webhookKey)
         ? {
             principal: options.webhookPrincipal.value,
-            cert: yield* fs.readFileString(options.webhookCert.value),
-            key: yield* fs.readFileString(options.webhookKey.value),
+            cert: yield* readText(options.webhookCert.value),
+            key: yield* readText(options.webhookKey.value),
             otherPrincipal: value(options.webhookOtherPrincipal),
             maxTtlMs: optionalInt(options.webhookMaxTtlMs),
             minTtlMs: optionalInt(options.webhookMinTtlMs),
@@ -172,14 +207,19 @@ const conformCommand = Command.make(
       yield* Console.error("Give at least one binding: --mcp, --mcp-stdio, --http, --cli or --webmcp.");
       return yield* fail;
     }
+    const failed = results.filter((result) => !result.passed).length;
+    const warnings = results.filter((result) => result.warning === true).length;
+    if (options.output === "json") {
+      yield* printJson({ passed: results.length - failed, failed, warnings, checks: results });
+      if (failed > 0) return yield* fail;
+      return;
+    }
     for (const result of results) {
       yield* Console.log(`${result.warning === true ? "!" : result.passed ? "✓" : "✗"} ${result.binding}: ${result.name} (${result.rule})${result.detail ? `\n    ${result.detail}` : ""}`);
     }
-    const failed = results.filter((result) => !result.passed).length;
-    const warnings = results.filter((result) => result.warning === true).length;
     yield* Console.log(`\n${results.length - failed} passed, ${failed} failed${warnings === 0 ? "" : `, ${warnings} with a warning`}.`);
     if (failed > 0) return yield* fail;
-  }),
+  }, Effect.catchTag("UnreadableFile", reportUnreadable)),
 ).pipe(Command.withDescription("Test a running implementation of the conformance fixture through its bindings."));
 
 const acidCat = Command.make("acid-cat").pipe(
