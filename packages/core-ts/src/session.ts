@@ -2,7 +2,21 @@ import { AVAILABLE, CallFailureError, callFailure, isCallFailure, viewOf } from 
 import type { Availability, CallFailure, CatalogDocument, Emitted, Outcome, Result } from "@acid-cat/spec-ts";
 
 import { catalogOf } from "./app.ts";
-import type { AnyCapability, AnyEventDefinition, App, Call, Capability, EventDefinition, FailureOf, FailureSchemas, Observable, Subscription, ToJsonSchema } from "./app.ts";
+import type {
+  AnyCapability,
+  AnyEventDefinition,
+  App,
+  Call,
+  Capability,
+  CapabilityParts,
+  EventDefinition,
+  EventParts,
+  FailureOf,
+  FailureSchemas,
+  Observable,
+  Subscription,
+  ToJsonSchema,
+} from "./app.ts";
 import type { StandardSchemaV1 } from "./standard-schema.ts";
 import { DEFAULT_BUFFER_LIMIT, runSubscription } from "./subscription.ts";
 import type { Occurrences } from "./subscription.ts";
@@ -32,7 +46,9 @@ export interface EventHandle<Input = never, Payload = unknown> {
   subscribeExternal(input: unknown, options?: SubscribeOptions): Promise<Occurrences<unknown>>;
 }
 
-export type EventHandleOf<E> = E extends EventDefinition<never, infer Input, infer Payload, string> ? EventHandle<Input, Payload> : never;
+type InputOf<D extends { readonly input?: StandardSchemaV1 | undefined }> = StandardSchemaV1.InferOutput<NonNullable<D["input"]>>;
+
+export type EventHandleOf<E extends AnyEventDefinition> = [E] extends [EventParts<infer Payload, string>] ? EventHandle<InputOf<E>, Payload> : never;
 
 function eventOutsideView<Input, Payload>(event: { readonly id: string; readonly description: string }): EventHandle<Input, Payload> {
   const reject = () => Promise.reject(new CallFailureError(callFailure("unknown-capability", `There is no event ${event.id}.`)));
@@ -57,8 +73,8 @@ export interface Handle<Input = never, Value = unknown, Failure = unknown, State
   invokeExternal(input: unknown, options?: { readonly signal?: AbortSignal | undefined }): Promise<Result<unknown, unknown>>;
 }
 
-export type HandleOf<C> =
-  C extends Capability<never, infer Input, infer Value, infer Failures, infer State, string> ? Handle<Input, Value, FailureOf<Failures>, State> : never;
+export type HandleOf<C extends AnyCapability> =
+  [C] extends [CapabilityParts<never, infer Value, infer Failures, infer State, string>] ? Handle<InputOf<C>, Value, FailureOf<Failures>, State> : never;
 
 function outsideView<Input, Value, Failure, State>(capability: { readonly id: string; readonly description: string }): Handle<Input, Value, Failure, State> {
   const failure = callFailure("unknown-capability", `There is no capability ${capability.id}.`);

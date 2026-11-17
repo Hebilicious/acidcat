@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { z } from "zod";
 
 import { capabilitiesFor, defineCapability, fail, ok } from "../src/index.ts";
+import type { HandleOf } from "../src/index.ts";
 
 test("defineCapability and capabilitiesFor keep the literal id", () => {
   const find = defineCapability({ id: "probe.find", description: "Find a record.", audience: ["mcp"], run: () => ok(null) });
@@ -48,5 +49,11 @@ test("run gets the type of its input from the input schema, and its result must 
     // @ts-expect-error `litres` is a number.
     capability({ id: "probe.e", description: "x", audience: [], input: z.object({ litres: z.number() }), run: ({ litres }) => ok(litres === "one" ? null : null) }),
   ];
-  void [fill, empty, wrong];
+  const calls = (filling: HandleOf<typeof fill>, emptying: HandleOf<typeof empty>) => [
+    filling.execute({ litres: 1 }),
+    // @ts-expect-error The input of probe.fill needs `litres`.
+    filling.execute({}),
+    emptying.execute({}),
+  ];
+  void [fill, empty, wrong, calls];
 });
