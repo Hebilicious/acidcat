@@ -13,6 +13,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use tokio::sync::{Notify, mpsc, watch};
+use tokio_util::sync::CancellationToken;
 
 pub struct Fixture {
     switch: watch::Sender<Availability>,
@@ -38,7 +39,7 @@ struct Holds {
 }
 
 impl Holds {
-    async fn hold(&self, key: String, marker: Option<String>) {
+    async fn hold(&self, key: String, marker: Option<String>, cancel: CancellationToken) {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let released = Arc::new(Notify::new());
         self.holding
@@ -48,6 +49,15 @@ impl Holds {
         let _forget = Forget(|| {
             self.holding.lock().unwrap().remove(&id);
         });
+        if self.blocks_its_thread
+            && let Some(path) = &marker
+        {
+            let cancelled = format!("{path}.cancelled");
+            std::thread::spawn(move || {
+                futures::executor::block_on(cancel.cancelled());
+                let _ = std::fs::write(cancelled, "");
+            });
+        }
         let _marker = marker.map(MarkerFileWhileAlive::write);
         if self.blocks_its_thread {
             loop {
@@ -299,7 +309,10 @@ pub fn fixture() -> Arc<Application<Fixture>> {
             .input::<Hold>()
             .output::<Key>()
             .run(|Hold { key, marker }, call| async move {
-                call.context().holds.hold(key.clone(), marker).await;
+                call.context()
+                    .holds
+                    .hold(key.clone(), marker, call.cancel_token().clone())
+                    .await;
                 Ok(Key { key })
             }),
         )

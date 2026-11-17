@@ -29,14 +29,22 @@ export interface Marker {
 export const holdsLayer = (marker?: Marker, { ignoreInterruption = false }: { readonly ignoreInterruption?: boolean } = {}) =>
   Layer.sync(Holds, () => {
     const holding = new Set<{ readonly key: string; readonly released: Deferred.Deferred<void> }>();
-    const hold = (key: string, path: string | undefined) =>
+    const writeMarker = (path: string | undefined) => (path === undefined || marker === undefined ? Effect.void : marker.write(path));
+    const holdOnAfterInterrupt = (path: string | undefined) => (released: Deferred.Deferred<void>) =>
+      Deferred.await(released).pipe(
+        Effect.interruptible,
+        Effect.onInterrupt(() => writeMarker(path === undefined ? undefined : `${path}.cancelled`)),
+        Effect.exit,
+        Effect.andThen(Deferred.await(released)),
+      );
+    const hold = (key: string, path: string | undefined, wait: (released: Deferred.Deferred<void>) => Effect.Effect<void> = Deferred.await) =>
       Effect.acquireUseRelease(
         Effect.map(Deferred.make<void>(), (released) => {
           const entry = { key, released };
           holding.add(entry);
           return entry;
         }),
-        (entry) => Effect.andThen(path === undefined || marker === undefined ? Effect.void : marker.write(path), Deferred.await(entry.released)),
+        (entry) => Effect.andThen(writeMarker(path), wait(entry.released)),
         (entry) =>
           Effect.andThen(
             Effect.sync(() => holding.delete(entry)),
@@ -44,7 +52,7 @@ export const holdsLayer = (marker?: Marker, { ignoreInterruption = false }: { re
           ),
       );
     return {
-      hold: ignoreInterruption ? (key, path) => Effect.uninterruptible(hold(key, path)) : hold,
+      hold: ignoreInterruption ? (key, path) => Effect.uninterruptible(hold(key, path, holdOnAfterInterrupt(path))) : (key, path) => hold(key, path),
       held: Effect.sync(() => [...holding].map((entry) => entry.key)),
       release: (key) =>
         Effect.forEach(
