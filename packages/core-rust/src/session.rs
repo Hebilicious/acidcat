@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Wake, Waker};
 
 use futures::FutureExt;
 use serde_json::Value;
 use tokio::sync::{mpsc, watch};
-use tokio_util::sync::CancellationToken;
+use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
 use crate::app::{Application, ServedCapability, ServedEvent, StateWatch, call, subscription};
 use crate::outcome::{Availability, CallFailure, Defect, Kind, Outcome};
@@ -24,6 +26,32 @@ pub struct SubscribeOptions {
     pub max_age_ms: Option<f64>,
     /// Cancels the subscription before it starts.
     pub cancel: CancellationToken,
+}
+
+struct CancelOnWake(CancellationToken);
+
+impl Wake for CancelOnWake {
+    fn wake(self: Arc<Self>) {
+        self.0.cancel();
+    }
+}
+
+// tokio_util wakes this waker inside the `cancel` of `source`, so `target` is cancelled even while the work of a call
+// blocks the thread that polls it.
+fn cancel_when_cancelled(
+    source: &CancellationToken,
+    target: CancellationToken,
+) -> Pin<Box<WaitForCancellationFutureOwned>> {
+    let mut cancelled = Box::pin(source.clone().cancelled_owned());
+    let waker = Waker::from(Arc::new(CancelOnWake(target.clone())));
+    if cancelled
+        .as_mut()
+        .poll(&mut Context::from_waker(&waker))
+        .is_ready()
+    {
+        target.cancel();
+    }
+    cancelled
 }
 
 pub(crate) fn is_max_age_ms(value: f64) -> bool {
@@ -232,6 +260,7 @@ impl<C: Send + Sync + 'static> Session<C> {
         }
         let token = inner.closing.child_token();
         let _cancel_on_end = token.clone().drop_guard();
+        let _cancel_with_caller = cancel_when_cancelled(cancel, token.clone());
         let work = match (capability.definition.run)(
             input,
             call(inner.context.clone(), inner.target.clone(), token.clone()),
