@@ -92,6 +92,8 @@ The full example is [`examples/fixture.rs`](examples/fixture.rs): the conformanc
 | `output::<T>()` | The type of the value. Its schema is the output schema. With no output, the value is `null`, and the work gives `()` |
 | `failures::<T>()` | An enum with `#[serde(tag = "_tag")]`. Each variant is one failure, and its name is the tag |
 | `read_only()` | A call changes nothing that a client can see |
+| `destructive(bool)` | `true`: a call can delete or overwrite something that a client can see. `false`: a call only adds things |
+| `idempotent(bool)` | `true`: a second call with the same input has no more effect that a client can see |
 | `availability(f)` | A `tokio::sync::watch::Receiver<Availability>` for each session, from the services |
 | `state(f)` | The [state](../../spec/invocation.md#state): a `tokio::sync::watch::Receiver<T>` for each session, from the services. Its type gives the state schema. `Session::state(id)` observes it |
 | `input_schema`, `output_schema`, `failure_schemas` | Give a schema that you write, for example with `serde_json::json!` |

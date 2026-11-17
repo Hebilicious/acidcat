@@ -51,6 +51,10 @@ export interface Capability<
   /** The targets that can use the capability. With no audience, no target can use it. */
   readonly audience: readonly string[];
   readonly readOnly?: boolean | undefined;
+  /** `true` when a call can delete or overwrite something that a client can see, `false` when a call only adds. */
+  readonly destructive?: boolean | undefined;
+  /** `true` when a second call with the same input has no further effect that a client can see. */
+  readonly idempotent?: boolean | undefined;
   /**
    * The input, a `Schema.Struct`, or a `Schema.Union` of structs. With no input schema, the input is an empty object.
    */
@@ -92,6 +96,8 @@ export interface Any<R = unknown> {
   readonly description: string;
   readonly audience: readonly string[];
   readonly readOnly?: boolean | undefined;
+  readonly destructive?: boolean | undefined;
+  readonly idempotent?: boolean | undefined;
   readonly input?: AnySchema | undefined;
   readonly output?: AnySchema | undefined;
   readonly failures?: readonly AnySchema[] | undefined;
@@ -107,6 +113,8 @@ export interface Declaration<Output extends AnySchema, Failure extends AnySchema
   readonly description: string;
   readonly audience: readonly string[];
   readonly readOnly?: boolean | undefined;
+  readonly destructive?: boolean | undefined;
+  readonly idempotent?: boolean | undefined;
   readonly output?: Output | undefined;
   readonly failures?: readonly Failure[] | undefined;
   readonly availability?: Effect.Effect<SubscriptionRef.SubscriptionRef<Availability>, never, RAvailability> | undefined;
@@ -186,6 +194,8 @@ export function make<
     description: definition.description,
     audience: definition.audience,
     readOnly: definition.readOnly,
+    destructive: definition.destructive,
+    idempotent: definition.idempotent,
     input: definition.input,
     output: definition.output,
     failures: definition.failures,

@@ -34,6 +34,12 @@ type Capability struct {
 	Failures map[string]Schema
 	// ReadOnly is true when a call changes nothing anyone can observe. A hint for clients.
 	ReadOnly bool
+	// Destructive is true when a call can delete or overwrite something that a client can see, and false when a call
+	// only adds. Nil leaves it out. A hint for clients.
+	Destructive *bool
+	// Idempotent is true when a second call with the same input has no further effect that a client can see. Nil
+	// leaves it out. A hint for clients.
+	Idempotent *bool
 	// State describes a value that clients can observe.
 	State Schema
 }
@@ -252,6 +258,12 @@ func (c *Catalog) Render() (string, error) {
 		}
 		if capability.ReadOnly {
 			out["readOnly"] = true
+		}
+		if capability.Destructive != nil {
+			out["destructive"] = *capability.Destructive
+		}
+		if capability.Idempotent != nil {
+			out["idempotent"] = *capability.Idempotent
 		}
 		capabilities[entry.name] = out
 	}

@@ -46,6 +46,20 @@ class CatalogTest(unittest.TestCase):
         expected = (HERE / "fixtures" / "edge.acidcat.json").read_text(encoding="utf-8")
         self.assertEqual(catalog.render(), expected)
 
+    def test_writes_the_hints_of_a_capability_in_canonical_order(self) -> None:
+        catalog = Catalog().target("agents", bindings=["mcp"])
+        catalog.capability(
+            "notes.count.read",
+            state={"type": "integer"},
+            idempotent=True,
+            destructive=False,
+            read_only=True,
+            audience=["agents"],
+            description="Read the number of notes.",
+        )
+        expected = (HERE / "fixtures" / "hints.acidcat.json").read_text(encoding="utf-8")
+        self.assertEqual(catalog.render(), expected)
+
     def test_reports_the_rules_a_catalog_breaks(self) -> None:
         catalog = (
             Catalog()

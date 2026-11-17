@@ -168,6 +168,8 @@ function write(app: App<unknown>): CatalogDocument {
       ...(capability.output === undefined ? {} : { output: toJson(capability.output, capability.id) }),
       ...(Object.keys(failures).length === 0 ? {} : { failures }),
       ...(capability.readOnly === true ? { readOnly: true } : {}),
+      ...(capability.destructive === undefined ? {} : { destructive: capability.destructive }),
+      ...(capability.idempotent === undefined ? {} : { idempotent: capability.idempotent }),
       ...(capability.state === undefined ? {} : { state: toJson(capability.state.schema, capability.id) }),
     };
   }

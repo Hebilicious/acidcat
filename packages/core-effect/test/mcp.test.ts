@@ -35,7 +35,11 @@ const Tools = Schema.Struct({
     Schema.Struct({
       name: Schema.String,
       outputSchema: Schema.optional(Schema.Struct({ type: Schema.optional(Schema.String) })),
-      annotations: Schema.Struct({ readOnlyHint: Schema.optional(Schema.Boolean) }),
+      annotations: Schema.Struct({
+        readOnlyHint: Schema.optional(Schema.Boolean),
+        destructiveHint: Schema.optional(Schema.Boolean),
+        idempotentHint: Schema.optional(Schema.Boolean),
+      }),
     }),
   ),
 });
@@ -88,6 +92,11 @@ test("tools/list gives the available capabilities of the view, with their schema
   assert.ok(echo !== undefined);
   assert.equal(echo.annotations.readOnlyHint, true);
   assert.equal(echo.outputSchema?.type, "object");
+  assert.equal(echo.annotations.destructiveHint, true, "with no destructive member, effect/ai gives the MCP default");
+  assert.equal(echo.annotations.idempotentHint, false, "with no idempotent member, effect/ai gives the MCP default");
+  const switchSet = tools.find((tool) => tool.name === "fixture.switch.set");
+  assert.equal(switchSet?.annotations.destructiveHint, true);
+  assert.equal(switchSet?.annotations.idempotentHint, true);
 });
 
 test("tools/call gives each outcome in the form of the binding", async () => {

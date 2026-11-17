@@ -9,6 +9,8 @@ const Catalog = z.looseObject({
     z.looseObject({
       audience: z.array(z.string()).optional(),
       readOnly: z.boolean().optional(),
+      destructive: z.boolean().optional(),
+      idempotent: z.boolean().optional(),
       failures: z.record(z.string(), z.looseObject({})).optional(),
       state: z.looseObject({}).optional(),
     }),
@@ -31,6 +33,8 @@ export function shape(catalog: unknown) {
         {
           audience: capability.audience,
           readOnly: capability.readOnly ?? false,
+          destructive: capability.destructive,
+          idempotent: capability.idempotent,
           failures: Object.keys(capability.failures ?? {}).sort(),
           state: capability.state !== undefined,
         },

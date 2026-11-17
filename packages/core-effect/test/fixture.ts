@@ -250,6 +250,8 @@ export const fixture = App.make({
       id: "fixture.switch.set",
       description: "Turn the switch on or off. The switch controls the availability of fixture.toggle.",
       audience: everywhere,
+      destructive: true,
+      idempotent: true,
       input: Schema.Struct({ on: Schema.Boolean }),
       run: ({ on }) =>
         Effect.gen(function* () {
@@ -287,6 +289,8 @@ export const fixture = App.make({
       id: "fixture.signal",
       description: "Give an occurrence of fixture.watch to each subscription that watches the key. Return the number of these subscriptions.",
       audience: everywhere,
+      destructive: false,
+      idempotent: false,
       input: Watched,
       output: Schema.Struct({ delivered: Schema.Int }),
       run: ({ key, value }) => Watchers.use((watchers) => Effect.map(watchers.signal(key, value), (delivered) => ({ delivered }))),

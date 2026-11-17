@@ -60,6 +60,8 @@ class Catalog:
         output: Schema | None = None,
         failures: Mapping[str, Schema] | None = None,
         read_only: bool | None = None,
+        destructive: bool | None = None,
+        idempotent: bool | None = None,
         state: Schema | None = None,
     ) -> Catalog:
         """Declare a capability. A capability with no audience reaches no target."""
@@ -72,6 +74,8 @@ class Catalog:
             "output": output,
             "failures": dict(failures) if failures else None,
             "readOnly": read_only,
+            "destructive": destructive,
+            "idempotent": idempotent,
             "state": state,
         }
         return self

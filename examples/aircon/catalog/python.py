@@ -94,6 +94,8 @@ def aircon_catalog() -> Catalog:
         audience=everywhere,
         input=setting("on", {"type": "boolean"}),
         failures={"Offline": offline},
+        destructive=True,
+        idempotent=True,
     )
     catalog.capability(
         "aircon.mode.set",
@@ -104,6 +106,8 @@ def aircon_catalog() -> Catalog:
             "Offline": offline,
             "PoweredOff": {"type": "object", "description": "The unit must be on before its mode can change."},
         },
+        destructive=True,
+        idempotent=True,
     )
     catalog.capability(
         "aircon.temperature.set",
@@ -111,6 +115,8 @@ def aircon_catalog() -> Catalog:
         audience=controls,
         input=setting("celsius", {"type": "number", "minimum": 16, "maximum": 31}),
         failures={"Offline": offline},
+        destructive=True,
+        idempotent=True,
     )
     catalog.capability(
         "aircon.fan.set",
@@ -118,6 +124,8 @@ def aircon_catalog() -> Catalog:
         audience=controls,
         input=setting("speed", fan_speed),
         failures={"Offline": offline},
+        destructive=True,
+        idempotent=True,
     )
     catalog.capability(
         "aircon.schedule.set",
@@ -130,6 +138,8 @@ def aircon_catalog() -> Catalog:
         },
         output=schedule,
         failures={"Offline": offline},
+        destructive=True,
+        idempotent=True,
     )
     catalog.capability(
         "aircon.status.export",

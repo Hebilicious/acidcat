@@ -26,6 +26,10 @@ export interface CapabilityOptions {
   readonly failures?: Readonly<Record<string, Schema>>;
   /** `true` when a call changes nothing anyone can observe. A hint for clients. */
   readonly readOnly?: boolean;
+  /** `true` when a call can delete or overwrite something that a client can see, `false` when a call only adds. A hint for clients. */
+  readonly destructive?: boolean;
+  /** `true` when a second call with the same input has no further effect that a client can see. A hint for clients. */
+  readonly idempotent?: boolean;
   /** The schema of a value that clients can observe. */
   readonly state?: Schema;
 }
@@ -167,6 +171,8 @@ export class Catalog {
             output: capability.output,
             failures: Object.keys(capability.failures ?? {}).length === 0 ? undefined : capability.failures,
             readOnly: capability.readOnly,
+            destructive: capability.destructive,
+            idempotent: capability.idempotent,
             state: capability.state,
           }),
         ]),

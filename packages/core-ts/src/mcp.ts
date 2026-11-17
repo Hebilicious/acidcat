@@ -1,4 +1,4 @@
-import { bundle, isJsonObject, KEEPALIVE_MS, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage } from "@acid-cat/spec-ts";
+import { bundle, isJsonObject, KEEPALIVE_MS, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpToolAnnotations, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage } from "@acid-cat/spec-ts";
 import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
@@ -273,7 +273,7 @@ export function listTools(session: Session) {
         description: capability.description,
         inputSchema: bundle(capability.input ?? { type: "object" }, types),
         ...(output?.type === "object" ? { outputSchema: output } : {}),
-        annotations: { readOnlyHint: capability.readOnly === true },
+        annotations: mcpToolAnnotations(capability),
       };
     });
 }

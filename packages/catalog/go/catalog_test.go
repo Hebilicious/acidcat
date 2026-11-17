@@ -156,6 +156,24 @@ func TestACatalogWithNoEventsHasNoEventsMember(t *testing.T) {
 	}
 }
 
+func TestWritesTheHintsOfACapabilityInCanonicalOrder(t *testing.T) {
+	rendered, err := catalog.New("", "").
+		Target("agents", catalog.Target{Bindings: []string{"mcp"}}).
+		Capability("notes.count.read", catalog.Capability{
+			State:       catalog.Schema{"type": "integer"},
+			Idempotent:  new(true),
+			Destructive: new(false),
+			ReadOnly:    true,
+			Audience:    []string{"agents"},
+			Description: "Read the number of notes.",
+		}).
+		Render()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectBytes(t, rendered, "testdata/hints.acidcat.json")
+}
+
 func expectBytes(t *testing.T, rendered, path string) {
 	t.Helper()
 	expected, err := os.ReadFile(path)

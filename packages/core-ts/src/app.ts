@@ -36,6 +36,10 @@ export interface CapabilityParts<Context, Value, Failures, State, Id extends str
   /** The targets that can use the capability. With no audience, no target can use it. */
   readonly audience: readonly string[];
   readonly readOnly?: boolean | undefined;
+  /** `true` when a call can delete or overwrite something that a client can see, `false` when a call only adds. */
+  readonly destructive?: boolean | undefined;
+  /** `true` when a second call with the same input has no further effect that a client can see. */
+  readonly idempotent?: boolean | undefined;
   /** The value of a successful call. With no output schema, the value is `null`. */
   readonly output?: StandardSchemaV1<unknown, Value> | undefined;
   readonly failures?: FailureSchemas<Failures> | undefined;
@@ -83,6 +87,8 @@ export interface AnyCapability<Context = never> {
   readonly description: string;
   readonly audience: readonly string[];
   readonly readOnly?: boolean | undefined;
+  readonly destructive?: boolean | undefined;
+  readonly idempotent?: boolean | undefined;
   readonly input?: StandardSchemaV1 | undefined;
   readonly output?: StandardSchemaV1 | undefined;
   readonly failures?: { readonly [tag: string]: StandardSchemaV1 } | undefined;
@@ -347,6 +353,8 @@ function write(app: App<never>, toJsonSchema: ToJsonSchema): CatalogDocument {
       ...(capability.output === undefined ? {} : { output: toJson(capability.output, capability.id) }),
       ...(Object.keys(failures).length === 0 ? {} : { failures }),
       ...(capability.readOnly === true ? { readOnly: true } : {}),
+      ...(capability.destructive === undefined ? {} : { destructive: capability.destructive }),
+      ...(capability.idempotent === undefined ? {} : { idempotent: capability.idempotent }),
       ...(capability.state === undefined ? {} : { state: toJson(capability.state.schema, capability.id) }),
     };
   }

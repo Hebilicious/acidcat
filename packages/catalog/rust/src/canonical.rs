@@ -13,13 +13,15 @@ const CATALOG_ORDER: [&str; 7] = [
     "events",
 ];
 const TARGET_ORDER: [&str; 3] = ["bindings", "description", "options"];
-const CAPABILITY_ORDER: [&str; 7] = [
+const CAPABILITY_ORDER: [&str; 9] = [
     "description",
     "audience",
     "input",
     "output",
     "failures",
     "readOnly",
+    "destructive",
+    "idempotent",
     "state",
 ];
 const EVENT_ORDER: [&str; 4] = ["description", "audience", "input", "payload"];

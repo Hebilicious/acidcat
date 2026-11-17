@@ -195,7 +195,9 @@ test("MCP gives the view and each outcome", async () => {
   const Reply = z.object({
     result: z
       .object({
-        tools: z.array(z.object({ name: z.string(), annotations: z.object({ readOnlyHint: z.boolean() }) })).optional(),
+        tools: z
+          .array(z.object({ name: z.string(), annotations: z.object({ readOnlyHint: z.boolean(), destructiveHint: z.boolean().optional(), idempotentHint: z.boolean().optional() }) }))
+          .optional(),
         structuredContent: z.unknown().optional(),
         isError: z.boolean().optional(),
         content: z.tuple([z.object({ text: z.string() })]).optional(),
@@ -216,7 +218,8 @@ test("MCP gives the view and each outcome", async () => {
     );
   const tools = (await rpc("tools/list")).result?.tools ?? [];
   assert.deepEqual(tools.map((tool) => tool.name).sort(), ["fixture.crash", "fixture.echo", "fixture.held", "fixture.hold", "fixture.refuse", "fixture.release", "fixture.signal", "fixture.switch.set", "fixture.toggle", "fixture.watching"]);
-  assert.equal(tools.find((tool) => tool.name === "fixture.echo")?.annotations.readOnlyHint, true);
+  assert.deepEqual(tools.find((tool) => tool.name === "fixture.echo")?.annotations, { readOnlyHint: true });
+  assert.deepEqual(tools.find((tool) => tool.name === "fixture.switch.set")?.annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: true });
   const value = await rpc("tools/call", { name: "fixture.echo", arguments: { text: "hi" } });
   assert.deepEqual(value.result?.structuredContent, { text: "hi" });
   const failure = await rpc("tools/call", { name: "fixture.refuse", arguments: {} });

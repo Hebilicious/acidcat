@@ -17,7 +17,7 @@ Each binding document MUST tell:
 4. **Listing.** How a client finds the capabilities of the target, and their [availability](../invocation.md#availability).
 5. **Cancellation.** How a client cancels a call.
 
-It MAY also tell how a client observes [state](../invocation.md#state), how the binding uses `readOnly`, and which [extensions](../extensions/README.md) it supports.
+It MAY also tell how a client observes [state](../invocation.md#state), how the binding uses `readOnly`, `destructive` and `idempotent`, and which [extensions](../extensions/README.md) it supports.
 
 A binding SHOULD serve [events](../events.md) if its protocol can send messages that the client did not ask for one at a time, for example a stream. A binding that serves events MUST tell:
 

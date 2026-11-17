@@ -93,6 +93,8 @@ A **capability** is one operation that a client can do. Each key of `capabilitie
 | `output` | No | The schema of the value that a successful call returns. If there is no output schema, the value is `null` |
 | `failures` | No | The failures that the capability can return, by tag. See [Failures](#failures) |
 | `readOnly` | No | `true` if a call changes nothing that a client can see. This is a hint for clients. It does not change the behavior of a call |
+| `destructive` | No | `true` if a call can delete or overwrite something that a client can see. `false` if a call only adds things. This is a hint for clients. It does not change the behavior of a call |
+| `idempotent` | No | `true` if a second call with the same input has no more effect that a client can see. This is a hint for clients. It does not change the behavior of a call |
 | `state` | No | The schema of a value that clients can observe. See [State](invocation.md#state) |
 
 ## Events
@@ -196,7 +198,7 @@ The `acidcat` member is the version of this specification. It is not the version
 
 The **canonical form** is the one correct text for a catalog. All tools and catalog libraries write the same bytes for the same catalog. A committed catalog SHOULD be in canonical form. `acid-cat format` writes this form.
 
-- **Member order.** The catalog: `acidcat`, `title`, `description`, `targets`, `$defs`, `capabilities`, `events`. A target: `bindings`, `description`, `options`. A capability: `description`, `audience`, `input`, `output`, `failures`, `readOnly`, `state`. An event: `description`, `audience`, `input`, `payload`. Other members come after these members, in sorted order.
+- **Member order.** The catalog: `acidcat`, `title`, `description`, `targets`, `$defs`, `capabilities`, `events`. A target: `bindings`, `description`, `options`. A capability: `description`, `audience`, `input`, `output`, `failures`, `readOnly`, `destructive`, `idempotent`, `state`. An event: `description`, `audience`, `input`, `payload`. Other members come after these members, in sorted order.
 - **Sorted keys.** Sort the keys of `targets`, `$defs`, `capabilities`, `events` and `failures`. Sort the keys of all objects in schemas and in `options`, at all levels. Sort by Unicode code point. Do not sort arrays.
 - **Values.** Write strings and numbers as `JSON.stringify` in ECMAScript writes them. For example: `16`, `0.5`, `1e-7`, `1e+21`. Escape only `"`, `\` and control characters.
 - **Layout.** Use UTF-8. Indent with two spaces. Put each member and each item on its own line. Write an empty object as `{}` and an empty array as `[]`. End the text with one line feed.

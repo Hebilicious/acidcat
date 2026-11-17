@@ -79,6 +79,8 @@ local function setting(text: String, name: String, property: Dynamic) = new Capa
     properties { [name] = property }
   }
   failures { ["Offline"] = module.ref("Offline") }
+  destructive = true
+  idempotent = true
 }
 
 capabilities {
@@ -126,6 +128,8 @@ capabilities {
     }
     output = module.ref("Schedule")
     failures { ["Offline"] = module.ref("Offline") }
+    destructive = true
+    idempotent = true
   }
 
   ["aircon.status.export"] {

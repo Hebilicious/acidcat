@@ -208,6 +208,12 @@
         "readOnly": {
           "type": "boolean"
         },
+        "destructive": {
+          "type": "boolean"
+        },
+        "idempotent": {
+          "type": "boolean"
+        },
         "state": {
           "$ref": "#/$defs/schema"
         }

@@ -1,0 +1,24 @@
+{
+  "acidcat": "0.1",
+  "targets": {
+    "agents": {
+      "bindings": [
+        "mcp"
+      ]
+    }
+  },
+  "capabilities": {
+    "notes.count.read": {
+      "description": "Read the number of notes.",
+      "audience": [
+        "agents"
+      ],
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "state": {
+        "type": "integer"
+      }
+    }
+  }
+}

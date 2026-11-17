@@ -361,6 +361,8 @@ pub fn fixture() -> Arc<Application<Fixture>> {
         .capability(
             Capability::new("fixture.switch.set", "Turn the switch on or off. The switch controls the availability of fixture.toggle.")
                 .audience(EVERYWHERE)
+                .destructive(true)
+                .idempotent(true)
                 .input::<Switch>()
                 .run(|Switch { on }, call| async move {
                     call.context().switch.send_replace(if on { Availability::Available } else { Availability::unavailable("The switch is off.") });
@@ -380,6 +382,8 @@ pub fn fixture() -> Arc<Application<Fixture>> {
                 "Give an occurrence of fixture.watch to each subscription that watches the key. Return the number of these subscriptions.",
             )
             .audience(EVERYWHERE)
+            .destructive(false)
+            .idempotent(false)
             .input::<Watched>()
             .output::<Delivered>()
             .run(|Watched { key, value }, call| async move { Ok(Delivered { delivered: call.context().watchers.signal(&key, &value) }) }),

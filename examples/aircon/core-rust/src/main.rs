@@ -263,6 +263,8 @@ pub fn aircon() -> (Arc<Application<Unit>>, CliOutput) {
     });
     let power_set = Capability::new("aircon.power.set", "Turn the unit on or off.")
         .audience(EVERYWHERE)
+        .destructive(true)
+        .idempotent(true)
         .input::<Power>()
         .failures::<Offline>()
         .run(|Power { on }, call| async move {
@@ -350,6 +352,8 @@ pub fn aircon() -> (Arc<Application<Unit>>, CliOutput) {
         .capability(
             Capability::new("aircon.mode.set", "Choose how the unit runs.")
                 .audience(CONTROLS)
+                .destructive(true)
+                .idempotent(true)
                 .input::<ModeInput>()
                 .failures::<ModeFailure>()
                 .run(|ModeInput { mode }, call| async move {
@@ -366,6 +370,8 @@ pub fn aircon() -> (Arc<Application<Unit>>, CliOutput) {
                 "Set the target temperature in degrees Celsius.",
             )
             .audience(CONTROLS)
+            .destructive(true)
+            .idempotent(true)
             .input::<Temperature>()
             .failures::<Offline>()
             .run(|Temperature { celsius }, call| async move {
@@ -376,6 +382,8 @@ pub fn aircon() -> (Arc<Application<Unit>>, CliOutput) {
         .capability(
             Capability::new("aircon.fan.set", "Set the fan speed.")
                 .audience(CONTROLS)
+                .destructive(true)
+                .idempotent(true)
                 .input::<Fan>()
                 .failures::<Offline>()
                 .run(|Fan { speed }, call| async move {
@@ -389,6 +397,8 @@ pub fn aircon() -> (Arc<Application<Unit>>, CliOutput) {
                 "Turn the unit on at each given hour, on each given day. The default hour is 7.",
             )
             .audience(CONTROLS)
+            .destructive(true)
+            .idempotent(true)
             .input::<ScheduleInput>()
             .output::<Schedule>()
             .failures::<Offline>()

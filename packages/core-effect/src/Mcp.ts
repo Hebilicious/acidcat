@@ -1,4 +1,4 @@
-import { bundle, isJsonObject, KEEPALIVE_MS, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage, viewOf } from "@acid-cat/spec-ts";
+import { bundle, isJsonObject, KEEPALIVE_MS, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, mcpToolAnnotations, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage, viewOf } from "@acid-cat/spec-ts";
 import type { JsonObject, Outcome, Rejection } from "@acid-cat/spec-ts";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberMap, Layer, Logger, Option, Queue, Schema, Scope, Semaphore, Sink, Stdio, Stream, SubscriptionRef } from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
@@ -362,7 +362,7 @@ const toolFor = (
         description: capability.description,
         inputSchema,
         ...(outputSchema === undefined ? {} : { outputSchema }),
-        annotations: { readOnlyHint: capability.readOnly === true },
+        annotations: mcpToolAnnotations(capability),
       }),
       annotations,
       handle: (payload: unknown) =>

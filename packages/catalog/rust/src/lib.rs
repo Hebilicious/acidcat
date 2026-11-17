@@ -46,6 +46,12 @@ pub struct Capability {
     pub failures: Vec<(String, Schema)>,
     /// `true` when a call changes nothing anyone can observe. A hint for clients.
     pub read_only: bool,
+    /// `Some(true)` when a call can delete or overwrite something that a client can see, `Some(false)` when a call
+    /// only adds. A hint for clients.
+    pub destructive: Option<bool>,
+    /// `Some(true)` when a second call with the same input has no further effect that a client can see. A hint for
+    /// clients.
+    pub idempotent: Option<bool>,
     /// The schema of a value that clients can observe.
     pub state: Option<Schema>,
 }
@@ -303,6 +309,12 @@ impl Catalog {
             }
             if capability.read_only {
                 out.insert("readOnly".into(), json!(true));
+            }
+            if let Some(destructive) = capability.destructive {
+                out.insert("destructive".into(), json!(destructive));
+            }
+            if let Some(idempotent) = capability.idempotent {
+                out.insert("idempotent".into(), json!(idempotent));
             }
             insert_some(&mut out, "state", capability.state.clone());
             capabilities.insert(id.clone(), Value::Object(out));
