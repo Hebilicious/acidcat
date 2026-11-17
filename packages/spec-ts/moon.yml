@@ -20,7 +20,7 @@ tasks:
     description: "Test outcomes, names, bindings and catalog operations."
     command: "node"
     args: ["--test", "test/"]
-    inputs: ["src/**/*.ts", "test/**/*.ts"]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "test/fixtures/*.json"]
 
   typecheck:
     description: "Type-check the sources and tests."

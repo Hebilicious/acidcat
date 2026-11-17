@@ -153,7 +153,7 @@ const callFailureKinds = list(field(facts, "callFailureKinds")).map(string);
 const exitCodes = numbered(field(facts, "cliExitCodes"));
 const watchExitCodes = numbered(field(facts, "cliWatchExitCodes"));
 const httpStatuses = numbered(field(facts, "httpStatus"));
-const genericCommands = list(field(facts, "cliGenericCommands")).map(string);
+const genericCommands = list(field(facts, "cliGenericCommands")).map(text);
 const keepaliveMs = integer(field(facts, "keepaliveMs"));
 const sseMediaType = string(field(facts, "sseMediaType"));
 const mcpProtocolVersion = string(field(facts, "mcpProtocolVersion"));
@@ -213,11 +213,119 @@ const cases = {
   help: list(field(state, "helpCases")).map((each) => ({ flag: flag(field(each, "flag")), line: text(field(each, "line")) })),
 };
 
+const aliasState = modelState("cli-alias-cases.qnt", "cliAliasCases");
+const aliasTemplates = new Map(aliasMessages);
+const ALIAS_TARGET = "cli";
+
+const filledAlias = (key: string, parts: readonly (readonly [string, string])[]): string => {
+  const template = aliasTemplates.get(key);
+  if (template === undefined) throw new Error(`${key} is not a message of the aliases.`);
+  const values = new Map([["where", `target ${ALIAS_TARGET}`], ...parts]);
+  return template.replaceAll(/\{(\w+)\}/g, (_, name: string) => {
+    const value = values.get(name);
+    if (value === undefined) throw new Error(`The message ${key} has no part ${name}.`);
+    return value;
+  });
+};
+
+const aliasProblem = (value: unknown): string =>
+  filledAlias(string(field(value, "key")), list(field(value, "parts")).map(pair).map(([name, part]) => [string(name), text(part)] as const));
+
+const schema = (value: unknown): { readonly type: "object"; readonly properties?: { readonly [name: string]: { readonly type: "string" } } } | null => {
+  const { tag, value: names } = variant(value, ["NoSchema", "NoProperties", "Properties"]);
+  if (tag === "NoSchema") return null;
+  if (tag === "NoProperties") return { type: "object" };
+  return { type: "object", properties: Object.fromEntries(list(names).map((name) => [text(name), { type: "string" }])) };
+};
+
+const entries = (value: unknown) =>
+  list(value).map((each) => ({ id: text(field(each, "id")), inView: boolean(field(each, "inView")), input: schema(field(each, "input")) }));
+
+const member = (value: unknown): string | number | null | undefined => {
+  const { tag, value: id } = variant(value, ["Absent", "Null", "NotText", "Id"]);
+  if (tag === "Absent") return undefined;
+  if (tag === "Null") return null;
+  if (tag === "NotText") return 1;
+  return text(id);
+};
+
+const fixedInput = (value: unknown): { readonly [name: string]: true } | readonly [] | undefined => {
+  const { tag, value: names } = variant(value, ["NoFixedInput", "FixedNotObject", "FixedKeys"]);
+  if (tag === "NoFixedInput") return undefined;
+  if (tag === "FixedNotObject") return [];
+  return Object.fromEntries(list(names).map((name) => [text(name), true] as const));
+};
+
+const aliasValue = (value: unknown): unknown => {
+  const { tag, value: alias } = variant(value, ["NotObject", "AliasObject"]);
+  if (tag === "NotObject") return "probe.read";
+  const members: readonly (readonly [string, unknown])[] = [
+    ["capability", member(field(alias, "capability"))],
+    ["event", member(field(alias, "event"))],
+    ["input", fixedInput(field(alias, "input"))],
+    ...list(field(alias, "others")).map((name) => [text(name), true] as const),
+  ];
+  return Object.fromEntries(members.filter(([, each]) => each !== undefined));
+};
+
+const aliasDefault = (value: unknown): string | number | undefined => {
+  const { tag, value: name } = variant(value, ["NoDefault", "DefaultNotText", "DefaultName"]);
+  if (tag === "NoDefault") return undefined;
+  if (tag === "DefaultNotText") return 1;
+  return text(name);
+};
+
+const aliasSettings = (value: unknown): unknown => {
+  const { tag, value: settings } = variant(value, ["NoSettings", "SettingsNotObject", "SettingsObject"]);
+  if (tag === "NoSettings") return undefined;
+  if (tag === "SettingsNotObject") return 7;
+  const declared = variant(field(settings, "aliases"), ["AliasesAbsent", "AliasesNotObject", "AliasMembers"]);
+  const aliases =
+    declared.tag === "AliasesAbsent"
+      ? undefined
+      : declared.tag === "AliasesNotObject"
+        ? null
+        : Object.fromEntries(list(declared.value).map(pair).map(([name, alias]) => [text(name), aliasValue(alias)]));
+  const fallback = aliasDefault(field(settings, "default"));
+  return { ...(aliases === undefined ? {} : { aliases }), ...(fallback === undefined ? {} : { default: fallback }) };
+};
+
+const acceptedAlias = (value: unknown) => {
+  const input = fixedInput(field(value, "input"));
+  return {
+    name: text(field(value, "name")),
+    kind: variant(field(value, "kind"), ["CapabilityAlias", "EventAlias"]).tag === "EventAlias" ? "event" : "capability",
+    id: text(field(value, "id")),
+    ...(input === undefined ? {} : { input }),
+  };
+};
+
+const aliasCatalog = field(aliasState, "catalog");
+const aliasCases = {
+  target: ALIAS_TARGET,
+  capabilities: entries(field(aliasCatalog, "capabilities")),
+  events: entries(field(aliasCatalog, "events")),
+  cases: list(field(aliasState, "aliasCases")).map((each) => {
+    const declared = field(each, "declared");
+    const result = field(each, "result");
+    const settings = aliasSettings(field(declared, "settings"));
+    const fallback = variant(field(result, "default"), ["NoDefaultAlias", "DefaultAlias"]);
+    return {
+      binding: boolean(field(declared, "cliBinding")),
+      ...(settings === undefined ? {} : { settings }),
+      errors: list(field(result, "problems")).map(aliasProblem),
+      aliases: list(field(result, "aliases")).map(acceptedAlias),
+      default: fallback.tag === "DefaultAlias" ? text(fallback.value) : null,
+    };
+  }),
+};
+
 const asciiJson = (value: unknown): string =>
   JSON.stringify(value).replaceAll(/[^\u0020-\u007E]/g, (character) => `\\u${(character.codePointAt(0) ?? 0).toString(16).padStart(4, "0")}`);
 
-const casesJson = `{\n${Object.entries(cases)
-  .map(([key, value]) => {
+const casesFile = (fixture: object): string => `{\n${Object.entries(fixture)
+  .map(([key, value]: [string, unknown]) => {
+    if (!isRecord(value) && !Array.isArray(value)) return `  ${JSON.stringify(key)}: ${asciiJson(value)}`;
     if (Array.isArray(value)) return `  ${JSON.stringify(key)}: [\n${value.map((each) => `    ${asciiJson(each)}`).join(",\n")}\n  ]`;
     const members = Object.entries(value).map(([member, items]) =>
       Array.isArray(items) && member === "cases"
@@ -227,6 +335,9 @@ const casesJson = `{\n${Object.entries(cases)
     return `  ${JSON.stringify(key)}: {\n${members.join(",\n")}\n  }`;
   })
   .join(",\n")}\n}\n`;
+
+const casesJson = casesFile(cases);
+const aliasCasesJson = casesFile(aliasCases);
 
 const typescriptList = (name: string, items: readonly string[]): string => `export const ${name}: readonly string[] = [${items.map((item) => JSON.stringify(item)).join(", ")}];`;
 
@@ -429,6 +540,8 @@ const outputs: readonly (readonly [string, string])[] = [
   ["packages/core-ts/test/fixtures/cli-output-cases.json", casesJson],
   ["packages/core-effect/test/fixtures/cli-output-cases.json", casesJson],
   ["packages/core-rust/tests/fixtures/cli_output_cases.json", casesJson],
+  ["packages/spec-ts/test/fixtures/cli-alias-cases.json", aliasCasesJson],
+  ["packages/core-rust/tests/fixtures/cli_alias_cases.json", aliasCasesJson],
 ];
 
 const read = (path: string): string | undefined => {
