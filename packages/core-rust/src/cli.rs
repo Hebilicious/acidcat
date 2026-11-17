@@ -3,6 +3,7 @@
 use std::io::{IsTerminal, Write};
 use std::sync::Arc;
 
+use futures::FutureExt;
 use futures::future::BoxFuture;
 use futures::stream::{BoxStream, StreamExt};
 use serde::Serialize;
@@ -386,11 +387,16 @@ impl<C: Send + Sync + 'static> Provider<C> {
         id: &str,
         input: Value,
         options: SubscribeOptions,
-    ) -> Result<BoxStream<'static, Result<Occurrence, CallFailure>>, CallFailure> {
+    ) -> Result<Watching, CallFailure> {
         match self {
-            Provider::Local(session) => session
-                .subscribe(id, input, options)
-                .map(|occurrences| occurrences.into_stream()),
+            Provider::Local(session) => {
+                session
+                    .subscribe(id, input, options)
+                    .map(|occurrences| Watching {
+                        ended: occurrences.ended().boxed(),
+                        occurrences: occurrences.into_stream(),
+                    })
+            }
             Provider::Remote(client) => {
                 let max_age_ms = match options.max_age_ms {
                     Some(value) if !crate::session::is_max_age_ms(value) => {
@@ -406,6 +412,7 @@ impl<C: Send + Sync + 'static> Provider<C> {
                     () = options.cancel.cancelled() => Err(CallFailure::new(Kind::Cancelled, "The subscription was cancelled.")),
                     stream = client.subscribe(id, &input, options.cursor.as_deref(), max_age_ms) => stream,
                 }
+                .map(|occurrences| Watching { occurrences, ended: futures::future::ready(()).boxed() })
             }
         }
     }
@@ -1084,25 +1091,27 @@ async fn follow<C: Send + Sync + 'static>(
         max_age_ms,
         cancel: io.cancel.clone(),
     };
-    let mut occurrences = match provider.subscribe(id, input, options).await {
-        Ok(occurrences) => occurrences,
+    let Watching {
+        mut occurrences,
+        ended,
+    } = match provider.subscribe(id, input, options).await {
+        Ok(watching) => watching,
         Err(_) if io.cancel.is_cancelled() => return exit::CANCELLED,
         Err(failure) => return printer.call_failure(io, &failure),
     };
     loop {
         let next = tokio::select! {
             biased;
-            () = io.cancel.cancelled() => return exit::CANCELLED,
+            () = io.cancel.cancelled() => None,
             next = occurrences.next() => next,
         };
         match next {
-            None => {
-                return if io.cancel.is_cancelled() {
-                    exit::CANCELLED
-                } else {
-                    exit::VALUE
-                };
+            None if io.cancel.is_cancelled() => {
+                drop(occurrences);
+                ended.await;
+                return exit::CANCELLED;
             }
+            None => return exit::VALUE,
             Some(Err(failure)) => {
                 printer.call_failure(io, &failure);
                 return exit::INTERNAL;
@@ -1110,6 +1119,13 @@ async fn follow<C: Send + Sync + 'static>(
             Some(Ok(occurrence)) => printer.occurrence(io, &occurrence),
         }
     }
+}
+
+/// The process can exit as soon as the watch returns, before a task of the runtime ends the subscription, so the
+/// watch waits for `ended` after an interrupt.
+struct Watching {
+    occurrences: BoxStream<'static, Result<Occurrence, CallFailure>>,
+    ended: BoxFuture<'static, ()>,
 }
 
 struct Printer<'a> {
