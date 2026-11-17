@@ -54,9 +54,9 @@ The bounds are `MOST_SEGMENTS`, `MOST_AFTER` and `MOST_NAMES` in the module, and
 | Task | What it does |
 | --- | --- |
 | `moon run model:test` | Run the examples of the model, and type-check the other modules. |
-| `moon run model:prove` | Prove each property with `quint verify`. It runs one Apalache server for each 7 GB of memory, up to one for each property, and proves the properties in parallel. On a computer with 30 GB of memory and 22 cores, it takes about 7 minutes. The longest proof takes about 5.5 minutes, and its Java and Z3 processes use up to about 1.8 GB. |
+| `moon run model:prove` | Prove each property with `quint verify`. `moon run model:prove -- lastOutputFlagWins` proves only the properties that it names. `moon run verify` does not run it: the workflow `prove.yml` proves each property in its own job when a pull request changes `model/`, `.prototools` or `pnpm-lock.yaml`. The proofs read only the model, so a change to the code of a core does not change their result; the tests of the cases check the code of each core. It runs one Apalache server for each 7 GB of memory, up to one for each property, and proves the properties in parallel. On a computer with 30 GB of memory and 22 cores, it takes about 7 minutes. The longest proof takes about 5.5 minutes, and its Java and Z3 processes use up to about 1.8 GB. |
 | `moon run model:generate` | Write the data and the cases into each core. |
-| `moon run model:check` | Run `test` and `prove`, then fail if a file in a core is not the output of the model. `moon run verify` runs it. |
+| `moon run model:check` | Run `test`, then fail if a file in a core is not the output of the model. `moon run verify` runs it. |
 
 Apalache runs on Java. proto installs Java from [`.prototools`](../.prototools). `quint verify` downloads Apalache into `~/.quint` the first time that it runs.
 

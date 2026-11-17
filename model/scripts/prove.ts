@@ -35,7 +35,10 @@ function prove({ main, invariant }: Property, port: number): Promise<string> {
   });
 }
 
-const queue = [...PROPERTIES];
+const chosen = process.argv.slice(2);
+const unknown = chosen.filter((name) => !PROPERTIES.some((property) => property.invariant === name));
+if (unknown.length > 0) throw new Error(`No property has the invariant ${unknown.join(", ")}.`);
+const queue = PROPERTIES.filter((property) => chosen.length === 0 || chosen.includes(property.invariant));
 await Promise.all(
   Array.from({ length: SERVERS }, async (_, server) => {
     for (let property = queue.shift(); property !== undefined; property = queue.shift()) console.log(await prove(property, FIRST_PORT + server));

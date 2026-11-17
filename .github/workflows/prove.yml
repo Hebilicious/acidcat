@@ -1,0 +1,41 @@
+name: Prove
+
+on:
+  push:
+    branches: [main]
+    paths: ["model/**", ".prototools", "pnpm-lock.yaml", ".github/workflows/prove.yml"]
+  pull_request:
+    paths: ["model/**", ".prototools", "pnpm-lock.yaml", ".github/workflows/prove.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prove-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prove:
+    name: prove ${{ matrix.invariant }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        invariant: [notTerminalGivesJson, acceptedNamesAreSafe, argumentsAfterTheStopStay, lastOutputFlagWins, badValueStops]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - run: pnpm install --frozen-lockfile
+
+      # `quint verify` downloads Apalache into ~/.quint the first time that it runs.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.quint
+          key: quint-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: quint-${{ runner.os }}-
+
+      - run: moon run model:prove -- ${{ matrix.invariant }}

@@ -15,7 +15,7 @@ tasks:
     inputs: ["*.qnt", "package.json", "/pnpm-workspace.yaml"]
 
   prove:
-    description: "Prove each property of the models with quint verify (Apalache). Apalache needs Java, which proto installs."
+    description: "Prove each property of the models with quint verify (Apalache), or only the invariants named after `--`. Apalache needs Java, which proto installs."
     command: "node"
     args: ["scripts/prove.ts"]
     inputs: ["*.qnt", "scripts/prove.ts", "package.json", "/pnpm-workspace.yaml", "/.prototools"]
@@ -33,7 +33,7 @@ tasks:
     description: "Check that the data and the cases in each core are the output of the models."
     command: "node"
     args: ["scripts/generate.ts", "--check"]
-    deps: ["test", "prove"]
+    deps: ["test"]
     inputs:
       - "*.qnt"
       - "scripts/generate.ts"
