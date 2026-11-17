@@ -27,9 +27,9 @@ import type { HelpDoc } from "effect/cli";
 import * as App from "./App.ts";
 import type { AnySchema } from "./Capability.ts";
 import type * as Http from "./Http.ts";
-import { formOf, hasColor, layout, outputChoice, outputErrors, outputFlagHelp, ui } from "./internal/human.ts";
+import { formOf, hasColor, layout, outputErrors, outputFlagHelp, outputRun, ui } from "./internal/human.ts";
 import type { Environment, Form, OutputFlag, Ui } from "./internal/human.ts";
-import { RESERVED_FLAGS } from "./internal/output.generated.ts";
+import { PROGRAM_FLAGS, RESERVED_FLAGS } from "./internal/output.generated.ts";
 import * as Session from "./Session.ts";
 
 export { formOf, layout } from "./internal/human.ts";
@@ -258,14 +258,14 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
     const { builtIns } = yield* CliConfig.CliConfig;
     const clashes = outputErrors(output.flags ?? [], flagsOfCommandLine(command, builtIns));
     if (clashes.length > 0) return yield* Effect.die(new Error(clashes.join("\n")));
-    const chosen = outputChoice(output.flags ?? [], args, commands);
-    if (chosen.error !== undefined) {
+    const terminal = yield* Terminal;
+    const chosen = outputRun(output.flags ?? [], args, commands, output.default, () => formOf(terminal.stdoutIsTerminal, terminal.environment));
+    if (chosen.exitCode !== undefined) {
       yield* Console.error(chosen.error);
-      process.exitCode = CLI_EXIT_CODES["invalid-input"];
+      process.exitCode = chosen.exitCode;
       return;
     }
-    const terminal = yield* Terminal;
-    const form = chosen.form ?? (output.default === "auto" ? formOf(terminal.stdoutIsTerminal, terminal.environment) : "json");
+    const { form } = chosen;
     const presentation: Presentation = { form, ui: ui(hasColor(form, terminal.stdoutIsTerminal, terminal.environment)) };
     return yield* Effect.provideService(dispatch(chosen.args), Presentation, presentation);
   });
@@ -310,7 +310,7 @@ const flagNames = (flag: CommandSpec.Flag): readonly string[] => [flag.name, ...
 
 const longFlagName = (arg: string): string => arg.slice(2).split("=", 1)[0] ?? "";
 
-const ACTIONS_OF_THE_ROOT = new Set(["help", "version"]);
+const ACTIONS_OF_THE_ROOT = new Set(PROGRAM_FLAGS.map((flag) => flag.slice("--".length)));
 
 function flagsOfCommandLine(command: Command.Command.Any, builtIns: BuiltIns): ReadonlyMap<string, string> {
   const flags = globalFlagsOfEveryCommand(command, builtIns).filter(({ name }) => !ACTIONS_OF_THE_ROOT.has(name));

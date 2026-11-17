@@ -140,7 +140,7 @@ The command line writes JSON for programs. It can also write text for a person: 
 To turn the human form on, give `CliOptions::output(CliOutput::new()...)`:
 
 - `.switch(names, form)`: a flag with no value that chooses a form, for example `.switch(["--json"], OutputForm::Json)`.
-- `.values(names, values)`: a flag with a value, and the form of each value, for example `.values(["--format", "-f"], [("text", OutputForm::Human), ("json", OutputForm::Json)])`. It takes `--format text`, `--format=text` and `-f text`. A value that is missing or not known is a usage error with exit code 3: `The option --format must be text or json.`
+- `.values(names, values)`: a flag with a value, and the form of each value, for example `.values(["--format", "-f"], [("text", OutputForm::Human), ("json", OutputForm::Json)])`. It takes `--format text`, `--format=text` and `-f text`. A value that is missing or not known is a usage error with exit code 3: `The option --format must be json or text.`
 - `.default_form(default)`: the form when the arguments give no output flag: `OutputDefault::Json` (the default) or `OutputDefault::Auto`. With `OutputDefault::Json`, the output is JSON unless an output flag chooses the human form.
 - `.formats(formats)`: the formats of the human form (see below).
 

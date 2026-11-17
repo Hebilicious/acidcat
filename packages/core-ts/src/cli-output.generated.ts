@@ -19,9 +19,37 @@ export const AGENT_VARIABLES: readonly string[] = [
 
 export const FALSE_VALUES: readonly string[] = ["", "0", "false", "no", "off"];
 
+export const TRIM_CHARACTERS = " \t\n\u000b\f\r";
+
+export const PROGRAM_FLAGS: readonly string[] = ["--help", "--version"];
+
+export const RESUME_FLAGS: readonly string[] = ["--cursor", "--max-age-ms"];
+
 export const RESERVED_FLAGS: readonly (readonly [name: string, description: string])[] = [
   ["--help", "the flag --help"],
   ["--version", "the flag --version"],
   ["--cursor", "the flag --cursor of watch"],
   ["--max-age-ms", "the flag --max-age-ms of watch"],
 ];
+
+export const INVALID_INPUT_EXIT_CODE = 3;
+
+export const MESSAGES = {
+  noName: "An output flag has no name.",
+  badName: "The output flag {name} is not a valid name. Give --<word> or -<letter or digit>.",
+  sameAsOutputFlag: "The output flag {name} has the same name as another output flag.",
+  sameAsOther: "The output flag {name} has the same name as {other}.",
+  noValues: "The output flag {name} has no values.",
+  badValue: "The option {name} must be {values}.",
+  switchHelp: "{names}  Write {form}.",
+  valuesHelp: "{names} <{values}>  The form of the output: {meanings}.",
+  meaning: "{value} is {form}",
+} as const;
+
+export const FORM_NAMES = { human: "the human form", json: "JSON" } as const;
+
+export const LIST_SEPARATOR = ", ";
+export const OR_WORD = "or";
+export const AND_WORD = "and";
+export const NAME_SEPARATOR = ", ";
+export const VALUE_SEPARATOR = "|";

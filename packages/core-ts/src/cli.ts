@@ -24,9 +24,9 @@ import {
 import type { Availability, CallFailure, CatalogCapability, CatalogDocument, CliAlias, JsonObject, Occurrence, Outcome } from "@acid-cat/spec-ts";
 
 import { catalogOf } from "./app.ts";
-import { cliFormatErrors, cliLayout, cliListText, cliOutputChoice, cliOutputErrors, cliOutputFlagHelp, cliUi, defaultCliOutput } from "./cli-human.ts";
-import type { CliForm, CliFormat, CliOutput, CliOutputChoice, CliOutputFlag, CliRender } from "./cli-human.ts";
-import { RESERVED_FLAGS } from "./cli-output.generated.ts";
+import { cliFormatErrors, cliLayout, cliListText, cliOutputErrors, cliOutputFlagHelp, cliOutputRun, cliUi, defaultCliOutput } from "./cli-human.ts";
+import type { CliForm, CliFormat, CliOutput, CliOutputFlag, CliOutputRun, CliRender } from "./cli-human.ts";
+import { PROGRAM_FLAGS, RESERVED_FLAGS } from "./cli-output.generated.ts";
 import type { App, ToJsonSchema } from "./app.ts";
 import type { HttpClient } from "./http-client.ts";
 import { createSession } from "./session.ts";
@@ -188,10 +188,12 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   const outputErrors = cliOutputErrors(outputFlags, takenFlags(view, aliases));
   if (outputErrors.length > 0) throw new Error(outputErrors.join("\n"));
   const added = options.commands ?? [];
-  const chosen: CliOutputChoice = options.output === undefined ? { args: argv } : cliOutputChoice(outputFlags, argv, added.map(({ name }) => name));
-  const args = chosen.error === undefined ? chosen.args : [];
-  const chosenForm = chosen.error === undefined ? chosen.form : undefined;
-  const output: CliForm = chosenForm ?? (options.output?.default === "auto" ? (io.output ?? "json") : "json");
+  const chosen: CliOutputRun =
+    options.output === undefined
+      ? { form: "json", args: argv }
+      : cliOutputRun(outputFlags, argv, added.map(({ name }) => name), options.output.default, () => io.output ?? "json");
+  const args = chosen.exitCode === undefined ? chosen.args : [];
+  const output: CliForm = chosen.exitCode === undefined ? chosen.form : "json";
   const formatOf = (id: string): CliFormat | undefined => formats.find((format) => format.id === id);
   const ui = cliUi(io.color === true);
   const render = async (format: CliRender | undefined, json: unknown): Promise<string> => {
@@ -316,14 +318,14 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     const [head] = args;
     if (defaultAlias === undefined) return args;
     if (head === undefined) return [defaultAlias.name];
-    const flagOfProgram = head === "--help" || head === "--version" || aliases.some(({ name }) => name === head);
+    const flagOfProgram = PROGRAM_FLAGS.includes(head) || aliases.some(({ name }) => name === head);
     return head.startsWith("--") && !flagOfProgram ? [defaultAlias.name, ...args] : args;
   };
 
   try {
-    if (chosen.error !== undefined) {
+    if (chosen.exitCode !== undefined) {
       io.stderr(chosen.error);
-      return CLI_EXIT_CODES["invalid-input"];
+      return chosen.exitCode;
     }
     const [first, ...rest] = argsWithDefaultAlias();
     if (first === undefined || first === "--help" || first === "-h") {

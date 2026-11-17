@@ -162,13 +162,13 @@ test("output flags are anywhere in the arguments, the last one wins, and an outp
   assert.deepEqual(await runWith(output, ["-h", "probe", "read"]), { code: 0, out: [PROBE_TEXT], err: [] });
   assert.deepEqual(await runWith(output, ["probe", "read", "--human", "--json"]), { code: 0, out: [PROBE_JSON], err: [] });
   assert.deepEqual(await runWith(output, ["probe", "read", "--format=text"]), { code: 0, out: [PROBE_TEXT], err: [] });
-  assert.deepEqual(await runWith(output, ["probe", "read", "-f"]), { code: 3, out: [], err: ["The option -f must be text or json."] });
+  assert.deepEqual(await runWith(output, ["probe", "read", "-f"]), { code: 3, out: [], err: ["The option -f must be json or text."] });
   const help = await runWith(output, ["--help"]);
   assert.equal(help.code, 0);
   assert.match(help.out.join("\n"), /^Usage: probe <command> \[flags\]$/m);
   assert.match(
     help.out.join("\n"),
-    /\n\nOutput:\n {2}-h, --human {2}Write the human form\.\n {2}--json, --no-human {2}Write JSON\.\n {2}--format, -f <text\|json> {2}The form of the output: text is the human form and json is JSON\.$/,
+    /\n\nOutput:\n {2}-h, --human {2}Write the human form\.\n {2}--json, --no-human {2}Write JSON\.\n {2}--format, -f <json\|text> {2}The form of the output: json is JSON and text is the human form\.$/,
   );
 });
 

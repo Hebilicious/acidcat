@@ -216,7 +216,7 @@ async fn output_flags_are_anywhere_the_last_one_wins_and_an_output_flag_can_take
         (
             exit::INVALID_INPUT,
             String::new(),
-            "The option -f must be text or json.".into()
+            "The option -f must be json or text.".into()
         )
     );
     let (code, help, _) = ran(&["--help"]).await;
@@ -224,7 +224,7 @@ async fn output_flags_are_anywhere_the_last_one_wins_and_an_output_flag_can_take
     assert!(help.contains("Usage: probe <command> [flags]"), "{help}");
     assert!(
         help.ends_with(
-            "\n\nOutput:\n  -h, --human  Write the human form.\n  --json, --no-human  Write JSON.\n  --format, -f <text|json>  The form of the output: text is the human form and json is JSON."
+            "\n\nOutput:\n  -h, --human  Write the human form.\n  --json, --no-human  Write JSON.\n  --format, -f <json|text>  The form of the output: json is JSON and text is the human form."
         ),
         "{help}"
     );

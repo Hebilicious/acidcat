@@ -19,6 +19,13 @@ module cliOutputCases {
     ["o", "f", "f"],
     [" ", "O", "f", "F", " "],
     [" ", " "],
+    ["<TAB>", "0", "<CR>", "<LF>"],
+    ["<VT>", "n", "O", "<FF>"],
+    ["<LF>"],
+    ["<BOM>", "0"],
+    ["<NEL>", "0"],
+    ["0", "<NEL>"],
+    ["<BOM>"],
     ["1"],
     ["t", "r", "u", "e"],
     ["y", "e", "s"],
@@ -71,12 +78,15 @@ module cliOutputCases {
       more.append([{ names: [first], kind: Switch(Human) }, { names: [second], kind: Values([(TEXT_VALUE, Human), (JSON_VALUE, Json)]) }])))
 
   pure val PROBLEM_CASES = ONE_FLAG_CONFIGS.concat(TWO_FLAG_CONFIGS).foldl([], (cases, flags) =>
-    cases.append({ flags: flags, others: OTHERS, problems: outputProblems(flags, OTHERS) }))
+    cases.append({ flags: flags, others: OTHERS, problems: outputProblems(flags, OTHERS).foldl([], (texts, problem) => texts.append(problemMessage(problem))) }))
+
+  pure val LEVEL_VALUES: List[(Text, Form)] = [(["h", "i", "g", "h"], Human), (["1"], Json), (["2"], Json)]
 
   pure val CHOICE_FLAGS: List[OutputFlag] = [
     { names: [["-", "-", "j", "s", "o", "n"]], kind: Switch(Json) },
     { names: [["-", "H"], ["-", "-", "h", "u", "m", "a", "n"]], kind: Switch(Human) },
     { names: [["-", "-", "f", "o", "r", "m", "a", "t"], ["-", "f"]], kind: Values([(TEXT_VALUE, Human), (JSON_VALUE, Json)]) },
+    { names: [["-", "-", "l", "e", "v", "e", "l"], ["-", "l"]], kind: Values(LEVEL_VALUES) },
   ]
 
   pure val DEPLOY: Text = ["d", "e", "p", "l", "o", "y"]
@@ -84,47 +94,119 @@ module cliOutputCases {
   pure val ARGUMENTS: List[Text] = [
     ["-", "-", "j", "s", "o", "n"],
     ["-", "H"],
+    ["-", "-", "h", "u", "m", "a", "n"],
+    ["-", "-", "f", "o", "r", "m", "a", "t"],
     ["-", "f"],
     TEXT_VALUE,
+    JSON_VALUE,
     ["-", "-", "f", "o", "r", "m", "a", "t", "=", "j", "s", "o", "n"],
     ["-", "-", "f", "o", "r", "m", "a", "t", "="],
+    ["-", "f", "=", "t", "e", "x", "t"],
+    ["-", "-", "j", "s", "o", "n", "="],
     ["-", "-", "j", "s", "o", "n", "=", "1"],
+    ["-", "-", "l", "e", "v", "e", "l"],
+    ["-", "l"],
+    ["h", "i", "g", "h"],
+    ["1"],
+    ["-", "-", "l", "e", "v", "e", "l", "=", "2"],
     END_OF_FLAGS,
     DEPLOY,
     ["x"],
   ]
 
+  // A smaller set for the lists of 3 arguments, for example an application command in the second place.
+  pure val THREE_ARGUMENTS: List[Text] = [
+    ["-", "-", "j", "s", "o", "n"],
+    ["-", "-", "f", "o", "r", "m", "a", "t"],
+    ["-", "f"],
+    TEXT_VALUE,
+    ["-", "-", "l", "e", "v", "e", "l"],
+    END_OF_FLAGS,
+    DEPLOY,
+    ["x"],
+  ]
+
+  pure val ARGUMENT_LISTS: List[List[Text]] = listsUpTo(ARGUMENTS, 2).concat(extend(extend(extend([[]], THREE_ARGUMENTS), THREE_ARGUMENTS), THREE_ARGUMENTS))
+
   pure val CHOICE_CASES = [[], [DEPLOY]].foldl([], (cases, commands) =>
-    listsUpTo(ARGUMENTS, 3).foldl(cases, (more, args) =>
-      more.append({ flags: CHOICE_FLAGS, args: args, commands: commands, outcome: outputChoice(CHOICE_FLAGS, args, commands) })))
+    ARGUMENT_LISTS.foldl(cases, (more, args) => {
+      val outcome = outputChoice(CHOICE_FLAGS, args, commands)
+      more.append({ flags: CHOICE_FLAGS, args: args, commands: commands, outcome: outcome, message: outcomeMessage(outcome) })
+    }))
+
+  pure val DECIDE_ENVIRONMENTS: List[str -> Text] = [Map(), Map(CI_VARIABLE -> ["1"]), Map("CLAUDECODE" -> ["<TAB>", "0"]), Map("CODEX_THREAD_ID" -> ["t", "1"])]
+
+  pure val DECIDE_ARGUMENTS: List[List[Text]] = [
+    [],
+    [["-", "-", "j", "s", "o", "n"]],
+    [["-", "H"]],
+    [["-", "-", "f", "o", "r", "m", "a", "t"], TEXT_VALUE],
+    [["-", "f"]],
+    [["-", "l"], ["3"]],
+  ]
+
+  pure val DECIDE_CASES = [AutoDefault, JsonDefault].foldl([], (cases, fallback) =>
+    [true, false].foldl(cases, (byTerminal, isTerminal) =>
+      DECIDE_ENVIRONMENTS.foldl(byTerminal, (byEnv, env) =>
+        DECIDE_ARGUMENTS.foldl(byEnv, (more, args) => {
+          val result = decide(fallback, isTerminal, env, outputChoice(CHOICE_FLAGS, args, []))
+          more.append({ fallback: fallback, isTerminal: isTerminal, env: env, args: args, result: result, message: runMessage(result) })
+        }))))
+
+  pure val HELP_FLAGS: List[OutputFlag] = CHOICE_FLAGS.concat([
+    { names: [["-", "-", "c", "o", "l", "o", "r"]], kind: Values([(["b"], Human), (["a", "-", "b"], Json), (["a"], Json), (["B"], Human), (["1", "0"], Json), (["9"], Human)]) },
+    { names: [["-", "-", "p", "l", "a", "i", "n"], ["-", "p"], ["-", "P"]], kind: Switch(Human) },
+    { names: [["-", "o"]], kind: Values([(TEXT_VALUE, Human)]) },
+  ])
+
+  pure val HELP_CASES = HELP_FLAGS.foldl([], (cases, flag) => cases.append({ flag: flag, line: helpLine(flag) }))
 
   var data: {
     ciVariable: str,
     agentVariables: List[str],
     falseValues: List[Text],
+    trimCharacters: List[str],
+    programFlags: List[Text],
+    resumeFlags: List[Text],
     reservedFlags: List[(Text, str)],
     invalidInputExitCode: int,
-    messages: { noName: str, badName: str, sameAsOutputFlag: str, sameAsOther: str, noValues: str, badValue: str },
+    messages: {
+      noName: Text, badName: Text, sameAsOutputFlag: Text, sameAsOther: Text, noValues: Text, badValue: Text,
+      switchHelp: Text, valuesHelp: Text, meaning: Text,
+    },
+    formNames: { human: Text, json: Text },
+    list: { separator: Text, orWord: Text, andWord: Text, names: Text, values: Text },
   }
 
   var autoCases: List[{ isTerminal: bool, env: str -> Text, form: Form }]
 
-  var problemCases: List[{ flags: List[OutputFlag], others: List[(Text, str)], problems: List[Problem] }]
+  var problemCases: List[{ flags: List[OutputFlag], others: List[(Text, str)], problems: List[Text] }]
 
-  var choiceCases: List[{ flags: List[OutputFlag], args: List[Text], commands: List[Text], outcome: Outcome }]
+  var choiceCases: List[{ flags: List[OutputFlag], args: List[Text], commands: List[Text], outcome: Outcome, message: Text }]
+
+  var decideCases: List[{ fallback: Default, isTerminal: bool, env: str -> Text, args: List[Text], result: Run, message: Text }]
+
+  var helpCases: List[{ flag: OutputFlag, line: Text }]
 
   action init = all {
     data' = {
       ciVariable: CI_VARIABLE,
       agentVariables: AGENT_VARIABLES,
       falseValues: FALSE_VALUES,
+      trimCharacters: TRIM_CHARACTERS,
+      programFlags: PROGRAM_FLAGS,
+      resumeFlags: RESUME_FLAGS,
       reservedFlags: RESERVED_FLAGS,
       invalidInputExitCode: INVALID_INPUT_EXIT_CODE,
       messages: MESSAGES,
+      formNames: { human: formName(Human), json: formName(Json) },
+      list: { separator: LIST_SEPARATOR, orWord: OR_WORD, andWord: AND_WORD, names: NAME_SEPARATOR, values: VALUE_SEPARATOR },
     },
     autoCases' = AUTO_CASES,
     problemCases' = PROBLEM_CASES,
     choiceCases' = CHOICE_CASES,
+    decideCases' = DECIDE_CASES,
+    helpCases' = HELP_CASES,
   }
 
   action step = all {
@@ -132,5 +214,7 @@ module cliOutputCases {
     autoCases' = autoCases,
     problemCases' = problemCases,
     choiceCases' = choiceCases,
+    decideCases' = decideCases,
+    helpCases' = helpCases,
   }
 }

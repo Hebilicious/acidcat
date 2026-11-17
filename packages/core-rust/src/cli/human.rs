@@ -5,7 +5,7 @@ use std::sync::{Arc, Once};
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
-use super::output_generated::{AGENT_VARIABLES, CI_VARIABLE, FALSE_VALUES};
+use super::output_generated::{AGENT_VARIABLES, CI_VARIABLE, FALSE_VALUES, TRIM_CHARACTERS};
 use crate::app::{CapabilityDefinition, EventDefinition};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -16,7 +16,12 @@ pub enum OutputForm {
 }
 
 fn is_truthy(value: Option<String>) -> bool {
-    value.is_some_and(|value| !FALSE_VALUES.contains(&value.trim().to_lowercase().as_str()))
+    value.is_some_and(|value| {
+        let value = value
+            .trim_matches(|c| TRIM_CHARACTERS.contains(&c))
+            .to_ascii_lowercase();
+        !FALSE_VALUES.contains(&value.as_str())
+    })
 }
 
 /// The form that [`OutputDefault::Auto`](super::OutputDefault::Auto) gives: [`OutputForm::Human`] only when standard

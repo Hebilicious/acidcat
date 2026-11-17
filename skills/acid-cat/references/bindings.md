@@ -57,7 +57,7 @@ The documents of the bindings are at https://github.com/Hebilicious/acidcat/tree
 - **Output flags.** Each one has `names` (`--word` or `-x`) and either `form`, for a switch (`{ names: ["--json"], form: "json" }`), or `values`, for a flag with a value (`{ names: ["--format", "-f"], values: { text: "human", json: "json" } }`).
   - An output flag can be anywhere in the arguments before `--`. The last one wins.
   - For a command of the application, an output flag comes before the name of the command. The command gets the arguments after its name unchanged, and reads the chosen form from `io.output` in core-ts, `Cli.outputForm` in core-effect and `io.form` in core-rust.
-  - A value that is not known exits with 3. The help and the message list the values.
+  - A value that is not known exits with 3. The help and the message list the values in code point order (`--format <json|text>`).
   - An output flag can take `-h`. It cannot take `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, a flag of an input, or in core-effect a flag of `effect/cli` (`--log-level`, `--completions`) or a global flag: the command line stops with an error when it starts.
 - **Default form.** `default` is `"json"` (the default: JSON unless an output flag chooses the human form) or `"auto"`. With `"auto"`, the form is human only when standard output is a terminal, `CI` is not set, and no coding agent is detected (`CLAUDECODE`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `AI_AGENT` and other variables).
 - **Formatters.** Without a formatter, the human form prints a generic layout of the value. For a better text, give a formatter for a capability, its failures or an event, typed from its object, in `formats`:

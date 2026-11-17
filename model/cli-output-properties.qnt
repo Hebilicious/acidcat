@@ -58,7 +58,7 @@ module cliOutputNames {
 module cliOutputArguments {
   import cliOutput.* from "./cli-output"
 
-  pure val MOST_SEGMENTS = 2
+  pure val MOST_SEGMENTS = 3
   pure val MOST_AFTER = 1
   pure val MOST_NAMES = 2
 
@@ -71,8 +71,8 @@ module cliOutputArguments {
 
   pure val KINDS: Set[Kind] = Set(Switch(Human), Switch(Json), Values([(["t"], Human), (["j"], Json)]), Values([(["j"], Json)]))
 
-  // Words that are not output flags, not `--` and not an application command.
-  pure val PLAIN_WORDS: Set[Text] = Set(["x"], ["-", "-", "z"], ["-", "z"], ["-", "-", "z", "=", "1"])
+  // Words that are not output flags and not `--`. An application command is a plain word when it is not the first remaining argument.
+  pure val PLAIN_WORDS: Set[Text] = Set(["x"], ["-", "-", "z"], ["-", "z"], ["-", "-", "z", "=", "1"], DEPLOY)
 
   pure val AFTER_WORDS: Set[Text] = Set(["x"], ["-", "-", "a"], ["-", "a"], ["-", "-"], DEPLOY, UNKNOWN_VALUE)
 
@@ -120,7 +120,6 @@ module cliOutputArguments {
     nondet ending = BAD_ENDINGS.oneOf()
     nondet afterCount = 0.to(MOST_AFTER).oneOf()
     nondet a0 = AFTER_WORDS.oneOf()
-    nondet a1 = AFTER_WORDS.oneOf()
     nondet commandCount = 0.to(1).oneOf()
     nondet stop = Set(END_OF_FLAGS, DEPLOY).oneOf()
     nondet ciValue = ENV_VALUES.oneOf()
@@ -133,7 +132,7 @@ module cliOutputArguments {
       flags' = [{ names: [n00, n01].slice(0, names0), kind: k0 }, { names: [n10, n11].slice(0, names1), kind: k1 }].slice(0, flagCount),
       segments' = [s0, s1, s2].slice(0, segmentCount),
       bad' = ending,
-      after' = [a0, a1].slice(0, afterCount),
+      after' = [a0].slice(0, afterCount),
       commands' = [DEPLOY].slice(0, commandCount),
       stopper' = stop,
       env' =
@@ -188,24 +187,29 @@ module cliOutputArguments {
 
   val readable = accepted(flags) and segments.foldl(true, (all_fit, segment) => all_fit and fits(flags, segment))
 
+  // The first plain word is the first remaining argument. When it is an application command, the reading stops there.
+  pure def startsWithCommand(plain: List[Text], names: List[Text]): bool = plain != [] and includes(names, plain[0])
+
+  pure def stopsAt(word: Text, plain: List[Text], names: List[Text]): bool = word == END_OF_FLAGS or (includes(names, word) and plain == [])
+
   val notTerminalGivesJson = {
     val plain = plainArgs(segments)
-    val args = if (stopper == END_OF_FLAGS) plain.append(END_OF_FLAGS).concat(after) else plain
+    val reachesStop = startsWithCommand(plain, commands) or stopsAt(stopper, plain, commands)
+    val args = plain.append(stopper).concat(if (reachesStop) after else [])
     val offTerminal = accepted(flags) and not(isTerminal)
     offTerminal implies decide(fallback, isTerminal, env, outputChoice(flags, args, commands)) == Proceeds({ form: Json, rest: args })
   }
 
   val argumentsAfterTheStopStay = {
     val plain = plainArgs(segments)
-    val stopsHere = stopper == END_OF_FLAGS or (includes(commands, stopper) and plain == [])
     val args = joinedArgs(segments).append(stopper).concat(after)
-    val stops = readable and stopsHere
+    val stops = readable and not(startsWithCommand(plain, commands)) and stopsAt(stopper, plain, commands)
     stops implies outputChoice(flags, args, commands) == Parsed({ chosen: lastChosen(flags, segments), rest: plain.append(stopper).concat(after) })
   }
 
   val lastOutputFlagWins = {
     val chosen = lastChosen(flags, segments)
-    val withFlag = readable and chosen != ByDefault
+    val withFlag = readable and not(startsWithCommand(plainArgs(segments), commands)) and chosen != ByDefault
     withFlag implies outputChoice(flags, joinedArgs(segments), commands) == Parsed({ chosen: chosen, rest: plainArgs(segments) })
   }
 
@@ -216,7 +220,7 @@ module cliOutputArguments {
       | Values(values) => {
         val args = joinedArgs(segments).concat(bad.args).concat(if (bad.value == []) [] else after)
         val failure = { flag: bad.name, values: valueNames(values) }
-        readable implies and {
+        (readable and not(startsWithCommand(plainArgs(segments), commands))) implies and {
           outputChoice(flags, args, commands) == BadValue(failure),
           decide(fallback, isTerminal, env, BadValue(failure)) == Stops({ exitCode: INVALID_INPUT_EXIT_CODE, flag: failure.flag, values: failure.values }),
         }

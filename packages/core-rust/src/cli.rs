@@ -20,6 +20,8 @@ mod human;
 mod output;
 mod output_generated;
 
+use output_generated::{PROGRAM_FLAGS, RESERVED_FLAGS, RESUME_FLAGS};
+
 pub use human::{CliFormats, CliUi, OutputForm, output_form};
 use human::{Formatted, aligned, output_color};
 pub use output::{CliOutput, OutputDefault};
@@ -29,7 +31,7 @@ pub mod exit {
     pub const VALUE: i32 = 0;
     pub const FAILURE: i32 = 1;
     pub const UNKNOWN_CAPABILITY: i32 = 2;
-    pub const INVALID_INPUT: i32 = 3;
+    pub const INVALID_INPUT: i32 = super::output_generated::INVALID_INPUT_EXIT_CODE;
     pub const UNAVAILABLE: i32 = 4;
     pub const INTERNAL: i32 = 5;
     pub const CANCELLED: i32 = 130;
@@ -37,9 +39,11 @@ pub mod exit {
 
 const GENERIC_COMMANDS: [&str; 3] = ["call", "list", "watch"];
 
-const RESUME_FLAGS: [&str; 2] = ["cursor", "max-age-ms"];
-
-const RESERVED_FLAGS: [&str; 2] = ["--help", "--version"];
+fn resume_words() -> impl Iterator<Item = &'static str> {
+    RESUME_FLAGS
+        .iter()
+        .filter_map(|flag| flag.strip_prefix("--"))
+}
 
 /// A capability or an event that an alias names: a [`CapabilityDefinition`] or an [`EventDefinition`].
 pub trait Aliased {
@@ -541,11 +545,11 @@ pub async fn run_cli<C: Send + Sync + 'static>(
         let input = view
             .pointer(&format!("/events/{id}/input"))
             .map(|input| cli_input_schema(input, &types));
-        if let Some(flag) = RESUME_FLAGS.iter().find(|flag| {
+        if let Some(flag) = resume_words().find(|flag| {
             input
                 .as_ref()
                 .and_then(|input| input.get("properties"))
-                .and_then(|properties| properties.get(**flag))
+                .and_then(|properties| properties.get(*flag))
                 .is_some()
         }) {
             return Err(format!(
@@ -621,14 +625,11 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                     .iter()
                     .map(|command| command.name.as_str())
                     .collect();
-                let (chosen, rest) = output
-                    .choose(args, &command_names)
-                    .map_err(|message| usage_error(message, exit::INVALID_INPUT))?;
-                let fallback = match output.default {
-                    OutputDefault::Auto => options.auto_form.unwrap_or_default(),
-                    OutputDefault::Json => OutputForm::Json,
-                };
-                (chosen.unwrap_or(fallback), rest)
+                output
+                    .decide(args, &command_names, || {
+                        options.auto_form.unwrap_or_default()
+                    })
+                    .map_err(|(code, message)| usage_error(message, code))?
             }
         };
         let printer = Printer {
@@ -1181,7 +1182,7 @@ fn taken_flags(view: &Value, aliases: &[Alias]) -> Vec<(String, String)> {
             taken.push((name, what));
         }
     };
-    for (name, what) in output_generated::RESERVED_FLAGS {
+    for (name, what) in RESERVED_FLAGS {
         take(name.to_owned(), what.to_owned());
     }
     for alias in aliases.iter().filter(|alias| alias.name.starts_with("--")) {
@@ -1231,7 +1232,8 @@ fn resume_flags(args: &[String]) -> Result<Resume, UsageError> {
     let mut max_age_ms = None;
     let mut remaining = args.iter();
     while let Some(arg) = remaining.next() {
-        let Some((name, inline)) = split_flag(arg).filter(|(name, _)| RESUME_FLAGS.contains(name))
+        let Some((name, inline)) =
+            split_flag(arg).filter(|(name, _)| resume_words().any(|word| word == *name))
         else {
             flags.push(arg.clone());
             continue;
@@ -1436,7 +1438,7 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
             continue;
         }
         let reserved = if name.starts_with("--") {
-            RESERVED_FLAGS.contains(&name.as_str())
+            PROGRAM_FLAGS.contains(&name.as_str())
         } else {
             GENERIC_COMMANDS.contains(&name.as_str())
         };
@@ -1543,7 +1545,7 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
         return result;
     };
     let flags = alias_flag_names(view, &fallback);
-    for reserved in RESERVED_FLAGS {
+    for reserved in PROGRAM_FLAGS {
         if flags.iter().any(|flag| *flag == reserved[2..]) {
             result.errors.push(format!(
                 "{place}: the default alias {} has the flag {reserved}, which is a flag of the command line",
@@ -1587,7 +1589,7 @@ fn alias_flag_names(view: &Value, alias: &Alias) -> Vec<String> {
         })
         .unwrap_or_default();
     let resume = match alias.kind {
-        AliasKind::Event => RESUME_FLAGS.iter().map(|flag| (*flag).to_owned()).collect(),
+        AliasKind::Event => resume_words().map(str::to_owned).collect(),
         AliasKind::Capability => Vec::new(),
     };
     [properties, resume].concat()
@@ -1602,7 +1604,7 @@ fn args_with_default_alias(
         (None, _) => args.to_vec(),
         (Some(fallback), None) => vec![fallback.name.clone()],
         (Some(fallback), Some(head)) => {
-            let flag_of_program = RESERVED_FLAGS.contains(&head.as_str())
+            let flag_of_program = PROGRAM_FLAGS.contains(&head.as_str())
                 || aliases.iter().any(|alias| alias.name == *head);
             if head.starts_with("--") && !flag_of_program {
                 std::iter::once(fallback.name.clone())

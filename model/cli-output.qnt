@@ -1,4 +1,7 @@
 // Quint has no operations on strings. A text that a rule reads character by character is a list of characters.
+// A text that the rules only write, such as a message, is a list of pieces: each piece is a string.
+// Quint strings have no escapes. A character in angle brackets is a control character or a Unicode space:
+// <TAB> U+0009, <LF> U+000A, <VT> U+000B, <FF> U+000C, <CR> U+000D, <NEL> U+0085 and <BOM> U+FEFF.
 module cliOutput {
   type Text = List[str]
 
@@ -52,6 +55,10 @@ module cliOutput {
     ["o", "f", "f"],
   ]
 
+  pure val PROGRAM_FLAGS: List[Text] = [["-", "-", "h", "e", "l", "p"], ["-", "-", "v", "e", "r", "s", "i", "o", "n"]]
+
+  pure val RESUME_FLAGS: List[Text] = [["-", "-", "c", "u", "r", "s", "o", "r"], ["-", "-", "m", "a", "x", "-", "a", "g", "e", "-", "m", "s"]]
+
   pure val RESERVED_FLAGS: List[(Text, str)] = [
     (["-", "-", "h", "e", "l", "p"], "the flag --help"),
     (["-", "-", "v", "e", "r", "s", "i", "o", "n"], "the flag --version"),
@@ -63,16 +70,9 @@ module cliOutput {
 
   pure val INVALID_INPUT_EXIT_CODE = 3
 
-  pure val MESSAGES = {
-    noName: "An output flag has no name.",
-    badName: "The output flag {name} is not a valid name. Give --<word> or -<letter or digit>.",
-    sameAsOutputFlag: "The output flag {name} has the same name as another output flag.",
-    sameAsOther: "The output flag {name} has the same name as {other}.",
-    noValues: "The output flag {name} has no values.",
-    badValue: "The option {name} must be {values}.",
-  }
+  pure val TRIM_CHARACTERS: List[str] = [" ", "<TAB>", "<LF>", "<VT>", "<FF>", "<CR>"]
 
-  pure val WHITESPACE = Set(" ")
+  pure val TRIMMED: Set[str] = TRIM_CHARACTERS.foldl(Set(), (found, c) => found.union(Set(c)))
 
   pure val UPPER_TO_LOWER = Map(
     "A" -> "a", "B" -> "b", "C" -> "c", "D" -> "d", "E" -> "e", "F" -> "f", "G" -> "g", "H" -> "h", "I" -> "i",
@@ -93,7 +93,7 @@ module cliOutput {
   pure def largest(numbers: Set[int], otherwise: int): int = numbers.fold(otherwise, (most, n) => if (n > most) n else most)
 
   pure def trim(text: Text): Text = {
-    val kept = text.indices().filter(i => not(WHITESPACE.contains(text[i])))
+    val kept = text.indices().filter(i => not(TRIMMED.contains(text[i])))
     if (kept == Set()) [] else text.slice(smallest(kept, text.length()), largest(kept, 0) + 1)
   }
 
@@ -242,6 +242,117 @@ module cliOutput {
       }
     }
 
+  pure val LIST_SEPARATOR: Text = [", "]
+  pure val OR_WORD: Text = ["or"]
+  pure val AND_WORD: Text = ["and"]
+  pure val NAME_SEPARATOR: Text = [", "]
+  pure val VALUE_SEPARATOR: Text = ["|"]
+
+  pure def joinedWith(items: List[Text], separator: Text): Text =
+    items.foldl({ text: [], first: true }, (joined, each) =>
+      { text: if (joined.first) each else joined.text.concat(separator).concat(each), first: false }
+    ).text
+
+  pure def joined(items: List[Text], word: Text): Text =
+    if (items.length() < 2) joinedWith(items, [])
+    else joinedWith(items.slice(0, items.length() - 1), LIST_SEPARATOR).concat([" "]).concat(word).concat([" "]).concat(items[items.length() - 1])
+
+  // The characters of the domains, in the order of their code points.
+  pure val CHARACTER_ORDER: List[str] = [
+    "-", ".", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+    "_",
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+  ]
+
+  pure def codePoint(c: str): int = CHARACTER_ORDER.indices().fold(-1, (found, i) => if (CHARACTER_ORDER[i] == c) i else found)
+
+  pure def before(a: Text, b: Text): bool = {
+    val differ = a.indices().filter(i => i < b.length() and a[i] != b[i])
+    if (differ == Set()) a.length() < b.length()
+    else {
+      val at = smallest(differ, a.length())
+      codePoint(a[at]) < codePoint(b[at])
+    }
+  }
+
+  pure def inCodePointOrder(items: List[a], key: a => Text): List[a] =
+    items.foldl([], (sorted, each) => {
+      val at = smallest(sorted.indices().filter(i => before(key(each), key(sorted[i]))), sorted.length())
+      sorted.slice(0, at).append(each).concat(sorted.slice(at, sorted.length()))
+    })
+
+  pure def noNameMessage: Text = ["An output flag has no name."]
+
+  pure def badNameMessage(name: Text): Text =
+    ["The output flag "].concat(name).concat([" is not a valid name. Give --<word> or -<letter or digit>."])
+
+  pure def sameAsOutputFlagMessage(name: Text): Text =
+    ["The output flag "].concat(name).concat([" has the same name as another output flag."])
+
+  pure def sameAsOtherMessage(name: Text, other: Text): Text =
+    ["The output flag "].concat(name).concat([" has the same name as "]).concat(other).concat(["."])
+
+  pure def noValuesMessage(name: Text): Text = ["The output flag "].concat(name).concat([" has no values."])
+
+  pure def badValueMessage(name: Text, values: Text): Text = ["The option "].concat(name).concat([" must be "]).concat(values).concat(["."])
+
+  pure def switchHelp(names: Text, form: Text): Text = names.concat(["  Write "]).concat(form).concat(["."])
+
+  pure def valuesHelp(names: Text, values: Text, meanings: Text): Text =
+    names.concat([" <"]).concat(values).concat([">  The form of the output: "]).concat(meanings).concat(["."])
+
+  pure def meaning(value: Text, form: Text): Text = value.concat([" is "]).concat(form)
+
+  pure def formName(form: Form): Text = match form {
+    | Human => ["the human form"]
+    | Json => ["JSON"]
+  }
+
+  pure val MESSAGES = {
+    noName: noNameMessage,
+    badName: badNameMessage(["{name}"]),
+    sameAsOutputFlag: sameAsOutputFlagMessage(["{name}"]),
+    sameAsOther: sameAsOtherMessage(["{name}"], ["{other}"]),
+    noValues: noValuesMessage(["{name}"]),
+    badValue: badValueMessage(["{name}"], ["{values}"]),
+    switchHelp: switchHelp(["{names}"], ["{form}"]),
+    valuesHelp: valuesHelp(["{names}"], ["{values}"], ["{meanings}"]),
+    meaning: meaning(["{value}"], ["{form}"]),
+  }
+
+  pure def problemMessage(problem: Problem): Text = match problem {
+    | NoName => noNameMessage
+    | BadName(name) => badNameMessage(name)
+    | SameAsOutputFlag(name) => sameAsOutputFlagMessage(name)
+    | SameAsOther(clash) => sameAsOtherMessage(clash._1, [clash._2])
+    | NoValues(name) => noValuesMessage(name)
+  }
+
+  pure def badValueText(flag: Text, values: List[Text]): Text = badValueMessage(flag, joined(inCodePointOrder(values, v => v), OR_WORD))
+
+  pure def outcomeMessage(outcome: Outcome): Text = match outcome {
+    | BadValue(failure) => badValueText(failure.flag, failure.values)
+    | Parsed(_) => []
+  }
+
+  pure def runMessage(outcome: Run): Text = match outcome {
+    | Stops(stop) => badValueText(stop.flag, stop.values)
+    | Proceeds(_) => []
+  }
+
+  pure def helpLine(flag: OutputFlag): Text = {
+    val names = joinedWith(flag.names, NAME_SEPARATOR)
+    match flag.kind {
+      | Switch(form) => switchHelp(names, formName(form))
+      | Values(values) => {
+        val sorted = inCodePointOrder(values, value => value._1)
+        val meanings = sorted.foldl([], (texts, value) => texts.append(meaning(value._1, formName(value._2))))
+        valuesHelp(names, joinedWith(valueNames(sorted), VALUE_SEPARATOR), joined(meanings, AND_WORD))
+      }
+    }
+  }
+
   pure val JSON_FLAG: Text = ["-", "-", "j", "s", "o", "n"]
   pure val FORMAT_FLAG: Text = ["-", "-", "f", "o", "r", "m", "a", "t"]
   pure val F_FLAG: Text = ["-", "f"]
@@ -302,5 +413,31 @@ module cliOutput {
     assert(decide(JsonDefault, true, Map(), outputChoice(FLAGS, [], [])) == Proceeds({ form: Json, rest: [] })),
     assert(decide(AutoDefault, true, Map(), outputChoice(FLAGS, [], [])) == Proceeds({ form: Human, rest: [] })),
     assert(decide(AutoDefault, true, Map(), outputChoice(FLAGS, [F_FLAG], [])) == Stops({ exitCode: 3, flag: F_FLAG, values: [TEXT, JSON] })),
+  }
+
+  run reservedFlagsTest = assert(RESERVED_FLAGS.foldl([], (names, flag) => names.append(flag._1)) == PROGRAM_FLAGS.concat(RESUME_FLAGS))
+
+  run trimTest = all {
+    assert(trim(["<TAB>", " ", "o", "f", "f", "<CR>", "<LF>", "<VT>", "<FF>"]) == ["o", "f", "f"]),
+    assert(trim(["<BOM>", "0"]) == ["<BOM>", "0"]),
+    assert(trim(["<NEL>", "0"]) == ["<NEL>", "0"]),
+    assert(trim(["<LF>"]) == []),
+  }
+
+  run joinedTest = all {
+    assert(joined([], OR_WORD) == []),
+    assert(joined([["a"]], OR_WORD) == ["a"]),
+    assert(joined([["a"], ["b"]], OR_WORD) == ["a", " ", "or", " ", "b"]),
+    assert(joined([["a"], ["b"], ["c"]], AND_WORD) == ["a", ", ", "b", " ", "and", " ", "c"]),
+  }
+
+  run orderTest = all {
+    assert(inCodePointOrder([["h", "i", "g", "h"], ["1"], ["2"]], v => v) == [["1"], ["2"], ["h", "i", "g", "h"]]),
+    assert(inCodePointOrder([["b"], ["a", "b"], ["a"], ["B"], ["1", "0"], ["9"]], v => v) == [["1", "0"], ["9"], ["B"], ["a"], ["a", "b"], ["b"]]),
+  }
+
+  run messageTest = all {
+    assert(outcomeMessage(outputChoice(FLAGS, [F_FLAG], [])) == ["The option ", "-", "f", " must be ", "j", "s", "o", "n", " ", "or", " ", "t", "e", "x", "t", "."]),
+    assert(helpLine(FLAGS[1]) == helpLine({ names: [FORMAT_FLAG, F_FLAG], kind: Values([(JSON, Json), (TEXT, Human)]) })),
   }
 }

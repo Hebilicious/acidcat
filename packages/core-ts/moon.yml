@@ -23,7 +23,7 @@ tasks:
     args: ["--test", "--test-timeout=60000", "test/"]
     env:
       NODE_COMPILE_CACHE: "node_modules/.cache/node-compile-cache"
-    inputs: ["src/**/*.ts", "test/**/*.ts", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/cli/src/**/*.ts", "/packages/cli/conformance/*.acidcat.json"]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "test/fixtures/*.json", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/cli/src/**/*.ts", "/packages/cli/conformance/*.acidcat.json"]
 
   typecheck:
     description: "Type-check the sources and tests."

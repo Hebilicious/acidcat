@@ -152,13 +152,13 @@ test("output flags are anywhere in the arguments, the last one wins, and an outp
   assert.deepEqual(short, { code: 0, stdout: LEVEL_TEXT, stderr: "" });
   assert.deepEqual(last, { code: 0, stdout: LEVEL_JSON, stderr: "" });
   assert.deepEqual(inline, { code: 0, stdout: LEVEL_TEXT, stderr: "" });
-  assert.deepEqual(missing, { code: 3, stdout: "", stderr: "The option -f must be text or json." });
+  assert.deepEqual(missing, { code: 3, stdout: "", stderr: "The option -f must be json or text." });
   assert.equal(help.code, 0);
   assert.match(help.stdout, /USAGE/);
   assert.doesNotMatch(help.stdout, /--help, -h/);
   assert.match(
     help.stdout,
-    /\n\nOUTPUT FLAGS\n {2}-h, --human {2}Write the human form\.\n {2}--json, --no-human {2}Write JSON\.\n {2}--format, -f <text\|json> {2}The form of the output: text is the human form and json is JSON\.$/,
+    /\n\nOUTPUT FLAGS\n {2}-h, --human {2}Write the human form\.\n {2}--json, --no-human {2}Write JSON\.\n {2}--format, -f <json\|text> {2}The form of the output: json is JSON and text is the human form\.$/,
   );
 });
 
