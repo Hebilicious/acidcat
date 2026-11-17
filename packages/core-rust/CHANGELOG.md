@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.3.0...crates-core/v0.3.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **core-rust:** cancel the token of a call when the call is cancelled, also while its work blocks a thread ([#180](https://github.com/Hebilicious/acidcat/issues/180)) ([c0ccc24](https://github.com/Hebilicious/acidcat/commit/c0ccc248ce26a769657059fe0beef99dd53e7203))
+
 ## [0.3.0](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.2.1...crates-core/v0.3.0) (2026-11-17)
 
 
