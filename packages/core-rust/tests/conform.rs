@@ -3,10 +3,12 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+mod fixture_program;
 mod fixture_settings;
 
 use acid_cat_core::cli::{INTERRUPT_GRACE, exit};
 
+use fixture_program::fixture;
 use fixture_settings::{
     POLL_BUFFER, POLL_LEASE_MS, WEBHOOK_MAX_SUBSCRIPTIONS, WEBHOOK_MAX_TTL_MS, WEBHOOK_MIN_TTL_MS,
 };
@@ -36,20 +38,6 @@ const SECOND_INTERRUPT: Duration = Duration::from_millis(100);
 
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-/// Cargo builds the examples before the integration tests, beside the directory of the tests.
-fn fixture() -> PathBuf {
-    let tests = std::env::current_exe().expect("the path of the test program");
-    let target = tests
-        .parent()
-        .and_then(Path::parent)
-        .expect("the target directory");
-    target.join("examples").join(if cfg!(windows) {
-        "fixture.exe"
-    } else {
-        "fixture"
-    })
 }
 
 struct Server {

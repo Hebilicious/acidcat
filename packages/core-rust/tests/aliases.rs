@@ -1,4 +1,3 @@
-use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
@@ -9,22 +8,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
+mod fixture_program;
+
+use fixture_program::fixture;
+
 type Capability = acid_cat_core::Capability<()>;
 type Event = acid_cat_core::Event<()>;
-
-/// Cargo builds the examples before the integration tests, beside the directory of the tests.
-fn fixture() -> PathBuf {
-    let tests = std::env::current_exe().expect("the path of the test program");
-    let target = tests
-        .parent()
-        .and_then(Path::parent)
-        .expect("the target directory");
-    target.join("examples").join(if cfg!(windows) {
-        "fixture.exe"
-    } else {
-        "fixture"
-    })
-}
 
 fn fixture_cli(args: &[&str]) -> (i32, String) {
     let output = Command::new(fixture())
