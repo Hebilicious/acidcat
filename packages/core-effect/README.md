@@ -414,6 +414,8 @@ node cli.ts aircon schedule set --days '[]'                                   # 
 node cli.ts list                                                             # the usage of each command
 ```
 
+When the command line breaks a rule of the binding, for example two commands with the same path, `Cli.run` and `NodeCli.main` write the message to standard error and stop the program with the exit code 5 (`internal`).
+
 `list` gives a usage line for each capability. The usage of a repeated flag ends with `...`, for example `--days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]`. See the [CLI binding](../../spec/bindings/cli.md#commands) for all the rules.
 
 `watch <id>` follows an event of the view. The flags come from the input schema of the event, with the same rules. When the input schema has no top-level `properties`, `watch <id> '<json>'` takes the input as JSON text. In the JSON form, each occurrence goes to standard output as one line of JSON, as soon as it comes:

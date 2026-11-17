@@ -338,6 +338,8 @@ node cli.ts watch aircon.status.changed
 node cli.ts watch aircon.status.changed --cursor 41 --max-age-ms 300000
 ```
 
+When the command line breaks a rule of the binding, for example two commands with the same path, `cliMain` writes the message to standard error and stops the program with the exit code 5 (`internal`).
+
 ### Commands of the application
 
 The option `commands` of `cliMain` and `runCli` adds commands of the application beside the commands of the capabilities, `call`, `list` and `watch`. A command has a `name`, a `description` for the help, and `run(args, io)`. `run` gets the arguments after the name of the command, and `io` with `stdout`, `stderr`, `signal` and the `context`. It returns the exit code. The name must not be `call`, `list`, `watch`, the name of another command of the application, or the first word of the command of a capability. If it is, `runCli` throws. The option `description` gives the text at the top of the help. The default is the description of the application, then its title, then the name of the program.

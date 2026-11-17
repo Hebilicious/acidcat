@@ -173,7 +173,14 @@ const remote = (client: Http.Client): Provider => ({
  * process, use `NodeCli.main` from `@acid-cat/core-effect/node`.
  */
 export const run = <R, const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(app: App.App<R>, options: Options<Commands>) =>
-  runCommand(command(app, options), options);
+  Effect.suspend(() => runCommand(command(app, options), options)).pipe(
+    Effect.catchDefect((problem) =>
+      Effect.andThen(
+        Console.error(problem instanceof Error ? problem.message : String(problem)),
+        Effect.sync(() => (process.exitCode = CLI_EXIT_CODES.internal)),
+      ),
+    ),
+  );
 
 /**
  * The default presenter of `effect/cli` writes the help of an invalid invocation to standard output, but standard
