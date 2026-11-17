@@ -39,6 +39,8 @@ export { isRefusal, refuse } from "./context.ts";
 export type { ContextOption, Refusal } from "./context.ts";
 export { main as cliMain, runCli } from "./cli.ts";
 export type { CliCommand, CliIo, CliOptions } from "./cli.ts";
+export { cliFormat } from "./cli-human.ts";
+export type { CliForm, CliFormat, CliOutput, CliOutputFlag, CliRender, CliUi } from "./cli-human.ts";
 export { httpClient } from "./http-client.ts";
 export type { HttpClient, HttpClientOptions, HttpSubscribeOptions } from "./http-client.ts";
 export { findHost, installWebMcp } from "./webmcp.ts";

@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-use acid_cat_core::cli::{CliAliases, CliCommand, CliIo, CliOptions, exit, run_cli};
+use acid_cat_core::cli::{CliAliases, CliCommand, CliIo, CliOptions, OutputForm, exit, run_cli};
 use acid_cat_core::{App, Application, CapabilityDefinition, Emitted, EventDefinition, Target};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -84,6 +84,7 @@ async fn run(
         stdout: Box::new(move |text| stdout.lock().unwrap().push_str(text)),
         stderr: Box::new(move |text| stderr.lock().unwrap().push_str(text)),
         cancel: CancellationToken::new(),
+        form: OutputForm::Json,
     };
     let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
     let code = run_cli(app, Arc::new(()), &options, &args, &mut io).await?;

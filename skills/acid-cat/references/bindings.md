@@ -47,6 +47,25 @@ The documents of the bindings are at https://github.com/Hebilicious/acidcat/tree
 - `watch <id>` subscribes to an event, and writes each occurrence as JSON on one line. It exits with 0 when the subscription is complete, 130 after an interrupt, and 5 after `internal`. An interrupt writes nothing to standard error, also when it comes before the subscription starts. `list` gives each item a `kind`: `capability` or `event`. No command can have the name `watch`. Write logs to standard error, or they break the lines of JSON.
 - `watch <id> --cursor <cursor> --max-age-ms <integer>` resumes after the cursor of an earlier occurrence. No input property of an event can be named `cursor` or `max-age-ms`: the command line stops with an error when it starts.
 - The command line can run on another machine than the application ([Server](https://github.com/Hebilicious/acidcat/blob/main/spec/bindings/cli.md#server)): it sends each call and each subscription to the HTTP binding of a server. core-ts: `remote: httpClient(url, { headers })` in the options of the command line. core-effect: `remote: Http.client(url, { headers })` in `Cli.Options`. core-rust: `CliOptions::remote(HttpClient::new(url)?.header(…)?)`. The commands still come from the view in the program. Serve that HTTP binding with the target of the command line, so that both have the same view. Give a token in a header when the server checks one: the command line never writes it.
+- The command line writes JSON. The exit codes and the streams are the same in each form of the output.
+
+### Human output
+
+- **Off by default.** Without the output option, the command line writes JSON only, also on a terminal.
+- **As an agent or in a script,** pass the JSON flag of the program if it has one, for example `--json` or `--output json`. The help of the program lists its output flags.
+- **Turn it on** with the output option: `output: { flags, default, formats }` in the options of the command line in core-ts and in `Cli.Options` in core-effect, and `CliOptions::output(CliOutput::new().values(…).switch(…).default_form(…).formats(…))` in core-rust.
+- **Output flags.** Each one has `names` (`--word` or `-x`) and either `form`, for a switch (`{ names: ["--json"], form: "json" }`), or `values`, for a flag with a value (`{ names: ["--format", "-f"], values: { text: "human", json: "json" } }`).
+  - An output flag can be anywhere in the arguments before `--`. The last one wins.
+  - For a command of the application, an output flag comes before the name of the command. The command gets the arguments after its name unchanged, and reads the chosen form from `io.output` in core-ts, `Cli.outputForm` in core-effect and `io.form` in core-rust.
+  - A value that is not known exits with 3. The help and the message list the values.
+  - An output flag can take `-h`. It cannot take `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, a flag of an input, or in core-effect a flag of `effect/cli` (`--log-level`, `--completions`) or a global flag: the command line stops with an error when it starts.
+- **Default form.** `default` is `"json"` (the default: JSON unless an output flag chooses the human form) or `"auto"`. With `"auto"`, the form is human only when standard output is a terminal, `CI` is not set, and no coding agent is detected (`CLAUDECODE`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `AI_AGENT` and other variables).
+- **Formatters.** Without a formatter, the human form prints a generic layout of the value. For a better text, give a formatter for a capability, its failures or an event, typed from its object, in `formats`:
+  - core-ts: `[cliFormat(statusGet, { value: (status, ui) => …, failures: { Offline: (failure, ui) => … } }), cliFormat(statusChanged, (payload, ui) => …)]`
+  - core-effect: `[App.format(statusGet, …)]`
+  - core-rust: `CliFormats::new().capability(&status_get, |status: &Status, ui| …).failure(&status_get, |failure: &StatusFailure, ui| …).event(&status_changed, |status: &Status, ui| …)`
+  - A formatter gets the value decoded from JSON with the schema, so it works the same with `remote`. `ui` has `bold`, `dim`, `ok`, `warn`, `error` and `table`, which write color only on a terminal.
+  - If the value does not decode or the formatter fails, the generic layout is printed. Two formats for one id, or a format for an id outside the view, stop the command line when it starts.
 
 ## WebMCP
 

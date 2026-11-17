@@ -1,6 +1,6 @@
 //! The CLI binding (spec/bindings/cli.md): a command line made from the view of a target.
 
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::sync::Arc;
 
 use futures::future::BoxFuture;
@@ -15,6 +15,13 @@ use crate::outcome::{Availability, CallFailure, Kind, Outcome};
 use crate::schema::{cli_input_schema, resolve};
 use crate::session::{Session, SubscribeOptions};
 use crate::subscription::Occurrence;
+
+mod human;
+mod output;
+
+pub use human::{CliFormats, CliUi, OutputForm, output_form};
+use human::{Formatted, aligned, output_color};
+pub use output::{CliOutput, OutputDefault};
 
 /// The exit codes of the outcomes (spec/bindings/cli.md#outcomes).
 pub mod exit {
@@ -43,7 +50,7 @@ pub trait Aliased {
     fn alias_of(&self) -> (&'static str, &str);
 }
 
-impl<C, X> Aliased for CapabilityDefinition<C, X> {
+impl<C, X, O, F> Aliased for CapabilityDefinition<C, X, O, F> {
     type Input = X;
 
     fn alias_of(&self) -> (&'static str, &str) {
@@ -51,7 +58,7 @@ impl<C, X> Aliased for CapabilityDefinition<C, X> {
     }
 }
 
-impl<C, X> Aliased for EventDefinition<C, X> {
+impl<C, X, P> Aliased for EventDefinition<C, X, P> {
     type Input = X;
 
     fn alias_of(&self) -> (&'static str, &str) {
@@ -219,6 +226,9 @@ pub struct CliIo {
     pub stderr: Box<dyn FnMut(&str) + Send>,
     /// Cancelled by an interrupt. It cancels the call or the subscription.
     pub cancel: CancellationToken,
+    /// The form of the output that the arguments and [`CliOptions::output`] choose. [`run_cli`] sets it before it
+    /// runs a command of the application.
+    pub form: OutputForm,
 }
 
 impl CliIo {
@@ -236,12 +246,14 @@ impl CliIo {
                 let _ = stderr.flush();
             }),
             cancel,
+            form: OutputForm::Json,
         }
     }
 }
 
-/// The work of a command of the application: the arguments after its name, the io and the services. The result is
-/// the exit code.
+/// The work of a command of the application: the arguments after its name, the io and the services. The arguments
+/// come unchanged: the command line reads output flags only before the name. `io.form` is the chosen form. The result
+/// is the exit code.
 pub type CommandRun<C> =
     Arc<dyn for<'a> Fn(Vec<String>, &'a mut CliIo, Arc<C>) -> BoxFuture<'a, i32> + Send + Sync>;
 
@@ -267,6 +279,17 @@ pub struct CliOptions<C> {
     /// this program. Serve the HTTP binding with a target whose view has the same capabilities and events, for
     /// example the target `cli`.
     pub remote: Option<HttpClient>,
+    /// The human form of the output: its flags, its default and its formats. With `None`, the command line writes
+    /// JSON only. [`run_cli`] gives an error if the name of an output flag is not valid, is in two output flags, or is
+    /// the name of another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or a flag of the
+    /// input of a capability or an event of the view.
+    pub output: Option<CliOutput>,
+    /// The form that [`OutputDefault::Auto`] gives. With `None`, [`run_cli`] gives JSON, and [`cli_main`] and
+    /// [`run_cli_process`] choose with [`output_form`] from standard output and the environment.
+    pub auto_form: Option<OutputForm>,
+    /// Color in the human form. With `None`, [`run_cli`] writes no color, and [`cli_main`] and [`run_cli_process`]
+    /// write color when standard output is a terminal and `NO_COLOR` is unset or empty.
+    pub color: Option<bool>,
 }
 
 impl<C> CliOptions<C> {
@@ -278,7 +301,16 @@ impl<C> CliOptions<C> {
             description: None,
             commands: Vec::new(),
             remote: None,
+            output: None,
+            auto_form: None,
+            color: None,
         }
+    }
+
+    /// Turn on the human form of the output.
+    pub fn output(mut self, output: CliOutput) -> Self {
+        self.output = Some(output);
+        self
     }
 
     /// Send each call and each subscription to the HTTP binding of a server.
@@ -385,9 +417,17 @@ pub async fn cli_main<C: Send + Sync + 'static>(
 pub async fn run_cli_process<C: Send + Sync + 'static>(
     app: Arc<Application<C>>,
     context: Arc<C>,
-    options: CliOptions<C>,
+    mut options: CliOptions<C>,
     args: Vec<String>,
 ) -> i32 {
+    let is_terminal = std::io::stdout().is_terminal();
+    let env = |name: &str| std::env::var(name).ok();
+    options
+        .auto_form
+        .get_or_insert_with(|| output_form(is_terminal, env));
+    options
+        .color
+        .get_or_insert_with(|| output_color(is_terminal, env));
     let cancel = CancellationToken::new();
     listen_for_interrupt(cancel.clone());
     let mut io = CliIo::standard(cancel);
@@ -520,6 +560,21 @@ pub async fn run_cli<C: Send + Sync + 'static>(
     if !alias_errors.is_empty() {
         return Err(alias_errors.join("\n"));
     }
+    let no_formats = CliFormats::new();
+    let formats = options
+        .output
+        .as_ref()
+        .map_or(&no_formats, |output| &output.formats);
+    let format_errors = formats.problems(&options.target, &capability_ids, &event_ids);
+    if !format_errors.is_empty() {
+        return Err(format_errors.join("\n"));
+    }
+    if let Some(output) = &options.output {
+        let output_errors = output.problems(&taken_flags(&view, &aliases));
+        if !output_errors.is_empty() {
+            return Err(output_errors.join("\n"));
+        }
+    }
     let mut taken: Vec<String> = GENERIC_COMMANDS
         .iter()
         .map(|name| (*name).to_owned())
@@ -556,9 +611,33 @@ pub async fn run_cli<C: Send + Sync + 'static>(
             .map(alias_usage_of)
             .collect()
     };
-    let args = args_with_default_alias(args, default_alias.as_ref(), &aliases);
-    let args = args.as_slice();
     let result: Result<i32, UsageError> = async {
+        let (form, args) = match &options.output {
+            None => (OutputForm::Json, args.to_vec()),
+            Some(output) => {
+                let command_names: Vec<&str> = options
+                    .commands
+                    .iter()
+                    .map(|command| command.name.as_str())
+                    .collect();
+                let (chosen, rest) = output
+                    .choose(args, &command_names)
+                    .map_err(|message| usage_error(message, exit::INVALID_INPUT))?;
+                let fallback = match output.default {
+                    OutputDefault::Auto => options.auto_form.unwrap_or_default(),
+                    OutputDefault::Json => OutputForm::Json,
+                };
+                (chosen.unwrap_or(fallback), rest)
+            }
+        };
+        let printer = Printer {
+            form,
+            formats,
+            ui: CliUi::new(options.color.unwrap_or(false)),
+        };
+        let printer = &printer;
+        let args = args_with_default_alias(&args, default_alias.as_ref(), &aliases);
+        let args = args.as_slice();
         let first = args.first().map(String::as_str);
         match first {
             None | Some("--help" | "-h") => {
@@ -600,6 +679,16 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                         format!("  {}", &usage[options.name.len() + 1..])
                     }));
                 }
+                let output_lines = options
+                    .output
+                    .as_ref()
+                    .map(CliOutput::help_lines)
+                    .unwrap_or_default();
+                if !output_lines.is_empty() {
+                    lines.push(String::new());
+                    lines.push("Output:".into());
+                    lines.extend(output_lines.iter().map(|line| format!("  {line}")));
+                }
                 (io.stdout)(&lines.join("\n"));
                 Ok(exit::VALUE)
             }
@@ -610,11 +699,26 @@ pub async fn run_cli<C: Send + Sync + 'static>(
             Some("list") => {
                 let availability = match provider.availability(&capability_ids, &io.cancel).await {
                     Ok(availability) => availability,
-                    Err(failure) => return Ok(print(io, &Outcome::CallFailure(failure))),
+                    Err(failure) => return Ok(printer.call_failure(io, &failure)),
                 };
                 let mut entries = Vec::new();
+                let mut capability_rows = Vec::new();
+                let mut event_rows = Vec::new();
                 for (id, available) in capability_ids.iter().zip(availability) {
                     let entry = capability(id);
+                    let description = entry
+                        .get("description")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    capability_rows.push([
+                        id.replace('.', " "),
+                        match &available {
+                            Availability::Available => description.to_owned(),
+                            Availability::Unavailable { reason } => {
+                                format!("{description} (unavailable: {reason})")
+                            }
+                        },
+                    ]);
                     let mut item = Map::new();
                     item.insert("kind".into(), json!("capability"));
                     item.insert("id".into(), json!(id));
@@ -639,6 +743,14 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                         .and_then(|events| events.get(id.as_str()))
                         .cloned()
                         .unwrap_or_default();
+                    event_rows.push([
+                        format!("watch {id}"),
+                        event
+                            .get("description")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_owned(),
+                    ]);
                     let mut item = Map::new();
                     item.insert("kind".into(), json!("event"));
                     item.insert("id".into(), json!(id));
@@ -656,7 +768,11 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                     }
                     entries.push(Value::Object(item));
                 }
-                (io.stdout)(&serde_json::to_string_pretty(&entries).unwrap_or_default());
+                if printer.form == OutputForm::Human {
+                    (io.stdout)(&human_list(&capability_rows, &event_rows));
+                } else {
+                    (io.stdout)(&serde_json::to_string_pretty(&entries).unwrap_or_default());
+                }
                 Ok(exit::VALUE)
             }
             Some("call") => {
@@ -688,17 +804,37 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                             },
                         }
                     };
-                    return Ok(print(io, &Outcome::CallFailure(failure)));
+                    return Ok(printer.call_failure(io, &failure));
                 };
                 let outcome = provider.invoke(id, input, &io.cancel).await;
-                Ok(print(io, &outcome))
+                Ok(printer.outcome(io, id, &outcome))
             }
-            Some("watch") => watch(&provider, &view, &types, &options.name, &args[1..], io).await,
+            Some("watch") => {
+                watch(
+                    &provider,
+                    printer,
+                    &view,
+                    &types,
+                    &options.name,
+                    &args[1..],
+                    io,
+                )
+                .await
+            }
             Some(name) if aliases.iter().any(|alias| alias.name == name) => {
                 let Some(alias) = aliases.iter().find(|alias| alias.name == name) else {
                     return Ok(exit::UNKNOWN_CAPABILITY);
                 };
-                run_alias(&provider, &view, alias, &options.name, &args[1..], io).await
+                run_alias(
+                    &provider,
+                    printer,
+                    &view,
+                    alias,
+                    &options.name,
+                    &args[1..],
+                    io,
+                )
+                .await
             }
             Some(name) if options.commands.iter().any(|command| command.name == name) => {
                 let command = options
@@ -707,7 +843,10 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                     .find(|command| command.name == name)
                     .map(|command| command.run.clone());
                 match command {
-                    Some(run) => Ok(run(args[1..].to_vec(), io, context.clone()).await),
+                    Some(run) => {
+                        io.form = form;
+                        Ok(run(args[1..].to_vec(), io, context.clone()).await)
+                    }
                     None => Ok(exit::UNKNOWN_CAPABILITY),
                 }
             }
@@ -747,7 +886,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 }
                 let input = parse_flags(flags, &schema)?;
                 let outcome = provider.invoke(id, Value::Object(input), &io.cancel).await;
-                Ok(print(io, &outcome))
+                Ok(printer.outcome(io, id, &outcome))
             }
         }
     }
@@ -760,6 +899,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
 
 async fn run_alias<C: Send + Sync + 'static>(
     provider: &Provider<C>,
+    printer: &Printer<'_>,
     view: &Value,
     alias: &Alias,
     program: &str,
@@ -829,21 +969,24 @@ async fn run_alias<C: Send + Sync + 'static>(
                     },
                 }
             };
-            return Ok(print(io, &Outcome::CallFailure(failure)));
+            return Ok(printer.call_failure(io, &failure));
         };
         input
     };
     match alias.kind {
         AliasKind::Capability => {
             let outcome = provider.invoke(&alias.id, input, &io.cancel).await;
-            Ok(print(io, &outcome))
+            Ok(printer.outcome(io, &alias.id, &outcome))
         }
-        AliasKind::Event => Ok(follow(provider, &alias.id, input, cursor, max_age_ms, io).await),
+        AliasKind::Event => {
+            Ok(follow(provider, printer, &alias.id, input, cursor, max_age_ms, io).await)
+        }
     }
 }
 
 async fn watch<C: Send + Sync + 'static>(
     provider: &Provider<C>,
+    printer: &Printer<'_>,
     view: &Value,
     types: &Map<String, Value>,
     program: &str,
@@ -890,22 +1033,20 @@ async fn watch<C: Send + Sync + 'static>(
             match serde_json::from_str(flags.first().map_or("{}", String::as_str)) {
                 Ok(parsed) => input = parsed,
                 Err(_) => {
-                    return Ok(print(
+                    return Ok(printer.call_failure(
                         io,
-                        &Outcome::CallFailure(CallFailure::new(
-                            Kind::InvalidInput,
-                            "The input is not JSON.",
-                        )),
+                        &CallFailure::new(Kind::InvalidInput, "The input is not JSON."),
                     ));
                 }
             }
         }
     }
-    Ok(follow(provider, id, input, cursor, max_age_ms, io).await)
+    Ok(follow(provider, printer, id, input, cursor, max_age_ms, io).await)
 }
 
 async fn follow<C: Send + Sync + 'static>(
     provider: &Provider<C>,
+    printer: &Printer<'_>,
     id: &str,
     input: Value,
     cursor: Option<String>,
@@ -920,7 +1061,7 @@ async fn follow<C: Send + Sync + 'static>(
     let mut occurrences = match provider.subscribe(id, input, options).await {
         Ok(occurrences) => occurrences,
         Err(_) if io.cancel.is_cancelled() => return exit::CANCELLED,
-        Err(failure) => return print(io, &Outcome::CallFailure(failure)),
+        Err(failure) => return printer.call_failure(io, &failure),
     };
     loop {
         let next = tokio::select! {
@@ -937,35 +1078,139 @@ async fn follow<C: Send + Sync + 'static>(
                 };
             }
             Some(Err(failure)) => {
-                (io.stderr)(&failure.to_json().to_string());
+                printer.call_failure(io, &failure);
                 return exit::INTERNAL;
             }
-            Some(Ok(occurrence)) => (io.stdout)(&occurrence.to_json().to_string()),
+            Some(Ok(occurrence)) => printer.occurrence(io, &occurrence),
         }
     }
 }
 
-fn print(io: &mut CliIo, outcome: &Outcome) -> i32 {
-    match outcome {
-        Outcome::Value(value) => {
-            (io.stdout)(&serde_json::to_string_pretty(value).unwrap_or_default());
-            exit::VALUE
+struct Printer<'a> {
+    form: OutputForm,
+    formats: &'a CliFormats,
+    ui: CliUi,
+}
+
+impl Printer<'_> {
+    fn human(&self, io: &mut CliIo, of: Formatted, id: &str, value: &Value) {
+        let text = self.formats.render(of, id, value, &self.ui);
+        if !text.is_empty() {
+            (io.stdout)(&text);
         }
-        Outcome::Failure(error) => {
-            (io.stdout)(&serde_json::to_string_pretty(error).unwrap_or_default());
-            exit::FAILURE
+    }
+
+    fn outcome(&self, io: &mut CliIo, id: &str, outcome: &Outcome) -> i32 {
+        match (outcome, self.form) {
+            (Outcome::Value(Value::Null), OutputForm::Human) => exit::VALUE,
+            (Outcome::Value(value), OutputForm::Human) => {
+                self.human(io, Formatted::Value, id, value);
+                exit::VALUE
+            }
+            (Outcome::Value(value), OutputForm::Json) => {
+                (io.stdout)(&serde_json::to_string_pretty(value).unwrap_or_default());
+                exit::VALUE
+            }
+            (Outcome::Failure(error), OutputForm::Human) => {
+                self.human(io, Formatted::Failure, id, error);
+                exit::FAILURE
+            }
+            (Outcome::Failure(error), OutputForm::Json) => {
+                (io.stdout)(&serde_json::to_string_pretty(error).unwrap_or_default());
+                exit::FAILURE
+            }
+            (Outcome::CallFailure(failure), _) => self.call_failure(io, failure),
         }
-        Outcome::CallFailure(failure) => {
-            (io.stderr)(&failure.to_json().to_string());
-            match failure.kind {
-                Kind::UnknownCapability => exit::UNKNOWN_CAPABILITY,
-                Kind::InvalidInput => exit::INVALID_INPUT,
-                Kind::Unavailable => exit::UNAVAILABLE,
-                Kind::Internal => exit::INTERNAL,
-                Kind::Cancelled => exit::CANCELLED,
+    }
+
+    fn call_failure(&self, io: &mut CliIo, failure: &CallFailure) -> i32 {
+        match self.form {
+            OutputForm::Human => (io.stderr)(&format!(
+                "{} ({}): {}",
+                self.ui.error("error"),
+                failure.kind.as_str(),
+                failure.message
+            )),
+            OutputForm::Json => (io.stderr)(&failure.to_json().to_string()),
+        }
+        match failure.kind {
+            Kind::UnknownCapability => exit::UNKNOWN_CAPABILITY,
+            Kind::InvalidInput => exit::INVALID_INPUT,
+            Kind::Unavailable => exit::UNAVAILABLE,
+            Kind::Internal => exit::INTERNAL,
+            Kind::Cancelled => exit::CANCELLED,
+        }
+    }
+
+    fn occurrence(&self, io: &mut CliIo, occurrence: &Occurrence) {
+        match self.form {
+            OutputForm::Human => {
+                if occurrence.truncated {
+                    (io.stdout)("(some occurrences were lost)");
+                }
+                self.human(io, Formatted::Payload, &occurrence.name, &occurrence.data);
+            }
+            OutputForm::Json => (io.stdout)(&occurrence.to_json().to_string()),
+        }
+    }
+}
+
+fn human_list(capabilities: &[[String; 2]], events: &[[String; 2]]) -> String {
+    let section = |title: &str, rows: &[[String; 2]]| {
+        let rows: Vec<[&str; 2]> = rows
+            .iter()
+            .map(|[first, second]| [first.as_str(), second.as_str()])
+            .collect();
+        let rows: Vec<&[&str]> = rows.iter().map(|row| row.as_slice()).collect();
+        std::iter::once(title.to_owned())
+            .chain(aligned(&rows).into_iter().map(|line| format!("  {line}")))
+            .collect::<Vec<_>>()
+    };
+    let mut lines = section("Capabilities", capabilities);
+    if !events.is_empty() {
+        lines.extend(section("Events", events));
+    }
+    lines.join("\n")
+}
+
+fn taken_flags(view: &Value, aliases: &[Alias]) -> Vec<(String, String)> {
+    let mut taken: Vec<(String, String)> = Vec::new();
+    let mut take = |name: String, what: String| {
+        if !taken.iter().any(|(each, _)| *each == name) {
+            taken.push((name, what));
+        }
+    };
+    for flag in RESERVED_FLAGS {
+        take(flag.to_owned(), format!("the flag {flag}"));
+    }
+    for flag in RESUME_FLAGS {
+        take(format!("--{flag}"), format!("the flag --{flag} of watch"));
+    }
+    for alias in aliases.iter().filter(|alias| alias.name.starts_with("--")) {
+        take(alias.name.clone(), format!("the flag alias {}", alias.name));
+    }
+    let types = object_at(view, "$defs");
+    for (member, kind) in [("capabilities", "capability"), ("events", "event")] {
+        let entries = view
+            .get(member)
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        for (id, entry) in entries {
+            let Some(input) = entry.get("input") else {
+                continue;
+            };
+            let schema = cli_input_schema(input, types);
+            let properties = schema.get("properties").and_then(Value::as_object);
+            for property in properties.into_iter().flat_map(Map::keys) {
+                take(
+                    format!("--{property}"),
+                    format!("a flag of the {kind} {id}"),
+                );
             }
         }
     }
+    taken
 }
 
 fn split_flag(arg: &str) -> Option<(&str, Option<&str>)> {

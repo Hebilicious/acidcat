@@ -6,6 +6,7 @@ import { Predicate, Schema } from "effect";
 import type * as Capability from "./Capability.ts";
 import type { AnySchema } from "./Capability.ts";
 import type * as Event from "./Event.ts";
+import type { Ui } from "./internal/human.ts";
 
 /** An alias of the command line (spec/bindings/cli.md#aliases). Make it with `App.alias` or `App.aliasDefault`. */
 export interface Alias {
@@ -27,6 +28,64 @@ export const alias = <Input extends AnySchema>(of: Aliased<Input>, input?: NoInf
 
 /** The alias that runs when the program gets no arguments. It must be a command alias, and a target has one at most. */
 export const aliasDefault = <Input extends AnySchema>(of: Aliased<Input>, input?: NoInfer<Partial<Input["Encoded"]>>): Alias => aliasOf(of, input, true);
+
+/**
+ * How the command line writes the outcomes of a capability, or the occurrences of an event, for a person. Make it with
+ * `App.format`, and give it in the `formats` of the command line.
+ */
+export interface Format {
+  readonly member: "capability" | "event";
+  readonly id: string;
+  /** The output schema of the capability, or the payload schema of the event. */
+  readonly schema?: AnySchema | undefined;
+  /** The formatter of the value of the capability, or of the payload of the event. */
+  readonly value?: ((value: unknown, ui: Ui) => string) | undefined;
+  readonly failureSchemas?: readonly AnySchema[] | undefined;
+  readonly failures?: { readonly [tag: string]: ((failure: unknown, ui: Ui) => string) | undefined } | undefined;
+}
+
+type Tag<Failure> = Failure extends { readonly _tag: infer T extends string } ? T : never;
+
+export interface CapabilityFormats<Value, Failure> {
+  readonly value?: ((value: Value, ui: Ui) => string) | undefined;
+  readonly failures?:
+    | ([Tag<Failure>] extends [never] ? never : { readonly [T in Tag<Failure>]?: (failure: Extract<Failure, { readonly _tag: T }>, ui: Ui) => string })
+    | undefined;
+}
+
+type Formatted<Output extends AnySchema, Failure extends AnySchema> = {
+  readonly id: string;
+  readonly output?: Output | undefined;
+  readonly failures?: readonly Failure[] | undefined;
+  readonly run: unknown;
+};
+
+type FormattedEvent<Payload extends AnySchema> = { readonly id: string; readonly payload?: Payload | undefined; readonly subscribe: unknown };
+
+type AnyFormats = ((value: unknown, ui: Ui) => string) | CapabilityFormats<unknown, unknown> | { readonly failures?: Format["failures"] };
+
+/**
+ * The formatters of a capability for the command line. Each one gets its value in the `Type` form of its schema: the
+ * command line decodes the JSON form with the output schema, or with the failure schemas, before it calls the
+ * formatter. A function alone is the formatter of the value.
+ */
+export function format<Output extends AnySchema, Failure extends AnySchema>(
+  capability: Formatted<Output, Failure>,
+  formats: CapabilityFormats<Output["Type"], Failure["Type"]> | ((value: Output["Type"], ui: Ui) => string),
+): Format;
+export function format<Payload extends AnySchema>(event: FormattedEvent<Payload>, payload: (payload: Payload["Type"], ui: Ui) => string): Format;
+export function format(of: Formatted<AnySchema, AnySchema> | FormattedEvent<AnySchema>, formats: AnyFormats): Format {
+  if ("subscribe" in of) {
+    if (typeof formats !== "function") throw new Error(`The format of the event ${of.id} must be a function of its payload.`);
+    return { member: "event", id: of.id, schema: of.payload, value: formats };
+  }
+  const { value, failures } = typeof formats === "function" ? { value: formats, failures: undefined } : { value: undefined, ...formats };
+  const tags = (of.failures ?? []).map(failureTag);
+  for (const tag of Object.keys(failures ?? {})) {
+    if (!tags.includes(tag)) throw new Error(`The capability ${of.id} has no failure ${tag}.`);
+  }
+  return { member: "capability", id: of.id, schema: of.output, value, failureSchemas: of.failures, failures };
+}
 
 export interface Target {
   /** The bindings that serve the target, for example `["mcp"]`. */
@@ -170,6 +229,11 @@ function isObjectSchema(schema: JsonObject, types: { readonly [name: string]: Js
 
 /** The catalog of an application, as text in canonical form. */
 export const render = (app: App<unknown>): string => canonicalText(document(app));
+
+function failureTag(failure: Schema.Top): string | undefined {
+  const { schema, definitions } = Schema.toJsonSchemaDocument(failure);
+  return tagOf(schema, definitions);
+}
 
 function tagOf(schema: JsonObject, types: { readonly [name: string]: JsonObject }): string | undefined {
   const name = typeof schema.$ref === "string" ? REFERENCE.exec(schema.$ref)?.[1] : undefined;

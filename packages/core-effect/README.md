@@ -416,7 +416,7 @@ node cli.ts list                                                             # t
 
 `list` gives a usage line for each capability. The usage of a repeated flag ends with `...`, for example `--days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]`. See the [CLI binding](../../spec/bindings/cli.md#commands) for all the rules.
 
-`watch <id>` follows an event of the view. The flags come from the input schema of the event, with the same rules. When the input schema has no top-level `properties`, `watch <id> '<json>'` takes the input as JSON text. Each occurrence goes to standard output as one line of JSON, as soon as it comes:
+`watch <id>` follows an event of the view. The flags come from the input schema of the event, with the same rules. When the input schema has no top-level `properties`, `watch <id> '<json>'` takes the input as JSON text. In the JSON form, each occurrence goes to standard output as one line of JSON, as soon as it comes:
 
 ```sh
 node cli.ts watch aircon.status.changed | jq .data.celsius
@@ -436,7 +436,7 @@ These two flags are not properties of the input. If the input schema of an event
 | Cancelled (`SIGINT`) | Nothing | 130 |
 | `internal` | `{ "kind", "message" }` | 5 |
 
-A subscription that cannot start has the exit code of its call failure. Each item of `list` has `kind`: `"capability"` or `"event"`. The items of the events come after the items of the capabilities, with their `usage`, which ends with `[--cursor <string>] [--max-age-ms <integer>]`. Standard output carries only JSON, so the logs of Effect go to standard error.
+A subscription that cannot start has the exit code of its call failure. Each item of `list` has `kind`: `"capability"` or `"event"`. The items of the events come after the items of the capabilities, with their `usage`, which ends with `[--cursor <string>] [--max-age-ms <integer>]`. The logs of Effect go to standard error, so that standard output carries only the output.
 
 #### Aliases
 
@@ -468,6 +468,50 @@ node cli.ts           # the default alias: node cli.ts status
 The properties of the fixed input are not flags of the alias. The other properties are flags, with the rules above. An alias of an event subscribes as `watch` does, with the same exit codes, and also takes `--cursor` and `--max-age-ms`. `list` gives the usage of the aliases of each capability and each event in `aliases`, and the help lists them. If an alias breaks a rule, `Cli.command` throws, so the program stops with an error when it starts. A command of the application must not have the name of an alias.
 
 With no arguments, the program runs the default alias. If the first argument starts with `--`, and it is not `--help`, `--version`, a flag alias or a global flag, the program runs the default alias with all the arguments as its flags. `Cli.runCommand` stops with a defect when it starts if a flag of the default alias has the name of a global flag of `effect/cli` or of the application.
+
+#### Output for a person
+
+The command line writes JSON for programs. It can also write text for a person: the human form. The human form is off by default. Without the option `output` of `Cli.Options`, the command line writes JSON only, also on a terminal, and takes no output flag.
+
+To turn the human form on, give `output` (a `Cli.Output`):
+
+- `flags`: the output flags. Each flag has `names`: `--word` or `-x`, with one letter or digit. A switch has `form`: `"human"` or `"json"`, for example `{ names: ["--json"], form: "json" }`. A flag with a value has `values`, a map from each value to a form, for example `{ names: ["--format", "-f"], values: { text: "human", json: "json" } }`. It takes `--format text`, `--format=text` and `-f text`. An output flag can be anywhere in the arguments, before `--`: `runCommand` removes it before `effect/cli` parses the rest. For a command of the application, an output flag must come before the name of the command: the command gets the arguments after its name unchanged, and `Cli.outputForm` gives it the chosen form. When the arguments give more than one, the last one wins. A value that is missing or not known is a usage error with exit code 3: `The option --format must be text or json.`
+- `default`: the form when the arguments give no output flag: `"json"` (the default) or `"auto"`. With `"json"`, the output is JSON unless an output flag chooses the human form. With `"auto"`, the form is human only when standard output is a terminal, the variable `CI` is not set, and no variable of a coding agent is set, for example `CLAUDECODE` or `CODEX_THREAD_ID`. Else it is JSON. A variable is set when its value is not empty, `0`, `false`, `no` or `off`. `Cli.formOf(stdoutIsTerminal, environment)` makes this decision. `Cli.run` and `Cli.runCommand` read the terminal and the environment from the reference `Cli.Terminal`. Its default is no terminal, so in tests the form is JSON. `NodeCli` gives the terminal and the environment of the process.
+- `formats`: the formatters of the human form (see below).
+
+The help of the root command lists the output flags under `OUTPUT FLAGS`. An output flag can have the name `-h`: then `-h` chooses its form, `--help` writes the help, and the help does not show `-h` for `--help`. `Cli.command` throws, so the program stops with an error when it starts, if the name of an output flag is not valid, is in two output flags, or is the name of another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or a flag of the input of a capability or an event of the view. `runCommand` stops the program with a defect when it starts if the name of an output flag is the name of a flag of `effect/cli`, such as `--log-level` or `--completions`, or of a global flag of the application.
+
+The text for a person has color only when standard output is a terminal and `NO_COLOR` is not set. The exit code and the stream of each outcome are the same in both forms. A call failure goes to standard error as `error (<kind>): <message>`. `list` gives a table of the commands and the events. `watch` writes one block for each occurrence. Help, `--version` and usage errors are the same in both forms.
+
+Without a formatter, the text is a generic layout of the value: an object gives one line for each member, an array of objects gives a table, and an array of scalars gives its items with commas. `Cli.layout(value)` gives this text. `App.format` makes a formatter for a capability or an event, and `output.formats` takes them. A formatter gets its value in the `Type` form of its schema: the command line decodes the JSON form with the output schema, a failure schema or the payload schema first. A formatter also gets `ui`, with the styles `bold`, `dim`, `ok`, `warn` and `error`, and `table(header, rows)`. For example, in [`examples/aircon/core-effect/output.ts`](../../examples/aircon/core-effect/output.ts):
+
+```ts
+const statusText = ({ power, mode, fan, targetCelsius, roomCelsius }: typeof Status.Type, ui: Cli.Ui) =>
+  `${ui.bold(power ? "on" : "off")} · ${mode} · fan ${fan} · target ${targetCelsius}°C · room ${roomCelsius}°C`;
+
+export const output: Cli.Output = {
+  flags: [
+    { names: ["--output", "-o"], values: { human: "human", json: "json" } },
+    { names: ["--json"], form: "json" },
+  ],
+  formats: [
+    App.format(statusGet, {
+      value: statusText,
+      failures: { Offline: ({ since }, ui) => `${ui.error("offline")}${since === undefined ? "" : ` since ${since}`}` },
+    }),
+    App.format(statusChanged, statusText),
+  ],
+};
+
+NodeCli.main(aircon, layer, { name: "aircon", version: "0.1.0", output });
+```
+
+```sh
+node cli.ts status --output human   # off · cool · fan auto · target 22°C · room 25°C
+node cli.ts status --json           # {"power": false, "mode": "cool", …}
+```
+
+`App.format(capability, { value, failures })` takes a formatter for the value, and one for each tag of the failures. Each one is optional. `App.format(capability, value)` takes only the formatter of the value, and `App.format(event, payload)` takes the formatter of the payload. TypeScript checks the tags and the types of the values. A `null` value gives no output. When the value does not decode, or the formatter throws, the command line writes the generic layout, with the same exit code. If two formats have the same id, or the id of a format is not in the view of the target, `Cli.command` throws, so the program stops with an error when it starts.
 
 ### Command line of a server
 

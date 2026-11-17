@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { AVAILABLE, capabilitiesFor, cliAlias, cliAliasDefault, defineApp, eventsFor, fail, ok, unavailable } from "@acid-cat/core-ts";
-import type { Availability, Observable, ToJsonSchema } from "@acid-cat/core-ts";
+import { AVAILABLE, capabilitiesFor, cliAlias, cliAliasDefault, cliFormat, defineApp, eventsFor, fail, ok, unavailable } from "@acid-cat/core-ts";
+import type { Availability, CliOutput, CliUi, Observable, ToJsonSchema } from "@acid-cat/core-ts";
 
 export const Mode = z.enum(["cool", "heat", "dry", "fan", "auto"]).meta({ id: "Mode" });
 export const FanSpeed = z.enum(["auto", "low", "medium", "high"]).meta({ id: "FanSpeed" });
@@ -235,6 +235,24 @@ export const aircon = defineApp<Context>({
   capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, scheduleSet, statusExport, firmwareUpdate],
   events: [statusChanged],
 });
+
+const statusText = ({ power, mode, fan, targetCelsius, roomCelsius }: z.infer<typeof Status>, ui: CliUi): string =>
+  `${ui.bold(power ? "on" : "off")} · ${mode} · fan ${fan} · target ${targetCelsius}°C · room ${roomCelsius}°C`;
+
+export const output: CliOutput = {
+  default: "auto",
+  flags: [
+    { names: ["--output", "-o"], values: { human: "human", json: "json" } },
+    { names: ["--json"], form: "json" },
+  ],
+  formats: [
+    cliFormat(statusGet, {
+      value: statusText,
+      failures: { Offline: ({ since }, ui) => `${ui.error("offline")}${since === undefined ? "" : ` since ${since}`}` },
+    }),
+    cliFormat(statusChanged, statusText),
+  ],
+};
 
 export const toJsonSchema: ToJsonSchema = (schema) => {
   if (!(schema instanceof z.ZodType)) throw new Error("The air conditioner has only Zod schemas.");

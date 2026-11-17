@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use acid_cat_core::cli::{CliIo, CliOptions, exit, run_cli};
+use acid_cat_core::cli::{CliIo, CliOptions, OutputForm, exit, run_cli};
 use acid_cat_core::mcp::{McpStdioOptions, PROTOCOL_VERSION, run_stdio};
 use acid_cat_core::{App, Application, Availability, Emitted};
 use schemars::JsonSchema;
@@ -109,6 +109,7 @@ async fn cli(args: &[&str]) -> (i32, String) {
         stdout: Box::new(move |text| stdout.lock().unwrap().push_str(text)),
         stderr: Box::new(move |text| stderr.lock().unwrap().push_str(text)),
         cancel: CancellationToken::new(),
+        form: OutputForm::Json,
     };
     let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
     let code = run_cli(
@@ -312,6 +313,7 @@ async fn an_interrupt_ends_list_of_a_server_that_does_not_answer_with_exit_code_
         stdout: Box::new(|_| {}),
         stderr: Box::new(|_| {}),
         cancel: cancel.clone(),
+        form: OutputForm::Json,
     };
     let interrupt = tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -356,6 +358,7 @@ async fn an_interrupt_before_the_answer_to_watch_exits_with_130_and_writes_nothi
         stdout: Box::new(move |text| stdout.lock().unwrap().push_str(text)),
         stderr: Box::new(move |text| stderr.lock().unwrap().push_str(text)),
         cancel,
+        form: OutputForm::Json,
     };
     let code = tokio::time::timeout(
         Duration::from_secs(5),
