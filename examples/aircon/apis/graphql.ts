@@ -35,8 +35,8 @@ const StatusType = builder.objectRef<Types.Status>("Status").implement({
 const OfflineType = builder.objectRef<Types.AirconStatusGetFailure>("Offline").implement({
   description: "The unit is not on the network.",
   fields: (t) => ({
-    _tag: t.exposeString("_tag"),
-    since: t.exposeString("since", { nullable: true }),
+    _tag: t.string({ resolve: (failure) => failure._tag }),
+    since: t.string({ nullable: true, resolve: (failure) => failure.since ?? null }),
   }),
 });
 

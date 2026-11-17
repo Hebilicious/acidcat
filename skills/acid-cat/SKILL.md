@@ -42,7 +42,7 @@ Commit the source and the JSON together. Add a check to the build that writes th
 - for each event, `<Prefix>Input` and `<Prefix>Payload`;
 - the interfaces `Capabilities` and `Events`, which map each id to its types.
 
-Each type accepts every value that its schema accepts. A keyword that a TypeScript type cannot express, such as `pattern` or `not`, makes the type wider. An object that declares properties has no index signature. Arrays and members are readonly. The command fails, with exit code 1, when two types get the same name, or when a title is not a TypeScript name. Commit the file, and add a check to the build that writes it again and fails when it differs, as for the JSON. Use these types where the code declares an input, a value, a failure or a payload, for example the public types of a library: they are explicit, so JSR sees no slow types. Types written by hand are also allowed.
+Each type accepts every value that its schema accepts. A keyword that a TypeScript type cannot express, such as `pattern` or `not`, makes the type wider. An object that declares properties has no index signature, unless all of them are optional and the object accepts more members. Arrays and members are readonly. The command fails, with exit code 1, when two types get the same name, or when a title is not a TypeScript name. Commit the file, and add a check to the build that writes it again and fails when it differs, as for the JSON. Use these types where the code declares an input, a value, a failure or a payload, for example the public types of a library: they are explicit, so JSR sees no slow types. Types written by hand are also allowed.
 
 ## Choose a core
 

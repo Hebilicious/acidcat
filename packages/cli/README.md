@@ -75,7 +75,7 @@ Each type accepts every JSON value that its schema accepts, and is as narrow as 
 | `items`, `prefixItems` | `readonly T[]`, or a tuple: `readonly [T, U?, ...V[]]`. An item after `minItems` is optional |
 | `anyOf`, `oneOf`, `allOf` | A union, a union, an intersection |
 
-An object that declares properties has no index signature: a TypeScript object type already accepts an object with more members. Other keywords, such as `pattern`, `minimum`, `not`, `if` and `patternProperties`, make the type wider, never narrower. The output compiles with `tsc --strict --isolatedDeclarations`. It exports only type aliases and interfaces.
+An object that declares properties has no index signature when one of them is required: a TypeScript object type already accepts an object with more members. An object whose properties are all optional, and that accepts more members, gets `readonly [key: string]: unknown`. Without it, TypeScript rejects an object that has none of the declared properties. Other keywords, such as `pattern`, `minimum`, `not`, `if` and `patternProperties`, make the type wider, never narrower. The output compiles with `tsc --strict --isolatedDeclarations`. It exports only type aliases and interfaces.
 
 Errors give exit code 1, with one line on standard error for each problem, and nothing on standard output: a file that is not a catalog, an unknown target, two types with the same name (for example the capabilities `a.b-c` and `a-b.c`, or a title that names another type), and a title or a type name that is not a TypeScript name. `acid-cat types` with no language, or with a language other than `typescript`, also gives exit code 1.
 

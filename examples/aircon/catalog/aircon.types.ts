@@ -6,7 +6,7 @@ export type FanSpeed = "auto" | "low" | "medium" | "high";
 
 export type Mode = "cool" | "heat" | "dry" | "fan" | "auto";
 
-export type Offline = { readonly since?: string };
+export type Offline = { readonly since?: string; readonly [key: string]: unknown };
 
 export type Schedule = { readonly days: readonly Day[]; readonly hours: readonly number[] };
 

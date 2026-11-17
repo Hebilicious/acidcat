@@ -134,10 +134,14 @@ function renderObject(members: readonly Member[], index: Node | undefined, inden
   if (members.length === 0) return `{ readonly [key: string]: ${index === undefined ? "never" : render(index, indent)} }`;
   const inner = indent + 1;
   const lines = members.map(({ key, optional, type }) => `readonly ${keyText(key)}${optional ? "?" : ""}: ${render(type, inner)}`);
+  if (index !== undefined) lines.push(`readonly [key: string]: ${render(index, inner)}`);
   const inline = `{ ${lines.join("; ")} }`;
   if (members.every((member) => member.doc === undefined) && !inline.includes("\n") && inline.length <= 80) return inline;
   const pad = "  ".repeat(inner);
-  const body = members.map(({ doc }, position) => `${doc === undefined ? "" : docLines(doc, pad)}${pad}${lines[position] ?? ""};\n`);
+  const body = lines.map((line, position) => {
+    const doc = members[position]?.doc;
+    return `${doc === undefined ? "" : docLines(doc, pad)}${pad}${line};\n`;
+  });
   return `{\n${body.join("")}${"  ".repeat(indent)}}`;
 }
 
@@ -168,11 +172,14 @@ export function typescriptTypes(catalog: Catalog): TypeScriptTypes {
     if (schema === true) return UNKNOWN;
     if (schema === false) return NEVER;
     if (!isObject(schema)) return UNKNOWN;
-    if (typeof schema.title === "string") return name(titledType(schema, schema.title, where, emptyMeansNone));
+    if (typeof schema.title === "string") {
+      const titledName = name(titledType(schema, schema.title, where));
+      return emptyMeansNone && declaresNoProperties(schema) ? intersectionOf([titledName, EMPTY_OBJECT]) : titledName;
+    }
     return structure(schema, where, emptyMeansNone, true);
   };
 
-  const titledType = (schema: JsonObject, title: string, where: string, emptyMeansNone: boolean): string => {
+  const titledType = (schema: JsonObject, title: string, where: string): string => {
     if (!isTypeName(title)) {
       errors.push(`${where}: the title ${JSON.stringify(title)} is not a TypeScript name`);
       return title;
@@ -184,7 +191,7 @@ export function typescriptTypes(catalog: Catalog): TypeScriptTypes {
       return title;
     }
     names.set(title, { origin: `the title in ${where}`, key });
-    const node = structure(schema, where, emptyMeansNone, true);
+    const node = structure(schema, where, false, true);
     titled.push(declaration(title, descriptionOf(schema), node));
     return title;
   };
@@ -305,8 +312,7 @@ function objectNode(schema: JsonObject, emptyMeansNone: boolean, sub: (child: un
   const properties = isObject(schema.properties) ? schema.properties : {};
   const required = isStringArray(schema.required) ? schema.required : [];
   const patterns = isObject(schema.patternProperties);
-  const noneDeclared = emptyMeansNone && isObject(schema.properties) && Object.keys(properties).length === 0;
-  const additional = schema.additionalProperties === undefined && noneDeclared && !patterns ? false : schema.additionalProperties;
+  const additional = emptyMeansNone && declaresNoProperties(schema) ? false : schema.additionalProperties;
   const members: Member[] = Object.entries(properties).map(([key, property]) => ({
     key,
     optional: !required.includes(key),
@@ -316,10 +322,16 @@ function objectNode(schema: JsonObject, emptyMeansNone: boolean, sub: (child: un
   for (const key of new Set(required)) {
     if (!Object.hasOwn(properties, key)) members.push({ key, optional: false, doc: undefined, type: UNKNOWN });
   }
-  if (members.length > 0) return { kind: "object", members, index: undefined };
+  const open = patterns || additional !== false;
+  if (members.length > 0) return { kind: "object", members, index: open && members.every(({ optional }) => optional) ? UNKNOWN : undefined };
   if (patterns || additional === undefined || additional === true) return { kind: "object", members, index: UNKNOWN };
   const index = additional === false ? NEVER : sub(additional, "additionalProperties");
   return { kind: "object", members, index: isName(index, "never") ? undefined : index };
+}
+
+function declaresNoProperties(schema: JsonObject): boolean {
+  const { properties } = schema;
+  return isObject(properties) && Object.keys(properties).length === 0 && schema.additionalProperties === undefined && !isObject(schema.patternProperties);
 }
 
 function taggedFailure(tag: string, node: Node): Node {

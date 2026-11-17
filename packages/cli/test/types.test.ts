@@ -54,7 +54,7 @@ test("each JSON type becomes its TypeScript type, and an array of types becomes 
   assert.equal(typeOf({ type: ["string", "integer", "number", "boolean", "null"] }), "string | number | boolean | null");
 });
 
-test("an object keeps its required and optional properties, and has an index signature only when it declares no property", () => {
+test("an object keeps its required and optional properties, and has an index signature only when other properties can match no declared property", () => {
   const schema = { type: "object", required: ["a", "b-c"], properties: { a: { type: "string" }, "b-c": { type: "number" }, d: { type: "boolean" } } };
   assert.equal(typeOf(schema), '{ readonly a: string; readonly "b-c": number; readonly d?: boolean }');
   assert.equal(typeOf({ ...schema, additionalProperties: false }), '{ readonly a: string; readonly "b-c": number; readonly d?: boolean }');
@@ -62,6 +62,8 @@ test("an object keeps its required and optional properties, and has an index sig
   assert.equal(typeOf({ type: "object" }), "{ readonly [key: string]: unknown }");
   assert.equal(typeOf({ type: "object", properties: {}, additionalProperties: false }), "{ readonly [key: string]: never }");
   assert.equal(typeOf({ type: "object", required: ["x"] }), "{ readonly x: unknown }");
+  assert.equal(typeOf({ type: "object", properties: { a: { type: "string" } } }), "{ readonly a?: string; readonly [key: string]: unknown }");
+  assert.equal(typeOf({ type: "object", properties: { a: { type: "string" } }, additionalProperties: false }), "{ readonly a?: string }");
 });
 
 test("an array becomes a readonly array, and prefixItems a tuple whose items are optional after minItems", () => {
@@ -128,11 +130,19 @@ test("an event gives its input and payload, an empty object when it has none, an
 test("an inline schema with a title becomes a named type, used once for each schema", () => {
   const point = { title: "Point", description: "A point.", type: "object", properties: { x: { type: "number" } } };
   const text = textOf(catalogWith({ capabilities: { "map.point.move": { description: "Move.", input: point, output: point } } }));
-  assert.equal(declared(text, "Point"), "{ readonly x?: number }");
+  assert.equal(declared(text, "Point"), "{ readonly x?: number; readonly [key: string]: unknown }");
   assert.equal(text.match(/export type Point /g)?.length, 1);
   assert.match(text, /\/\*\* A point\. \*\/\nexport type Point /);
   assert.equal(declared(text, "MapPointMoveInput"), "Point");
   assert.equal(declared(text, "MapPointMoveValue"), "Point");
+});
+
+test("a titled input with no properties takes no properties, and the same titled output stays open", () => {
+  const box = { title: "Box", type: "object", properties: {} };
+  const text = textOf(catalogWith({ capabilities: { "map.box.echo": { description: "Echo.", input: box, output: box } } }));
+  assert.equal(declared(text, "Box"), "{ readonly [key: string]: unknown }");
+  assert.equal(declared(text, "MapBoxEchoInput"), "Box & { readonly [key: string]: never }");
+  assert.equal(declared(text, "MapBoxEchoValue"), "Box");
 });
 
 test("a title that is not a TypeScript name, or that names another type, is an error", () => {
@@ -171,13 +181,14 @@ test("the types compile with --strict and --isolatedDeclarations, and accept the
     Open: { type: "object", required: ["a"], properties: { a: { enum: ["x", 2] }, "b c": { type: ["null", "array"], items: { $ref: "#/$defs/Tuple" } } } },
     Map: { type: "object", additionalProperties: { anyOf: [{ type: "string" }, { $ref: "#/$defs/Open" }] } },
     Both: { allOf: [{ $ref: "#/$defs/Open" }, { type: "object", properties: { c: { const: true } } }] },
+    Optional: { type: "object", properties: { a: { type: "string" } } },
   };
   writeFileSync(join(directory, "shapes.ts"), textOf(catalogWith({ $defs: shapes })));
   writeFileSync(
     join(directory, "values.ts"),
     [
       'import type { BakeryOrderPlaceFailure, BakeryOrderPlaceInput, BakeryOrderReadyInput, Capabilities, Order } from "./bakery.ts";',
-      'import type { Both, Map, Open, Tuple } from "./shapes.ts";',
+      'import type { Both, Map, Open, Optional, Tuple } from "./shapes.ts";',
       'const withNote = { id: "1", loaf: "rye", quantity: 2, status: "ready", note: "extra" } as const;',
       "export const order: Order = withNote;",
       'export const input: BakeryOrderPlaceInput = { loaf: "brioche", quantity: 1 };',
@@ -188,6 +199,8 @@ test("the types compile with --strict and --isolatedDeclarations, and accept the
       'export const open: Open = { a: "x", "b c": [["a", 1]] };',
       'export const map: Map = { one: "a", two: { a: 2, "b c": null } };',
       'export const both: Both = { a: 2, c: true };',
+      "const other = { other: 2 } as const;",
+      "export const optional: Optional = other;",
       "// @ts-expect-error A loaf that the enum does not accept.",
       'export const wrong: BakeryOrderPlaceInput = { loaf: "bun", quantity: 1 };',
       "",
