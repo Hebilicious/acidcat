@@ -29,6 +29,7 @@ import type { AnySchema } from "./Capability.ts";
 import type * as Http from "./Http.ts";
 import { formOf, hasColor, layout, outputChoice, outputErrors, outputFlagHelp, ui } from "./internal/human.ts";
 import type { Environment, Form, OutputFlag, Ui } from "./internal/human.ts";
+import { RESERVED_FLAGS } from "./internal/output.generated.ts";
 import * as Session from "./Session.ts";
 
 export { formOf, layout } from "./internal/human.ts";
@@ -622,9 +623,7 @@ function takenFlags(view: CatalogDocument, aliases: ReadonlyArray<{ readonly nam
   const take = (name: string, what: string) => {
     if (!taken.has(name)) taken.set(name, what);
   };
-  take("--help", "the flag --help");
-  take("--version", "the flag --version");
-  for (const flag of CLI_RESUME_FLAGS) take(`--${flag}`, `the flag --${flag} of watch`);
+  for (const [name, what] of RESERVED_FLAGS) take(name, what);
   for (const { name } of aliases) if (name.startsWith("--")) take(name, `the flag alias ${name}`);
   const types = view.$defs ?? {};
   const members = [

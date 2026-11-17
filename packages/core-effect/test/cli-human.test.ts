@@ -6,7 +6,6 @@ import { Cause, Console, Effect, Exit, Layer, Schema, Stdio } from "effect";
 import { Command, Flag, GlobalFlag } from "effect/cli";
 
 import { App, Capability, Cli } from "../src/index.ts";
-import { outputChoice } from "../src/internal/human.ts";
 
 const Level = Schema.Struct({ level: Schema.Number });
 const Empty = Schema.TaggedStruct("Empty", {});
@@ -53,14 +52,6 @@ const runWith = <const Commands extends ReadonlyArray<Command.Command.Any> = rea
   });
 
 const runHuman = (formats: readonly App.Format[], ...args: string[]) => runWith({ default: "auto", formats }, args, true);
-
-test("the form is human only at a terminal with no CI and no coding agent", () => {
-  assert.equal(Cli.formOf(true, {}), "human");
-  assert.equal(Cli.formOf(true, { CLAUDECODE: "1" }), "json");
-  assert.equal(Cli.formOf(true, { CI: "true" }), "json");
-  assert.equal(Cli.formOf(true, { CLAUDECODE: "0" }), "human");
-  assert.equal(Cli.formOf(false, {}), "json");
-});
 
 test("a formatter that throws, or a value that does not decode, gives the generic layout with the same exit code", async () => {
   const throws = App.format(level, () => {
@@ -193,11 +184,6 @@ test("an application command gets its arguments unchanged and the chosen form, a
   ]);
 });
 
-test("output flags stop at --", () => {
-  const flags = [{ names: ["--json"], form: "json" }] as const;
-  assert.deepEqual(outputChoice(flags, ["probe", "level", "--json", "--", "--json"], []), { form: "json", args: ["probe", "level", "--", "--json"] });
-});
-
 test("the command line stops when it starts if an output flag has the name of a flag of effect/cli or of the application", async () => {
   const switchFlag = GlobalFlag.Setting("switch")({ flag: Flag.Boolean("switch") });
   const start = (name: string) => {
@@ -227,14 +213,10 @@ test("the default form is json, and auto gives the human form only at a terminal
   );
 });
 
-test("the command line stops when it starts if an output flag has a name that is not valid or that is taken", () => {
+test("the command line stops when it starts if an output flag has the name of a flag of watch, an alias or an input", () => {
   const fails = (names: readonly string[], message: string) =>
     assert.throws(() => Cli.command(probe, { name: "probe", version: "0.0.0", output: { flags: [{ names, form: "json" }] } }), { message });
   fails(["--cursor"], "The output flag --cursor has the same name as the flag --cursor of watch.");
   fails(["--now"], "The output flag --now has the same name as the flag alias --now.");
   fails(["--litres"], "The output flag --litres has the same name as a flag of the capability probe.fill.");
-  fails(["--json", "--json"], "The output flag --json has the same name as another output flag.");
-  fails(["format"], "The output flag format is not a valid name. Give --<word> or -<letter or digit>.");
-  fails(["-ab"], "The output flag -ab is not a valid name. Give --<word> or -<letter or digit>.");
-  fails(["--version"], "The output flag --version has the same name as the flag --version.");
 });

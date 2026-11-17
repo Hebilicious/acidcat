@@ -26,6 +26,7 @@ import type { Availability, CallFailure, CatalogCapability, CatalogDocument, Cli
 import { catalogOf } from "./app.ts";
 import { cliFormatErrors, cliLayout, cliListText, cliOutputChoice, cliOutputErrors, cliOutputFlagHelp, cliUi, defaultCliOutput } from "./cli-human.ts";
 import type { CliForm, CliFormat, CliOutput, CliOutputChoice, CliOutputFlag, CliRender } from "./cli-human.ts";
+import { RESERVED_FLAGS } from "./cli-output.generated.ts";
 import type { App, ToJsonSchema } from "./app.ts";
 import type { HttpClient } from "./http-client.ts";
 import { createSession } from "./session.ts";
@@ -431,9 +432,7 @@ function takenFlags(view: CatalogDocument, aliases: readonly CliAlias[]): Readon
   const take = (name: string, what: string) => {
     if (!taken.has(name)) taken.set(name, what);
   };
-  take("--help", "the flag --help");
-  take("--version", "the flag --version");
-  for (const flag of CLI_RESUME_FLAGS) take(`--${flag}`, `the flag --${flag} of watch`);
+  for (const [name, what] of RESERVED_FLAGS) take(name, what);
   for (const { name } of aliases) if (name.startsWith("--")) take(name, `the flag alias ${name}`);
   const types = view.$defs ?? {};
   const members = [

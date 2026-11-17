@@ -1,4 +1,5 @@
 import type { EmptyInput, FailureData, FailureSchemas } from "./app.ts";
+import { AGENT_VARIABLES, CI_VARIABLE, FALSE_VALUES } from "./cli-output.generated.ts";
 import type { StandardSchemaV1 } from "./standard-schema.ts";
 
 export type CliForm = "human" | "json";
@@ -156,27 +157,10 @@ export function cliFormatErrors(formats: readonly CliFormat[], capabilities: rea
   return errors;
 }
 
-const AGENT_VARIABLES: readonly string[] = [
-  "AI_AGENT",
-  "CLAUDECODE",
-  "CODEX_THREAD_ID",
-  "CURSOR_AGENT",
-  "GEMINI_CLI",
-  "OPENCODE",
-  "AMP_CURRENT_THREAD_ID",
-  "AUGMENT_AGENT",
-  "QWEN_CODE_SESSION_ID",
-  "PI_CODING_AGENT",
-  "CRUSH",
-  "COPILOT_AGENT",
-];
-
-const FALSE_VALUES: readonly string[] = ["", "0", "false", "no", "off"];
-
 const isTruthy = (value: string | undefined): boolean => value !== undefined && !FALSE_VALUES.includes(value.trim().toLowerCase());
 
 export function defaultCliOutput(isTerminal: boolean, env: { readonly [name: string]: string | undefined }): CliForm {
-  if (!isTerminal || isTruthy(env.CI) || AGENT_VARIABLES.some((name) => isTruthy(env[name]))) return "json";
+  if (!isTerminal || isTruthy(env[CI_VARIABLE]) || AGENT_VARIABLES.some((name) => isTruthy(env[name]))) return "json";
   return "human";
 }
 

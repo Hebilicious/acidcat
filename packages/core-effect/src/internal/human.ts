@@ -1,5 +1,7 @@
 import { Predicate } from "effect";
 
+import { AGENT_VARIABLES, CI_VARIABLE, FALSE_VALUES } from "./output.generated.ts";
+
 export type Form = "human" | "json";
 
 /** The styles and the table that a formatter of the command line gets. Without color, each style gives its text unchanged. */
@@ -90,31 +92,16 @@ export function outputChoice(flags: readonly OutputFlag[], args: readonly string
   return { form, args: rest };
 }
 
-const AGENT_VARIABLES = [
-  "AI_AGENT",
-  "CLAUDECODE",
-  "CODEX_THREAD_ID",
-  "CURSOR_AGENT",
-  "GEMINI_CLI",
-  "OPENCODE",
-  "AMP_CURRENT_THREAD_ID",
-  "AUGMENT_AGENT",
-  "QWEN_CODE_SESSION_ID",
-  "PI_CODING_AGENT",
-  "CRUSH",
-  "COPILOT_AGENT",
-] as const;
+const FALSE_SET: ReadonlySet<string> = new Set(FALSE_VALUES);
 
-const FALSE_VALUES = new Set(["", "0", "false", "no", "off"]);
-
-const isTruthy = (value: string | undefined): boolean => value !== undefined && !FALSE_VALUES.has(value.trim().toLowerCase());
+const isTruthy = (value: string | undefined): boolean => value !== undefined && !FALSE_SET.has(value.trim().toLowerCase());
 
 /**
  * The form that the default `"auto"` of the output gives: human when standard output is a terminal and the environment
  * shows no CI and no coding agent, else JSON.
  */
 export const formOf = (stdoutIsTerminal: boolean, environment: Environment): Form =>
-  stdoutIsTerminal && !isTruthy(environment.CI) && !AGENT_VARIABLES.some((name) => isTruthy(environment[name])) ? "human" : "json";
+  stdoutIsTerminal && !isTruthy(environment[CI_VARIABLE]) && !AGENT_VARIABLES.some((name) => isTruthy(environment[name])) ? "human" : "json";
 
 export const hasColor = (form: Form, stdoutIsTerminal: boolean, environment: Environment): boolean =>
   form === "human" && stdoutIsTerminal && (environment.NO_COLOR ?? "") === "";

@@ -18,6 +18,7 @@ use crate::subscription::Occurrence;
 
 mod human;
 mod output;
+mod output_generated;
 
 pub use human::{CliFormats, CliUi, OutputForm, output_form};
 use human::{Formatted, aligned, output_color};
@@ -1180,11 +1181,8 @@ fn taken_flags(view: &Value, aliases: &[Alias]) -> Vec<(String, String)> {
             taken.push((name, what));
         }
     };
-    for flag in RESERVED_FLAGS {
-        take(flag.to_owned(), format!("the flag {flag}"));
-    }
-    for flag in RESUME_FLAGS {
-        take(format!("--{flag}"), format!("the flag --{flag} of watch"));
+    for (name, what) in output_generated::RESERVED_FLAGS {
+        take(name.to_owned(), what.to_owned());
     }
     for alias in aliases.iter().filter(|alias| alias.name.starts_with("--")) {
         take(alias.name.clone(), format!("the flag alias {}", alias.name));

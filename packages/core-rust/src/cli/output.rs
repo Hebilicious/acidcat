@@ -236,17 +236,110 @@ fn is_short_name(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::Value;
+
+    use super::super::output_form;
     use super::*;
 
-    #[test]
-    fn output_flags_stop_at_double_dash() {
-        let output = CliOutput::new().switch(["--json"], OutputForm::Json);
-        let args: Vec<String> = ["probe", "count", "--json", "--", "--json"]
+    const CASES: &str = include_str!("../../tests/fixtures/cli_output_cases.json");
+
+    fn strings(value: &Value) -> Vec<String> {
+        value
+            .as_array()
+            .expect("a list of strings")
             .iter()
-            .map(|arg| (*arg).to_owned())
+            .map(|each| each.as_str().expect("a string").to_owned())
+            .collect()
+    }
+
+    fn form(value: &Value) -> OutputForm {
+        match value.as_str() {
+            Some("human") => OutputForm::Human,
+            Some("json") => OutputForm::Json,
+            _ => panic!("{value} is not a form"),
+        }
+    }
+
+    fn output_of(flags: &Value) -> CliOutput {
+        let flags = flags.as_array().expect("a list of output flags");
+        flags.iter().fold(CliOutput::new(), |output, flag| {
+            let names = strings(&flag["names"]);
+            match flag.get("values").and_then(Value::as_object) {
+                Some(values) => output.values(
+                    names,
+                    values
+                        .iter()
+                        .map(|(value, chosen)| (value.clone(), form(chosen))),
+                ),
+                None => output.switch(names, form(&flag["form"])),
+            }
+        })
+    }
+
+    fn cases() -> Value {
+        serde_json::from_str(CASES).expect("the cases of the model are JSON")
+    }
+
+    #[test]
+    fn the_automatic_form_gives_the_form_of_the_model_in_each_case() {
+        let cases = cases();
+        for case in cases["auto"].as_array().expect("a list of cases") {
+            let env = case["env"].as_object().expect("an environment");
+            let actual = output_form(case["isTerminal"] == Value::Bool(true), |name| {
+                env.get(name).and_then(Value::as_str).map(str::to_owned)
+            });
+            assert_eq!(actual, form(&case["form"]), "{case}");
+        }
+    }
+
+    #[test]
+    fn the_check_of_the_output_flags_gives_the_messages_of_the_model_in_each_case() {
+        let cases = cases();
+        let others: Vec<(String, String)> = cases["problems"]["others"]
+            .as_array()
+            .expect("a list of other flags")
+            .iter()
+            .map(|other| {
+                let pair = strings(other);
+                (pair[0].clone(), pair[1].clone())
+            })
             .collect();
-        let (form, rest) = output.choose(&args, &[]).unwrap();
-        assert_eq!(form, Some(OutputForm::Json));
-        assert_eq!(rest, ["probe", "count", "--", "--json"]);
+        for case in cases["problems"]["cases"]
+            .as_array()
+            .expect("a list of cases")
+        {
+            let output = output_of(&case["flags"]);
+            assert_eq!(
+                output.problems(&others),
+                strings(&case["messages"]),
+                "{case}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_output_flags_in_the_arguments_give_the_form_the_arguments_or_the_error_of_the_model_in_each_case()
+     {
+        let cases = cases();
+        let output = output_of(&cases["choices"]["flags"]);
+        for case in cases["choices"]["cases"]
+            .as_array()
+            .expect("a list of cases")
+        {
+            let commands = strings(&case["commands"]);
+            let commands: Vec<&str> = commands.iter().map(String::as_str).collect();
+            let expected = match case.get("error").and_then(Value::as_str) {
+                Some(error) => Err(error.to_owned()),
+                None => Ok((
+                    case.get("form").filter(|form| !form.is_null()).map(form),
+                    strings(&case["rest"]),
+                )),
+            };
+            assert_eq!(
+                output.choose(&strings(&case["args"]), &commands),
+                expected,
+                "{case}"
+            );
+        }
     }
 }
