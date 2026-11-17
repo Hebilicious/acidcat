@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
@@ -108,6 +108,14 @@ test("watch is a command of the command line: no capability and no command of th
   await assert.rejects(runCli(app, { name: "probe", version: "0", toJsonSchema, context: undefined }, ["list"], { stdout: () => {}, stderr: () => {} }), /watch start/);
   const command = { name: "watch", description: "Mine.", run: () => 0 };
   await assert.rejects(runCli(sensorsApp, { name: "sensors", version: "0", ...sensorOptions(), commands: [command] }, ["list"], { stdout: () => {}, stderr: () => {} }), /watch/);
+});
+
+test("in a process, a command line that breaks a rule stops when it starts, with the message and the exit code 5", () => {
+  const fixture = fileURLToPath(new URL("./fixture-sensors-cli-setup-error.ts", import.meta.url));
+  const { status, stdout, stderr } = spawnSync(process.execPath, [fixture, "list"], { encoding: "utf-8" });
+  assert.equal(status, 5);
+  assert.equal(stdout, "");
+  assert.equal(stderr, "The command watch of the application has the same name as another command.\n");
 });
 
 test("in a process, an interrupt ends watch with the exit code 130", async () => {

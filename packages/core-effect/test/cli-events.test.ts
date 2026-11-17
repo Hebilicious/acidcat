@@ -106,9 +106,9 @@ describe("the command line of an application with events", { concurrency: true }
     await Promise.all(
       ["cursor", "max-age-ms"].map(async (name) => {
         const started = await run(reserved, name, "list");
-        assert.notEqual(started.code, 0);
+        assert.equal(started.code, 5);
         assert.equal(started.stdout, "");
-        assert.match(started.stderr, new RegExp(`has a property ${name}, which is a flag of watch`));
+        assert.equal(started.stderr, `The input of the event reserved.changed has a property ${name}, which is a flag of watch.\n`);
       }),
     );
   });

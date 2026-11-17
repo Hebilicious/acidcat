@@ -149,9 +149,15 @@ export function main<Context>(app: App<Context>, options: CliOptions<Context>, a
     signal: interrupt.signal,
     output: defaultCliOutput(process.stdout.isTTY, process.env),
     color: process.stdout.isTTY && (process.env.NO_COLOR ?? "") === "",
-  }).then((code) => {
-    process.exitCode = code;
-  });
+  }).then(
+    (code) => {
+      process.exitCode = code;
+    },
+    (problem: unknown) => {
+      process.stderr.write(`${problem instanceof Error ? problem.message : String(problem)}\n`);
+      process.exitCode = CLI_EXIT_CODES.internal;
+    },
+  );
 }
 
 /** Run the command line with arguments. The result is the exit code (spec/bindings/cli.md#outcomes). */
