@@ -63,7 +63,7 @@ Verify each change against what it must do. Do not hunt for edge cases until a r
 5. **Triage each finding.** Fix it, or dismiss it with a reason. Dismiss a finding that needs an unusual setup that no user is likely to have. A finding that needs a new rule in the specification must name the client that relies on that rule ("Simple and permissive"). Then check only the diff of the fixes, one time.
 6. **Attack the premise.** When two fixes rest on the same premise, stop. Write the premise down, and test it before you write another fix. Often the design is wrong, not the code.
 7. **Encode what repeats.** When the same manual step or the same fix comes back, make a script, a test, a lint rule or a Moon task do it.
-8. **Hand off** the pull request with the result of each check, each finding, and what you fixed or dismissed, and why.
+8. **Hand off** the pull request with the result of each check, each finding, and what you fixed or dismissed, and why. List the documents that the change updates, or say why none needed it.
 
 Give each round of work to a new subagent, with the full scope in its brief: what the user asked for, the acceptance checks, the earlier findings, and the branch. Do not add work to a subagent that already returned.
 
