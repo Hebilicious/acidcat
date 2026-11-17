@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 
 import { cliMain, httpClient } from "@acid-cat/core-ts";
 import type { HttpClient } from "@acid-cat/core-ts";
-import { aircon, formats, toJsonSchema, Unit } from "./aircon.ts";
+import { aircon, output, toJsonSchema, Unit } from "./aircon.ts";
 
 let remote: HttpClient | undefined;
 const url = process.env.AIRCON_URL;
@@ -15,4 +15,4 @@ if (url !== undefined) {
     process.exit(2);
   }
 }
-cliMain(aircon, { name: "aircon", version: "0.1.0", context: { unit: new Unit(), writeFile }, toJsonSchema, remote, formats });
+cliMain(aircon, { name: "aircon", version: "0.1.0", context: { unit: new Unit(), writeFile }, toJsonSchema, remote, output });

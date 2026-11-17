@@ -7,3 +7,5 @@ export const OFFLINE = "offline";
 export const POWERED_OFF_LAYOUT = "_tag  PoweredOff";
 
 export const SCHEDULE_LAYOUT = ["days   mon, fri", "hours  7, 18"].join("\n");
+
+export const OUTPUT_ERROR = "The option --output must be human or json.";

@@ -16,7 +16,7 @@ import { App, Mcp, Session } from "@acid-cat/core-effect";
 import { run } from "./run.ts";
 import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
-import { OFFLINE, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF } from "./human.ts";
+import { OFFLINE, OUTPUT_ERROR, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF } from "./human.ts";
 
 const ToolList = Schema.Struct({ result: Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: Schema.String })) }) });
 
@@ -217,21 +217,22 @@ test("aircon.status.export writes a file through the command line", async (conte
   assert.partialDeepStrictEqual(JSON.parse(await readFile(file, "utf-8")), { power: false });
 });
 
-test("the Effect command line writes the human form with --output human, and JSON with --output json", async () => {
-  const human = (...args: string[]) => run(cliPath, "--output", "human", ...args);
-  const [status, none, poweredOff, schedule, list, unknown, json, plain, xml] = await Promise.all([
-    human("aircon", "status", "get"),
-    human(),
-    human("aircon", "mode", "set", "--mode", "heat"),
-    human("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18"),
-    human("list"),
-    human("call", "nope"),
-    run(cliPath, "--output", "json", "aircon", "status", "get"),
-    run(cliPath, "aircon", "status", "get"),
-    run(cliPath, "--output", "xml", "status"),
+test("the Effect command line writes the human form with its output flags", async () => {
+  const cli = (...args: string[]) => run(cliPath, ...args);
+  const [status, short, inline, defaultAlias, poweredOff, schedule, list, unknown, json, plain, xml] = await Promise.all([
+    cli("status", "--output", "human"),
+    cli("-o", "human", "status"),
+    cli("--output=human", "status"),
+    cli("-o", "human"),
+    cli("aircon", "mode", "set", "--output", "human", "--mode", "heat"),
+    cli("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18", "--output=human"),
+    cli("list", "-o", "human"),
+    cli("call", "nope", "--output", "human"),
+    cli("--output", "json", "aircon", "status", "get"),
+    cli("aircon", "status", "get"),
+    cli("status", "--output", "xml"),
   ]);
-  assert.deepEqual([status.code, status.stdout], [0, `${STATUS_OFF}\n`]);
-  assert.deepEqual([none.code, none.stdout], [0, `${STATUS_OFF}\n`], "the default alias is status");
+  for (const human of [status, short, inline, defaultAlias]) assert.deepEqual([human.code, human.stdout], [0, `${STATUS_OFF}\n`]);
   assert.deepEqual([poweredOff.code, poweredOff.stdout], [1, `${POWERED_OFF_LAYOUT}\n`]);
   assert.deepEqual([schedule.code, schedule.stdout], [0, `${SCHEDULE_LAYOUT}\n`]);
   assert.ok(list.stdout.startsWith("Capabilities\n  aircon status get "));
@@ -239,29 +240,40 @@ test("the Effect command line writes the human form with --output human, and JSO
   assert.equal(unknown.code, 2);
   assert.ok(unknown.stderr.startsWith("error (unknown-capability): "));
   assert.deepEqual([json.code, json.stdout], [plain.code, plain.stdout]);
-  assert.equal(xml.code, 3);
+  assert.deepEqual([xml.code, xml.stdout, xml.stderr], [3, "", `${OUTPUT_ERROR}\n`]);
+
+  const [terminal, terminalJson, terminalDefault, offline] = await Promise.all([
+    terminalCli(true, "status"),
+    terminalCli(true, "status", "--json"),
+    terminalCli(true, "--json"),
+    terminalCli(false, "aircon", "status", "get"),
+  ]);
+  assert.deepEqual([terminal.code, terminal.stdout], [0, `${STATUS_OFF}\n`]);
+  assert.deepEqual([terminalJson.code, terminalJson.stdout], [0, plain.stdout]);
+  assert.deepEqual([terminalDefault.code, terminalDefault.stdout], [0, plain.stdout], "the default alias with an output flag");
+  assert.deepEqual([offline.code, offline.stdout, offline.stderr], [1, `${OFFLINE}\n`, ""]);
 });
 
-const offlineCli = `
+const terminalScript = (online: boolean) => `
 import { NodeCli } from "@acid-cat/core-effect/node";
 import { unavailable } from "@acid-cat/spec-ts";
 import { Effect, Layer, SubscriptionRef } from "effect";
 import { aircon, Unit, unitLayer } from ${JSON.stringify(new URL("../core-effect/aircon.ts", import.meta.url).href)};
-import { formats } from ${JSON.stringify(new URL("../core-effect/formats.ts", import.meta.url).href)};
+import { output } from ${JSON.stringify(new URL("../core-effect/output.ts", import.meta.url).href)};
+process.stdout.isTTY = true;
 const offline = Layer.effectDiscard(Effect.flatMap(Effect.service(Unit), (unit) => SubscriptionRef.set(unit.connection, unavailable("The unit is offline."))));
-NodeCli.main(aircon, Layer.provideMerge(offline, unitLayer), { name: "aircon", version: "0.1.0", formats }, process.argv.slice(1));
+NodeCli.main(aircon, ${online ? "unitLayer" : "Layer.provideMerge(offline, unitLayer)"}, { name: "aircon", version: "0.1.0", output }, process.argv.slice(1));
 `;
 
-test("the human form of the Effect command line writes the Offline failure with its formatter", async () => {
-  const offline = await finish(
-    spawn(process.execPath, ["--input-type=module", "--eval", offlineCli, "--", "--output", "human", "aircon", "status", "get"], {
+const terminalCli = (online: boolean, ...args: string[]) =>
+  finish(
+    spawn(process.execPath, ["--input-type=module", "--eval", terminalScript(online), "--", ...args], {
       cwd: new URL("..", import.meta.url).pathname,
+      env: { PATH: process.env.PATH ?? "", NO_COLOR: "1" },
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 20_000,
     }),
   );
-  assert.deepEqual([offline.code, offline.stdout, offline.stderr], [1, `${OFFLINE}\n`, ""]);
-});
 
 test("the human form of the Effect command line is the same for a server, and watch writes each status", async (context) => {
   const url = await startServer(context);

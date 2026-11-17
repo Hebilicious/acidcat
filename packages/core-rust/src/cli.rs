@@ -17,9 +17,11 @@ use crate::session::{Session, SubscribeOptions};
 use crate::subscription::Occurrence;
 
 mod human;
+mod output;
 
 pub use human::{CliFormats, CliUi, OutputForm, output_form};
 use human::{Formatted, aligned, output_color};
+pub use output::{CliOutput, OutputDefault};
 
 /// The exit codes of the outcomes (spec/bindings/cli.md#outcomes).
 pub mod exit {
@@ -272,10 +274,14 @@ pub struct CliOptions<C> {
     /// this program. Serve the HTTP binding with a target whose view has the same capabilities and events, for
     /// example the target `cli`.
     pub remote: Option<HttpClient>,
-    pub formats: CliFormats,
-    /// The form of the output when the arguments do not give `--output`. With `None`, [`run_cli`] writes JSON, and
-    /// [`cli_main`] and [`run_cli_process`] choose with [`output_form`] from standard output and the environment.
-    pub output: Option<OutputForm>,
+    /// The human form of the output: its flags, its default and its formats. With `None`, the command line writes
+    /// JSON only. [`run_cli`] gives an error if the name of an output flag is not valid, is in two output flags, or is
+    /// the name of another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or a flag of the
+    /// input of a capability or an event of the view.
+    pub output: Option<CliOutput>,
+    /// The form that [`OutputDefault::Auto`] gives. With `None`, [`run_cli`] gives JSON, and [`cli_main`] and
+    /// [`run_cli_process`] choose with [`output_form`] from standard output and the environment.
+    pub auto_form: Option<OutputForm>,
     /// Color in the human form. With `None`, [`run_cli`] writes no color, and [`cli_main`] and [`run_cli_process`]
     /// write color when standard output is a terminal and `NO_COLOR` is unset or empty.
     pub color: Option<bool>,
@@ -290,14 +296,15 @@ impl<C> CliOptions<C> {
             description: None,
             commands: Vec::new(),
             remote: None,
-            formats: CliFormats::new(),
             output: None,
+            auto_form: None,
             color: None,
         }
     }
 
-    pub fn formats(mut self, formats: CliFormats) -> Self {
-        self.formats = formats;
+    /// Turn on the human form of the output.
+    pub fn output(mut self, output: CliOutput) -> Self {
+        self.output = Some(output);
         self
     }
 
@@ -411,7 +418,7 @@ pub async fn run_cli_process<C: Send + Sync + 'static>(
     let is_terminal = std::io::stdout().is_terminal();
     let env = |name: &str| std::env::var(name).ok();
     options
-        .output
+        .auto_form
         .get_or_insert_with(|| output_form(is_terminal, env));
     options
         .color
@@ -548,11 +555,20 @@ pub async fn run_cli<C: Send + Sync + 'static>(
     if !alias_errors.is_empty() {
         return Err(alias_errors.join("\n"));
     }
-    let format_errors = options
-        .formats
-        .problems(&options.target, &capability_ids, &event_ids);
+    let no_formats = CliFormats::new();
+    let formats = options
+        .output
+        .as_ref()
+        .map_or(&no_formats, |output| &output.formats);
+    let format_errors = formats.problems(&options.target, &capability_ids, &event_ids);
     if !format_errors.is_empty() {
         return Err(format_errors.join("\n"));
+    }
+    if let Some(output) = &options.output {
+        let output_errors = output.problems(&taken_flags(&view, &aliases));
+        if !output_errors.is_empty() {
+            return Err(output_errors.join("\n"));
+        }
     }
     let mut taken: Vec<String> = GENERIC_COMMANDS
         .iter()
@@ -591,14 +607,27 @@ pub async fn run_cli<C: Send + Sync + 'static>(
             .collect()
     };
     let result: Result<i32, UsageError> = async {
-        let (form, args) = output_option(args)?;
+        let (form, args) = match &options.output {
+            None => (OutputForm::Json, args.to_vec()),
+            Some(output) => {
+                let (chosen, rest) = output
+                    .choose(args)
+                    .map_err(|message| usage_error(message, exit::INVALID_INPUT))?;
+                let fallback = match output.default {
+                    OutputDefault::Auto => options.auto_form.unwrap_or_default(),
+                    OutputDefault::Human => OutputForm::Human,
+                    OutputDefault::Json => OutputForm::Json,
+                };
+                (chosen.unwrap_or(fallback), rest)
+            }
+        };
         let printer = Printer {
-            form: form.or(options.output).unwrap_or_default(),
-            formats: &options.formats,
+            form,
+            formats,
             ui: CliUi::new(options.color.unwrap_or(false)),
         };
         let printer = &printer;
-        let args = args_with_default_alias(args, default_alias.as_ref(), &aliases);
+        let args = args_with_default_alias(&args, default_alias.as_ref(), &aliases);
         let args = args.as_slice();
         let first = args.first().map(String::as_str);
         match first {
@@ -1122,25 +1151,44 @@ fn human_list(capabilities: &[[String; 2]], events: &[[String; 2]]) -> String {
     lines.join("\n")
 }
 
-fn output_option(args: &[String]) -> Result<(Option<OutputForm>, &[String]), UsageError> {
-    let (value, rest) = match args.first().map(String::as_str) {
-        Some("--output") => (
-            args.get(1).map(String::as_str),
-            args.get(2..).unwrap_or_default(),
-        ),
-        Some(first) if first.starts_with("--output=") => {
-            (Some(&first["--output=".len()..]), &args[1..])
+fn taken_flags(view: &Value, aliases: &[Alias]) -> Vec<(String, String)> {
+    let mut taken: Vec<(String, String)> = Vec::new();
+    let mut take = |name: String, what: String| {
+        if !taken.iter().any(|(each, _)| *each == name) {
+            taken.push((name, what));
         }
-        _ => return Ok((None, args)),
     };
-    match value {
-        Some("human") => Ok((Some(OutputForm::Human), rest)),
-        Some("json") => Ok((Some(OutputForm::Json), rest)),
-        _ => Err(usage_error(
-            "The option --output must be human or json.",
-            exit::INVALID_INPUT,
-        )),
+    for flag in RESERVED_FLAGS {
+        take(flag.to_owned(), format!("the flag {flag}"));
     }
+    for flag in RESUME_FLAGS {
+        take(format!("--{flag}"), format!("the flag --{flag} of watch"));
+    }
+    for alias in aliases.iter().filter(|alias| alias.name.starts_with("--")) {
+        take(alias.name.clone(), format!("the flag alias {}", alias.name));
+    }
+    let types = object_at(view, "$defs");
+    for (member, kind) in [("capabilities", "capability"), ("events", "event")] {
+        let entries = view
+            .get(member)
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        for (id, entry) in entries {
+            let Some(input) = entry.get("input") else {
+                continue;
+            };
+            let schema = cli_input_schema(input, types);
+            let properties = schema.get("properties").and_then(Value::as_object);
+            for property in properties.into_iter().flat_map(Map::keys) {
+                take(
+                    format!("--{property}"),
+                    format!("a flag of the {kind} {id}"),
+                );
+            }
+        }
+    }
+    taken
 }
 
 fn split_flag(arg: &str) -> Option<(&str, Option<&str>)> {

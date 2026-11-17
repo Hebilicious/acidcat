@@ -471,29 +471,44 @@ With no arguments, the program runs the default alias. If the first argument sta
 
 #### Output for a person
 
-The command line writes its output in one of two forms: JSON for programs, or text for a person. `--output json` or `--output human` (also `--output=human`) chooses the form. It is an option only as the first argument, before the command, so `node cli.ts --output human` runs the default alias. Another value is a usage error, with exit code 3. Without the option, `NodeCli` writes text for a person only when standard output is a terminal, the variable `CI` is not set, and no variable of a coding agent is set, for example `CLAUDECODE` or `CODEX_THREAD_ID`. Else it writes JSON. A variable is set when its value is not empty, `0`, `false`, `no` or `off`. `Cli.formOf(stdoutIsTerminal, environment)` makes this decision. `Cli.run` and `Cli.runCommand` read the terminal and the environment from the reference `Cli.Terminal`. Its default is no terminal, so in tests the form is JSON. Agents and scripts can give `--output json` to be sure of JSON.
+The command line writes JSON for programs. It can also write text for a person: the human form. The human form is off by default. Without the option `output` of `Cli.Options`, the command line writes JSON only, also on a terminal, and takes no output flag.
+
+To turn the human form on, give `output` (a `Cli.Output`):
+
+- `flags`: the output flags. Each flag has `names`: `--word` or `-x`, with one letter or digit. A switch has `form`: `"human"` or `"json"`, for example `{ names: ["--json"], form: "json" }`. A flag with a value has `values`, a map from each value to a form, for example `{ names: ["--format", "-f"], values: { text: "human", json: "json" } }`. It takes `--format text`, `--format=text` and `-f text`. An output flag can be anywhere in the arguments: `runCommand` removes it before `effect/cli` parses the rest. When the arguments give more than one, the last one wins. A value that is missing or not known is a usage error with exit code 3: `The option --format must be text or json.`
+- `default`: the form when the arguments give no output flag: `"auto"` (the default), `"human"` or `"json"`. With `"auto"`, the form is human only when standard output is a terminal, the variable `CI` is not set, and no variable of a coding agent is set, for example `CLAUDECODE` or `CODEX_THREAD_ID`. Else it is JSON. A variable is set when its value is not empty, `0`, `false`, `no` or `off`. `Cli.formOf(stdoutIsTerminal, environment)` makes this decision. `Cli.run` and `Cli.runCommand` read the terminal and the environment from the reference `Cli.Terminal`. Its default is no terminal, so in tests the form is JSON. `NodeCli` gives the terminal and the environment of the process.
+- `formats`: the formatters of the human form (see below).
+
+An output flag can have the name `-h`: then `-h` chooses its form, and `--help` writes the help. `Cli.command` throws, so the program stops with an error when it starts, if the name of an output flag is not valid, is in two output flags, or is the name of another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or a flag of the input of a capability or an event of the view.
 
 The text for a person has color only when standard output is a terminal and `NO_COLOR` is not set. The exit code and the stream of each outcome are the same in both forms. A call failure goes to standard error as `error (<kind>): <message>`. `list` gives a table of the commands and the events. `watch` writes one block for each occurrence. Help, `--version` and usage errors are the same in both forms.
 
-Without a formatter, the text is a generic layout of the value: an object gives one line for each member, an array of objects gives a table, and an array of scalars gives its items with commas. `Cli.layout(value)` gives this text. `App.format` makes a formatter for a capability or an event, and the option `formats` of the command line takes them. A formatter gets its value in the `Type` form of its schema: the command line decodes the JSON form with the output schema, a failure schema or the payload schema first. A formatter also gets `ui`, with the styles `bold`, `dim`, `ok`, `warn` and `error`, and `table(header, rows)`. For example, in [`examples/aircon/core-effect/formats.ts`](../../examples/aircon/core-effect/formats.ts):
+Without a formatter, the text is a generic layout of the value: an object gives one line for each member, an array of objects gives a table, and an array of scalars gives its items with commas. `Cli.layout(value)` gives this text. `App.format` makes a formatter for a capability or an event, and `output.formats` takes them. A formatter gets its value in the `Type` form of its schema: the command line decodes the JSON form with the output schema, a failure schema or the payload schema first. A formatter also gets `ui`, with the styles `bold`, `dim`, `ok`, `warn` and `error`, and `table(header, rows)`. For example, in [`examples/aircon/core-effect/output.ts`](../../examples/aircon/core-effect/output.ts):
 
 ```ts
 const statusText = ({ power, mode, fan, targetCelsius, roomCelsius }: typeof Status.Type, ui: Cli.Ui) =>
   `${ui.bold(power ? "on" : "off")} · ${mode} · fan ${fan} · target ${targetCelsius}°C · room ${roomCelsius}°C`;
 
-export const formats = [
-  App.format(statusGet, {
-    value: statusText,
-    failures: { Offline: ({ since }, ui) => `${ui.error("offline")}${since === undefined ? "" : ` since ${since}`}` },
-  }),
-  App.format(statusChanged, statusText),
-];
+export const output: Cli.Output = {
+  flags: [
+    { names: ["--output", "-o"], values: { human: "human", json: "json" } },
+    { names: ["--json"], form: "json" },
+  ],
+  formats: [
+    App.format(statusGet, {
+      value: statusText,
+      failures: { Offline: ({ since }, ui) => `${ui.error("offline")}${since === undefined ? "" : ` since ${since}`}` },
+    }),
+    App.format(statusChanged, statusText),
+  ],
+};
 
-NodeCli.main(aircon, layer, { name: "aircon", version: "0.1.0", formats });
+NodeCli.main(aircon, layer, { name: "aircon", version: "0.1.0", output });
 ```
 
 ```sh
-node cli.ts --output human status   # off · cool · fan auto · target 22°C · room 25°C
+node cli.ts status --output human   # off · cool · fan auto · target 22°C · room 25°C
+node cli.ts status --json           # {"power": false, "mode": "cool", …}
 ```
 
 `App.format(capability, { value, failures })` takes a formatter for the value, and one for each tag of the failures. Each one is optional. `App.format(capability, value)` takes only the formatter of the value, and `App.format(event, payload)` takes the formatter of the payload. TypeScript checks the tags and the types of the values. A `null` value gives no output. When the value does not decode, or the formatter throws, the command line writes the generic layout, with the same exit code. If two formats have the same id, or the id of a format is not in the view of the target, `Cli.command` throws, so the program stops with an error when it starts.

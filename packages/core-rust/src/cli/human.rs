@@ -38,8 +38,8 @@ fn is_truthy(value: Option<String>) -> bool {
     })
 }
 
-/// The form of the output when the arguments do not give `--output`: [`OutputForm::Human`] only when standard output
-/// is a terminal, `CI` is not truthy and no variable of a coding agent is truthy. `env` gives the value of an
+/// The form that [`OutputDefault::Auto`](super::OutputDefault::Auto) gives: [`OutputForm::Human`] only when standard
+/// output is a terminal, `CI` is not truthy and no variable of a coding agent is truthy. `env` gives the value of an
 /// environment variable.
 pub fn output_form(is_terminal: bool, env: impl Fn(&str) -> Option<String>) -> OutputForm {
     let automated = std::iter::once("CI")
@@ -127,7 +127,7 @@ struct Format {
 }
 
 /// The formats of the human form of the output, for the values and the failures of capabilities and the payloads of
-/// events. Give them to [`CliOptions::formats`](super::CliOptions::formats).
+/// events. Give them to [`CliOutput::formats`](super::CliOutput::formats).
 ///
 /// A format gets the value decoded again from its JSON form with `serde_json::from_value`, so its type is the type of
 /// the definition:

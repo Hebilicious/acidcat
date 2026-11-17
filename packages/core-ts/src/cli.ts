@@ -24,8 +24,8 @@ import {
 import type { Availability, CallFailure, CatalogCapability, CatalogDocument, CliAlias, JsonObject, Occurrence, Outcome } from "@acid-cat/spec-ts";
 
 import { catalogOf } from "./app.ts";
-import { cliFormatErrors, cliLayout, cliListText, cliUi, defaultCliOutput } from "./cli-human.ts";
-import type { CliFormat, CliOutput, CliRender } from "./cli-human.ts";
+import { cliFormatErrors, cliLayout, cliListText, cliOutputChoice, cliOutputErrors, cliUi, defaultCliOutput } from "./cli-human.ts";
+import type { CliForm, CliFormat, CliOutput, CliOutputChoice, CliRender } from "./cli-human.ts";
 import type { App, ToJsonSchema } from "./app.ts";
 import type { HttpClient } from "./http-client.ts";
 import { createSession } from "./session.ts";
@@ -55,10 +55,12 @@ export interface CliOptions<Context> {
    */
   readonly remote?: HttpClient | undefined;
   /**
-   * The formatters of the human form of the output, made with `cliFormat`. Give one format at most for each capability
-   * or event of the view. A value with no formatter has the generic layout.
+   * The human form of the output: its flags, its default and its formatters. Without it, the command line writes JSON
+   * only. The program stops with an error when it starts if the name of an output flag is not valid, is in two output
+   * flags, or is the name of another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or a flag
+   * of the input of a capability or an event of the view.
    */
-  readonly formats?: readonly CliFormat[] | undefined;
+  readonly output?: CliOutput | undefined;
 }
 
 interface Provider {
@@ -101,8 +103,8 @@ export interface CliIo {
   readonly stdout: (text: string) => void;
   readonly stderr: (text: string) => void;
   readonly signal?: AbortSignal | undefined;
-  /** The form of the output when the arguments do not give `--output`. The default is `"json"`. */
-  readonly output?: CliOutput | undefined;
+  /** The form that the default `"auto"` of the option `output` gives. The default is `"json"`. */
+  readonly output?: CliForm | undefined;
   /** Style the human form with ANSI colors. The default is `false`. */
   readonly color?: boolean | undefined;
 }
@@ -129,9 +131,8 @@ class UsageError extends Error {
 
 /**
  * Run the command line as the main program of the process. An interrupt (`SIGINT`) cancels the call or the subscription.
- * The default arguments are the arguments of the process. The output is in the human form when standard output is a
- * terminal and no CI and no coding agent is detected, and JSON in all other cases. `--output human` or `--output json`
- * as the first argument chooses the form.
+ * The default arguments are the arguments of the process. With the option `output`, the default `"auto"` gives the human
+ * form when standard output is a terminal and no CI and no coding agent is detected, and JSON in all other cases.
  */
 export function main<Context>(app: App<Context>, options: CliOptions<Context>, args: readonly string[] = process.argv.slice(2)): void {
   const interrupt = new AbortController();
@@ -149,12 +150,6 @@ export function main<Context>(app: App<Context>, options: CliOptions<Context>, a
 
 /** Run the command line with arguments. The result is the exit code (spec/bindings/cli.md#outcomes). */
 export async function runCli<Context>(app: App<Context>, options: CliOptions<Context>, argv: readonly string[], io: CliIo): Promise<number> {
-  const chosen = outputOption(argv);
-  if (chosen === undefined) {
-    io.stderr("The option --output must be human or json.");
-    return CLI_EXIT_CODES["invalid-input"];
-  }
-  const { output = io.output ?? "json", args } = chosen;
   const provider = options.remote === undefined ? localProvider(app, options) : remoteProvider(app, options, options.remote);
   const view = provider.view;
   const types = view.$defs ?? {};
@@ -181,9 +176,17 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   const aliasUsages = (kind: CliAlias["kind"], id: string): readonly string[] =>
     aliases.filter((alias) => alias.kind === kind && alias.id === id).map(aliasUsage);
 
-  const formats = options.formats ?? [];
+  const formats = options.output?.formats ?? [];
   const formatErrors = cliFormatErrors(formats, Object.keys(view.capabilities), Object.keys(view.events ?? {}));
   if (formatErrors.length > 0) throw new Error(formatErrors.join("\n"));
+  const outputFlags = options.output?.flags ?? [];
+  const outputErrors = cliOutputErrors(outputFlags, takenFlags(view, aliases));
+  if (outputErrors.length > 0) throw new Error(outputErrors.join("\n"));
+  const chosen: CliOutputChoice = options.output === undefined ? { args: argv } : cliOutputChoice(outputFlags, argv);
+  const args = chosen.error === undefined ? chosen.args : [];
+  const chosenForm = chosen.error === undefined ? chosen.form : undefined;
+  const outputDefault = options.output?.default ?? "auto";
+  const output: CliForm = options.output === undefined ? "json" : (chosenForm ?? (outputDefault === "auto" ? (io.output ?? "json") : outputDefault));
   const formatOf = (id: string): CliFormat | undefined => formats.find((format) => format.id === id);
   const ui = cliUi(io.color === true);
   const render = async (format: CliRender | undefined, json: unknown): Promise<string> => {
@@ -314,6 +317,10 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   };
 
   try {
+    if (chosen.error !== undefined) {
+      io.stderr(chosen.error);
+      return CLI_EXIT_CODES["invalid-input"];
+    }
     const [first, ...rest] = argsWithDefaultAlias();
     if (first === undefined || first === "--help" || first === "-h") {
       const description = options.description ?? app.description ?? app.title ?? options.name;
@@ -416,12 +423,25 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   }
 }
 
-function outputOption(args: readonly string[]): { readonly output?: CliOutput; readonly args: readonly string[] } | undefined {
-  const [first, ...rest] = args;
-  if (first !== "--output" && first?.startsWith("--output=") !== true) return { args };
-  const [value, ...others] = first === "--output" ? rest : [first.slice("--output=".length), ...rest];
-  if (value !== "human" && value !== "json") return undefined;
-  return { output: value, args: others };
+function takenFlags(view: CatalogDocument, aliases: readonly CliAlias[]): ReadonlyMap<string, string> {
+  const taken = new Map<string, string>();
+  const take = (name: string, what: string) => {
+    if (!taken.has(name)) taken.set(name, what);
+  };
+  take("--help", "the flag --help");
+  take("--version", "the flag --version");
+  for (const flag of CLI_RESUME_FLAGS) take(`--${flag}`, `the flag --${flag} of watch`);
+  for (const { name } of aliases) if (name.startsWith("--")) take(name, `the flag alias ${name}`);
+  const types = view.$defs ?? {};
+  const members = [
+    ...Object.entries(view.capabilities).map(([id, { input }]) => ({ member: "capability", id, input })),
+    ...Object.entries(view.events ?? {}).map(([id, { input }]) => ({ member: "event", id, input })),
+  ];
+  for (const { member, id, input } of members) {
+    const properties = input === undefined ? undefined : cliInputSchema(input, types).properties;
+    for (const property of Object.keys(objectOrEmpty(properties))) take(`--${property}`, `a flag of the ${member} ${id}`);
+  }
+  return taken;
 }
 
 const jsonOf = (value: unknown): unknown => {

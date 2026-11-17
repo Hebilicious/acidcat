@@ -26,12 +26,32 @@ import { Argument, CliConfig, CliError, CliOutput, Command, CommandSpec, Flag, P
 import * as App from "./App.ts";
 import type { AnySchema } from "./Capability.ts";
 import type * as Http from "./Http.ts";
-import { formOf, hasColor, layout, ui } from "./internal/human.ts";
-import type { Environment, Form, Ui } from "./internal/human.ts";
+import { formOf, hasColor, layout, outputChoice, outputErrors, ui } from "./internal/human.ts";
+import type { Environment, Form, OutputFlag, Ui } from "./internal/human.ts";
 import * as Session from "./Session.ts";
 
 export { formOf, layout } from "./internal/human.ts";
-export type { Environment, Form, Ui } from "./internal/human.ts";
+export type { Environment, Form, OutputFlag, Ui } from "./internal/human.ts";
+
+/** The human form of the output. Without it, the command line writes JSON only, and takes no output flag. */
+export interface Output {
+  /**
+   * The flags that choose the form. They can be anywhere in the arguments. When the arguments give more than one, the
+   * last one wins.
+   */
+  readonly flags?: readonly OutputFlag[] | undefined;
+  /**
+   * The form when the arguments give no output flag. `"auto"`, the default, is the human form when standard output is
+   * a terminal and no CI and no coding agent is detected (see `formOf`), and JSON in all other cases.
+   */
+  readonly default?: "auto" | Form | undefined;
+  /**
+   * How the human form writes the outcomes of some capabilities and the occurrences of some events. Make each one with
+   * `App.format`. Without a format, the human form writes the generic layout of the value. `command` throws if two
+   * formats have the same id, or if the id of a format is not in the view of `target`.
+   */
+  readonly formats?: readonly App.Format[] | undefined;
+}
 
 export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = readonly []> {
   readonly name: string;
@@ -57,16 +77,17 @@ export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = r
    */
   readonly remote?: Http.Client | undefined;
   /**
-   * How the human form of the output writes the outcomes of some capabilities and the occurrences of some events. Make
-   * each one with `App.format`. Without a format, the human form writes the generic layout of the value. `command`
-   * throws if two formats have the same id, or if the id of a format is not in the view of `target`.
+   * The human form of the output: its flags, its default and its formats. Without it, the command line writes JSON
+   * only. `command` throws if the name of an output flag is not valid, is in two output flags, or is the name of
+   * another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or a flag of the input of a
+   * capability or an event of the view.
    */
-  readonly formats?: readonly App.Format[] | undefined;
+  readonly output?: Output | undefined;
 }
 
 /**
- * Standard output, and the environment of the process, that decide the form of the output when the arguments do not
- * give `--output`. The default is no terminal, so the form is JSON. `NodeCli` gives the ones of the process.
+ * Standard output, and the environment of the process, that decide the form of the output under the default `"auto"`
+ * of `Output`. The default is no terminal, so the form is JSON. `NodeCli` gives the ones of the process.
  */
 export interface Terminal {
   readonly stdoutIsTerminal: boolean;
@@ -84,20 +105,7 @@ interface Presentation {
 
 const Presentation = Context.Reference<Presentation>("@acid-cat/core-effect/Cli/Presentation", { defaultValue: () => ({ form: "json", ui: ui(false) }) });
 
-const OUTPUT_ERROR = "The option --output must be human or json.";
-
-function chosenForm(args: readonly string[]): { readonly form: Form | undefined; readonly rest: readonly string[] } | undefined {
-  const [first, ...rest] = args;
-  if (first === "--output") {
-    const [value, ...others] = rest;
-    return value === "human" || value === "json" ? { form: value, rest: others } : undefined;
-  }
-  if (first?.startsWith("--output=") === true) {
-    const value = first.slice("--output=".length);
-    return value === "human" || value === "json" ? { form: value, rest } : undefined;
-  }
-  return { form: undefined, rest: args };
-}
+const OutputOption = Context.Reference<Output | undefined>("@acid-cat/core-effect/Cli/Output", { defaultValue: () => undefined });
 
 interface AliasEntry {
   readonly name: string;
@@ -204,6 +212,7 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   options: { readonly version: string },
 ): Effect.Effect<void | number, Exclude<E, CliError.CliError>, R | Command.Environment> => {
   const aliases = Context.get(command.annotations, Aliases);
+  const output = Context.get(command.annotations, OutputOption);
   const dispatch = (args: readonly string[]) =>
     Effect.gen(function* () {
     const runWith = Command.runWith(command, { version: options.version });
@@ -227,16 +236,19 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
     return yield* runWith(args);
   });
   const program = Effect.gen(function* () {
-    const chosen = chosenForm(yield* (yield* Stdio.Stdio).args);
-    if (chosen === undefined) {
-      yield* Console.error(OUTPUT_ERROR);
+    const args = yield* (yield* Stdio.Stdio).args;
+    if (output === undefined) return yield* dispatch(args);
+    const chosen = outputChoice(output.flags ?? [], args);
+    if (chosen.error !== undefined) {
+      yield* Console.error(chosen.error);
       process.exitCode = CLI_EXIT_CODES["invalid-input"];
       return;
     }
     const terminal = yield* Terminal;
-    const form = chosen.form ?? formOf(terminal.stdoutIsTerminal, terminal.environment);
+    const fallback = output.default ?? "auto";
+    const form = chosen.form ?? (fallback === "auto" ? formOf(terminal.stdoutIsTerminal, terminal.environment) : fallback);
     const presentation: Presentation = { form, ui: ui(hasColor(form, terminal.stdoutIsTerminal, terminal.environment)) };
-    return yield* Effect.provideService(dispatch(chosen.rest), Presentation, presentation);
+    return yield* Effect.provideService(dispatch(chosen.args), Presentation, presentation);
   });
   return Effect.catchIf(
     program,
@@ -320,7 +332,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   const types = catalogView.$defs ?? {};
 
   const formats = new Map<string, App.Format>();
-  for (const format of options.formats ?? []) {
+  for (const format of options.output?.formats ?? []) {
     if (formats.has(format.id)) throw new Error(`There are two formats for ${format.id}.`);
     const members = format.member === "event" ? (catalogView.events ?? {}) : catalogView.capabilities;
     if (ownMember(members, format.id) === undefined) throw new Error(`The format of ${format.id} refers to a ${format.member} that is not in the view of the target ${target}.`);
@@ -547,6 +559,8 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     }
   }
   for (const { name } of aliases) taken.add(name);
+  const errors = outputErrors(options.output?.flags ?? [], takenFlags(catalogView, aliases));
+  if (errors.length > 0) throw new Error(errors.join("\n"));
   for (const added of options.commands ?? []) {
     if (taken.has(added.name)) throw new Error(`The command ${added.name} of the application has the same name as another command.`);
     taken.add(added.name);
@@ -559,7 +573,29 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
       Aliases,
       aliasCommands.map(({ entry }) => entry),
     ),
+    Command.annotate(OutputOption, options.output),
   );
+}
+
+function takenFlags(view: CatalogDocument, aliases: ReadonlyArray<{ readonly name: string }>): ReadonlyMap<string, string> {
+  const taken = new Map<string, string>();
+  const take = (name: string, what: string) => {
+    if (!taken.has(name)) taken.set(name, what);
+  };
+  take("--help", "the flag --help");
+  take("--version", "the flag --version");
+  for (const flag of CLI_RESUME_FLAGS) take(`--${flag}`, `the flag --${flag} of watch`);
+  for (const { name } of aliases) if (name.startsWith("--")) take(name, `the flag alias ${name}`);
+  const types = view.$defs ?? {};
+  const members = [
+    ...Object.entries(view.capabilities).map(([id, { input }]) => ({ member: "capability", id, input })),
+    ...Object.entries(view.events ?? {}).map(([id, { input }]) => ({ member: "event", id, input })),
+  ];
+  for (const { member, id, input } of members) {
+    const properties = input === undefined ? {} : schemasIn(cliInputSchema(input, types).properties);
+    for (const property of Object.keys(properties)) take(`--${property}`, `a flag of the ${member} ${id}`);
+  }
+  return taken;
 }
 
 interface Leaf<R> {

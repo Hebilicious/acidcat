@@ -14,6 +14,67 @@ export interface Ui {
 
 export type Environment = { readonly [name: string]: string | undefined };
 
+/**
+ * A flag that chooses the form of the output. Each name is `--word` or `-x`, with one letter or digit. A switch gives
+ * `form`, for example `--json`. A flag with a value gives `values`, a map from each value to a form, for example
+ * `--format <text|json>` with `{ text: "human", json: "json" }`. It takes `--format text`, `--format=text` and `-f text`.
+ */
+export type OutputFlag =
+  | { readonly names: readonly string[]; readonly form: Form; readonly values?: undefined }
+  | { readonly names: readonly string[]; readonly values: { readonly [value: string]: Form }; readonly form?: undefined };
+
+const LONG_NAME = /^--[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+
+const SHORT_NAME = /^-[A-Za-z0-9]$/;
+
+export function outputErrors(flags: readonly OutputFlag[], otherFlags: ReadonlyMap<string, string>): readonly string[] {
+  const errors: string[] = [];
+  const seen = new Set<string>();
+  for (const flag of flags) {
+    const [first] = flag.names;
+    if (first === undefined) errors.push("An output flag has no name.");
+    for (const name of flag.names) {
+      if (!LONG_NAME.test(name) && !SHORT_NAME.test(name)) {
+        errors.push(`The output flag ${name} is not a valid name. Give --<word> or -<letter or digit>.`);
+        continue;
+      }
+      if (seen.has(name)) errors.push(`The output flag ${name} has the same name as another output flag.`);
+      seen.add(name);
+      const other = otherFlags.get(name);
+      if (other !== undefined) errors.push(`The output flag ${name} has the same name as ${other}.`);
+    }
+    if (first !== undefined && flag.values !== undefined && Object.keys(flag.values).length === 0) errors.push(`The output flag ${first} has no values.`);
+  }
+  return errors;
+}
+
+const choices = (values: readonly string[]): string => (values.length < 2 ? values.join("") : `${values.slice(0, -1).join(", ")} or ${values.at(-1) ?? ""}`);
+
+export type OutputChoice = { readonly form: Form | undefined; readonly args: readonly string[]; readonly error?: undefined } | { readonly error: string };
+
+export function outputChoice(flags: readonly OutputFlag[], args: readonly string[]): OutputChoice {
+  const rest: string[] = [];
+  let form: Form | undefined;
+  const items = args.values();
+  for (const arg of items) {
+    const [name = arg, inline] = arg.startsWith("--") ? arg.split(/=(.*)/s, 2) : [arg];
+    const flag = flags.find(({ names }) => names.includes(name));
+    if (flag === undefined || (flag.values === undefined && inline !== undefined)) {
+      rest.push(arg);
+      continue;
+    }
+    if (flag.values === undefined) {
+      form = flag.form;
+      continue;
+    }
+    const value = inline ?? items.next().value;
+    const chosen = value === undefined || !Object.hasOwn(flag.values, value) ? undefined : flag.values[value];
+    if (chosen === undefined) return { error: `The option ${name} must be ${choices(Object.keys(flag.values))}.` };
+    form = chosen;
+  }
+  return { form, args: rest };
+}
+
 const AGENT_VARIABLES = [
   "AI_AGENT",
   "CLAUDECODE",
@@ -34,8 +95,8 @@ const FALSE_VALUES = new Set(["", "0", "false", "no", "off"]);
 const isTruthy = (value: string | undefined): boolean => value !== undefined && !FALSE_VALUES.has(value.trim().toLowerCase());
 
 /**
- * The form of the output when the arguments do not choose one: human when standard output is a terminal and the
- * environment shows no CI and no coding agent, else JSON.
+ * The form that the default `"auto"` of the output gives: human when standard output is a terminal and the environment
+ * shows no CI and no coding agent, else JSON.
  */
 export const formOf = (stdoutIsTerminal: boolean, environment: Environment): Form =>
   stdoutIsTerminal && !isTruthy(environment.CI) && !AGENT_VARIABLES.some((name) => isTruthy(environment[name])) ? "human" : "json";

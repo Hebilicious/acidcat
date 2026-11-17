@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use acid_cat_core::cli::{CliAliases, CliFormats, CliUi};
+use acid_cat_core::cli::{CliAliases, CliFormats, CliOutput, CliUi, OutputForm};
 use acid_cat_core::{App, Application, Availability, Emitted, RunResult, Target, fail};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -244,7 +244,7 @@ fn status_text(status: &Status, ui: &CliUi) -> String {
     )
 }
 
-pub fn aircon() -> (Arc<Application<Unit>>, CliFormats) {
+pub fn aircon() -> (Arc<Application<Unit>>, CliOutput) {
     let status_get = Capability::new(
         "aircon.status.get",
         "Read the unit's power, mode, fan speed, target temperature and room temperature.",
@@ -295,6 +295,12 @@ pub fn aircon() -> (Arc<Application<Unit>>, CliFormats) {
             })
         });
 
+    let output = CliOutput::new()
+        .values(
+            ["--output", "-o"],
+            [("human", OutputForm::Human), ("json", OutputForm::Json)],
+        )
+        .switch(["--json"], OutputForm::Json);
     let formats = CliFormats::new()
         .capability(&status_get, status_text)
         .failure(&status_get, |Offline::Offline { since }: &Offline, ui| {
@@ -438,13 +444,13 @@ pub fn aircon() -> (Arc<Application<Unit>>, CliFormats) {
         .event(status_changed)
         .build()
         .unwrap_or_else(|problems| panic!("the air conditioner does not conform: {problems:?}"));
-    (app, formats)
+    (app, output.formats(formats))
 }
 
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let (app, formats) = aircon();
+    let (app, output) = aircon();
     let unit = Arc::new(Unit::default());
     match args.first().map(String::as_str) {
         Some("catalog") => print!("{}", app.render_catalog()),
@@ -455,7 +461,7 @@ async fn main() {
                 files: true,
                 ..Unit::default()
             });
-            let mut options = CliOptions::new("aircon", "0.1.0").formats(formats);
+            let mut options = CliOptions::new("aircon", "0.1.0").output(output);
             if let Ok(url) = std::env::var("AIRCON_URL") {
                 match HttpClient::new(&url) {
                     Ok(client) => options = options.remote(client),
@@ -619,13 +625,10 @@ mod tests {
             .to_owned()
     }
 
-    #[tokio::test]
-    async fn the_human_form_of_aircon_status_get_is_offline_while_the_unit_is_offline() {
+    async fn on_terminal(unit: Arc<Unit>, args: &[&str]) -> (i32, String) {
         use acid_cat_core::cli::{CliIo, CliOptions, run_cli};
 
-        let (app, formats) = aircon();
-        let unit = Arc::new(Unit::default());
-        unit.set_online(false);
+        let (app, output) = aircon();
         let written = Arc::new(Mutex::new(String::new()));
         let stdout = written.clone();
         let mut io = CliIo {
@@ -633,11 +636,35 @@ mod tests {
             stderr: Box::new(|text| panic!("no text on standard error: {text}")),
             cancel: CancellationToken::new(),
         };
-        let args = ["--output", "human", "aircon", "status", "get"].map(String::from);
-        let options = CliOptions::new("aircon", "0.1.0").formats(formats);
-        let code = run_cli(&app, unit, &options, &args, &mut io).await;
-        assert_eq!(code, Ok(1));
-        assert_eq!(*written.lock().unwrap(), human_text("OFFLINE"));
+        let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+        let mut options = CliOptions::new("aircon", "0.1.0").output(output);
+        options.auto_form = Some(OutputForm::Human);
+        let code = run_cli(&app, unit, &options, &args, &mut io)
+            .await
+            .expect("the command line starts");
+        let text = written.lock().unwrap().clone();
+        (code, text)
+    }
+
+    #[tokio::test]
+    async fn on_a_terminal_the_command_line_writes_the_human_form_unless_an_output_flag_chooses_json()
+     {
+        let unit = || Arc::new(Unit::default());
+        assert_eq!(
+            on_terminal(unit(), &["status"]).await,
+            (0, human_text("STATUS_OFF"))
+        );
+        let (code, json) = on_terminal(unit(), &["status", "--json"]).await;
+        assert_eq!(code, 0);
+        let status: serde_json::Value = serde_json::from_str(&json).expect("the output is JSON");
+        assert_eq!(status["power"], serde_json::json!(false));
+        assert_eq!(on_terminal(unit(), &["--json"]).await, (0, json));
+        let offline = unit();
+        offline.set_online(false);
+        assert_eq!(
+            on_terminal(offline, &["aircon", "status", "get"]).await,
+            (1, human_text("OFFLINE"))
+        );
     }
 
     #[tokio::test]

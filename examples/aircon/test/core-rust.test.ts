@@ -8,7 +8,7 @@ import { type TestContext, test } from "node:test";
 
 import { check } from "@acid-cat/cli";
 
-import { POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
+import { OUTPUT_ERROR, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 
@@ -64,20 +64,21 @@ test("the Rust command line takes one repeated flag for each item, or JSON text 
   assert.match(list.stdout, /"usage": "aircon aircon schedule set --days <mon\|tue\|wed\|thu\|fri\|sat\|sun>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });
 
-test("the Rust command line writes the human form with --output human, and its formats", async () => {
-  const [status, fallback, poweredOff, schedule, list, unknown, json, plain, xml] = await Promise.all([
-    cli("--output", "human", "aircon", "status", "get"),
-    cli("--output", "human"),
-    cli("--output", "human", "aircon", "mode", "set", "--mode", "heat"),
-    cli("--output", "human", "aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18"),
-    cli("--output", "human", "list"),
-    cli("--output", "human", "call", "nope"),
+test("the Rust command line writes the human form with its output flags", async () => {
+  const [status, short, inline, defaultAlias, poweredOff, schedule, list, unknown, json, plain, xml] = await Promise.all([
+    cli("status", "--output", "human"),
+    cli("-o", "human", "status"),
+    cli("--output=human", "status"),
+    cli("-o", "human"),
+    cli("aircon", "mode", "set", "--output", "human", "--mode", "heat"),
+    cli("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18", "--output=human"),
+    cli("list", "-o", "human"),
+    cli("call", "nope", "--output", "human"),
     cli("--output", "json", "aircon", "status", "get"),
     cli("aircon", "status", "get"),
-    cli("--output", "xml", "status"),
+    cli("status", "--output", "xml"),
   ]);
-  assert.deepEqual([status.code, status.stdout], [0, `${STATUS_OFF}\n`]);
-  assert.deepEqual([fallback.code, fallback.stdout], [0, `${STATUS_OFF}\n`]);
+  for (const human of [status, short, inline, defaultAlias]) assert.deepEqual([human.code, human.stdout], [0, `${STATUS_OFF}\n`]);
   assert.deepEqual([poweredOff.code, poweredOff.stdout], [1, `${POWERED_OFF_LAYOUT}\n`]);
   assert.deepEqual([schedule.code, schedule.stdout], [0, `${SCHEDULE_LAYOUT}\n`]);
   assert.ok(list.stdout.startsWith("Capabilities\n  aircon status get "), list.stdout);
@@ -85,7 +86,7 @@ test("the Rust command line writes the human form with --output human, and its f
   assert.equal(unknown.code, 2);
   assert.ok(unknown.stderr.startsWith("error (unknown-capability): "), unknown.stderr);
   assert.deepEqual([json.code, json.stdout], [0, plain.stdout]);
-  assert.equal(xml.code, 3);
+  assert.deepEqual([xml.code, xml.stdout, xml.stderr], [3, "", `${OUTPUT_ERROR}\n`]);
 });
 
 async function startRemote(context: TestContext) {

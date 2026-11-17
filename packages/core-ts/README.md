@@ -388,7 +388,15 @@ An alias can also name an event: `follow: cliAlias(statusChanged)` makes `node c
 
 #### Human output
 
-The command line writes JSON for programs, and a form of the output for a person. `cliMain` writes the human form when standard output is a terminal, the environment variable `CI` is not set, and no coding agent is detected. These variables tell a coding agent: `AI_AGENT`, `CLAUDECODE`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `GEMINI_CLI`, `OPENCODE`, `AMP_CURRENT_THREAD_ID`, `AUGMENT_AGENT`, `QWEN_CODE_SESSION_ID`, `PI_CODING_AGENT`, `CRUSH` and `COPILOT_AGENT`. A variable is set when its value is not empty, `0`, `false`, `no` or `off`. In all other cases, the output is JSON. `--output human` or `--output json`, as the first argument, chooses the form. Agents and scripts can give `--output json` to be sure of JSON. `runCli` writes JSON, unless its `io` has `output: "human"` or the arguments give `--output human`. The human form has colors only on a terminal, and only when `NO_COLOR` is not set.
+The command line writes JSON for programs. It can also write a form of the output for a person: the human form. The human form is off by default. Without the option `output`, the command line writes JSON only, also on a terminal, and takes no output flag.
+
+To turn the human form on, give the option `output` of `cliMain` and `runCli`:
+
+- `flags`: the output flags. Each flag has `names`: `--word` or `-x`, with one letter or digit. A switch has `form`: `"human"` or `"json"`, for example `{ names: ["--json"], form: "json" }`. A flag with a value has `values`, a map from each value to a form, for example `{ names: ["--format", "-f"], values: { text: "human", json: "json" } }`. It takes `--format text`, `--format=text` and `-f text`. An output flag can be anywhere in the arguments. When the arguments give more than one, the last one wins. A value that is missing or not known is a usage error with exit code 3: `The option --format must be text or json.`
+- `default`: the form when the arguments give no output flag: `"auto"` (the default), `"human"` or `"json"`. With `"auto"`, `cliMain` writes the human form when standard output is a terminal, the environment variable `CI` is not set, and no coding agent is detected. These variables tell a coding agent: `AI_AGENT`, `CLAUDECODE`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `GEMINI_CLI`, `OPENCODE`, `AMP_CURRENT_THREAD_ID`, `AUGMENT_AGENT`, `QWEN_CODE_SESSION_ID`, `PI_CODING_AGENT`, `CRUSH` and `COPILOT_AGENT`. A variable is set when its value is not empty, `0`, `false`, `no` or `off`. In all other cases, the output is JSON. `runCli` takes this form from `io.output`, and the default is `"json"`.
+- `formats`: the formatters of the human form (see below).
+
+An output flag can have the name `-h`: then `-h` chooses its form, and `--help` writes the help. `runCli` rejects, and `cliMain` stops the program with an error when it starts, if the name of an output flag is not valid, is in two output flags, or is the name of another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or a flag of the input of a capability or an event of the view. The human form has colors only on a terminal, and only when `NO_COLOR` is not set.
 
 The exit code and the stream of each outcome are the same in the two forms. Help, usage and `--version` do not change. In the human form:
 
@@ -400,7 +408,7 @@ The exit code and the stream of each outcome are the same in the two forms. Help
 
 The generic layout writes an object as one `key  value` line for each scalar member, and as `key:` and an indented block for each other member. An array of scalars is one line, with `, ` between the items. An array of flat objects is a table. Another array is a list with `- `.
 
-`cliFormat` makes a formatter. Give the formatters in the option `formats` of `cliMain` and `runCli`. `cliFormat` takes the capability or the event, and the types of the value, of each failure and of the payload come from their schemas. A formatter gets the value decoded from its JSON form with its schema, and `ui`: `bold`, `dim`, `ok`, `warn` and `error` style a text, and `table(header, rows)` writes a table. If the value does not decode, or the formatter throws, the command line writes the generic layout. Two formats for one id, or a format for an id that is not in the view, make `runCli` reject when it starts.
+`cliFormat` makes a formatter. Give the formatters in `output.formats`. `cliFormat` takes the capability or the event, and the types of the value, of each failure and of the payload come from their schemas. A formatter gets the value decoded from its JSON form with its schema, and `ui`: `bold`, `dim`, `ok`, `warn` and `error` style a text, and `table(header, rows)` writes a table. If the value does not decode, or the formatter throws, the command line writes the generic layout. Two formats for one id, or a format for an id that is not in the view, make `runCli` reject when it starts.
 
 ```ts
 import { cliFormat, cliMain } from "@acid-cat/core-ts";
@@ -413,16 +421,22 @@ cliMain(aircon, {
   version: "0.1.0",
   context: { unit },
   toJsonSchema,
-  formats: [
-    cliFormat(statusGet, { value: statusText, failures: { Offline: (_, ui) => ui.error("offline") } }),
-    cliFormat(statusChanged, statusText),
-  ],
+  output: {
+    flags: [
+      { names: ["--format", "-f"], values: { text: "human", json: "json" } },
+      { names: ["--json"], form: "json" },
+    ],
+    formats: [
+      cliFormat(statusGet, { value: statusText, failures: { Offline: (_, ui) => ui.error("offline") } }),
+      cliFormat(statusChanged, statusText),
+    ],
+  },
 });
 ```
 
 ```sh
-node cli.ts --output human aircon status get   # off · cool
-node cli.ts --output json aircon status get    # {"power":false,"mode":"cool",…}
+node cli.ts aircon status get --format text   # off · cool
+node cli.ts aircon status get --json          # {"power":false,"mode":"cool",…}
 ```
 
 ### Command line of a server

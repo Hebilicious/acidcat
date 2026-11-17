@@ -29,11 +29,12 @@ node core-ts/cli.ts aircon power set --on
 node core-effect/cli.ts aircon mode set --mode heat
 node core-ts/cli.ts aircon schedule set --days mon --days fri --hours 7 --hours 18
 node core-ts/cli.ts list
-node core-ts/cli.ts --output human aircon status get
+node core-ts/cli.ts aircon status get --output human
+node core-effect/cli.ts status --json
 cargo run --manifest-path core-rust/Cargo.toml -- cli aircon fan set --speed high
 ```
 
-In a terminal, each command line writes text for a person: `aircon status get` gives `off · cool · fan auto · target 22°C · room 25°C`. Each core formats the status and the `Offline` failure of `aircon.status.get` and the payload of `aircon.status.changed`, and prints the other values in the generic layout. In a pipe, in CI, or for a coding agent, the output is JSON. The first argument `--output json` or `--output human` chooses the form.
+Each command line turns on the human form of the output, which is off by default in each core. In a terminal, each command line writes text for a person: `aircon status get` gives `off · cool · fan auto · target 22°C · room 25°C`. Each core formats the status and the `Offline` failure of `aircon.status.get` and the payload of `aircon.status.changed`, and prints the other values in the generic layout. In a pipe, in CI, or for a coding agent, the output is JSON. The output flags choose the form, anywhere in the arguments: `--output human`, `--output json`, `--output=human`, `-o human` and `--json`.
 
 Each command line can also control a unit in another process or on another machine. The server serves the HTTP binding of the `cli` target, and writes its URL. With `AIRCON_URL`, the command line sends each call and each subscription to that server. Each server runs until you stop it, so start each one in its own terminal. `cargo build --manifest-path core-rust/Cargo.toml` builds the Rust program:
 

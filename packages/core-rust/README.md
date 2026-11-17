@@ -135,7 +135,18 @@ The command line has the [aliases](../../spec/bindings/cli.md#aliases) of its ta
 
 ### The form of the output
 
-The command line writes JSON for programs, and text for a person (the human form). The first argument `--output json` or `--output human` (or `--output=human`) chooses the form. Without it, `cli_main` and `run_cli_process` write the human form only when standard output is a terminal, the environment variable `CI` is not truthy, and no variable of a coding agent is truthy (`AI_AGENT`, `CLAUDECODE`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `GEMINI_CLI`, `OPENCODE`, `AMP_CURRENT_THREAD_ID`, `AUGMENT_AGENT`, `QWEN_CODE_SESSION_ID`, `PI_CODING_AGENT`, `CRUSH`, `COPILOT_AGENT`). A variable is truthy when it is set and its value is not empty, `0`, `false`, `no` or `off`. `cli::output_form(is_terminal, env)` gives this choice. `run_cli` writes JSON unless `CliOptions::output` says otherwise. Agents and scripts give `--output json`.
+The command line writes JSON for programs. It can also write text for a person: the human form. The human form is off by default. Without `CliOptions::output`, the command line writes JSON only, also on a terminal, and takes no output flag.
+
+To turn the human form on, give `CliOptions::output(CliOutput::new()...)`:
+
+- `.switch(names, form)`: a flag with no value that chooses a form, for example `.switch(["--json"], OutputForm::Json)`.
+- `.values(names, values)`: a flag with a value, and the form of each value, for example `.values(["--format", "-f"], [("text", OutputForm::Human), ("json", OutputForm::Json)])`. It takes `--format text`, `--format=text` and `-f text`. A value that is missing or not known is a usage error with exit code 3: `The option --format must be text or json.`
+- `.default_form(default)`: the form when the arguments give no output flag: `OutputDefault::Auto` (the default), `OutputDefault::Human` or `OutputDefault::Json`.
+- `.formats(formats)`: the formats of the human form (see below).
+
+Each name is `--word` or `-x`, with one letter or digit. An output flag can be anywhere in the arguments. When the arguments give more than one, the last one wins. An output flag can have the name `-h`: then `-h` chooses its form, and `--help` writes the help. The command line stops with an error when it starts if the name of an output flag is not valid, is in two output flags, or is the name of another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or a flag of the input of a capability or an event of the view.
+
+With `OutputDefault::Auto`, `cli_main` and `run_cli_process` write the human form only when standard output is a terminal, the environment variable `CI` is not truthy, and no variable of a coding agent is truthy (`AI_AGENT`, `CLAUDECODE`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `GEMINI_CLI`, `OPENCODE`, `AMP_CURRENT_THREAD_ID`, `AUGMENT_AGENT`, `QWEN_CODE_SESSION_ID`, `PI_CODING_AGENT`, `CRUSH`, `COPILOT_AGENT`). A variable is truthy when it is set and its value is not empty, `0`, `false`, `no` or `off`. `cli::output_form(is_terminal, env)` gives this choice. `run_cli` takes this form from `CliOptions::auto_form`, and the default is JSON.
 
 The human form has color only when standard output is a terminal and `NO_COLOR` is unset or empty. The exit code and the stream of each outcome are the same in each form. Help, usage and usage errors do not change.
 
@@ -147,7 +158,7 @@ The human form has color only when standard output is a terminal and `NO_COLOR` 
 | Occurrence | The format of the payload, or the generic layout of `data`. Before an occurrence with `truncated`, the line `(some occurrences were lost)` |
 | `list` | The section `Capabilities`, then the section `Events`, with the command and the description of each one |
 
-Give the formats with `CliOptions::formats(CliFormats::new()...)`:
+Give the formats with `CliOutput::formats(CliFormats::new()...)`:
 
 ```rust,ignore
 fn power(status: &Status, ui: &CliUi) -> String {
@@ -160,7 +171,11 @@ let formats = CliFormats::new()
         Offline::Offline {} => ui.error("offline"),
     })
     .event(&status_changed, power);
-cli_main(app, context, CliOptions::new("aircon", "1.0.0").formats(formats)).await;
+let output = CliOutput::new()
+    .values(["--format", "-f"], [("text", OutputForm::Human), ("json", OutputForm::Json)])
+    .switch(["--json"], OutputForm::Json)
+    .formats(formats);
+cli_main(app, context, CliOptions::new("aircon", "1.0.0").output(output)).await;
 ```
 
 - Each method takes the definition, as the alias methods do. A `CapabilityDefinition<C, X, O, F>` keeps the type of the value `O` and of the failures `F`, and an `EventDefinition<C, X, P>` keeps the type of the payload `P`. So bind each definition before you give it to `App::capability` or `App::event`. `untyped()` removes these types.

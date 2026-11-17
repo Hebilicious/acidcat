@@ -1,7 +1,37 @@
 import type { EmptyInput, FailureData, FailureSchemas } from "./app.ts";
 import type { StandardSchemaV1 } from "./standard-schema.ts";
 
-export type CliOutput = "human" | "json";
+export type CliForm = "human" | "json";
+
+/**
+ * A flag that chooses the form of the output. Each name is `--word` or `-x`, with one letter or digit. A switch gives
+ * `form`, for example `--json`. A flag with a value gives `values`, a map from each value to a form, for example
+ * `--format <text|json>` with `{ text: "human", json: "json" }`. It takes `--format text`, `--format=text` and `-f text`.
+ */
+export type CliOutputFlag =
+  | { readonly names: readonly string[]; readonly form: CliForm; readonly values?: undefined }
+  | { readonly names: readonly string[]; readonly values: { readonly [value: string]: CliForm }; readonly form?: undefined };
+
+/**
+ * The human form of the output. Without this option, the command line writes JSON only, and takes no output flag.
+ */
+export interface CliOutput {
+  /**
+   * The flags that choose the form. They can be anywhere in the arguments. When the arguments give more than one, the
+   * last one wins.
+   */
+  readonly flags?: readonly CliOutputFlag[] | undefined;
+  /**
+   * The form when the arguments give no output flag. `"auto"`, the default, is the human form when standard output is
+   * a terminal and no CI and no coding agent is detected, and JSON in all other cases.
+   */
+  readonly default?: "auto" | CliForm | undefined;
+  /**
+   * The formatters of the human form, made with `cliFormat`. Give one format at most for each capability or event of
+   * the view. A value with no formatter has the generic layout.
+   */
+  readonly formats?: readonly CliFormat[] | undefined;
+}
 
 /** The styles and the table that a formatter of the command line gets. Without color, each style gives the text unchanged. */
 export interface CliUi {
@@ -145,9 +175,61 @@ const FALSE_VALUES: readonly string[] = ["", "0", "false", "no", "off"];
 
 const isTruthy = (value: string | undefined): boolean => value !== undefined && !FALSE_VALUES.includes(value.trim().toLowerCase());
 
-export function defaultCliOutput(isTerminal: boolean, env: { readonly [name: string]: string | undefined }): CliOutput {
+export function defaultCliOutput(isTerminal: boolean, env: { readonly [name: string]: string | undefined }): CliForm {
   if (!isTerminal || isTruthy(env.CI) || AGENT_VARIABLES.some((name) => isTruthy(env[name]))) return "json";
   return "human";
+}
+
+const LONG_NAME = /^--[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+
+const SHORT_NAME = /^-[A-Za-z0-9]$/;
+
+export function cliOutputErrors(flags: readonly CliOutputFlag[], otherFlags: ReadonlyMap<string, string>): string[] {
+  const errors: string[] = [];
+  const seen = new Set<string>();
+  for (const flag of flags) {
+    const [first] = flag.names;
+    if (first === undefined) errors.push("An output flag has no name.");
+    for (const name of flag.names) {
+      if (!LONG_NAME.test(name) && !SHORT_NAME.test(name)) {
+        errors.push(`The output flag ${name} is not a valid name. Give --<word> or -<letter or digit>.`);
+        continue;
+      }
+      if (seen.has(name)) errors.push(`The output flag ${name} has the same name as another output flag.`);
+      seen.add(name);
+      const other = otherFlags.get(name);
+      if (other !== undefined) errors.push(`The output flag ${name} has the same name as ${other}.`);
+    }
+    if (first !== undefined && flag.values !== undefined && Object.keys(flag.values).length === 0) errors.push(`The output flag ${first} has no values.`);
+  }
+  return errors;
+}
+
+const choices = (values: readonly string[]): string => (values.length < 2 ? values.join("") : `${values.slice(0, -1).join(", ")} or ${values.at(-1) ?? ""}`);
+
+export type CliOutputChoice = { readonly form?: CliForm | undefined; readonly args: readonly string[]; readonly error?: undefined } | { readonly error: string };
+
+export function cliOutputChoice(flags: readonly CliOutputFlag[], args: readonly string[]): CliOutputChoice {
+  const rest: string[] = [];
+  let form: CliForm | undefined;
+  const items = args.values();
+  for (const arg of items) {
+    const [name = arg, inline] = arg.startsWith("--") ? arg.split(/=(.*)/s, 2) : [arg];
+    const flag = flags.find(({ names }) => names.includes(name));
+    if (flag === undefined || (flag.values === undefined && inline !== undefined)) {
+      rest.push(arg);
+      continue;
+    }
+    if (flag.values === undefined) {
+      form = flag.form;
+      continue;
+    }
+    const value = inline ?? items.next().value;
+    const chosen = value === undefined || !Object.hasOwn(flag.values, value) ? undefined : flag.values[value];
+    if (chosen === undefined) return { error: `The option ${name} must be ${choices(Object.keys(flag.values))}.` };
+    form = chosen;
+  }
+  return { form, args: rest };
 }
 
 const style =

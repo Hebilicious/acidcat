@@ -10,10 +10,10 @@ import { test } from "node:test";
 import { check } from "@acid-cat/cli";
 import type { z } from "zod";
 
-import { aircon, fanSet, firmwareUpdate, formats, modeSet, Offline, PoweredOff, powerSet, Status, statusChanged, statusGet, toJsonSchema, Unit } from "../core-ts/aircon.ts";
+import { aircon, fanSet, firmwareUpdate, modeSet, Offline, PoweredOff, powerSet, Status, output, statusChanged, statusGet, toJsonSchema, Unit } from "../core-ts/aircon.ts";
 import { CallFailureError, catalogOf, createSession, renderCatalog, runCli } from "@acid-cat/core-ts";
 import type { Result } from "@acid-cat/core-ts";
-import { OFFLINE, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
+import { OFFLINE, OUTPUT_ERROR, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import { run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 
@@ -193,21 +193,22 @@ test("an array input takes one repeated flag for each item, or JSON text of the 
   assert.match(list.stdout, /"usage": "aircon aircon schedule set --days <mon\|tue\|wed\|thu\|fri\|sat\|sun>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });
 
-test("the command line writes the human form with --output human", async () => {
+test("the command line writes the human form with its output flags", async () => {
   const cli = (...args: string[]) => run(new URL("../core-ts/cli.ts", import.meta.url).pathname, ...args);
-  const [status, defaultAlias, poweredOff, schedule, list, unknown, json, plain, xml] = await Promise.all([
-    cli("--output", "human", "aircon", "status", "get"),
-    cli("--output", "human"),
-    cli("--output", "human", "aircon", "mode", "set", "--mode", "heat"),
-    cli("--output=human", "aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18"),
-    cli("--output", "human", "list"),
-    cli("--output", "human", "call", "nope"),
+  const [status, short, inline, defaultAlias, poweredOff, schedule, list, unknown, json, plain, xml] = await Promise.all([
+    cli("status", "--output", "human"),
+    cli("-o", "human", "status"),
+    cli("--output=human", "status"),
+    cli("-o", "human"),
+    cli("aircon", "mode", "set", "--output", "human", "--mode", "heat"),
+    cli("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18", "--output=human"),
+    cli("list", "-o", "human"),
+    cli("call", "nope", "--output", "human"),
     cli("--output", "json", "aircon", "status", "get"),
     cli("aircon", "status", "get"),
-    cli("--output", "xml", "status"),
+    cli("status", "--output", "xml"),
   ]);
-  assert.deepEqual([status.code, status.stdout], [0, `${STATUS_OFF}\n`]);
-  assert.deepEqual([defaultAlias.code, defaultAlias.stdout], [0, `${STATUS_OFF}\n`]);
+  for (const human of [status, short, inline, defaultAlias]) assert.deepEqual([human.code, human.stdout], [0, `${STATUS_OFF}\n`]);
   assert.deepEqual([poweredOff.code, poweredOff.stdout], [1, `${POWERED_OFF_LAYOUT}\n`]);
   assert.deepEqual([schedule.code, schedule.stdout], [0, `${SCHEDULE_LAYOUT}\n`]);
   assert.equal(list.code, 0);
@@ -216,16 +217,23 @@ test("the command line writes the human form with --output human", async () => {
   assert.equal(unknown.code, 2);
   assert.ok(unknown.stderr.startsWith("error (unknown-capability): "));
   assert.deepEqual([json.code, json.stdout], [0, plain.stdout]);
-  assert.deepEqual([xml.code, xml.stderr], [3, "The option --output must be human or json.\n"]);
+  assert.deepEqual([xml.code, xml.stdout, xml.stderr], [3, "", `${OUTPUT_ERROR}\n`]);
 
-  const unit = new Unit();
-  unit.change({ online: false });
-  const out: string[] = [];
-  const offline = await runCli(aircon, { name: "aircon", version: "0.1.0", context: { unit }, toJsonSchema, formats }, ["--output", "human", "aircon", "status", "get"], {
-    stdout: (text) => out.push(text),
-    stderr: () => undefined,
-  });
-  assert.deepEqual([offline, out], [1, [OFFLINE]]);
+  const onTerminal = async (unit: Unit, ...args: string[]) => {
+    const out: string[] = [];
+    const code = await runCli(aircon, { name: "aircon", version: "0.1.0", context: { unit }, toJsonSchema, output }, args, {
+      stdout: (text) => out.push(text),
+      stderr: () => undefined,
+      output: "human",
+    });
+    return { code, stdout: out.join("\n") };
+  };
+  assert.deepEqual(await onTerminal(new Unit(), "status"), { code: 0, stdout: STATUS_OFF });
+  assert.deepEqual(await onTerminal(new Unit(), "status", "--json"), { code: 0, stdout: plain.stdout.trimEnd() });
+  assert.deepEqual(await onTerminal(new Unit(), "--json"), { code: 0, stdout: plain.stdout.trimEnd() }, "the default alias with an output flag");
+  const offline = new Unit();
+  offline.change({ online: false });
+  assert.deepEqual(await onTerminal(offline, "aircon", "status", "get"), { code: 1, stdout: OFFLINE });
 });
 
 function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<{ readonly code: number | null; readonly stdout: string }> {
