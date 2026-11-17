@@ -41,6 +41,8 @@ module facts {
 
   pure val KEEPALIVE_MS: int = 15000
 
+  pure val INTERRUPT_GRACE_MS: int = 1000
+
   pure val SSE_MEDIA_TYPE: str = "text/event-stream"
 
   pure val MCP_PROTOCOL_VERSION: str = "2026-07-28"
@@ -106,6 +108,7 @@ module factsData {
     programFlags: List[List[str]],
     resumeFlags: List[List[str]],
     keepaliveMs: int,
+    interruptGraceMs: int,
     sseMediaType: str,
     mcpProtocolVersion: str,
     mcpEventsExtension: str,
@@ -126,6 +129,7 @@ module factsData {
     programFlags: PROGRAM_FLAGS,
     resumeFlags: RESUME_FLAGS,
     keepaliveMs: KEEPALIVE_MS,
+    interruptGraceMs: INTERRUPT_GRACE_MS,
     sseMediaType: SSE_MEDIA_TYPE,
     mcpProtocolVersion: MCP_PROTOCOL_VERSION,
     mcpEventsExtension: MCP_EVENTS_EXTENSION,

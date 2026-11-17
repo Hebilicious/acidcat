@@ -250,7 +250,7 @@
       ]
     },
     "fixture.hold": {
-      "description": "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held gives the key. With a marker, the call writes a file at that path when it starts to hold.",
+      "description": "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held gives the key. With a marker, the call writes a file at that path when it starts to hold, and deletes the file when it ends.",
       "audience": [
         "app",
         "mcp",
@@ -529,7 +529,7 @@
       }
     },
     "fixture.watch": {
-      "description": "Give an occurrence each time that fixture.signal gets the key. Never end. With a marker, write a file at that path when the subscription starts.",
+      "description": "Give an occurrence each time that fixture.signal gets the key. Never end. With a marker, write a file at that path when the subscription starts, and delete the file when it ends.",
       "audience": [
         "app",
         "mcp",

@@ -58,6 +58,7 @@ struct Shared {
     state: Mutex<State>,
     notify: Notify,
     stop: CancellationToken,
+    ended: CancellationToken,
 }
 
 impl Shared {
@@ -128,6 +129,11 @@ impl Occurrences {
         }
     }
 
+    /// Resolves when the source of the subscription has ended and is dropped.
+    pub(crate) fn ended(&self) -> impl Future<Output = ()> + Send + 'static {
+        self.shared.ended.clone().cancelled_owned()
+    }
+
     /// Cancel the subscription: the client sees the end at once.
     pub fn cancel(&self) {
         {
@@ -177,6 +183,7 @@ pub(crate) fn prepare() -> (CancellationToken, impl FnOnce(Parts) -> Occurrences
             }),
             notify: Notify::new(),
             stop,
+            ended: CancellationToken::new(),
         });
         tokio::spawn(pump(shared.clone(), parts));
         Occurrences { shared }
@@ -185,6 +192,11 @@ pub(crate) fn prepare() -> (CancellationToken, impl FnOnce(Parts) -> Occurrences
 }
 
 async fn pump(shared: Arc<Shared>, parts: Parts) {
+    produce(shared.clone(), parts).await;
+    shared.ended.cancel();
+}
+
+async fn produce(shared: Arc<Shared>, parts: Parts) {
     let Parts {
         name,
         mut source,

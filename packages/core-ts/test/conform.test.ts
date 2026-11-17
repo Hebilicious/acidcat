@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { writeFile } from "node:fs/promises";
 import { after, before, describe, test } from "node:test";
 
 import { conform } from "@acid-cat/cli";
@@ -9,6 +8,7 @@ import { createSession, httpHandler, installWebMcp, mcpHandler, mcpHandshake } f
 import type { McpHandler } from "../src/index.ts";
 import { serve, webhookDelivery } from "../src/node.ts";
 import type { Served } from "../src/node.ts";
+import { fileMarker } from "./file-marker.ts";
 import { fixture, Holds, options, POLL, principalOf, Watchers, WEBHOOK_LIMITS } from "./fixture.ts";
 import { timeout } from "./deadline.ts";
 import { testCertificate } from "./webhook-receiver.ts";
@@ -29,8 +29,7 @@ describe("the TypeScript core passes acid-cat conform", { concurrency: true }, (
   before(async () => {
     const webhooks = webhookDelivery({ allowPrivateNetworks: true, ca: certificate.cert, retryDelayMs: () => 50, ...WEBHOOK_LIMITS });
     mcp = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...options(), poll: POLL, principal: principalOf, webhooks });
-    const mark = (path: string) => writeFile(path, "");
-    const cli = httpHandler(fixture, { allowedOrigins: [], target: "cli", base: "/cli", ...options(new Holds(mark), new Watchers(mark, { keepAlive: false })) });
+    const cli = httpHandler(fixture, { allowedOrigins: [], target: "cli", base: "/cli", ...options(new Holds(fileMarker), new Watchers(fileMarker, { keepAlive: false })) });
     served = await serve({ "/mcp": mcpHandshake(mcp), "/api": httpHandler(fixture, { allowedOrigins: [], base: "/api", ...options() }), "/cli": cli }, { port: 0 });
     url = served.url;
   });

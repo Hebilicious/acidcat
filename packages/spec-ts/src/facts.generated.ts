@@ -34,6 +34,8 @@ export const CLI_RESUME_FLAGS = ["cursor", "max-age-ms"] as const;
 
 export const KEEPALIVE_MS = 15000;
 
+export const INTERRUPT_GRACE_MS = 1000;
+
 export const SSE_MEDIA_TYPE = "text/event-stream";
 
 export const MCP_PROTOCOL_VERSION = "2026-07-28";

@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, watch } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
+import { setTimeout as pause } from "node:timers/promises";
+
+import { INTERRUPT_GRACE_MS } from "@acid-cat/spec-ts";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Cause, Effect, Exit, Schema } from "effect";
@@ -23,6 +26,39 @@ const cliWithCommand = program("./fixture-cli-commands.ts");
 const cliWithRepeated = program("./fixture-cli-repeated.ts");
 
 const cliWithInherited = program("./fixture-cli-inherited.ts");
+
+const DEADLINE_MS = 10_000;
+const SECOND_INTERRUPT_MS = 100;
+
+async function interruptedHold(interrupts: 1 | 2) {
+  const directory = mkdtempSync(join(tmpdir(), "core-effect-interrupt-"));
+  const marker = join(directory, "held");
+  const fixture = new URL("./fixture-cli-ignoring-interruption.ts", import.meta.url).pathname;
+  const child = spawn(process.execPath, [fixture, "fixture", "hold", "--key", "k", "--marker", marker], { stdio: ["ignore", "ignore", "pipe"] });
+  let stderr = "";
+  child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
+  const exited = new Promise<[number | null, NodeJS.Signals | null]>((resolve) => child.on("close", (...exit) => resolve(exit)));
+  try {
+    const start = Date.now();
+    while (!existsSync(marker)) {
+      if (Date.now() - start > DEADLINE_MS) throw new Error(`The call did not write its marker file. ${stderr}`);
+      await pause(10);
+    }
+    const interrupted = Date.now();
+    child.kill("SIGINT");
+    // Unix merges a signal that is still pending with the next one of the same kind.
+    if (interrupts === 2) {
+      await pause(SECOND_INTERRUPT_MS);
+      child.kill("SIGINT");
+    }
+    const ended = await Promise.race([exited, pause(DEADLINE_MS, "running" as const)]);
+    const [code, signal] = ended === "running" ? [null, null] : ended;
+    return { code, signal, stderr, elapsed: Date.now() - interrupted, running: ended === "running" };
+  } finally {
+    child.kill("SIGKILL");
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
 
 const toggle = (stdout: string) =>
   decodeText(CliListing, stdout)
@@ -82,7 +118,9 @@ describe("the command line of an application", { concurrency: true }, () => {
       let stderr = "";
       child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
       const watcher = watch(directory, (_, name) => {
-        if (name === `held-${run}`) child.kill("SIGINT");
+        if (name !== `held-${run}`) return;
+        watcher.close();
+        child.kill("SIGINT");
       });
       const [code, signal] = await new Promise<[number | null, NodeJS.Signals | null]>((resolve) => child.on("close", (...exit) => resolve(exit)));
       watcher.close();
@@ -95,6 +133,14 @@ describe("the command line of an application", { concurrency: true }, () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  test("a call that ignores the interrupt exits with 130 after the grace period, or at once after a second interrupt", async () => {
+    const [once, twice] = await Promise.all([interruptedHold(1), interruptedHold(2)]);
+    assert.deepEqual({ ...once, elapsed: undefined }, { code: 130, signal: null, stderr: "", elapsed: undefined, running: false });
+    assert.ok(once.elapsed >= INTERRUPT_GRACE_MS, `exited ${once.elapsed} ms after the interrupt, before the grace period`);
+    assert.deepEqual({ ...twice, elapsed: undefined }, { code: 130, signal: null, stderr: "", elapsed: undefined, running: false });
+    assert.ok(twice.elapsed < INTERRUPT_GRACE_MS, `exited ${twice.elapsed} ms after two interrupts, not at once`);
   });
 
   test("a command of the application runs beside the commands of the capabilities", async () => {

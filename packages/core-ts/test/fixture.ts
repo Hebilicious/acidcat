@@ -26,12 +26,17 @@ export class Switch implements Observable<Availability> {
   }
 }
 
+export interface Marker {
+  readonly write: (path: string) => Promise<void>;
+  readonly remove: (path: string) => Promise<void>;
+}
+
 export class Holds {
   readonly #holding = new Set<{ readonly key: string; readonly stop: () => void }>();
-  readonly #mark: ((path: string) => Promise<void>) | undefined;
+  readonly #marker: Marker | undefined;
 
-  constructor(mark?: (path: string) => Promise<void>) {
-    this.#mark = mark;
+  constructor(marker?: Marker) {
+    this.#marker = marker;
   }
 
   async hold(key: string, marker: string | undefined, signal: AbortSignal): Promise<void> {
@@ -49,11 +54,12 @@ export class Holds {
     // A promise alone does not keep a Node.js process running. The timer keeps the command line running while the call holds.
     const running = setInterval(() => undefined, 2 ** 30);
     try {
-      if (marker !== undefined) await this.#mark?.(marker);
+      if (marker !== undefined) await this.#marker?.write(marker);
       await stopped;
     } finally {
       clearInterval(running);
       signal.removeEventListener("abort", entry.stop);
+      if (marker !== undefined) await this.#marker?.remove(marker);
     }
   }
 
@@ -74,11 +80,11 @@ export class HoldsThatIgnoreCancellation extends Holds {
 
 export class Watchers {
   readonly #watching = new Set<{ readonly key: string; readonly push: (value: string) => void }>();
-  readonly #mark: ((path: string) => Promise<void>) | undefined;
+  readonly #marker: Marker | undefined;
   readonly #keepAlive: boolean;
 
-  constructor(mark?: (path: string) => Promise<void>, { keepAlive = true }: { readonly keepAlive?: boolean } = {}) {
-    this.#mark = mark;
+  constructor(marker?: Marker, { keepAlive = true }: { readonly keepAlive?: boolean } = {}) {
+    this.#marker = marker;
     this.#keepAlive = keepAlive;
   }
 
@@ -122,7 +128,11 @@ export class Watchers {
   }
 
   async mark(path: string): Promise<void> {
-    await this.#mark?.(path);
+    await this.#marker?.write(path);
+  }
+
+  async unmark(path: string): Promise<void> {
+    await this.#marker?.remove(path);
   }
 
   watching(): string[] {
@@ -137,8 +147,8 @@ export class Watchers {
 }
 
 export class WatchersThatIgnoreCancellation extends Watchers {
-  constructor(mark?: (path: string) => Promise<void>, { keepAlive = false }: { readonly keepAlive?: boolean } = {}) {
-    super(mark, { keepAlive });
+  constructor(marker?: Marker, { keepAlive = false }: { readonly keepAlive?: boolean } = {}) {
+    super(marker, { keepAlive });
   }
 
   override watch(key: string): AsyncIterable<string> {
@@ -243,7 +253,7 @@ export const fixture = defineApp<Context>({
     capability({
       id: "fixture.hold",
       description:
-        "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held gives the key. With a marker, the call writes a file at that path when it starts to hold.",
+        "Hold until fixture.release releases the key, then return the key. While the call holds, fixture.held gives the key. With a marker, the call writes a file at that path when it starts to hold, and deletes the file when it ends.",
       audience: everywhere,
       input: Hold,
       output: Key,
@@ -351,14 +361,18 @@ export const fixture = defineApp<Context>({
     }),
     event({
       id: "fixture.watch",
-      description: "Give an occurrence each time that fixture.signal gets the key. Never end. With a marker, write a file at that path when the subscription starts.",
+      description: "Give an occurrence each time that fixture.signal gets the key. Never end. With a marker, write a file at that path when the subscription starts, and delete the file when it ends.",
       audience: everywhere,
       input: z.object({ key: z.string(), marker: z.string().optional() }),
       payload: Watched,
       async *subscribe({ key, marker }, { context, signal }) {
         const values = context.watchers.watch(key, signal);
         if (marker !== undefined) await context.watchers.mark(marker);
-        for await (const value of values) yield { data: { key, value } };
+        try {
+          for await (const value of values) yield { data: { key, value } };
+        } finally {
+          if (marker !== undefined) await context.watchers.unmark(marker);
+        }
       },
     }),
     event({

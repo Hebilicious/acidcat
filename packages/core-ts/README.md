@@ -331,6 +331,8 @@ node cli.ts list                                                             # t
 
 `watch <id>` subscribes to an event. The flags come from the input schema, with the same rules as for a capability. If the input schema has no top-level `properties` member, `watch <id> '<json>'` takes the input as JSON text. Each occurrence goes to standard output as JSON on one line, with its cursor. The exit code is 0 when the subscription is complete, 130 after an interrupt (`SIGINT`), and 5 after `internal`, with `{ "kind", "message" }` on standard error. A failure before the first occurrence has the exit code of a call.
 
+In `cliMain`, an interrupt (`SIGINT`) cancels the call or the subscription. A capability that cannot stop, for example one that waits for a dynamic `import()`, does not keep the process running. If the call or the subscription has not ended one second (`INTERRUPT_GRACE_MS` of `@acid-cat/spec-ts`) after the interrupt, the process exits with 130 and writes nothing more. A second interrupt exits with 130 at once.
+
 `--cursor <cursor>` and `--max-age-ms <integer>` resume the subscription after a cursor, in the flags form and in the JSON form. A script can keep the last cursor, and resume with it after the program stops. A `--max-age-ms` that is not a whole number exits with 3. These two flags are not properties of the input: if the input schema of an event has a top-level property `cursor` or `max-age-ms`, `runCli` throws when it starts.
 
 ```sh

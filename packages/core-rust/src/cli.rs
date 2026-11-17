@@ -3,6 +3,7 @@
 use std::io::{IsTerminal, Write};
 use std::sync::Arc;
 
+use futures::FutureExt;
 use futures::future::BoxFuture;
 use futures::stream::{BoxStream, StreamExt};
 use serde::Serialize;
@@ -36,10 +37,14 @@ pub use crate::facts_generated::exit;
 use crate::facts_generated::{
     ALIASES_NOT_OBJECT_MESSAGE, BAD_DEFAULT_MESSAGE, BAD_NAME_MESSAGE, BAD_TARGET_MESSAGE,
     DEFAULT_HAS_RESERVED_FLAG_MESSAGE, FIRST_WORD_MESSAGE, FLAG_OF_DEFAULT_MESSAGE,
-    GENERIC_COMMANDS, INPUT_NOT_OBJECT_MESSAGE, NO_CLI_BINDING_MESSAGE, NO_PROPERTIES_MESSAGE,
-    NOT_A_PROPERTY_MESSAGE, NOT_IN_VIEW_MESSAGE, RESERVED_NAME_MESSAGE,
+    GENERIC_COMMANDS, INPUT_NOT_OBJECT_MESSAGE, INTERRUPT_GRACE_MS, NO_CLI_BINDING_MESSAGE,
+    NO_PROPERTIES_MESSAGE, NOT_A_PROPERTY_MESSAGE, NOT_IN_VIEW_MESSAGE, RESERVED_NAME_MESSAGE,
     SETTINGS_NOT_OBJECT_MESSAGE, UNKNOWN_MEMBER_MESSAGE,
 };
+
+/// The time after the first interrupt at which [`cli_main`] and [`run_cli_process`] exit with code 130.
+pub const INTERRUPT_GRACE: std::time::Duration =
+    std::time::Duration::from_millis(INTERRUPT_GRACE_MS);
 
 fn resume_words() -> impl Iterator<Item = &'static str> {
     RESUME_FLAGS
@@ -382,11 +387,16 @@ impl<C: Send + Sync + 'static> Provider<C> {
         id: &str,
         input: Value,
         options: SubscribeOptions,
-    ) -> Result<BoxStream<'static, Result<Occurrence, CallFailure>>, CallFailure> {
+    ) -> Result<Watching, CallFailure> {
         match self {
-            Provider::Local(session) => session
-                .subscribe(id, input, options)
-                .map(|occurrences| occurrences.into_stream()),
+            Provider::Local(session) => {
+                session
+                    .subscribe(id, input, options)
+                    .map(|occurrences| Watching {
+                        ended: occurrences.ended().boxed(),
+                        occurrences: occurrences.into_stream(),
+                    })
+            }
             Provider::Remote(client) => {
                 let max_age_ms = match options.max_age_ms {
                     Some(value) if !crate::session::is_max_age_ms(value) => {
@@ -402,13 +412,15 @@ impl<C: Send + Sync + 'static> Provider<C> {
                     () = options.cancel.cancelled() => Err(CallFailure::new(Kind::Cancelled, "The subscription was cancelled.")),
                     stream = client.subscribe(id, &input, options.cursor.as_deref(), max_age_ms) => stream,
                 }
+                .map(|occurrences| Watching { occurrences, ended: futures::future::ready(()).boxed() })
             }
         }
     }
 }
 
 /// Run the command line as the main program, with the arguments of the process, and exit with its exit code. An
-/// interrupt (`SIGINT`) cancels the call or the subscription.
+/// interrupt (`SIGINT`) cancels the call or the subscription. If the process has not exited [`INTERRUPT_GRACE`]
+/// after the interrupt, or at a second interrupt, it exits with code 130.
 pub async fn cli_main<C: Send + Sync + 'static>(
     app: Arc<Application<C>>,
     context: Arc<C>,
@@ -420,7 +432,8 @@ pub async fn cli_main<C: Send + Sync + 'static>(
 }
 
 /// Run the command line with arguments, on standard output and standard error. An interrupt (`SIGINT`) cancels the
-/// call or the subscription. The result is the exit code.
+/// call or the subscription. If the process has not exited [`INTERRUPT_GRACE`] after the interrupt, or at a second
+/// interrupt, it exits with code 130. The result is the exit code.
 pub async fn run_cli_process<C: Send + Sync + 'static>(
     app: Arc<Application<C>>,
     context: Arc<C>,
@@ -454,7 +467,10 @@ fn listen_for_interrupt(cancel: CancellationToken) {
         if let Ok(mut interrupts) = signal(SignalKind::interrupt()) {
             tokio::spawn(async move {
                 if interrupts.recv().await.is_some() {
-                    cancel.cancel();
+                    interrupted(&cancel);
+                    if interrupts.recv().await.is_some() {
+                        std::process::exit(exit::CANCELLED);
+                    }
                 }
             });
             return;
@@ -468,8 +484,21 @@ fn listen_for_interrupt(cancel: CancellationToken) {
         .poll(&mut std::task::Context::from_waker(&waker));
     tokio::spawn(async move {
         if interrupt.await.is_ok() {
-            cancel.cancel();
+            interrupted(&cancel);
+            if tokio::signal::ctrl_c().await.is_ok() {
+                std::process::exit(exit::CANCELLED);
+            }
         }
+    });
+}
+
+fn interrupted(cancel: &CancellationToken) {
+    cancel.cancel();
+    // A thread, not a task: the runtime drops its tasks when it shuts down, and a capability can block the threads
+    // of the runtime.
+    std::thread::spawn(|| {
+        std::thread::sleep(INTERRUPT_GRACE);
+        std::process::exit(exit::CANCELLED);
     });
 }
 
@@ -1062,25 +1091,27 @@ async fn follow<C: Send + Sync + 'static>(
         max_age_ms,
         cancel: io.cancel.clone(),
     };
-    let mut occurrences = match provider.subscribe(id, input, options).await {
-        Ok(occurrences) => occurrences,
+    let Watching {
+        mut occurrences,
+        ended,
+    } = match provider.subscribe(id, input, options).await {
+        Ok(watching) => watching,
         Err(_) if io.cancel.is_cancelled() => return exit::CANCELLED,
         Err(failure) => return printer.call_failure(io, &failure),
     };
     loop {
         let next = tokio::select! {
             biased;
-            () = io.cancel.cancelled() => return exit::CANCELLED,
+            () = io.cancel.cancelled() => None,
             next = occurrences.next() => next,
         };
         match next {
-            None => {
-                return if io.cancel.is_cancelled() {
-                    exit::CANCELLED
-                } else {
-                    exit::VALUE
-                };
+            None if io.cancel.is_cancelled() => {
+                drop(occurrences);
+                ended.await;
+                return exit::CANCELLED;
             }
+            None => return exit::VALUE,
             Some(Err(failure)) => {
                 printer.call_failure(io, &failure);
                 return exit::INTERNAL;
@@ -1088,6 +1119,13 @@ async fn follow<C: Send + Sync + 'static>(
             Some(Ok(occurrence)) => printer.occurrence(io, &occurrence),
         }
     }
+}
+
+/// The process can exit as soon as the watch returns, before a task of the runtime ends the subscription, so the
+/// watch waits for `ended` after an interrupt.
+struct Watching {
+    occurrences: BoxStream<'static, Result<Occurrence, CallFailure>>,
+    ended: BoxFuture<'static, ()>,
 }
 
 struct Printer<'a> {

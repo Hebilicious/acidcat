@@ -49,6 +49,7 @@ Quint has no operations on strings. A text that a rule reads character by charac
 | The flags of the program | `PROGRAM_FLAGS` | `CLI_RESERVED_FLAGS` | `PROGRAM_FLAGS` in `cli/output_generated.rs` |
 | The flags of `watch` | `RESUME_FLAGS` | `CLI_RESUME_FLAGS`, without `--` | `RESUME_FLAGS` in `cli/output_generated.rs` |
 | The time after which a stream sends a keepalive | `KEEPALIVE_MS` | `KEEPALIVE_MS` | `KEEPALIVE_MS`, read by `remote::KEEPALIVE` |
+| The time after an interrupt at which the main program of the command line exits with code 130 | `INTERRUPT_GRACE_MS` | `INTERRUPT_GRACE_MS` | `INTERRUPT_GRACE_MS`, read by `cli::INTERRUPT_GRACE` |
 | The media type of server-sent events | `SSE_MEDIA_TYPE` | `SSE_MEDIA_TYPE` | `SSE_MEDIA_TYPE` |
 | The revision of MCP | `MCP_PROTOCOL_VERSION` | `MCP_PROTOCOL_VERSION` | `MCP_PROTOCOL_VERSION`, read by `mcp::PROTOCOL_VERSION` |
 | The name of the MCP events extension | `MCP_EVENTS_EXTENSION` | `MCP_EVENTS_EXTENSION` | `MCP_EVENTS_EXTENSION` |

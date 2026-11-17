@@ -438,6 +438,8 @@ These two flags are not properties of the input. If the input schema of an event
 | Cancelled (`SIGINT`) | Nothing | 130 |
 | `internal` | `{ "kind", "message" }` | 5 |
 
+In `NodeCli.main` and `NodeCli.runCommand`, an interrupt (`SIGINT`) interrupts the fiber of the call or the subscription. A fiber that cannot be interrupted, for example in an uninterruptible region, does not keep the process running. If the fiber has not ended one second (`INTERRUPT_GRACE_MS` of `@acid-cat/spec-ts`) after the interrupt, the process exits with 130 and writes nothing more. A second interrupt exits with 130 at once.
+
 A subscription that cannot start has the exit code of its call failure. Each item of `list` has `kind`: `"capability"` or `"event"`. The items of the events come after the items of the capabilities, with their `usage`, which ends with `[--cursor <string>] [--max-age-ms <integer>]`. The logs of Effect go to standard error, so that standard output carries only the output.
 
 #### Aliases
