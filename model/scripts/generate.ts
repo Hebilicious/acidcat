@@ -121,7 +121,7 @@ function modelState(file: string, main: string): unknown {
     const itf = join(directory, "cases.itf.json");
     execFileSync(
       join(MODEL, "node_modules", ".bin", "quint"),
-      ["run", file, `--main=${main}`, "--max-steps=0", "--max-samples=1", `--out-itf=${itf}`, "--verbosity=0"],
+      ["run", file, `--main=${main}`, "--backend=typescript", "--max-steps=0", "--max-samples=1", `--out-itf=${itf}`, "--verbosity=0"],
       { cwd: MODEL, stdio: ["ignore", "ignore", "inherit"] },
     );
     const parsed: unknown = JSON.parse(readFileSync(itf, "utf8"));

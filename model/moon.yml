@@ -11,7 +11,7 @@ toolchains:
 tasks:
   test:
     description: "Run the tests of the models, and type-check the modules of the properties."
-    script: "quint test cli-output.qnt && quint test cli-aliases.qnt && quint typecheck cli-output-properties.qnt && quint typecheck cli-output-cases.qnt && quint typecheck cli-alias-cases.qnt && quint typecheck facts.qnt"
+    script: "quint test --backend=typescript cli-output.qnt && quint test --backend=typescript cli-aliases.qnt && quint typecheck cli-output-properties.qnt && quint typecheck cli-output-cases.qnt && quint typecheck cli-alias-cases.qnt && quint typecheck facts.qnt"
     inputs: ["*.qnt", "package.json", "/pnpm-workspace.yaml"]
 
   prove:

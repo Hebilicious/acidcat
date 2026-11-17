@@ -6,6 +6,8 @@ This Moon project holds the formal models of the rules that each core follows. T
 - `quint verify` proves the properties of the model with the Apalache model checker, for every input of small finite domains.
 - A generator writes, from the model, the data of the rule for each core, and every case of a bounded domain with its expected result. Each core runs every case against its own functions, and must give the same result.
 
+`quint test` and the generator use the TypeScript backend of Quint (`--backend=typescript`). The default Rust backend downloads an evaluator from the GitHub API when it first runs, and that API limits requests that are not authenticated.
+
 The project is also the single source of the shared facts of the cores: names, numbers and the templates of messages that every core uses. See [Shared facts](#shared-facts).
 
 The project is not a package. No registry receives it. It is in `model/` at the root of the repository, and not in `packages/`, because it is the source of files in several packages.
