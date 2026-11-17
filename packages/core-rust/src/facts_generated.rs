@@ -84,11 +84,15 @@ pub(crate) const SETTINGS_NOT_OBJECT_MESSAGE: &str = "{where}: options.cli must 
 pub(crate) const NO_CLI_BINDING_MESSAGE: &str = "{where}: has options.cli, but not the binding cli";
 pub(crate) const ALIASES_NOT_OBJECT_MESSAGE: &str =
     "{where}: options.cli.aliases must be an object";
-pub(crate) const BAD_NAME_MESSAGE: &str = "{where}: the alias {name} must be one word, or -- and one word, with the letters a-z, the digits 0-9 and single hyphens";
+pub(crate) const BAD_NAME_MESSAGE: &str = "{where}: the alias {name} must be one word, two words with one space between them, or -- and one word, with the letters a-z, the digits 0-9 and single hyphens in each word";
 pub(crate) const RESERVED_NAME_MESSAGE: &str =
     "{where}: the alias {name} has the name of a command or a flag of the command line";
+pub(crate) const RESERVED_FIRST_WORD_MESSAGE: &str =
+    "{where}: the first word of the alias {name} is the name of a command of the command line";
 pub(crate) const FIRST_WORD_MESSAGE: &str =
     "{where}: the alias {name} has the name of the first word of the command of a capability";
+pub(crate) const GROUP_FIRST_WORD_MESSAGE: &str =
+    "{where}: the first word of the alias {name} is the first word of the command of a capability";
 pub(crate) const BAD_TARGET_MESSAGE: &str = "{where}: the alias {name} must be an object with the id of a capability in capability, or the id of an event in event";
 pub(crate) const UNKNOWN_MEMBER_MESSAGE: &str =
     "{where}: the alias {name} has the unknown member {members}";

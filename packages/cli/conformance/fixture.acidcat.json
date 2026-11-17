@@ -42,6 +42,18 @@
             "held-keys": {
               "capability": "fixture.held"
             },
+            "notes": {
+              "capability": "fixture.raw"
+            },
+            "notes add": {
+              "capability": "fixture.note"
+            },
+            "notes loud": {
+              "capability": "fixture.note",
+              "input": {
+                "loud": true
+              }
+            },
             "quick": {
               "capability": "fixture.flags",
               "input": {
@@ -53,6 +65,12 @@
             },
             "say": {
               "capability": "fixture.echo"
+            },
+            "shout hello": {
+              "capability": "fixture.echo",
+              "input": {
+                "text": "HELLO"
+              }
             },
             "ticks": {
               "event": "fixture.ticks",

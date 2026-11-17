@@ -271,7 +271,11 @@ pub fn fixture() -> Arc<Application<Fixture>> {
                             "fixed-note": { "capability": "fixture.note", "input": { "text": "fixed" } },
                             "ticks": { "event": "fixture.ticks", "input": { "count": 2 } },
                             "broken-ticks": { "event": "fixture.broken" },
-                            "echoes": { "event": "fixture.echoes" }
+                            "echoes": { "event": "fixture.echoes" },
+                            "notes": { "capability": "fixture.raw" },
+                            "notes add": { "capability": "fixture.note" },
+                            "notes loud": { "capability": "fixture.note", "input": { "loud": true } },
+                            "shout hello": { "capability": "fixture.echo", "input": { "text": "HELLO" } }
                         },
                         "default": "quick"
                     }

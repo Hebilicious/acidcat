@@ -35,7 +35,10 @@ fn aircon_catalog() -> Catalog {
                         "status": { "capability": "aircon.status.get" },
                         "--on": { "capability": "aircon.power.set", "input": { "on": true } },
                         "--off": { "capability": "aircon.power.set", "input": { "on": false } },
-                        "follow": { "event": "aircon.status.changed" }
+                        "follow": { "event": "aircon.status.changed" },
+                        "fan": { "capability": "aircon.fan.set" },
+                        "fan auto": { "capability": "aircon.fan.set", "input": { "speed": "auto" } },
+                        "fan high": { "capability": "aircon.fan.set", "input": { "speed": "high" } }
                     }, "default": "status" }
                 })),
                 ..Target::default()

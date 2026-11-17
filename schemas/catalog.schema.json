@@ -113,7 +113,7 @@
         "aliases": {
           "type": "object",
           "propertyNames": {
-            "pattern": "^(--)?[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+            "pattern": "^(--[a-z][a-z0-9]*(-[a-z0-9]+)*|[a-z][a-z0-9]*(-[a-z0-9]+)*( [a-z][a-z0-9]*(-[a-z0-9]+)*)?)$"
           },
           "additionalProperties": {
             "$ref": "#/$defs/cliAlias"
@@ -122,7 +122,7 @@
         "default": {
           "description": "The name of the default alias: a command alias that runs when the command line gets no command.",
           "type": "string",
-          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*( [a-z][a-z0-9]*(-[a-z0-9]+)*)?$"
         }
       }
     },

@@ -70,6 +70,15 @@ module cliAliasCases {
     ["-", "-", "h", "e", "l", "p"],
     ["-", "-", "p", "a", "t", "h"],
     ["-", "-", "c", "u", "r", "s", "o", "r"],
+    ["s", " ", "a", "-", "1"],
+    ["l", "i", "s", "t", " ", "s"],
+    ["p", "r", "o", "b", "e", " ", "s"],
+    ["a", " ", "b", " ", "c"],
+    ["a", " ", " ", "b"],
+    [" ", "a"],
+    ["a", " "],
+    ["s", " ", "B"],
+    ["-", "-", "s", " ", "a"],
   ]
 
   pure val UNDECLARED: Text = ["z", "z"]
@@ -82,7 +91,7 @@ module cliAliasCases {
   pure val ONE_ALIAS: List[Declared] = NAMES.foldl([], (cases, name) => VALUES.foldl(cases, (byValue, value) =>
     defaultsFor(name).foldl(byValue, (more, fallback) => more.append(declared([(name, value)], fallback)))))
 
-  pure val PAIR_NAMES: List[Text] = [["s"], ["t"], ["-", "-", "p", "a", "t", "h"], ["-", "-", "c", "u", "r", "s", "o", "r"], ["-", "-", "z", "a", "p"]]
+  pure val PAIR_NAMES: List[Text] = [["s"], ["t"], ["s", " ", "t"], ["-", "-", "p", "a", "t", "h"], ["-", "-", "c", "u", "r", "s", "o", "r"], ["-", "-", "z", "a", "p"]]
 
   pure val PAIR_VALUES: List[AliasValue] = [
     capabilityValue(PROBE_READ, NoFixedInput),

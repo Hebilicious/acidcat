@@ -5,6 +5,7 @@ import {
   CLI_RESUME_FLAGS,
   CLI_WATCH_EXIT_CODES,
   cliAliases,
+  cliAliasOfArgs,
   cliAliasInput,
   cliAliasUsage,
   cliCommandList,
@@ -47,8 +48,8 @@ export interface CliOptions<Context> {
   readonly description?: string | undefined;
   /**
    * The commands of the application, beside the commands of the capabilities, `call`, `list` and `watch`. The name of
-   * each one must not be `call`, `list`, `watch`, the name of another command of the application, or the first word of
-   * the command of a capability (spec/bindings/cli.md#commands).
+   * each one must not be `call`, `list`, `watch`, the name of another command of the application, the first word of a
+   * command alias, or the first word of the command of a capability (spec/bindings/cli.md#commands).
    */
   readonly commands?: readonly CliCommand<Context>[] | undefined;
   /**
@@ -227,7 +228,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     if (text !== "") io.stdout(text);
   };
 
-  const taken = new Set([...CLI_GENERIC_COMMANDS, ...commands.flatMap(({ path }) => path.slice(0, 1)), ...aliases.map(({ name }) => name)]);
+  const taken = new Set([...CLI_GENERIC_COMMANDS, ...commands.flatMap(({ path }) => path.slice(0, 1)), ...aliases.map(({ name }) => leadingWord(name))]);
   for (const command of added) {
     if (taken.has(command.name)) throw new Error(`The command ${command.name} of the application has the same name as another command.`);
     taken.add(command.name);
@@ -336,9 +337,10 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   const argsWithDefaultAlias = (): readonly string[] => {
     const [head] = args;
     if (defaultAlias === undefined) return args;
-    if (head === undefined) return [defaultAlias.name];
+    const words = defaultAlias.name.split(" ");
+    if (head === undefined) return words;
     const flagOfProgram = PROGRAM_FLAGS.includes(head) || aliases.some(({ name }) => name === head);
-    return head.startsWith("--") && !flagOfProgram ? [defaultAlias.name, ...args] : args;
+    return head.startsWith("--") && !flagOfProgram ? [...words, ...args] : args;
   };
 
   try {
@@ -421,8 +423,9 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       return await invoke(id, input);
     }
     if (first === "watch") return await watch(rest);
-    const alias = aliases.find(({ name }) => name === first);
-    if (alias !== undefined) return await runAlias(alias, rest);
+    const named = cliAliasOfArgs(aliases, [first, ...rest]);
+    if (named === "unknown-command") throw new UsageError(`There is no command ${[first, ...rest].slice(0, 2).join(" ")}.`, CLI_EXIT_CODES["unknown-capability"]);
+    if (named !== undefined) return await runAlias(named.alias, named.rest);
     const command = added.find(({ name }) => name === first);
     if (command !== undefined) return await command.run(rest, { ...io, output, context: options.context });
 
@@ -457,6 +460,8 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     await provider.dispose();
   }
 }
+
+const leadingWord = (name: string): string => name.split(" ")[0] ?? name;
 
 function takenFlags(view: CatalogDocument, aliases: readonly CliAlias[]): ReadonlyMap<string, string> {
   const taken = new Map<string, string>();

@@ -37,9 +37,10 @@ pub use crate::facts_generated::exit;
 use crate::facts_generated::{
     ALIASES_NOT_OBJECT_MESSAGE, BAD_DEFAULT_MESSAGE, BAD_NAME_MESSAGE, BAD_TARGET_MESSAGE,
     DEFAULT_HAS_RESERVED_FLAG_MESSAGE, FIRST_WORD_MESSAGE, FLAG_OF_DEFAULT_MESSAGE,
-    GENERIC_COMMANDS, INPUT_NOT_OBJECT_MESSAGE, INTERRUPT_GRACE_MS, NO_CLI_BINDING_MESSAGE,
-    NO_PROPERTIES_MESSAGE, NOT_A_PROPERTY_MESSAGE, NOT_IN_VIEW_MESSAGE, RESERVED_NAME_MESSAGE,
-    SETTINGS_NOT_OBJECT_MESSAGE, UNKNOWN_MEMBER_MESSAGE,
+    GENERIC_COMMANDS, GROUP_FIRST_WORD_MESSAGE, INPUT_NOT_OBJECT_MESSAGE, INTERRUPT_GRACE_MS,
+    NO_CLI_BINDING_MESSAGE, NO_PROPERTIES_MESSAGE, NOT_A_PROPERTY_MESSAGE, NOT_IN_VIEW_MESSAGE,
+    RESERVED_FIRST_WORD_MESSAGE, RESERVED_NAME_MESSAGE, SETTINGS_NOT_OBJECT_MESSAGE,
+    UNKNOWN_MEMBER_MESSAGE,
 };
 
 /// The time after the first interrupt at which [`cli_main`] and [`run_cli_process`] exit with code 130.
@@ -284,7 +285,8 @@ pub struct CliOptions<C> {
     /// The text at the top of the help. The default is the description of the application, then `name`.
     pub description: Option<String>,
     /// The commands of the application. The name of each one must not be `call`, `list`, `watch`, the name of
-    /// another command of the application, or the first word of the command of a capability.
+    /// another command of the application, the first word of a command alias, or the first word of the command of a
+    /// capability.
     pub commands: Vec<CliCommand<C>>,
     /// The HTTP binding of the application in another process or on another machine. With it, the command line
     /// sends each call and each subscription to that server. The commands still come from the view of `target` in
@@ -615,7 +617,11 @@ pub async fn run_cli<C: Send + Sync + 'static>(
         .iter()
         .map(|name| (*name).to_owned())
         .chain(commands.iter().map(|(_, path)| path[0].clone()))
-        .chain(aliases.iter().map(|alias| alias.name.clone()))
+        .chain(
+            aliases
+                .iter()
+                .map(|alias| leading_word(&alias.name).to_owned()),
+        )
         .collect();
     for command in &options.commands {
         if taken.contains(&command.name) {
@@ -852,9 +858,12 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 )
                 .await
             }
-            Some(name) if aliases.iter().any(|alias| alias.name == name) => {
-                let Some(alias) = aliases.iter().find(|alias| alias.name == name) else {
-                    return Ok(exit::UNKNOWN_CAPABILITY);
+            Some(_) if !matches!(alias_of_args(args, &aliases), AliasOfArgs::None) => {
+                let AliasOfArgs::Alias(alias, words) = alias_of_args(args, &aliases) else {
+                    return Err(usage_error(
+                        format!("There is no command {}.", args[..2].join(" ")),
+                        exit::UNKNOWN_CAPABILITY,
+                    ));
                 };
                 run_alias(
                     &provider,
@@ -862,7 +871,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                     &view,
                     alias,
                     &options.name,
-                    &args[1..],
+                    &args[words..],
                     io,
                 )
                 .await
@@ -1444,8 +1453,7 @@ fn event_usage(program: &str, id: &str, input: Option<&Value>) -> String {
     words.join(" ")
 }
 
-fn is_alias_name(name: &str) -> bool {
-    let word = name.strip_prefix("--").unwrap_or(name);
+fn is_word(word: &str) -> bool {
     word.starts_with(|first: char| first.is_ascii_lowercase())
         && word.split('-').all(|part| {
             !part.is_empty()
@@ -1453,6 +1461,13 @@ fn is_alias_name(name: &str) -> bool {
                     .chars()
                     .all(|letter| letter.is_ascii_lowercase() || letter.is_ascii_digit())
         })
+}
+
+fn is_alias_name(name: &str) -> bool {
+    match name.strip_prefix("--") {
+        Some(word) => is_word(word),
+        None => name.split(' ').count() <= 2 && name.split(' ').all(is_word),
+    }
 }
 
 fn cli_aliases(view: &Value, target: &str) -> Aliases {
@@ -1512,17 +1527,31 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
             problem(BAD_NAME_MESSAGE, &[]);
             continue;
         }
+        let (leading, two_words) = match name.split_once(' ') {
+            Some((leading, _)) => (leading, true),
+            None => (name.as_str(), false),
+        };
         let reserved = if name.starts_with("--") {
             PROGRAM_FLAGS.contains(&name.as_str())
         } else {
-            GENERIC_COMMANDS.contains(&name.as_str())
+            GENERIC_COMMANDS.contains(&leading)
         };
         if reserved {
-            problem(RESERVED_NAME_MESSAGE, &[]);
+            let template = if two_words {
+                RESERVED_FIRST_WORD_MESSAGE
+            } else {
+                RESERVED_NAME_MESSAGE
+            };
+            problem(template, &[]);
             continue;
         }
-        if first_words.contains(&name.as_str()) {
-            problem(FIRST_WORD_MESSAGE, &[]);
+        if first_words.contains(&leading) {
+            let template = if two_words {
+                GROUP_FIRST_WORD_MESSAGE
+            } else {
+                FIRST_WORD_MESSAGE
+            };
+            problem(template, &[]);
             continue;
         }
         let value = &members[name];
@@ -1681,18 +1710,56 @@ fn args_with_default_alias(
 ) -> Vec<String> {
     match (default_alias, args.first()) {
         (None, _) => args.to_vec(),
-        (Some(fallback), None) => vec![fallback.name.clone()],
+        (Some(fallback), None) => fallback.name.split(' ').map(str::to_owned).collect(),
         (Some(fallback), Some(head)) => {
             let flag_of_program = PROGRAM_FLAGS.contains(&head.as_str())
                 || aliases.iter().any(|alias| alias.name == *head);
             if head.starts_with("--") && !flag_of_program {
-                std::iter::once(fallback.name.clone())
+                fallback
+                    .name
+                    .split(' ')
+                    .map(str::to_owned)
                     .chain(args.iter().cloned())
                     .collect()
             } else {
                 args.to_vec()
             }
         }
+    }
+}
+
+fn leading_word(name: &str) -> &str {
+    name.split(' ').next().unwrap_or(name)
+}
+
+enum AliasOfArgs<'a> {
+    Alias(&'a Alias, usize),
+    UnknownCommand,
+    None,
+}
+
+/// The alias that the first arguments name, and the number of arguments in its name (spec/bindings/cli.md#aliases).
+fn alias_of_args<'a>(args: &[String], aliases: &'a [Alias]) -> AliasOfArgs<'a> {
+    let Some(first) = args.first() else {
+        return AliasOfArgs::None;
+    };
+    let second = args.get(1);
+    if let Some(alias) = second.and_then(|second| {
+        let name = format!("{first} {second}");
+        aliases.iter().find(|alias| alias.name == name)
+    }) {
+        return AliasOfArgs::Alias(alias, 2);
+    }
+    let Some(alias) = aliases.iter().find(|alias| alias.name == *first) else {
+        return AliasOfArgs::None;
+    };
+    let group = aliases
+        .iter()
+        .any(|other| other.name.starts_with(&format!("{first} ")));
+    if group && second.is_some_and(|second| is_word(second)) {
+        AliasOfArgs::UnknownCommand
+    } else {
+        AliasOfArgs::Alias(alias, 1)
     }
 }
 

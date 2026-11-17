@@ -26,10 +26,13 @@ func airconCatalog() *catalog.Catalog {
 		}).
 		Target("cli", catalog.Target{Bindings: []string{"cli"}, Options: schema{
 			"cli": schema{"aliases": schema{
-				"status": schema{"capability": "aircon.status.get"},
-				"--on":   schema{"capability": "aircon.power.set", "input": schema{"on": true}},
-				"--off":  schema{"capability": "aircon.power.set", "input": schema{"on": false}},
-				"follow": schema{"event": "aircon.status.changed"},
+				"status":   schema{"capability": "aircon.status.get"},
+				"--on":     schema{"capability": "aircon.power.set", "input": schema{"on": true}},
+				"--off":    schema{"capability": "aircon.power.set", "input": schema{"on": false}},
+				"follow":   schema{"event": "aircon.status.changed"},
+				"fan":      schema{"capability": "aircon.fan.set"},
+				"fan auto": schema{"capability": "aircon.fan.set", "input": schema{"speed": "auto"}},
+				"fan high": schema{"capability": "aircon.fan.set", "input": schema{"speed": "high"}},
 			}, "default": "status"},
 		}}).
 		Target("mcp", catalog.Target{Description: "Agents, through an MCP server.", Bindings: []string{"mcp"}}).

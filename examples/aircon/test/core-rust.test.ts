@@ -119,10 +119,17 @@ test("the Rust command line has the aliases of the catalog", async (context) => 
   const fallback = await finish(remote());
   assert.equal(fallback.code, 0, fallback.stderr);
   assert.partialDeepStrictEqual(JSON.parse(fallback.stdout), { power: false }, "the default alias is status");
+  assert.equal((await finish(remote("fan", "high"))).code, 0);
+  assert.partialDeepStrictEqual(JSON.parse((await finish(remote("status"))).stdout), { fan: "high" });
+  assert.equal((await finish(remote("fan", "--speed", "low"))).code, 0);
+  assert.partialDeepStrictEqual(JSON.parse((await finish(remote("status"))).stdout), { fan: "low" });
+  const unknown = await finish(remote("fan", "medium"));
+  assert.deepEqual([unknown.code, unknown.stdout], [2, ""], "medium is not the second word of an alias of the group fan");
   const list = await cli("list");
   assert.match(list.stdout, /"aliases": \[\n\s*"aircon --off",\n\s*"aircon --on"\n\s*\]/);
   assert.match(list.stdout, /"aliases": \[\n\s*"aircon follow \[--cursor <string>\] \[--max-age-ms <integer>\]"\n\s*\]/);
-  assert.match((await cli("--help")).stdout, /\nAliases:\n {2}--off\n {2}--on\n {2}follow \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}status\n\nOutput:\n/);
+  assert.match(list.stdout, /"aliases": \[\n\s*"aircon fan --speed <auto\|low\|medium\|high>",\n\s*"aircon fan auto",\n\s*"aircon fan high"\n\s*\]/);
+  assert.match((await cli("--help")).stdout, /\nAliases:\n {2}--off\n {2}--on\n {2}fan --speed <auto\|low\|medium\|high>\n {2}fan auto\n {2}fan high\n {2}follow \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}status\n\nOutput:\n/);
 
   const follow = remote("follow");
   context.after(() => follow.kill());

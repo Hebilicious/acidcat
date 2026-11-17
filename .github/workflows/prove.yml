@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        invariant: [notTerminalGivesJson, acceptedNamesAreSafe, argumentsAfterTheStopStay, lastOutputFlagWins, badValueStops]
+        invariant: [notTerminalGivesJson, acceptedNamesAreSafe, argumentsAfterTheStopStay, lastOutputFlagWins, badValueStops, acceptedAliasNamesAreSafe]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         # Moon compares the pull request with `main`, so it needs the full history.

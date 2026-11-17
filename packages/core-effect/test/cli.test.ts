@@ -169,7 +169,7 @@ describe("the command line of an application", { concurrency: true }, () => {
 
   test("the help lists the aliases, and <alias> --help gives the usage of the alias", async () => {
     const [help, sayHelp, helloHelp] = await Promise.all([cli("--help"), cli("say", "--help"), cli("--hello", "--help")]);
-    assert.match(help.stdout, /\nALIASES\n {2}--hello\n {2}broken-ticks \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}echoes '<json>' \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}fixed-note \[--loud\]\n {2}held-keys\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n {2}ticks \[--gap <integer>\] \[--key <string>\] \[--cursor <string>\] \[--max-age-ms <integer>\]\n$/);
+    assert.match(help.stdout, /\nALIASES\n {2}--hello\n {2}broken-ticks \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}echoes '<json>' \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}fixed-note \[--loud\]\n {2}held-keys\n {2}notes '<json>'\n {2}notes add --text <string> \[--loud\]\n {2}notes loud --text <string>\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n {2}shout hello\n {2}ticks \[--gap <integer>\] \[--key <string>\] \[--cursor <string>\] \[--max-age-ms <integer>\]\n$/);
     assert.doesNotMatch(help.stdout, /alias --hello/);
     assert.deepEqual(sayHelp, { code: 0, stdout: "Usage: fixture say --text <string>\n\nReturn the input text.\n", stderr: "" });
     assert.equal(helloHelp.stdout, "Usage: fixture --hello\n\nReturn the input text.\n");
@@ -237,7 +237,7 @@ test("the description of the command line is the option, else the description of
 test("a command of the application must not have the name of another command", () => {
   const options = { name: "fixture", version: "0.0.0" };
   const named = (name: string) => Command.make(name);
-  for (const name of ["call", "list", "fixture", "say"]) {
+  for (const name of ["call", "list", "fixture", "say", "shout"]) {
     assert.throws(() => Cli.command(fixture, { ...options, commands: [named(name)] }), new RegExp(`The command ${name} of the application`));
   }
   assert.throws(() => Cli.command(fixture, { ...options, commands: [named("report"), named("report")] }), /The command report of the application/);

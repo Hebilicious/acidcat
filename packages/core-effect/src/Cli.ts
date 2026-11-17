@@ -4,6 +4,7 @@ import {
   CLI_RESUME_FLAGS,
   CLI_WATCH_EXIT_CODES,
   cliAliases,
+  cliAliasOfArgs,
   cliAliasFlagNames,
   cliAliasInput,
   cliAliasUsage,
@@ -70,8 +71,8 @@ export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = r
   readonly description?: string | undefined;
   /**
    * The commands of the application, beside the commands of the capabilities, `call`, `list` and `watch`. The name of
-   * each one must not be `call`, `list`, `watch`, the name of another command of the application, or the first word of
-   * the command of a capability (spec/bindings/cli.md#commands).
+   * each one must not be `call`, `list`, `watch`, the name of another command of the application, the first word of a
+   * command alias, or the first word of the command of a capability (spec/bindings/cli.md#commands).
    */
   readonly commands?: Commands | undefined;
   /**
@@ -228,8 +229,8 @@ function parentUsageError(commandPath: readonly string[]): { readonly message: s
  * code with `exitCodeOf`. Other failures of the command stay in the error channel. Standard output carries only the
  * outcomes, so the logs and the usage errors go to standard error.
  *
- * When the first argument is the name of an alias (spec/bindings/cli.md#aliases), the subcommand of the alias makes
- * the call or the subscription, and `<alias> --help` writes the usage of the alias. With a default alias, the program
+ * When the first one or two arguments are the name of an alias (spec/bindings/cli.md#aliases), the subcommand of the
+ * alias makes the call or the subscription, and `<alias> --help` writes the usage of the alias. With a default alias, the program
  * runs it when there is no argument, or when the first argument starts with `--` and is not a flag alias or a global
  * flag: then all the arguments are its flags. The help of the root command ends with the aliases. The program stops
  * with a defect when it starts if the name of a flag alias, or of a flag of the default alias, is the name of a global
@@ -260,9 +261,14 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
     }
     const runAlias = (alias: AliasEntry, rest: readonly string[]) =>
       rest.includes("--help") || rest.includes("-h") ? Console.log(cliHelp(alias.usage, alias.description)) : runWith([aliasWord(alias.name), ...rest]);
-    const [first, ...rest] = args;
-    const named = aliases.find(({ name }) => name === first);
-    if (named !== undefined) return yield* runAlias(named, rest);
+    const named = cliAliasOfArgs(aliases, args);
+    if (named === "unknown-command") {
+      yield* Console.error(`There is no command ${args.slice(0, 2).join(" ")}.`);
+      process.exitCode = CLI_EXIT_CODES["unknown-capability"];
+      return;
+    }
+    if (named !== undefined) return yield* runAlias(named.alias, named.rest);
+    const [first] = args;
     const startsDefault = first === undefined || (first.startsWith("--") && !taken.has(longFlagName(first)));
     if (fallback !== undefined && startsDefault) return yield* runAlias(fallback, args);
     return yield* runWith(args);
@@ -619,7 +625,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
       throw new Error(filled(MESSAGES.sharedPrefix, { command: path.join(" "), longer: longer.path.join(" ") }));
     }
   }
-  for (const { name } of aliases) taken.add(name);
+  for (const { name } of aliases) taken.add(name.split(" ")[0] ?? name);
   const errors = outputErrors(options.output?.flags ?? [], takenFlags(catalogView, aliases));
   if (errors.length > 0) throw new Error(errors.join("\n"));
   for (const added of options.commands ?? []) {

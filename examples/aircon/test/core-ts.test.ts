@@ -140,6 +140,25 @@ test("the aliases of the command line call their capabilities with their fixed i
   assert.partialDeepStrictEqual(list.find((item: unknown) => typeof item === "object" && item !== null && "id" in item && item.id === "aircon.power.set"), {
     aliases: ["aircon --off", "aircon --on"],
   });
+  assert.partialDeepStrictEqual(list.find((item: unknown) => typeof item === "object" && item !== null && "id" in item && item.id === "aircon.fan.set"), {
+    aliases: ["aircon fan --speed <auto|low|medium|high>", "aircon fan auto", "aircon fan high"],
+  });
+});
+
+test("the two-word aliases of the command line and the one-word alias of their group set the fan speed", async () => {
+  const unit = new Unit();
+  const cli = async (...args: string[]) => {
+    const out: string[] = [];
+    const code = await runCli(aircon, { name: "aircon", version: "0.1.0", context: { unit }, toJsonSchema }, args, { stdout: (text) => out.push(text), stderr: () => undefined });
+    return { code, stdout: out.join("\n") };
+  };
+  assert.equal((await cli("fan", "high")).code, 0);
+  assert.equal(unit.state.fan, "high");
+  assert.equal((await cli("fan", "--speed", "low")).code, 0);
+  assert.equal(unit.state.fan, "low");
+  assert.equal((await cli("fan", "auto")).code, 0);
+  assert.equal(unit.state.fan, "auto");
+  assert.deepEqual(await cli("fan", "medium"), { code: 2, stdout: "" }, "medium is not the second word of an alias of the group fan");
 });
 
 test("the alias follow of the command line writes each change of the status", async () => {
