@@ -52,6 +52,12 @@ test("subscribe gets the type of its input from the input schema, and each data 
   };
   // @ts-expect-error The input of the handle has the type of the input schema.
   const badInput = () => handle.subscribe({ room: 1 });
-  void [ids, wrong, first, badInput];
+  const subscriptions = (readings: EventHandleOf<typeof reading>, ticks: EventHandleOf<typeof tick>) => [
+    readings.subscribe({ room: "hall" }),
+    // @ts-expect-error The input of probe.reading needs `room`.
+    readings.subscribe({}),
+    ticks.subscribe({}),
+  ];
+  void [ids, wrong, first, badInput, subscriptions];
   await session.dispose();
 });
