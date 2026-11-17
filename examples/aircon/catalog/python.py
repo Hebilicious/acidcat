@@ -142,7 +142,7 @@ def aircon_catalog() -> Catalog:
         "aircon.firmware.update",
         description="Install the latest firmware. The unit restarts and is offline for about a minute.",
         audience=["app"],
-        failures={"Offline": offline, "UpToDate": {"type": "object", "properties": {"version": {"type": "string"}}}},
+        failures={"Offline": offline, "UpToDate": {"type": "object", "required": ["version"], "properties": {"version": {"type": "string"}}}},
     )
     catalog.event(
         "aircon.status.changed",
