@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/Hebilicious/acidcat/compare/pypi/v0.2.2...pypi/v0.3.0) (2026-11-17)
+
+
+### Features
+
+* **cli:** add aliases to the CLI binding ([#145](https://github.com/Hebilicious/acidcat/issues/145)) ([63c3f87](https://github.com/Hebilicious/acidcat/commit/63c3f87033240833a43a3219d265333de74f8128))
+
 ## [0.2.2](https://github.com/Hebilicious/acidcat/compare/pypi/v0.2.1...pypi/v0.2.2) (2026-11-12)
 
 

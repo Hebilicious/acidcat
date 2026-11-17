@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.0](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.1.2...crates-core/v0.2.0) (2026-11-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** add a human form of the output, off by default, with output flags and typed formatters in each core ([#159](https://github.com/Hebilicious/acidcat/issues/159))
+
+### Features
+
+* **cli:** add a human form of the output, off by default, with output flags and typed formatters in each core ([#159](https://github.com/Hebilicious/acidcat/issues/159)) ([c1794ec](https://github.com/Hebilicious/acidcat/commit/c1794ecc252aea5acdff269fa42a7f72375c34d1))
+* **cli:** add aliases of events and a default alias ([#146](https://github.com/Hebilicious/acidcat/issues/146)) ([cf40029](https://github.com/Hebilicious/acidcat/commit/cf4002937a50c059d45411fa680be7005796198c))
+* **cli:** add aliases to the CLI binding ([#145](https://github.com/Hebilicious/acidcat/issues/145)) ([63c3f87](https://github.com/Hebilicious/acidcat/commit/63c3f87033240833a43a3219d265333de74f8128))
+* **cli:** give check and conform a JSON output for scripts and agents ([#154](https://github.com/Hebilicious/acidcat/issues/154)) ([29cf5ab](https://github.com/Hebilicious/acidcat/commit/29cf5abd70b4cc0c54e7a42696abd66f0f12e990))
+* **model:** add a Quint model of the output rules of the CLI, with proofs and generated cases for each core ([#160](https://github.com/Hebilicious/acidcat/issues/160)) ([f1b3dfa](https://github.com/Hebilicious/acidcat/commit/f1b3dfacefb783f4567946646c11167325f1df75))
+
+
+### Code Refactoring
+
+* **model:** generate the shared facts of the cores from one source ([#163](https://github.com/Hebilicious/acidcat/issues/163)) ([10c2a0d](https://github.com/Hebilicious/acidcat/commit/10c2a0d7eabb5180015ea95d4d0fa97214f7eaeb))
+
 ## [0.1.2](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.1.1...crates-core/v0.1.2) (2026-11-16)
 
 
