@@ -34,7 +34,6 @@ fn webhook_limit_flags() -> Vec<String> {
 }
 
 const DEADLINE: Duration = Duration::from_secs(10);
-const SECOND_INTERRUPT: Duration = Duration::from_millis(100);
 
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -240,11 +239,19 @@ fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
             .status()
             .expect("kill runs");
     };
-    let interrupted = Instant::now();
+    let mut interrupted = Instant::now();
     interrupt();
     if interrupts == 2 {
         // Unix merges a signal that is still pending with the next one of the same kind.
-        std::thread::sleep(SECOND_INTERRUPT);
+        let cancelled = directory.join("held.cancelled");
+        while !cancelled.exists() {
+            assert!(
+                interrupted.elapsed() < DEADLINE,
+                "the call did not write its marker file when it was cancelled"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        interrupted = Instant::now();
         interrupt();
     }
     let status = loop {
@@ -294,7 +301,7 @@ fn a_call_that_blocks_exits_with_130_after_the_grace_period_or_at_once_after_a_s
     );
     assert!(
         twice.after_interrupt < INTERRUPT_GRACE,
-        "exited {:?} after two interrupts, not at once",
+        "exited {:?} after the second interrupt, not at once",
         twice.after_interrupt
     );
 }

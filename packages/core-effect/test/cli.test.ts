@@ -28,7 +28,6 @@ const cliWithRepeated = program("./fixture-cli-repeated.ts");
 const cliWithInherited = program("./fixture-cli-inherited.ts");
 
 const DEADLINE_MS = 10_000;
-const SECOND_INTERRUPT_MS = 100;
 
 async function interruptedHold(interrupts: 1 | 2) {
   const directory = mkdtempSync(join(tmpdir(), "core-effect-interrupt-"));
@@ -38,17 +37,21 @@ async function interruptedHold(interrupts: 1 | 2) {
   let stderr = "";
   child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
   const exited = new Promise<[number | null, NodeJS.Signals | null]>((resolve) => child.on("close", (...exit) => resolve(exit)));
-  try {
+  const waitFor = async (path: string, state: string) => {
     const start = Date.now();
-    while (!existsSync(marker)) {
-      if (Date.now() - start > DEADLINE_MS) throw new Error(`The call did not write its marker file. ${stderr}`);
+    while (!existsSync(path)) {
+      if (Date.now() - start > DEADLINE_MS) throw new Error(`The call did not write its marker file when it ${state}. ${stderr}`);
       await pause(10);
     }
-    const interrupted = Date.now();
+  };
+  try {
+    await waitFor(marker, "started to hold");
+    let interrupted = Date.now();
     child.kill("SIGINT");
     // Unix merges a signal that is still pending with the next one of the same kind.
     if (interrupts === 2) {
-      await pause(SECOND_INTERRUPT_MS);
+      await waitFor(`${marker}.cancelled`, "was cancelled");
+      interrupted = Date.now();
       child.kill("SIGINT");
     }
     const ended = await Promise.race([exited, pause(DEADLINE_MS, "running" as const)]);
@@ -140,7 +143,7 @@ describe("the command line of an application", { concurrency: true }, () => {
     assert.deepEqual({ ...once, elapsed: undefined }, { code: 130, signal: null, stderr: "", elapsed: undefined, running: false });
     assert.ok(once.elapsed >= INTERRUPT_GRACE_MS, `exited ${once.elapsed} ms after the interrupt, before the grace period`);
     assert.deepEqual({ ...twice, elapsed: undefined }, { code: 130, signal: null, stderr: "", elapsed: undefined, running: false });
-    assert.ok(twice.elapsed < INTERRUPT_GRACE_MS, `exited ${twice.elapsed} ms after two interrupts, not at once`);
+    assert.ok(twice.elapsed < INTERRUPT_GRACE_MS, `exited ${twice.elapsed} ms after the second interrupt, not at once`);
   });
 
   test("a command of the application runs beside the commands of the capabilities", async () => {

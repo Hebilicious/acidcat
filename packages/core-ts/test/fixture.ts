@@ -127,7 +127,7 @@ export class Watchers {
     return { [Symbol.asyncIterator]: () => iterator };
   }
 
-  async mark(path: string): Promise<void> {
+  async mark(path: string, _signal: AbortSignal): Promise<void> {
     await this.#marker?.write(path);
   }
 
@@ -155,6 +155,11 @@ export class WatchersThatIgnoreCancellation extends Watchers {
     const values = super.watch(key, new AbortController().signal)[Symbol.asyncIterator]();
     // A `for await` loop that ends calls `return` on its iterator. This iterator has none, so the watch does not stop.
     return { [Symbol.asyncIterator]: () => ({ next: () => values.next() }) };
+  }
+
+  override async mark(path: string, signal: AbortSignal): Promise<void> {
+    signal.addEventListener("abort", () => void super.mark(`${path}.cancelled`, signal), { once: true });
+    await super.mark(path, signal);
   }
 }
 
@@ -367,7 +372,7 @@ export const fixture = defineApp<Context>({
       payload: Watched,
       async *subscribe({ key, marker }, { context, signal }) {
         const values = context.watchers.watch(key, signal);
-        if (marker !== undefined) await context.watchers.mark(marker);
+        if (marker !== undefined) await context.watchers.mark(marker, signal);
         try {
           for await (const value of values) yield { data: { key, value } };
         } finally {
