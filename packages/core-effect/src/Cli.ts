@@ -22,11 +22,12 @@ import { unavailable } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CatalogDocument, JsonObject, Occurrence, Outcome, Resume } from "@acid-cat/spec-ts";
 import { Console, Context, Effect, Exit, Logger, Option, Predicate, Schema, Scope, Stdio, Stream } from "effect";
 import { Argument, CliConfig, CliError, CliOutput, Command, CommandSpec, Flag, Primitive } from "effect/cli";
+import type { HelpDoc } from "effect/cli";
 
 import * as App from "./App.ts";
 import type { AnySchema } from "./Capability.ts";
 import type * as Http from "./Http.ts";
-import { formOf, hasColor, layout, outputChoice, outputErrors, ui } from "./internal/human.ts";
+import { formOf, hasColor, layout, outputChoice, outputErrors, outputFlagHelp, ui } from "./internal/human.ts";
 import type { Environment, Form, OutputFlag, Ui } from "./internal/human.ts";
 import * as Session from "./Session.ts";
 
@@ -105,7 +106,20 @@ interface Presentation {
 
 const Presentation = Context.Reference<Presentation>("@acid-cat/core-effect/Cli/Presentation", { defaultValue: () => ({ form: "json", ui: ui(false) }) });
 
-const OutputOption = Context.Reference<Output | undefined>("@acid-cat/core-effect/Cli/Output", { defaultValue: () => undefined });
+/**
+ * The form of the output that the arguments and `Options.output` choose. A command of the application reads it to
+ * write in the same form. Without `Options.output`, it is `"json"`.
+ */
+export const outputForm: Effect.Effect<Form> = Effect.gen(function* () {
+  return (yield* Presentation).form;
+});
+
+interface OutputSettings {
+  readonly output: Output;
+  readonly commands: readonly string[];
+}
+
+const OutputSettings = Context.Reference<OutputSettings | undefined>("@acid-cat/core-effect/Cli/Output", { defaultValue: () => undefined });
 
 interface AliasEntry {
   readonly name: string;
@@ -212,7 +226,8 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   options: { readonly version: string },
 ): Effect.Effect<void | number, Exclude<E, CliError.CliError>, R | Command.Environment> => {
   const aliases = Context.get(command.annotations, Aliases);
-  const output = Context.get(command.annotations, OutputOption);
+  const settings = Context.get(command.annotations, OutputSettings);
+  const claimed = new Set(settings?.output.flags?.flatMap(({ names }) => names) ?? []);
   const dispatch = (args: readonly string[]) =>
     Effect.gen(function* () {
     const runWith = Command.runWith(command, { version: options.version });
@@ -237,8 +252,12 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   });
   const program = Effect.gen(function* () {
     const args = yield* (yield* Stdio.Stdio).args;
-    if (output === undefined) return yield* dispatch(args);
-    const chosen = outputChoice(output.flags ?? [], args);
+    if (settings === undefined) return yield* dispatch(args);
+    const { output, commands } = settings;
+    const { builtIns } = yield* CliConfig.CliConfig;
+    const clashes = outputErrors(output.flags ?? [], flagsOfCommandLine(command, builtIns));
+    if (clashes.length > 0) return yield* Effect.die(new Error(clashes.join("\n")));
+    const chosen = outputChoice(output.flags ?? [], args, commands);
     if (chosen.error !== undefined) {
       yield* Console.error(chosen.error);
       process.exitCode = CLI_EXIT_CODES["invalid-input"];
@@ -259,7 +278,7 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
     Effect.updateService(
       CliOutput.Formatter,
       (formatter): CliOutput.Formatter => ({
-        formatHelpDoc: (doc) => withAliases(formatter.formatHelpDoc(doc), doc),
+        formatHelpDoc: (doc) => withOutputFlags(withAliases(formatter.formatHelpDoc(withoutClaimedAliases(doc, claimed)), doc), doc),
         formatCliError: (error) => formatter.formatCliError(error),
         formatError: (error) => formatter.formatError(error),
         formatVersion: (name, version) => formatter.formatVersion(name, version),
@@ -290,6 +309,24 @@ function globalFlagsOfEveryCommand(command: Command.Command.Any, builtIns: Built
 const flagNames = (flag: CommandSpec.Flag): readonly string[] => [flag.name, ...flag.aliases, ...(flag.negation === undefined ? [] : [flag.negation])];
 
 const longFlagName = (arg: string): string => arg.slice(2).split("=", 1)[0] ?? "";
+
+const ACTIONS_OF_THE_ROOT = new Set(["help", "version"]);
+
+function flagsOfCommandLine(command: Command.Command.Any, builtIns: BuiltIns): ReadonlyMap<string, string> {
+  const flags = globalFlagsOfEveryCommand(command, builtIns).filter(({ name }) => !ACTIONS_OF_THE_ROOT.has(name));
+  return new Map(flags.flatMap(flagNames).map((name) => [name.length === 1 ? `-${name}` : `--${name}`, "a flag of the command line"]));
+}
+
+function withoutClaimedAliases(doc: HelpDoc.HelpDoc, claimed: ReadonlySet<string>): HelpDoc.HelpDoc {
+  if (doc.globalFlags === undefined || claimed.size === 0) return doc;
+  return { ...doc, globalFlags: doc.globalFlags.map((flag) => ({ ...flag, aliases: flag.aliases.filter((alias) => !claimed.has(alias)) })) };
+}
+
+function withOutputFlags(help: string, doc: { readonly annotations: Context.Context<never> }): string {
+  const flags = Context.get(doc.annotations, OutputSettings)?.output.flags ?? [];
+  if (flags.length === 0) return help;
+  return [help, "", "OUTPUT FLAGS", ...flags.map((flag) => `  ${outputFlagHelp(flag)}`)].join("\n");
+}
 
 function withAliases(help: string, doc: { readonly annotations: Context.Context<never> }): string {
   const aliases = Context.get(doc.annotations, Aliases);
@@ -515,7 +552,11 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     return followCommand(id, id, schema, undefined, (made) => made.pipe(Command.withDescription(event.description)));
   });
   const watch = Command.make("watch").pipe(
-    Command.withDescription("Follow an event by its id. Each occurrence goes to standard output."),
+    Command.withDescription(
+      options.output === undefined
+        ? "Follow an event by its id. Each occurrence goes to standard output as one line of JSON."
+        : "Follow an event by its id. Each occurrence goes to standard output, as one line of JSON or in the human form.",
+    ),
     Command.withSubcommands(watchers),
   );
 
@@ -573,7 +614,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
       Aliases,
       aliasCommands.map(({ entry }) => entry),
     ),
-    Command.annotate(OutputOption, options.output),
+    Command.annotate(OutputSettings, options.output === undefined ? undefined : { output: options.output, commands: (options.commands ?? []).map(({ name }) => name) }),
   );
 }
 

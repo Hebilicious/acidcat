@@ -2,7 +2,8 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 use acid_cat_core::cli::{
-    CliAliases, CliFormats, CliIo, CliOptions, CliOutput, OutputDefault, OutputForm, exit, run_cli,
+    CliAliases, CliCommand, CliFormats, CliIo, CliOptions, CliOutput, OutputDefault, OutputForm,
+    exit, run_cli,
 };
 use acid_cat_core::{App, Application, Capability, CapabilityDefinition, fail};
 use schemars::JsonSchema;
@@ -63,6 +64,13 @@ async fn run_with(
     args: &[&str],
     auto_form: Option<OutputForm>,
 ) -> Result<Ran, String> {
+    let mut options = CliOptions::new("probe", "0.0.0");
+    options.output = output;
+    options.auto_form = auto_form;
+    run_options(&options, args).await
+}
+
+async fn run_options(options: &CliOptions<()>, args: &[&str]) -> Result<Ran, String> {
     let (stdout, stderr) = (
         Arc::new(Mutex::new(Vec::<String>::new())),
         Arc::new(Mutex::new(Vec::<String>::new())),
@@ -72,12 +80,10 @@ async fn run_with(
         stdout: Box::new(move |text| out.lock().unwrap().push(text.to_owned())),
         stderr: Box::new(move |text| err.lock().unwrap().push(text.to_owned())),
         cancel: CancellationToken::new(),
+        form: OutputForm::Json,
     };
-    let mut options = CliOptions::new("probe", "0.0.0");
-    options.output = output;
-    options.auto_form = auto_form;
     let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
-    let code = run_cli(&probe(), Arc::new(()), &options, &args, &mut io).await?;
+    let code = run_cli(&probe(), Arc::new(()), options, &args, &mut io).await?;
     let (stdout, stderr) = (
         stdout.lock().unwrap().join("\n"),
         stderr.lock().unwrap().join("\n"),
@@ -216,6 +222,50 @@ async fn output_flags_are_anywhere_the_last_one_wins_and_an_output_flag_can_take
     let (code, help, _) = ran(&["--help"]).await;
     assert_eq!(code, exit::VALUE);
     assert!(help.contains("Usage: probe <command> [flags]"), "{help}");
+    assert!(
+        help.ends_with(
+            "\n\nOutput:\n  -h, --human  Write the human form.\n  --json, --no-human  Write JSON.\n  --format, -f <text|json>  The form of the output: text is the human form and json is JSON."
+        ),
+        "{help}"
+    );
+}
+
+#[tokio::test]
+async fn an_application_command_gets_its_arguments_unchanged_and_the_chosen_form() {
+    let seen = Arc::new(Mutex::new(Vec::<(Vec<String>, OutputForm)>::new()));
+    let mut options = CliOptions::new("probe", "0.0.0");
+    options.output = Some(
+        CliOutput::new()
+            .default_form(OutputDefault::Json)
+            .switch(["--json"], OutputForm::Json)
+            .values(
+                ["--format", "-f"],
+                [("text", OutputForm::Human), ("json", OutputForm::Json)],
+            ),
+    );
+    let record = seen.clone();
+    options.commands.push(CliCommand {
+        name: "deploy".into(),
+        description: "Deploy the probe.".into(),
+        run: Arc::new(move |args, io, _| {
+            record.lock().unwrap().push((args, io.form));
+            Box::pin(async { 0 })
+        }),
+    });
+    run_options(&options, &["deploy", "--json", "-f", "prod"])
+        .await
+        .unwrap();
+    run_options(&options, &["-f", "text", "deploy", "--json"])
+        .await
+        .unwrap();
+    let words = |args: &[&str]| args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>();
+    assert_eq!(
+        *seen.lock().unwrap(),
+        vec![
+            (words(&["--json", "-f", "prod"]), OutputForm::Json),
+            (words(&["--json"]), OutputForm::Human),
+        ]
+    );
 }
 
 #[tokio::test]

@@ -126,14 +126,46 @@ impl CliOutput {
         problems
     }
 
+    pub(crate) fn help_lines(&self) -> Vec<String> {
+        self.flags
+            .iter()
+            .map(|flag| {
+                let names = flag.names.join(", ");
+                match &flag.choice {
+                    Choice::Form(form) => format!("{names}  Write {}.", form_name(*form)),
+                    Choice::Values(values) => {
+                        let words: Vec<&str> =
+                            values.iter().map(|(value, _)| value.as_str()).collect();
+                        let meanings: Vec<String> = values
+                            .iter()
+                            .map(|(value, form)| format!("{value} is {}", form_name(*form)))
+                            .collect();
+                        let meanings: Vec<&str> = meanings.iter().map(String::as_str).collect();
+                        format!(
+                            "{names} <{}>  The form of the output: {}.",
+                            words.join("|"),
+                            joined(&meanings, "and")
+                        )
+                    }
+                }
+            })
+            .collect()
+    }
+
     pub(crate) fn choose(
         &self,
         args: &[String],
+        command_names: &[&str],
     ) -> Result<(Option<OutputForm>, Vec<String>), String> {
         let mut rest = Vec::new();
         let mut form = None;
         let mut items = args.iter();
         while let Some(arg) = items.next() {
+            if arg == "--" || (rest.is_empty() && command_names.contains(&arg.as_str())) {
+                rest.push(arg.clone());
+                rest.extend(items.cloned());
+                break;
+            }
             let (name, inline) = match arg.split_once('=') {
                 Some((name, inline)) if arg.starts_with("--") => (name, Some(inline)),
                 _ => (arg.as_str(), None),
@@ -153,7 +185,10 @@ impl CliOutput {
                     let Some(chosen) = chosen else {
                         let words: Vec<&str> =
                             values.iter().map(|(value, _)| value.as_str()).collect();
-                        return Err(format!("The option {name} must be {}.", choices(&words)));
+                        return Err(format!(
+                            "The option {name} must be {}.",
+                            joined(&words, "or")
+                        ));
                     };
                     form = Some(chosen);
                 }
@@ -164,10 +199,19 @@ impl CliOutput {
     }
 }
 
-fn choices(values: &[&str]) -> String {
+fn joined(values: &[&str], word: &str) -> String {
     match values.split_last() {
-        Some((last, others)) if !others.is_empty() => format!("{} or {last}", others.join(", ")),
+        Some((last, others)) if !others.is_empty() => {
+            format!("{} {word} {last}", others.join(", "))
+        }
         _ => values.join(""),
+    }
+}
+
+fn form_name(form: OutputForm) -> &'static str {
+    match form {
+        OutputForm::Human => "the human form",
+        OutputForm::Json => "JSON",
     }
 }
 
@@ -189,4 +233,21 @@ fn is_short_name(name: &str) -> bool {
     chars.next() == Some('-')
         && chars.next().is_some_and(|c| c.is_ascii_alphanumeric())
         && chars.next().is_none()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn output_flags_stop_at_double_dash() {
+        let output = CliOutput::new().switch(["--json"], OutputForm::Json);
+        let args: Vec<String> = ["probe", "count", "--json", "--", "--json"]
+            .iter()
+            .map(|arg| (*arg).to_owned())
+            .collect();
+        let (form, rest) = output.choose(&args, &[]).unwrap();
+        assert_eq!(form, Some(OutputForm::Json));
+        assert_eq!(rest, ["probe", "count", "--", "--json"]);
+    }
 }

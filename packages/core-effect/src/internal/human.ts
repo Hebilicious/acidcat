@@ -48,15 +48,30 @@ export function outputErrors(flags: readonly OutputFlag[], otherFlags: ReadonlyM
   return errors;
 }
 
-const choices = (values: readonly string[]): string => (values.length < 2 ? values.join("") : `${values.slice(0, -1).join(", ")} or ${values.at(-1) ?? ""}`);
+const joined = (values: readonly string[], word: string): string =>
+  values.length < 2 ? values.join("") : `${values.slice(0, -1).join(", ")} ${word} ${values.at(-1) ?? ""}`;
+
+const FORM_NAMES: { readonly [form in Form]: string } = { human: "the human form", json: "JSON" };
+
+export function outputFlagHelp(flag: OutputFlag): string {
+  const names = flag.names.join(", ");
+  if (flag.values === undefined) return `${names}  Write ${FORM_NAMES[flag.form]}.`;
+  const values = Object.entries(flag.values);
+  const meanings = values.map(([value, form]) => `${value} is ${FORM_NAMES[form]}`);
+  return `${names} <${values.map(([value]) => value).join("|")}>  The form of the output: ${joined(meanings, "and")}.`;
+}
 
 export type OutputChoice = { readonly form: Form | undefined; readonly args: readonly string[]; readonly error?: undefined } | { readonly error: string };
 
-export function outputChoice(flags: readonly OutputFlag[], args: readonly string[]): OutputChoice {
+export function outputChoice(flags: readonly OutputFlag[], args: readonly string[], commandNames: readonly string[]): OutputChoice {
   const rest: string[] = [];
   let form: Form | undefined;
   const items = args.values();
   for (const arg of items) {
+    if (arg === "--" || (rest.length === 0 && commandNames.includes(arg))) {
+      rest.push(arg, ...items);
+      break;
+    }
     const [name = arg, inline] = arg.startsWith("--") ? arg.split(/=(.*)/s, 2) : [arg];
     const flag = flags.find(({ names }) => names.includes(name));
     if (flag === undefined || (flag.values === undefined && inline !== undefined)) {
@@ -69,7 +84,7 @@ export function outputChoice(flags: readonly OutputFlag[], args: readonly string
     }
     const value = inline ?? items.next().value;
     const chosen = value === undefined || !Object.hasOwn(flag.values, value) ? undefined : flag.values[value];
-    if (chosen === undefined) return { error: `The option ${name} must be ${choices(Object.keys(flag.values))}.` };
+    if (chosen === undefined) return { error: `The option ${name} must be ${joined(Object.keys(flag.values), "or")}.` };
     form = chosen;
   }
   return { form, args: rest };

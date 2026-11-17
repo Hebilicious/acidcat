@@ -635,6 +635,7 @@ mod tests {
             stdout: Box::new(move |text| stdout.lock().unwrap().push_str(text)),
             stderr: Box::new(|text| panic!("no text on standard error: {text}")),
             cancel: CancellationToken::new(),
+            form: OutputForm::Json,
         };
         let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
         let mut options = CliOptions::new("aircon", "0.1.0").output(output);

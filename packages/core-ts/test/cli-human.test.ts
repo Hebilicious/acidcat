@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
 
-import { cliLayout, defaultCliOutput } from "../src/cli-human.ts";
+import { cliLayout, cliOutputChoice, defaultCliOutput } from "../src/cli-human.ts";
 import { cliAlias, cliFormat, defineApp, defineCapability, defineEvent, fail, ok, runCli } from "../src/index.ts";
-import type { CliForm, CliFormat, CliOutput, ToJsonSchema } from "../src/index.ts";
+import type { CliCommand, CliForm, CliFormat, CliOutput, ToJsonSchema } from "../src/index.ts";
 
 const Probe = z.object({ name: z.string(), celsius: z.number() });
 const Broken = z.object({ _tag: z.literal("Broken"), part: z.string() });
@@ -37,10 +37,10 @@ const toJsonSchema: ToJsonSchema = (schema) => {
   return z.toJSONSchema(schema, { unrepresentable: "any" });
 };
 
-const runWith = async (output: CliOutput | undefined, args: readonly string[], terminal?: CliForm) => {
+const runWith = async (output: CliOutput | undefined, args: readonly string[], terminal?: CliForm, commands?: readonly CliCommand<{}>[]) => {
   const out: string[] = [];
   const err: string[] = [];
-  const code = await runCli(app, { name: "probe", version: "0.0.0", context: {}, toJsonSchema, output }, args, {
+  const code = await runCli(app, { name: "probe", version: "0.0.0", context: {}, toJsonSchema, output, commands }, args, {
     stdout: (text) => out.push(text),
     stderr: (text) => err.push(text),
     output: terminal,
@@ -174,6 +174,40 @@ test("output flags are anywhere in the arguments, the last one wins, and an outp
   const help = await runWith(output, ["--help"]);
   assert.equal(help.code, 0);
   assert.match(help.out.join("\n"), /^Usage: probe <command> \[flags\]$/m);
+  assert.match(
+    help.out.join("\n"),
+    /\n\nOutput:\n {2}-h, --human {2}Write the human form\.\n {2}--json, --no-human {2}Write JSON\.\n {2}--format, -f <text\|json> {2}The form of the output: text is the human form and json is JSON\.$/,
+  );
+});
+
+test("an application command gets its arguments unchanged and the chosen form, and output flags before its name choose the form", async () => {
+  const seen: { readonly args: readonly string[]; readonly output: CliForm | undefined }[] = [];
+  const deploy: CliCommand<{}> = {
+    name: "deploy",
+    description: "Deploy the probe.",
+    run: (args, io) => {
+      seen.push({ args, output: io.output });
+      return 0;
+    },
+  };
+  const output: CliOutput = {
+    default: "json",
+    flags: [
+      { names: ["--json"], form: "json" },
+      { names: ["--format", "-f"], values: { text: "human", json: "json" } },
+    ],
+  };
+  await runWith(output, ["deploy", "--json", "-f", "prod"], undefined, [deploy]);
+  await runWith(output, ["-f", "text", "deploy", "--json"], undefined, [deploy]);
+  assert.deepEqual(seen, [
+    { args: ["--json", "-f", "prod"], output: "json" },
+    { args: ["--json"], output: "human" },
+  ]);
+});
+
+test("output flags stop at --", () => {
+  const flags = [{ names: ["--json"], form: "json" }] as const;
+  assert.deepEqual(cliOutputChoice(flags, ["probe", "read", "--json", "--", "--json"], []), { form: "json", args: ["probe", "read", "--", "--json"] });
 });
 
 test("the default form is json, human, or auto from the terminal", async () => {

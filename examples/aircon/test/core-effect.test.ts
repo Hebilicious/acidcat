@@ -16,7 +16,7 @@ import { App, Mcp, Session } from "@acid-cat/core-effect";
 import { run } from "./run.ts";
 import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
-import { OFFLINE, OUTPUT_ERROR, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF } from "./human.ts";
+import { OFFLINE, OUTPUT_ERROR, OUTPUT_FLAG_LINES, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF } from "./human.ts";
 
 const ToolList = Schema.Struct({ result: Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: Schema.String })) }) });
 
@@ -233,6 +233,7 @@ test("the Effect command line writes the human form with its output flags", asyn
     cli("status", "--output", "xml"),
   ]);
   for (const human of [status, short, inline, defaultAlias]) assert.deepEqual([human.code, human.stdout], [0, `${STATUS_OFF}\n`]);
+  assert.ok((await cli("--help")).stdout.endsWith(`\n\nOUTPUT FLAGS\n${OUTPUT_FLAG_LINES}\n`));
   assert.deepEqual([poweredOff.code, poweredOff.stdout], [1, `${POWERED_OFF_LAYOUT}\n`]);
   assert.deepEqual([schedule.code, schedule.stdout], [0, `${SCHEDULE_LAYOUT}\n`]);
   assert.ok(list.stdout.startsWith("Capabilities\n  aircon status get "));

@@ -13,7 +13,7 @@ import type { z } from "zod";
 import { aircon, fanSet, firmwareUpdate, modeSet, Offline, PoweredOff, powerSet, Status, output, statusChanged, statusGet, toJsonSchema, Unit } from "../core-ts/aircon.ts";
 import { CallFailureError, catalogOf, createSession, renderCatalog, runCli } from "@acid-cat/core-ts";
 import type { Result } from "@acid-cat/core-ts";
-import { OFFLINE, OUTPUT_ERROR, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
+import { OFFLINE, OUTPUT_ERROR, OUTPUT_FLAG_LINES, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import { run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 
@@ -209,6 +209,7 @@ test("the command line writes the human form with its output flags", async () =>
     cli("status", "--output", "xml"),
   ]);
   for (const human of [status, short, inline, defaultAlias]) assert.deepEqual([human.code, human.stdout], [0, `${STATUS_OFF}\n`]);
+  assert.ok((await cli("--help")).stdout.endsWith(`\n\nOutput:\n${OUTPUT_FLAG_LINES}\n`));
   assert.deepEqual([poweredOff.code, poweredOff.stdout], [1, `${POWERED_OFF_LAYOUT}\n`]);
   assert.deepEqual([schedule.code, schedule.stdout], [0, `${SCHEDULE_LAYOUT}\n`]);
   assert.equal(list.code, 0);

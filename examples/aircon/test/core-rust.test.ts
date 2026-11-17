@@ -8,7 +8,7 @@ import { type TestContext, test } from "node:test";
 
 import { check } from "@acid-cat/cli";
 
-import { OUTPUT_ERROR, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
+import { OUTPUT_ERROR, OUTPUT_FLAG_LINES, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 
@@ -79,6 +79,7 @@ test("the Rust command line writes the human form with its output flags", async 
     cli("status", "--output", "xml"),
   ]);
   for (const human of [status, short, inline, defaultAlias]) assert.deepEqual([human.code, human.stdout], [0, `${STATUS_OFF}\n`]);
+  assert.ok((await cli("--help")).stdout.endsWith(`\n\nOutput:\n${OUTPUT_FLAG_LINES}\n`));
   assert.deepEqual([poweredOff.code, poweredOff.stdout], [1, `${POWERED_OFF_LAYOUT}\n`]);
   assert.deepEqual([schedule.code, schedule.stdout], [0, `${SCHEDULE_LAYOUT}\n`]);
   assert.ok(list.stdout.startsWith("Capabilities\n  aircon status get "), list.stdout);
@@ -119,7 +120,7 @@ test("the Rust command line has the aliases of the catalog", async (context) => 
   const list = await cli("list");
   assert.match(list.stdout, /"aliases": \[\n\s*"aircon --off",\n\s*"aircon --on"\n\s*\]/);
   assert.match(list.stdout, /"aliases": \[\n\s*"aircon follow \[--cursor <string>\] \[--max-age-ms <integer>\]"\n\s*\]/);
-  assert.match((await cli("--help")).stdout, /\nAliases:\n {2}--off\n {2}--on\n {2}follow \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}status\n$/);
+  assert.match((await cli("--help")).stdout, /\nAliases:\n {2}--off\n {2}--on\n {2}follow \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}status\n\nOutput:\n/);
 
   const follow = remote("follow");
   context.after(() => follow.kill());

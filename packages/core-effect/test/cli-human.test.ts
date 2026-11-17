@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Console, Effect, Layer, Schema, Stdio } from "effect";
+import { Cause, Console, Effect, Exit, Layer, Schema, Stdio } from "effect";
+import { Command, Flag, GlobalFlag } from "effect/cli";
 
 import { App, Capability, Cli } from "../src/index.ts";
+import { outputChoice } from "../src/internal/human.ts";
 
 const Level = Schema.Struct({ level: Schema.Number });
 const Empty = Schema.TaggedStruct("Empty", {});
@@ -28,14 +30,19 @@ const fill = Capability.make({
 
 const probe = App.make({ targets: { cli: { bindings: ["cli"], cli: { aliases: { "--now": App.alias(level) } } } }, capabilities: [level, fill] });
 
-const runWith = (output: Cli.Output | undefined, args: readonly string[], stdoutIsTerminal = false) =>
+const runWith = <const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(
+  output: Cli.Output | undefined,
+  args: readonly string[],
+  stdoutIsTerminal = false,
+  commands?: Commands,
+) =>
   Effect.gen(function* () {
     const stdout: string[] = [];
     const stderr: string[] = [];
     const captured = { ...console, log: (text: string) => stdout.push(text), error: (text: string) => stderr.push(text) };
     const before = process.exitCode;
     process.exitCode = 0;
-    yield* Cli.run(probe, { name: "probe", version: "0.0.0", output }).pipe(
+    yield* Cli.run(probe, { name: "probe", version: "0.0.0", output, commands }).pipe(
       Effect.provideService(Console.Console, captured),
       Effect.provideService(Cli.Terminal, { stdoutIsTerminal, environment: {} }),
       Effect.provide(Layer.provideMerge(Layer.effect(Stdio.Stdio, Effect.map(Effect.service(Stdio.Stdio), (stdio) => ({ ...stdio, args: Effect.succeed(args) }))), NodeServices.layer)),
@@ -157,6 +164,51 @@ test("output flags are anywhere in the arguments, the last one wins, and an outp
   assert.deepEqual(missing, { code: 3, stdout: "", stderr: "The option -f must be text or json." });
   assert.equal(help.code, 0);
   assert.match(help.stdout, /USAGE/);
+  assert.doesNotMatch(help.stdout, /--help, -h/);
+  assert.match(
+    help.stdout,
+    /\n\nOUTPUT FLAGS\n {2}-h, --human {2}Write the human form\.\n {2}--json, --no-human {2}Write JSON\.\n {2}--format, -f <text\|json> {2}The form of the output: text is the human form and json is JSON\.$/,
+  );
+});
+
+test("an application command gets its arguments unchanged and the chosen form, and output flags before its name choose the form", async () => {
+  const seen: { readonly json: boolean; readonly file: string; readonly form: Cli.Form }[] = [];
+  const deploy = Command.make("deploy", { json: Flag.Boolean("json"), file: Flag.String("file").pipe(Flag.withAlias("f")) }, ({ json, file }) =>
+    Effect.gen(function* () {
+      seen.push({ json, file, form: yield* Cli.outputForm });
+    }),
+  );
+  const output: Cli.Output = {
+    default: "json",
+    flags: [
+      { names: ["--json"], form: "json" },
+      { names: ["--format", "-f"], values: { text: "human", json: "json" } },
+    ],
+  };
+  await Effect.runPromise(runWith(output, ["deploy", "--json", "-f", "prod"], false, [deploy]));
+  await Effect.runPromise(runWith(output, ["-f", "text", "deploy", "--json", "-f", "stage"], false, [deploy]));
+  assert.deepEqual(seen, [
+    { json: true, file: "prod", form: "json" },
+    { json: true, file: "stage", form: "human" },
+  ]);
+});
+
+test("output flags stop at --", () => {
+  const flags = [{ names: ["--json"], form: "json" }] as const;
+  assert.deepEqual(outputChoice(flags, ["probe", "level", "--json", "--", "--json"], []), { form: "json", args: ["probe", "level", "--", "--json"] });
+});
+
+test("the command line stops when it starts if an output flag has the name of a flag of effect/cli or of the application", async () => {
+  const switchFlag = GlobalFlag.Setting("switch")({ flag: Flag.Boolean("switch") });
+  const start = (name: string) => {
+    const command = Cli.command(probe, { name: "probe", version: "0.0.0", output: { flags: [{ names: [name], form: "json" }] } }).pipe(Command.withGlobalFlags([switchFlag]));
+    return Effect.runPromiseExit(Cli.runCommand(command, { version: "0.0.0" }).pipe(Effect.provide(NodeServices.layer)));
+  };
+  for (const name of ["--log-level", "--completions", "--switch", "--no-switch"]) {
+    const exit = await start(name);
+    assert.ok(Exit.isFailure(exit), `${name} stops the command line`);
+    assert.match(Cause.pretty(exit.cause), new RegExp(`The output flag ${name} has the same name as a flag of the command line`));
+  }
 });
 
 test("the default form is json, human, or auto from the terminal", async () => {

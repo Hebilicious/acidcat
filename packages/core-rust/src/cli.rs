@@ -226,6 +226,9 @@ pub struct CliIo {
     pub stderr: Box<dyn FnMut(&str) + Send>,
     /// Cancelled by an interrupt. It cancels the call or the subscription.
     pub cancel: CancellationToken,
+    /// The form of the output that the arguments and [`CliOptions::output`] choose. [`run_cli`] sets it before it
+    /// runs a command of the application.
+    pub form: OutputForm,
 }
 
 impl CliIo {
@@ -243,12 +246,14 @@ impl CliIo {
                 let _ = stderr.flush();
             }),
             cancel,
+            form: OutputForm::Json,
         }
     }
 }
 
-/// The work of a command of the application: the arguments after its name, the io and the services. The result is
-/// the exit code.
+/// The work of a command of the application: the arguments after its name, the io and the services. The arguments
+/// come unchanged: the command line reads output flags only before the name. `io.form` is the chosen form. The result
+/// is the exit code.
 pub type CommandRun<C> =
     Arc<dyn for<'a> Fn(Vec<String>, &'a mut CliIo, Arc<C>) -> BoxFuture<'a, i32> + Send + Sync>;
 
@@ -610,8 +615,13 @@ pub async fn run_cli<C: Send + Sync + 'static>(
         let (form, args) = match &options.output {
             None => (OutputForm::Json, args.to_vec()),
             Some(output) => {
+                let command_names: Vec<&str> = options
+                    .commands
+                    .iter()
+                    .map(|command| command.name.as_str())
+                    .collect();
                 let (chosen, rest) = output
-                    .choose(args)
+                    .choose(args, &command_names)
                     .map_err(|message| usage_error(message, exit::INVALID_INPUT))?;
                 let fallback = match output.default {
                     OutputDefault::Auto => options.auto_form.unwrap_or_default(),
@@ -669,6 +679,16 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                         let usage = alias_usage_of(alias);
                         format!("  {}", &usage[options.name.len() + 1..])
                     }));
+                }
+                let output_lines = options
+                    .output
+                    .as_ref()
+                    .map(CliOutput::help_lines)
+                    .unwrap_or_default();
+                if !output_lines.is_empty() {
+                    lines.push(String::new());
+                    lines.push("Output:".into());
+                    lines.extend(output_lines.iter().map(|line| format!("  {line}")));
                 }
                 (io.stdout)(&lines.join("\n"));
                 Ok(exit::VALUE)
@@ -824,7 +844,10 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                     .find(|command| command.name == name)
                     .map(|command| command.run.clone());
                 match command {
-                    Some(run) => Ok(run(args[1..].to_vec(), io, context.clone()).await),
+                    Some(run) => {
+                        io.form = form;
+                        Ok(run(args[1..].to_vec(), io, context.clone()).await)
+                    }
                     None => Ok(exit::UNKNOWN_CAPABILITY),
                 }
             }

@@ -24,8 +24,8 @@ import {
 import type { Availability, CallFailure, CatalogCapability, CatalogDocument, CliAlias, JsonObject, Occurrence, Outcome } from "@acid-cat/spec-ts";
 
 import { catalogOf } from "./app.ts";
-import { cliFormatErrors, cliLayout, cliListText, cliOutputChoice, cliOutputErrors, cliUi, defaultCliOutput } from "./cli-human.ts";
-import type { CliForm, CliFormat, CliOutput, CliOutputChoice, CliRender } from "./cli-human.ts";
+import { cliFormatErrors, cliLayout, cliListText, cliOutputChoice, cliOutputErrors, cliOutputFlagHelp, cliUi, defaultCliOutput } from "./cli-human.ts";
+import type { CliForm, CliFormat, CliOutput, CliOutputChoice, CliOutputFlag, CliRender } from "./cli-human.ts";
 import type { App, ToJsonSchema } from "./app.ts";
 import type { HttpClient } from "./http-client.ts";
 import { createSession } from "./session.ts";
@@ -112,7 +112,11 @@ export interface CliIo {
 export interface CliCommand<Context> {
   readonly name: string;
   readonly description: string;
-  /** Run the command with the arguments that come after its name. The result is the exit code. */
+  /**
+   * Run the command with the arguments that come after its name, unchanged: the command line reads output flags only
+   * before the name. `io.output` is the form that the arguments and the option `output` choose. The result is the exit
+   * code.
+   */
   run(args: readonly string[], io: CliIo & { readonly context: Context }): number | Promise<number>;
 }
 
@@ -182,7 +186,8 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   const outputFlags = options.output?.flags ?? [];
   const outputErrors = cliOutputErrors(outputFlags, takenFlags(view, aliases));
   if (outputErrors.length > 0) throw new Error(outputErrors.join("\n"));
-  const chosen: CliOutputChoice = options.output === undefined ? { args: argv } : cliOutputChoice(outputFlags, argv);
+  const added = options.commands ?? [];
+  const chosen: CliOutputChoice = options.output === undefined ? { args: argv } : cliOutputChoice(outputFlags, argv, added.map(({ name }) => name));
   const args = chosen.error === undefined ? chosen.args : [];
   const chosenForm = chosen.error === undefined ? chosen.form : undefined;
   const outputDefault = options.output?.default ?? "auto";
@@ -201,7 +206,6 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     if (text !== "") io.stdout(text);
   };
 
-  const added = options.commands ?? [];
   const taken = new Set([...GENERIC_COMMANDS, ...commands.flatMap(({ path }) => path.slice(0, 1)), ...aliases.map(({ name }) => name)]);
   for (const command of added) {
     if (taken.has(command.name)) throw new Error(`The command ${command.name} of the application has the same name as another command.`);
@@ -325,7 +329,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     if (first === undefined || first === "--help" || first === "-h") {
       const description = options.description ?? app.description ?? app.title ?? options.name;
       const aliasLines = aliases.map((alias) => aliasUsage(alias).slice(options.name.length + 1));
-      io.stdout(help(options.name, description, commands.map(({ path }) => path.join(" ")), Object.keys(view.events ?? {}).length > 0, added, aliasLines));
+      io.stdout(help(options.name, description, commands.map(({ path }) => path.join(" ")), Object.keys(view.events ?? {}).length > 0, added, aliasLines, outputFlags));
       return CLI_EXIT_CODES.value;
     }
     if (first === "--version" || first === "-v") {
@@ -399,7 +403,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     const alias = aliases.find(({ name }) => name === first);
     if (alias !== undefined) return await runAlias(alias, rest);
     const command = added.find(({ name }) => name === first);
-    if (command !== undefined) return await command.run(rest, { ...io, context: options.context });
+    if (command !== undefined) return await command.run(rest, { ...io, output, context: options.context });
 
     const match = commands
       .filter(({ path }) => path.every((word, index) => args[index] === word))
@@ -547,6 +551,7 @@ function help(
   hasEvents: boolean,
   added: readonly CliCommand<unknown>[],
   aliases: readonly string[],
+  outputFlags: readonly CliOutputFlag[],
 ): string {
   return [
     description,
@@ -560,6 +565,7 @@ function help(
     ...(hasEvents ? ["  watch <id> [flags] [--cursor <string>] [--max-age-ms <integer>]"] : []),
     ...added.map((command) => `  ${command.name}  ${command.description}`),
     ...(aliases.length > 0 ? ["", "Aliases:", ...aliases.map((alias) => `  ${alias}`)] : []),
+    ...(outputFlags.length > 0 ? ["", "Output:", ...outputFlags.map((flag) => `  ${cliOutputFlagHelp(flag)}`)] : []),
   ].join("\n");
 }
 
