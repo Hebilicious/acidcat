@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/spec-ts@0.12.1...@acid-cat/spec-ts@0.13.0) (2026-11-17)
+
+
+### Features
+
+* **cli:** exit with 130 after a grace period when an interrupt cannot stop the run ([#168](https://github.com/Hebilicious/acidcat/issues/168)) ([74b2623](https://github.com/Hebilicious/acidcat/commit/74b26236afe2b1a68c779e9f2605c18397b16bf8))
+
 ## [0.12.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/spec-ts@0.12.0...@acid-cat/spec-ts@0.12.1) (2026-11-17)
 
 

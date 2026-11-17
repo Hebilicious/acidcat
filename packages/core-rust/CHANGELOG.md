@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.2.1...crates-core/v0.3.0) (2026-11-17)
+
+
+### Features
+
+* **cli:** exit with 130 after a grace period when an interrupt cannot stop the run ([#168](https://github.com/Hebilicious/acidcat/issues/168)) ([74b2623](https://github.com/Hebilicious/acidcat/commit/74b26236afe2b1a68c779e9f2605c18397b16bf8))
+
+
+### Bug Fixes
+
+* **cli:** stop with the message and exit code 5 when the command line breaks a rule at start ([#166](https://github.com/Hebilicious/acidcat/issues/166)) ([e0c5173](https://github.com/Hebilicious/acidcat/commit/e0c5173870ef935b2ed3a0d34fed707915aec123))
+
 ## [0.2.1](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.2.0...crates-core/v0.2.1) (2026-11-17)
 
 
