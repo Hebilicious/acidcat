@@ -26,7 +26,7 @@ pub type RequestBody = UnsyncBoxBody<Bytes, BoxError>;
 pub type ResponseBody = UnsyncBoxBody<Bytes, Infallible>;
 
 /// The time with nothing sent on a stream after which a binding sends a keepalive or a heartbeat.
-pub const KEEPALIVE: Duration = Duration::from_secs(15);
+pub const KEEPALIVE: Duration = Duration::from_millis(crate::facts_generated::KEEPALIVE_MS);
 
 pub const DEFAULT_MAXIMUM_BYTES: usize = 1_048_576;
 
@@ -175,7 +175,7 @@ pub(crate) fn sse_response(stream: BoxStream<'static, String>) -> Response<Respo
     let headers = response.headers_mut();
     headers.insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_static("text/event-stream"),
+        HeaderValue::from_static(crate::facts_generated::SSE_MEDIA_TYPE),
     );
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response

@@ -3,6 +3,9 @@
 // Quint strings have no escapes. A character in angle brackets is a control character or a Unicode space:
 // <TAB> U+0009, <LF> U+000A, <VT> U+000B, <FF> U+000C, <CR> U+000D, <NEL> U+0085 and <BOM> U+FEFF.
 module cliOutput {
+  import facts.* from "./facts"
+  export facts.*
+
   type Text = List[str]
 
   type Form = Human | Json
@@ -55,10 +58,6 @@ module cliOutput {
     ["o", "f", "f"],
   ]
 
-  pure val PROGRAM_FLAGS: List[Text] = [["-", "-", "h", "e", "l", "p"], ["-", "-", "v", "e", "r", "s", "i", "o", "n"]]
-
-  pure val RESUME_FLAGS: List[Text] = [["-", "-", "c", "u", "r", "s", "o", "r"], ["-", "-", "m", "a", "x", "-", "a", "g", "e", "-", "m", "s"]]
-
   pure val RESERVED_FLAGS: List[(Text, str)] = [
     (["-", "-", "h", "e", "l", "p"], "the flag --help"),
     (["-", "-", "v", "e", "r", "s", "i", "o", "n"], "the flag --version"),
@@ -67,8 +66,6 @@ module cliOutput {
   ]
 
   pure val END_OF_FLAGS: Text = ["-", "-"]
-
-  pure val INVALID_INPUT_EXIT_CODE = 3
 
   pure val TRIM_CHARACTERS: List[str] = [" ", "<TAB>", "<LF>", "<VT>", "<FF>", "<CR>"]
 

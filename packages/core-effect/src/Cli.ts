@@ -1,5 +1,6 @@
 import {
   CLI_EXIT_CODES,
+  CLI_GENERIC_COMMANDS,
   CLI_RESUME_FLAGS,
   CLI_WATCH_EXIT_CODES,
   cliAliases,
@@ -27,9 +28,9 @@ import type { HelpDoc } from "effect/cli";
 import * as App from "./App.ts";
 import type { AnySchema } from "./Capability.ts";
 import type * as Http from "./Http.ts";
-import { formOf, hasColor, layout, outputErrors, outputFlagHelp, outputRun, ui } from "./internal/human.ts";
+import { filled, formOf, hasColor, layout, outputErrors, outputFlagHelp, outputRun, ui } from "./internal/human.ts";
 import type { Environment, Form, OutputFlag, Ui } from "./internal/human.ts";
-import { PROGRAM_FLAGS, RESERVED_FLAGS } from "./internal/output.generated.ts";
+import { MESSAGES, PROGRAM_FLAGS, RESERVED_FLAGS } from "./internal/output.generated.ts";
 import * as Session from "./Session.ts";
 
 export { formOf, layout } from "./internal/human.ts";
@@ -547,7 +548,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     const schema = event.input === undefined ? undefined : cliInputSchema(event.input, types);
     const properties = schema === undefined ? {} : schemasIn(schema.properties);
     for (const name of CLI_RESUME_FLAGS) {
-      if (name in properties) throw new Error(`The input of the event ${id} has a property ${name}, which is a flag of watch.`);
+      if (name in properties) throw new Error(filled(MESSAGES.resumeProperty, { id, flag: name }));
     }
     return followCommand(id, id, schema, undefined, (made) => made.pipe(Command.withDescription(event.description)));
   });
@@ -583,12 +584,12 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     return { kind: alias.kind, id: alias.id, entry, subcommand };
   });
 
-  const reserved = new Set(["call", "list", "watch"]);
+  const reserved = new Set<string>(CLI_GENERIC_COMMANDS);
   const taken = new Set(reserved);
   for (const { path } of leaves) {
     const [first] = path;
     if (first === undefined) continue;
-    if (reserved.has(first)) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
+    if (reserved.has(first)) throw new Error(filled(MESSAGES.genericCommand, { command: path.join(" ") }));
     taken.add(first);
   }
   // A shared prefix is a command that only contains other commands (`spec/bindings/cli.md`), so the path of a capability
@@ -596,7 +597,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   for (const { path } of leaves) {
     const longer = leaves.find((other) => other.path.length > path.length && path.every((word, index) => other.path[index] === word));
     if (longer !== undefined) {
-      throw new Error(`The command ${path.join(" ")} is also the start of the command ${longer.path.join(" ")}. A shared prefix only contains other commands.`);
+      throw new Error(filled(MESSAGES.sharedPrefix, { command: path.join(" "), longer: longer.path.join(" ") }));
     }
   }
   for (const { name } of aliases) taken.add(name);

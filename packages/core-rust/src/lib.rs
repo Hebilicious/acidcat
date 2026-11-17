@@ -2,6 +2,7 @@
 
 mod app;
 mod client;
+mod facts_generated;
 mod http_client;
 mod outcome;
 mod schema;

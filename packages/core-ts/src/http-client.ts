@@ -70,7 +70,7 @@ export function httpClient(url: string, options: HttpClientOptions = {}): HttpCl
   async function request(method: "GET" | "POST", path: string, init: { readonly body?: unknown; readonly signal?: AbortSignal | undefined; readonly lastEventId?: string | undefined }): Promise<Response | CallFailure> {
     if (aborted(init.signal)) return cancelled();
     const requestHeaders = new Headers(headers);
-    requestHeaders.set("Accept", "application/json, text/event-stream");
+    requestHeaders.set("Accept", `application/json, ${SSE_MEDIA_TYPE}`);
     if (init.lastEventId !== undefined) {
       try {
         requestHeaders.set("Last-Event-ID", init.lastEventId);

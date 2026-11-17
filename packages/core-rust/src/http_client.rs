@@ -8,6 +8,7 @@ use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use serde_json::Value;
 
+use crate::facts_generated::SSE_MEDIA_TYPE;
 use crate::outcome::{Availability, CallFailure, Kind, Outcome};
 use crate::subscription::Occurrence;
 
@@ -170,7 +171,7 @@ impl HttpClient {
             .get(header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok())
             .unwrap_or_default();
-        if !media_type.starts_with("text/event-stream") {
+        if !media_type.starts_with(SSE_MEDIA_TYPE) {
             return Err(not_an_answer());
         }
         Ok(server_sent_events(answer.into_body()))
@@ -202,7 +203,10 @@ impl HttpClient {
                 header::HOST,
                 url.authority().map_or("", |authority| authority.as_str()),
             )
-            .header(header::ACCEPT, "application/json, text/event-stream");
+            .header(
+                header::ACCEPT,
+                format!("application/json, {SSE_MEDIA_TYPE}"),
+            );
         if body.is_some() {
             request = request.header(header::CONTENT_TYPE, "application/json");
         }

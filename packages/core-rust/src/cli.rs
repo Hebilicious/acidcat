@@ -20,24 +20,24 @@ mod human;
 mod output;
 mod output_generated;
 
-use output_generated::{PROGRAM_FLAGS, RESERVED_FLAGS, RESUME_FLAGS};
+use output::filled;
+use output_generated::{
+    GENERIC_COMMAND_MESSAGE, PROGRAM_FLAGS, RESERVED_FLAGS, RESUME_FLAGS, RESUME_PROPERTY_MESSAGE,
+    SHARED_PREFIX_MESSAGE,
+};
 
 pub use human::{CliFormats, CliUi, OutputForm, output_form};
 use human::{Formatted, aligned, output_color};
 pub use output::{CliOutput, OutputDefault};
 
-/// The exit codes of the outcomes (spec/bindings/cli.md#outcomes).
-pub mod exit {
-    pub const VALUE: i32 = 0;
-    pub const FAILURE: i32 = 1;
-    pub const UNKNOWN_CAPABILITY: i32 = 2;
-    pub const INVALID_INPUT: i32 = super::output_generated::INVALID_INPUT_EXIT_CODE;
-    pub const UNAVAILABLE: i32 = 4;
-    pub const INTERNAL: i32 = 5;
-    pub const CANCELLED: i32 = 130;
-}
-
-const GENERIC_COMMANDS: [&str; 3] = ["call", "list", "watch"];
+pub use crate::facts_generated::exit;
+use crate::facts_generated::{
+    ALIASES_NOT_OBJECT_MESSAGE, BAD_DEFAULT_MESSAGE, BAD_NAME_MESSAGE, BAD_TARGET_MESSAGE,
+    DEFAULT_HAS_RESERVED_FLAG_MESSAGE, FIRST_WORD_MESSAGE, FLAG_OF_DEFAULT_MESSAGE,
+    GENERIC_COMMANDS, INPUT_NOT_OBJECT_MESSAGE, NO_CLI_BINDING_MESSAGE, NO_PROPERTIES_MESSAGE,
+    NOT_A_PROPERTY_MESSAGE, NOT_IN_VIEW_MESSAGE, RESERVED_NAME_MESSAGE,
+    SETTINGS_NOT_OBJECT_MESSAGE, UNKNOWN_MEMBER_MESSAGE,
+};
 
 fn resume_words() -> impl Iterator<Item = &'static str> {
     RESUME_FLAGS
@@ -525,19 +525,18 @@ pub async fn run_cli<C: Send + Sync + 'static>(
         .collect();
     for (_, path) in &commands {
         if GENERIC_COMMANDS.contains(&path[0].as_str()) {
-            return Err(format!(
-                "The command {} has the same name as a command of the command line.",
-                path.join(" ")
+            return Err(filled(
+                GENERIC_COMMAND_MESSAGE,
+                &[("command", &path.join(" "))],
             ));
         }
         if let Some((_, longer)) = commands
             .iter()
             .find(|(_, other)| other.len() > path.len() && other.starts_with(path))
         {
-            return Err(format!(
-                "The command {} is also the start of the command {}. A shared prefix only contains other commands.",
-                path.join(" "),
-                longer.join(" ")
+            return Err(filled(
+                SHARED_PREFIX_MESSAGE,
+                &[("command", &path.join(" ")), ("longer", &longer.join(" "))],
             ));
         }
     }
@@ -552,8 +551,9 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 .and_then(|properties| properties.get(*flag))
                 .is_some()
         }) {
-            return Err(format!(
-                "The input of the event {id} has a property {flag}, which is a flag of watch."
+            return Err(filled(
+                RESUME_PROPERTY_MESSAGE,
+                &[("id", id.as_str()), ("flag", flag)],
             ));
         }
     }
@@ -1404,7 +1404,7 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
     let Some(settings) = settings.as_object() else {
         result
             .errors
-            .push(format!("{place}: options.cli must be an object"));
+            .push(filled(SETTINGS_NOT_OBJECT_MESSAGE, &[("where", &place)]));
         return result;
     };
     let errors = &mut result.errors;
@@ -1413,11 +1413,11 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
         .and_then(Value::as_array)
         .is_some_and(|bindings| bindings.iter().any(|binding| binding == "cli"));
     if !has_cli {
-        errors.push(format!("{place}: has options.cli, but not the binding cli"));
+        errors.push(filled(NO_CLI_BINDING_MESSAGE, &[("where", &place)]));
     }
     let empty = json!({});
     let Some(members) = settings.get("aliases").unwrap_or(&empty).as_object() else {
-        errors.push(format!("{place}: options.cli.aliases must be an object"));
+        errors.push(filled(ALIASES_NOT_OBJECT_MESSAGE, &[("where", &place)]));
         return result;
     };
 
@@ -1432,9 +1432,13 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
     names.sort();
     let aliases = &mut result.aliases;
     for name in names {
-        let mut problem = |text: String| errors.push(format!("{place}: the alias {name} {text}"));
+        let mut problem = |template: &str, parts: &[(&str, &str)]| {
+            let mut all = vec![("where", place.as_str()), ("name", name.as_str())];
+            all.extend_from_slice(parts);
+            errors.push(filled(template, &all));
+        };
         if !is_alias_name(name) {
-            problem("must be one word, or -- and one word, with the letters a-z, the digits 0-9 and single hyphens".into());
+            problem(BAD_NAME_MESSAGE, &[]);
             continue;
         }
         let reserved = if name.starts_with("--") {
@@ -1443,11 +1447,11 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
             GENERIC_COMMANDS.contains(&name.as_str())
         };
         if reserved {
-            problem("has the name of a command or a flag of the command line".into());
+            problem(RESERVED_NAME_MESSAGE, &[]);
             continue;
         }
         if first_words.contains(&name.as_str()) {
-            problem("has the name of the first word of the command of a capability".into());
+            problem(FIRST_WORD_MESSAGE, &[]);
             continue;
         }
         let value = &members[name];
@@ -1456,7 +1460,7 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
         let id = match named.and_then(Value::as_str) {
             Some(id) if value.is_object() && !(capability.is_some() && event.is_some()) => id,
             _ => {
-                problem("must be an object with the id of a capability in capability, or the id of an event in event".into());
+                problem(BAD_TARGET_MESSAGE, &[]);
                 continue;
             }
         };
@@ -1468,7 +1472,7 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
             .filter(|key| !["capability", "event", "input"].contains(key) && !key.starts_with("x-"))
             .collect();
         if !unknown.is_empty() {
-            problem(format!("has the unknown member {}", unknown.join(", ")));
+            problem(UNKNOWN_MEMBER_MESSAGE, &[("members", &unknown.join(", "))]);
             continue;
         }
         let (kind, entries, what) = if event.is_some() {
@@ -1477,9 +1481,7 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
             (AliasKind::Capability, capabilities, "a capability")
         };
         let Some(entry) = entries.get(id) else {
-            problem(format!(
-                "refers to {id}, which is not {what} in the view of the target"
-            ));
+            problem(NOT_IN_VIEW_MESSAGE, &[("id", id), ("kind", what)]);
             continue;
         };
         let Some(fixed) = value.get("input") else {
@@ -1492,7 +1494,7 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
             continue;
         };
         let Some(fixed) = fixed.as_object() else {
-            problem("must have an object as its input".into());
+            problem(INPUT_NOT_OBJECT_MESSAGE, &[]);
             continue;
         };
         let properties = entry
@@ -1500,9 +1502,7 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
             .and_then(|input| resolve(input, types).get("properties"))
             .and_then(Value::as_object);
         let Some(properties) = properties else {
-            problem(format!(
-                "has a fixed input, but the input schema of {id} has no properties"
-            ));
+            problem(NO_PROPERTIES_MESSAGE, &[("id", id)]);
             continue;
         };
         let extra: Vec<&str> = fixed
@@ -1511,10 +1511,10 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
             .map(String::as_str)
             .collect();
         if !extra.is_empty() {
-            problem(format!(
-                "has the fixed input {}, which is not a property of the input of {id}",
-                extra.join(", ")
-            ));
+            problem(
+                NOT_A_PROPERTY_MESSAGE,
+                &[("members", &extra.join(", ")), ("id", id)],
+            );
             continue;
         }
         aliases.push(Alias {
@@ -1536,9 +1536,9 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
         .as_str()
         .is_some_and(|named| !named.starts_with("--") && members.contains_key(named));
     if !command_alias {
-        result.errors.push(format!(
-            "{place}: options.cli.default must be the name of a command alias"
-        ));
+        result
+            .errors
+            .push(filled(BAD_DEFAULT_MESSAGE, &[("where", &place)]));
         return result;
     }
     let Some(fallback) = fallback else {
@@ -1547,9 +1547,13 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
     let flags = alias_flag_names(view, &fallback);
     for reserved in PROGRAM_FLAGS {
         if flags.iter().any(|flag| *flag == reserved[2..]) {
-            result.errors.push(format!(
-                "{place}: the default alias {} has the flag {reserved}, which is a flag of the command line",
-                fallback.name
+            result.errors.push(filled(
+                DEFAULT_HAS_RESERVED_FLAG_MESSAGE,
+                &[
+                    ("where", &place),
+                    ("name", &fallback.name),
+                    ("flag", reserved),
+                ],
             ));
         }
     }
@@ -1559,9 +1563,13 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
             .strip_prefix("--")
             .is_some_and(|flag| flags.iter().any(|each| each == flag))
         {
-            result.errors.push(format!(
-                "{place}: the alias {} has the name of a flag of the default alias {}",
-                alias.name, fallback.name
+            result.errors.push(filled(
+                FLAG_OF_DEFAULT_MESSAGE,
+                &[
+                    ("where", &place),
+                    ("name", &alias.name),
+                    ("default", &fallback.name),
+                ],
             ));
         }
     }

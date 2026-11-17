@@ -1,5 +1,32 @@
-/** The kinds of call failure, in order of precedence: when more than one applies, the first one is used. */
-export const CALL_FAILURE_KINDS = ["cancelled", "unknown-capability", "unavailable", "invalid-input", "internal"] as const;
+import {
+  ALIAS_MESSAGES,
+  CALL_FAILURE_KINDS,
+  CLI_EXIT_CODES,
+  CLI_GENERIC_COMMANDS,
+  CLI_RESERVED_FLAGS,
+  CLI_RESUME_FLAGS,
+  HTTP_STATUS,
+  MCP_EVENT_ERRORS,
+  MCP_REJECTIONS as REJECTIONS,
+  MCP_SUBSCRIPTION_ID,
+} from "./facts.generated.ts";
+
+export {
+  CALL_FAILURE_KINDS,
+  CLI_EXIT_CODES,
+  CLI_GENERIC_COMMANDS,
+  CLI_RESERVED_FLAGS,
+  CLI_RESUME_FLAGS,
+  CLI_WATCH_EXIT_CODES,
+  HTTP_STATUS,
+  KEEPALIVE_MS,
+  MCP_EVENT_ERRORS,
+  MCP_EVENTS_EXTENSION,
+  MCP_PROTOCOL_VERSION,
+  MCP_SUBSCRIPTION_ID,
+  MCP_UNKNOWN_TOOL,
+  SSE_MEDIA_TYPE,
+} from "./facts.generated.ts";
 
 export type CallFailureKind = (typeof CALL_FAILURE_KINDS)[number];
 
@@ -93,9 +120,6 @@ export function isOccurrence(value: unknown): value is Occurrence {
 
 const OCCURRENCE_MEMBERS = new Set(["eventId", "name", "timestamp", "data", "cursor", "truncated"]);
 
-/** The time with no message on a stream after which a binding sends a keepalive or a heartbeat, in milliseconds. */
-export const KEEPALIVE_MS = 15_000;
-
 export type Availability = { readonly available: true } | { readonly available: false; readonly reason: string };
 
 export const AVAILABLE: Availability = { available: true };
@@ -107,16 +131,6 @@ export const ID_PATTERN = /^[a-z][a-z0-9]*(-[a-z0-9]+)*(\.[a-z][a-z0-9]*(-[a-z0-
 export const isId = (id: string): boolean => id.length <= 128 && ID_PATTERN.test(id);
 
 export const commandPath = (id: string): readonly string[] => id.split(".");
-
-export const CLI_EXIT_CODES = {
-  value: 0,
-  failure: 1,
-  "unknown-capability": 2,
-  "invalid-input": 3,
-  unavailable: 4,
-  internal: 5,
-  cancelled: 130,
-} as const;
 
 export const cliExitCode = (outcome: Outcome<unknown, unknown>): number =>
   isCallFailure(outcome) ? CLI_EXIT_CODES[outcome.kind] : outcome.ok ? CLI_EXIT_CODES.value : CLI_EXIT_CODES.failure;
@@ -200,12 +214,6 @@ export function cliEventUsage(program: string, id: string, input: JsonObject | u
   return [program, "watch", id, ...(input === undefined ? [] : cliFlags(input)), resume].join(" ");
 }
 
-/** The commands of the command line itself (spec/bindings/cli.md#commands). No alias or command of an application can have their names. */
-export const CLI_GENERIC_COMMANDS = ["call", "list", "watch"] as const;
-
-/** The flags that no flag alias can have as its name (spec/bindings/cli.md#aliases). */
-export const CLI_RESERVED_FLAGS = ["--help", "--version"] as const;
-
 export const CLI_ALIAS_NAME = /^(--)?[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
 export interface CliAlias {
@@ -232,12 +240,12 @@ export function cliAliases(catalog: CatalogDocument, target: string): CliAliases
   const settings = declared === undefined || !isJsonObject(declared.options) ? undefined : ownMember(declared.options, "cli");
   if (declared === undefined || settings === undefined) return none;
   const where = `target ${target}`;
-  if (!isJsonObject(settings)) return { ...none, errors: [`${where}: options.cli must be an object`] };
+  if (!isJsonObject(settings)) return { ...none, errors: [filled(ALIAS_MESSAGES.settingsNotObject, { where })] };
   const errors: string[] = [];
-  if (!declared.bindings.includes("cli")) errors.push(`${where}: has options.cli, but not the binding cli`);
+  if (!declared.bindings.includes("cli")) errors.push(filled(ALIAS_MESSAGES.noCliBinding, { where }));
   const declaredAliases = ownMember(settings, "aliases");
   const members = declaredAliases === undefined ? {} : declaredAliases;
-  if (!isJsonObject(members)) return { ...none, errors: [...errors, `${where}: options.cli.aliases must be an object`] };
+  if (!isJsonObject(members)) return { ...none, errors: [...errors, filled(ALIAS_MESSAGES.aliasesNotObject, { where })] };
 
   const types = catalog.$defs ?? {};
   const inView = (entries: { readonly [id: string]: { readonly audience?: readonly string[]; readonly input?: JsonObject } } | undefined) =>
@@ -247,34 +255,34 @@ export function cliAliases(catalog: CatalogDocument, target: string): CliAliases
   const firstWords = new Set([...capabilities.keys()].map((id) => commandPath(id)[0]));
   const aliases: CliAlias[] = [];
   for (const name of Object.keys(members).sort(byCodePoint)) {
-    const problem = (text: string) => errors.push(`${where}: the alias ${name} ${text}`);
+    const problem = (template: string, parts: { readonly [part: string]: string } = {}) => errors.push(filled(template, { where, name, ...parts }));
     const value = members[name];
     if (!CLI_ALIAS_NAME.test(name)) {
-      problem("must be one word, or -- and one word, with the letters a-z, the digits 0-9 and single hyphens");
+      problem(ALIAS_MESSAGES.badName);
       continue;
     }
     if (name.startsWith("--") ? isOneOf(CLI_RESERVED_FLAGS, name) : isOneOf(CLI_GENERIC_COMMANDS, name)) {
-      problem("has the name of a command or a flag of the command line");
+      problem(ALIAS_MESSAGES.reservedName);
       continue;
     }
     if (firstWords.has(name)) {
-      problem("has the name of the first word of the command of a capability");
+      problem(ALIAS_MESSAGES.firstWord);
       continue;
     }
     if (!isJsonObject(value) || typeof (value.capability ?? value.event) !== "string" || (value.capability !== undefined && value.event !== undefined)) {
-      problem("must be an object with the id of a capability in capability, or the id of an event in event");
+      problem(ALIAS_MESSAGES.badTarget);
       continue;
     }
     const unknown = Object.keys(value).filter((key) => key !== "capability" && key !== "event" && key !== "input" && !key.startsWith("x-"));
     if (unknown.length > 0) {
-      problem(`has the unknown member ${unknown.join(", ")}`);
+      problem(ALIAS_MESSAGES.unknownMember, { members: unknown.join(", ") });
       continue;
     }
     const kind = typeof value.event === "string" ? "event" : "capability";
     const id = typeof value.event === "string" ? value.event : typeof value.capability === "string" ? value.capability : "";
     const entries = kind === "event" ? events : capabilities;
     if (!entries.has(id)) {
-      problem(`refers to ${id}, which is not ${kind === "event" ? "an event" : "a capability"} in the view of the target`);
+      problem(ALIAS_MESSAGES.notInView, { id, kind: kind === "event" ? "an event" : "a capability" });
       continue;
     }
     if (value.input === undefined) {
@@ -282,18 +290,18 @@ export function cliAliases(catalog: CatalogDocument, target: string): CliAliases
       continue;
     }
     if (!isJsonObject(value.input)) {
-      problem("must have an object as its input");
+      problem(ALIAS_MESSAGES.inputNotObject);
       continue;
     }
     const input = entries.get(id);
     const properties = input === undefined ? undefined : resolveType(input, types).properties;
     if (!isJsonObject(properties)) {
-      problem(`has a fixed input, but the input schema of ${id} has no properties`);
+      problem(ALIAS_MESSAGES.noProperties, { id });
       continue;
     }
     const extra = Object.keys(value.input).filter((key) => !Object.hasOwn(properties, key));
     if (extra.length > 0) {
-      problem(`has the fixed input ${extra.join(", ")}, which is not a property of the input of ${id}`);
+      problem(ALIAS_MESSAGES.notAProperty, { members: extra.join(", "), id });
       continue;
     }
     aliases.push({ name, kind, id, input: value.input });
@@ -303,17 +311,17 @@ export function cliAliases(catalog: CatalogDocument, target: string): CliAliases
   if (named === undefined) return { aliases, default: undefined, errors };
   const fallback = typeof named === "string" ? aliases.find((alias) => alias.name === named) : undefined;
   if (typeof named !== "string" || named.startsWith("--") || (fallback === undefined && !Object.hasOwn(members, named))) {
-    errors.push(`${where}: options.cli.default must be the name of a command alias`);
+    errors.push(filled(ALIAS_MESSAGES.badDefault, { where }));
     return { aliases, default: undefined, errors };
   }
   if (fallback === undefined) return { aliases, default: undefined, errors };
   const flags = cliAliasFlagNames(catalog, fallback);
   for (const reserved of CLI_RESERVED_FLAGS) {
-    if (flags.includes(reserved.slice(2))) errors.push(`${where}: the default alias ${fallback.name} has the flag ${reserved}, which is a flag of the command line`);
+    if (flags.includes(reserved.slice(2))) errors.push(filled(ALIAS_MESSAGES.defaultHasReservedFlag, { where, name: fallback.name, flag: reserved }));
   }
   for (const alias of aliases) {
     if (alias.name.startsWith("--") && flags.includes(alias.name.slice(2))) {
-      errors.push(`${where}: the alias ${alias.name} has the name of a flag of the default alias ${fallback.name}`);
+      errors.push(filled(ALIAS_MESSAGES.flagOfDefault, { where, name: alias.name, default: fallback.name }));
     }
   }
   return { aliases, default: fallback, errors };
@@ -359,19 +367,8 @@ export function cliAliasUsage(program: string, alias: Pick<CliAlias, "name" | "k
 
 const isOneOf = (names: readonly string[], name: string): boolean => names.includes(name);
 
-/** The flags of `watch` that give the cursor and `maxAgeMs`. No input property of an event can have these names. */
-export const CLI_RESUME_FLAGS = ["cursor", "max-age-ms"] as const;
-
-/** The exit code for each end of a subscription through the CLI (spec/bindings/cli.md#events). */
-export const CLI_WATCH_EXIT_CODES = { complete: 0, cancelled: 130, internal: 5 } as const;
-
-export const HTTP_STATUS = {
-  "unknown-capability": 404,
-  "invalid-input": 422,
-  unavailable: 503,
-  cancelled: 409,
-  internal: 500,
-} as const;
+const filled = (template: string, parts: { readonly [part: string]: string }): string =>
+  template.replaceAll(/\{(\w+)\}/g, (placeholder, part: string) => parts[part] ?? placeholder);
 
 export const httpStatus = (outcome: Outcome<unknown, unknown>): number =>
   isCallFailure(outcome) ? HTTP_STATUS[outcome.kind] : 200;
@@ -393,8 +390,6 @@ export const httpEventMessage = {
   error: (failure: CallFailure): string => sseMessage({ event: "error", data: JSON.stringify({ kind: failure.kind, message: failure.message }) }),
   keepalive: (): string => ":\n\n",
 } as const;
-
-export const SSE_MEDIA_TYPE = "text/event-stream";
 
 export type Rejection = "method" | "origin" | "media-type" | "too-large" | "not-utf8";
 
@@ -454,33 +449,7 @@ export async function readBounded(
   }
 }
 
-export const MCP_PROTOCOL_VERSION = "2026-07-28";
-
-export const MCP_UNKNOWN_TOOL = -32602;
-
-export const MCP_REJECTIONS: { readonly [R in Rejection]: { readonly status: number; readonly code?: number } } = {
-  method: { status: 405 },
-  origin: { status: 403 },
-  "media-type": { status: 415 },
-  "too-large": { status: 413, code: -32600 },
-  "not-utf8": { status: 400, code: -32700 },
-};
-
-export const MCP_EVENTS_EXTENSION = "io.modelcontextprotocol/events";
-
-/** The key in `params._meta` that holds the id of the `events/stream` request. */
-export const MCP_SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId";
-
-/** The JSON-RPC errors of the MCP events extension. Their numbers are not final in SEP-3415. */
-export const MCP_EVENT_ERRORS = {
-  notFound: -32023,
-  forbidden: -32024,
-  resourceExhausted: -32025,
-  unsupported: -32026,
-  callbackEndpoint: -32027,
-  invalidParams: -32602,
-  internal: -32603,
-} as const;
+export const MCP_REJECTIONS: { readonly [R in Rejection]: { readonly status: number; readonly code?: number } } = REJECTIONS;
 
 /** The JSON-RPC error for a call failure of a subscription before its first occurrence. */
 export function mcpSubscribeError(failure: CallFailure): { readonly code: number; readonly message: string; readonly data?: JsonObject } {

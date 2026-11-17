@@ -11,7 +11,7 @@ toolchains:
 tasks:
   test:
     description: "Run the tests of the models, and type-check the modules of the properties."
-    script: "quint test cli-output.qnt && quint typecheck cli-output-properties.qnt && quint typecheck cli-output-cases.qnt"
+    script: "quint test cli-output.qnt && quint typecheck cli-output-properties.qnt && quint typecheck cli-output-cases.qnt && quint typecheck facts.qnt"
     inputs: ["*.qnt", "package.json", "/pnpm-workspace.yaml"]
 
   prove:
@@ -21,10 +21,10 @@ tasks:
     inputs: ["*.qnt", "scripts/prove.ts", "package.json", "/pnpm-workspace.yaml", "/.prototools"]
 
   generate:
-    description: "Write the data and the cases of the models into each core."
+    description: "Write the shared facts, and the data and the cases of the models, into spec-ts and each core."
     command: "node"
     args: ["scripts/generate.ts"]
-    inputs: ["*.qnt", "scripts/generate.ts", "package.json", "/pnpm-workspace.yaml", "/packages/spec-ts/src/**/*.ts"]
+    inputs: ["*.qnt", "scripts/generate.ts", "package.json", "/pnpm-workspace.yaml"]
     options:
       runInCI: false
       cache: false
@@ -39,10 +39,11 @@ tasks:
       - "scripts/generate.ts"
       - "package.json"
       - "/pnpm-workspace.yaml"
-      - "/packages/spec-ts/src/**/*.ts"
+      - "/packages/spec-ts/src/facts.generated.ts"
       - "/packages/core-ts/src/cli-output.generated.ts"
       - "/packages/core-effect/src/internal/output.generated.ts"
       - "/packages/core-rust/src/cli/output_generated.rs"
+      - "/packages/core-rust/src/facts_generated.rs"
       - "/packages/core-ts/test/fixtures/cli-output-cases.json"
       - "/packages/core-effect/test/fixtures/cli-output-cases.json"
       - "/packages/core-rust/tests/fixtures/cli_output_cases.json"

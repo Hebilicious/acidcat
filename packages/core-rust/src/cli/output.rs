@@ -237,7 +237,7 @@ impl CliOutput {
     }
 }
 
-fn filled(template: &str, parts: &[(&str, &str)]) -> String {
+pub(super) fn filled(template: &str, parts: &[(&str, &str)]) -> String {
     let mut text = String::new();
     let mut rest = template;
     while let Some(open) = rest.find('{') {

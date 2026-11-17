@@ -1,4 +1,4 @@
-import { isJsonObject, KEEPALIVE_MS, MCP_PROTOCOL_VERSION, MCP_UNKNOWN_TOOL, mcpToolResult } from "@acid-cat/spec-ts";
+import { isJsonObject, KEEPALIVE_MS, MCP_PROTOCOL_VERSION, MCP_SUBSCRIPTION_ID, MCP_UNKNOWN_TOOL, mcpToolResult } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
@@ -47,7 +47,6 @@ const HANDSHAKE_VERSIONS = [LATEST_HANDSHAKE_VERSION, "2025-06-18"] as const;
 const SUPPORTED_VERSIONS = [MCP_PROTOCOL_VERSION, ...HANDSHAKE_VERSIONS];
 
 const PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
-const SUBSCRIPTION_ID_KEY = "io.modelcontextprotocol/subscriptionId";
 
 type Id = string | number;
 
@@ -292,7 +291,7 @@ class StdioServer {
     this.#send({
       jsonrpc: "2.0",
       method: "notifications/subscriptions/acknowledged",
-      params: { _meta: { [SUBSCRIPTION_ID_KEY]: id }, notifications: tools ? { toolsListChanged: true } : {} },
+      params: { _meta: { [MCP_SUBSCRIPTION_ID]: id }, notifications: tools ? { toolsListChanged: true } : {} },
     });
     if (tools) this.#subscriptions.add(id);
   }
@@ -328,7 +327,7 @@ class StdioServer {
     this.#listed = next;
     if (this.#initialized) this.#send({ jsonrpc: "2.0", method: "notifications/tools/list_changed", params: {} });
     for (const id of this.#subscriptions) {
-      this.#send({ jsonrpc: "2.0", method: "notifications/tools/list_changed", params: { _meta: { [SUBSCRIPTION_ID_KEY]: id } } });
+      this.#send({ jsonrpc: "2.0", method: "notifications/tools/list_changed", params: { _meta: { [MCP_SUBSCRIPTION_ID]: id } } });
     }
   }
 

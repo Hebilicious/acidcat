@@ -44,6 +44,9 @@ export const MESSAGES = {
   switchHelp: "{names}  Write {form}.",
   valuesHelp: "{names} <{values}>  The form of the output: {meanings}.",
   meaning: "{value} is {form}",
+  genericCommand: "The command {command} has the same name as a command of the command line.",
+  sharedPrefix: "The command {command} is also the start of the command {longer}. A shared prefix only contains other commands.",
+  resumeProperty: "The input of the event {id} has a property {flag}, which is a flag of watch.",
 } as const;
 
 export const FORM_NAMES = { human: "the human form", json: "JSON" } as const;

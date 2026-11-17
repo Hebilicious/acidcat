@@ -63,7 +63,7 @@ export function outputErrors(flags: readonly OutputFlag[], otherFlags: ReadonlyM
   return errors;
 }
 
-const filled = (template: string, parts: { readonly [name: string]: string }): string =>
+export const filled = (template: string, parts: { readonly [name: string]: string }): string =>
   template.replaceAll(/\{(\w+)\}/g, (placeholder, name: string) => parts[name] ?? placeholder);
 
 const joined = (values: readonly string[], word: string): string =>
