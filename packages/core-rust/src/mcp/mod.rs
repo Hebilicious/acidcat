@@ -24,27 +24,21 @@ pub use stdio::{McpStdioOptions, run_stdio, serve_stdio};
 pub use webhook::{Allow, WebhookOptions};
 
 /// The revision of MCP that the binding serves.
-pub const PROTOCOL_VERSION: &str = "2026-07-28";
+pub const PROTOCOL_VERSION: &str = crate::facts_generated::MCP_PROTOCOL_VERSION;
 
 /// The revisions with an `initialize` handshake that the binding serves, the latest first.
 pub const HANDSHAKE_VERSIONS: [&str; 2] = ["2025-11-25", "2025-06-18"];
 
 pub(crate) const PROTOCOL_VERSION_KEY: &str = "io.modelcontextprotocol/protocolVersion";
-pub(crate) const SUBSCRIPTION_ID_KEY: &str = "io.modelcontextprotocol/subscriptionId";
+pub(crate) const SUBSCRIPTION_ID_KEY: &str = crate::facts_generated::MCP_SUBSCRIPTION_ID;
 pub(crate) const SERVER_INFO_KEY: &str = "io.modelcontextprotocol/serverInfo";
-pub(crate) const EVENTS_EXTENSION: &str = "io.modelcontextprotocol/events";
+pub(crate) const EVENTS_EXTENSION: &str = crate::facts_generated::MCP_EVENTS_EXTENSION;
 
 /// The JSON-RPC errors of the MCP events extension. Their numbers are not final in SEP-3415.
 pub(crate) mod codes {
-    pub const NOT_FOUND: i64 = -32023;
-    pub const FORBIDDEN: i64 = -32024;
-    pub const RESOURCE_EXHAUSTED: i64 = -32025;
-    pub const UNSUPPORTED: i64 = -32026;
-    pub const CALLBACK_ENDPOINT: i64 = -32027;
-    pub const INVALID_PARAMS: i64 = -32602;
-    pub const INTERNAL: i64 = -32603;
+    pub use crate::facts_generated::event_errors::*;
     pub const METHOD_NOT_FOUND: i64 = -32601;
-    pub const UNKNOWN_TOOL: i64 = -32602;
+    pub const UNKNOWN_TOOL: i64 = crate::facts_generated::MCP_UNKNOWN_TOOL;
 }
 
 #[derive(Clone, Debug)]

@@ -4,6 +4,8 @@ The fixed details of the [AcidCat specification](../../spec/README.md), as TypeS
 
 This package is part of the TypeScript reference implementation. [`@acid-cat/core-effect`](../core-effect) and [`@acid-cat/core-ts`](../core-ts) use it, so that both cores agree on each detail. An implementation in another language does not use it.
 
+The constants that each core shares, such as the exit codes, the call failure kinds, the HTTP status of each kind, the reserved flags and the MCP constants, are in `src/facts.generated.ts`. `moon run model:generate` writes this file from [`model/facts.qnt`](../../model/facts.qnt), and writes the same facts into the Rust core. Do not change the file by hand: change the model, and write the file again. `moon run verify` fails when the file is not the output of the model.
+
 ```sh
 pnpm add @acid-cat/spec-ts
 ```

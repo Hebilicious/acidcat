@@ -443,15 +443,13 @@ fn rpc(status: u16, id: &Value, answer: Result<Value, RpcError>) -> Response<Res
 }
 
 fn rejected(rejection: Rejection) -> Response<ResponseBody> {
-    let (status, error) = match rejection {
-        Rejection::Method => (405, None),
-        Rejection::Origin => (403, None),
-        Rejection::MediaType => (415, None),
-        Rejection::TooLarge => (413, Some((-32600, "The request body is too large."))),
-        Rejection::NotUtf8 => (400, Some((-32700, "The request body is not UTF-8 JSON."))),
+    let status = rejection.status();
+    let message = match rejection {
+        Rejection::TooLarge => "The request body is too large.",
+        _ => "The request body is not UTF-8 JSON.",
     };
-    let mut answer = match error {
-        Some((code, message)) => json_response(
+    let mut answer = match rejection.rpc_code() {
+        Some(code) => json_response(
             status,
             &response(&Value::Null, Err(RpcError::new(code, message))),
         ),

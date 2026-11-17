@@ -338,9 +338,6 @@ importers:
 
   model:
     devDependencies:
-      '@acid-cat/spec-ts':
-        specifier: workspace:*
-        version: link:../packages/spec-ts
       '@informalsystems/quint':
         specifier: 'catalog:'
         version: 0.33.1

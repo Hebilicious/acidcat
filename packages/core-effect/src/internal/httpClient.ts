@@ -68,7 +68,7 @@ export function make(base: string, options: ClientOptions = {}): Client {
     Effect.gen(function* () {
       const http = HttpClient.withScope(yield* HttpClient.HttpClient);
       let request = HttpClientRequest.make(method)(`${root}${path}`, {
-        headers: { ...Object.fromEntries(headers), Accept: "application/json, text/event-stream", ...extra },
+        headers: { ...Object.fromEntries(headers), Accept: `application/json, ${SSE_MEDIA_TYPE}`, ...extra },
       });
       if (method === "POST") request = HttpClientRequest.bodyText(request, JSON.stringify(body), "application/json");
       return yield* http.execute(request).pipe(Effect.mapError(() => new CallFailed(unreachable)));

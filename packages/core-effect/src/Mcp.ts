@@ -1,4 +1,4 @@
-import { bundle, isJsonObject, KEEPALIVE_MS, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, mcpToolResult, readBounded, screenRequest, sseMessage, viewOf } from "@acid-cat/spec-ts";
+import { bundle, isJsonObject, KEEPALIVE_MS, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage, viewOf } from "@acid-cat/spec-ts";
 import type { JsonObject, Outcome, Rejection } from "@acid-cat/spec-ts";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberMap, Layer, Logger, Option, Queue, Schema, Scope, Semaphore, Sink, Stdio, Stream, SubscriptionRef } from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
@@ -305,7 +305,7 @@ const respondToEvents = <R>(
 ): Effect.Effect<Response | Streaming> =>
   Effect.gen(function* () {
     const accepted = (http.headers.get("Accept") ?? "").split(",").map((each) => each.split(";")[0]?.trim().toLowerCase());
-    if (!accepted.includes("application/json") || !accepted.includes("text/event-stream")) return new Response(null, { status: 406 });
+    if (!accepted.includes("application/json") || !accepted.includes(SSE_MEDIA_TYPE)) return new Response(null, { status: 406 });
     const name = request.params.name;
     const nameHeader = http.headers.get("Mcp-Name");
     const mismatch =

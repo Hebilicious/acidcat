@@ -15,19 +15,6 @@ pub enum Kind {
     Internal,
 }
 
-impl Kind {
-    /// The name of the kind in the JSON form, for example `unknown-capability`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Kind::Cancelled => "cancelled",
-            Kind::UnknownCapability => "unknown-capability",
-            Kind::Unavailable => "unavailable",
-            Kind::InvalidInput => "invalid-input",
-            Kind::Internal => "internal",
-        }
-    }
-}
-
 /// A call that did not give a result: `{ "kind", "message" }`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CallFailure {

@@ -296,18 +296,8 @@ fn not_json<C: Send + Sync + 'static>(session: &Session<C>, route: Route, id: &s
     }
 }
 
-fn status_of(kind: Kind) -> u16 {
-    match kind {
-        Kind::UnknownCapability => 404,
-        Kind::InvalidInput => 422,
-        Kind::Unavailable => 503,
-        Kind::Cancelled => 409,
-        Kind::Internal => 500,
-    }
-}
-
 fn failure_response(failure: &CallFailure) -> Response<ResponseBody> {
-    json_response(status_of(failure.kind), &failure.to_json())
+    json_response(failure.kind.http_status(), &failure.to_json())
 }
 
 fn no_route() -> Response<ResponseBody> {
@@ -318,14 +308,7 @@ fn no_route() -> Response<ResponseBody> {
 }
 
 fn rejected(rejection: Rejection) -> Response<ResponseBody> {
-    let status = match rejection {
-        Rejection::Method => 405,
-        Rejection::Origin => 403,
-        Rejection::MediaType => 415,
-        Rejection::TooLarge => 413,
-        Rejection::NotUtf8 => 400,
-    };
-    let mut response = empty_response(status);
+    let mut response = empty_response(rejection.status());
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));

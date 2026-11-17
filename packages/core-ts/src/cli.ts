@@ -1,6 +1,7 @@
 import {
   CallFailureError,
   CLI_EXIT_CODES,
+  CLI_GENERIC_COMMANDS,
   CLI_RESUME_FLAGS,
   CLI_WATCH_EXIT_CODES,
   cliAliases,
@@ -24,9 +25,9 @@ import {
 import type { Availability, CallFailure, CatalogCapability, CatalogDocument, CliAlias, JsonObject, Occurrence, Outcome } from "@acid-cat/spec-ts";
 
 import { catalogOf } from "./app.ts";
-import { cliFormatErrors, cliLayout, cliListText, cliOutputErrors, cliOutputFlagHelp, cliOutputRun, cliUi, defaultCliOutput } from "./cli-human.ts";
+import { cliFormatErrors, filled, cliLayout, cliListText, cliOutputErrors, cliOutputFlagHelp, cliOutputRun, cliUi, defaultCliOutput } from "./cli-human.ts";
 import type { CliForm, CliFormat, CliOutput, CliOutputFlag, CliOutputRun, CliRender } from "./cli-human.ts";
-import { PROGRAM_FLAGS, RESERVED_FLAGS } from "./cli-output.generated.ts";
+import { MESSAGES, PROGRAM_FLAGS, RESERVED_FLAGS } from "./cli-output.generated.ts";
 import type { App, ToJsonSchema } from "./app.ts";
 import type { HttpClient } from "./http-client.ts";
 import { createSession } from "./session.ts";
@@ -121,7 +122,7 @@ export interface CliCommand<Context> {
   run(args: readonly string[], io: CliIo & { readonly context: Context }): number | Promise<number>;
 }
 
-const GENERIC_COMMANDS: readonly string[] = ["call", "list", "watch"];
+const isGenericCommand = (word: string): boolean => CLI_GENERIC_COMMANDS.some((command) => command === word);
 
 const NO_FLAGS: JsonObject = { type: "object", properties: {} };
 
@@ -160,20 +161,20 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   const types = view.$defs ?? {};
   const commands = Object.keys(view.capabilities).map((id) => ({ id, path: commandPath(id) }));
   for (const { path } of commands) {
-    if (path[0] !== undefined && GENERIC_COMMANDS.includes(path[0])) throw new Error(`The command ${path.join(" ")} has the same name as a command of the command line.`);
+    if (path[0] !== undefined && isGenericCommand(path[0])) throw new Error(filled(MESSAGES.genericCommand, { command: path.join(" ") }));
   }
   // A shared prefix is a command that only contains other commands (`spec/bindings/cli.md`), so the path of a capability
   // must not be the start of the path of another capability.
   for (const { path } of commands) {
     const longer = commands.find((other) => other.path.length > path.length && path.every((word, index) => other.path[index] === word));
     if (longer !== undefined) {
-      throw new Error(`The command ${path.join(" ")} is also the start of the command ${longer.path.join(" ")}. A shared prefix only contains other commands.`);
+      throw new Error(filled(MESSAGES.sharedPrefix, { command: path.join(" "), longer: longer.path.join(" ") }));
     }
   }
   for (const [id, event] of Object.entries(view.events ?? {})) {
     const properties = event.input === undefined ? undefined : cliInputSchema(event.input, types).properties;
     const taken = CLI_RESUME_FLAGS.find((flag) => isJsonObject(properties) && flag in properties);
-    if (taken !== undefined) throw new Error(`The input of the event ${id} has a property ${taken}, which is a flag of watch.`);
+    if (taken !== undefined) throw new Error(filled(MESSAGES.resumeProperty, { id, flag: taken }));
   }
   const { aliases, default: defaultAlias, errors: aliasErrors } = cliAliases(view, options.target ?? "cli");
   if (aliasErrors.length > 0) throw new Error(aliasErrors.join("\n"));
@@ -208,7 +209,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     if (text !== "") io.stdout(text);
   };
 
-  const taken = new Set([...GENERIC_COMMANDS, ...commands.flatMap(({ path }) => path.slice(0, 1)), ...aliases.map(({ name }) => name)]);
+  const taken = new Set([...CLI_GENERIC_COMMANDS, ...commands.flatMap(({ path }) => path.slice(0, 1)), ...aliases.map(({ name }) => name)]);
   for (const command of added) {
     if (taken.has(command.name)) throw new Error(`The command ${command.name} of the application has the same name as another command.`);
     taken.add(command.name);

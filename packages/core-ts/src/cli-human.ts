@@ -212,7 +212,7 @@ export function cliOutputErrors(flags: readonly CliOutputFlag[], otherFlags: Rea
   return errors;
 }
 
-const filled = (template: string, parts: { readonly [name: string]: string }): string =>
+export const filled = (template: string, parts: { readonly [name: string]: string }): string =>
   template.replaceAll(/\{(\w+)\}/g, (placeholder, name: string) => parts[name] ?? placeholder);
 
 const joined = (values: readonly string[], word: string): string =>

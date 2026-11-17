@@ -47,6 +47,11 @@ pub(crate) const SWITCH_HELP_MESSAGE: &str = "{names}  Write {form}.";
 pub(crate) const VALUES_HELP_MESSAGE: &str =
     "{names} <{values}>  The form of the output: {meanings}.";
 pub(crate) const MEANING_MESSAGE: &str = "{value} is {form}";
+pub(crate) const GENERIC_COMMAND_MESSAGE: &str =
+    "The command {command} has the same name as a command of the command line.";
+pub(crate) const SHARED_PREFIX_MESSAGE: &str = "The command {command} is also the start of the command {longer}. A shared prefix only contains other commands.";
+pub(crate) const RESUME_PROPERTY_MESSAGE: &str =
+    "The input of the event {id} has a property {flag}, which is a flag of watch.";
 
 pub(crate) const HUMAN_FORM_NAME: &str = "the human form";
 pub(crate) const JSON_FORM_NAME: &str = "JSON";
