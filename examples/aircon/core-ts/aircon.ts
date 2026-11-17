@@ -240,6 +240,7 @@ const statusText = ({ power, mode, fan, targetCelsius, roomCelsius }: z.infer<ty
   `${ui.bold(power ? "on" : "off")} · ${mode} · fan ${fan} · target ${targetCelsius}°C · room ${roomCelsius}°C`;
 
 export const output: CliOutput = {
+  default: "auto",
   flags: [
     { names: ["--output", "-o"], values: { human: "human", json: "json" } },
     { names: ["--json"], form: "json" },

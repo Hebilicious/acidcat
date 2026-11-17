@@ -6,6 +6,7 @@ const statusText = ({ power, mode, fan, targetCelsius, roomCelsius }: typeof Sta
   `${ui.bold(power ? "on" : "off")} · ${mode} · fan ${fan} · target ${targetCelsius}°C · room ${roomCelsius}°C`;
 
 export const output: Cli.Output = {
+  default: "auto",
   flags: [
     { names: ["--output", "-o"], values: { human: "human", json: "json" } },
     { names: ["--json"], form: "json" },

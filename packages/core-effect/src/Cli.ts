@@ -42,10 +42,10 @@ export interface Output {
    */
   readonly flags?: readonly OutputFlag[] | undefined;
   /**
-   * The form when the arguments give no output flag. `"auto"`, the default, is the human form when standard output is
-   * a terminal and no CI and no coding agent is detected (see `formOf`), and JSON in all other cases.
+   * The form when the arguments give no output flag. The default is `"json"`. `"auto"` is the human form when standard
+   * output is a terminal and no CI and no coding agent is detected (see `formOf`), and JSON in all other cases.
    */
-  readonly default?: "auto" | Form | undefined;
+  readonly default?: "auto" | "json" | undefined;
   /**
    * How the human form writes the outcomes of some capabilities and the occurrences of some events. Make each one with
    * `App.format`. Without a format, the human form writes the generic layout of the value. `command` throws if two
@@ -87,7 +87,7 @@ export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = r
 }
 
 /**
- * Standard output, and the environment of the process, that decide the form of the output under the default `"auto"`
+ * Standard output, and the environment of the process, that decide the form of the output under `default: "auto"`
  * of `Output`. The default is no terminal, so the form is JSON. `NodeCli` gives the ones of the process.
  */
 export interface Terminal {
@@ -264,8 +264,7 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
       return;
     }
     const terminal = yield* Terminal;
-    const fallback = output.default ?? "auto";
-    const form = chosen.form ?? (fallback === "auto" ? formOf(terminal.stdoutIsTerminal, terminal.environment) : fallback);
+    const form = chosen.form ?? (output.default === "auto" ? formOf(terminal.stdoutIsTerminal, terminal.environment) : "json");
     const presentation: Presentation = { form, ui: ui(hasColor(form, terminal.stdoutIsTerminal, terminal.environment)) };
     return yield* Effect.provideService(dispatch(chosen.args), Presentation, presentation);
   });

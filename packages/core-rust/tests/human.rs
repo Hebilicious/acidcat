@@ -97,9 +97,9 @@ async fn run_options(options: &CliOptions<()>, args: &[&str]) -> Result<Ran, Str
 
 async fn run(formats: CliFormats, args: &[&str]) -> Result<(i32, String), String> {
     let output = CliOutput::new()
-        .default_form(OutputDefault::Human)
+        .default_form(OutputDefault::Auto)
         .formats(formats);
-    let ran = run_with(Some(output), args, None).await?;
+    let ran = run_with(Some(output), args, Some(OutputForm::Human)).await?;
     Ok((ran.code, format!("{}{}", ran.stdout, ran.stderr)))
 }
 
@@ -269,28 +269,34 @@ async fn an_application_command_gets_its_arguments_unchanged_and_the_chosen_form
 }
 
 #[tokio::test]
-async fn the_default_form_is_json_human_or_auto_from_the_terminal() {
-    let args = ["probe", "count", "--count", "2"];
-    let stdout = async |default: OutputDefault, auto_form: Option<OutputForm>| {
-        let output = CliOutput::new().default_form(default);
-        run_with(Some(output), &args, auto_form)
+async fn the_default_form_is_json_and_auto_gives_the_human_form_only_on_a_terminal() {
+    let stdout = async |output: CliOutput, args: &[&str], auto_form: Option<OutputForm>| {
+        run_with(Some(output), args, auto_form)
             .await
             .unwrap()
             .stdout
     };
+    let count = ["probe", "count", "--count", "2"];
+    let human = || CliOutput::new().switch(["--human"], OutputForm::Human);
     assert_eq!(
-        stdout(OutputDefault::Json, Some(OutputForm::Human)).await,
+        stdout(human(), &count, Some(OutputForm::Human)).await,
         COUNT_JSON
     );
     assert_eq!(
-        stdout(OutputDefault::Human, Some(OutputForm::Json)).await,
+        stdout(
+            human(),
+            &["probe", "count", "--count", "2", "--human"],
+            Some(OutputForm::Human)
+        )
+        .await,
         COUNT_TEXT
     );
+    let auto = || CliOutput::new().default_form(OutputDefault::Auto);
     assert_eq!(
-        stdout(OutputDefault::Auto, Some(OutputForm::Human)).await,
+        stdout(auto(), &count, Some(OutputForm::Human)).await,
         COUNT_TEXT
     );
-    assert_eq!(stdout(OutputDefault::Auto, None).await, COUNT_JSON);
+    assert_eq!(stdout(auto(), &count, None).await, COUNT_JSON);
 }
 
 #[tokio::test]

@@ -5,9 +5,8 @@ use super::human::{CliFormats, OutputForm};
 pub enum OutputDefault {
     /// The human form when standard output is a terminal and no CI and no coding agent is detected (see
     /// [`output_form`](super::output_form)), and JSON in all other cases.
-    #[default]
     Auto,
-    Human,
+    #[default]
     Json,
 }
 
@@ -79,7 +78,7 @@ impl CliOutput {
         self
     }
 
-    /// The form when the arguments give no output flag. The default is [`OutputDefault::Auto`].
+    /// The form when the arguments give no output flag. The default is [`OutputDefault::Json`].
     pub fn default_form(mut self, default: OutputDefault) -> Self {
         self.default = default;
         self

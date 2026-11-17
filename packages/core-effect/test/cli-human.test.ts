@@ -44,7 +44,7 @@ const runWith = <const Commands extends ReadonlyArray<Command.Command.Any> = rea
     process.exitCode = 0;
     yield* Cli.run(probe, { name: "probe", version: "0.0.0", output, commands }).pipe(
       Effect.provideService(Console.Console, captured),
-      Effect.provideService(Cli.Terminal, { stdoutIsTerminal, environment: {} }),
+      Effect.provideService(Cli.Terminal, { stdoutIsTerminal, environment: { NO_COLOR: "1" } }),
       Effect.provide(Layer.provideMerge(Layer.effect(Stdio.Stdio, Effect.map(Effect.service(Stdio.Stdio), (stdio) => ({ ...stdio, args: Effect.succeed(args) }))), NodeServices.layer)),
     );
     const code = process.exitCode;
@@ -52,7 +52,7 @@ const runWith = <const Commands extends ReadonlyArray<Command.Command.Any> = rea
     return { code, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
   });
 
-const runHuman = (formats: readonly App.Format[], ...args: string[]) => runWith({ default: "human", formats }, args);
+const runHuman = (formats: readonly App.Format[], ...args: string[]) => runWith({ default: "auto", formats }, args, true);
 
 test("the form is human only at a terminal with no CI and no coding agent", () => {
   assert.equal(Cli.formOf(true, {}), "human");
@@ -211,9 +211,15 @@ test("the command line stops when it starts if an output flag has the name of a 
   }
 });
 
-test("the default form is json, human, or auto from the terminal", async () => {
+test("the default form is json, and auto gives the human form only at a terminal", async () => {
+  const human: Cli.Output = { flags: [{ names: ["--human"], form: "human" }] };
   const results = await Effect.runPromise(
-    Effect.all([runWith({ default: "json" }, ["probe", "level"], true), runWith({ default: "human" }, ["probe", "level"]), runWith({}, ["probe", "level"], true), runWith({}, ["probe", "level"])]),
+    Effect.all([
+      runWith(human, ["probe", "level"], true),
+      runWith(human, ["probe", "level", "--human"], true),
+      runWith({ default: "auto" }, ["probe", "level"], true),
+      runWith({ default: "auto" }, ["probe", "level"]),
+    ]),
   );
   assert.deepEqual(
     results.map(({ stdout }) => stdout),

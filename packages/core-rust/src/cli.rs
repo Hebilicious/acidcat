@@ -625,7 +625,6 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                     .map_err(|message| usage_error(message, exit::INVALID_INPUT))?;
                 let fallback = match output.default {
                     OutputDefault::Auto => options.auto_form.unwrap_or_default(),
-                    OutputDefault::Human => OutputForm::Human,
                     OutputDefault::Json => OutputForm::Json,
                 };
                 (chosen.unwrap_or(fallback), rest)

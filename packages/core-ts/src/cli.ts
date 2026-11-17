@@ -103,7 +103,7 @@ export interface CliIo {
   readonly stdout: (text: string) => void;
   readonly stderr: (text: string) => void;
   readonly signal?: AbortSignal | undefined;
-  /** The form that the default `"auto"` of the option `output` gives. The default is `"json"`. */
+  /** The form that `default: "auto"` of the option `output` gives. The default is `"json"`. */
   readonly output?: CliForm | undefined;
   /** Style the human form with ANSI colors. The default is `false`. */
   readonly color?: boolean | undefined;
@@ -135,8 +135,8 @@ class UsageError extends Error {
 
 /**
  * Run the command line as the main program of the process. An interrupt (`SIGINT`) cancels the call or the subscription.
- * The default arguments are the arguments of the process. With the option `output`, the default `"auto"` gives the human
- * form when standard output is a terminal and no CI and no coding agent is detected, and JSON in all other cases.
+ * The default arguments are the arguments of the process. With `default: "auto"` in the option `output`, the form is
+ * human when standard output is a terminal and no CI and no coding agent is detected, and JSON in all other cases.
  */
 export function main<Context>(app: App<Context>, options: CliOptions<Context>, args: readonly string[] = process.argv.slice(2)): void {
   const interrupt = new AbortController();
@@ -190,8 +190,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   const chosen: CliOutputChoice = options.output === undefined ? { args: argv } : cliOutputChoice(outputFlags, argv, added.map(({ name }) => name));
   const args = chosen.error === undefined ? chosen.args : [];
   const chosenForm = chosen.error === undefined ? chosen.form : undefined;
-  const outputDefault = options.output?.default ?? "auto";
-  const output: CliForm = options.output === undefined ? "json" : (chosenForm ?? (outputDefault === "auto" ? (io.output ?? "json") : outputDefault));
+  const output: CliForm = chosenForm ?? (options.output?.default === "auto" ? (io.output ?? "json") : "json");
   const formatOf = (id: string): CliFormat | undefined => formats.find((format) => format.id === id);
   const ui = cliUi(io.color === true);
   const render = async (format: CliRender | undefined, json: unknown): Promise<string> => {

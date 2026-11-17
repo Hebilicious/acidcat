@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use acid_cat_core::cli::{CliAliases, CliFormats, CliOutput, CliUi, OutputForm};
+use acid_cat_core::cli::{CliAliases, CliFormats, CliOutput, CliUi, OutputDefault, OutputForm};
 use acid_cat_core::{App, Application, Availability, Emitted, RunResult, Target, fail};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -296,6 +296,7 @@ pub fn aircon() -> (Arc<Application<Unit>>, CliOutput) {
         });
 
     let output = CliOutput::new()
+        .default_form(OutputDefault::Auto)
         .values(
             ["--output", "-o"],
             [("human", OutputForm::Human), ("json", OutputForm::Json)],

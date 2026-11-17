@@ -48,7 +48,7 @@ const runWith = async (output: CliOutput | undefined, args: readonly string[], t
   return { code, out, err };
 };
 
-const run = async (formats: readonly CliFormat[], args: readonly string[]) => await runWith({ default: "human", formats }, args);
+const run = async (formats: readonly CliFormat[], args: readonly string[]) => await runWith({ default: "auto", formats }, args, "human");
 
 const writes = async (formats: readonly CliFormat[], ...args: string[]) => (await run(formats, args)).out;
 
@@ -210,11 +210,12 @@ test("output flags stop at --", () => {
   assert.deepEqual(cliOutputChoice(flags, ["probe", "read", "--json", "--", "--json"], []), { form: "json", args: ["probe", "read", "--", "--json"] });
 });
 
-test("the default form is json, human, or auto from the terminal", async () => {
-  assert.deepEqual(await runWith({ default: "json" }, ["probe", "read"], "human"), { code: 0, out: [PROBE_JSON], err: [] });
-  assert.deepEqual(await runWith({ default: "human" }, ["probe", "read"], "json"), { code: 0, out: [PROBE_TEXT], err: [] });
-  assert.deepEqual(await runWith({}, ["probe", "read"], "human"), { code: 0, out: [PROBE_TEXT], err: [] });
-  assert.deepEqual(await runWith({}, ["probe", "read"]), { code: 0, out: [PROBE_JSON], err: [] });
+test("the default form is json, and auto gives the human form only on a terminal", async () => {
+  const human = [{ names: ["--human"], form: "human" }] as const;
+  assert.deepEqual(await runWith({ flags: human }, ["probe", "read"], "human"), { code: 0, out: [PROBE_JSON], err: [] });
+  assert.deepEqual(await runWith({ flags: human }, ["probe", "read", "--human"], "human"), { code: 0, out: [PROBE_TEXT], err: [] });
+  assert.deepEqual(await runWith({ default: "auto" }, ["probe", "read"], "human"), { code: 0, out: [PROBE_TEXT], err: [] });
+  assert.deepEqual(await runWith({ default: "auto" }, ["probe", "read"]), { code: 0, out: [PROBE_JSON], err: [] });
 });
 
 test("the command line stops when it starts if an output flag has a name that is not valid or that is taken", async () => {

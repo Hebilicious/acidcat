@@ -22,10 +22,10 @@ export interface CliOutput {
    */
   readonly flags?: readonly CliOutputFlag[] | undefined;
   /**
-   * The form when the arguments give no output flag. `"auto"`, the default, is the human form when standard output is
-   * a terminal and no CI and no coding agent is detected, and JSON in all other cases.
+   * The form when the arguments give no output flag. The default is `"json"`. `"auto"` is the human form when standard
+   * output is a terminal and no CI and no coding agent is detected, and JSON in all other cases.
    */
-  readonly default?: "auto" | CliForm | undefined;
+  readonly default?: "auto" | "json" | undefined;
   /**
    * The formatters of the human form, made with `cliFormat`. Give one format at most for each capability or event of
    * the view. A value with no formatter has the generic layout.
