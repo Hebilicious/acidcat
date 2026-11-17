@@ -1,6 +1,7 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Effect, Layer, Stdio } from "effect";
+import { CLI_EXIT_CODES } from "@acid-cat/spec-ts";
+import { Console, Effect, Layer, Stdio } from "effect";
 import type { Command } from "effect/cli";
 
 import type * as App from "./App.ts";
@@ -24,6 +25,14 @@ const terminal = Layer.effect(
   Effect.flatMap(Effect.service(Stdio.Stdio), (stdio) => Effect.map(stdio.stdoutIsTerminal, (stdoutIsTerminal) => ({ stdoutIsTerminal, environment: process.env }))),
 );
 
+const stopOnBrokenRule = <A, E, R>(program: Effect.Effect<A, E, R>) =>
+  Effect.catchDefect(program, (problem) =>
+    Effect.andThen(
+      Console.error(problem instanceof Error ? problem.message : String(problem)),
+      Effect.sync(() => (process.exitCode = CLI_EXIT_CODES.internal)),
+    ),
+  );
+
 export function main<R, E, const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(
   app: App.App<R>,
   layer: Layer.Layer<R | Command.Services<Commands[number]>, E>,
@@ -31,12 +40,12 @@ export function main<R, E, const Commands extends ReadonlyArray<Command.Command.
   args: readonly string[] = process.argv.slice(2),
 ): void {
   const services = Layer.provideMerge(Layer.merge(withArgs(args), terminal), NodeServices.layer);
-  Cli.run(app, options).pipe(Effect.provide(Layer.merge(layer, services)), afterInterruptHandlers, NodeRuntime.runMain);
+  Effect.suspend(() => Cli.run(app, options)).pipe(stopOnBrokenRule, Effect.provide(Layer.merge(layer, services)), afterInterruptHandlers, NodeRuntime.runMain);
 }
 
 export function runCommand<Name extends string, Input, ContextInput, E>(
   command: Command.Command<Name, Input, ContextInput, E, Command.Environment>,
   options: { readonly version: string },
 ): void {
-  Cli.runCommand(command, options).pipe(Effect.provide(Layer.provideMerge(terminal, NodeServices.layer)), afterInterruptHandlers, NodeRuntime.runMain);
+  Cli.runCommand(command, options).pipe(stopOnBrokenRule, Effect.provide(Layer.provideMerge(terminal, NodeServices.layer)), afterInterruptHandlers, NodeRuntime.runMain);
 }
