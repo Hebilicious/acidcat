@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.12.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/spec-ts@0.11.2...@acid-cat/spec-ts@0.12.0) (2026-11-17)
+
+
+### Features
+
+* **cli:** add aliases of events and a default alias ([#146](https://github.com/Hebilicious/acidcat/issues/146)) ([cf40029](https://github.com/Hebilicious/acidcat/commit/cf4002937a50c059d45411fa680be7005796198c))
+* **cli:** add aliases to the CLI binding ([#145](https://github.com/Hebilicious/acidcat/issues/145)) ([63c3f87](https://github.com/Hebilicious/acidcat/commit/63c3f87033240833a43a3219d265333de74f8128))
+
+
+### Code Refactoring
+
+* **model:** generate the shared facts of the cores from one source ([#163](https://github.com/Hebilicious/acidcat/issues/163)) ([10c2a0d](https://github.com/Hebilicious/acidcat/commit/10c2a0d7eabb5180015ea95d4d0fa97214f7eaeb))
+
 ## [0.11.2](https://github.com/Hebilicious/acidcat/compare/@acid-cat/spec-ts@0.11.1...@acid-cat/spec-ts@0.11.2) (2026-11-16)
 
 
