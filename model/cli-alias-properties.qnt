@@ -1,5 +1,3 @@
-// The check of each alias accepts only a name that the program can read from the first one or two arguments, and that
-// takes the place of no command, flag or capability of the command line.
 module cliAliasNames {
   import cliAliases.* from "./cli-aliases"
 

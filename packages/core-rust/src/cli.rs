@@ -859,7 +859,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 .await
             }
             Some(_) if !matches!(alias_of_args(args, &aliases), AliasOfArgs::None) => {
-                let AliasOfArgs::Alias(alias, words) = alias_of_args(args, &aliases) else {
+                let AliasOfArgs::Alias { alias, words } = alias_of_args(args, &aliases) else {
                     return Err(usage_error(
                         format!("There is no command {}.", args[..2].join(" ")),
                         exit::UNKNOWN_CAPABILITY,
@@ -1733,12 +1733,11 @@ fn leading_word(name: &str) -> &str {
 }
 
 enum AliasOfArgs<'a> {
-    Alias(&'a Alias, usize),
+    Alias { alias: &'a Alias, words: usize },
     UnknownCommand,
     None,
 }
 
-/// The alias that the first arguments name, and the number of arguments in its name (spec/bindings/cli.md#aliases).
 fn alias_of_args<'a>(args: &[String], aliases: &'a [Alias]) -> AliasOfArgs<'a> {
     let Some(first) = args.first() else {
         return AliasOfArgs::None;
@@ -1748,7 +1747,7 @@ fn alias_of_args<'a>(args: &[String], aliases: &'a [Alias]) -> AliasOfArgs<'a> {
         let name = format!("{first} {second}");
         aliases.iter().find(|alias| alias.name == name)
     }) {
-        return AliasOfArgs::Alias(alias, 2);
+        return AliasOfArgs::Alias { alias, words: 2 };
     }
     let Some(alias) = aliases.iter().find(|alias| alias.name == *first) else {
         return AliasOfArgs::None;
@@ -1759,7 +1758,7 @@ fn alias_of_args<'a>(args: &[String], aliases: &'a [Alias]) -> AliasOfArgs<'a> {
     if group && second.is_some_and(|second| is_word(second)) {
         AliasOfArgs::UnknownCommand
     } else {
-        AliasOfArgs::Alias(alias, 1)
+        AliasOfArgs::Alias { alias, words: 1 }
     }
 }
 
