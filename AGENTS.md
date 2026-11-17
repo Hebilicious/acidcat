@@ -50,6 +50,7 @@ When a design decision is made for something that does not exist yet, build it. 
 - Each published package has the license file of the repository, and a task in `moon run verify` that builds or packages it the way that its registry receives it.
 - A feature reaches every surface of the examples: each API in `examples/` uses it, with a test. Do not list a surface as not done because no one named it.
 - The skill [`skills/acid-cat`](skills/acid-cat/SKILL.md) tells agents how to build with AcidCat. When a change adds or changes a rule of the catalog, a core, a binding or a command of `acid-cat`, change the skill in the same pull request. `gh skill publish --dry-run .` validates it.
+- When a change adds or changes a feature that a user of AcidCat sees, update each document that describes that feature, in the same pull request: the root [README.md](README.md) (its overview of the surfaces, the packages and the roadmap), the README of each package that the change touches, the README of each example that uses the feature, and the skill. A new feature that the root README does not mention is not done.
 - Release by merging the release pull request of release-please. Do not change a version or a `CHANGELOG.md` by hand. See [Publishing](packages/README.md#publishing).
 
 ## Verification
@@ -63,7 +64,7 @@ Verify each change against what it must do. Do not hunt for edge cases until a r
 5. **Triage each finding.** Fix it, or dismiss it with a reason. Dismiss a finding that needs an unusual setup that no user is likely to have. A finding that needs a new rule in the specification must name the client that relies on that rule ("Simple and permissive"). Then check only the diff of the fixes, one time.
 6. **Attack the premise.** When two fixes rest on the same premise, stop. Write the premise down, and test it before you write another fix. Often the design is wrong, not the code.
 7. **Encode what repeats.** When the same manual step or the same fix comes back, make a script, a test, a lint rule or a Moon task do it.
-8. **Hand off** the pull request with the result of each check, each finding, and what you fixed or dismissed, and why.
+8. **Hand off** the pull request with the result of each check, each finding, and what you fixed or dismissed, and why. List the documents that the change updates, or say why none needed it.
 
 Give each round of work to a new subagent, with the full scope in its brief: what the user asked for, the acceptance checks, the earlier findings, and the branch. Do not add work to a subagent that already returned.
 
