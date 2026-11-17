@@ -131,7 +131,7 @@ func airconCatalog() *catalog.Catalog {
 			Audience:    []string{"app"},
 			Failures: map[string]schema{
 				"Offline":  offline,
-				"UpToDate": {"type": "object", "properties": schema{"version": schema{"type": "string"}}},
+				"UpToDate": {"type": "object", "required": []any{"version"}, "properties": schema{"version": schema{"type": "string"}}},
 			},
 		}).
 		Event("aircon.status.changed", catalog.Event{

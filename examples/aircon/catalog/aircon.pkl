@@ -149,6 +149,7 @@ capabilities {
       ["Offline"] = module.ref("Offline")
       ["UpToDate"] {
         type = "object"
+        required { "version" }
         properties {
           version { type = "string" }
         }

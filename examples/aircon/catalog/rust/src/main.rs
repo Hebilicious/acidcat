@@ -180,7 +180,7 @@ fn aircon_catalog() -> Catalog {
             audience: strings(&["app"]),
             failures: vec![
                 ("Offline".into(), offline.clone()),
-                ("UpToDate".into(), json!({ "type": "object", "properties": { "version": { "type": "string" } } })),
+                ("UpToDate".into(), json!({ "type": "object", "required": ["version"], "properties": { "version": { "type": "string" } } })),
             ],
             ..Capability::default()
         })
