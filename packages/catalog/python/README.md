@@ -1,12 +1,14 @@
 # acid-cat-catalog
 
-The AcidCat catalog library for Python. PyPI package: `acid-cat-catalog`.
+The AcidCat catalog library for Python, published on PyPI as `acid-cat-catalog`. Build a catalog in code and write it in [canonical form](../../../spec/catalog.md#canonical-form). The library uses only the standard library. Use it at build time to write `acidcat.catalog.json`.
 
-Write a catalog in Python, and write it in canonical form. The library uses only the standard library. Use it at build time to write `acidcat.catalog.json`.
+## Install
 
 ```sh
 pip install acid-cat-catalog
 ```
+
+## Example
 
 ```python
 from pathlib import Path
@@ -33,8 +35,22 @@ catalog.event(
 Path("acidcat.catalog.json").write_text(catalog.render())
 ```
 
-`event()` declares an [event](../../../spec/events.md): clients subscribe to it, and get its payload in each occurrence. A payload is an object, or a reference to a type that is an object. `validate()` lists the rules a catalog breaks, and `render()` raises `CatalogError` for one that breaks any. The full example is [`examples/weather.py`](examples/weather.py), a weather station.
+The full example, a weather station, is [`examples/weather.py`](examples/weather.py).
 
-`read_only`, `destructive` and `idempotent` are the [hints](../../../spec/catalog.md#capabilities) of a capability for clients. A hint that is not given is not in the catalog.
+## API
 
-The tests compare the output of the library with files in this directory: the weather-station catalog [`examples/weather.acidcat.json`](examples/weather.acidcat.json), a catalog of values that languages write differently, [`tests/fixtures/edge.acidcat.json`](tests/fixtures/edge.acidcat.json), and a catalog with each hint of a capability, [`tests/fixtures/hints.acidcat.json`](tests/fixtures/hints.acidcat.json), which shows the order of the hints. The air-conditioner example of the repository also writes its catalog with this library, in [`examples/aircon/catalog/python.py`](../../../examples/aircon/catalog/python.py). Its test compares the output with the Pkl catalog. Each committed catalog file is in [canonical form](../../../spec/catalog.md#canonical-form), and the root `moon run check` checks this. Thus all catalog libraries agree on the canonical form, and they do not share a test file. Test with `moon run catalog-python:test`.
+- `event()` declares an [event](../../../spec/events.md). Clients subscribe to it and get its payload in each occurrence. A payload is an object, or a reference to a type that is an object.
+- `read_only`, `destructive` and `idempotent` are a capability's [hints](../../../spec/catalog.md#capabilities) for clients. A hint you leave out is not in the catalog.
+- `validate()` lists the rules that the catalog breaks. `render()` raises `CatalogError` for a catalog that breaks any rule.
+
+## Tests
+
+Run `moon run catalog-python:test`. The tests compare the library's output, byte for byte, with these files:
+
+| File | Contents |
+| --- | --- |
+| [`examples/weather.acidcat.json`](examples/weather.acidcat.json) | The weather-station catalog |
+| [`tests/fixtures/edge.acidcat.json`](tests/fixtures/edge.acidcat.json) | Values that languages write differently by default |
+| [`tests/fixtures/hints.acidcat.json`](tests/fixtures/hints.acidcat.json) | Each hint of a capability, in canonical order |
+
+The air-conditioner example writes its catalog with this library in [`examples/aircon/catalog/python.py`](../../../examples/aircon/catalog/python.py), and its test compares the output with the Pkl catalog. The root `moon run check` checks that each committed catalog file is in canonical form, so the catalog libraries agree on the form without sharing a test file.

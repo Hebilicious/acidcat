@@ -1,8 +1,8 @@
 # Catalog libraries
 
-Write a catalog in the language that you use. Each library makes a catalog, checks the catalog rules, and writes the catalog in [canonical form](../../spec/catalog.md#canonical-form).
+Write a catalog in the language you already use. Each library builds a catalog, checks the catalog rules, and writes the catalog in [canonical form](../../spec/catalog.md#canonical-form), so the same catalog gives the same bytes in every language.
 
-Use these libraries at build time, to write `acidcat.catalog.json`. At run time, an application does not use them (see [Build time and run time](../../spec/catalog.md#build-time-and-run-time)).
+Use these libraries at build time to write `acidcat.catalog.json`. An application does not use them at run time (see [Build time and run time](../../spec/catalog.md#build-time-and-run-time)).
 
 | Language | Directory | Registry name | Test |
 | --- | --- | --- | --- |
@@ -12,7 +12,7 @@ Use these libraries at build time, to write `acidcat.catalog.json`. At run time,
 | Rust | [`rust/`](rust) | crates.io `acid-cat-catalog` | `moon run catalog-rust:test` |
 | Pkl | [`pkl/`](pkl) | Pkl package `package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog` | `moon run catalog-pkl:test` |
 
-## One shape in every language
+## The same steps in every language
 
 | Step | Pkl | TypeScript | Python | Go | Rust |
 | --- | --- | --- | --- | --- | --- |
@@ -24,15 +24,13 @@ Use these libraries at build time, to write `acidcat.catalog.json`. At run time,
 | Check the rules | while writing | `.validate()` | `.validate()` | `.Validate()` | `.validate()` |
 | Render canonical JSON | `pkl eval`, then `acid-cat format` | `.render()` | `.render()` | `.Render()` | `.render()` |
 
-In all languages, a schema is a plain JSON Schema object. When you declare a shared type, you get the schema that refers to it. Thus a reference always refers to a type that exists.
+A schema is a plain JSON Schema object in every language. Declaring a shared type returns the schema that refers to it, so a reference always points at a type that exists.
 
-The libraries check the [catalog rules](../../spec/conformance.md#catalog) that need no schema validator: the form of ids and names, audiences, inputs and payloads, ids that are both a capability and an event, references, and nested `$defs`. Then `acid-cat check` from [`@acid-cat/cli`](../cli/README.md) does the full check.
+The libraries check the [catalog rules](../../spec/conformance.md#catalog) that need no schema validator: the form of ids and names, audiences, inputs and payloads, ids that are both a capability and an event, references, and nested `$defs`. `acid-cat check` from [`@acid-cat/cli`](../cli/README.md) does the full check.
 
-## Identical output
+## How the libraries stay byte-identical
 
-All libraries write catalogs in canonical form. Thus the same catalog gives the same bytes in all languages.
-
-Each library tests its own catalogs, with files in its own directory:
+Each library tests its own catalogs, with files in its own directory. The libraries share no test file.
 
 | Library | Example catalog | Edge-case catalog |
 | --- | --- | --- |
@@ -42,12 +40,13 @@ Each library tests its own catalogs, with files in its own directory:
 | Rust | A music player: [`rust/examples/player.acidcat.json`](rust/examples/player.acidcat.json) | [`rust/tests/fixtures/edge.acidcat.json`](rust/tests/fixtures/edge.acidcat.json) |
 | Pkl | A greenhouse: [`pkl/examples/greenhouse.acidcat.json`](pkl/examples/greenhouse.acidcat.json) | None. `acid-cat format` writes the canonical form of the Pkl output. |
 
-- The test of an example catalog makes the catalog with the library, and compares the output with the committed file, byte for byte.
+- An example catalog's test builds the catalog with the library and compares the output with the committed file, byte for byte.
 - An edge-case catalog holds values that languages write differently by default: a number with a zero fraction, very small and very large numbers, escapes and control characters in strings, and non-ASCII keys. Each library uses different values.
-- Each committed catalog file in the repository MUST be in canonical form. The root `moon run check` checks this. Thus all libraries agree on the canonical form, and they do not share a file.
+- Each committed catalog file in the repository MUST be in canonical form, and the root `moon run check` checks this. That one check is what makes every library agree on the form.
+- Pkl writes JSON in its own key order, so `moon run examples` sends the Pkl output through `acid-cat format`.
 
-[`examples/aircon/catalog`](../../examples/aircon/catalog) shows one catalog written in Pkl, TypeScript, Python, Go and Rust. Its test checks that each language gives the same bytes.
+[`examples/aircon/catalog`](../../examples/aircon/catalog) writes one catalog in Pkl, TypeScript, Python, Go and Rust, and its test checks that each language gives the same bytes.
 
-Pkl writes JSON in its own order. Thus `moon run examples` sends the Pkl output through `acid-cat format`.
+## Add a language
 
-To add a language, use the same steps and the same rules, and write the canonical form. Add an example catalog in a new domain and an edge-case catalog with new values, both in the directory of the library, and test the output of the library against them.
+Follow the same steps and rules, and write the canonical form. In the new library's directory, add an example catalog in a new domain and an edge-case catalog with new values, and test the library's output against both.

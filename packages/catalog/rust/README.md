@@ -1,12 +1,14 @@
 # acid-cat-catalog
 
-The AcidCat catalog library for Rust. crates.io package: `acid-cat-catalog`.
+The AcidCat catalog library for Rust, published on crates.io as `acid-cat-catalog`. Build a catalog in code and write it in [canonical form](../../../spec/catalog.md#canonical-form). Write schemas with `serde_json::json!`. Use it at build time, for example in `build.rs`, to write `acidcat.catalog.json`.
 
-Write a catalog in Rust, and write it in canonical form. Write schemas with `serde_json::json!`. Use it at build time, for example in `build.rs`, to write `acidcat.catalog.json`.
+## Install
 
 ```sh
 cargo add acid-cat-catalog
 ```
+
+## Example
 
 ```rust
 use acid_cat_catalog::{Capability, Catalog, Event, Target};
@@ -32,8 +34,22 @@ catalog.event("player.track.started", Event {
 std::fs::write("acidcat.catalog.json", catalog.render().expect("the catalog conforms"))?;
 ```
 
-`event()` declares an [event](../../../spec/events.md): clients subscribe to it, and get its payload in each occurrence. A payload is an object, or a reference to a type that is an object. `validate()` lists the rules a catalog breaks, and `render()` returns them as an error. The full example is [`examples/player.rs`](examples/player.rs), a music player. Run it with `cargo run --example player`.
+The full example, a music player, is [`examples/player.rs`](examples/player.rs). Run it with `cargo run --example player`.
 
-`read_only`, `destructive` and `idempotent` are the [hints](../../../spec/catalog.md#capabilities) of a capability for clients. `destructive` and `idempotent` are `Option<bool>`. A hint that is not given is not in the catalog.
+## API
 
-The tests compare the output of the library with files in this directory: the music-player catalog [`examples/player.acidcat.json`](examples/player.acidcat.json), a catalog of values that languages write differently, [`tests/fixtures/edge.acidcat.json`](tests/fixtures/edge.acidcat.json), and a catalog with each hint of a capability, [`tests/fixtures/hints.acidcat.json`](tests/fixtures/hints.acidcat.json), which shows the order of the hints. The air-conditioner example of the repository also writes its catalog with this library, in [`examples/aircon/catalog/rust`](../../../examples/aircon/catalog/rust). Its test compares the output with the Pkl catalog. Each committed catalog file is in [canonical form](../../../spec/catalog.md#canonical-form), and the root `moon run check` checks this. Thus all catalog libraries agree on the canonical form, and they do not share a test file. Test with `moon run catalog-rust:test`.
+- `event()` declares an [event](../../../spec/events.md). Clients subscribe to it and get its payload in each occurrence. A payload is an object, or a reference to a type that is an object.
+- `read_only`, `destructive` and `idempotent` are a capability's [hints](../../../spec/catalog.md#capabilities) for clients. `destructive` and `idempotent` are `Option<bool>`. A hint you leave out is not in the catalog.
+- `validate()` lists the rules that the catalog breaks. `render()` returns them as an error.
+
+## Tests
+
+Run `moon run catalog-rust:test`. The tests compare the library's output, byte for byte, with these files:
+
+| File | Contents |
+| --- | --- |
+| [`examples/player.acidcat.json`](examples/player.acidcat.json) | The music-player catalog |
+| [`tests/fixtures/edge.acidcat.json`](tests/fixtures/edge.acidcat.json) | Values that languages write differently by default |
+| [`tests/fixtures/hints.acidcat.json`](tests/fixtures/hints.acidcat.json) | Each hint of a capability, in canonical order |
+
+The air-conditioner example writes its catalog with this library in [`examples/aircon/catalog/rust`](../../../examples/aircon/catalog/rust), and its test compares the output with the Pkl catalog. The root `moon run check` checks that each committed catalog file is in canonical form, so the catalog libraries agree on the form without sharing a test file.

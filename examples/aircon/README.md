@@ -1,28 +1,32 @@
 # Air conditioner
 
-One air conditioner, described once and served to every surface. The unit is simulated in memory. This example shows each part of AcidCat on the same application:
+A simulated air conditioner, described once in a catalog and served to every surface: a command line, MCP servers, a web page with WebMCP tools, and four hand-written APIs. The unit lives in memory, so you can run everything without hardware.
+
+The same application exists on all three cores, so you can compare how each core expresses it:
 
 | Directory | Contents |
 | --- | --- |
-| [`catalog/`](catalog) | The catalog, written in Pkl, TypeScript, Python, Go and Rust. Each language gives the same bytes |
-| [`core-ts/`](core-ts) | The application on [`@acid-cat/core-ts`](../../packages/core-ts), with Zod, its command line, its MCP server through stdio, its server for a remote command line (`serve.ts`), and its web page with WebMCP tools (`page.ts`, `serve-page.ts`) |
-| [`core-effect/`](core-effect) | The application on [`@acid-cat/core-effect`](../../packages/core-effect), fully in Effect, its command line, its MCP server through stdio, its server for a remote command line (`serve.ts`), and its web page with WebMCP tools (`page.ts`, `serve-page.ts`) |
-| [`core-rust/`](core-rust) | The application on [`acid-cat-core`](../../packages/core-rust), in Rust, one program with its command line, its MCP server through stdio, and its server for a remote command line (`aircon serve`) |
-| [`web/`](web) | The markup and the controls of the web page, which both TypeScript cores use |
-| [`apis/`](apis) | APIs whose design the application controls: GraphQL, Cap'n Web, Elysia and an MCP server |
-| [`test/`](test) | The tests of all parts |
+| [`catalog/`](catalog) | The catalog, written in Pkl, TypeScript, Python, Go and Rust. Each language writes the same bytes. |
+| [`core-ts/`](core-ts) | The application on [`@acid-cat/core-ts`](../../packages/core-ts), with Zod: command line (`cli.ts`), MCP server through stdio (`mcp-stdio.ts`), server for a remote command line (`serve.ts`), and web page with WebMCP tools (`page.ts`, `serve-page.ts`). |
+| [`core-effect/`](core-effect) | The same application on [`@acid-cat/core-effect`](../../packages/core-effect), written entirely in Effect, with the same files. |
+| [`core-rust/`](core-rust) | The application on [`acid-cat-core`](../../packages/core-rust), as one Rust program: command line (`aircon cli`), MCP server through stdio (`aircon mcp-stdio`), and server for a remote command line (`aircon serve`). |
+| [`web/`](web) | The page markup and controls that both TypeScript cores use. |
+| [`apis/`](apis) | APIs whose design the application controls: GraphQL, Cap'n Web, Elysia and an MCP server. |
+| [`test/`](test) | The tests for every part. |
 
-The example imports the packages by their names, for example `@acid-cat/core-ts`. The packages do not use the example.
+The example imports the packages by name, for example `@acid-cat/core-ts`. The packages never import the example.
 
-## Catalog
+Run every command below from `examples/aircon` unless it says otherwise. Build the Rust program once with `cargo build --manifest-path core-rust/Cargo.toml` before you use `core-rust/target/debug/aircon`.
 
-[`catalog/aircon.pkl`](catalog/aircon.pkl) is the source of the catalog. [`catalog/aircon.acidcat.json`](catalog/aircon.acidcat.json) is the catalog in canonical form. `moon run examples` writes it from the Pkl source.
+## The catalog
 
-Each catalog library writes the same catalog in its own language: [`typescript.ts`](catalog/typescript.ts), [`python.py`](catalog/python.py), [`go/main.go`](catalog/go/main.go) and [`rust/src/main.rs`](catalog/rust/src/main.rs). Each program writes the catalog to its output. The test checks that each output is exactly `aircon.acidcat.json`.
+[`catalog/aircon.pkl`](catalog/aircon.pkl) is the source. `moon run examples` writes it in canonical form to [`catalog/aircon.acidcat.json`](catalog/aircon.acidcat.json).
 
-## Application and command line
+Each catalog library also writes the same catalog from its own language: [`typescript.ts`](catalog/typescript.ts), [`python.py`](catalog/python.py), [`go/main.go`](catalog/go/main.go) and [`rust/src/main.rs`](catalog/rust/src/main.rs). Each program prints the catalog, and the test checks that every output is exactly `aircon.acidcat.json`. Each application's test also compares the catalog it serves with that file.
 
-Each application serves the catalog: the test of each one compares its catalog with `aircon.acidcat.json`. Each one has a command line. Run these commands in `examples/aircon`:
+## The command line
+
+Each core gives the application a command line, with one command for each capability in the view of the `cli` target:
 
 ```sh
 node core-ts/cli.ts aircon power set --on
@@ -36,22 +40,42 @@ node core-ts/cli.ts aircon power set --help
 node core-effect/cli.ts aircon status --help
 ```
 
-`aircon power set --help` writes `Usage: aircon aircon power set --on`, an empty line, and the description of the capability. `aircon status --help` writes `Commands:`, then the usage of `aircon.status.get` and of `aircon.status.export`. `aircon status` alone, or with arguments that are not `--help` and are not the path of a command, such as `aircon status --path out.json`, writes the same list to standard error, with exit code 2. The test of each core checks this help.
+What to look at:
 
-The human form of the output is off by default in each core. Each command line turns it on with the default form `auto`. Without `auto`, the output is JSON unless an output flag chooses the human form. With `auto`, in a terminal, each command line writes text for a person: `aircon status get` gives `off · cool · fan auto · target 22°C · room 25°C`. Each core formats the status and the `Offline` failure of `aircon.status.get` and the payload of `aircon.status.changed`, and prints the other values in the generic layout. In a pipe, in CI, or for a coding agent, the output is JSON. The output flags choose the form, anywhere in the arguments: `--output human`, `--output json`, `--output=human`, `-o human` and `--json`.
+- **Shared types.** A flag of a shared type, such as `--mode`, accepts only that type's values.
+- **Repeated flags.** `aircon.schedule.set` takes two arrays: `days`, with items of the shared type `Day`, and `hours`, with integers. Each one is a repeated flag, and each occurrence adds one item in order, so the command above sets the days `["mon", "fri"]` and the hours `[7, 18]`. A repeated flag given once can also carry the whole array as JSON: `--days '["mon","fri"]'` gives the same days. In the usage that `list` prints, a repeated flag ends with `...`:
 
-Each command line can also control a unit in another process or on another machine. The server serves the HTTP binding of the `cli` target, and writes its URL. With `AIRCON_URL`, the command line sends each call and each subscription to that server. Each server runs until you stop it, so start each one in its own terminal. `cargo build --manifest-path core-rust/Cargo.toml` builds the Rust program:
+  ```
+  aircon aircon schedule set --days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]
+  ```
 
-```sh
-node core-ts/serve.ts 0.0.0.0:8080
-node core-effect/serve.ts 0.0.0.0:8081
-core-rust/target/debug/aircon serve 0.0.0.0:8082
-AIRCON_URL=http://localhost:8080/cli node core-ts/cli.ts aircon power set --on
-AIRCON_URL=http://localhost:8081/cli node core-effect/cli.ts aircon power set --on
-AIRCON_URL=http://localhost:8082/cli core-rust/target/debug/aircon cli aircon power set --on
+- **Help.** `aircon power set --help` prints `Usage: aircon aircon power set --on`, an empty line, and the capability's description. `aircon status --help` prints `Commands:` followed by the usage of `aircon.status.get` and `aircon.status.export`. `aircon status` on its own, or with arguments that are neither `--help` nor a command path (such as `aircon status --path out.json`), prints the same list to standard error and exits with code 2. Each core's test checks this help.
+- **Interrupts.** `SIGINT` (Ctrl+C) cancels the call or the subscription, for example `follow`, and the exit code is 130. If a call cannot stop, the command line still exits with 130 one second after the interrupt, or at once on a second interrupt.
+
+### Human or JSON output
+
+The cores leave the human form off by default. Each command line in this example turns it on by setting the default form to `auto`. With `auto`, the command line writes text for a person when it runs in a terminal. `aircon status get` then gives:
+
+```
+off · cool · fan auto · target 22°C · room 25°C
 ```
 
-The `cli` target gives eight [aliases](../../spec/bindings/cli.md#aliases). Each core gives them from the capability and event objects, and the catalog writes them in `options.cli`. `status` calls `aircon.status.get`, and it is the default alias. `--on` and `--off` call `aircon.power.set` with the fixed input `{ "on": true }` or `{ "on": false }`. `follow` subscribes to the event `aircon.status.changed`. `fan`, `fan auto` and `fan high` are a group: `fan` calls `aircon.fan.set` with the flag `--speed`, and `fan auto` and `fan high` call it with the fixed input `{ "speed": "auto" }` or `{ "speed": "high" }`. `fan medium` is an unknown command, because the group has no alias `fan medium`. `aircon power` is the prefix default of the shared prefix `aircon power`: it calls `aircon.power.set` with the flag `--on`, and the command `aircon power set` keeps its path. `aircon power nope` is an unknown command, because no command under `aircon power` has the name `nope`:
+In a pipe, in CI, or under a coding agent, the output is JSON. Without `auto`, the output is JSON unless an output flag asks for the human form. The output flags work anywhere in the arguments: `--output human`, `--output json`, `--output=human`, `-o human` and `--json`.
+
+Each core formats the status, the `Offline` failure of `aircon.status.get`, and the payload of `aircon.status.changed`. Other values use the generic layout.
+
+### Aliases
+
+The `cli` target defines eight [aliases](../../spec/bindings/cli.md#aliases) in `options.cli`. Each core builds them from the capability and event objects.
+
+| Alias | Runs |
+| --- | --- |
+| `status` | `aircon.status.get`. It is the default alias, so running the program with no arguments does the same. |
+| `--on`, `--off` | `aircon.power.set` with the fixed input `{ "on": true }` or `{ "on": false }`. |
+| `follow` | A subscription to `aircon.status.changed`, the same as `watch aircon.status.changed`. |
+| `fan` | `aircon.fan.set` with the flag `--speed`. |
+| `fan auto`, `fan high` | `aircon.fan.set` with the fixed input `{ "speed": "auto" }` or `{ "speed": "high" }`. `fan medium` is an unknown command, because no alias has that name. |
+| `aircon power` | `aircon.power.set` with the flag `--on`. It is the default of the shared prefix `aircon power`, and the command `aircon power set` keeps its path. `aircon power nope` is an unknown command, because no command under `aircon power` is named `nope`. |
 
 ```sh
 node core-ts/cli.ts --on
@@ -64,27 +88,32 @@ node core-ts/cli.ts aircon power --on # the same as aircon power set --on
 cargo run --manifest-path core-rust/Cargo.toml -- cli --off
 ```
 
-An interrupt (`SIGINT`, Ctrl+C) cancels the call or the subscription, for example `follow`, and the exit code is 130. In each core, a call that cannot stop does not keep the command line running: it exits with 130 one second after the interrupt, or at once at a second interrupt.
+### Control a unit in another process
 
-The command line has one command for each capability in the view of the `cli` target. A flag of a shared type, for example `--mode`, accepts only the values of that type.
+Each core can serve the HTTP binding of the `cli` target. The server prints its URL. Set `AIRCON_URL` and the command line sends every call and subscription to that server instead of a local unit. Each server runs until you stop it, so start each one in its own terminal:
 
-The input of `aircon.schedule.set` has two arrays: `days`, with items of the shared type `Day`, and `hours`, with integer items. Each one is a repeated flag. Each occurrence of the flag gives one item, in the order of the flags, so the command above sets the days `["mon", "fri"]` and the hours `[7, 18]`. A repeated flag that occurs once can also give the whole array as JSON text: `--days '["mon","fri"]'` gives the same days. `list` gives the usage of each command. The usage of a repeated flag ends with `...`:
-
+```sh
+node core-ts/serve.ts 0.0.0.0:8080
+node core-effect/serve.ts 0.0.0.0:8081
+core-rust/target/debug/aircon serve 0.0.0.0:8082
+AIRCON_URL=http://localhost:8080/cli node core-ts/cli.ts aircon power set --on
+AIRCON_URL=http://localhost:8081/cli node core-effect/cli.ts aircon power set --on
+AIRCON_URL=http://localhost:8082/cli core-rust/target/debug/aircon cli aircon power set --on
 ```
-aircon aircon schedule set --days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]
-```
 
-## Command line only
+### Command line only
 
-`aircon.status.export` writes the status to a file. Its audience is only `cli`, so the MCP server, WebMCP and the APIs do not have it. Only the command line gives the file system to its sessions. The other programs fail with `unknown-capability`, except the server of the remote command line: it serves the `cli` target, and fails with `WriteFailed`.
+`aircon.status.export` writes the status to a file. Its audience is only `cli`, because only the command line gives its sessions the file system:
 
 ```sh
 node core-ts/cli.ts aircon status export --path status.json
 ```
 
+The MCP servers, WebMCP and the APIs do not have it, and fail with `unknown-capability`. The remote command-line server is the exception: it serves the `cli` target, and fails with `WriteFailed`.
+
 ## MCP server through stdio
 
-Each application also has an MCP server through [stdio](../../spec/bindings/mcp.md#stdio), for MCP clients that start a local process. It serves the view of the `mcp` target. For example, give an MCP client one of these commands, with the root of the repository as its working directory:
+Each application has an MCP server through [stdio](../../spec/bindings/mcp.md#stdio), for MCP clients that start a local process. It serves the view of the `mcp` target. Give your MCP client one of these commands, with the repository root as its working directory:
 
 ```sh
 node examples/aircon/core-ts/mcp-stdio.ts
@@ -92,86 +121,89 @@ node examples/aircon/core-effect/mcp-stdio.ts
 examples/aircon/core-rust/target/debug/aircon mcp-stdio
 ```
 
-The Rust program is built with `cargo build` in `core-rust/`. The task `example-aircon:test-rust` builds it and runs its tests before the other tests.
+The task `example-aircon:test-rust` builds the Rust program and runs its tests before the other tests.
 
-The process is one session with one simulated unit. When standard input ends, the process exits.
+The process is one session with one simulated unit, and it exits when standard input ends.
 
-The capabilities that change a setting, for example `aircon.power.set` and `aircon.schedule.set`, have the [hints](../../spec/catalog.md#capabilities) `destructive: true` and `idempotent: true`: a call overwrites the old setting, and a second call with the same input changes nothing more. `aircon.status.get` is `readOnly`. Each MCP server gives these hints as the tool annotations `destructiveHint`, `idempotentHint` and `readOnlyHint`.
+Look at the tool annotations. The capabilities that change a setting, such as `aircon.power.set` and `aircon.schedule.set`, have the [hints](../../spec/catalog.md#capabilities) `destructive: true` and `idempotent: true`: a call overwrites the old setting, and repeating it with the same input changes nothing more. `aircon.status.get` is `readOnly`. Each MCP server turns these hints into `destructiveHint`, `idempotentHint` and `readOnlyHint`.
 
 ## WebMCP
 
-Each TypeScript core has a web page of the air conditioner on the `app` target. The `app` target is for the apps that people use, and it has the [WebMCP binding](../../spec/bindings/webmcp.md). The page shows the status of the unit and has controls: power, mode, target temperature, fan speed and firmware update. A check box takes the simulated unit offline and online again. The page also installs the WebMCP binding, so a browser agent gets one tool for each capability of the view of the `app` target:
+Each TypeScript core has a web page for the `app` target, the target for apps that people use. It has the [WebMCP binding](../../spec/bindings/webmcp.md). The page shows the unit's status and has controls for power, mode, target temperature, fan speed and firmware update. A check box takes the simulated unit offline and back online.
 
 | Page | Session | WebMCP |
 | --- | --- | --- |
 | [`core-ts/page.ts`](core-ts/page.ts) | `createSession(aircon, { target: "app", … })` | `installWebMcp(session)` |
 | [`core-effect/page.ts`](core-effect/page.ts) | `Session.make(aircon, { target: "app" })`, in one Effect program | `WebMcp.install(session)` |
 
-Both pages use the markup of [`web/page.ts`](web/page.ts) and the controls of [`web/controls.ts`](web/controls.ts). Each page has its own simulated unit. Run one of these commands in `examples/aircon`. The script bundles the page with esbuild, serves it on `127.0.0.1` with a free port, and writes its URL. Give an address, for example `127.0.0.1:8080`, to choose the port:
+Both pages use the markup in [`web/page.ts`](web/page.ts) and the controls in [`web/controls.ts`](web/controls.ts). Each page has its own simulated unit. To serve one, run:
 
 ```sh
 node core-ts/serve-page.ts
 node core-effect/serve-page.ts
 ```
 
-Open the URL in a browser that has WebMCP: the page uses `document.modelContext`, or `navigator.modelContext` if the first one does not exist. In a browser without WebMCP, the controls work, and the WebMCP status is `no host`.
+The script bundles the page with esbuild, serves it on `127.0.0.1` on a free port, and prints the URL. Pass an address, such as `127.0.0.1:8080`, to choose the port.
 
-An agent in the browser sees these tools:
+Open the URL in a browser with WebMCP. The page uses `document.modelContext`, or `navigator.modelContext` if the first does not exist. Without WebMCP, the controls still work and the WebMCP status reads `no host`.
 
-- **Names and descriptions.** The name of each tool is the id of the capability, for example `aircon.temperature.set`. Its description is the description of the capability. Its input schema is the bundled input schema: `aircon.mode.set` has the type `Mode` in its `$defs`.
-- **Outcomes.** A call resolves with the result in its JSON form: `{ "ok": true, "value": null }`, or a failure such as `{ "ok": false, "error": { "_tag": "Offline" } }`. A call failure rejects with an `Error` that has a `kind`, for example `invalid-input` for a temperature of 40.
-- **Availability.** `aircon.firmware.update` is available only while the unit is online. While it is offline, the page removes its tool. When the unit is online again, the page registers the tool again. The page lists each capability, and tells if it is available. The binding registers a tool for each available capability.
-- **One session.** The controls and the tools call the same session, so the page shows each change that an agent makes, and the agent reads each change that a person makes.
+A browser agent gets one tool for each capability in the view of the `app` target. What to look at:
 
-The page shows the status of the binding: `loading`, `reconciling`, `ready`, `failed`, `closing` or `disposed` (core-ts: `status` of the installation; core-effect: the `status` ref of the installation).
+- **Names and schemas.** Each tool's name is the capability id, such as `aircon.temperature.set`, and its description is the capability's description. The input schema is bundled: `aircon.mode.set` has the type `Mode` in its `$defs`.
+- **Outcomes.** A call resolves with the result in JSON form: `{ "ok": true, "value": null }`, or a failure such as `{ "ok": false, "error": { "_tag": "Offline" } }`. A call failure rejects with an `Error` that has a `kind`, for example `invalid-input` for a temperature of 40.
+- **Availability.** `aircon.firmware.update` is available only while the unit is online. When the unit goes offline, the page removes the tool. When it comes back, the page registers the tool again. The page lists every capability and whether it is available.
+- **One session.** The controls and the tools call the same session. The page shows each change an agent makes, and the agent reads each change a person makes.
+- **Binding status.** The page shows it: `loading`, `reconciling`, `ready`, `failed`, `closing` or `disposed`. In core-ts this is the installation's `status`. In core-effect it is the installation's `status` ref.
 
-The Rust core has no WebMCP. WebMCP runs in a web page, and the Rust program runs as a process. Its catalog has the WebMCP binding on the `app` target also, so that the catalog is the same in each language.
+The Rust core has no WebMCP, because WebMCP runs in a web page and the Rust program runs as a process. Its catalog still puts the WebMCP binding on the `app` target, so the catalog is the same in every language.
 
-[`test/webmcp-page.test.ts`](test/webmcp-page.test.ts) opens each page in Chromium through Playwright, with a test WebMCP host as its `modelContext`. It reads the tools, calls them, and reads what the page shows.
+[`test/webmcp-page.test.ts`](test/webmcp-page.test.ts) opens each page in Chromium through Playwright, with a test WebMCP host as its `modelContext`. It reads the tools, calls them, and checks what the page shows.
 
 ## APIs
 
-The HTTP and MCP bindings give generic access to the capabilities: one route or one tool for each id. An API whose design you control is application code. Build it on a session, with the library that you prefer, and serve a binding beside it.
+The HTTP and MCP bindings give generic access: one route or one tool for each capability id. When you want an API with your own design, write it as application code on a session, with any library, and serve a binding beside it.
 
 | File | Library | API | Failures |
 | --- | --- | --- | --- |
-| [`apis/graphql.ts`](apis/graphql.ts) | [Pothos](https://pothos-graphql.dev), [GraphQL Yoga](https://the-guild.dev/graphql/yoga-server) and [graphql-ws](https://the-guild.dev/graphql/ws) | `query { status }`, mutations that return the new status, and `subscription { statusChanged }`, which follows the event `aircon.status.changed`. The subscription works through server-sent events (Yoga, with the graphql-sse client) and through WebSockets (graphql-ws on a [`ws`](https://github.com/websockets/ws) server). The schema is in [`apis/schema.graphql`](apis/schema.graphql) | Data: each field returns a union of `Status` and the failures of its capability, for example `Status \| Offline \| PoweredOff` |
-| [`apis/capnweb.ts`](apis/capnweb.ts) | [Cap'n Web](https://github.com/cloudflare/capnweb) | A class with typed methods. A client sends many calls in one request through HTTP, or calls them over time through WebSockets ([`ws`](https://github.com/websockets/ws)). `followStatus(listener)` follows the event `aircon.status.changed`: the server calls the function of the client with each new status, until the client disposes the result. It works through WebSockets | A result value: `{ ok: false, error }` |
-| [`apis/elysia.ts`](apis/elysia.ts) | [Elysia](https://elysiajs.com) | `GET /status`, `PATCH /status` that changes many settings, `GET /status/changes`, a stream of server-sent events from a generator route with `sse`, and the WebSocket `/status/follow`. Both follow the event `aircon.status.changed`. The WebSocket runs on the Node.js adapter of Elysia, `@elysiajs/node`. The HTTP binding is mounted with `.mount("/api", …)` | Status 409 with the failure |
-| [`apis/mcp.ts`](apis/mcp.ts) | [Effect](https://effect.website) `effect/ai` | MCP tools `get_status`, with `readOnlyHint`, and `set_controls`, which changes many settings in one call, with `destructiveHint` and `idempotentHint`, at `/mcp`. The same URL serves the event `aircon.status.changed` through the [MCP events extension](../../spec/bindings/mcp.md#events), with push and poll delivery: `Mcp.withEvents` of `@acid-cat/core-effect` wraps the server of `effect/ai` | A tool error with the failure |
+| [`apis/graphql.ts`](apis/graphql.ts) | [Pothos](https://pothos-graphql.dev), [GraphQL Yoga](https://the-guild.dev/graphql/yoga-server) and [graphql-ws](https://the-guild.dev/graphql/ws) | `query { status }`, mutations that return the new status, and `subscription { statusChanged }`, which follows `aircon.status.changed` through server-sent events (Yoga, with the graphql-sse client) and WebSockets (graphql-ws on a [`ws`](https://github.com/websockets/ws) server). Schema: [`apis/schema.graphql`](apis/schema.graphql). | Data: each field returns a union of `Status` and its capability's failures, for example `Status \| Offline \| PoweredOff` |
+| [`apis/capnweb.ts`](apis/capnweb.ts) | [Cap'n Web](https://github.com/cloudflare/capnweb) | A class with typed methods. A client sends many calls in one HTTP request, or calls them over time through WebSockets ([`ws`](https://github.com/websockets/ws)). `followStatus(listener)` follows `aircon.status.changed` through WebSockets: the server calls the client's function with each new status until the client disposes the result. | A result value: `{ ok: false, error }` |
+| [`apis/elysia.ts`](apis/elysia.ts) | [Elysia](https://elysiajs.com) | `GET /status`, `PATCH /status` (which changes several settings), `GET /status/changes` (a server-sent event stream from a generator route with `sse`), and the WebSocket `/status/follow`. Both streams follow `aircon.status.changed`. The WebSocket runs on Elysia's Node.js adapter, `@elysiajs/node`. The HTTP binding is mounted with `.mount("/api", …)`. | Status 409 with the failure |
+| [`apis/mcp.ts`](apis/mcp.ts) | [Effect](https://effect.website) `effect/ai` | MCP tools at `/mcp`: `get_status`, with `readOnlyHint`, and `set_controls`, which changes several settings in one call, with `destructiveHint` and `idempotentHint`. The same URL serves `aircon.status.changed` through the [MCP events extension](../../spec/bindings/mcp.md#events), with push and poll delivery: `Mcp.withEvents` from `@acid-cat/core-effect` wraps the `effect/ai` server. | A tool error with the failure |
 
-The first three APIs use the application on `@acid-cat/core-ts`, and serve the HTTP binding at `/api`. [`apis/shared.ts`](apis/shared.ts) has what they share. The MCP server uses the application on `@acid-cat/core-effect`, and serves the MCP binding at two URLs:
+The first three APIs use the `@acid-cat/core-ts` application and serve the HTTP binding at `/api`. [`apis/shared.ts`](apis/shared.ts) holds the code they share. The MCP API uses the `@acid-cat/core-effect` application and serves the MCP binding at two URLs:
 
 | URL | MCP revisions | Use |
 | --- | --- | --- |
-| `/capabilities/mcp` | `2026-07-28` | `Mcp.toWebHandler(…)`. Use this form when your clients support revision `2026-07-28` |
-| `/capabilities/mcp-legacy` | `2026-07-28`, and the [`initialize` handshake](../../spec/bindings/mcp.md#earlier-revisions-through-http) of `2025-11-25` and `2025-06-18` | `Mcp.withHandshake(Mcp.toWebHandler(…))`, for clients that still open the session with `initialize`. This form keeps no session, so it does not send `notifications/tools/list_changed` to these clients |
+| `/capabilities/mcp` | `2026-07-28` | `Mcp.toWebHandler(…)`. Use this form when your clients support revision `2026-07-28`. |
+| `/capabilities/mcp-legacy` | `2026-07-28`, plus the [`initialize` handshake](../../spec/bindings/mcp.md#earlier-revisions-through-http) of `2025-11-25` and `2025-06-18` | `Mcp.withHandshake(Mcp.toWebHandler(…))`, for clients that still open the session with `initialize`. This form keeps no session, so it does not send `notifications/tools/list_changed` to these clients. |
 
-All APIs reject origins that they do not allow.
+Every API rejects origins it does not allow.
 
-Each API calls the capabilities through a session, so it gets the same outcomes as all other surfaces:
+### How the APIs use sessions
 
-- **One session for each client.** A session serves one client (see [Sessions](../../spec/invocation.md#sessions)). Each request, or each Cap'n Web batch, opens its own session with `await using session = openSession(options)`. A WebSocket connection, of GraphQL or of Cap'n Web, is one session. The session closes when the block ends. The unit is a service in the context, so all sessions share it.
-- **Typed calls.** An API gets input that is not trusted. `session.call(powerSet, input)` checks it with the input schema of the capability, and gives a result with the types of the capability, with no cast. The MCP server checks the parameters of its tools with Effect Schema, then calls the session of `@acid-cat/core-effect`.
-- **Subscriptions.** Each API follows the event through `session.eventHandle(statusChanged).subscribe(…)`, and stops the subscription when its client stops or goes away. A request with a stream of server-sent events keeps its session open until the stream ends. A WebSocket connection opens its session when the client connects, and closes it when the connection closes, which ends each subscription of the connection.
-  - GraphQL: the `subscribe` resolver of `statusChanged` returns the promise of `subscribe`, and its `resolve` gives the data of each occurrence. GraphQL calls `return()` of the iterator when the client ends the subscription.
-  - Cap'n Web: `followStatus` subscribes with a signal, and calls the listener of the client with each occurrence. It returns a `Following` object. When the client disposes it, when the connection breaks, or when the listener throws, the signal aborts.
-  - Elysia: the generator of `GET /status/changes` subscribes with the signal of the request, which aborts when the client goes away. Its first event, `retry: 1000`, makes Elysia send the response before the first change. Each change is an event `aircon.status.changed` with the status as its data. The WebSocket `/status/follow` is one session for each connection: it sends `{ "event": "following" }` when the subscription starts, then `{ "event": "aircon.status.changed", "data": <status> }` for each change. Closing the WebSocket cancels the subscription. A foreign origin gets 403 for the upgrade request.
-  - MCP: the server of `effect/ai` has no way to add methods. So `Mcp.withEvents(aircon, unit, application.handler, options)` takes each request of the events extension before the server of `effect/ai` gets it, and answers it as the MCP binding does. The server declares the extension with `extensions: Mcp.eventsExtensions`. `events/stream` follows the event until the client closes the request. `events/poll` reads it from a lease, which ends when `dispose` runs or after five minutes with no poll.
-- **Three outcomes.** A value and a failure are results: each API gives them in its own form, as data, as a union member, or as a status code. A call failure rejects as a `CallFailureError`, and each API turns it into an error of its protocol.
+Each API calls the capabilities through a session, so it gets the same outcomes as every other surface.
 
-## Run
+- **One session per client.** A session serves one client (see [Sessions](../../spec/invocation.md#sessions)). Each request, or each Cap'n Web batch, opens its own session with `await using session = openSession(options)`, and the session closes when the block ends. A GraphQL or Cap'n Web WebSocket connection is one session. The unit is a service in the context, so all sessions share it.
+- **Typed calls.** API input is untrusted. `session.call(powerSet, input)` checks it against the capability's input schema and returns a result typed by the capability, with no cast. The MCP API checks its tool parameters with Effect Schema, then calls the `@acid-cat/core-effect` session.
+- **Three outcomes.** A value and a failure are results, and each API gives them in its own form: data, a union member, or a status code. A call failure rejects as a `CallFailureError`, and each API turns it into an error of its protocol.
+- **Subscriptions.** Each API follows the event with `session.eventHandle(statusChanged).subscribe(…)` and stops the subscription when its client stops or goes away. A server-sent event request keeps its session open until the stream ends. A WebSocket connection opens its session on connect and closes it on disconnect, which ends every subscription on that connection.
+
+How each API ends a subscription:
+
+- GraphQL: The `subscribe` resolver of `statusChanged` returns the promise from `subscribe`, and its `resolve` gives the data of each occurrence. GraphQL calls the iterator's `return()` when the client ends the subscription.
+- Cap'n Web: `followStatus` subscribes with a signal and calls the client's listener with each occurrence. It returns a `Following` object. The signal aborts when the client disposes that object, when the connection breaks, or when the listener throws.
+- Elysia: The generator of `GET /status/changes` subscribes with the request's signal, which aborts when the client goes away. Its first event, `retry: 1000`, makes Elysia send the response before the first change. Each change is an `aircon.status.changed` event with the status as its data. The WebSocket `/status/follow` is one session per connection: it sends `{ "event": "following" }` when the subscription starts, then `{ "event": "aircon.status.changed", "data": <status> }` for each change. Closing the WebSocket cancels the subscription. An upgrade request from a foreign origin gets 403.
+- MCP: The `effect/ai` server cannot add methods, so `Mcp.withEvents(aircon, unit, application.handler, options)` takes each events-extension request before the `effect/ai` server sees it, and answers it the way the MCP binding does. The server declares the extension with `extensions: Mcp.eventsExtensions`. `events/stream` follows the event until the client closes the request. `events/poll` reads from a lease, which ends when `dispose` runs or after five minutes with no poll.
+
+### Run an API
 
 ```sh
 node apis/main.ts graphql   # or capnweb, elysia, mcp
-moon run example-aircon:test
 ```
 
-The tests start each TypeScript program of the example as a process from its bundle. The task `example-aircon:test-programs` writes the bundles into `.out/programs/` before the tests, because a bundle starts in less time than its source modules.
+`apis/main.ts` serves the API on `http://127.0.0.1:3000` with `serve` from `@acid-cat/core-ts/node`. The GraphQL API also serves WebSockets on `ws://127.0.0.1:3001/graphql`, and the Cap'n Web API on `ws://127.0.0.1:3001/rpc`. The Elysia API runs on `@elysiajs/node` instead, which serves its routes and its WebSocket `ws://127.0.0.1:3000/status/follow` on one port.
 
-`apis/main.ts` serves the API on `http://127.0.0.1:3000`, with `serve` from `@acid-cat/core-ts/node`. The GraphQL API also serves WebSockets on `ws://127.0.0.1:3001/graphql`, and the Cap'n Web API on `ws://127.0.0.1:3001/rpc`. The Elysia API runs on `@elysiajs/node` instead, which serves its routes and its WebSocket `ws://127.0.0.1:3000/status/follow` on one port.
-
-To follow the status, start an API, follow the event in one terminal, and change the unit in another:
+To watch status changes, start an API, follow the event in one terminal, and change the unit in another:
 
 ```sh
 # GraphQL, through server-sent events
@@ -201,4 +233,12 @@ using following = await api.followStatus((status) => console.log(status));
 await api.setPower(true);
 ```
 
-The test runs the Python, Go and Rust programs of `catalog/`, so it needs `python`, `go` and `cargo`. proto installs them from [`.prototools`](../../.prototools). The test of the web pages needs Chromium: the task `cli:browser` installs it before the tests.
+## Run the tests
+
+```sh
+moon run example-aircon:test
+```
+
+The tests start each TypeScript program of the example as a process from its bundle. The task `example-aircon:test-programs` writes the bundles into `.out/programs/` before the tests, because a bundle starts in less time than its source modules.
+
+The tests run the Python, Go and Rust programs in `catalog/`, so they need `python`, `go` and `cargo`. proto installs them from [`.prototools`](../../.prototools). The web page tests need Chromium, which the task `cli:browser` installs before the tests run.

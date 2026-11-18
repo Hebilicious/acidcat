@@ -1,12 +1,59 @@
 # @acid-cat/core-ts
 
-Serve AcidCat capabilities and events in plain TypeScript. npm package: `@acid-cat/core-ts`.
+`@acid-cat/core-ts` is an AcidCat core in plain TypeScript. You define capabilities and events once, and the package serves them through the TypeScript, HTTP, MCP, CLI and WebMCP bindings. It is one implementation of the [AcidCat specification](../../spec/README.md).
 
-This package has no Effect dependency. A capability returns a promise. An event gives an async iterable. Inputs are validated with any library that implements [Standard Schema](https://standardschema.dev), for example Zod, Valibot or ArkType. The application writes its own catalog.
+Use it if you want AcidCat without Effect. A capability is an async function that returns a promise, and an event is an async iterable. Validate inputs with any [Standard Schema](https://standardschema.dev) library, such as Zod, Valibot or ArkType. The application writes its own catalog from its code.
 
 ```sh
 pnpm add @acid-cat/core-ts
 ```
+
+## Quick start
+
+This program is a command line with one command:
+
+```ts
+import { capabilitiesFor, cliMain, defineApp, ok } from "@acid-cat/core-ts";
+import type { ToJsonSchema } from "@acid-cat/core-ts";
+import { z } from "zod";
+
+type Context = { lamp: { on: boolean } };
+const capability = capabilitiesFor<Context>();
+
+const app = defineApp<Context>({
+  title: "Desk lamp",
+  targets: { cli: { bindings: ["cli"] } },
+  capabilities: [
+    capability({
+      id: "lamp.power.set",
+      description: "Turn the lamp on or off.",
+      audience: ["cli"],
+      input: z.object({ on: z.boolean() }),
+      output: z.object({ on: z.boolean() }),
+      run: async ({ on }, { context }) => {
+        context.lamp.on = on;
+        return ok({ on });
+      },
+    }),
+  ],
+});
+
+const toJsonSchema: ToJsonSchema = (schema) => {
+  if (!(schema instanceof z.ZodType)) throw new Error("Only Zod schemas.");
+  return z.toJSONSchema(schema, { target: "draft-2020-12" });
+};
+
+cliMain(app, { name: "lamp", version: "0.1.0", context: { lamp: { on: false } }, toJsonSchema });
+```
+
+```sh
+$ node lamp.ts lamp power set --on
+{
+  "on": true
+}
+```
+
+To serve the same app over HTTP or MCP, add those bindings to a target and pass the app to `httpHandler` or `mcpHandler`. See [Serve capabilities and events](#serve-capabilities-and-events).
 
 ## Write capabilities
 
@@ -33,19 +80,21 @@ export const aircon = defineApp<{ unit: Unit }>({
 });
 ```
 
-- `run` gets the input, and `{ signal, context, target }`: an `AbortSignal`, the context, and the target of the session, for example `"mcp"` or `"cli"`. It returns `ok(value)` or `fail(failure)`, for example `fail({ _tag: "Offline", since })`. The types check that the value agrees with the output schema, that the failure has a tag of `failures`, and that it has the members of the schema of that tag. If `run` throws, the call fails as `internal`.
-- With an input schema, `run` gets the output of the schema. With none, it gets an empty object.
-- A failure schema describes the whole failure object, with its `_tag`.
-- `readOnly`, `destructive` and `idempotent` are optional booleans: the [hints](../../spec/catalog.md#capabilities) of the capability for clients. The MCP binding gives them as the tool annotations `readOnlyHint`, `destructiveHint` and `idempotentHint`.
-- `availability` is an optional function that returns an observable availability. A session reads it with `getSnapshot` when a call comes in. It subscribes to it only while `onChange` or the handle has listeners.
-- `state` is an optional `{ schema, source }`: the schema of the [state](../../spec/invocation.md#state), and a function that returns an observable. The handle gives it as `snapshot`.
-- `capabilitiesFor<Context>()` sets the context type one time. The other types come from the schemas.
-- `defineCapability` and `capabilitiesFor` keep the literal type of `id`, so that an application can type its ids. `run`, `availability` and `state` all get the same `Context`.
-- An application lists only capabilities that `defineCapability` or `capabilitiesFor` made. Each one has `decode`, which validates an input that is not trusted with the input schema and then gives the call of `run`. A session calls it, because there the type of the input is not known.
+`capabilitiesFor<Context>()` sets the context type once. Every other type comes from the schemas.
+
+- `run(input, { signal, context, target })` gets the decoded input (an empty object if there is no input schema), an `AbortSignal`, the context, and the session's target, such as `"mcp"` or `"cli"`.
+- `run` returns `ok(value)` or `fail(failure)`, for example `fail({ _tag: "Offline", since })`. The types check that the value matches the output schema, and that the failure has a tag from `failures` and the members of that tag's schema. If `run` throws, the call fails as `internal`.
+- A failure schema describes the whole failure object, including its `_tag`.
+- `readOnly`, `destructive` and `idempotent` are optional boolean [hints](../../spec/catalog.md#capabilities) for clients. The MCP binding sends them as the tool annotations `readOnlyHint`, `destructiveHint` and `idempotentHint`.
+- `availability` is an optional function that returns an observable availability. The session reads it with `getSnapshot` when a call arrives, and subscribes to it only while `onChange` or the handle has listeners.
+- `state` is an optional `{ schema, source }`: the [state](../../spec/invocation.md#state) schema, and a function that returns an observable. The handle exposes it as `snapshot`.
+- `run`, `availability` and `state` all get the same `Context`.
+- `defineCapability` and `capabilitiesFor` keep the literal type of `id`, so an application can type its ids.
+- An application lists only capabilities made by `defineCapability` or `capabilitiesFor`. Each one has `decode`, which validates an untrusted input against the input schema and returns the call of `run`. Sessions use it because they do not know the input type.
 
 ## Write events
 
-An [event](../../spec/events.md) is a kind of thing that happens, and that clients can follow. `subscribe` gives an async iterable, for example an async generator, with one value for each occurrence.
+An [event](../../spec/events.md) is a kind of thing that happens, which clients can follow. `subscribe` returns an async iterable, such as an async generator, with one value per occurrence.
 
 ```ts
 import { eventsFor } from "@acid-cat/core-ts";
@@ -67,13 +116,13 @@ export const statusChanged = event({
 export const aircon = defineApp<{ unit: Unit }>({ targets, capabilities: [powerSet], events: [statusChanged] });
 ```
 
-- `subscribe` gets the input, and `{ signal, context, target, cursor, maxAgeMs }`. `target` is the target of the session. The signal aborts when the subscription ends, in all ways. Stop the work and release the resources then.
-- Each value is `{ data }`, and optionally `eventId`, `timestamp`, `cursor` and `truncated`. Give the `eventId` of the source if it has one. With none, the session makes a unique id. With no `timestamp`, the session uses the time at which it gets the value.
-- `data` must agree with the payload schema. The session gives the client the output of the schema, as a copy. With no payload schema, `data` must be an empty object.
-- If `subscribe` throws before it gives an iterable, the subscription fails as `internal` before it starts. If the iterable throws, or gives data that does not agree with the payload schema, the subscription ends with `internal`. The details go to `onDefect`, not to the client.
+- `subscribe(input, { signal, context, target, cursor, maxAgeMs })`. The signal aborts when the subscription ends, however it ends. Stop the work and release resources then.
+- Each value is `{ data }`, with optional `eventId`, `timestamp`, `cursor` and `truncated`. Pass the source's `eventId` if it has one; otherwise the session makes a unique id. Without `timestamp`, the session uses the time it received the value.
+- `data` must match the payload schema. The client gets a copy of the schema's output. With no payload schema, `data` must be an empty object.
+- If `subscribe` throws before it returns an iterable, the subscription fails as `internal` before it starts. If the iterable throws, or yields data that does not match the payload schema, the subscription ends with `internal`. The details go to `onDefect`, not to the client.
 - When the iterable ends, the subscription is complete.
-- The session asks for the first value before the promise of `subscribe` resolves. Thus the body of an async generator runs until its first `await` or `yield` before the client gets the iterable. Register a listener on the source before that point, and the subscription gets each change after `subscribe` resolves.
-- To resume, give a `cursor` with each value. A client can give a `cursor` and `maxAgeMs` when it subscribes. Start after the cursor, and send no occurrence older than `maxAgeMs`. If you skip occurrences, give `truncated: true` on the first value. An event that gives no cursors ignores them.
+- The session asks for the first value before the `subscribe` promise resolves, so an async generator runs up to its first `await` or `yield` before the client gets the iterable. Register a listener on the source before that point, and the subscription sees every change after `subscribe` resolves.
+- To support resuming, give a `cursor` with each value. A client can pass `cursor` and `maxAgeMs` when it subscribes: start after the cursor, and skip occurrences older than `maxAgeMs`. If you skip occurrences, set `truncated: true` on the first value. An event that gives no cursors ignores them.
 - `defineEvent` and `eventsFor` keep the literal type of `id`. Capabilities and events share one set of ids.
 
 ## Write the catalog
@@ -86,55 +135,61 @@ const toJsonSchema = (schema) => z.toJSONSchema(schema, { target: "draft-2020-12
 await writeFile("acidcat.catalog.json", renderCatalog(aircon, { toJsonSchema })); // canonical form
 ```
 
-Standard Schema does not convert to JSON Schema. Give the converter of your schema library as `toJsonSchema`. The catalog has an `events` member when the application has events.
+Standard Schema has no JSON Schema conversion, so pass your schema library's converter as `toJsonSchema`. The catalog has an `events` member when the application has events.
 
-## Serve the capabilities and the events
+## Serve capabilities and events
 
 | Function | Binding | Result |
 | --- | --- | --- |
 | `createSession(app, options)` | [TypeScript](../../spec/bindings/typescript.md) | A session with a handle for each capability and an event handle for each event in the view |
-| `mcpHandler(app, options)` | [MCP](../../spec/bindings/mcp.md#http) through HTTP | `(request: Request) => Promise<Response>` |
-| `mcpHandshake(handler)` | [MCP](../../spec/bindings/mcp.md#earlier-revisions-through-http) through HTTP, for earlier revisions | The handler, which also serves the `initialize` handshake of earlier revisions. From [`@acid-cat/mcp-handshake`](../mcp-handshake) |
-| `mcpStdioMain(app, options)`, `runMcpStdio(…)` | [MCP](../../spec/bindings/mcp.md#stdio) through stdio | The MCP server of the process, or a promise that resolves when the input ends |
+| `mcpHandler(app, options)` | [MCP](../../spec/bindings/mcp.md#http) over HTTP | `(request: Request) => Promise<Response>` |
+| `mcpHandshake(handler)` | [MCP](../../spec/bindings/mcp.md#earlier-revisions-through-http) over HTTP, earlier revisions | The handler, which also serves the `initialize` handshake of earlier revisions. From [`@acid-cat/mcp-handshake`](../mcp-handshake) |
+| `mcpStdioMain(app, options)`, `runMcpStdio(…)` | [MCP](../../spec/bindings/mcp.md#stdio) over stdio | The process's MCP server, or a promise that resolves when the input ends |
 | `httpHandler(app, options)` | [HTTP](../../spec/bindings/http.md) | `(request: Request) => Promise<Response>` |
-| `cliMain(app, options)`, `runCli(…)` | [CLI](../../spec/bindings/cli.md) | The command line of the process, or an exit code |
-| `httpClient(url, options)` | [CLI](../../spec/bindings/cli.md#server), [HTTP](../../spec/bindings/http.md) | A client of the HTTP binding of a server, for the option `remote` of the command line |
+| `cliMain(app, options)`, `runCli(…)` | [CLI](../../spec/bindings/cli.md) | The process's command line, or an exit code |
+| `httpClient(url, options)` | [CLI](../../spec/bindings/cli.md#server), [HTTP](../../spec/bindings/http.md) | A client for a server's HTTP binding, for the command line's `remote` option |
 | `installWebMcp(session)` | [WebMCP](../../spec/bindings/webmcp.md) | Tools in the page, with a status. WebMCP serves no events |
 | `serve(handler, options)`, from `@acid-cat/core-ts/node` | MCP and HTTP | A Node.js server for the web handlers. See [Serve on Node.js](#serve-on-nodejs) |
 
-When the signal of a request aborts, `mcpHandler` and `httpHandler` cancel the call or the subscription of the request.
+When a request's signal aborts, `mcpHandler` and `httpHandler` cancel that request's call or subscription.
 
-Each binding serves the events of its view:
+Each binding serves the events in its view:
 
 | Binding | Events |
 | --- | --- |
 | TypeScript | `session.eventHandle(event).subscribe(input)`. See [Event handles](#event-handles) |
-| HTTP | `GET {base}/events` lists them. `POST {base}/events/{id}` gives a stream of server-sent events: `event: next` for each occurrence, then `event: complete`, or `event: error` with `internal`. `Last-Event-ID` gives the cursor, and `?maxAgeMs=` gives `maxAgeMs`. The option `keepaliveMs` (15 seconds) sets the time after which an idle stream gets a comment line |
-| MCP | The MCP events extension, revision `2026-07-28` only: `events/list`, push delivery with `events/stream`, poll delivery with `events/poll`, and webhook delivery with `events/subscribe` and `events/unsubscribe` through HTTP if the deployment turns it on. Through HTTP, the answer to `events/stream` is a stream of server-sent events. The option `heartbeatMs` (15 seconds) sets the time after which an idle stream gets `notifications/events/heartbeat`. A client with the `initialize` handshake gets no events. See [MCP poll and webhook delivery](#mcp-poll-and-webhook-delivery) |
+| HTTP | `GET {base}/events` lists them. `POST {base}/events/{id}` returns a server-sent event stream: `event: next` per occurrence, then `event: complete`, or `event: error` with `internal`. `Last-Event-ID` carries the cursor and `?maxAgeMs=` carries `maxAgeMs`. The `keepaliveMs` option (15 seconds) sets how long a stream stays idle before it gets a comment line |
+| MCP | The MCP events extension, revision `2026-07-28` only: `events/list`, push delivery with `events/stream`, poll delivery with `events/poll`, and, over HTTP when the deployment enables it, webhook delivery with `events/subscribe` and `events/unsubscribe`. Over HTTP, the `events/stream` response is a server-sent event stream. The `heartbeatMs` option (15 seconds) sets how long a stream stays idle before it gets `notifications/events/heartbeat`. A client that used the `initialize` handshake gets no events. See [MCP poll and webhook delivery](#mcp-poll-and-webhook-delivery) |
 | CLI | `watch <id>` writes each occurrence on one line. See [Command line](#command-line) |
 
-The options `bufferLimit` of `createSession`, `httpHandler`, `mcpHandler` and `runMcpStdio` set the number of occurrences that each subscription keeps for a client that reads slowly. The default is 256. When the limit is full, the oldest occurrence goes, and the next occurrence that the client reads has `truncated: true`.
+The `bufferLimit` option of `createSession`, `httpHandler`, `mcpHandler` and `runMcpStdio` sets how many occurrences each subscription keeps for a slow client. The default is 256. When the buffer is full, the oldest occurrence is dropped, and the next occurrence the client reads has `truncated: true`.
 
 ### MCP poll and webhook delivery
 
-A poll lease and a webhook subscription continue after the request that started them. Each one holds its subscription in a session of its own. Through HTTP, that session has the context of the request that started it: the shared `context`, or the context that `createContext` made for that request. Through stdio, it has the `context` of the process. The session closes when the lease or the webhook subscription ends. This state is in memory: when the process stops, it is lost, and clients start again with their cursors.
+A poll lease and a webhook subscription outlive the request that started them. Each holds its subscription in its own session. Over HTTP, that session has the starting request's context: the shared `context`, or the one `createContext` made for that request. Over stdio, it has the process's `context`. The session closes when the lease or webhook subscription ends. This state lives in memory, so it is lost when the process stops, and clients start again from their cursors.
 
-`handler.close()` of `mcpHandler` ends all leases and webhook subscriptions. `await using handler = mcpHandler(…)` calls it at the end of the block. Through stdio, the end of standard input ends them.
+`handler.close()` on an `mcpHandler` ends all leases and webhook subscriptions. `await using handler = mcpHandler(…)` calls it at the end of the block. Over stdio, the end of standard input ends them.
 
-**Poll.** `events/poll` reads the occurrences of a lease (spec/bindings/mcp.md#poll). Both `mcpHandler` and `runMcpStdio` serve it. The key of a lease is the principal, the id and the input, so two polls of the same client with the same input read one lease. The option `poll` sets the limits:
+#### Poll
 
-| Option of `poll` | Default | Use |
+`events/poll` reads a lease's occurrences ([spec](../../spec/bindings/mcp.md#poll)). Both `mcpHandler` and `runMcpStdio` serve it. A lease's key is the principal, the event id and the input, so two polls from the same client with the same input read one lease. The `poll` option sets the limits:
+
+| `poll` option | Default | Meaning |
 | --- | --- | --- |
-| `leaseMs` | 5 minutes | A lease that gets no poll for this time ends, and its subscription is cancelled |
-| `bufferLimit` | 1000 | The number of occurrences that each lease keeps. When the buffer is full, the oldest occurrence goes. A cursor older than the buffer gets `truncated: true` |
-| `maxEvents` | 100 | The number of occurrences in a result when the request gives no `maxEvents` |
+| `leaseMs` | 5 minutes | A lease that gets no poll for this long ends, and its subscription is cancelled |
+| `bufferLimit` | 1000 | Occurrences each lease keeps. When the buffer is full, the oldest is dropped. A cursor older than the buffer gets `truncated: true` |
+| `maxEvents` | 100 | Occurrences in a result when the request gives no `maxEvents` |
 | `nextPollMs` | 2000 | The `nextPollMs` of each result |
 
-The cursor of a poll tells the lease, the position in its buffer, and the last cursor of the provider. When a lease ended, a poll with its cursor starts a new lease that resumes after that cursor of the provider, with `maxAgeMs`.
+A poll cursor encodes the lease, the position in its buffer, and the provider's last cursor. After a lease ends, a poll with its cursor starts a new lease that resumes after that provider cursor, with `maxAgeMs`.
 
-**Principal.** The option `principal(request)` of `mcpHandler` gives the identity of the client of a request, for example the subject of a verified token, or `undefined` when the request has none. It is part of the key of a lease and of a webhook subscription, so that one client cannot read the lease of another. Through stdio, the process serves one client, and leases have no principal.
+#### Principal
 
-**Webhook.** Webhook delivery is off by default, and only through HTTP. Turn it on with the option `webhooks`, and `webhookDelivery(options)` from `@acid-cat/core-ts/node`. It sends each occurrence in a signed `POST` request to the URL of the client (spec/bindings/mcp.md#webhook). It needs `principal`: a request with no principal gets `Forbidden`.
+The `principal(request)` option of `mcpHandler` returns the identity of a request's client, such as the subject of a verified token, or `undefined` if there is none. It is part of the key of each lease and webhook subscription, so one client cannot read another's lease. Over stdio, the process serves one client and leases have no principal.
+
+#### Webhook
+
+Webhook delivery is off by default and works only over HTTP. Enable it with the `webhooks` option and `webhookDelivery(options)` from `@acid-cat/core-ts/node`. It sends each occurrence in a signed `POST` request to the client's URL ([spec](../../spec/bindings/mcp.md#webhook)). It needs `principal`: a request with no principal gets `Forbidden`.
 
 ```ts
 import { mcpHandler } from "@acid-cat/core-ts";
@@ -152,32 +207,32 @@ const mcp = mcpHandler(aircon, {
 await serve({ "/mcp": mcp });
 ```
 
-| Option of `webhookDelivery` | Default | Use |
+| `webhookDelivery` option | Default | Meaning |
 | --- | --- | --- |
-| `allow(url)` | None | The allowlist. A URL for which it gives `true` gets deliveries with no verification |
-| `allowPrivateNetworks` | `false` | Connect also to addresses that are not globally routable. Only for tests and private networks |
-| `ca` | None | Certificates of authorities, in PEM form, to trust beside the default ones |
-| `maxTtlMs`, `minTtlMs` | 1 hour, 1 minute | The limits of the lifetime that the server grants for `ttlMs` |
-| `maxSubscriptions` | 100 | The maximum number of webhook subscriptions of one principal. Over it, `ResourceExhausted` |
-| `attempts`, `retryWindowMs` | 5, 15 minutes | The attempts of one delivery, and the time in which the server makes them |
+| `allow(url)` | None | The allowlist. A URL for which it returns `true` gets deliveries without verification |
+| `allowPrivateNetworks` | `false` | Also connect to addresses that are not globally routable. For tests and private networks only |
+| `ca` | None | Extra certificate authorities to trust, in PEM form |
+| `maxTtlMs`, `minTtlMs` | 1 hour, 1 minute | Bounds on the lifetime the server grants for `ttlMs` |
+| `maxSubscriptions` | 100 | Maximum webhook subscriptions per principal. Above it, `ResourceExhausted` |
+| `attempts`, `retryWindowMs` | 5, 15 minutes | Attempts per delivery, and the time window for them |
 | `retryDelayMs(attempt)` | 10 s, 30 s, 90 s, 270 s | The wait before the next attempt |
-| `timeoutMs` | 5 seconds | The time that the server waits for each answer |
-| `rotationGraceMs` | 5 minutes | After a new secret, the time in which the server signs with the old secret and the new secret |
+| `timeoutMs` | 5 seconds | How long the server waits for each response |
+| `rotationGraceMs` | 5 minutes | After a new secret, how long the server signs with both the old and the new secret |
 
-Each pair of principal and URL must agree to get deliveries before the first delivery: the URL is in the allowlist, or the endpoint answers the `verification` message with its challenge. The server keeps each verification while the process runs. A refresh with the same key grants a new lifetime and replaces the secret. The server sends the deliveries of a subscription one at a time, in order. The `cursor` of each delivery is the watermark: the last cursor of an occurrence whose delivery succeeded or was abandoned.
+Before the first delivery, each principal and URL pair must agree to receive deliveries: either the URL is on the allowlist, or the endpoint answers the `verification` message with its challenge. The server remembers each verification while the process runs. A refresh with the same key grants a new lifetime and replaces the secret. The server sends a subscription's deliveries one at a time, in order. Each delivery's `cursor` is the watermark: the last cursor of an occurrence whose delivery succeeded or was abandoned.
 
-Security of webhook delivery:
+Security:
 
-- The URL must use `https`. The server checks the certificate of the endpoint.
-- For each request, the server resolves the host name, and connects only to an address that is globally routable, unless `allowPrivateNetworks` is `true`. It connects to the address that it checked, with the host name in the `Host` header and in TLS, so a change of DNS between the check and the connection has no effect. It does not follow redirects.
-- `lastError` and the reason of `CallbackEndpointError` are categories, for example `http_4xx` or `tls_error`. The server gives no text of the answer of the endpoint.
+- The URL must use `https`. The server checks the endpoint's certificate.
+- For each request, the server resolves the host name and connects only to a globally routable address, unless `allowPrivateNetworks` is `true`. It connects to the address it checked, with the host name in the `Host` header and in TLS, so a DNS change between the check and the connection has no effect. It does not follow redirects.
+- `lastError` and the reason in `CallbackEndpointError` are categories such as `http_4xx` or `tls_error`. The server never passes on the endpoint's response text.
 - The server never logs or returns a secret.
 
-The option `clock` of `mcpHandler`, `runMcpStdio` and `webhookDelivery` gives the time and the timers of leases, lifetimes and retries. The default is the clock of the system. Tests give a clock that they control.
+The `clock` option of `mcpHandler`, `runMcpStdio` and `webhookDelivery` supplies the time and the timers for leases, lifetimes and retries. The default is the system clock. Tests pass a clock they control.
 
 ### Serve on Node.js
 
-`@acid-cat/core-ts/node` serves web handlers on Node.js, with only `node:http`. It has no other dependency.
+`@acid-cat/core-ts/node` serves web handlers on Node.js using only `node:http`, with no other dependency.
 
 ```ts
 import { serve } from "@acid-cat/core-ts/node";
@@ -189,22 +244,22 @@ const server = await serve({ "/mcp": mcp, "/": http }, { port: 3000 });
 console.log(server.url); // http://127.0.0.1:3000
 ```
 
-`serve(handler, options)` takes one handler for all paths, or handlers by path prefix. The longest prefix that matches gets the request, and the prefix `/` matches all paths. The MCP handler answers on all paths, so give it only its own prefix. A path that no prefix matches gets `404`. A handler that rejects gets `500`.
+`serve(handler, options)` takes one handler for every path, or handlers by path prefix. The longest matching prefix gets the request, and `/` matches every path. The MCP handler answers on every path, so give it its own prefix. A path that matches no prefix gets `404`. A handler that rejects gets `500`.
 
-| Option | Default | Use |
+| Option | Default | Meaning |
 | --- | --- | --- |
-| `port` | `3000` | The port. With `0`, the system chooses a free port. `server.port` gives it |
-| `hostname` | `127.0.0.1` | The address. Only the same computer can connect. Use `0.0.0.0` or `::` to accept connections from the network |
+| `port` | `3000` | The port. With `0`, the system picks a free port, and `server.port` returns it |
+| `hostname` | `127.0.0.1` | The address. The default accepts connections from the same computer only. Use `0.0.0.0` or `::` to accept connections from the network |
 
-`serve` resolves when the server listens. `server.close()` stops it, and `await using server = await serve(…)` closes it at the end of the block. When a client closes its connection, the signal of its request aborts, so the handler cancels the call.
+`serve` resolves once the server listens. `server.close()` stops it, and `await using server = await serve(…)` closes it at the end of the block. When a client closes its connection, its request's signal aborts, so the handler cancels the call.
 
-`serve` gives a plain HTTP/1.1 server. It does not serve HTTPS. When clients connect through a network, end TLS before the server, in the platform: a load balancer, the ingress of a Kubernetes cluster (for example with cert-manager for the certificates), or a tunnel such as Cloudflare Tunnel. The platform sends plain HTTP to the server on its private network. Set `hostname` to `0.0.0.0` or `::`, so that the platform can connect. Do not put a TLS proxy in the process in front of `serve`.
+`serve` is a plain HTTP/1.1 server without HTTPS. When clients connect over a network, terminate TLS in front of it on the platform: a load balancer, a Kubernetes ingress (for example with cert-manager for certificates), or a tunnel such as Cloudflare Tunnel. The platform sends plain HTTP to the server over its private network. Set `hostname` to `0.0.0.0` or `::` so the platform can connect. Do not put an in-process TLS proxy in front of `serve`.
 
-For more, use a library for web handlers, for example [srvx](https://srvx.h3.dev): HTTPS in the process, when TLS must reach the server, HTTP/2, middleware, or the same server code on Bun and Deno. Give it the handler. Make sure that the library aborts the signal of a request when the client closes the connection. If it does not, a closed connection does not cancel the call.
+For more features, give the handler to a web handler library such as [srvx](https://srvx.h3.dev): in-process HTTPS when TLS must reach the server, HTTP/2, middleware, or the same server code on Bun and Deno. Check that the library aborts a request's signal when the client closes the connection. If it does not, a closed connection does not cancel the call.
 
-### MCP through stdio
+### MCP over stdio
 
-An MCP client, for example a coding agent, can start the server as a local process. `mcpStdioMain` serves the standard input and output of the process. The process is one session, with one `context`. The server serves revision `2026-07-28`, and the `initialize` handshake of revisions `2025-11-25` and `2025-06-18`. When the availability of a capability changes, the server sends `notifications/tools/list_changed`. `notifications/cancelled` cancels a call or an `events/stream` request. When standard input ends, the session closes: the calls in progress are cancelled, and each subscription is complete.
+An MCP client, such as a coding agent, can start the server as a local process. `mcpStdioMain` serves the process's standard input and output.
 
 ```ts
 #!/usr/bin/env node
@@ -213,18 +268,25 @@ import { mcpStdioMain } from "@acid-cat/core-ts";
 mcpStdioMain(aircon, { name: "aircon", version: "1.0.0", context: { unit }, toJsonSchema });
 ```
 
-Standard output carries only MCP messages. The session writes defects to standard error. Do not write to standard output from a capability. `runMcpStdio(app, options, { input, write })` is the same server on any stream: `input` is an async iterable of bytes or text, for example a `ReadableStream`, and `write` writes one line. It works in all runtimes.
+- The process is one session with one `context`.
+- The server serves revision `2026-07-28`, and the `initialize` handshake of revisions `2025-11-25` and `2025-06-18`.
+- When a capability's availability changes, the server sends `notifications/tools/list_changed`.
+- `notifications/cancelled` cancels a call or an `events/stream` request.
+- When standard input ends, the session closes: calls in progress are cancelled, and each subscription is complete.
+- Standard output carries only MCP messages, and the session writes defects to standard error. Do not write to standard output from a capability.
+
+`runMcpStdio(app, options, { input, write })` is the same server on any stream, and works in every runtime. `input` is an async iterable of bytes or text, such as a `ReadableStream`, and `write` writes one line.
 
 ### Typed calls and handles
 
-`createSession` gives a `Session<Context>`. It calls a capability with the types of the capability in two ways. Both take the capability object, so the types come from its schemas:
+`createSession` returns a `Session<Context>`. It offers two typed ways to call a capability. Both take the capability object, so the types come from its schemas:
 
-- `session.call(capability, input)` takes an input that is not trusted, for example the arguments of a request. The input schema of the capability checks it. The result has the types of the capability. An input that does not agree rejects as `invalid-input`.
-- `session.handle(capability)` gives the handle of the capability (spec/bindings/typescript.md#handles): its availability, its `snapshot` of the state, and `execute` for an input that the types already check.
+- `session.call(capability, input)` takes an untrusted input, such as a request's arguments. The capability's input schema checks it, and the result has the capability's types. An input that does not match rejects as `invalid-input`.
+- `session.handle(capability)` returns the capability's [handle](../../spec/bindings/typescript.md#handles): its availability, its state `snapshot`, and `execute` for an input the types already check.
 
-Both call the capability through the session: availability, cancellation, and the checks of the output and of the failures. The session must serve that capability object. For any other capability, also one with the same id, a call rejects as `unknown-capability`, and the handle is always unavailable.
+Both go through the session, which applies availability, cancellation, and the output and failure checks. The session must serve that exact capability object. For any other capability, even one with the same id, a call rejects as `unknown-capability` and the handle is always unavailable.
 
-`session.handles` is the map of the handles by id, for bindings. A handle of the map has the input type `never`: call it with `invokeExternal`, which validates the input. A function that gets a session declares its context: `(session: Session<{ unit: Unit }>) => …`.
+`session.handles` maps ids to handles, for bindings. A handle from that map has the input type `never`: call it with `invokeExternal`, which validates the input. A function that takes a session declares its context: `(session: Session<{ unit: Unit }>) => …`.
 
 A session is async-disposable. `await using` closes it at the end of the block, as `dispose()` does:
 
@@ -242,7 +304,7 @@ await power.execute({ on: true });
 
 ### Event handles
 
-`session.eventHandle(event)` gives the event handle of an event (spec/bindings/typescript.md#event-handles), with the types of its schemas. `session.eventHandles` is the map of the event handles by id, for bindings. A handle of the map has the input type `never`: subscribe with `subscribeExternal`, which validates the input.
+`session.eventHandle(event)` returns the event's [event handle](../../spec/bindings/typescript.md#event-handles), typed from its schemas. `session.eventHandles` maps ids to event handles, for bindings. A handle from that map has the input type `never`: subscribe with `subscribeExternal`, which validates the input.
 
 ```ts
 const status = session.eventHandle(statusChanged);
@@ -251,13 +313,16 @@ for await (const occurrence of await status.subscribe({})) {
 }
 ```
 
-- The promise of `subscribe` resolves when the subscription has started. Before that, it rejects with a `CallFailureError`: `unknown-capability` for an event that the session does not serve, `invalid-input` for an input that does not agree with the schema or a `maxAgeMs` that is not an integer of 0 or more, and `cancelled` when the session closes or the signal aborts.
-- The result is an async iterator of occurrences: `eventId`, `name`, `timestamp`, `data`, and `cursor` and `truncated` if they are present. `return()` cancels the subscription, also while a `next()` waits: that `next()` resolves with `done: true`. `await using` also cancels it at the end of the block.
+- The `subscribe` promise resolves once the subscription has started. Before that, it rejects with a `CallFailureError`:
+  - `unknown-capability` for an event the session does not serve;
+  - `invalid-input` for an input that does not match the schema, or a `maxAgeMs` that is not a non-negative integer;
+  - `cancelled` when the session closes or the signal aborts.
+- The result is an async iterator of occurrences: `eventId`, `name`, `timestamp`, `data`, plus `cursor` and `truncated` when present. `return()` cancels the subscription, even while a `next()` is waiting; that `next()` resolves with `done: true`. `await using` also cancels it at the end of the block.
 - The options are `signal`, `cursor` and `maxAgeMs`.
-- When the session closes, each subscription is complete. With `internal`, `next()` rejects with a `CallFailureError`, then resolves with `done: true`.
-- A session can hold any number of subscriptions at the same time. To cancel one does not change the others.
+- When the session closes, each subscription is complete. On `internal`, `next()` rejects with a `CallFailureError`, then resolves with `done: true`.
+- A session can hold any number of subscriptions at once. Cancelling one does not affect the others.
 
-A GraphQL server can use an event handle as the source of a subscription. Return the promise of `subscribe` from the `subscribe` resolver of the field. GraphQL calls `return()` when the client ends the subscription, through WebSockets (graphql-ws) or server-sent events (graphql-sse, GraphQL Yoga):
+A GraphQL server can use an event handle as a subscription source. Return the `subscribe` promise from the field's `subscribe` resolver. GraphQL calls `return()` when the client ends the subscription, over WebSockets (graphql-ws) or server-sent events (graphql-sse, GraphQL Yoga):
 
 ```ts
 subscription: { statusChanged: { subscribe: () => status.subscribe({}), resolve: (occurrence) => occurrence.data } }
@@ -265,7 +330,7 @@ subscription: { statusChanged: { subscribe: () => status.subscribe({}), resolve:
 
 ### WebMCP
 
-`installWebMcp(session, { host })` registers each capability of the view of the session that is available as a [WebMCP](../../spec/bindings/webmcp.md) tool. Use it in a web page, with a session of a target that has the binding `webmcp`. The host is the option `host`, else `findHost()`: `document.modelContext`, then `navigator.modelContext`. With no host, it returns `undefined`, and the page works as before.
+`installWebMcp(session, { host })` registers each available capability in the session's view as a [WebMCP](../../spec/bindings/webmcp.md) tool. Use it in a web page, with a session for a target that has the `webmcp` binding. The host is the `host` option, or else `findHost()`, which tries `document.modelContext`, then `navigator.modelContext`. With no host, `installWebMcp` returns `undefined` and the page works without tools.
 
 ```ts
 const session = createSession(app, { target: "app", context, toJsonSchema });
@@ -273,16 +338,16 @@ const webmcp = installWebMcp(session);
 webmcp?.status.subscribe(({ phase, message }) => console.log(phase, message));
 ```
 
-- A tool has the id of its capability as its name, its description, and its bundled input schema. A value or a failure is the result of the tool. A call failure rejects with an `Error` that has its `kind`. The signal of the host cancels the call.
-- The tools follow availability: a capability that becomes unavailable loses its tool, and gets it again when it is available. The binding makes one update at a time. A failed update keeps the tools that the page has.
-- `status` is an observable `{ phase, message }`. The phases are `loading`, `reconciling`, `ready`, `failed`, `closing` and `disposed`. `retry()` tries the last failed update again. `dispose()` removes all tools, and waits for the calls in progress.
+- Each tool's name is its capability's id, with the capability's description and bundled input schema. A value or a failure is the tool's result. A call failure rejects with an `Error` that has its `kind`. The host's signal cancels the call.
+- The tools follow availability: a capability that becomes unavailable loses its tool and gets it back when it is available again. The binding makes one update at a time. A failed update leaves the page's existing tools in place.
+- `status` is an observable `{ phase, message }`. The phases are `loading`, `reconciling`, `ready`, `failed`, `closing` and `disposed`. `retry()` retries the last failed update. `dispose()` removes all tools and waits for calls in progress.
 - WebMCP serves no events.
 
-[`examples/aircon/core-ts/page.ts`](../../examples/aircon/core-ts/page.ts) is a page with its WebMCP tools, and `examples/aircon/test/webmcp-page.test.ts` tests it in Chromium with a test host. `acid-cat conform --webmcp <url>` tests the binding with a page that serves the conformance fixture.
+[`examples/aircon/core-ts/page.ts`](../../examples/aircon/core-ts/page.ts) is a page with WebMCP tools, and `examples/aircon/test/webmcp-page.test.ts` tests it in Chromium with a test host. `acid-cat conform --webmcp <url>` tests the binding against a page that serves the conformance fixture.
 
-### Context for each request
+### Context per request
 
-`mcpHandler` and `httpHandler` take `context` or `createContext`. With `context`, all requests share one context. With `createContext(request)`, the handler makes a new context for each request that passes the screening. Use it when a request must not use objects that an earlier request made, for example on Cloudflare Workers, or when a stateful service must not be shared between callers. When the context has `Symbol.asyncDispose` or `Symbol.dispose`, the handler calls it after the response:
+`mcpHandler` and `httpHandler` take either `context` or `createContext`. With `context`, all requests share one context. With `createContext(request)`, the handler makes a new context for each request that passes screening. Use it when a request must not reuse objects from an earlier request, as on Cloudflare Workers, or when callers must not share a stateful service. If the context has `Symbol.asyncDispose` or `Symbol.dispose`, the handler calls it after the response:
 
 ```ts
 const handler = httpHandler(aircon, {
@@ -292,7 +357,7 @@ const handler = httpHandler(aircon, {
 });
 ```
 
-`createContext` can refuse a request: it gives `refuse(status, message, headers?)` in place of a context. Use it to authenticate the caller, and give the caller to the capabilities in the context:
+`createContext` can refuse a request by returning `refuse(status, message, headers?)` instead of a context. Use this to authenticate the caller, and pass the caller to the capabilities in the context:
 
 ```ts
 import { httpHandler, refuse } from "@acid-cat/core-ts";
@@ -308,17 +373,30 @@ const handler = httpHandler(aircon, {
 });
 ```
 
-- A refusal answers the request with its status, its headers, the media type `application/json`, and the body `{ "message" }`. The handler opens no session. No capability runs, and no subscription starts. The message shows no internal data.
-- The status of a refusal is an integer from 400 to 599. `refuse` throws a `RangeError` for another status.
-- `isRefusal(value)` tells if a value is a refusal that `refuse` made.
-- The handler releases the context after the answer, or when the stream of a subscription ends.
-- Through MCP, a poll lease or a webhook subscription uses the context of the request that started it. The handler calls `createContext` once for each request. It releases the context when the answer is done and each lease and webhook subscription of the request has ended.
-- Set the option `principal` of `mcpHandler` too, from the same caller. A poll lease is keyed by the principal, the event and the input: with no principal, two callers that poll the same event with the same input share one lease, and the second caller reads the occurrences of the session of the first caller.
-- The command line and MCP through stdio have one context for the program.
+- A refusal answers with its status and headers, the media type `application/json`, and the body `{ "message" }`. The handler opens no session, so no capability runs and no subscription starts. Keep internal data out of the message.
+- A refusal's status is an integer from 400 to 599. `refuse` throws a `RangeError` for any other status.
+- `isRefusal(value)` tells whether a value is a refusal made by `refuse`.
+- The handler releases the context after the response, or when a subscription's stream ends.
+- Over MCP, a poll lease or webhook subscription uses the context of the request that started it. The handler calls `createContext` once per request, and releases the context when the response is done and every lease and webhook subscription from that request has ended.
+- Also set the `principal` option of `mcpHandler`, from the same caller. Poll leases are keyed by principal, event and input. Without a principal, two callers that poll the same event with the same input share one lease, and the second caller reads occurrences from the first caller's session.
+- The command line and MCP over stdio have one context for the whole program.
 
 ### Command line
 
-The command line has one command for each capability in the view of the `cli` target. The words of the id give the path of the command. A shared prefix only contains other commands: if the path of a capability is the start of the path of another capability, for example `aircon.status` and `aircon.status.get`, `runCli` rejects and `cliMain` stops the program with an error when it starts. Each top-level property of the input is a flag with the same name, for example `--celsius 22` or `--celsius=22`. A boolean property is a switch, for example `--on`. A property with an array of strings, numbers or values of a string enum is a repeated flag: each occurrence gives one item, in the order of the flags. A repeated flag that occurs once can also give the whole array as JSON text. Other properties take JSON text. For example, with the command line of the air conditioner, [`examples/aircon/core-ts/cli.ts`](../../examples/aircon/core-ts/cli.ts):
+The command line has one command per capability in the `cli` target's view. The words of the id make the command path: `aircon.temperature.set` is `aircon temperature set`.
+
+Each top-level input property is a flag of the same name:
+
+| Property type | Flag |
+| --- | --- |
+| String, number or string enum | The value: `--celsius 22` or `--celsius=22` |
+| Boolean | A switch: `--on` |
+| Array of strings, numbers or string-enum values | A repeated flag. Each occurrence adds one item, in order. A single occurrence can also give the whole array as JSON text |
+| Anything else | JSON text |
+
+A shared prefix holds only other commands. If one capability's path starts another's, such as `aircon.status` and `aircon.status.get`, `runCli` rejects and `cliMain` stops the program with an error at startup.
+
+With the air conditioner's command line, [`examples/aircon/core-ts/cli.ts`](../../examples/aircon/core-ts/cli.ts):
 
 ```sh
 node cli.ts aircon temperature set --celsius 22
@@ -330,24 +408,43 @@ node cli.ts aircon power set --help                                          # U
 node cli.ts aircon status --help                                             # Commands:, then the usage of each command under aircon status
 ```
 
-`list` gives a usage line for each capability, then for each event. Each item has `kind`: `"capability"` or `"event"`. The usage of a repeated flag ends with `...`, for example `--days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]`. `--help` after the path of a command writes `Usage: ` and its usage, an empty line, and its description, as `<alias> --help` and `watch <id> --help` do for an alias and an event. `--help` after a shared prefix writes `Commands:` and the usage of each command under it, in the order of `list`. A shared prefix alone, or with arguments that are not `--help` and are not the path of a command, writes the same list to standard error, with exit code 2. See the [CLI binding](../../spec/bindings/cli.md#commands) for all the rules.
+- `list` prints a usage line for each capability, then each event. Each item has `kind`: `"capability"` or `"event"`. A repeated flag's usage ends with `...`, for example `--days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]`.
+- `--help` after a command path prints `Usage: ` and the usage, an empty line, and the description. `<alias> --help` and `watch <id> --help` do the same for an alias and an event.
+- `--help` after a shared prefix prints `Commands:` and the usage of each command under it, in `list` order. A shared prefix alone, or followed by arguments that are neither `--help` nor a command path, prints the same list to standard error and exits with 2.
 
-`watch <id>` subscribes to an event. The flags come from the input schema, with the same rules as for a capability. If the input schema has no top-level `properties` member, `watch <id> '<json>'` takes the input as JSON text. Each occurrence goes to standard output as JSON on one line, with its cursor. The exit code is 0 when the subscription is complete, 130 after an interrupt (`SIGINT`), and 5 after `internal`, with `{ "kind", "message" }` on standard error. A failure before the first occurrence has the exit code of a call.
+See the [CLI binding](../../spec/bindings/cli.md#commands) for the full rules.
 
-In `cliMain`, an interrupt (`SIGINT`) cancels the call or the subscription. A capability that cannot stop, for example one that waits for a dynamic `import()`, does not keep the process running. If the call or the subscription has not ended one second (`INTERRUPT_GRACE_MS` of `@acid-cat/spec-ts`) after the interrupt, the process exits with 130 and writes nothing more. A second interrupt exits with 130 at once.
+#### Watch events
 
-`--cursor <cursor>` and `--max-age-ms <integer>` resume the subscription after a cursor, in the flags form and in the JSON form. A script can keep the last cursor, and resume with it after the program stops. A `--max-age-ms` that is not a whole number exits with 3. These two flags are not properties of the input: if the input schema of an event has a top-level property `cursor` or `max-age-ms`, `runCli` throws when it starts.
+`watch <id>` subscribes to an event. Its flags come from the input schema, with the same rules as for a capability. If the input schema has no top-level `properties` member, `watch <id> '<json>'` takes the input as JSON text. Each occurrence goes to standard output as one line of JSON, with its cursor.
+
+`--cursor <cursor>` and `--max-age-ms <integer>` resume after a cursor, in both the flag form and the JSON form. A script can keep the last cursor and resume from it after the program stops. A `--max-age-ms` that is not a whole number exits with 3. These two flags are not input properties: if an event's input schema has a top-level `cursor` or `max-age-ms` property, `runCli` throws at startup.
 
 ```sh
 node cli.ts watch aircon.status.changed
 node cli.ts watch aircon.status.changed --cursor 41 --max-age-ms 300000
 ```
 
-When the command line breaks a rule of the binding, for example two commands with the same path, `cliMain` writes the message to standard error and stops the program with the exit code 5 (`internal`).
+| Exit code | When |
+| --- | --- |
+| 0 | The subscription is complete |
+| 130 | After an interrupt (`SIGINT`) |
+| 5 | After `internal`, with `{ "kind", "message" }` on standard error |
+| Same as a call | A failure before the first occurrence |
 
-### Commands of the application
+#### Interrupts and startup errors
 
-The option `commands` of `cliMain` and `runCli` adds commands of the application beside the commands of the capabilities, `call`, `list` and `watch`. A command has a `name`, a `description` for the help, and `run(args, io)`. `run` gets the arguments after the name of the command, and `io` with `stdout`, `stderr`, `signal` and the `context`. It returns the exit code. The name must not be `call`, `list`, `watch`, the name of another command of the application, or the first word of the command of a capability. If it is, `runCli` throws. The option `description` gives the text at the top of the help. The default is the description of the application, then its title, then the name of the program.
+In `cliMain`, an interrupt (`SIGINT`) cancels the call or the subscription. A capability that cannot stop, such as one waiting on a dynamic `import()`, does not keep the process alive: if the call or subscription has not ended one second after the interrupt (`INTERRUPT_GRACE_MS` from `@acid-cat/spec-ts`), the process exits with 130 and writes nothing more. A second interrupt exits with 130 at once.
+
+When the command line breaks a binding rule, for example with two commands on the same path, `cliMain` writes the message to standard error and exits with 5 (`internal`).
+
+### Application commands
+
+The `commands` option of `cliMain` and `runCli` adds your own commands beside the capability commands, `call`, `list` and `watch`. A command has a `name`, a `description` for the help, and `run(args, io)`. `run` gets the arguments after the command name, plus `io` with `stdout`, `stderr`, `signal` and the `context`, and returns the exit code.
+
+`runCli` throws if the name is `call`, `list`, `watch`, another application command's name, or the first word of a capability's command. The name also must not be the first word of a command alias.
+
+The `description` option sets the text at the top of the help. The default is the application's description, then its title, then the program name.
 
 ```ts
 import { cliMain } from "@acid-cat/core-ts";
@@ -367,7 +464,7 @@ cliMain(aircon, { name: "aircon", version: "0.1.0", context: { unit }, toJsonSch
 
 #### Aliases
 
-The `cli` target can give [aliases](../../spec/bindings/cli.md#aliases) in its member `cli`: short names for capabilities, with an optional fixed input. A command alias is one word or two words, and a flag alias is `--` and one word. `cliAlias` takes the capability or the event, and the type of the fixed input comes from the input schema. The catalog writes the aliases in `options.cli`:
+The `cli` target can declare [aliases](../../spec/bindings/cli.md#aliases) in its `cli` member: short names for capabilities or events, with an optional fixed input. A command alias is one or two words. A flag alias is `--` and one word. `cliAlias` takes the capability or event, and the fixed input's type comes from its input schema. The catalog writes the aliases in `options.cli`.
 
 ```ts
 targets: {
@@ -387,43 +484,52 @@ targets: {
 ```
 
 ```sh
-node cli.ts --on      # the same call as: node cli.ts aircon power set --on
-node cli.ts status    # the same call as: node cli.ts aircon status get
-node cli.ts fan high  # the same call as: node cli.ts aircon fan set --speed high
+node cli.ts --on      # same as: node cli.ts aircon power set --on
+node cli.ts status    # same as: node cli.ts aircon status get
+node cli.ts fan high  # same as: node cli.ts aircon fan set --speed high
 node cli.ts fan --speed low
 ```
 
-The command aliases with the same first word are a group, such as `fan` and `fan high`. The first two arguments that are the name of a two-word alias run it. If not, the one-word alias runs with the other arguments. A second argument that is a word and not the second word of an alias of the group, such as `node cli.ts fan medium`, is an unknown command with exit code 2.
+- Properties in the fixed input are not flags of the alias. The other properties are flags, with the usual rules.
+- `list` shows each capability's and event's alias usages in `aliases`, and the help lists them.
+- An alias for an event works like `watch`: `follow: cliAlias(statusChanged)` makes `node cli.ts follow` equal to `node cli.ts watch aircon.status.changed`, with `--cursor` and `--max-age-ms`.
+- `cliAliasDefault(statusGet)` makes the default alias. `node cli.ts` with no arguments runs it, and so does a first flag that is not a flag alias, such as `node cli.ts --flag`. `--help` still prints the help.
+- If an alias breaks a rule, `runCli` rejects and `cliMain` stops the program with an error at startup.
 
-The name of a command alias can be a shared prefix, but not the path of a command. The alias is then the prefix default of that prefix: `"aircon power": cliAlias(powerSet)` makes `node cli.ts aircon power --on` call `aircon.power.set`, and `node cli.ts aircon power set --on` stays the command of `aircon.power.set`. A word after a prefix default that names no command, such as `node cli.ts aircon power nope`, is an unknown command with exit code 2.
+Two-word aliases and shared prefixes:
 
-The properties of the fixed input are not flags of the alias. The other properties are flags, with the rules above. `list` gives the usage of the aliases of each capability and each event in `aliases`, and the help lists them.
-
-An alias can also name an event: `follow: cliAlias(statusChanged)` makes `node cli.ts follow` the same as `node cli.ts watch aircon.status.changed`, with `--cursor` and `--max-age-ms`. `status: cliAliasDefault(statusGet)` makes `status` the default alias: `node cli.ts` with no arguments runs it, and so does a first flag that is not a flag alias, for example `node cli.ts --flag`. `--help` still writes the help. If an alias breaks a rule, `runCli` rejects and `cliMain` stops the program with an error when it starts. A command of the application must not have the first word of a command alias.
+- Command aliases with the same first word form a group, such as `fan` and `fan high`. If the first two arguments name a two-word alias, it runs. Otherwise the one-word alias runs with the remaining arguments. A second argument that is a word but not the second word of an alias in the group, such as `node cli.ts fan medium`, is an unknown command with exit code 2.
+- A command alias can be named after a shared prefix, but not after a command path. It then becomes the prefix's default: `"aircon power": cliAlias(powerSet)` makes `node cli.ts aircon power --on` call `aircon.power.set`, while `node cli.ts aircon power set --on` stays the `aircon.power.set` command. A word after a prefix default that names no command, such as `node cli.ts aircon power nope`, is an unknown command with exit code 2.
 
 #### Human output
 
-The command line writes JSON for programs. It can also write a form of the output for a person: the human form. The human form is off by default. Without the option `output`, the command line writes JSON only, also on a terminal, and takes no output flag.
+The command line writes JSON for programs. It can also write a human form. Without the `output` option, it writes JSON only, even on a terminal, and accepts no output flag.
 
-To turn the human form on, give the option `output` of `cliMain` and `runCli`:
+To enable the human form, pass the `output` option to `cliMain` or `runCli`:
 
-- `flags`: the output flags. Each flag has `names`: `--word` or `-x`, with one letter or digit. A switch has `form`: `"human"` or `"json"`, for example `{ names: ["--json"], form: "json" }`. A flag with a value has `values`, a map from each value to a form, for example `{ names: ["--format", "-f"], values: { text: "human", json: "json" } }`. It takes `--format text`, `--format=text` and `-f text`. The command line ignores a first argument `--`, which package runners such as `pnpm` and `npx` pass to it. An output flag can be anywhere in the arguments, before a later `--`. For a command of the application, an output flag must come before the name of the command: the command gets the arguments after its name unchanged, and `io.output` is the chosen form. When the arguments give more than one, the last one wins. A value that is missing or not known is a usage error with exit code 3: `The option --format must be json or text.`
-- `default`: the form when the arguments give no output flag: `"json"` (the default) or `"auto"`. With `"json"`, the output is JSON unless an output flag chooses the human form. With `"auto"`, `cliMain` writes the human form when standard output is a terminal, the environment variable `CI` is not set, and no coding agent is detected. These variables tell a coding agent: `AI_AGENT`, `CLAUDECODE`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `GEMINI_CLI`, `OPENCODE`, `AMP_CURRENT_THREAD_ID`, `AUGMENT_AGENT`, `QWEN_CODE_SESSION_ID`, `PI_CODING_AGENT`, `CRUSH` and `COPILOT_AGENT`. A variable is set when its value is not empty, `0`, `false`, `no` or `off`. In all other cases, the output is JSON. `runCli` takes this form from `io.output`, and the default is `"json"`.
-- `formats`: the formatters of the human form (see below).
+- `flags`: the output flags. Each has `names`: `--word`, or `-x` with one letter or digit.
+  - A switch has `form`, `"human"` or `"json"`: `{ names: ["--json"], form: "json" }`.
+  - A flag with a value has `values`, which maps each value to a form: `{ names: ["--format", "-f"], values: { text: "human", json: "json" } }` accepts `--format text`, `--format=text` and `-f text`.
+  - An output flag can appear anywhere in the arguments before a later `--`. The command line ignores a leading `--`, which package runners such as `pnpm` and `npx` pass. For an application command, the output flag must come before the command name: the command gets the arguments after its name unchanged, and `io.output` holds the chosen form.
+  - If the arguments give more than one output flag, the last one wins. A missing or unknown value is a usage error with exit code 3: `The option --format must be json or text.`
+- `default`: the form when no output flag is given, `"json"` (the default) or `"auto"`. With `"json"`, the output is JSON unless an output flag picks the human form. With `"auto"`, `cliMain` writes the human form when standard output is a terminal, `CI` is not set, and no coding agent is detected; otherwise JSON. `runCli` takes the form from `io.output`, which defaults to `"json"`.
+- `formats`: the formatters for the human form (see below).
 
-The help lists the output flags under `Output:`. An output flag can have the name `-h`: then `-h` chooses its form, and `--help` writes the help. `runCli` rejects, and `cliMain` stops the program with an error when it starts, if the name of an output flag is not valid, is in two output flags, or is the name of another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or a flag of the input of a capability or an event of the view. The human form has colors only on a terminal, and only when `NO_COLOR` is not set.
+These environment variables signal a coding agent: `AI_AGENT`, `CLAUDECODE`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `GEMINI_CLI`, `OPENCODE`, `AMP_CURRENT_THREAD_ID`, `AUGMENT_AGENT`, `QWEN_CODE_SESSION_ID`, `PI_CODING_AGENT`, `CRUSH` and `COPILOT_AGENT`. A variable counts as set unless its value is empty, `0`, `false`, `no` or `off`.
 
-The exit code and the stream of each outcome are the same in the two forms. Help, usage and `--version` do not change. In the human form:
+The help lists output flags under `Output:`. An output flag may be named `-h`: then `-h` picks its form and `--help` still prints the help. `runCli` rejects, and `cliMain` stops with an error at startup, if an output flag name is invalid, appears in two output flags, or collides with another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or an input flag of a capability or event in the view. The human form uses colors only on a terminal, and only when `NO_COLOR` is not set.
 
-- A value goes through the formatter of its capability. With no formatter, it has the generic layout. A `null` value writes nothing.
-- A failure goes through the formatter of its tag. With no formatter, the failure object has the generic layout.
+Exit codes and output streams are the same in both forms, and help, usage and `--version` do not change. In the human form:
+
+- A value goes through its capability's formatter, or the generic layout if there is none. A `null` value prints nothing.
+- A failure goes through its tag's formatter, or the failure object gets the generic layout.
 - A call failure goes to standard error as `error (<kind>): <message>`.
-- `watch` writes one block for each occurrence: the formatter of the event for its `data`, or the generic layout. Before an occurrence with `truncated: true`, it writes `(some occurrences were lost)`.
-- `list` writes the commands of the capabilities and of the events, with their descriptions.
+- `watch` prints one block per occurrence, using the event's formatter for `data` or the generic layout. Before an occurrence with `truncated: true`, it prints `(some occurrences were lost)`.
+- `list` prints the capability and event commands with their descriptions.
 
-The generic layout writes an object as one `key  value` line for each scalar member, and as `key:` and an indented block for each other member. An array of scalars is one line, with `, ` between the items. An array of flat objects is a table. Another array is a list with `- `.
+The generic layout prints an object as one `key  value` line per scalar member, and `key:` with an indented block for other members. An array of scalars is one line, joined with `, `. An array of flat objects is a table. Any other array is a `- ` list.
 
-`cliFormat` makes a formatter. Give the formatters in `output.formats`. `cliFormat` takes the capability or the event, and the types of the value, of each failure and of the payload come from their schemas. A formatter gets the value decoded from its JSON form with its schema, and `ui`: `bold`, `dim`, `ok`, `warn` and `error` style a text, and `table(header, rows)` writes a table. If the value does not decode, or the formatter throws, the command line writes the generic layout. Two formats for one id, or a format for an id that is not in the view, make `runCli` reject when it starts.
+`cliFormat` makes a formatter; pass formatters in `output.formats`. It takes the capability or event, and the types of the value, each failure and the payload come from their schemas. A formatter gets the value decoded from JSON with its schema, plus `ui`: `bold`, `dim`, `ok`, `warn` and `error` style text, and `table(header, rows)` prints a table. If the value does not decode or the formatter throws, the command line falls back to the generic layout. Two formats for one id, or a format for an id outside the view, make `runCli` reject at startup.
 
 ```ts
 import { cliFormat, cliMain } from "@acid-cat/core-ts";
@@ -454,16 +560,23 @@ node cli.ts aircon status get --format text   # off · cool
 node cli.ts aircon status get --json          # {"power":false,"mode":"cool",…}
 ```
 
-### Command line of a server
+### Remote command line
 
-The command line can serve a view of an application that runs on a server ([Server](../../spec/bindings/cli.md#server)). Give the option `remote` of `cliMain` and `runCli` a client of the HTTP binding of the server: `httpClient(url, { headers?, fetch? })`. The commands, the flags and the help still come from the view in the program. Each call is `POST {url}/capabilities/{id}`, `list` gets the availability from `GET {url}/capabilities`, and `watch` is `POST {url}/events/{id}`, with the cursor in `Last-Event-ID` and `maxAgeMs` in the query.
+The command line can drive a view of an application that runs on a server ([Server](../../spec/bindings/cli.md#server)). Pass `remote` to `cliMain` or `runCli`, with a client for the server's HTTP binding: `httpClient(url, { headers?, fetch? })`. Commands, flags and help still come from the view in the local program.
 
-- A capability that the server does not list is unavailable in `list`.
-- A server that does not answer is the call failure `unavailable`, with exit code 4. An answer that the HTTP binding does not give is `internal`, with exit code 5.
-- An interrupt (`SIGINT`) closes the request, so the server cancels the call or the subscription. The exit code is 130.
-- The client sends `headers` with each request, for example a token in `Authorization`. The command line never writes them. `httpClient` throws when the URL is not an `http` or `https` URL, when it has a user name, a password, a query or a fragment, and when a header is not valid. The error does not contain the value of a header.
+| Command | Request |
+| --- | --- |
+| A capability call | `POST {url}/capabilities/{id}` |
+| `list` | `GET {url}/capabilities`, for availability |
+| `watch` | `POST {url}/events/{id}`, with the cursor in `Last-Event-ID` and `maxAgeMs` in the query |
 
-Serve the HTTP binding with the target of the command line, so that both have the same view. [`examples/aircon/core-ts/serve.ts`](../../examples/aircon/core-ts/serve.ts) serves it, and [`examples/aircon/core-ts/cli.ts`](../../examples/aircon/core-ts/cli.ts) sends to it when `AIRCON_URL` is set:
+- A capability the server does not list shows as unavailable in `list`.
+- A server that does not answer gives the call failure `unavailable`, with exit code 4. A response the HTTP binding does not define gives `internal`, with exit code 5.
+- An interrupt (`SIGINT`) closes the request, so the server cancels the call or subscription. The exit code is 130.
+- The client sends `headers` with each request, such as a token in `Authorization`. The command line never prints them.
+- `httpClient` throws if the URL is not `http` or `https`, if it has a user name, password, query or fragment, or if a header is invalid. The error never contains a header value.
+
+Serve the HTTP binding with the command line's target, so both have the same view. [`examples/aircon/core-ts/serve.ts`](../../examples/aircon/core-ts/serve.ts) serves it, and [`examples/aircon/core-ts/cli.ts`](../../examples/aircon/core-ts/cli.ts) sends to it when `AIRCON_URL` is set:
 
 ```ts
 // On the server.
@@ -473,12 +586,12 @@ serve({ "/cli": httpHandler(aircon, { allowedOrigins: [], target: "cli", base: "
 cliMain(aircon, { name: "aircon", version: "0.1.0", context: { unit: new Unit() }, toJsonSchema, remote: httpClient("http://pi.local:8080/cli", { headers: { Authorization: `Bearer ${token}` } }) });
 ```
 
-The client works alone too: `capabilities()`, `invoke(id, input, { signal })` and `subscribe(id, input, { signal, cursor, maxAgeMs })`. No method rejects: each one gives the call failure.
+The client also works on its own: `capabilities()`, `invoke(id, input, { signal })` and `subscribe(id, input, { signal, cursor, maxAgeMs })`. No method rejects; each returns the call failure instead.
 
 ## Examples and tests
 
-- [`examples/aircon/core-ts`](../../examples/aircon/README.md) is an air conditioner written with this package, with its command line. [`examples/aircon/apis`](../../examples/aircon/README.md#apis) builds GraphQL, Cap'n Web and Elysia APIs on it, each beside the HTTP binding.
-- `moon run core-ts:test` tests sessions, handles and all bindings with a test application, and runs `acid-cat conform` against all bindings. Each test application is in `test/`:
+- [`examples/aircon/core-ts`](../../examples/aircon/README.md) is an air conditioner built with this package, including its command line. [`examples/aircon/apis`](../../examples/aircon/README.md#apis) builds GraphQL, Cap'n Web and Elysia APIs on it, each beside the HTTP binding.
+- `moon run core-ts:test` tests sessions, handles and every binding with test applications, and runs `acid-cat conform` against every binding. The test applications are in `test/`:
   - [`test/fixture.ts`](test/fixture.ts) has one capability for each behavior that `acid-cat conform` tests.
-  - [`test/kettle.ts`](test/kettle.ts) is an electric kettle, simulated in memory. Its tests examine the catalog that the core writes, named types, state, availability, typed handles and the command line.
-  - [`test/sensors.ts`](test/sensors.ts) is a set of temperature sensors, simulated in memory. Its tests examine events through each binding: occurrences, the ends of a subscription, slow clients, cursors, and a GraphQL subscription with graphql-js.
+  - [`test/kettle.ts`](test/kettle.ts) is an in-memory electric kettle. Its tests cover the catalog the core writes, named types, state, availability, typed handles and the command line.
+  - [`test/sensors.ts`](test/sensors.ts) is a set of in-memory temperature sensors. Its tests cover events through each binding: occurrences, how subscriptions end, slow clients, cursors, and a GraphQL subscription with graphql-js.

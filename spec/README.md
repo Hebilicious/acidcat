@@ -1,46 +1,18 @@
 # AcidCat specification
 
-AcidCat describes what an application can do in one document, the **catalog**. Each surface of the application comes from the catalog, in the language that the surface needs. Examples of surfaces are a web app, a desktop widget, a mobile app, a command line, an MCP server, and an HTTP API.
+An application describes what it can do in one JSON document, the **catalog**. Every surface of the application comes from the catalog: a web app, a desktop widget, a mobile app, a command line, an MCP server or an HTTP API. A **binding** defines how one kind of surface is made from the catalog. A **provider** runs the operations.
 
 ```
-                         catalog
-          (one document: what the application can do)
-                            │
-          ┌─────────────────┼──────────────────┐
-      provider          bindings            clients
-   (does the        (rules that make     (web, mobile,
-   operations)       one kind of          desktop, cli,
-                     surface)             mcp, api, …)
+                 catalog (JSON)
+     what the application can do, and for whom
+                       │
+        ┌──────────────┼───────────────┐
+     provider       bindings         clients
+  runs the         rules for each   web, mobile, desktop,
+  operations       surface          CLI, MCP, API, …
 ```
 
-## Vocabulary
-
-These terms have these meanings in all documents.
-
-| Term | Meaning |
-| --- | --- |
-| **Catalog** | The JSON document that lists the capabilities and the targets of an application. See [Catalog](catalog.md) |
-| **Capability** | One operation that a client can do, for example `aircon.power.set` |
-| **Event** | A kind of thing that happens in the application, and that clients can follow, for example `aircon.status.changed`. See [Events](events.md) |
-| **Id** | The name of a capability or an event, with dots between its segments. Each surface name comes from the id |
-| **Namespace** | The first segment of an id |
-| **Failure** | A result that tells why a capability did not do the operation, for example `Offline` |
-| **Target** | A group of clients that can use a set of capabilities, for example `app`, `cli` or `mcp` |
-| **Audience** | The targets that can use a capability or an event. A capability or an event with no audience is not available to any target |
-| **View** | The part of the catalog that one target can see. A view is a catalog |
-| **Binding** | The rules that make one kind of surface from a view. A **protocol binding** makes a surface on the network or in a terminal, for example MCP or a command line. A **language binding** makes a surface in code, for example TypeScript. See [Bindings](bindings/README.md) |
-| **Alias** | A short name for a capability or an event on the command line. A **command alias** is one word or two words, and a **flag alias** is `--` and one word. The command aliases with the same first word are a **group**. A command alias whose name is a shared prefix of commands is the **prefix default** of that prefix. The **fixed input** of an alias is the part of the input that the alias always gives. The **default alias** runs when the command line gets no command. See [CLI binding](bindings/cli.md#aliases) |
-| **Transport** | How a protocol binding carries messages between a client and a server, for example HTTP, or the standard input and output of a process (stdio) |
-| **Provider** | The code that does the operations |
-| **Client** | A program or a person that calls capabilities through a binding |
-| **Session** | One period in which one client calls the capabilities of one target, and follows its events. It holds the identity of the client. It opens, and later it closes |
-| **Invocation** | One call: an id and an input go in, one outcome comes out. See [Invocation](invocation.md) |
-| **Outcome** | The end of a call: a **value**, a **failure** or a **call failure** |
-| **Availability** | If a capability can run now in a session. If it cannot, the availability gives a reason |
-| **Subscription** | One client following one event with one input. It ends one time: complete, cancelled, or with a call failure |
-| **Occurrence** | One thing that happened, which a subscription gives to its client. Its `data` agrees with the payload schema of the event |
-| **Cursor** | A string that tells a position in the occurrences of an event. A client gives it to resume a subscription |
-| **State** | A value of a capability that clients can observe, for example the temperature of a room |
+The specification does not depend on a language or a library. Bindings depend on the specification, never the reverse.
 
 ## Documents
 
@@ -49,15 +21,43 @@ These terms have these meanings in all documents.
 | [Catalog](catalog.md) | Targets, capabilities, events, ids, schemas, types, views, canonical form |
 | [Invocation](invocation.md) | Outcomes, availability, sessions, cancellation, concurrency, state |
 | [Events](events.md) | Subscriptions, occurrences, ending, resuming |
-| [Bindings](bindings/README.md) | The rules for all bindings, and the bindings in this specification |
+| [Bindings](bindings/README.md) | Rules for all bindings, and the bindings this specification defines |
 | [Extensions](extensions/README.md) | Optional conventions: attachments, pagination |
-| [Conformance](conformance.md) | The rules for a conforming catalog, provider and binding |
+| [Conformance](conformance.md) | What makes a catalog, a provider and a binding conform |
 
-[`examples/aircon/catalog/aircon.pkl`](../examples/aircon/catalog/aircon.pkl) is a full catalog for an air conditioner. [`schemas/`](../schemas) has the JSON Schemas for the catalog, for outcomes and for occurrences.
+[`examples/aircon/catalog/aircon.pkl`](../examples/aircon/catalog/aircon.pkl) is a complete catalog for an air conditioner. [`schemas/`](../schemas) has the JSON Schemas for catalogs, outcomes and occurrences.
+
+## Vocabulary
+
+Every document uses these terms with these meanings.
+
+| Term | Meaning |
+| --- | --- |
+| **Catalog** | The JSON document that lists an application's capabilities, events and targets. See [Catalog](catalog.md) |
+| **Capability** | One operation that a client can do, for example `aircon.power.set` |
+| **Event** | A kind of thing that happens in the application and that clients can follow, for example `aircon.status.changed`. See [Events](events.md) |
+| **Id** | The name of a capability or an event: segments with dots between them. Every surface name comes from the id |
+| **Namespace** | The first segment of an id |
+| **Failure** | A result that says why a capability did not do the operation, for example `Offline` |
+| **Target** | A group of clients that can use a set of capabilities, for example `app`, `cli` or `mcp` |
+| **Audience** | The targets that can use a capability or an event. A capability or an event with no audience is available to no target |
+| **View** | The part of the catalog that one target can see. A view is itself a catalog |
+| **Binding** | The rules that make one kind of surface from a view. A **protocol binding** makes a surface on the network or in a terminal, for example MCP or a command line. A **language binding** makes a surface in code, for example TypeScript. See [Bindings](bindings/README.md) |
+| **Alias** | A short command-line name for a capability or an event. A **command alias** is one or two words; a **flag alias** is `--` and one word. Command aliases with the same first word form a **group**. A command alias whose name is a shared prefix of commands is the **prefix default** of that prefix. The **fixed input** of an alias is the part of the input that the alias always gives. The **default alias** runs when the command line gets no command. See [CLI binding](bindings/cli.md#aliases) |
+| **Transport** | How a protocol binding carries messages between a client and a server, for example HTTP, or a process's standard input and output (stdio) |
+| **Provider** | The code that does the operations |
+| **Client** | A program or a person that calls capabilities through a binding |
+| **Session** | One period in which one client calls the capabilities of one target and follows its events. It holds the client's identity. It opens, and later it closes |
+| **Invocation** | One call: an id and an input go in, one outcome comes out. See [Invocation](invocation.md) |
+| **Outcome** | How a call ends: a **value**, a **failure** or a **call failure** |
+| **Availability** | Whether a capability can run now in a session. When it cannot, the availability gives a reason |
+| **Subscription** | One client following one event with one input. It ends once: complete, cancelled, or with a call failure |
+| **Occurrence** | One thing that happened, which a subscription delivers to its client. Its `data` matches the event's payload schema |
+| **Cursor** | A string that marks a position in an event's occurrences. A client gives it to resume a subscription |
+| **State** | A value of a capability that clients can observe, for example the temperature of a room |
 
 ## Conventions
 
-- The words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119. Other text explains or gives examples.
-- "Design notes" sections are not normative.
-- The schemas in a catalog are JSON Schema 2020-12.
-- This specification does not depend on a language or a library. Bindings depend on this specification. This specification does not depend on bindings.
+- MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119. All other text explains or gives examples.
+- Sections titled "Design notes" are not normative.
+- Schemas in a catalog are JSON Schema 2020-12.
