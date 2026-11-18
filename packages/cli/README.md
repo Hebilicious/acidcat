@@ -39,21 +39,21 @@ You get the JSON document only when the options are correct. With incorrect opti
 - An **error** is a broken rule. Examples: an audience that names an unknown target, an event payload that is not an object, or an id that is both a capability and an event.
 - A **warning** is a broken recommendation. Examples: a file that is not in [canonical form](../../spec/catalog.md#canonical-form), or a member with no `x-` prefix.
 
-`check` also gives an error when a capability hint (`readOnly`, `destructive` or `idempotent`) is not a boolean, and checks each alias in `options.cli` against the [alias rules](../../spec/bindings/cli.md#aliases).
+It also checks each alias in `options.cli` against the [alias rules](../../spec/bindings/cli.md#aliases).
 
-The exit code is 0 with no errors and 1 with errors. With `--strict`, warnings also give exit code 1.
+The exit code is 1 with errors, and 0 otherwise. With `--strict`, warnings also give exit code 1.
 
 ## format
 
-`format` writes a catalog in canonical form. For example, it writes a capability's hints in the order `readOnly`, `destructive`, `idempotent`. Use it for catalogs that no catalog library wrote: Pkl output, generated files, or files you edit by hand.
+`format` writes a catalog in [canonical form](../../spec/catalog.md#canonical-form). Use it for catalogs that no catalog library wrote: Pkl output, generated files, or files you edit by hand. `--write` changes the files in place.
 
 ## view
 
-`view` writes the [view](../../spec/catalog.md#views) of one target: the capabilities and events that the target can use, and the types they use. A view with no events has no `events` member.
+`view` writes the [view](../../spec/catalog.md#views) of one target: the capabilities, events and types that the target can use.
 
 ## conform
 
-`conform` tests a running implementation of the [conformance fixture](conformance/fixture.pkl) through its bindings. The rules it tests are in [Conformance](../../spec/conformance.md#acid-cat-conform). Each AcidCat core runs `conform` in its tests.
+`conform` tests a running implementation of the [conformance fixture](conformance/fixture.pkl) through its bindings. Each AcidCat core runs it in its tests.
 
 ### Options
 
@@ -79,98 +79,26 @@ Each flag has an equivalent option for `conform()` in code. Give one or more bin
 
 ### What the checks test
 
-#### MCP through HTTP
+[`acid-cat conform`](../../spec/conformance.md#acid-cat-conform) lists every check. In short:
 
-- The official MCP client, with revision `2026-07-28`, tests the tools and outcomes. Raw requests test rejections.
-- With `--mcp-handshake`, the client of revision `2025-11-25` tests the tools and outcomes again, and raw requests test `initialize` with no session and a notification.
+- **MCP through HTTP and stdio.** The official MCP client tests the tools and outcomes with revision `2026-07-28`, and with the `initialize` handshake of `2025-11-25` through stdio, or through HTTP with `--mcp-handshake`. Raw requests test rejections. Through stdio, raw lines also test version negotiation, lines that are not JSON, a clean standard output and the end of standard input.
+- **HTTP and CLI.** Each outcome, each kind of call failure, availability and rejections. For the CLI: each kind of flag, usage lines, help, shared prefixes, aliases, interrupts with exit code 130, and `watch --cursor`.
+- **WebMCP.** The checks act as the host: they open the page in Chromium through [Playwright](https://playwright.dev) with a test `modelContext`. Install it first: `pnpm add -D playwright`, then `pnpm exec playwright install chromium`.
+- **Events.** Through HTTP, MCP and the CLI: the list of events, failures before the first occurrence, each occurrence against `schemas/occurrence.schema.json` and its payload schema, order, `truncated`, the cursor, each end, and cancellation. Through WebMCP, no event is a tool.
+- **[Poll delivery](../../spec/bindings/mcp.md#poll).** Through MCP, when `events/list` gives `poll`. Otherwise the check gives a warning and `events/poll` must answer `Unsupported`. `--poll-buffer` adds a cursor older than the buffer. `--poll-lease-ms` adds the end of an unused lease; give a few seconds, for example 5000, because a check makes other requests between two polls and a shorter lease can end on a busy computer.
+- **[Webhook delivery](../../spec/bindings/mcp.md#webhook).** Through MCP over HTTP, with the three `--webhook-*` options. The checks run an HTTPS receiver on `127.0.0.1` with that certificate. Configure the deployment to trust the certificate, allow deliveries to private addresses, and give the principal `<name>` to a request with `Authorization: Bearer <name>`. The deadline must be longer than the deployment's first retry wait. Give `--webhook-other-principal` with `--webhook-max-subscriptions`: the limit check then fills a principal that no other check uses. Without the webhook options, a server that does not list `webhook` must answer `Unsupported`.
+- **[Hints](../../spec/bindings/mcp.md#tools).** Each MCP tool's annotations match its capability's hints.
+- **Properties.** With fast-check, through MCP and HTTP: concurrent calls each get their own outcome, and a cancellation changes only its own call.
 
-#### MCP through stdio
-
-- The official MCP client tests the tools and outcomes twice: with revision `2026-07-28`, and with the `initialize` handshake of revision `2025-11-25`. It also tests `notifications/tools/list_changed` and `notifications/cancelled`.
-- Raw lines test the version negotiation, a line that is not JSON, that standard output holds only JSON-RPC messages, and the end of standard input.
-
-#### HTTP and CLI
-
-The checks test each outcome, each kind of call failure, availability, and rejections. For the CLI, they also test:
-
-- Each kind of flag, including a repeated flag that gives one array item for each occurrence, or the whole array as JSON text.
-- The usage line of each command and each event, with `[--cursor <string>] [--max-age-ms <integer>]`.
-- The help of a command, an alias and an event: `Usage: ` and the usage, an empty line, then the description.
-- The help of a shared prefix is its command list on standard output. A shared prefix alone, or with a flag that is not `--help`, writes the same list to standard error with exit code 2.
-- An interrupt (`SIGINT`) during a call that holds gives exit code 130, and the call must end and delete its marker file.
-- `watch --cursor` starts after the cursor. A `--max-age-ms` that is not an integer gives exit code 3.
-
-#### WebMCP
-
-The checks act as the WebMCP host. `--webmcp <url>` opens the page in Chromium, through [Playwright](https://playwright.dev), with a test `modelContext`. Install Playwright first: `pnpm add -D playwright`, then `pnpm exec playwright install chromium`.
-
-#### Events
-
-Through HTTP, MCP with each transport, and the CLI, the checks test:
-
-- The list of the view's events.
-- The call failures before the first occurrence: an event outside the view, and invalid input.
-- Each occurrence against `schemas/occurrence.schema.json` and the payload schema, and the order of the occurrences.
-- An occurrence with `truncated: true`, from `fixture.ticks` with `gap`. Through HTTP and the CLI, `truncated` is in the occurrence. Through MCP push, `notifications/events/active` has `truncated: true` and the cursor before the event. Through MCP poll, the result has `truncated: true`.
-- The cursor, each end of a subscription (complete and `internal`), and cancellation.
-- Through MCP: `server/discover`, `events/list` with the server's delivery modes, `notifications/events/active`, and the subscription id of each message. With `--mcp-handshake`, `initialize` must not declare the events extension.
-- Through WebMCP: no event is a tool.
-
-#### Poll delivery
-
-The checks test poll delivery through MCP with each transport, when `events/list` gives `poll`. If it does not, the checks give a warning, and `events/poll` must answer `Unsupported`.
-
-- Each row of the [Poll](../../spec/bindings/mcp.md#poll) table: no cursor, with no lease and with a lease; a cursor of the lease; a cursor of another lease, with and without a lease of the key; a cursor of push delivery; and a cursor of another lease that has a cursor of the provider, which resumes after it.
-- The form of each result, `maxEvents` and `hasMore`, a `maxEvents` that is not valid, the failures before the first occurrence (which start no lease), and the error `-32603` after a defect.
-- With `--poll-buffer <n>`: a cursor older than the buffer.
-- With `--poll-lease-ms <ms>`: a lease with no poll ends and cancels its subscription. The lease time must be shorter than the deadline. A check makes other requests between two polls of a lease, so give a lease time of a few seconds, for example 5 seconds. A shorter lease can end between two polls on a busy computer, and the check then fails.
-- Each check uses a new key in its input, so leases from an earlier run do not change the result.
-
-#### Webhook delivery
-
-The checks test webhook delivery through MCP over HTTP when they get the three options `--webhook-principal`, `--webhook-cert` and `--webhook-key`.
-
-- The checks run an HTTPS receiver on `127.0.0.1` with this certificate. Configure the deployment under test to trust the certificate, allow deliveries to private addresses, and give the principal `<name>` to a request with the header `Authorization: Bearer <name>`.
-- The checks test:
-  - `Forbidden` with no principal
-  - `-32602` for a URL that is not `https` and for a secret that is not valid
-  - the verification and `challenge_failed`
-  - the form of the `events/subscribe` result and its subscription id
-  - the headers, signature and body of each delivery, and their order
-  - a renewal that signs with the old and the new secret
-  - `events/unsubscribe`, and a second `events/unsubscribe`
-  - a retry with the same `webhook-id` after a status 500
-  - a 410 that abandons a delivery
-  - the control message `gap` with the watermark before an occurrence with `truncated: true`
-  - the control message `terminated`
-  - the lifetime that the server grants for a `ttlMs` below the minimum, above the maximum, `null` and absent
-- The retry check waits for the deployment's first retry, so the deadline must be longer than that wait.
-- With `--webhook-min-ttl-ms`, which must be shorter than the deadline, the checks also test that a subscription with no renewal ends at the end of its lifetime and gets no more deliveries.
-- With `--webhook-max-subscriptions <n>`, the checks subscribe until the server answers `ResourceExhausted` (`-32025`, with `data: { limit: "subscriptions", max }`), then renew one subscription.
-- With `--webhook-other-principal <name>`, the limit check fills the subscriptions of this second principal, which no other check uses. It expects exactly `n` subscriptions, then tests that the first principal can still subscribe. Without it, the limit check uses the first principal, which can still hold subscriptions from other checks.
-- Without the webhook options, a server that does not list `webhook` must answer `events/subscribe` and `events/unsubscribe` with `Unsupported`. Through stdio, it must always do so.
-
-#### Hints
-
-Through MCP with each transport, each tool's `readOnlyHint`, `destructiveHint` and `idempotentHint` match its capability's `readOnly`, `destructive` and `idempotent`. When a capability has no hint, the tool has no annotation or the MCP default.
-
-#### Properties
-
-With fast-check, through MCP with each transport and through HTTP: concurrent calls each get exactly their own outcome, and a cancellation changes only its own call.
+Each poll check uses a new key, so leases from an earlier run do not change the result.
 
 ### Waiting and deadlines
 
-The checks wait for states they can observe, never for a fixed time.
-
-- Before a check cancels a call to `fixture.hold`, it waits until `fixture.held` gives the call's key or, for the CLI, until the call's marker file exists.
-- Before a check signals or cancels a subscription to `fixture.watch`, it waits until `fixture.watching` gives its key, or until its marker file exists. After it cancels the subscription, it waits until the key leaves `fixture.watching`.
-- Through the CLI, after the process exits, the check waits until the marker file of the call or subscription is deleted. A core can exit with 130 when a call does not stop, so the exit code alone does not show that the call ended.
-
-Each check has one deadline: `--deadline`, or `deadline` in code, in milliseconds. A check that does not settle before its deadline fails with "did not settle", and the check stops what it started. That cleanup has a deadline of the same length, so `conform` always returns. The deadline never makes a check pass.
+The checks wait for states they can observe, such as `fixture.held`, `fixture.watching` or a marker file, never for a fixed time. Each check has one deadline (`--deadline`, or `deadline` in code). A check that does not settle in time fails with "did not settle" and stops what it started, under a second deadline of the same length, so `conform` always returns. The deadline never makes a check pass.
 
 ### Result
 
-A failed check of a recommendation (SHOULD) gives a warning, marked `!`, and passes. The exit code is 1 if a check fails.
+A failed check of a SHOULD rule gives a warning, marked `!`, and passes. The exit code is 1 if a check fails.
 
 ### Use it in code
 
