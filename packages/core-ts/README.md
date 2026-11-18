@@ -13,29 +13,28 @@ pnpm add @acid-cat/core-ts
 A command line with one command:
 
 ```ts
-import { capabilitiesFor, cliMain, defineApp, ok } from "@acid-cat/core-ts";
+import { cliMain, defineApp, defineCapability, ok } from "@acid-cat/core-ts";
 import type { ToJsonSchema } from "@acid-cat/core-ts";
 import { z } from "zod";
 
-type Context = { lamp: { on: boolean } };
-const capability = capabilitiesFor<Context>();
+const lamp = { on: false };
 
-const app = defineApp<Context>({
+const powerSet = defineCapability({
+  id: "lamp.power.set",
+  description: "Turn the lamp on or off.",
+  audience: ["cli"],
+  input: z.object({ on: z.boolean() }),
+  output: z.object({ on: z.boolean() }),
+  run: ({ on }) => {
+    lamp.on = on;
+    return ok({ on });
+  },
+});
+
+const app = defineApp({
   title: "Desk lamp",
   targets: { cli: { bindings: ["cli"] } },
-  capabilities: [
-    capability({
-      id: "lamp.power.set",
-      description: "Turn the lamp on or off.",
-      audience: ["cli"],
-      input: z.object({ on: z.boolean() }),
-      output: z.object({ on: z.boolean() }),
-      run: async ({ on }, { context }) => {
-        context.lamp.on = on;
-        return ok({ on });
-      },
-    }),
-  ],
+  capabilities: [powerSet],
 });
 
 const toJsonSchema: ToJsonSchema = (schema) => {
@@ -43,7 +42,7 @@ const toJsonSchema: ToJsonSchema = (schema) => {
   return z.toJSONSchema(schema, { target: "draft-2020-12" });
 };
 
-cliMain(app, { name: "lamp", version: "0.1.0", context: { lamp: { on: false } }, toJsonSchema });
+cliMain(app, { name: "lamp", version: "0.1.0", context: {}, toJsonSchema });
 ```
 
 ```sh
@@ -80,7 +79,7 @@ export const aircon = defineApp<{ unit: Unit }>({
 });
 ```
 
-`capabilitiesFor<Context>()` sets the context type once. Every other type comes from the schemas.
+No type parameter is required: the types come from the schemas. The only one you may give is the context type, when capabilities need a service from outside, such as `unit` in the example above. `capabilitiesFor<Context>()` sets it once for all capabilities, and the same `Context` goes to `defineApp<Context>`. The context itself comes from the `context` option of `cliMain`, `httpHandler` and the other entry points.
 
 - `run(input, { signal, context, target })` gets the decoded input (`{}` without an input schema), an `AbortSignal`, the context, and the session's target.
 - `run` returns `ok(value)` or `fail(failure)`. The types check the value against the output schema and the failure against `failures`. A failure schema describes the whole object, `_tag` included. If `run` throws, the call fails as `internal`.
