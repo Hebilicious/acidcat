@@ -39,10 +39,11 @@ AcidCat lists those operations once, in a **catalog**. Every surface comes from 
 
 ### 1. Write the catalog
 
-Write the catalog in your own language: the capabilities, their schemas and their targets. With the TypeScript core and Zod:
+Declare each capability in code: its schemas, its targets and the function that runs it. These declarations are the catalog. With the TypeScript core and Zod:
 
 ```ts
-import { cliMain, defineApp, defineCapability, fail, ok, renderCatalog } from "@acid-cat/core-ts";
+// aircon.ts
+import { defineApp, defineCapability, fail, ok } from "@acid-cat/core-ts";
 import type { ToJsonSchema } from "@acid-cat/core-ts";
 import { z } from "zod";
 
@@ -63,28 +64,46 @@ const powerSet = defineCapability({
   },
 });
 
-const aircon = defineApp({
+export const aircon = defineApp({
   title: "Air conditioner",
   targets: { cli: { bindings: ["cli"] }, mcp: { bindings: ["mcp"] } },
   capabilities: [powerSet],
 });
 
-const toJsonSchema: ToJsonSchema = (schema) => {
+export const toJsonSchema: ToJsonSchema = (schema) => {
   if (!(schema instanceof z.ZodType)) throw new Error("Only Zod schemas.");
   return z.toJSONSchema(schema, { target: "draft-2020-12" });
 };
 ```
 
-`renderCatalog(aircon, { toJsonSchema })` writes the catalog as JSON. Commit it, and run `acid-cat check` on it in CI.
+At build time, write the catalog as JSON and check it:
+
+```ts
+// catalog.ts
+import { writeFile } from "node:fs/promises";
+import { renderCatalog } from "@acid-cat/core-ts";
+import { aircon, toJsonSchema } from "./aircon.ts";
+
+await writeFile("aircon.acidcat.json", renderCatalog(aircon, { toJsonSchema }));
+```
+
+```sh
+node catalog.ts
+acid-cat check aircon.acidcat.json
+```
 
 ### 2. Serve it
 
 ```ts
+// cli.ts
+import { cliMain } from "@acid-cat/core-ts";
+import { aircon, toJsonSchema } from "./aircon.ts";
+
 cliMain(aircon, { name: "home", version: "0.1.0", context: {}, toJsonSchema });
 ```
 
 ```sh
-$ node aircon.ts aircon power set --on
+$ node cli.ts aircon power set --on
 null
 ```
 
@@ -105,7 +124,7 @@ Pass the same `aircon` to `mcpStdioMain` for an MCP server, or to `httpHandler` 
 - Failures are typed data, declared by tag. An unexpected error becomes the call failure `internal`, and its details stay on the server.
 - Events, such as `aircon.status.changed`, stream occurrences to subscribers over the CLI, MCP, HTTP (server-sent events) and TypeScript ([events](spec/events.md)).
 - WebMCP lets a browser agent call your page's capabilities directly, with the user's session ([binding](spec/bindings/webmcp.md)).
-- The command line has aliases such as `aircon --on`, JSON or human output, and Ctrl+C cancellation ([binding](spec/bindings/cli.md)).
+- The command line has aliases such as `home --on`, JSON or human output, and Ctrl+C cancellation ([binding](spec/bindings/cli.md)).
 - For an API you design yourself, such as GraphQL, call the same capabilities through a session ([examples](examples/aircon/README.md#apis)).
 
 ## 📚 Specification
