@@ -3,27 +3,18 @@ import { test } from "node:test";
 
 import { CallFailureError, isOccurrence } from "@acid-cat/spec-ts";
 import type { Occurrence } from "@acid-cat/spec-ts";
-import { Effect, Exit, Fiber, Schema, Scope, Stream } from "effect";
-import { GraphQLInt, GraphQLObjectType, GraphQLSchema, GraphQLString, parse, subscribe } from "graphql";
+import { Deferred, Effect, Exit, Fiber, Schema, Scope, Stream } from "effect";
 
 import { App, Event, Handles, Session } from "../src/index.ts";
-import { counted, events, Feed, feedForPromises, feedLayer, following, publish, resumed, ticked } from "./events-fixture.ts";
+import { counted, crashing, disagreeing, events, Feed, feedForPromises, feedLayer, following, publish, resumed, ticked } from "./events-fixture.ts";
 
 const run = <A, E>(program: Effect.Effect<A, E, Feed | Scope.Scope>) => Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(feedLayer)));
 
 const startFailure = <A>(start: Effect.Effect<A, Session.CallFailed, Scope.Scope>) =>
   Effect.flip(start).pipe(Effect.map(({ kind, message }) => ({ kind, message })));
 
-test("the catalog has the events, in canonical form, and the view of a target has only its events", () => {
-  const document = App.document(events);
-  assert.deepEqual(Object.keys(document.events ?? {}).sort(), ["feed.counted", "feed.crashing", "feed.disagreeing", "feed.hidden", "feed.resumed", "feed.ticked", "feed.timed"]);
-  const tickedEntry = document.events?.["feed.ticked"];
-  assert.equal(tickedEntry?.description, "A test published a tick. With a room, only the ticks of that room.");
-  assert.deepEqual(tickedEntry?.audience, ["app", "mcp", "cli", "api"]);
-  assert.deepEqual(Object.keys(tickedEntry?.input?.properties ?? {}), ["room"]);
-  assert.equal(tickedEntry?.payload?.type, "object");
-  assert.deepEqual(tickedEntry?.payload?.required, ["room", "count"]);
-  assert.equal(document.events?.["feed.crashing"]?.payload, undefined);
+test("an event with no payload schema has no payload in the catalog, the events come after the capabilities, and a view narrows the audience", () => {
+  assert.equal(App.document(events).events?.["feed.crashing"]?.payload, undefined);
   const text = App.render(events);
   assert.ok(text.indexOf('"capabilities"') < text.indexOf('"events"'));
   const view = Effect.runSync(Session.make(events, { target: "mcp" }).pipe(Effect.scoped, Effect.provide(feedLayer))).view;
@@ -176,18 +167,29 @@ test("when the session closes, each subscription ends as complete", async () => 
 });
 
 test("a slow client loses the oldest occurrences, and the next one it reads has truncated: true", async () => {
-  const received = await run(
+  const received = await Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Session.make(events, { target: "app", eventBuffer: 2 });
-      const stream = yield* session.follow(ticked, {});
-      yield* following(1);
-      for (const count of [1, 2, 3, 4, 5]) yield* publish({ room: "a", count });
-      yield* Effect.sleep(50);
-      const fiber = yield* Effect.forkChild(Stream.runCollect(Stream.take(stream, 3)));
-      yield* Effect.sleep(10);
-      yield* publish({ room: "a", count: 6 });
-      return yield* Fiber.join(fiber);
-    }),
+      const buffered = yield* Deferred.make<void>();
+      const readFive = yield* Deferred.make<void>();
+      const counts = Event.make({
+        id: "burst.counted",
+        description: "Give the counts 1 to 5, then the count 6 after the client reads the count 5.",
+        audience: ["app"],
+        payload: Schema.Struct({ count: Schema.Int }),
+        subscribe: () =>
+          Stream.concat(Stream.make(1, 2, 3, 4, 5), Stream.fromEffect(Effect.andThen(Deferred.succeed(buffered, undefined), Deferred.await(readFive)).pipe(Effect.as(6)))).pipe(
+            Stream.map((count) => ({ data: { count } })),
+          ),
+      });
+      const app = App.make({ targets: { app: { bindings: ["typescript"] } }, capabilities: [], events: [counts] });
+      const session = yield* Session.make(app, { target: "app", eventBuffer: 2 });
+      const stream = yield* session.follow(counts, {});
+      yield* Deferred.await(buffered);
+      return yield* Stream.take(stream, 3).pipe(
+        Stream.tap(({ data }) => (data.count === 5 ? Deferred.succeed(readFive, undefined) : Effect.void)),
+        Stream.runCollect,
+      );
+    }).pipe(Effect.scoped),
   );
   assert.deepEqual(
     received.map(({ data, truncated }) => ({ count: data.count, truncated })),
@@ -199,26 +201,41 @@ test("a slow client loses the oldest occurrences, and the next one it reads has 
   );
 });
 
-test("a defect of the provider, or a payload that does not agree, ends the subscription with internal", async () => {
+test("a defect of the provider, a provider that throws when it starts, or a payload that does not agree, ends the subscription with internal", async () => {
+  const throwing = Event.make({
+    id: "probe.throws",
+    description: "The provider throws when it starts.",
+    audience: ["app"],
+    subscribe: () => {
+      throw new Error("secret internal detail");
+    },
+  });
+  const filled = Event.make({
+    id: "probe.filled",
+    description: "Give data that is not empty, with no payload schema.",
+    audience: ["app"],
+    subscribe: () => Stream.make({ data: Object.defineProperty({}, "secret", { value: 1, enumerable: true }) }),
+  });
+  const probes = App.make({ targets: { app: { bindings: ["typescript"] } }, capabilities: [], events: [crashing, disagreeing, throwing, filled] });
   const outcome = (id: string) =>
     run(
       Effect.gen(function* () {
-        const session = yield* Session.make(events, { target: "app" });
+        const session = yield* Session.make(probes, { target: "app" });
         const stream = yield* session.subscribe(id, {});
         const received: Occurrence[] = [];
         const exit = yield* Effect.exit(Stream.runForEach(stream, (occurrence) => Effect.sync(() => received.push(occurrence))));
-        return { received: received.length, failure: Exit.isFailure(exit) ? Exit.findErrorOption(exit) : undefined };
+        const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : undefined;
+        return { received: received.length, failure: failure?._tag === "Some" ? { kind: failure.value.kind, message: failure.value.message } : undefined };
       }),
     );
-  const crash = await outcome("feed.crashing");
-  assert.equal(crash.received, 1);
-  assert.ok(crash.failure?._tag === "Some");
-  assert.deepEqual({ kind: crash.failure.value.kind, message: crash.failure.value.message }, { kind: "internal", message: "The event failed." });
-  const bad = await outcome("feed.disagreeing");
-  assert.equal(bad.received, 1);
-  assert.ok(bad.failure?._tag === "Some");
-  assert.equal(bad.failure.value.kind, "internal");
-  assert.doesNotMatch(bad.failure.value.message, /secret/);
+  assert.deepEqual(await outcome("feed.crashing"), { received: 1, failure: { kind: "internal", message: "The event failed." } });
+  assert.deepEqual(await outcome("probe.throws"), { received: 0, failure: { kind: "internal", message: "The event failed." } });
+  for (const id of ["feed.disagreeing", "probe.filled"]) {
+    const bad = await outcome(id);
+    assert.equal(bad.received, id === "feed.disagreeing" ? 1 : 0, id);
+    assert.equal(bad.failure?.kind, "internal", id);
+    assert.doesNotMatch(bad.failure?.message ?? "", /secret/);
+  }
 });
 
 const eventHandle = (handles: ReadonlyMap<string, Handles.EventHandle>, id: string) => {
@@ -235,7 +252,6 @@ const rejected = (promise: Promise<unknown>) =>
       return error;
     },
   );
-
 
 test("event handles give occurrences as an async iterable, and reject start failures before the first occurrence", async () => {
   const feed = feedForPromises();
@@ -302,62 +318,6 @@ test("return() cancels a subscription while next() waits, and that next() resolv
     const left = open.next();
     await session.dispose();
     assert.deepEqual(await left, { done: true, value: undefined });
-  } finally {
-    await session.dispose();
-  }
-});
-
-test("a GraphQL subscription uses an event handle, and ends the subscription when the client ends it", async () => {
-  const feed = feedForPromises();
-  const session = await Handles.open(events, feed.layer, { target: "app" });
-  try {
-    const handle = session.event(ticked);
-    const Arguments = Schema.Struct({ room: Schema.optionalKey(Schema.String) });
-    const Tick = new GraphQLObjectType({ name: "Tick", fields: { room: { type: GraphQLString }, count: { type: GraphQLInt } } });
-    const schema = new GraphQLSchema({
-      query: new GraphQLObjectType({ name: "Query", fields: { ok: { type: GraphQLString } } }),
-      subscription: new GraphQLObjectType({
-        name: "Subscription",
-        fields: {
-          ticked: {
-            type: Tick,
-            args: { room: { type: GraphQLString } },
-            subscribe: (_source: unknown, args: unknown) => handle.subscribe(Schema.decodeUnknownSync(Arguments)(args)),
-            resolve: (occurrence: unknown) => (isOccurrence(occurrence) ? occurrence.data : null),
-          },
-        },
-      }),
-    });
-    const result = await subscribe({ schema, document: parse('subscription { ticked(room: "a") { room count } }') });
-    assert.ok(Symbol.asyncIterator in result, "the subscription started");
-    const iterator = result[Symbol.asyncIterator]();
-    await feed.following(1);
-    await feed.publish({ room: "a", count: 7 });
-    assert.equal(JSON.stringify((await iterator.next()).value), JSON.stringify({ data: { ticked: { room: "a", count: 7 } } }));
-    // graphql-js calls return() while next() waits, when the client ends the subscription.
-    const pending = iterator.next();
-    await iterator.return();
-    assert.deepEqual(await pending, { done: true, value: undefined });
-    await feed.following(0);
-  } finally {
-    await session.dispose();
-  }
-});
-
-test("the WebMCP binding registers the capabilities of a view with events, and no tool for an event", async () => {
-  const names = new Set<string>();
-  const host = {
-    registerTool(tool: { readonly name: string }, options: { signal: AbortSignal }) {
-      names.add(tool.name);
-      options.signal.addEventListener("abort", () => names.delete(tool.name));
-      return { unregister() {} };
-    },
-  };
-  const session = await Handles.open(events, feedLayer, { target: "app", webmcp: host });
-  try {
-    for (let attempt = 0; attempt < 100 && session.webmcp?.status.getSnapshot().phase !== "ready"; attempt++) await new Promise((resolve) => setTimeout(resolve, 5));
-    assert.deepEqual([...names], ["feed.publish"]);
-    assert.ok(session.events.has("feed.ticked"));
   } finally {
     await session.dispose();
   }

@@ -244,7 +244,7 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
           ...(resume.maxAgeMs === undefined ? {} : { maxAgeMs: resume.maxAgeMs }),
         };
         const buffer = yield* truncatingBuffer<P>(capacity);
-        const provider = opener(where).pipe(
+        const provider = Stream.suspend(() => opener(where)).pipe(
           Stream.runForEach((emitted) => Effect.sync(() => buffer.offer(occurrenceOf(id, emitted, newEventId, () => new Date())))),
           Effect.exit,
           Effect.flatMap((exit) => {
