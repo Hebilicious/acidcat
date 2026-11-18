@@ -1,38 +1,73 @@
 import { spawn } from "node:child_process";
 import type { ChildProcessByStdio } from "node:child_process";
+import { once } from "node:events";
+import { createServer, request } from "node:http";
 import type { Readable } from "node:stream";
 import type { TestContext } from "node:test";
 
 export async function startServer(context: TestContext, command: string, args: readonly string[]): Promise<string> {
   const server = spawn(command, args, { stdio: ["ignore", "pipe", "inherit"] });
-  context.after(() => server.kill());
-  return await new Promise<string>((resolve, reject) => {
-    server.on("error", reject);
+  return (await firstLine(server, context)).trim();
+}
+
+export function firstLine(child: ChildProcessByStdio<null, Readable, Readable | null>, context: TestContext): Promise<string> {
+  context.after(() => child.kill());
+  return new Promise((resolve, reject) => {
     let text = "";
-    server.stdout.setEncoding("utf-8").on("data", (chunk: string) => {
+    child.on("error", reject);
+    child.on("close", (code) => reject(new Error(`The process ended with the code ${code} before it wrote a line: ${text}`)));
+    child.stdout.setEncoding("utf-8").on("data", (chunk: string) => {
       text += chunk;
-      if (text.includes("\n")) resolve(text.slice(0, text.indexOf("\n")).trim());
+      if (text.includes("\n")) resolve(text.slice(0, text.indexOf("\n")));
     });
   });
 }
 
-export async function changeStatusUntil(url: string, done: () => boolean): Promise<void> {
-  for (let turn = 0; !done(); turn++) {
-    const response = await fetch(`${url}/capabilities/aircon.fan.set`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ speed: turn % 2 === 0 ? "low" : "high" }),
-    });
-    await response.body?.cancel();
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
+/**
+ * A proxy in front of the server at `url`, which counts the subscriptions that have started. The HTTP binding answers a
+ * subscription with the status 200 only when it has started (spec/bindings/http.md).
+ */
+export async function subscriptionProxy(context: TestContext, url: string): Promise<{ readonly url: string; readonly started: (count: number) => Promise<void> }> {
+  const target = new URL(url);
+  let started = 0;
+  const waiting = new Set<() => void>();
+  const proxy = createServer((incoming, outgoing) => {
+    const forwarded = request(
+      { host: target.hostname, port: target.port, method: incoming.method, path: incoming.url, headers: { ...incoming.headers, host: target.host } },
+      (answer) => {
+        outgoing.writeHead(answer.statusCode ?? 502, answer.headers);
+        outgoing.flushHeaders();
+        if (incoming.method === "POST" && incoming.url?.includes("/events/") === true && answer.statusCode === 200) {
+          started += 1;
+          waiting.forEach((check) => check());
+        }
+        answer.pipe(outgoing);
+        answer.on("error", () => outgoing.destroy());
+      },
+    );
+    forwarded.on("error", () => outgoing.destroy());
+    outgoing.on("close", () => forwarded.destroy());
+    incoming.pipe(forwarded);
+  });
+  proxy.listen(0, "127.0.0.1");
+  await once(proxy, "listening");
+  context.after(() => {
+    proxy.closeAllConnections();
+    proxy.close();
+  });
+  const address = proxy.address();
+  if (address === null || typeof address === "string") throw new Error("The proxy has no port.");
+  return {
+    url: `http://127.0.0.1:${address.port}${target.pathname}`,
+    started: (count) =>
+      new Promise((resolve) => {
+        const check = () => {
+          if (started < count) return;
+          waiting.delete(check);
+          resolve();
+        };
+        waiting.add(check);
+        check();
+      }),
+  };
 }
-
-export function collect(child: ChildProcessByStdio<null, Readable, Readable>, context: TestContext): () => string {
-  context.after(() => child.kill());
-  let text = "";
-  child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (text += chunk));
-  return () => text;
-}
-
-export const firstLine = (text: string): string => text.slice(0, text.indexOf("\n"));

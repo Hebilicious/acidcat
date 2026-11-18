@@ -11,7 +11,7 @@ import { check } from "@acid-cat/cli";
 import { SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import { assertHelp } from "./help.ts";
 import type { Run } from "./run.ts";
-import { changeStatusUntil, collect, firstLine, startServer } from "./server.ts";
+import { firstLine, startServer, subscriptionProxy } from "./server.ts";
 import { shape, writtenText } from "./shape.ts";
 
 const aircon = new URL("target/debug/aircon", new URL("../core-rust/", import.meta.url)).pathname;
@@ -65,7 +65,8 @@ test("the Rust command line writes the human form with its output flags", async 
 
 test("the Rust command line controls the unit of a server, and watch and follow write its changes", async (context) => {
   const url = await startServer(context, aircon, ["serve"]);
-  const remote = (...args: string[]) => spawn(aircon, ["cli", ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  const client = (target: string) => (...args: string[]) => spawn(aircon, ["cli", ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  const remote = client(url);
 
   assert.equal((await finish(remote("aircon", "power", "set", "--on"))).code, 0);
   const status = await finish(remote("aircon", "status", "get"));
@@ -74,16 +75,16 @@ test("the Rust command line controls the unit of a server, and watch and follow 
   assert.partialDeepStrictEqual(JSON.parse((await cli("aircon", "status", "get")).stdout), { power: false });
   assert.equal((await finish(remote("--output", "human", "aircon", "status", "get"))).stdout, `${STATUS_ON}\n`);
 
-  const watch = remote("watch", "aircon.status.changed");
-  const watched = collect(watch, context);
-  const humanWatched = collect(remote("--output", "human", "watch", "aircon.status.changed"), context);
-  const followed = collect(remote("follow"), context);
-  await changeStatusUntil(url, () => [watched(), humanWatched(), followed()].every((text) => text.includes("\n")));
-  const line = firstLine(watched());
-  assert.partialDeepStrictEqual(JSON.parse(line), { name: "aircon.status.changed", data: { power: true } });
-  assert.match(line, /"fan":"(low|high)"/);
-  assert.match(firstLine(humanWatched()), /^on · cool · fan (low|high) · target 22°C · room 25°C$/);
-  assert.partialDeepStrictEqual(JSON.parse(firstLine(followed())), { name: "aircon.status.changed" });
+  const proxy = await subscriptionProxy(context, url);
+  const watcher = client(proxy.url);
+  const watch = watcher("watch", "aircon.status.changed");
+  const lines = Promise.all([firstLine(watch, context), firstLine(watcher("--output", "human", "watch", "aircon.status.changed"), context), firstLine(watcher("follow"), context)]);
+  await proxy.started(3);
+  assert.equal((await finish(remote("aircon", "fan", "set", "--speed", "high"))).code, 0);
+  const [line, human, followed] = await lines;
+  assert.partialDeepStrictEqual(JSON.parse(line), { name: "aircon.status.changed", data: { power: true, fan: "high" } });
+  assert.equal(human, "on · cool · fan high · target 22°C · room 25°C");
+  assert.partialDeepStrictEqual(JSON.parse(followed), { name: "aircon.status.changed", data: { fan: "high" } });
   const exited = new Promise<number | null>((resolve) => watch.on("close", resolve));
   watch.kill("SIGINT");
   assert.equal(await exited, 130);

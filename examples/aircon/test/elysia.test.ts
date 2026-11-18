@@ -113,29 +113,34 @@ async function freePort(): Promise<number> {
  * server has its own `stop`: the function stops that server. When a release of `@elysiajs/node` sets `app.server` in
  * `listen`, use `app.stop()`, and remove the callback and `isStoppable`.
  *
- * The adapter starts to listen a short time after `listen` returns, so wait until the port answers.
+ * The adapter starts to listen a short time after `listen` returns. The server of the callback holds the srvx server in
+ * `raw`, and its `ready()` resolves when the port listens.
  */
 async function listenOnNode(app: ReturnType<typeof elysiaApi>): Promise<{ readonly port: number; readonly stop: () => Promise<void> }> {
   const port = await freePort();
-  let stop: () => Promise<void> = async () => undefined;
+  let served: unknown;
   app.listen({ hostname: "127.0.0.1", port }, (server: unknown) => {
-    if (isStoppable(server)) {
-      stop = async () => {
-        await server.stop();
-      };
-    }
+    served = server;
   });
-  const end = Date.now() + 5000;
-  for (;;) {
-    try {
-      await fetch(`http://127.0.0.1:${port}/status`);
-      return { port, stop };
-    } catch (error) {
-      if (Date.now() > end) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
-  }
+  const server = served;
+  if (!isStoppable(server) || !hasRawServer(server)) throw new Error("The adapter gave no srvx server to the callback of listen.");
+  await server.raw.ready();
+  return {
+    port,
+    stop: async () => {
+      await server.stop();
+    },
+  };
 }
+
+const hasRawServer = (server: unknown): server is { raw: { ready(): unknown } } =>
+  typeof server === "object" &&
+  server !== null &&
+  "raw" in server &&
+  typeof server.raw === "object" &&
+  server.raw !== null &&
+  "ready" in server.raw &&
+  typeof server.raw.ready === "function";
 
 const isStoppable = (server: unknown): server is { stop(): unknown } =>
   typeof server === "object" && server !== null && "stop" in server && typeof server.stop === "function";

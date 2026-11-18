@@ -15,7 +15,7 @@ import { catalogOf, createSession, renderCatalog, runCli } from "@acid-cat/core-
 import { OFFLINE, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import { bundledProgram } from "./bundled-program.ts";
 import { run } from "./run.ts";
-import { changeStatusUntil, collect, firstLine, startServer } from "./server.ts";
+import { firstLine, startServer, subscriptionProxy } from "./server.ts";
 import { assertHelp } from "./help.ts";
 import { shape, writtenText } from "./shape.ts";
 
@@ -164,7 +164,8 @@ function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<{
 
 test("the TypeScript command line controls the unit of a server, and watch follows its changes", async (context) => {
   const url = await startServer(context, process.execPath, [bundledProgram("core-ts/serve.ts")]);
-  const remote = (...args: string[]) => spawn(process.execPath, [program, ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  const client = (target: string) => (...args: string[]) => spawn(process.execPath, [program, ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  const remote = client(url);
 
   assert.equal((await finish(remote("aircon", "power", "set", "--on"))).code, 0);
   const status = await finish(remote("aircon", "status", "get"));
@@ -173,14 +174,15 @@ test("the TypeScript command line controls the unit of a server, and watch follo
   assert.partialDeepStrictEqual(JSON.parse((await run(program, "aircon", "status", "get")).stdout), { power: false });
   assert.equal((await finish(remote("--output", "human", "aircon", "status", "get"))).stdout, `${STATUS_ON}\n`);
 
-  const watch = remote("watch", "aircon.status.changed");
-  const watched = collect(watch, context);
-  const humanWatched = collect(remote("--output", "human", "watch", "aircon.status.changed"), context);
-  await changeStatusUntil(url, () => [watched(), humanWatched()].every((text) => text.includes("\n")));
-  const line = firstLine(watched());
-  assert.partialDeepStrictEqual(JSON.parse(line), { name: "aircon.status.changed", data: { power: true } });
-  assert.match(line, /"fan":"(low|high)"/);
-  assert.match(firstLine(humanWatched()), /^on · cool · fan (low|high) · target 22°C · room 25°C$/);
+  const proxy = await subscriptionProxy(context, url);
+  const watcher = client(proxy.url);
+  const watch = watcher("watch", "aircon.status.changed");
+  const lines = Promise.all([firstLine(watch, context), firstLine(watcher("--output", "human", "watch", "aircon.status.changed"), context)]);
+  await proxy.started(2);
+  assert.equal((await finish(remote("aircon", "fan", "set", "--speed", "high"))).code, 0);
+  const [line, human] = await lines;
+  assert.partialDeepStrictEqual(JSON.parse(line), { name: "aircon.status.changed", data: { power: true, fan: "high" } });
+  assert.equal(human, "on · cool · fan high · target 22°C · room 25°C");
   const exited = new Promise<number | null>((resolve) => watch.on("close", resolve));
   watch.kill("SIGINT");
   assert.equal(await exited, 130);
