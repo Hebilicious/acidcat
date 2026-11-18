@@ -25,11 +25,8 @@ test("acid-cat conform fails only the cancellation checks of events of an implem
     const failed = runs.flat().filter((result) => !result.passed);
     assert.deepEqual(failed.map((result) => `${result.binding}: ${result.name}`).sort(), [
       "cli: an interrupt cancels watch with exit code 130",
-      "http: a subscription gets the things that happen, and closing the stream cancels it",
-      "http: cancelling one subscription leaves the other subscriptions running",
-      "mcp-stdio events: events/stream gets the things that happen, and cancelling it ends the subscription",
+      "http: each subscription gets the things that happen, and closing one stream cancels only its subscription",
       "mcp-stdio events: two subscriptions at the same time each get their own messages, and cancelling one leaves the other",
-      "mcp: events/stream gets the things that happen, and cancelling it ends the subscription",
       "mcp: two subscriptions at the same time each get their own messages, and cancelling one leaves the other",
     ], failures(failed));
     for (const result of failed) assert.match(result.detail ?? "", didNotSettle);
