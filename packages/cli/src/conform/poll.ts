@@ -74,22 +74,13 @@ export async function checkPoll(checks: Checks, channel: Channel, settings: Poll
     for (const value of values) expectEqual(await signalKey(key, value, signal), 1, "the subscriptions that fixture.signal reached");
   };
 
-  await checks.run("events/poll with no cursor and no lease starts a lease with no occurrences, whose subscription starts now", RULE, async (signal) => {
-    const key = randomUUID();
-    const cursor = await startWatch(key, signal);
-    await signalAll(key, ["first"], signal);
-    const polled = await pollUntil("the lease has the occurrence", "fixture.watch", { key }, { cursor }, (each) => each.events.length > 0, signal);
-    expectEqual(dataOf(polled), watched(key, "first"), "the data of the occurrences");
-    expectEqual([polled.truncated, polled.hasMore], [false, false], "truncated and hasMore");
-  });
-
-  await checks.run("a cursor of the lease gives the occurrences after it, in order, and no cursor gives the newest position", RULE, async (signal) => {
+  await checks.run("events/poll with no cursor and no lease starts a lease with no occurrences, whose subscription starts now; a cursor of the lease gives the occurrences after it, in order; and no cursor gives the newest position", RULE, async (signal) => {
     const key = randomUUID();
     const start = await startWatch(key, signal);
     await signalAll(key, ["a", "b"], signal);
     const both = await pollUntil("the lease has both occurrences", "fixture.watch", { key }, { cursor: start }, (each) => each.events.length >= 2, signal);
     expectEqual(dataOf(both), watched(key, "a", "b"), "the data of the occurrences after the start");
-    expectEqual(both.truncated, false, "truncated");
+    expectEqual([both.truncated, both.hasMore], [false, false], "truncated and hasMore");
     const newest = await poll("fixture.watch", { key }, {}, signal);
     expectEqual([newest.events, newest.truncated], [[], false], "the occurrences and truncated of a poll with no cursor");
     await signalAll(key, ["c"], signal);
