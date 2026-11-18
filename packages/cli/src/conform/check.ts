@@ -111,6 +111,7 @@ export class Checks {
       return controller.signal.aborted ? `did not settle within ${this.deadline} ms: ${message}` : message;
     } finally {
       clearTimeout(timer);
+      controller.abort();
     }
   }
 }

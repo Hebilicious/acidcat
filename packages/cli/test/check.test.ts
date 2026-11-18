@@ -22,3 +22,17 @@ test("checks that run at the same time keep the order in which they are defined"
     ],
   );
 });
+
+test("the end of a check stops the work that it started, also when one part of it fails first", async () => {
+  const checks = new Checks("cli", 60_000);
+  let started: AbortSignal | undefined;
+  await checks.run("fails", "rule", async (signal) => {
+    started = signal;
+    await Promise.all([pause(60_000, undefined, { signal }), Promise.reject(new Error("refused"))]);
+  });
+  assert.equal(started?.aborted, true);
+  assert.deepEqual(
+    checks.results.map(({ name, passed, detail }) => [name, passed, detail]),
+    [["fails", false, "refused"]],
+  );
+});
