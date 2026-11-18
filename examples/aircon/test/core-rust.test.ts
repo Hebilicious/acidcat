@@ -125,11 +125,19 @@ test("the Rust command line has the aliases of the catalog", async (context) => 
   assert.partialDeepStrictEqual(JSON.parse((await finish(remote("status"))).stdout), { fan: "low" });
   const unknown = await finish(remote("fan", "medium"));
   assert.deepEqual([unknown.code, unknown.stdout], [2, ""], "medium is not the second word of an alias of the group fan");
+  assert.equal((await finish(remote("aircon", "power", "--on"))).code, 0);
+  assert.partialDeepStrictEqual(JSON.parse((await finish(remote("status"))).stdout), { power: true }, "aircon power is the default of the prefix aircon power");
+  assert.equal((await finish(remote("--off"))).code, 0);
+  assert.equal((await finish(remote("aircon", "power", "set", "--on"))).code, 0);
+  assert.partialDeepStrictEqual(JSON.parse((await finish(remote("status"))).stdout), { power: true }, "aircon power set is still the command of aircon.power.set");
+  assert.equal((await finish(remote("aircon", "power"))).code, 3, "the alias aircon power runs, without its required flag --on");
+  const nope = await finish(remote("aircon", "power", "nope"));
+  assert.deepEqual([nope.code, nope.stdout], [2, ""], "nope is not a command under the prefix aircon power");
   const list = await cli("list");
-  assert.match(list.stdout, /"aliases": \[\n\s*"aircon --off",\n\s*"aircon --on"\n\s*\]/);
+  assert.match(list.stdout, /"aliases": \[\n\s*"aircon --off",\n\s*"aircon --on",\n\s*"aircon aircon power --on"\n\s*\]/);
   assert.match(list.stdout, /"aliases": \[\n\s*"aircon follow \[--cursor <string>\] \[--max-age-ms <integer>\]"\n\s*\]/);
   assert.match(list.stdout, /"aliases": \[\n\s*"aircon fan --speed <auto\|low\|medium\|high>",\n\s*"aircon fan auto",\n\s*"aircon fan high"\n\s*\]/);
-  assert.match((await cli("--help")).stdout, /\nAliases:\n {2}--off\n {2}--on\n {2}fan --speed <auto\|low\|medium\|high>\n {2}fan auto\n {2}fan high\n {2}follow \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}status\n\nOutput:\n/);
+  assert.match((await cli("--help")).stdout, /\nAliases:\n {2}--off\n {2}--on\n {2}aircon power --on\n {2}fan --speed <auto\|low\|medium\|high>\n {2}fan auto\n {2}fan high\n {2}follow \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}status\n\nOutput:\n/);
 
   const follow = remote("follow");
   context.after(() => follow.kill());

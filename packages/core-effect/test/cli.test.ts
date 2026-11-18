@@ -169,7 +169,7 @@ describe("the command line of an application", { concurrency: true }, () => {
 
   test("the help lists the aliases, and <alias> --help gives the usage of the alias", async () => {
     const [help, sayHelp, helloHelp] = await Promise.all([cli("--help"), cli("say", "--help"), cli("--hello", "--help")]);
-    assert.match(help.stdout, /\nALIASES\n {2}--hello\n {2}broken-ticks \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}echoes '<json>' \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}fixed-note \[--loud\]\n {2}held-keys\n {2}notes '<json>'\n {2}notes add --text <string> \[--loud\]\n {2}notes loud --text <string>\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n {2}shout hello\n {2}ticks \[--gap <integer>\] \[--key <string>\] \[--cursor <string>\] \[--max-age-ms <integer>\]\n$/);
+    assert.match(help.stdout, /\nALIASES\n {2}--hello\n {2}broken-ticks \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}echoes '<json>' \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}fixed-note \[--loud\]\n {2}fixture \[--count <integer>\][^\n]*\n {2}held-keys\n {2}notes '<json>'\n {2}notes add --text <string> \[--loud\]\n {2}notes loud --text <string>\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n {2}shout hello\n {2}ticks \[--gap <integer>\] \[--key <string>\] \[--cursor <string>\] \[--max-age-ms <integer>\]\n$/);
     assert.doesNotMatch(help.stdout, /alias --hello/);
     assert.deepEqual(sayHelp, { code: 0, stdout: "Usage: fixture say --text <string>\n\nReturn the input text.\n", stderr: "" });
     assert.equal(helloHelp.stdout, "Usage: fixture --hello\n\nReturn the input text.\n");
@@ -260,9 +260,10 @@ test("the command line stops when it starts if an alias breaks a rule", () => {
     App.make({ targets: { cli: { bindings: ["cli"], options: { cli: { aliases } } } }, capabilities: [ping] });
   const options = { name: "probe", version: "0.0.0" };
   assert.throws(() => Cli.command(appOf({ list: { capability: "probe.ping" } }), options), /the alias list has the name of a command/);
-  assert.throws(() => Cli.command(appOf({ probe: { capability: "probe.ping" } }), options), /the alias probe has the name of the first word/);
+  assert.throws(() => Cli.command(appOf({ "probe ping": { capability: "probe.ping" } }), options), /the alias probe ping has the path of the command of a capability/);
   assert.throws(() => Cli.command(appOf({ gone: { capability: "probe.gone" } }), options), /the alias gone refers to probe.gone/);
   assert.doesNotThrow(() => Cli.command(appOf({ ping: { capability: "probe.ping" } }), options));
+  assert.doesNotThrow(() => Cli.command(appOf({ probe: { capability: "probe.ping" } }), options));
 });
 
 test("the command line stops when it starts if a flag alias has the name of a global flag", async () => {

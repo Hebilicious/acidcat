@@ -36,9 +36,9 @@ pub use output::{CliOutput, OutputDefault};
 pub use crate::facts_generated::exit;
 use crate::facts_generated::{
     ALIASES_NOT_OBJECT_MESSAGE, BAD_DEFAULT_MESSAGE, BAD_NAME_MESSAGE, BAD_TARGET_MESSAGE,
-    DEFAULT_HAS_RESERVED_FLAG_MESSAGE, FIRST_WORD_MESSAGE, FLAG_OF_DEFAULT_MESSAGE,
-    GENERIC_COMMANDS, GROUP_FIRST_WORD_MESSAGE, INPUT_NOT_OBJECT_MESSAGE, INTERRUPT_GRACE_MS,
-    NO_CLI_BINDING_MESSAGE, NO_PROPERTIES_MESSAGE, NOT_A_PROPERTY_MESSAGE, NOT_IN_VIEW_MESSAGE,
+    COMMAND_PATH_MESSAGE, DEFAULT_HAS_RESERVED_FLAG_MESSAGE, FLAG_OF_DEFAULT_MESSAGE,
+    GENERIC_COMMANDS, INPUT_NOT_OBJECT_MESSAGE, INTERRUPT_GRACE_MS, NO_CLI_BINDING_MESSAGE,
+    NO_PROPERTIES_MESSAGE, NOT_A_PROPERTY_MESSAGE, NOT_IN_VIEW_MESSAGE,
     RESERVED_FIRST_WORD_MESSAGE, RESERVED_NAME_MESSAGE, SETTINGS_NOT_OBJECT_MESSAGE,
     UNKNOWN_MEMBER_MESSAGE,
 };
@@ -556,6 +556,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
         .iter()
         .map(|id| (id.clone(), id.split('.').map(str::to_owned).collect()))
         .collect();
+    let paths: Vec<Vec<String>> = commands.iter().map(|(_, path)| path.clone()).collect();
     for (_, path) in &commands {
         if GENERIC_COMMANDS.contains(&path[0].as_str()) {
             return Err(filled(
@@ -858,13 +859,19 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 )
                 .await
             }
-            Some(_) if !matches!(alias_of_args(args, &aliases), AliasOfArgs::None) => {
-                let AliasOfArgs::Alias { alias, words } = alias_of_args(args, &aliases) else {
-                    return Err(usage_error(
-                        format!("There is no command {}.", args[..2].join(" ")),
-                        exit::UNKNOWN_CAPABILITY,
-                    ));
-                };
+            Some(_)
+                if let AliasOfArgs::UnknownCommand(unknown) =
+                    alias_of_args(args, &aliases, &paths) =>
+            {
+                Err(usage_error(
+                    format!("There is no command {}.", unknown.join(" ")),
+                    exit::UNKNOWN_CAPABILITY,
+                ))
+            }
+            Some(_)
+                if let AliasOfArgs::Alias { alias, words } =
+                    alias_of_args(args, &aliases, &paths) =>
+            {
                 run_alias(
                     &provider,
                     printer,
@@ -1510,10 +1517,7 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
     let types = object_at(view, "$defs");
     let capabilities = object_at(view, "capabilities");
     let events = object_at(view, "events");
-    let first_words: Vec<&str> = capabilities
-        .keys()
-        .filter_map(|id| id.split('.').next())
-        .collect();
+    let paths: Vec<String> = capabilities.keys().map(|id| id.replace('.', " ")).collect();
     let mut names: Vec<&String> = members.keys().collect();
     names.sort();
     let aliases = &mut result.aliases;
@@ -1545,13 +1549,8 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
             problem(template, &[]);
             continue;
         }
-        if first_words.contains(&leading) {
-            let template = if two_words {
-                GROUP_FIRST_WORD_MESSAGE
-            } else {
-                FIRST_WORD_MESSAGE
-            };
-            problem(template, &[]);
+        if paths.contains(name) {
+            problem(COMMAND_PATH_MESSAGE, &[]);
             continue;
         }
         let value = &members[name];
@@ -1734,31 +1733,48 @@ fn leading_word(name: &str) -> &str {
 
 enum AliasOfArgs<'a> {
     Alias { alias: &'a Alias, words: usize },
-    UnknownCommand,
+    UnknownCommand(Vec<String>),
     None,
 }
 
-fn alias_of_args<'a>(args: &[String], aliases: &'a [Alias]) -> AliasOfArgs<'a> {
+fn alias_of_args<'a>(
+    args: &[String],
+    aliases: &'a [Alias],
+    paths: &[Vec<String>],
+) -> AliasOfArgs<'a> {
+    let starts_args = |words: &[String]| {
+        words.len() <= args.len() && words.iter().zip(args).all(|(word, arg)| word == arg)
+    };
+    if paths.iter().any(|path| starts_args(path)) {
+        return AliasOfArgs::None;
+    }
     let Some(first) = args.first() else {
         return AliasOfArgs::None;
     };
-    let second = args.get(1);
-    if let Some(alias) = second.and_then(|second| {
+    let two_words = args.get(1).and_then(|second| {
         let name = format!("{first} {second}");
         aliases.iter().find(|alias| alias.name == name)
-    }) {
-        return AliasOfArgs::Alias { alias, words: 2 };
-    }
-    let Some(alias) = aliases.iter().find(|alias| alias.name == *first) else {
+    });
+    let Some(alias) = two_words.or_else(|| aliases.iter().find(|alias| alias.name == *first))
+    else {
         return AliasOfArgs::None;
     };
-    let group = aliases
+    let words: Vec<String> = alias.name.split(' ').map(str::to_owned).collect();
+    let prefix = paths
         .iter()
-        .any(|other| other.name.starts_with(&format!("{first} ")));
-    if group && second.is_some_and(|second| is_word(second)) {
-        AliasOfArgs::UnknownCommand
-    } else {
-        AliasOfArgs::Alias { alias, words: 1 }
+        .any(|path| path.len() > words.len() && path.starts_with(&words));
+    let group = two_words.is_none()
+        && aliases
+            .iter()
+            .any(|other| other.name.starts_with(&format!("{first} ")));
+    match args.get(words.len()) {
+        Some(next) if (prefix || group) && is_word(next) => {
+            AliasOfArgs::UnknownCommand([words, vec![next.clone()]].concat())
+        }
+        _ => AliasOfArgs::Alias {
+            alias,
+            words: words.len(),
+        },
     }
 }
 

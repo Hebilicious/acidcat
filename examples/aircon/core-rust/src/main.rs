@@ -350,6 +350,7 @@ pub fn aircon() -> (Arc<Application<Unit>>, CliOutput) {
                 .alias_default("status", &status_get)
                 .alias_with("--on", &power_set, Power { on: true })
                 .alias_with("--off", &power_set, Power { on: false })
+                .alias("aircon power", &power_set)
                 .alias("follow", &status_changed)
                 .alias("fan", &fan_set)
                 .alias_with(

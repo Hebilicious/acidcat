@@ -468,7 +468,7 @@ test("a command of the application must not have the name of another command", a
 
 test("the help lists the aliases, and <alias> --help gives the usage of the alias", async () => {
   const run = (...args: string[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options() }, ...args);
-  assert.match((await run("--help")).stdout, /\nAliases:\n {2}--hello\n {2}broken-ticks \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}echoes '<json>' \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}fixed-note \[--loud\]\n {2}held-keys\n {2}notes '<json>'\n {2}notes add --text <string> \[--loud\]\n {2}notes loud --text <string>\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n {2}shout hello\n {2}ticks \[--gap <integer>\] \[--key <string>\] \[--cursor <string>\] \[--max-age-ms <integer>\]$/);
+  assert.match((await run("--help")).stdout, /\nAliases:\n {2}--hello\n {2}broken-ticks \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}echoes '<json>' \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}fixed-note \[--loud\]\n {2}fixture \[--count <integer>\][^\n]*\n {2}held-keys\n {2}notes '<json>'\n {2}notes add --text <string> \[--loud\]\n {2}notes loud --text <string>\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n {2}shout hello\n {2}ticks \[--gap <integer>\] \[--key <string>\] \[--cursor <string>\] \[--max-age-ms <integer>\]$/);
   assert.equal((await run("say", "--help")).stdout, "Usage: fixture say --text <string>\n\nReturn the input text.");
 });
 
@@ -510,9 +510,10 @@ test("the command line stops when it starts if an alias breaks a rule", async ()
     });
   const run = (aliases: { readonly [name: string]: unknown }) => commandLine(app(aliases), { name: "probe", version: "0.0.0", ...options() }, "list");
   await assert.rejects(run({ list: { capability: "probe.ping" } }), /the alias list has the name of a command/);
-  await assert.rejects(run({ probe: { capability: "probe.ping" } }), /the alias probe has the name of the first word/);
+  await assert.rejects(run({ "probe ping": { capability: "probe.ping" } }), /the alias probe ping has the path of the command of a capability/);
   await assert.rejects(run({ gone: { capability: "probe.gone" } }), /the alias gone refers to probe.gone/);
   assert.equal((await run({ ping: { capability: "probe.ping" } })).code, 0);
+  assert.equal((await run({ probe: { capability: "probe.ping" } })).code, 0);
 });
 
 test("cliAlias writes options.cli, with one default command alias at most", () => {

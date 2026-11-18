@@ -478,6 +478,8 @@ node cli.ts fan --speed low
 
 The command aliases with the same first word are a group, such as `fan` and `fan high`. The first two arguments that are the name of a two-word alias run it. If not, the one-word alias runs with the other arguments. A second argument that is a word and not the second word of an alias of the group, such as `node cli.ts fan medium`, is an unknown command with exit code 2.
 
+The name of a command alias can be a shared prefix, but not the path of a command. The alias is then the prefix default of that prefix: `"aircon power": App.alias(powerSet)` makes `node cli.ts aircon power --on` call `aircon.power.set`, and `node cli.ts aircon power set --on` stays the command of `aircon.power.set`. A word after a prefix default that names no command, such as `node cli.ts aircon power nope`, is an unknown command with exit code 2.
+
 The properties of the fixed input are not flags of the alias. The other properties are flags, with the rules above. An alias of an event subscribes as `watch` does, with the same exit codes, and also takes `--cursor` and `--max-age-ms`. `list` gives the usage of the aliases of each capability and each event in `aliases`, and the help lists them. If an alias breaks a rule, `Cli.command` throws, so the program stops with an error when it starts. A command of the application must not have the first word of a command alias.
 
 With no arguments, the program runs the default alias. If the first argument starts with `--`, and it is not `--help`, `--version`, a flag alias or a global flag, the program runs the default alias with all the arguments as its flags. `Cli.runCommand` stops with a defect when it starts if a flag of the default alias has the name of a global flag of `effect/cli` or of the application.

@@ -239,23 +239,28 @@ export const CLI_ALIAS_NAME = new RegExp(`^(--${CLI_WORD}|${CLI_WORD}( ${CLI_WOR
 const CLI_WORD_ONLY = new RegExp(`^${CLI_WORD}$`);
 
 /**
- * The alias that the first arguments name, with the arguments after its name (spec/bindings/cli.md#aliases), or
- * `"unknown-command"` when the first argument is a one-word alias, the second argument is a word, and no two-word alias
- * has these two words.
+ * The alias that the first arguments name, with the arguments after its name (spec/bindings/cli.md#aliases), or the
+ * words of an unknown command. `paths` are the paths of the commands of the capabilities. The arguments that start with
+ * the path of a command name no alias. A word after an alias is an unknown command when the alias is a shared prefix,
+ * or when it is a one-word alias whose group has two-word aliases.
  */
 export function cliAliasOfArgs<Alias extends { readonly name: string }>(
   aliases: readonly Alias[],
+  paths: readonly (readonly string[])[],
   args: readonly string[],
-): { readonly alias: Alias; readonly rest: readonly string[] } | "unknown-command" | undefined {
+): { readonly alias: Alias; readonly rest: readonly string[] } | { readonly unknownCommand: readonly string[] } | undefined {
+  const startsWith = (words: readonly string[]) => words.length <= args.length && words.every((word, index) => args[index] === word);
+  if (paths.some(startsWith)) return undefined;
   const [first, second] = args;
-  if (first === undefined) return undefined;
   const twoWords = second === undefined ? undefined : aliases.find(({ name }) => name === `${first} ${second}`);
-  if (twoWords !== undefined) return { alias: twoWords, rest: args.slice(2) };
-  const oneWord = aliases.find(({ name }) => name === first);
-  if (oneWord === undefined) return undefined;
-  const group = aliases.some(({ name }) => name.startsWith(`${first} `));
-  if (group && second !== undefined && CLI_WORD_ONLY.test(second)) return "unknown-command";
-  return { alias: oneWord, rest: args.slice(1) };
+  const named = twoWords ?? aliases.find(({ name }) => name === first);
+  if (named === undefined) return undefined;
+  const words = named.name.split(" ");
+  const next = args[words.length];
+  const prefix = paths.some((path) => path.length > words.length && words.every((word, index) => path[index] === word));
+  const group = twoWords === undefined && aliases.some(({ name }) => name.startsWith(`${first} `));
+  if ((prefix || group) && next !== undefined && CLI_WORD_ONLY.test(next)) return { unknownCommand: [...words, next] };
+  return { alias: named, rest: args.slice(words.length) };
 }
 
 export interface CliAlias {
@@ -294,7 +299,7 @@ export function cliAliases(catalog: CatalogDocument, target: string): CliAliases
     Object.entries(entries ?? {}).filter(([, entry]) => (entry.audience ?? []).includes(target));
   const capabilities = new Map(inView(catalog.capabilities).map(([id, capability]) => [id, capability.input]));
   const events = new Map(inView(catalog.events).map(([id, event]) => [id, event.input]));
-  const firstWords = new Set([...capabilities.keys()].map((id) => commandPath(id)[0]));
+  const paths = new Set([...capabilities.keys()].map((id) => commandPath(id).join(" ")));
   const aliases: CliAlias[] = [];
   for (const name of Object.keys(members).sort(byCodePoint)) {
     const problem = (template: string, parts: { readonly [part: string]: string } = {}) => errors.push(filled(template, { where, name, ...parts }));
@@ -308,8 +313,8 @@ export function cliAliases(catalog: CatalogDocument, target: string): CliAliases
       problem(second === undefined ? ALIAS_MESSAGES.reservedName : ALIAS_MESSAGES.reservedFirstWord);
       continue;
     }
-    if (firstWords.has(leading)) {
-      problem(second === undefined ? ALIAS_MESSAGES.firstWord : ALIAS_MESSAGES.groupFirstWord);
+    if (paths.has(name)) {
+      problem(ALIAS_MESSAGES.commandPath);
       continue;
     }
     if (!isJsonObject(value) || typeof (value.capability ?? value.event) !== "string" || (value.capability !== undefined && value.event !== undefined)) {

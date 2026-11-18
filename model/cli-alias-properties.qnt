@@ -7,6 +7,7 @@ module cliAliasNames {
     ["l", "i", "s", "t", " ", "t"],
     ["w", "a", "t", "c", "h"],
     ["p", " ", "t"],
+    ["p", " ", "r"],
     ["p"],
     ["s", " ", " ", "t"],
     [" ", "s"],
@@ -54,7 +55,7 @@ module cliAliasNames {
         spaces(name) <= (if (startsWithDoubleDash(name)) 0 else 1),
         not(CLI_GENERIC_COMMANDS.includes(leading)),
         not(PROGRAM_FLAGS.includes(leading)),
-        leading != firstWord(ID),
+        name != pathOf(ID),
       }
     }
   }

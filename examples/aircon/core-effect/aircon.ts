@@ -209,6 +209,7 @@ export const aircon = App.make({
           status: App.aliasDefault(statusGet),
           "--on": App.alias(powerSet, { on: true }),
           "--off": App.alias(powerSet, { on: false }),
+          "aircon power": App.alias(powerSet),
           follow: App.alias(statusChanged),
           fan: App.alias(fanSet),
           "fan auto": App.alias(fanSet, { speed: "auto" }),

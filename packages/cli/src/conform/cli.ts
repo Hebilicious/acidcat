@@ -36,7 +36,10 @@ const EVENT_USAGES: { readonly [id: string]: string } = {
 
 const ALIAS_USAGES: { readonly [id: string]: readonly string[] } = {
   "fixture.echo": ["--hello", "say --text <string>", "shout hello"],
-  "fixture.flags": ["quick [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]"],
+  "fixture.flags": [
+    "fixture [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]",
+    "quick [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]",
+  ],
   "fixture.held": ["held-keys"],
   "fixture.note": ["fixed-note [--loud]", "notes add --text <string> [--loud]", "notes loud --text <string>"],
   "fixture.raw": ["notes '<json>'", "raw '<json>'"],
@@ -120,8 +123,9 @@ export async function checkCli(command: readonly string[], options: { readonly d
     expect(/"kind":"internal"/.test(result.stderr), "standard error must contain the call failure");
   });
   for (const [name, args, code] of [
-    ["an unknown command has exit code 2", ["fixture", "nothing"], 2],
-    ["a shared prefix alone has exit code 2", ["fixture"], 2],
+    ["an unknown command has exit code 2", ["nothing"], 2],
+    ["a shared prefix alone has exit code 2", ["fixture", "switch"], 2],
+    ["an unknown word after an alias that is the default of a shared prefix has exit code 2", ["fixture", "nope"], 2],
     ["the first word of two-word aliases alone, with no one-word alias, has exit code 2", ["shout"], 2],
     ["an unknown second word after the first word of two-word aliases has exit code 2", ["shout", "nope"], 2],
     ["an unknown second word after a one-word alias with two-word aliases has exit code 2", ["notes", "nope"], 2],
@@ -304,6 +308,13 @@ async function checkAliases(checks: Checks, command: readonly string[]): Promise
   await checks.run("a one-word alias runs when the second argument is not the second word of a two-word alias", ALIASES, async (signal) => {
     expectOutput(await run(signal, "notes"), {});
     expectOutput(await run(signal, "notes", '{"a":1}'), { a: 1 });
+  });
+  await checks.run("an alias that is the default of a shared prefix runs with the prefix alone, and with flags", ALIASES, async (signal) => {
+    expectOutput(await run(signal, "fixture"), { mode: "slow" });
+    expectOutput(await run(signal, "fixture", "--count", "2"), { mode: "slow", count: 2 });
+  });
+  await checks.run("a command under a shared prefix with a default alias keeps its path", ALIASES, async (signal) => {
+    expectOutput(await run(signal, "fixture", "echo", "--text", "hi"), { text: "hi" });
   });
   await checks.run("a two-word alias with --help writes its usage", ALIASES, async (signal) => {
     const result = await run(signal, "notes", "add", "--help");

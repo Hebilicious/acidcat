@@ -110,8 +110,8 @@ const rejected: Readonly<Record<string, readonly string[]>> = {
     "target shop: the alias list has the name of a command or a flag of the command line",
     "target shop: the first word of the alias list x is the name of a command of the command line",
     "target shop: the alias odd has the unknown member extra",
-    "target shop: the first word of the alias shop x is the first word of the command of a capability",
   ],
+  "cli-alias-command-path.json": ["target cli: the alias inbox adopt has the path of the command of a capability"],
   "cli-alias-default.json": [
     "target shop: the alias orders refers to shop.order.gone, which is not an event in the view of the target",
     "target shop: options.cli.default must be the name of a command alias",

@@ -235,6 +235,7 @@ export const aircon = defineApp<Context>({
           status: cliAliasDefault(statusGet),
           "--on": cliAlias(powerSet, { on: true }),
           "--off": cliAlias(powerSet, { on: false }),
+          "aircon power": cliAlias(powerSet),
           follow: cliAlias(statusChanged),
           fan: cliAlias(fanSet),
           "fan auto": cliAlias(fanSet, { speed: "auto" }),

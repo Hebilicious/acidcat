@@ -86,7 +86,7 @@ fn the_help_lists_the_aliases_and_an_alias_with_help_gives_its_usage() {
     let (_, help) = fixture_cli(&["--help"]);
     assert!(
         help.ends_with(
-            "\nAliases:\n  --hello\n  broken-ticks [--cursor <string>] [--max-age-ms <integer>]\n  echoes '<json>' [--cursor <string>] [--max-age-ms <integer>]\n  fixed-note [--loud]\n  held-keys\n  notes '<json>'\n  notes add --text <string> [--loud]\n  notes loud --text <string>\n  quick [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]\n  raw '<json>'\n  say --text <string>\n  shout hello\n  ticks [--gap <integer>] [--key <string>] [--cursor <string>] [--max-age-ms <integer>]\n"
+            "\nAliases:\n  --hello\n  broken-ticks [--cursor <string>] [--max-age-ms <integer>]\n  echoes '<json>' [--cursor <string>] [--max-age-ms <integer>]\n  fixed-note [--loud]\n  fixture [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]\n  held-keys\n  notes '<json>'\n  notes add --text <string> [--loud]\n  notes loud --text <string>\n  quick [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]\n  raw '<json>'\n  say --text <string>\n  shout hello\n  ticks [--gap <integer>] [--key <string>] [--cursor <string>] [--max-age-ms <integer>]\n"
         ),
         "{help}"
     );
@@ -124,9 +124,20 @@ async fn the_command_line_stops_when_it_starts_if_an_alias_breaks_a_rule() {
                 .to_owned()
         )
     );
+    assert_eq!(
+        start(json!({ "probe ping": { "capability": "probe.ping" } })).await,
+        Err(
+            "target cli: the alias probe ping has the path of the command of a capability"
+                .to_owned()
+        )
+    );
     let (code, text) = start(json!({ "ping": { "capability": "probe.ping", "x-note": "Ping." } }))
         .await
         .expect("the aliases follow the rules");
+    assert_eq!(code, exit::VALUE, "{text}");
+    let (code, text) = start(json!({ "probe": { "capability": "probe.ping" } }))
+        .await
+        .expect("an alias can be the default of a shared prefix");
     assert_eq!(code, exit::VALUE, "{text}");
 }
 
