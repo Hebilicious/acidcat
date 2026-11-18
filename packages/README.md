@@ -66,6 +66,7 @@ To release, merge the release pull request. release-please then tags each releas
 
 release-please reads the commits on `main` (titles of the form `type(scope): subject`) and keeps one release pull request open.
 
+- release-please reads each squash commit with `@conventional-commits/parser`. When the parser fails, release-please skips the commit without a warning, and no package gets a release for it. The squash commit is the pull request title and its body, which GitHub wraps at 72 columns. The parser fails, for example, on a line that starts with `f(g(x))`. The `semantic` check parses the squash commit with the same parser version (`scripts/check-commit-message.ts`), and fails when the parser fails. To fix it, change the line in the body, or put the commit in a `BEGIN_COMMIT_OVERRIDE` … `END_COMMIT_OVERRIDE` block in the body.
 - A package gets a release when a commit of type `feat`, `fix`, `perf`, `refactor` or `revert`, or a breaking change (`!`), changes a file in its directory. Other types, and files outside the packages, give no release. `changelog-sections` in `release-please-config.json` sets this rule for each package.
 - Before 1.0, `feat` and a breaking change (`!`) increase the minor version. The other types increase the patch version.
 - The pull request changes the versions in the package files and each package's `CHANGELOG.md`, which release-please writes.
