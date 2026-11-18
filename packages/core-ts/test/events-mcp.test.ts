@@ -111,7 +111,7 @@ test("MCP through HTTP: a client with the initialize handshake gets no events", 
   assert.equal(member(await post({ id: 2, method: "events/list", params: {} }), "error")["code"], -32601);
 });
 
-function stdio(sensors = new Sensors()) {
+function stdio(sensors = new Sensors(), heartbeatMs?: number) {
   const queue: string[] = [];
   let ended = false;
   let wake = () => {};
@@ -127,7 +127,7 @@ function stdio(sensors = new Sensors()) {
     }
   }
   const written: JsonObject[] = [];
-  const served = runMcpStdio(sensorsApp, { name: "sensors", version: "0.0.0", ...sensorOptions(sensors) }, {
+  const served = runMcpStdio(sensorsApp, { name: "sensors", version: "0.0.0", ...sensorOptions(sensors), ...(heartbeatMs === undefined ? {} : { heartbeatMs }) }, {
     input: input(),
     write: (text) => written.push(objectOf(text)),
   });
@@ -156,6 +156,19 @@ test("MCP through stdio: the end of standard input completes each open stream, a
   await io.served;
   assert.deepEqual(io.of(1).at(-1), { jsonrpc: "2.0", id: 1, result: { resultType: "complete", _meta: { ...SERVER_INFO, ...sub(1) } } });
   assert.equal(sensors.listeners, 0);
+});
+
+test("MCP through stdio: an idle stream gets heartbeats", async () => {
+  const io = stdio(new Sensors(), 20);
+  io.send({ id: 1, method: "events/stream", params: { name: "sensor.reading.changed", _meta: META } });
+  const heartbeat = () => io.of(1).find((message) => message["method"] === "notifications/events/heartbeat");
+  try {
+    await until(() => heartbeat() !== undefined);
+    assert.deepEqual(heartbeat(), { jsonrpc: "2.0", method: "notifications/events/heartbeat", params: { cursor: null, _meta: sub(1) } });
+  } finally {
+    io.end();
+    await io.served;
+  }
 });
 
 test("MCP through stdio: a request with no _meta is -32601, and initialize gives no events extension", async () => {

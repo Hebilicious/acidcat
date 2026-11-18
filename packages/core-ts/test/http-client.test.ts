@@ -8,6 +8,7 @@ import { serve } from "../src/node.ts";
 import type { WebHandler } from "../src/node.ts";
 import { fixture, options } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
+import { until } from "./until.ts";
 
 const SECRET = "Bearer s3cr3t-t0k3n";
 
@@ -98,31 +99,45 @@ describe("the command line that calls a server", () => {
     assert.partialDeepStrictEqual(entry("fixture.refuse"), { available: false, reason: "The server does not serve this capability." });
   });
 
-  test("an interrupt during list is cancelled, with exit code 130, and closes the request", async (context) => {
-    const interrupt = new AbortController();
-    const closed = Promise.withResolvers<void>();
+  test("an interrupt during list or a call is cancelled, with exit code 130, and closes the request", async (context) => {
+    for (const args of [["list"], ["fixture", "echo", "--text", "hi"]]) {
+      const interrupt = new AbortController();
+      let closed = false;
+      const url = await served(
+        (request) =>
+          new Promise<Response>(() => {
+            request.signal.addEventListener("abort", () => (closed = true));
+            interrupt.abort();
+          }),
+        context,
+      );
+      const run = await remoteCli(httpClient(url), args, interrupt.signal);
+      assert.equal(run.code, 130, args.join(" "));
+      assert.equal(kindOf(run.stderr), "cancelled");
+      assert.equal(run.stdout, "");
+      await until(() => closed);
+    }
+  });
+
+  test("watch writes each occurrence, then ends with the call failure of an error message", async (context) => {
+    const occurrence = { eventId: "1", name: "fixture.ticks", timestamp: "2026-01-01T00:00:00.000Z", data: { n: 1 }, cursor: "1" };
     const url = await served(
-      (request) =>
-        new Promise<Response>(() => {
-          request.signal.addEventListener("abort", () => closed.resolve());
-          interrupt.abort();
-        }),
+      () => new Response(`event: next\ndata: ${JSON.stringify(occurrence)}\n\nevent: error\ndata: {"kind":"internal","message":"The event failed."}\n\n`, { headers: { "Content-Type": "text/event-stream" } }),
       context,
     );
-    const run = await remoteCli(httpClient(url), ["list"], interrupt.signal);
-    assert.equal(run.code, 130);
-    assert.equal(kindOf(run.stderr), "cancelled");
-    assert.equal(run.stdout, "");
-    await closed.promise;
+    const run = await remoteCli(httpClient(url), ["watch", "fixture.ticks", "--count", "1"]);
+    assert.equal(run.code, 5);
+    assert.deepEqual(JSON.parse(run.stdout), occurrence);
+    assert.deepEqual(JSON.parse(run.stderr), { kind: "internal", message: "The event failed." });
   });
 
   test("an interrupt before the server answers a subscription ends watch with 130, and writes nothing", async (context) => {
     const interrupt = new AbortController();
-    const closed = Promise.withResolvers<void>();
+    let closed = false;
     const url = await served(
       (request) =>
         new Promise<Response>(() => {
-          request.signal.addEventListener("abort", () => closed.resolve());
+          request.signal.addEventListener("abort", () => (closed = true));
           interrupt.abort();
         }),
       context,
@@ -131,7 +146,7 @@ describe("the command line that calls a server", () => {
     assert.equal(run.code, 130);
     assert.equal(run.stderr, "");
     assert.equal(run.stdout, "");
-    await closed.promise;
+    await until(() => closed);
   });
 
   test("a cursor that cannot be a header value is invalid-input, with exit code 3, and sends no request", async (context) => {

@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { check } from "@acid-cat/cli";
 import { z } from "zod";
 
-import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, ok, renderCatalog } from "../src/index.ts";
+import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, ok, renderCatalog, runCli } from "../src/index.ts";
 import type { Result } from "../src/index.ts";
 import { boil, fill, Kettle, kettle, statusGet, toJsonSchema, warmSet } from "./kettle.ts";
 import type { Status } from "./kettle.ts";
@@ -208,6 +208,13 @@ test("await using closes the session at the end of its block", async () => {
     assert.equal(signal.aborted, false);
   }
   assert.equal(signal.aborted, true);
+});
+
+test("the command line resolves a flag through a named type", async () => {
+  const context = { kettle: filledKettle() };
+  const code = await runCli(kettle, { name: "kettle", version: "0.1.0", context, toJsonSchema }, ["kettle", "warm", "set", "--drink", "baby-milk"], { stdout: () => undefined, stderr: () => undefined });
+  assert.equal(code, 0);
+  assert.equal(context.kettle.status.keepWarm, "baby-milk");
 });
 
 test("the functions of a session work when code takes them off the session", async () => {

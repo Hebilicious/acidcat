@@ -11,7 +11,9 @@ import type { WebhookOptions } from "../src/node.ts";
 import { sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
 import { startReceiver, testCertificate } from "./webhook-receiver.ts";
 import type { Received } from "./webhook-receiver.ts";
-import { until } from "./until.ts";
+import { until as untilWithin } from "./until.ts";
+
+const until = (condition: () => boolean | Promise<boolean>) => untilWithin(condition, 2000);
 
 const VERSION = "2026-07-28";
 const META = { "io.modelcontextprotocol/protocolVersion": VERSION };
@@ -99,6 +101,20 @@ test("webhook: a new subscription has no watermark and a delivery status with no
   const result = member(await subscribe({ arguments: { room: "hall" } }), "result");
   assert.equal(result["cursor"], null);
   assert.deepEqual(result["deliveryStatus"], { active: true, lastDeliveryAt: null, lastError: null });
+  await handler.close();
+});
+
+test("webhook: a truncated occurrence before the first delivery comes after a gap message with no cursor", async () => {
+  const { handler, subscribe, sensors } = server();
+  const old = new Date(Date.now() - 60_000).toISOString();
+  sensors.emit("hall", 1, old);
+  sensors.emit("hall", 2, old);
+  sensors.emit("hall", 3);
+  assert.ok(isJsonObject((await subscribe({ cursor: "0", maxAgeMs: 1000 }))["result"]));
+  await until(() => receiver.deliveries().length === 2);
+  const [gap, occurrence] = receiver.deliveries();
+  assert.deepEqual(gap?.body, { type: "gap", cursor: null });
+  assert.equal(occurrence?.body["cursor"], "2");
   await handler.close();
 });
 
