@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.15.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.14.0...@acid-cat/core-ts@0.15.0) (2026-11-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **conform:** keep each lease and webhook subscription alive for the whole check, and remove duplicate conform checks ([#197](https://github.com/Hebilicious/acidcat/issues/197))
+
+### Bug Fixes
+
+* **cli:** start the independent processes of the conformance checks of the command line at the same time ([#192](https://github.com/Hebilicious/acidcat/issues/192)) ([ad1503c](https://github.com/Hebilicious/acidcat/commit/ad1503cc15ee4e5068fe045d08425b525d04b979))
+* **conform:** keep each lease and webhook subscription alive for the whole check, and remove duplicate conform checks ([#197](https://github.com/Hebilicious/acidcat/issues/197)) ([fc02fe3](https://github.com/Hebilicious/acidcat/commit/fc02fe31483b97e0d4b76972e6f57f786e3ee78c))
+* **core-ts:** treat a path that is not under base as an unknown route, and audit the tests ([#198](https://github.com/Hebilicious/acidcat/issues/198)) ([8536b17](https://github.com/Hebilicious/acidcat/commit/8536b17021134a238701b77973d30fa3bc9b9a2e))
+
 ## [0.14.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.13.1...@acid-cat/core-ts@0.14.0) (2026-11-18)
 
 

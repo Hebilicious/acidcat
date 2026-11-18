@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.4.0...crates-core/v0.5.0) (2026-11-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **conform:** keep each lease and webhook subscription alive for the whole check, and remove duplicate conform checks ([#197](https://github.com/Hebilicious/acidcat/issues/197))
+
+### Bug Fixes
+
+* **catalog:** write integers above 2^53 as JSON.stringify writes them ([d1dea9d](https://github.com/Hebilicious/acidcat/commit/d1dea9de906ea20f485b1f7c94f00195f9171db0))
+* **cli:** start the independent processes of the conformance checks of the command line at the same time ([#192](https://github.com/Hebilicious/acidcat/issues/192)) ([ad1503c](https://github.com/Hebilicious/acidcat/commit/ad1503cc15ee4e5068fe045d08425b525d04b979))
+* **conform:** keep each lease and webhook subscription alive for the whole check, and remove duplicate conform checks ([#197](https://github.com/Hebilicious/acidcat/issues/197)) ([fc02fe3](https://github.com/Hebilicious/acidcat/commit/fc02fe31483b97e0d4b76972e6f57f786e3ee78c))
+
 ## [0.4.0](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.3.1...crates-core/v0.4.0) (2026-11-18)
 
 

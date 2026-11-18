@@ -7,7 +7,7 @@ The AcidCat catalog module for [Pkl](https://pkl-lang.org), published as the Pkl
 <!-- x-release-please-start-version -->
 
 ```pkl
-amends "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@0.3.0#/Catalog.pkl"
+amends "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@0.3.1#/Catalog.pkl"
 
 targets {
   ["panel"] { bindings { "typescript" } }
