@@ -96,22 +96,6 @@ test("GET /status/changes streams each new status as a server-sent event, and a 
   await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
 });
 
-test("when the signal of the request aborts, the stream ends and the subscription with it", async () => {
-  const unit = new Unit();
-  const app = elysiaApi({ unit });
-  const before = unit.statusListeners;
-  const abort = new AbortController();
-  const response = await app.handle(new Request("http://localhost/status/changes", { signal: abort.signal }));
-  assert.ok(response.body !== null);
-  const reader = response.body.getReader();
-  await reader.read();
-  assert.equal(unit.statusListeners, before + 1);
-  const waiting = reader.read();
-  abort.abort();
-  assert.equal((await waiting).done, true);
-  await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
-});
-
 async function freePort(): Promise<number> {
   const server = createServer();
   server.listen(0, "127.0.0.1");

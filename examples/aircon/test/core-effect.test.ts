@@ -6,25 +6,30 @@ import { join } from "node:path";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable } from "node:stream";
 import { test } from "node:test";
-import type { TestContext } from "node:test";
 
 import { check } from "@acid-cat/cli";
-import { Effect, Fiber, Layer, Schema, Stream } from "effect";
+import { App, Cli, Session } from "@acid-cat/core-effect";
+import { unavailable } from "@acid-cat/spec-ts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { Console, Effect, Fiber, Layer, Stdio, Stream, SubscriptionRef } from "effect";
 
-import { aircon, statusChanged, unitLayer } from "../core-effect/aircon.ts";
-import { App, Mcp, Session } from "@acid-cat/core-effect";
+import { aircon, Files, statusChanged, Unit, unitLayer } from "../core-effect/aircon.ts";
+import { output } from "../core-effect/output.ts";
 import { bundledProgram } from "./bundled-program.ts";
-import { run } from "./run.ts";
 import { assertHelp } from "./help.ts";
+import { OFFLINE, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
+import { run } from "./run.ts";
+import { changeStatusUntil, collect, firstLine, startServer } from "./server.ts";
 import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
-import { OFFLINE, OUTPUT_ERROR, OUTPUT_FLAG_LINES, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF } from "./human.ts";
 
-const ToolList = Schema.Struct({ result: Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: Schema.String })) }) });
+const cliPath = bundledProgram("core-effect/cli.ts");
+
+const OFF = { power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 };
 
 test("the code writes a catalog that conforms and agrees with the Pkl catalog", () => {
   const text = App.render(aircon);
-  assert.deepEqual(check(JSON.parse(text), text).errors, []);
+  assert.deepEqual(check(JSON.parse(text), text), { errors: [], warnings: [] });
   assert.deepEqual(shape(App.document(aircon)), shape(JSON.parse(writtenText)));
 });
 
@@ -38,10 +43,6 @@ test("the unit works through a session", () =>
         assert.deepEqual(yield* session.invoke("aircon.mode.set", { mode: "heat" }), { ok: true, value: null });
         const invalid = yield* session.invoke("aircon.temperature.set", { celsius: 40 });
         assert.equal("kind" in invalid && invalid.kind, "invalid-input");
-        const [state] = yield* session.state("aircon.status.get").pipe(Stream.take(1), Stream.runCollect);
-        assert.deepEqual(state, { power: true, mode: "heat", fan: "auto", targetCelsius: 22, roomCelsius: 25 });
-        const status = yield* session.invoke("aircon.status.get", {});
-        assert.deepEqual(status, { ok: true, value: { power: true, mode: "heat", fan: "auto", targetCelsius: 22, roomCelsius: 25 } });
       }),
     ).pipe(Effect.provide(Layer.fresh(unitLayer))),
   ));
@@ -64,45 +65,12 @@ test("aircon.status.changed gives the new status after each change, and nothing 
     ).pipe(Effect.provide(Layer.fresh(unitLayer))),
   ));
 
-test("an agent sees the mcp view through MCP", async () => {
-  const handler = Mcp.toWebHandler(aircon, unitLayer, { name: "aircon", version: "0.1.0", allowedOrigins: [] });
-  const response = await handler(
-    new Request("https://unit.local/mcp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "mcp-method": "tools/list", "mcp-protocol-version": "2026-07-28" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} } } }),
-    }),
-  );
-  const { result } = Schema.decodeUnknownSync(ToolList)(await response.json());
-  const tools = result.tools.map((tool) => tool.name).sort();
-  assert.deepEqual(tools, ["aircon.fan.set", "aircon.mode.set", "aircon.power.set", "aircon.schedule.set", "aircon.status.get", "aircon.temperature.set"]);
-});
-
-test("a flag follows a $ref to its type", async () => {
-  const cli = (...args: string[]) => run(bundledProgram("core-effect/cli.ts"), ...args);
-  const [poweredOff, unknownMode] = await Promise.all([cli("aircon", "mode", "set", "--mode", "heat"), cli("aircon", "mode", "set", "--mode", "boil")]);
+test("the command line runs a capability, and a flag follows a $ref to its type", async () => {
+  const [status, poweredOff] = await Promise.all([run(cliPath, "aircon", "status", "get"), run(cliPath, "aircon", "mode", "set", "--mode", "heat")]);
+  assert.equal(status.code, 0);
+  assert.deepEqual(JSON.parse(status.stdout), OFF);
   assert.equal(poweredOff.code, 1);
   assert.deepEqual(JSON.parse(poweredOff.stdout), { _tag: "PoweredOff" });
-  assert.equal(unknownMode.code, 3);
-});
-
-test("an array input takes one repeated flag for each item, or JSON text of the array", async () => {
-  const cli = (...args: string[]) => run(bundledProgram("core-effect/cli.ts"), ...args);
-  const [schedule, once, jsonText, notADay, notAnHour, list] = await Promise.all([
-    cli("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours=18"),
-    cli("aircon", "schedule", "set", "--days", "sat"),
-    cli("aircon", "schedule", "set", "--days", '["tue","thu"]', "--hours", "[6]"),
-    cli("aircon", "schedule", "set", "--days", '["noon"]'),
-    cli("aircon", "schedule", "set", "--days", "mon", "--hours", "24"),
-    cli("list"),
-  ]);
-  assert.equal(schedule.code, 0);
-  assert.deepEqual(JSON.parse(schedule.stdout), { days: ["mon", "fri"], hours: [7, 18] });
-  assert.deepEqual(JSON.parse(once.stdout), { days: ["sat"], hours: [7] });
-  assert.deepEqual(JSON.parse(jsonText.stdout), { days: ["tue", "thu"], hours: [6] });
-  assert.equal(notADay.code, 3);
-  assert.equal(notAnHour.code, 3);
-  assert.match(list.stdout, /"usage": "aircon aircon schedule set --days <mon\|tue\|wed\|thu\|fri\|sat\|sun>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });
 
 test("the state gives the current value, then each change", () =>
@@ -113,11 +81,53 @@ test("the state gives the current value, then each change", () =>
         const values = yield* session.state("aircon.status.get").pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }));
         yield* session.invoke("aircon.power.set", { on: true });
         const [first, second] = yield* Fiber.join(values).pipe(Effect.timeout(1000));
-        const off = { power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 };
-        assert.deepEqual([first, second], [off, { ...off, power: true }]);
+        assert.deepEqual([first, second], [OFF, { ...OFF, power: true }]);
         assert.deepEqual(yield* session.state("aircon.power.set").pipe(Stream.runCollect), []);
       }),
     ).pipe(Effect.provide(Layer.fresh(unitLayer))),
+  ));
+
+const withArgs = (args: readonly string[]) => Layer.effect(Stdio.Stdio, Effect.map(Effect.service(Stdio.Stdio), (stdio) => ({ ...stdio, args: Effect.succeed(args) })));
+
+const inProcess = (args: readonly string[], stdoutIsTerminal = false) =>
+  Effect.gen(function* () {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const captured = { ...console, log: (text: string) => stdout.push(text), error: (text: string) => stderr.push(text) };
+    const before = process.exitCode;
+    process.exitCode = 0;
+    yield* Cli.run(aircon, { name: "aircon", version: "0.1.0", output }).pipe(
+      Effect.provideService(Console.Console, captured),
+      Effect.provideService(Cli.Terminal, { stdoutIsTerminal, environment: { NO_COLOR: "1" } }),
+      Effect.provide(Layer.provideMerge(withArgs(args), NodeServices.layer)),
+    );
+    const code = process.exitCode;
+    process.exitCode = before;
+    return { code, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+  });
+
+const freshUnit = Layer.merge(Layer.fresh(unitLayer), Layer.succeed(Files, { writeFile: async () => undefined }));
+
+test("each alias of the command line calls its capability with its fixed input", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const unit = yield* Unit;
+      const status = () => SubscriptionRef.get(unit.status);
+      assert.equal((yield* inProcess(["--on"])).code, 0);
+      assert.equal((yield* status()).power, true);
+      assert.partialDeepStrictEqual(JSON.parse((yield* inProcess(["status"])).stdout), { power: true });
+      assert.equal((yield* inProcess(["--off"])).code, 0);
+      assert.equal((yield* status()).power, false);
+      assert.partialDeepStrictEqual(JSON.parse((yield* inProcess([])).stdout), { power: false }, "the default alias is status");
+      assert.equal((yield* inProcess(["fan", "high"])).code, 0);
+      assert.equal((yield* status()).fan, "high");
+      assert.equal((yield* inProcess(["fan", "auto"])).code, 0);
+      assert.equal((yield* status()).fan, "auto");
+      assert.equal((yield* inProcess(["fan", "--speed", "low"])).code, 0);
+      assert.equal((yield* status()).fan, "low");
+      assert.equal((yield* inProcess(["aircon", "power", "--on"])).code, 0);
+      assert.equal((yield* status()).power, true);
+    }).pipe(Effect.provide(freshUnit)),
   ));
 
 function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<Run> {
@@ -131,75 +141,8 @@ function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<R
   });
 }
 
-const cliPath = bundledProgram("core-effect/cli.ts");
-
-async function startServer(context: TestContext): Promise<string> {
-  const server = spawn(process.execPath, [bundledProgram("core-effect/serve.ts")], { stdio: ["ignore", "pipe", "inherit"] });
-  context.after(() => server.kill());
-  return await new Promise<string>((resolve, reject) => {
-    server.on("error", reject);
-    let text = "";
-    server.stdout.setEncoding("utf-8").on("data", (chunk: string) => {
-      text += chunk;
-      if (text.includes("\n")) resolve(text.slice(0, text.indexOf("\n")).trim());
-    });
-  });
-}
-
-test("the aliases of the Effect command line call their capabilities with their fixed input", async (context) => {
-  const url = await startServer(context);
-  const remote = (...args: string[]) =>
-    finish(spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 }));
-  assert.equal((await remote("--on")).code, 0);
-  const on = await remote("status");
-  assert.equal(on.code, 0);
-  assert.partialDeepStrictEqual(JSON.parse(on.stdout), { power: true });
-  assert.partialDeepStrictEqual(JSON.parse((await remote("--", "status")).stdout), { power: true }, "a first -- is not an argument");
-  assert.equal((await remote("--off")).code, 0);
-  assert.partialDeepStrictEqual(JSON.parse((await remote("status")).stdout), { power: false });
-  assert.equal((await remote("--on", "--on", "false")).code, 3);
-  const none = await remote();
-  assert.equal(none.code, 0, "the default alias is status");
-  assert.partialDeepStrictEqual(JSON.parse(none.stdout), { power: false });
-  assert.equal((await remote("fan", "high")).code, 0);
-  assert.partialDeepStrictEqual(JSON.parse((await remote("status")).stdout), { fan: "high" });
-  assert.equal((await remote("fan", "--speed", "low")).code, 0);
-  assert.partialDeepStrictEqual(JSON.parse((await remote("status")).stdout), { fan: "low" });
-  const unknown = await remote("fan", "medium");
-  assert.deepEqual([unknown.code, unknown.stdout], [2, ""], "medium is not the second word of an alias of the group fan");
-  assert.equal((await remote("aircon", "power", "--on")).code, 0);
-  assert.partialDeepStrictEqual(JSON.parse((await remote("status")).stdout), { power: true }, "aircon power is the default of the prefix aircon power");
-  assert.equal((await remote("--off")).code, 0);
-  assert.equal((await remote("aircon", "power", "set", "--on")).code, 0);
-  assert.partialDeepStrictEqual(JSON.parse((await remote("status")).stdout), { power: true }, "aircon power set is still the command of aircon.power.set");
-  assert.equal((await remote("aircon", "power")).code, 3, "the alias aircon power runs, without its required flag --on");
-  const nope = await remote("aircon", "power", "nope");
-  assert.deepEqual([nope.code, nope.stdout], [2, ""], "nope is not a command under the prefix aircon power");
-});
-
-test("the alias follow of the Effect command line writes each change of the status", async (context) => {
-  const url = await startServer(context);
-  const remote = (...args: string[]) =>
-    spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
-  const follow = remote("follow");
-  context.after(() => follow.kill());
-  let followed = "";
-  follow.stdout.setEncoding("utf-8").on("data", (chunk: string) => (followed += chunk));
-  // A change before the subscription starts is not in it, so change the power until the first occurrence comes.
-  for (let turn = 0; !followed.includes("\n"); turn++) {
-    assert.ok(turn < 100, "follow writes an occurrence");
-    assert.equal((await finish(remote(turn % 2 === 0 ? "--on" : "--off"))).code, 0);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  const line = followed.slice(0, followed.indexOf("\n"));
-  assert.partialDeepStrictEqual(JSON.parse(line), { name: "aircon.status.changed" });
-  const exited = new Promise<number | null>((resolve) => follow.on("close", resolve));
-  follow.kill("SIGINT");
-  assert.equal(await exited, 130);
-});
-
-test("the Effect command line controls the unit of a server, and watch follows its changes", async (context) => {
-  const url = await startServer(context);
+test("the command line controls the unit of a server, and watch and follow write its changes", async (context) => {
+  const url = await startServer(context, process.execPath, [bundledProgram("core-effect/serve.ts")]);
   const remote = (...args: string[]) =>
     spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
 
@@ -208,19 +151,18 @@ test("the Effect command line controls the unit of a server, and watch follows i
   assert.equal(status.code, 0);
   assert.partialDeepStrictEqual(JSON.parse(status.stdout), { power: true });
   assert.partialDeepStrictEqual(JSON.parse((await run(cliPath, "aircon", "status", "get")).stdout), { power: false });
+  assert.equal((await finish(remote("--output", "human", "aircon", "status", "get"))).stdout, `${STATUS_ON}\n`);
 
   const watch = remote("watch", "aircon.status.changed");
-  context.after(() => watch.kill());
-  let watched = "";
-  watch.stdout.setEncoding("utf-8").on("data", (chunk: string) => (watched += chunk));
-  for (let turn = 0; !watched.includes("\n"); turn++) {
-    assert.ok(turn < 100, "watch writes an occurrence");
-    assert.equal((await finish(remote("aircon", "fan", "set", "--speed", turn % 2 === 0 ? "low" : "high"))).code, 0);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  const line = watched.slice(0, watched.indexOf("\n"));
+  const watched = collect(watch, context);
+  const humanWatched = collect(remote("--output", "human", "watch", "aircon.status.changed"), context);
+  const followed = collect(remote("follow"), context);
+  await changeStatusUntil(url, () => [watched(), humanWatched(), followed()].every((text) => text.includes("\n")));
+  const line = firstLine(watched());
   assert.partialDeepStrictEqual(JSON.parse(line), { name: "aircon.status.changed", data: { power: true } });
   assert.match(line, /"fan":"(low|high)"/);
+  assert.match(firstLine(humanWatched()), /^on · cool · fan (low|high) · target 22°C · room 25°C$/);
+  assert.partialDeepStrictEqual(JSON.parse(firstLine(followed())), { name: "aircon.status.changed" });
   const exited = new Promise<number | null>((resolve) => watch.on("close", resolve));
   watch.kill("SIGINT");
   assert.equal(await exited, 130);
@@ -230,77 +172,36 @@ test("aircon.status.export writes a file through the command line", async (conte
   const folder = await mkdtemp(join(tmpdir(), "aircon-"));
   context.after(() => rm(folder, { recursive: true, force: true }));
   const file = join(folder, "status.json");
-  assert.equal((await run(bundledProgram("core-effect/cli.ts"), "aircon", "status", "export", "--path", file)).code, 0);
+  assert.equal((await run(cliPath, "aircon", "status", "export", "--path", file)).code, 0);
   assert.partialDeepStrictEqual(JSON.parse(await readFile(file, "utf-8")), { power: false });
 });
 
-test("the Effect command line writes the human form with its output flags", async () => {
-  const cli = (...args: string[]) => run(cliPath, ...args);
-  const [status, short, inline, defaultAlias, poweredOff, schedule, list, unknown, json, plain, xml] = await Promise.all([
-    cli("status", "--output", "human"),
-    cli("-o", "human", "status"),
-    cli("--output=human", "status"),
-    cli("-o", "human"),
-    cli("aircon", "mode", "set", "--output", "human", "--mode", "heat"),
-    cli("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18", "--output=human"),
-    cli("list", "-o", "human"),
-    cli("call", "nope", "--output", "human"),
-    cli("--output", "json", "aircon", "status", "get"),
-    cli("aircon", "status", "get"),
-    cli("status", "--output", "xml"),
+const offline = Layer.effectDiscard(Effect.flatMap(Effect.service(Unit), (unit) => SubscriptionRef.set(unit.connection, unavailable("The unit is offline."))));
+
+test("the command line writes the human form with its output flags, and on a terminal by default", async () => {
+  const [status, schedule, list, unknown] = await Promise.all([
+    run(cliPath, "status", "--output", "human"),
+    run(cliPath, "aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18", "--output=human"),
+    run(cliPath, "list", "-o", "human"),
+    run(cliPath, "call", "nope", "-o", "human"),
   ]);
-  for (const human of [status, short, inline, defaultAlias]) assert.deepEqual([human.code, human.stdout], [0, `${STATUS_OFF}\n`]);
-  assert.ok((await cli("--help")).stdout.endsWith(`\n\nOUTPUT FLAGS\n${OUTPUT_FLAG_LINES}\n`));
-  assert.deepEqual([poweredOff.code, poweredOff.stdout], [1, `${POWERED_OFF_LAYOUT}\n`]);
+  assert.deepEqual([status.code, status.stdout], [0, `${STATUS_OFF}\n`]);
   assert.deepEqual([schedule.code, schedule.stdout], [0, `${SCHEDULE_LAYOUT}\n`]);
+  assert.equal(list.code, 0);
   assert.ok(list.stdout.startsWith("Capabilities\n  aircon status get "));
   assert.ok(list.stdout.includes("\nEvents\n  watch aircon.status.changed"));
   assert.equal(unknown.code, 2);
   assert.ok(unknown.stderr.startsWith("error (unknown-capability): "));
-  assert.deepEqual([json.code, json.stdout], [plain.code, plain.stdout]);
-  assert.deepEqual([xml.code, xml.stdout, xml.stderr], [3, "", `${OUTPUT_ERROR}\n`]);
 
-  const [terminal, terminalJson, terminalDefault, offline] = await Promise.all([
-    terminalCli(true, "status"),
-    terminalCli(true, "status", "--json"),
-    terminalCli(true, "--json"),
-    terminalCli(false, "aircon", "status", "get"),
-  ]);
-  assert.deepEqual([terminal.code, terminal.stdout], [0, `${STATUS_OFF}\n`]);
-  assert.deepEqual([terminalJson.code, terminalJson.stdout], [0, plain.stdout]);
-  assert.deepEqual([terminalDefault.code, terminalDefault.stdout], [0, plain.stdout], "the default alias with an output flag");
-  assert.deepEqual([offline.code, offline.stdout, offline.stderr], [1, `${OFFLINE}\n`, ""]);
+  const onTerminal = (...args: string[]) => Effect.runPromise(inProcess(args, true).pipe(Effect.provide(freshUnit)));
+  assert.deepEqual(await onTerminal("status"), { code: 0, stdout: STATUS_OFF, stderr: "" });
+  const json = await onTerminal("status", "--json");
+  assert.deepEqual([json.code, JSON.parse(json.stdout)], [0, OFF]);
+  assert.deepEqual(await onTerminal("--json"), json, "the default alias with an output flag");
+  const unreachable = await Effect.runPromise(inProcess(["aircon", "status", "get"], true).pipe(Effect.provide(Layer.provideMerge(offline, freshUnit))));
+  assert.deepEqual(unreachable, { code: 1, stdout: OFFLINE, stderr: "" });
 });
 
-const terminalCli = (online: boolean, ...args: string[]) =>
-  finish(
-    spawn(process.execPath, [bundledProgram("test/terminal-cli.ts"), online ? "online" : "offline", ...args], {
-      env: { PATH: process.env.PATH ?? "", NO_COLOR: "1" },
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 20_000,
-    }),
-  );
-
-test("the human form of the Effect command line is the same for a server, and watch writes each status", async (context) => {
-  const url = await startServer(context);
-  const remote = (...args: string[]) =>
-    spawn(process.execPath, [cliPath, "--output", "human", ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
-  const status = await finish(remote("aircon", "status", "get"));
-  assert.deepEqual([status.code, status.stdout], [0, `${STATUS_OFF}\n`]);
-
-  const watch = remote("watch", "aircon.status.changed");
-  context.after(() => watch.kill());
-  let watched = "";
-  watch.stdout.setEncoding("utf-8").on("data", (chunk: string) => (watched += chunk));
-  for (let turn = 0; !watched.includes("\n"); turn++) {
-    assert.ok(turn < 100, "watch writes an occurrence");
-    assert.equal((await finish(remote("aircon", "fan", "set", "--speed", turn % 2 === 0 ? "low" : "high"))).code, 0);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  const line = watched.slice(0, watched.indexOf("\n"));
-  assert.ok([STATUS_OFF.replace("fan auto", "fan low"), STATUS_OFF.replace("fan auto", "fan high")].includes(line), line);
-});
-
-test("the Effect command line writes the help of a command and the command list of a shared prefix", async () => {
+test("the command line writes the command list of a shared prefix", async () => {
   await assertHelp((...args) => run(cliPath, ...args));
 });

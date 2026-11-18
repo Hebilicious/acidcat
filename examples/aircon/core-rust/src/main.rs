@@ -623,7 +623,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_state_of_aircon_status_get_gives_copies_and_each_change() {
+    async fn the_state_of_aircon_status_get_gives_the_current_value_and_each_change() {
         let unit = Arc::new(Unit::default());
         let session = Session::open(&aircon().0, "app", unit.clone());
         let mut state = session
@@ -651,7 +651,7 @@ mod tests {
             .to_owned()
     }
 
-    async fn on_terminal(unit: Arc<Unit>, args: &[&str]) -> (i32, String) {
+    async fn cli(unit: Arc<Unit>, args: &[&str], on_terminal: bool) -> (i32, String) {
         use acid_cat_core::cli::{CliIo, CliOptions, run_cli};
 
         let (app, output) = aircon();
@@ -665,12 +665,45 @@ mod tests {
         };
         let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
         let mut options = CliOptions::new("aircon", "0.1.0").output(output);
-        options.auto_form = Some(OutputForm::Human);
+        if on_terminal {
+            options.auto_form = Some(OutputForm::Human);
+        }
         let code = run_cli(&app, unit, &options, &args, &mut io)
             .await
             .expect("the command line starts");
         let text = written.lock().unwrap().clone();
         (code, text)
+    }
+
+    async fn on_terminal(unit: Arc<Unit>, args: &[&str]) -> (i32, String) {
+        cli(unit, args, true).await
+    }
+
+    #[tokio::test]
+    async fn each_alias_of_the_command_line_calls_its_capability_with_its_fixed_input() {
+        let unit = Arc::new(Unit::default());
+        let call = |args: &'static [&'static str]| cli(unit.clone(), args, false);
+        let status = |text: String| -> serde_json::Value {
+            serde_json::from_str(&text).expect("the output is JSON")
+        };
+        assert_eq!(call(&["--on"]).await.0, 0);
+        assert!(unit.status.borrow().power);
+        assert_eq!(status(call(&["status"]).await.1)["power"], json!(true));
+        assert_eq!(call(&["--off"]).await.0, 0);
+        assert!(!unit.status.borrow().power);
+        assert_eq!(
+            status(call(&[]).await.1)["power"],
+            json!(false),
+            "the default alias is status"
+        );
+        assert_eq!(call(&["fan", "high"]).await.0, 0);
+        assert_eq!(unit.status.borrow().fan, FanSpeed::High);
+        assert_eq!(call(&["fan", "auto"]).await.0, 0);
+        assert_eq!(unit.status.borrow().fan, FanSpeed::Auto);
+        assert_eq!(call(&["fan", "--speed", "low"]).await.0, 0);
+        assert_eq!(unit.status.borrow().fan, FanSpeed::Low);
+        assert_eq!(call(&["aircon", "power", "--on"]).await.0, 0);
+        assert!(unit.status.borrow().power);
     }
 
     #[tokio::test]

@@ -25,6 +25,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
     "@modelcontextprotocol/client": "catalog:",
     "@types/node": "catalog:",
     "@types/ws": "catalog:",
