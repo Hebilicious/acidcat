@@ -7,7 +7,7 @@ Write a catalog in Pkl. The module checks the catalog rules while you write. Ren
 <!-- x-release-please-start-version -->
 
 ```pkl
-amends "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@0.2.1#/Catalog.pkl"
+amends "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@0.3.0#/Catalog.pkl"
 
 targets {
   ["panel"] { bindings { "typescript" } }

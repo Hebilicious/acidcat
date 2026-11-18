@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/Hebilicious/acidcat/compare/packages/catalog/go/v0.2.2...packages/catalog/go/v0.3.0) (2026-11-18)
+
+
+### Features
+
+* **catalog:** add the destructive and idempotent hints of a capability ([#183](https://github.com/Hebilicious/acidcat/issues/183)) ([0e21bea](https://github.com/Hebilicious/acidcat/commit/0e21bea609b3e3392a9bf8f89ce8cd2e17a4188a))
+
 ## [0.2.2](https://github.com/Hebilicious/acidcat/compare/packages/catalog/go/v0.2.1...packages/catalog/go/v0.2.2) (2026-11-12)
 
 

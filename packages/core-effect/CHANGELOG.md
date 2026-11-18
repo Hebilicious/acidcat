@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.14.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.13.1...@acid-cat/core-effect@0.14.0) (2026-11-18)
+
+
+### Features
+
+* **catalog:** add the destructive and idempotent hints of a capability ([#183](https://github.com/Hebilicious/acidcat/issues/183)) ([0e21bea](https://github.com/Hebilicious/acidcat/commit/0e21bea609b3e3392a9bf8f89ce8cd2e17a4188a))
+* **cli:** allow command aliases of two words ([#185](https://github.com/Hebilicious/acidcat/issues/185)) ([ae0ef97](https://github.com/Hebilicious/acidcat/commit/ae0ef978ccc54e1387d10de2ae1f2c6c3f501fe8))
+* **cli:** let an alias be the default of a shared prefix ([#187](https://github.com/Hebilicious/acidcat/issues/187)) ([89c50a4](https://github.com/Hebilicious/acidcat/commit/89c50a480279ade527ce32e42b6ed5da0acbbee6))
+
+
+### Bug Fixes
+
+* **cli:** write the help of a command and the command list of a shared prefix ([#186](https://github.com/Hebilicious/acidcat/issues/186)) ([82773ae](https://github.com/Hebilicious/acidcat/commit/82773ae65ba798e807bcdfeafb882845743c8487))
+
 ## [0.13.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.13.0...@acid-cat/core-effect@0.13.1) (2026-11-17)
 
 

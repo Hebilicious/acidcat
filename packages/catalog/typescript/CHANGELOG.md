@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/catalog@0.13.1...@acid-cat/catalog@0.14.0) (2026-11-18)
+
+
+### Features
+
+* **catalog:** add the destructive and idempotent hints of a capability ([#183](https://github.com/Hebilicious/acidcat/issues/183)) ([0e21bea](https://github.com/Hebilicious/acidcat/commit/0e21bea609b3e3392a9bf8f89ce8cd2e17a4188a))
+
 ## [0.13.1](https://github.com/Hebilicious/acidcat/compare/@acid-cat/catalog@0.13.0...@acid-cat/catalog@0.13.1) (2026-11-17)
 
 
