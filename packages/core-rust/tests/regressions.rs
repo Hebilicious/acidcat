@@ -5,6 +5,7 @@ use std::time::Duration;
 use acid_cat_core::cli::{CliIo, CliOptions, OutputForm, exit, run_cli};
 use acid_cat_core::mcp::{McpStdioOptions, PROTOCOL_VERSION, run_stdio};
 use acid_cat_core::{App, Application, Availability, Emitted};
+use futures::StreamExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -18,6 +19,7 @@ type Event = acid_cat_core::Event<Services>;
 struct Services {
     switch: watch::Sender<Availability>,
     holding: AtomicUsize,
+    slow_ticks: watch::Sender<i64>,
 }
 
 impl Default for Services {
@@ -25,6 +27,7 @@ impl Default for Services {
         Services {
             switch: watch::Sender::new(Availability::unavailable("The switch is off.")),
             holding: AtomicUsize::new(0),
+            slow_ticks: watch::Sender::new(0),
         }
     }
 }
@@ -82,21 +85,16 @@ fn application() -> Arc<Application<Services>> {
                 }),
         )
         .event(
-            Event::new(
-                "test.slow",
-                "Give the occurrences n = 1 to 300, one each millisecond.",
-            )
-            .audience(["mcp"])
-            .payload::<Tick>()
-            .subscribe(|(), _| {
-                futures::stream::unfold(1, |n| async move {
-                    if n > SLOW_TICKS {
-                        return None;
-                    }
-                    tokio::time::sleep(Duration::from_millis(1)).await;
-                    Some((Ok(Emitted::new(Tick { n })), n + 1))
-                })
-            }),
+            Event::new("test.slow", "Give the occurrences n = 1 to 300.")
+                .audience(["mcp"])
+                .payload::<Tick>()
+                .subscribe(|(), subscription| {
+                    let context = subscription.context_arc();
+                    futures::stream::iter(1..=SLOW_TICKS).map(move |n| {
+                        context.slow_ticks.send_replace(n);
+                        Ok(Emitted::new(Tick { n }))
+                    })
+                }),
         )
         .build()
         .unwrap_or_else(|problems| panic!("the application does not conform: {problems:?}"))
@@ -253,14 +251,19 @@ async fn a_cancellation_on_the_line_after_its_request_cancels_the_call() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_client_that_stops_reading_gets_truncated_occurrences_and_still_gets_answers() {
-    let mut client = Client::start(Arc::new(Services::default()), 1024);
+    let context = Arc::new(Services::default());
+    let mut ticks = context.slow_ticks.subscribe();
+    let mut client = Client::start(context, 1024);
     client
         .write(&[request(1, "events/stream", json!({ "name": "test.slow" }))])
         .await;
-    tokio::time::sleep(Duration::from_millis(
-        u64::try_from(SLOW_TICKS).unwrap_or(300) * 3,
-    ))
-    .await;
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        ticks.wait_for(|n| *n == SLOW_TICKS),
+    )
+    .await
+    .expect("the provider gives every occurrence")
+    .expect("the provider is alive");
     client.write(&[request(2, "ping", json!({}))]).await;
 
     let messages = client.read_until_responses(&[1, 2]).await;
@@ -301,24 +304,22 @@ async fn a_client_that_stops_reading_gets_truncated_occurrences_and_still_gets_a
 async fn an_interrupt_ends_list_of_a_server_that_does_not_answer_with_exit_code_130() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
+    let cancel = CancellationToken::new();
+    let interrupt = cancel.clone();
     tokio::spawn(async move {
         let mut open = Vec::new();
         while let Ok((stream, _)) = listener.accept().await {
+            interrupt.cancel();
             open.push(stream);
         }
     });
     let client = acid_cat_core::http::HttpClient::new(&format!("http://{address}/cli")).unwrap();
-    let cancel = CancellationToken::new();
     let mut io = CliIo {
         stdout: Box::new(|_| {}),
         stderr: Box::new(|_| {}),
-        cancel: cancel.clone(),
+        cancel,
         form: OutputForm::Json,
     };
-    let interrupt = tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        cancel.cancel();
-    });
     let code = tokio::time::timeout(
         Duration::from_secs(5),
         run_cli(
@@ -332,7 +333,6 @@ async fn an_interrupt_ends_list_of_a_server_that_does_not_answer_with_exit_code_
     .await
     .expect("the interrupt ends list")
     .expect("the commands follow the rules");
-    interrupt.await.unwrap();
     assert_eq!(code, exit::CANCELLED);
 }
 

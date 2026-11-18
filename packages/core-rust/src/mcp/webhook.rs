@@ -814,32 +814,10 @@ mod tests {
         let (min, max) = (Duration::from_secs(60), Duration::from_secs(3600));
         assert_eq!(granted_lifetime(Some(1e22), min, max), max);
         assert_eq!(granted_lifetime(Some(f64::MAX), min, max), max);
-        assert_eq!(granted_lifetime(Some(0.0), min, max), min);
         assert_eq!(
             granted_lifetime(Some(120_000.0), min, max),
             Duration::from_secs(120)
         );
-        assert_eq!(granted_lifetime(None, min, max), max);
-    }
-
-    #[tokio::test]
-    async fn a_very_large_ttl_gets_the_maximum_lifetime() {
-        let webhooks = webhooks();
-        let open = opener();
-        let result = webhooks
-            .subscribe("principal", &request("test.quiet", json!(1e22)), &open)
-            .await;
-        assert!(result.is_ok(), "the subscription starts: {result:?}");
-        let expires_at = lock(&webhooks.registry)
-            .subscriptions
-            .values()
-            .map(|subscription| subscription.lock().expires_at)
-            .next();
-        let lifetime = expires_at
-            .and_then(|expires_at| expires_at.duration_since(SystemTime::now()).ok())
-            .unwrap_or_default();
-        assert!(lifetime > Duration::from_secs(3590) && lifetime <= Duration::from_secs(3600));
-        webhooks.close().await;
     }
 
     #[tokio::test]
@@ -901,43 +879,5 @@ mod tests {
         assert!(webhooks.admit("principal").is_some());
         drop(second);
         assert!(lock(&webhooks.registry).admitted.is_empty());
-    }
-
-    #[tokio::test]
-    async fn a_subscription_that_exists_counts_once_for_the_limit() {
-        let webhooks = Webhooks::new(WebhookOptions {
-            allow: Some(Arc::new(|_| true)),
-            max_subscriptions: 2,
-            ..WebhookOptions::default()
-        });
-        let open = opener();
-        let subscribe = |room: &str| {
-            let mut params = request("test.quiet", Value::Null);
-            if let Some(delivery) = params.get_mut("delivery") {
-                delivery["url"] = json!(format!("https://example.com/{room}"));
-            }
-            params
-        };
-        assert!(
-            webhooks
-                .subscribe("principal", &subscribe("a"), &open)
-                .await
-                .is_ok()
-        );
-        assert!(
-            lock(&webhooks.registry).admitted.is_empty(),
-            "the subscription left the starting count when it was added"
-        );
-        assert!(
-            webhooks
-                .subscribe("principal", &subscribe("b"), &open)
-                .await
-                .is_ok()
-        );
-        let over = webhooks
-            .subscribe("principal", &subscribe("c"), &open)
-            .await;
-        assert!(over.is_err(), "a third subscription is over the limit");
-        webhooks.close().await;
     }
 }

@@ -84,7 +84,9 @@ fn caller(
                     alive: alive.clone(),
                 })
             }
-            None => Err(Refusal::new(401, "Give a token.").header("WWW-Authenticate", "Bearer")),
+            None => Err(Refusal::new(401, "Give a token.")
+                .header("WWW-Authenticate", "Bearer")
+                .header("Content-Type", "text/plain")),
         })
     }
 }
@@ -137,6 +139,8 @@ async fn through_http_the_capability_gets_the_caller_of_the_request_and_the_targ
 
     let refused = binding.handle(request(None)).await;
     assert_eq!(refused.headers()["www-authenticate"], "Bearer");
+    let types: Vec<_> = refused.headers().get_all("content-type").iter().collect();
+    assert_eq!(types, ["application/json"]);
     let (status, body) = answer(refused).await;
     assert_eq!(status, 401);
     assert_eq!(body, json!({ "message": "Give a token." }));
@@ -181,32 +185,11 @@ async fn through_mcp_the_capability_gets_the_caller_of_the_request_and_the_targe
 
     let refused = binding.handle(request(None)).await;
     assert_eq!(refused.headers()["www-authenticate"], "Bearer");
+    let types: Vec<_> = refused.headers().get_all("content-type").iter().collect();
+    assert_eq!(types, ["application/json"]);
     let (status, body) = answer(refused).await;
     assert_eq!(status, 401);
     assert_eq!(body, json!({ "message": "Give a token." }));
-}
-
-#[tokio::test]
-async fn a_refusal_answers_with_one_media_type_application_json() {
-    let binding = HttpBinding::with_request_context(
-        app(),
-        |_: &http::request::Parts| {
-            std::future::ready(Err::<Caller, _>(
-                Refusal::new(403, "No.").header("Content-Type", "text/plain"),
-            ))
-        },
-        HttpOptions::default(),
-    );
-    let refused = binding
-        .handle(request_body(
-            post("/capabilities/who.get", None)
-                .body(Full::new(bytes::Bytes::from("{}")))
-                .expect("a request"),
-        ))
-        .await;
-    let types: Vec<_> = refused.headers().get_all("content-type").iter().collect();
-    assert_eq!(types, ["application/json"]);
-    assert_eq!(answer(refused).await.0, 403);
 }
 
 #[test]
@@ -244,4 +227,45 @@ async fn through_http_an_event_gets_the_target_and_the_context_lives_until_the_s
         0,
         "the context is dropped when the stream ends"
     );
+}
+
+#[tokio::test]
+async fn through_http_a_path_that_is_not_under_base_is_an_unknown_route() {
+    let alive = Arc::new(AtomicUsize::new(0));
+    let options = HttpOptions {
+        base: "/api".into(),
+        ..HttpOptions::default()
+    };
+    let binding = HttpBinding::with_request_context(app(), caller(&alive), options);
+    let get = |path: &str| {
+        request_body(
+            Request::get(path)
+                .header("authorization", "Bearer dashboard")
+                .body(Full::new(bytes::Bytes::new()))
+                .expect("a request"),
+        )
+    };
+
+    assert_eq!(binding.handle(get("/api/capabilities")).await.status(), 200);
+    for path in [
+        "/zzz/capabilities",
+        "/apix/capabilities",
+        "/zzz/catalog",
+        "/zzz/events",
+    ] {
+        let (status, body) = answer(binding.handle(get(path)).await).await;
+        assert_eq!(
+            (status, &body["kind"]),
+            (404, &json!("unknown-capability")),
+            "{path}"
+        );
+    }
+    let call = binding
+        .handle(request_body(
+            post("/zzz/capabilities/who.get", Some("dashboard"))
+                .body(Full::new(bytes::Bytes::from("{}")))
+                .expect("a request"),
+        ))
+        .await;
+    assert_eq!(call.status(), 404);
 }

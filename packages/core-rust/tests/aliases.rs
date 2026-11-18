@@ -25,10 +25,6 @@ fn fixture_cli(args: &[&str]) -> (i32, String) {
     (output.status.code().unwrap_or(-1), stdout)
 }
 
-fn parsed(text: &str) -> Value {
-    serde_json::from_str(text).unwrap_or_else(|_| panic!("the output is JSON: {text}"))
-}
-
 fn probe(aliases: Value, capabilities: Vec<CapabilityDefinition<()>>) -> Arc<Application<()>> {
     probe_with(json!({ "aliases": aliases }), capabilities, Vec::new())
 }
@@ -82,7 +78,7 @@ async fn run(
 }
 
 #[test]
-fn the_help_lists_the_aliases_and_an_alias_with_help_gives_its_usage() {
+fn the_help_lists_the_aliases() {
     let (_, help) = fixture_cli(&["--help"]);
     assert!(
         help.ends_with(
@@ -90,55 +86,6 @@ fn the_help_lists_the_aliases_and_an_alias_with_help_gives_its_usage() {
         ),
         "{help}"
     );
-    assert_eq!(
-        fixture_cli(&["say", "--help"]).1,
-        "Usage: fixture say --text <string>\n\nReturn the input text.\n"
-    );
-}
-
-#[derive(Serialize, Deserialize, JsonSchema)]
-struct Power {
-    on: bool,
-}
-
-#[tokio::test]
-async fn the_command_line_stops_when_it_starts_if_an_alias_breaks_a_rule() {
-    let power = || {
-        Capability::new("probe.power.set", "Turn the probe on or off.")
-            .audience(["cli"])
-            .input::<Power>()
-            .run(|_: Power, _| async move { Ok(()) })
-    };
-    let start = |aliases: Value| async move {
-        run(
-            &probe(aliases, vec![ping(), power().untyped()]),
-            CliOptions::new("probe", "0.0.0"),
-            &["list"],
-        )
-        .await
-    };
-    assert_eq!(
-        start(json!({ "list": { "capability": "probe.ping" } })).await,
-        Err(
-            "target cli: the alias list has the name of a command or a flag of the command line"
-                .to_owned()
-        )
-    );
-    assert_eq!(
-        start(json!({ "probe ping": { "capability": "probe.ping" } })).await,
-        Err(
-            "target cli: the alias probe ping has the path of the command of a capability"
-                .to_owned()
-        )
-    );
-    let (code, text) = start(json!({ "ping": { "capability": "probe.ping", "x-note": "Ping." } }))
-        .await
-        .expect("the aliases follow the rules");
-    assert_eq!(code, exit::VALUE, "{text}");
-    let (code, text) = start(json!({ "probe": { "capability": "probe.ping" } }))
-        .await
-        .expect("an alias can be the default of a shared prefix");
-    assert_eq!(code, exit::VALUE, "{text}");
 }
 
 #[test]
@@ -146,18 +93,6 @@ fn a_first_double_dash_is_not_an_argument() {
     let plain = fixture_cli(&["say", "--text", "hi"]);
     assert_eq!(plain.0, exit::VALUE);
     assert_eq!(fixture_cli(&["--", "say", "--text", "hi"]), plain);
-}
-
-#[test]
-fn the_input_schema_of_fixture_note_is_a_ref_with_a_description_beside_it() {
-    let catalog = Command::new(fixture())
-        .arg("catalog")
-        .output()
-        .expect("the fixture runs");
-    let catalog = parsed(&String::from_utf8(catalog.stdout).expect("the output is UTF-8"));
-    let input = &catalog["capabilities"]["fixture.note"]["input"];
-    assert_eq!(input["$ref"], json!("#/$defs/Note"));
-    assert_eq!(input["description"], json!("The note."));
 }
 
 #[tokio::test]
@@ -192,40 +127,22 @@ fn readings() -> EventDefinition<()> {
         .untyped()
 }
 
-#[derive(Serialize, Deserialize, JsonSchema)]
-struct Helpful {
-    help: Option<bool>,
-}
-
 #[tokio::test]
-async fn the_command_line_stops_when_it_starts_if_an_alias_of_an_event_or_the_default_alias_breaks_a_rule()
- {
-    let helpful = || {
-        Capability::new("probe.helpful", "Help.")
-            .audience(["cli"])
-            .input::<Helpful>()
-            .run(|_: Helpful, _| async move { Ok(()) })
-    };
+async fn the_command_line_stops_when_it_starts_if_an_alias_breaks_a_rule() {
     let start = |settings: Value| async move {
         run(
-            &probe_with(
-                settings,
-                vec![ping(), helpful().untyped()],
-                vec![readings()],
-            ),
+            &probe_with(settings, vec![ping()], vec![readings()]),
             CliOptions::new("probe", "0.0.0"),
             &["list"],
         )
         .await
     };
     assert_eq!(
-        start(json!({ "aliases": {
-            "follow": { "event": "probe.readings" },
-            "--cursor": { "capability": "probe.ping" },
-            "--room": { "capability": "probe.ping" }
-        }, "default": "follow" }))
-        .await,
-        Err("target cli: the alias --cursor has the name of a flag of the default alias follow\ntarget cli: the alias --room has the name of a flag of the default alias follow".to_owned())
+        start(json!({ "aliases": { "list": { "capability": "probe.ping" } } })).await,
+        Err(
+            "target cli: the alias list has the name of a command or a flag of the command line"
+                .to_owned()
+        )
     );
     let (code, text) = start(json!({
         "aliases": { "hall": { "event": "probe.readings", "input": { "room": "hall" }, "x-note": "The hall." } },

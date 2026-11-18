@@ -13,7 +13,15 @@ pub fn fixture() -> PathBuf {
 }
 
 fn build() -> PathBuf {
-    let output = Command::new(env!("CARGO"))
+    let mut cargo = Command::new(env!("CARGO"));
+    // Cargo gives the test program the variables of its package, and the build script of ring reruns when one of them
+    // changes, so the next `cargo test` builds ring again.
+    for (name, _) in std::env::vars_os() {
+        if name.to_str().is_some_and(is_variable_of_the_package) {
+            cargo.env_remove(name);
+        }
+    }
+    let output = cargo
         .args([
             "build",
             "--quiet",
@@ -32,4 +40,19 @@ fn build() -> PathBuf {
         .filter(|message| message["target"]["name"] == "fixture")
         .find_map(|message| message["executable"].as_str().map(PathBuf::from))
         .expect("cargo names the executable of the fixture")
+}
+
+fn is_variable_of_the_package(name: &str) -> bool {
+    [
+        "CARGO_PKG_",
+        "CARGO_MANIFEST_",
+        "CARGO_CRATE_",
+        "CARGO_BIN_",
+        "CARGO_PRIMARY_PACKAGE",
+        "CARGO_TARGET_TMPDIR",
+        "CARGO_RUSTC_CURRENT_DIR",
+        "OUT_DIR",
+    ]
+    .iter()
+    .any(|prefix| name.starts_with(prefix))
 }
