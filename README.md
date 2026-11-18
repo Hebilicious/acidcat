@@ -39,37 +39,10 @@ AcidCat lists those operations once, in a **catalog**. Every surface comes from 
 
 ### 1. Write the catalog
 
-Write the catalog in a typed language and let the tool write the JSON. The tool checks the catalog rules, and every tool writes the same canonical JSON. With the TypeScript catalog library:
+Write the catalog in your own language: the capabilities, their schemas and their targets. With the TypeScript core and Zod:
 
 ```ts
-import { writeFile } from "node:fs/promises";
-
-import { Catalog } from "@acid-cat/catalog";
-
-const catalog = new Catalog({ title: "Air conditioner" });
-catalog.target("cli", { bindings: ["cli"] });
-catalog.target("mcp", { bindings: ["mcp"] });
-const offline = catalog.type("Offline", { type: "object" });
-catalog.capability("aircon.power.set", {
-  description: "Turn the unit on or off.",
-  audience: ["cli", "mcp"],
-  input: { type: "object", required: ["on"], properties: { on: { type: "boolean" } } },
-  failures: { Offline: offline },
-  destructive: true,
-  idempotent: true,
-});
-
-await writeFile("aircon.acidcat.json", catalog.render());
-```
-
-The same catalog in [Pkl](packages/catalog/pkl), [Python](packages/catalog/python), [Go](packages/catalog/go) or [Rust](packages/catalog/rust) gives the same bytes. Commit the JSON with its source, and run `acid-cat check` on it in CI.
-
-### 2. Implement it
-
-A **core** runs your code behind the catalog. This is the capability in the TypeScript core, with Zod schemas:
-
-```ts
-import { cliMain, defineApp, defineCapability, fail, ok } from "@acid-cat/core-ts";
+import { cliMain, defineApp, defineCapability, fail, ok, renderCatalog } from "@acid-cat/core-ts";
 import type { ToJsonSchema } from "@acid-cat/core-ts";
 import { z } from "zod";
 
@@ -100,13 +73,15 @@ const toJsonSchema: ToJsonSchema = (schema) => {
   if (!(schema instanceof z.ZodType)) throw new Error("Only Zod schemas.");
   return z.toJSONSchema(schema, { target: "draft-2020-12" });
 };
-
-cliMain(aircon, { name: "home", version: "0.1.0", context: {}, toJsonSchema });
 ```
 
-The core also writes a catalog from this code, with `renderCatalog(aircon, { toJsonSchema })`. A test compares it with `aircon.acidcat.json`, so the code cannot drift from the contract ([`examples/aircon`](examples/aircon/README.md) does this for every core). A single program with one core can skip step 1 and use its code as the catalog source.
+`renderCatalog(aircon, { toJsonSchema })` writes the catalog as JSON. Commit it, and run `acid-cat check` on it in CI.
 
-### 3. Run it
+### 2. Serve it
+
+```ts
+cliMain(aircon, { name: "home", version: "0.1.0", context: {}, toJsonSchema });
+```
 
 ```sh
 $ node aircon.ts aircon power set --on
@@ -115,13 +90,11 @@ null
 
 Pass the same `aircon` to `mcpStdioMain` for an MCP server, or to `httpHandler` for an HTTP API. MCP clients get `destructiveHint` and `idempotentHint`, so an agent knows to ask before it turns the unit off.
 
-[`examples/aircon`](examples/aircon/README.md) is a full application, served by every core on every surface.
-
 ## 🧭 How it works
 
 | Part | What it is |
 | --- | --- |
-| Catalog | The contract, written in Pkl, a catalog library or a core's code, and stored as JSON. Checked at build time; programs do not read it at run time |
+| Catalog | The contract, stored as JSON. Write it in a core's code, or, when several programs share it, in [Pkl](packages/catalog/pkl) or with a [catalog library](packages/catalog). Checked at build time; programs do not read it at run time |
 | Binding | The rules for one surface: CLI, MCP, HTTP, WebMCP or a language such as TypeScript. Defined in the [specification](spec/bindings/README.md) |
 | Core | A library that runs your capabilities and serves the bindings |
 | `acid-cat conform` | Tests a running program from the outside, through each binding |
