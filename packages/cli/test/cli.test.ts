@@ -32,6 +32,7 @@ const rejected: Readonly<Record<string, readonly string[]>> = {
     '["targets"]["shop"]["options"]["cli"]["aliases"]["Shop"]: Expected a string matching the RegExp ^(--[a-z][a-z0-9]*(-[a-z0-9]+)*|[a-z][a-z0-9]*(-[a-z0-9]+)*( [a-z][a-z0-9]*(-[a-z0-9]+)*)?)$',
     '["targets"]["shop"]["options"]["cli"]["aliases"]["a b c"]: Expected a string matching the RegExp ^(--[a-z][a-z0-9]*(-[a-z0-9]+)*|[a-z][a-z0-9]*(-[a-z0-9]+)*( [a-z][a-z0-9]*(-[a-z0-9]+)*)?)$',
   ],
+  "capability-hint-not-boolean.json": ['["capabilities"]["shop.item.remove"]["destructive"]: Expected boolean'],
   "audience-inherited-name.json": ["shop.item.get: the audience names constructor, which is not a target"],
   "event-audience.json": ["shop.order.ready: the audience names till, which is not a target"],
   "event-id-is-a-capability.json": ["shop.order.ready: the id is both a capability and an event"],

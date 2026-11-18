@@ -364,6 +364,12 @@ function checkAliases(check: Define, command: readonly string[], listed: Listed)
     expectEqual(await echoes('{"a":1}'), [{ a: 1 }], "the data of the occurrences");
     expectEqual(await echoes(), [{}], "the data of the occurrences with no input");
   });
+  check("an alias of an event writes internal to standard error with exit code 5 after a defect", ALIASES, async (signal) => {
+    const result = await run(signal, "broken-ticks");
+    expectEqual(result.code, 5, "exit code");
+    expectEqual(occurrencesIn(result.stdout, "fixture.broken").map((occurrence) => occurrence.data), [{ n: 1 }], "the data of the occurrences");
+    expect(/"kind":"internal"/.test(result.stderr), `standard error must contain the call failure internal, got ${JSON.stringify(result.stderr)}`);
+  });
   check("the default alias runs with no arguments", ALIASES, async (signal) => {
     expectOutput(await run(signal), { mode: "fast" });
   });

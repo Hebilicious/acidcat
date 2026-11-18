@@ -1,0 +1,7 @@
+{
+  "acidcat": "0.1",
+  "targets": { "shop": { "bindings": ["typescript"] } },
+  "capabilities": {
+    "shop.item.remove": { "description": "Remove an item.", "audience": ["shop"], "destructive": "yes" }
+  }
+}
