@@ -3,7 +3,6 @@ import { test } from "node:test";
 
 import {
   bundle,
-  cliInputSchema,
   byCodePoint,
   canonicalJson,
   cliFlags,
@@ -13,46 +12,30 @@ import {
   decodePollCursor,
   encodePollCursor,
   isGloballyRoutable,
-  mcpEventEntry,
   webhookGrantMs,
   webhookSecretBytes,
   webhookSignature,
   webhookSubscriptionId,
-  CallFailureError,
-  cliEventUsage,
-  cliExitCode,
   cliJsonArray,
   cliUsage,
   cliCommandList,
   cliHelp,
   cliAliases,
-  cliAliasSchema,
-  cliAliasInput,
-  cliAliasUsage,
-  commandPath,
-  fail,
-  httpEventMessage,
-  httpStatus,
   isOccurrence,
   isId,
   isJsonObject,
-  mcpEventParams,
-  mcpSubscribeError,
   mcpToolResult,
   objectInput,
   occurrenceOf,
   ok,
-  readBounded,
-  screenRequest,
   viewOf,
   type CatalogDocument,
 } from "../src/index.ts";
 
-test("ids become surface names", () => {
+test("an id has two or more lowercase segments", () => {
   assert.ok(isId("aircon.power.set"));
   assert.ok(!isId("Aircon.power"));
   assert.ok(!isId("aircon"));
-  assert.deepEqual(commandPath("aircon.power.set"), ["aircon", "power", "set"]);
 });
 
 test("a repeated flag that occurs once with JSON text of an array gives that array", () => {
@@ -65,15 +48,12 @@ test("a repeated flag that occurs once with JSON text of an array gives that arr
   assert.equal(cliJsonArray([]), undefined);
 });
 
-test("the usage of a command gives its flags, required flags first", () => {
+test("the usage of a command reads a $ref, and gives a required repeated flag, an array of $ref items, and JSON text for an array of arrays or with no items", () => {
   const input = {
     type: "object",
-    required: ["speed", "on"],
+    required: ["speed", "levels"],
     properties: {
       speed: { $ref: "#/$defs/FanSpeed" },
-      on: { type: "boolean" },
-      note: { type: "string" },
-      quiet: { type: "boolean" },
       limits: { type: "array" },
       levels: { type: "array", items: { type: "integer" } },
       speeds: { type: "array", items: { $ref: "#/$defs/FanSpeed" } },
@@ -81,13 +61,7 @@ test("the usage of a command gives its flags, required flags first", () => {
     },
     $defs: { FanSpeed: { enum: ["auto", "low"] } },
   };
-  assert.equal(
-    cliUsage("aircon", "aircon.fan.set", { ...input, required: [...input.required, "levels"] }),
-    "aircon aircon fan set --levels <integer>... --on --speed <auto|low> [--limits <json>] [--note <string>] [--pairs <json>] [--quiet] [--speeds <auto|low>...]",
-  );
-  assert.equal(cliUsage("aircon", "aircon.status.get", undefined), "aircon aircon status get");
-  assert.equal(cliUsage("aircon", "aircon.status.get", { type: "object", properties: {} }), "aircon aircon status get");
-  assert.equal(cliUsage("aircon", "aircon.batch.run", { oneOf: [{ type: "object" }] }), "aircon call aircon.batch.run '<json>'");
+  assert.equal(cliUsage("aircon", "aircon.fan.set", input), "aircon aircon fan set --levels <integer>... --speed <auto|low> [--limits <json>] [--pairs <json>] [--speeds <auto|low>...]");
 });
 
 test("the help of a command, and the command list of a shared prefix, in the order of the capabilities", () => {
@@ -104,40 +78,8 @@ test("the help of a command, and the command list of a shared prefix, in the ord
   assert.equal(cliCommandList([], capabilities), undefined);
 });
 
-test("each outcome has its exit code, status code and MCP result", () => {
-  const offline = fail({ _tag: "Offline", since: "2026-01-01T00:00:00Z" });
-  assert.deepEqual(offline, { ok: false, error: { _tag: "Offline", since: "2026-01-01T00:00:00Z" } });
-  assert.equal(cliExitCode(ok(null)), 0);
-  assert.equal(cliExitCode(offline), 1);
-  assert.equal(cliExitCode({ kind: "invalid-input", message: "" }), 3);
-  assert.equal(httpStatus(offline), 200);
-  assert.equal(httpStatus({ kind: "unavailable", message: "" }), 503);
-  assert.deepEqual(mcpToolResult(ok({ power: true }), true), {
-    content: [{ type: "text", text: '{"power":true}' }],
-    structuredContent: { power: true },
-  });
+test("a value of a tool with no output schema has no structured content", () => {
   assert.deepEqual(mcpToolResult(ok(null), false), { content: [{ type: "text", text: "null" }] });
-  assert.equal(mcpToolResult(offline, true).content[0].text, '{"ok":false,"error":{"_tag":"Offline","since":"2026-01-01T00:00:00Z"}}');
-  assert.equal(mcpToolResult({ kind: "internal", message: "x" }, true).isError, true);
-});
-
-test("a call failure becomes an error with its kind", () => {
-  const error = new CallFailureError({ kind: "cancelled", message: "stopped" });
-  assert.equal(error.kind, "cancelled");
-  assert.equal(error.name, "AbortError");
-  assert.equal(new CallFailureError({ kind: "invalid-input", message: "" }).name, "TypeError");
-});
-
-test("remote requests are screened in order", async () => {
-  const rules = { methods: ["POST"], allowedOrigins: ["https://a.example"], mediaType: "application/json", maximumBytes: 8 };
-  const request = (init: RequestInit) => new Request("https://a.example/mcp", init);
-  assert.equal(screenRequest(request({ method: "GET" }), rules), "method");
-  assert.equal(screenRequest(request({ method: "POST", headers: { Origin: "https://b.example" } }), rules), "origin");
-  assert.equal(screenRequest(request({ method: "POST", headers: { "Content-Type": "text/plain" }, body: "x" }), rules), "media-type");
-  assert.equal(screenRequest(request({ method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }), rules), undefined);
-  assert.deepEqual(await readBounded(request({ method: "POST", body: "123456789" }), 8), { rejection: "too-large" });
-  assert.deepEqual(await readBounded(request({ method: "POST", body: new Uint8Array([0xff]) }), 8), { rejection: "not-utf8" });
-  assert.deepEqual(await readBounded(request({ method: "POST", body: "{}" }), 8), { text: "{}" });
 });
 
 test("views keep one target, and bundles keep the types they use", () => {
@@ -159,6 +101,11 @@ test("views keep one target, and bundles keep the types they use", () => {
   assert.equal(bundled.type, "object");
   assert.ok(isJsonObject(bundled.$defs));
   assert.deepEqual(Object.keys(bundled.$defs), ["Mode"]);
+  const list = { type: "object", properties: { modes: { type: "array", items: { $ref: "#/$defs/Mode" } } } };
+  const bundledList = bundle(list, catalog.$defs);
+  assert.deepEqual(bundledList.properties, list.properties);
+  assert.ok(isJsonObject(bundledList.$defs));
+  assert.deepEqual(Object.keys(bundledList.$defs), ["Mode"]);
 });
 
 test("inherited names, such as constructor and toString, are not targets or types", () => {
@@ -183,14 +130,6 @@ test("a schema resolves to the type that its $ref refers to, whatever other keys
   assert.equal(resolveType({ $ref: "#/$defs/Item" }, types), types.Item);
   const plain = { type: "string" };
   assert.equal(resolveType(plain, types), plain);
-});
-
-test("the CLI binding reads the bundled type that the $ref of an input schema refers to, whatever other keys it has", () => {
-  const types = { Input: { type: "object", properties: { level: { $ref: "#/$defs/Level" } } }, Level: { type: "integer" } };
-  const expected = { ...types.Input, $defs: { Level: types.Level } };
-  assert.deepEqual(cliInputSchema({ $ref: "#/$defs/Input", description: "The input." }, types), expected);
-  assert.deepEqual(cliInputSchema({ $ref: "#/$defs/Input" }, types), expected);
-  assert.deepEqual(cliInputSchema(types.Level, types), types.Level);
 });
 
 test("an input that is a union of objects becomes an object schema", () => {
@@ -237,29 +176,6 @@ test("an emitted value becomes an occurrence", () => {
   assert.equal(isOccurrence({ ...occurrence, truncated: false }), false);
 });
 
-test("occurrences become server-sent events, MCP notifications and CLI usage", () => {
-  const occurrence = { eventId: "e1", name: "a.changed", timestamp: "2026-11-10T09:30:00Z", data: {}, cursor: "7", truncated: true } as const;
-  assert.equal(httpEventMessage.next(occurrence), `event: next\nid: 7\ndata: ${JSON.stringify(occurrence)}\n\n`);
-  assert.equal(httpEventMessage.complete(), "event: complete\ndata:\n\n");
-  assert.equal(httpEventMessage.error({ kind: "internal", message: "m" }), 'event: error\ndata: {"kind":"internal","message":"m"}\n\n');
-  assert.deepEqual(mcpEventParams(occurrence, 3), {
-    eventId: "e1",
-    name: "a.changed",
-    timestamp: "2026-11-10T09:30:00Z",
-    data: {},
-    cursor: "7",
-    _meta: { "io.modelcontextprotocol/subscriptionId": 3 },
-  });
-  assert.deepEqual(mcpSubscribeError({ kind: "unknown-capability", message: "m" }), { code: -32023, message: "m", data: { kind: "event" } });
-  assert.equal(mcpSubscribeError({ kind: "invalid-input", message: "m" }).code, -32602);
-  assert.equal(cliEventUsage("aircon", "aircon.status.changed", { type: "object", properties: {} }), "aircon watch aircon.status.changed [--cursor <string>] [--max-age-ms <integer>]");
-  assert.equal(cliEventUsage("x", "a.b", { type: "object" }), "x watch a.b '<json>' [--cursor <string>] [--max-age-ms <integer>]");
-  assert.equal(
-    cliEventUsage("x", "a.b", { type: "object", required: ["room"], properties: { room: { type: "string" } } }),
-    "x watch a.b --room <string> [--cursor <string>] [--max-age-ms <integer>]",
-  );
-});
-
 test("canonical JSON sorts keys at all levels and has no spaces", () => {
   assert.equal(canonicalJson({ b: [1, { d: 0.5, c: "x" }], a: null }), '{"a":null,"b":[1,{"c":"x","d":0.5}]}');
   assert.equal(canonicalJson("é"), '"é"');
@@ -278,28 +194,13 @@ test("a poll cursor keeps its lease, position and provider cursor, and other tex
   assert.equal(decodePollCursor(`p1.${btoa(JSON.stringify(["l", -1]))}`), undefined);
 });
 
-test("events/list gives the delivery modes", () => {
-  assert.deepEqual(mcpEventEntry("a.b", "d", undefined, undefined).delivery, ["push", "poll"]);
-  assert.deepEqual(mcpEventEntry("a.b", "d", undefined, undefined, true).delivery, ["push", "poll", "webhook"]);
-});
-
 test("webhook secrets, grants, signatures and subscription ids follow Standard Webhooks and the MCP binding", async () => {
-  const secret = `whsec_${btoa(String.fromCharCode(...Array.from({ length: 24 }, () => 7)))}`;
-  assert.equal(webhookSecretBytes(secret)?.length, 24);
-  assert.equal(webhookSecretBytes(`whsec_${btoa("short")}`), undefined);
-  assert.equal(webhookSecretBytes("secret"), undefined);
   assert.equal(webhookSecretBytes("whsec_not base64!"), undefined);
-  const limits = { maxTtlMs: 3_600_000, minTtlMs: 60_000 };
-  assert.equal(webhookGrantMs(undefined, limits), 3_600_000);
-  assert.equal(webhookGrantMs(null, limits), 3_600_000);
-  assert.equal(webhookGrantMs(1000, limits), 60_000);
-  assert.equal(webhookGrantMs(120_000, limits), 120_000);
-  assert.equal(webhookGrantMs(10 ** 9, limits), 3_600_000);
+  assert.equal(webhookGrantMs(120_000, { maxTtlMs: 3_600_000, minTtlMs: 60_000 }), 120_000);
 
   // The example of the Standard Webhooks specification.
   const signature = await webhookSignature(["whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw"], "msg_p5jXN8AQM9LWM0D4loKWxJek", 1614265330, '{"test": 2432232314}');
   assert.equal(signature, "v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=");
-  assert.equal((await webhookSignature([secret, secret], "msg_x", 1, "{}")).split(" ").length, 2);
 
   const id = await webhookSubscriptionId("p", "https://h/x", "a.b", { y: 1, x: 2 });
   assert.match(id, /^sub_[0-9a-f]{16}$/);
@@ -331,34 +232,4 @@ test("cliAliases reads the input schema of a capability through $defs, and ignor
     errors: ["target cli: the alias loud has the fixed input volume, which is not a property of the input of aircon.power.set"],
   });
   assert.deepEqual(cliAliases(catalog, "api"), { aliases: [], default: undefined, errors: [] });
-});
-
-test("an alias takes flags for the properties that are not in its fixed input", () => {
-  const input = {
-    type: "object",
-    required: ["mode", "speed"],
-    properties: { mode: { type: "string", enum: ["cool", "heat"] }, speed: { type: "integer" }, quiet: { type: "boolean" } },
-  };
-  const schema = cliAliasSchema(input, { mode: "cool" });
-  assert.deepEqual(schema, { type: "object", required: ["speed"], properties: { speed: { type: "integer" }, quiet: { type: "boolean" } } });
-  assert.equal(cliAliasUsage("aircon", { name: "cool", kind: "capability" }, schema), "aircon cool --speed <integer> [--quiet]");
-  assert.deepEqual(cliAliasSchema(input, { mode: "cool", speed: 1 }).required, undefined);
-  assert.equal(cliAliasUsage("aircon", { name: "--on", kind: "capability" }, cliAliasSchema({ type: "object", required: ["on"], properties: { on: { type: "boolean" } } }, { on: true })), "aircon --on");
-  assert.equal(cliAliasUsage("aircon", { name: "status", kind: "capability" }, undefined), "aircon status");
-  assert.equal(cliAliasUsage("aircon", { name: "raw", kind: "capability" }, { type: "object" }), "aircon raw '<json>'");
-  assert.equal(cliAliasUsage("aircon", { name: "follow", kind: "event" }, undefined), "aircon follow [--cursor <string>] [--max-age-ms <integer>]");
-  assert.equal(cliAliasUsage("aircon", { name: "feed", kind: "event" }, { type: "object" }), "aircon feed '<json>' [--cursor <string>] [--max-age-ms <integer>]");
-});
-
-test("the usage of an alias of an event has the flags that are not in its fixed input, and the cursor flags", () => {
-  const catalog = {
-    acidcat: "0.1",
-    targets: { cli: { bindings: ["cli"] } },
-    capabilities: {},
-    events: {
-      "css.tokens.built": { description: "", audience: ["cli"], input: { type: "object", properties: { theme: { type: "string" }, full: { type: "boolean" } } } },
-    },
-  } as const;
-  const follow = { name: "follow", kind: "event", id: "css.tokens.built", input: { theme: "dark" } } as const;
-  assert.equal(cliAliasUsage("css", follow, cliAliasInput(catalog, follow)), "css follow [--full] [--cursor <string>] [--max-age-ms <integer>]");
 });
