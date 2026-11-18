@@ -234,8 +234,8 @@ test("webhook: events/unsubscribe of the subscription of another principal gives
 test("webhook: a complete subscription ends with no message", async () => {
   const { handler, subscribe } = server({ maxSubscriptions: 1 });
   assert.ok(isJsonObject((await subscribe({ name: "sensor.ticks" }))["result"]));
-  // The limit admits a second subscription only after the first one has ended.
-  await until(async () => isJsonObject((await subscribe({}))["result"]));
+  const firstEnded = async () => isJsonObject((await subscribe({}))["result"]);
+  await until(firstEnded);
   assert.equal(receiver.deliveries().length, 3);
   await handler.close();
 });

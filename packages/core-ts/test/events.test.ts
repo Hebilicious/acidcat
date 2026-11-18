@@ -16,7 +16,7 @@ async function nextOf<Payload>(occurrences: Occurrences<Payload>) {
 }
 
 function burst(id: string, items: readonly { readonly data: { readonly n: number }; readonly truncated?: true }[]) {
-  const { promise: taken, resolve } = Promise.withResolvers<void>();
+  const { promise: allBuffered, resolve } = Promise.withResolvers<void>();
   const event = defineEvent({
     id,
     description: "Give each item at once.",
@@ -24,11 +24,10 @@ function burst(id: string, items: readonly { readonly data: { readonly n: number
     payload: z.object({ n: z.number() }),
     async *subscribe() {
       yield* items;
-      // The subscription asks for the next item only after it has put the last one in its buffer.
       resolve();
     },
   });
-  return { app: defineApp({ targets: { app: { bindings: ["typescript"] } }, capabilities: [], events: [event] }), taken };
+  return { app: defineApp({ targets: { app: { bindings: ["typescript"] } }, capabilities: [], events: [event] }), allBuffered };
 }
 
 const kindOf = (started: Occurrences<unknown> | { readonly kind: string }) => ("kind" in started ? started.kind : undefined);
@@ -160,11 +159,11 @@ test("a provider that throws when it starts fails as internal before the first o
 });
 
 test("an occurrence that the provider marks truncated keeps the mark, also when earlier occurrences wait in the buffer", async () => {
-  const { app, taken } = burst("probe.gap", [{ data: { n: 1 } }, { data: { n: 2 }, truncated: true }, { data: { n: 3 } }]);
+  const { app, allBuffered } = burst("probe.gap", [{ data: { n: 1 } }, { data: { n: 2 }, truncated: true }, { data: { n: 3 } }]);
   await using session = createSession(app, { target: "app", ...sensorOptions() });
   const occurrences = await session.subscribe("probe.gap", {});
   assert.ok(!("kind" in occurrences));
-  await taken;
+  await allBuffered;
   const read = [await nextOf(occurrences), await nextOf(occurrences), await nextOf(occurrences)];
   assert.deepEqual(read.map((each) => [each.data, each.truncated]), [[{ n: 1 }, undefined], [{ n: 2 }, true], [{ n: 3 }, undefined]]);
 });
@@ -224,11 +223,11 @@ test("dispose ends each subscription as complete, and the providers stop", async
 });
 
 test("a slow client loses the oldest occurrences, and the next occurrence that it reads has truncated", async () => {
-  const { app, taken } = burst("probe.burst", [0, 1, 2, 3, 4].map((n) => ({ data: { n } })));
+  const { app, allBuffered } = burst("probe.burst", [0, 1, 2, 3, 4].map((n) => ({ data: { n } })));
   await using session = createSession(app, { target: "app", ...sensorOptions(), bufferLimit: 2 });
   const occurrences = await session.subscribe("probe.burst", {});
   assert.ok(!("kind" in occurrences));
-  await taken;
+  await allBuffered;
   const third = await nextOf(occurrences);
   assert.deepEqual([third.data, third.truncated], [{ n: 3 }, true]);
   const fourth = await nextOf(occurrences);
