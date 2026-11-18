@@ -141,6 +141,10 @@ const HelpText = Context.Reference<string | undefined>("@acid-cat/core-effect/Cl
 
 const Aliases = Context.Reference<ReadonlyArray<AliasEntry>>("@acid-cat/core-effect/Cli/Aliases", { defaultValue: () => [] });
 
+const pathKey = (words: readonly string[]): string => words.join(" ");
+
+const SharedPrefixes = Context.Reference<ReadonlySet<string>>("@acid-cat/core-effect/Cli/SharedPrefixes", { defaultValue: () => new Set() });
+
 /**
  * `effect/cli` reads a flag alias such as `--on` as a flag, never as a command, so `runCommand` selects the subcommand
  * of each alias by this other name. The arguments of a process cannot contain NUL, so no user can give it.
@@ -187,13 +191,13 @@ export const run = <R, const Commands extends ReadonlyArray<Command.Command.Any>
  * The default presenter of `effect/cli` writes the help of an invalid invocation to standard output, but standard
  * output must be empty for exit codes 2 and 3 (spec/bindings/cli.md#outcomes).
  */
-const usageErrorsOnStderr: CliOutput.Presenter = {
+const usageErrorsOnStderr = (isSharedPrefix: (commandPath: readonly string[]) => boolean): CliOutput.Presenter => ({
   present: (event) =>
     event._tag === "InvalidInvocation"
       ? Effect.gen(function* () {
           const formatter = yield* CliOutput.Formatter;
           yield* Console.error(formatter.formatHelpDoc(event.helpDoc));
-          yield* Console.error(formatter.formatErrors(event.errors));
+          if (!isSharedPrefix(event.commandPath)) yield* Console.error(formatter.formatErrors(event.errors));
         })
       : event._tag === "Help" && event.reason === "Implicit"
         ? Effect.gen(function* () {
@@ -204,7 +208,7 @@ const usageErrorsOnStderr: CliOutput.Presenter = {
             if (Context.get(event.helpDoc.annotations, HelpText) === undefined) yield* Console.error(usage.message);
           })
         : CliOutput.defaultPresenter.present(event),
-};
+});
 
 /**
  * `effect/cli` shows the help of a command that only contains other commands when it runs with no subcommand, as if the
@@ -238,6 +242,9 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   const aliases = Context.get(command.annotations, Aliases);
   const settings = Context.get(command.annotations, OutputSettings);
   const claimed = new Set(settings?.output.flags?.flatMap(({ names }) => names) ?? []);
+  const sharedPrefixes = Context.get(command.annotations, SharedPrefixes);
+  const isSharedPrefix = (commandPath: readonly string[]) => sharedPrefixes.has(pathKey(commandPath.slice(1)));
+  const isInvalidSharedPrefix = (error: CliError.CliError) => error._tag === "ShowHelp" && error.errors.length > 0 && isSharedPrefix(error.commandPath);
   const dispatch = (args: readonly string[]) =>
     Effect.gen(function* () {
     const runWith = Command.runWith(command, { version: options.version });
@@ -281,7 +288,7 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   return Effect.catchIf(
     program,
     CliError.isCliError,
-    (error) => Effect.sync(() => (process.exitCode = exitCodeOf(error))),
+    (error) => Effect.sync(() => (process.exitCode = isInvalidSharedPrefix(error) ? CLI_EXIT_CODES["unknown-capability"] : exitCodeOf(error))),
     Effect.fail,
   ).pipe(
     Effect.updateService(
@@ -295,7 +302,7 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
       }),
     ),
     Effect.provideService(Logger.LogToStderr, true),
-    Effect.provideService(CliOutput.Presenter, usageErrorsOnStderr),
+    Effect.provideService(CliOutput.Presenter, usageErrorsOnStderr(isSharedPrefix)),
   );
 };
 
@@ -627,6 +634,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
       Aliases,
       aliasCommands.map(({ entry }) => entry),
     ),
+    Command.annotate(SharedPrefixes, new Set(leaves.flatMap(({ path }) => path.slice(1).map((_, index) => pathKey(path.slice(0, index + 1)))))),
     Command.annotate(OutputSettings, options.output === undefined ? undefined : { output: options.output, commands: (options.commands ?? []).map(({ name }) => name) }),
   );
 }

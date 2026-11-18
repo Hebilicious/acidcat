@@ -54,9 +54,9 @@ A protocol binding that serves a view as a command line. The commands come from 
   | Arguments | Standard output | Standard error | Exit code |
   | --- | --- | --- | --- |
   | `<prefix> --help` | The command list | Nothing | 0 |
-  | `<prefix>` | Nothing | The command list | 2 |
+  | `<prefix>`, or `<prefix>` and arguments that are not `--help` | Nothing | The command list | 2 |
 
-  A shared prefix can have one word or more words: `aircon --help` and `aircon status --help` are both the help of a shared prefix, if no capability has the path `aircon` or `aircon status`.
+  A shared prefix can have one word or more words: `aircon --help` and `aircon status --help` are both the help of a shared prefix, if no capability has the path `aircon` or `aircon status`. The program uses the longest shared prefix at the start of the arguments. If the arguments after it do not continue the path of a command, the command is unknown. If one of these arguments is `--help`, the program writes the command list to standard output. If not, the program writes the command list to standard error. For example, `aircon power --on`, `aircon power nope` and `aircon power` all write the command list of `aircon power` to standard error, with exit code 2.
 - **Cancellation.** An interrupt (`SIGINT`) cancels the call. If the call has not ended within a grace period after the interrupt, the program SHOULD exit with code 130. At a second interrupt, it SHOULD exit with code 130 at once.
 
 An application MAY add its own commands and flags. The name of a command of the application is one word. This name MUST NOT be `call`, `list`, `watch`, the name of a different command of the application, the name of an alias, or the first word of the path of a capability. If a name breaks this rule, if two commands have the same path, or if two flags have the same name, the program MUST stop with an error when it starts.

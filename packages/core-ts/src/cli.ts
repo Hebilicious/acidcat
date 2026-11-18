@@ -430,16 +430,15 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       .filter(({ path }) => path.every((word, index) => args[index] === word))
       .sort((a, b) => b.path.length - a.path.length)[0];
     if (match === undefined) {
-      const firstFlag = args.findIndex((arg) => arg.startsWith("-"));
-      const prefix = firstFlag === -1 ? args : args.slice(0, firstFlag);
-      const rest = args.slice(prefix.length);
-      const list = cliCommandList(prefix, commands.map(({ id }) => ({ id, usage: usageOf(id) })));
-      if (list !== undefined && isHelp(rest)) {
+      const usages = commands.map(({ id }) => ({ id, usage: usageOf(id) }));
+      for (let length = args.length; length > 0; length--) {
+        const list = cliCommandList(args.slice(0, length), usages);
+        if (list === undefined) continue;
+        if (!isHelp(args.slice(length))) throw new UsageError(list, CLI_EXIT_CODES["unknown-capability"]);
         io.stdout(list);
         return CLI_EXIT_CODES.value;
       }
-      const message = list !== undefined && rest.length === 0 ? list : `There is no command ${args.filter((arg) => !arg.startsWith("-")).join(" ")}.`;
-      throw new UsageError(message, CLI_EXIT_CODES["unknown-capability"]);
+      throw new UsageError(`There is no command ${args.filter((arg) => !arg.startsWith("-")).join(" ")}.`, CLI_EXIT_CODES["unknown-capability"]);
     }
 
     const capability = viewCapability(view, match.id);

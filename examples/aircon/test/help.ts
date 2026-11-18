@@ -22,7 +22,9 @@ export async function assertHelp(cli: (...args: string[]) => Promise<Run>): Prom
   assert.deepEqual(await cli("aircon", "power", "--help"), { code: 0, stdout: commandList([POWER_SET]), stderr: "" });
   assert.deepEqual(await cli("aircon", "status", "--help"), { code: 0, stdout: commandList([STATUS_GET, STATUS_EXPORT]), stderr: "" });
   assert.deepEqual(await cli("aircon", "--help"), { code: 0, stdout: commandList(EVERY_COMMAND), stderr: "" });
-  assert.deepEqual(await cli("aircon", "power"), { code: 2, stdout: "", stderr: commandList([POWER_SET]) });
+  for (const rest of [[], ["--on"], ["nope"], ["{}"]]) {
+    assert.deepEqual(await cli("aircon", "power", ...rest), { code: 2, stdout: "", stderr: commandList([POWER_SET]) });
+  }
   const unknown = await cli("nope");
   assert.equal(unknown.code, 2);
   assert.equal(unknown.stdout, "");

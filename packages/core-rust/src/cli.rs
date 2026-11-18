@@ -890,33 +890,32 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                     })
                     .max_by_key(|(_, path)| path.len());
                 let Some((id, path)) = found else {
-                    let first_flag = args
-                        .iter()
-                        .position(|arg| arg.starts_with('-'))
-                        .unwrap_or(args.len());
-                    let (prefix, rest) = args.split_at(first_flag);
-                    let list = command_list(
-                        prefix,
-                        commands.iter().map(|(id, path)| (path, usage_of(id))),
-                    );
-                    if let Some(list) = &list
-                        && is_help(rest)
-                    {
-                        (io.stdout)(list);
-                        return Ok(exit::VALUE);
-                    }
-                    let message = match list {
-                        Some(list) if rest.is_empty() => list,
-                        _ => {
+                    let shared = (1..=args.len()).rev().find_map(|length| {
+                        let (prefix, rest) = args.split_at(length);
+                        command_list(
+                            prefix,
+                            commands.iter().map(|(id, path)| (path, usage_of(id))),
+                        )
+                        .map(|list| (list, rest))
+                    });
+                    return match shared {
+                        Some((list, rest)) if is_help(rest) => {
+                            (io.stdout)(&list);
+                            Ok(exit::VALUE)
+                        }
+                        Some((list, _)) => Err(usage_error(list, exit::UNKNOWN_CAPABILITY)),
+                        None => {
                             let words: Vec<&str> = args
                                 .iter()
                                 .map(String::as_str)
                                 .filter(|arg| !arg.starts_with('-'))
                                 .collect();
-                            format!("There is no command {}.", words.join(" "))
+                            Err(usage_error(
+                                format!("There is no command {}.", words.join(" ")),
+                                exit::UNKNOWN_CAPABILITY,
+                            ))
                         }
                     };
-                    return Err(usage_error(message, exit::UNKNOWN_CAPABILITY));
                 };
                 let entry = capability(id);
                 let schema = schema_of(&entry).unwrap_or_else(|| json!({ "type": "object" }));

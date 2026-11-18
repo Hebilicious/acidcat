@@ -246,13 +246,19 @@ async function checkHelp(checks: Checks, command: readonly string[]): Promise<vo
       expectEqual(result.stderr, "", "standard error");
     }
   });
-  await checks.run("a shared prefix alone writes its command list to standard error with exit code 2", `${RULE}#commands`, async (signal) => {
+  const expectUnknown = async (signal: AbortSignal, ...args: string[]) => {
     const entries = await listed(signal);
-    const result = await run(signal, "fixture", "switch");
+    const result = await run(signal, ...args);
     expectEqual(result.code, 2, "exit code");
     expectEqual(result.stdout, "", "standard output");
     expectEqual(result.stderr, commandList(entries, "fixture.switch"), "standard error");
-  });
+  };
+  await checks.run("a shared prefix alone writes its command list to standard error with exit code 2", `${RULE}#commands`, (signal) =>
+    expectUnknown(signal, "fixture", "switch"),
+  );
+  await checks.run("a shared prefix and a flag that is not --help write its command list to standard error with exit code 2", `${RULE}#commands`, (signal) =>
+    expectUnknown(signal, "fixture", "switch", "--on"),
+  );
 }
 
 async function checkAliases(checks: Checks, command: readonly string[]): Promise<void> {
