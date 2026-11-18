@@ -16,8 +16,15 @@ tasks:
     inputs: ["src/**/*", "package.json", "tsconfig.json", "tsconfig.build.json", "/tsconfig.base.json", "/scripts/build-package.ts"]
     outputs: ["dist/**/*"]
 
+  test-programs:
+    description: "Bundle each TypeScript program that the tests start as a process into .out/programs/. A bundle starts in less time than its source modules."
+    command: "node"
+    args: ["../../scripts/bundle-programs.ts", "test/fixture-cli.ts", "test/fixture-cli-flags.ts", "test/fixture-cli-commands.ts", "test/fixture-cli-repeated.ts", "test/fixture-cli-inherited.ts", "test/fixture-cli-ignoring-interruption.ts", "test/fixture-cli-remote.ts", "test/fixture-mcp-stdio.ts", "test/events-cli.ts", "test/events-cli-reserved.ts", "test/lamp-cli.ts"]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "/scripts/bundle-programs.ts", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/mcp-handshake/src/**/*.ts"]
+    outputs: [".out/programs/**/*"]
+
   test:
-    deps: ["cli:browser"]
+    deps: ["test-programs", "cli:browser"]
     description: "Test sessions, handles and the MCP, HTTP, CLI and WebMCP bindings, with the test applications of the package and the air conditioner."
     command: "node"
     args: ["--test", "--test-timeout=$TEST_TIMEOUT_MS", "test/"]

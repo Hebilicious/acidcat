@@ -8,6 +8,7 @@ import { isDeepStrictEqual } from "node:util";
 import { isArrayOf, isObject, memberOf, parseJson } from "../json.ts";
 import type { JsonObject } from "../json.ts";
 import { Checks, eventIdsOf, expect, expectEqual, expectOccurrence, idsOf, sorted, until } from "./check.ts";
+import type { Define } from "./check.ts";
 
 const RULE = "spec/bindings/cli.md";
 
@@ -107,40 +108,42 @@ export async function checkCli(command: readonly string[], options: { readonly d
   const checks = new Checks("cli", options.deadline);
   const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
 
-  await checks.run("a value goes to standard output with exit code 0", `${RULE}#outcomes`, async (signal) => {
-    const result = await run(signal, "fixture", "echo", "--text", "hello");
-    expectEqual(result.code, 0, "exit code");
-    expectEqual(parseJson(result.stdout), { text: "hello" }, "standard output");
-  });
-  await checks.run("a failure goes to standard output with exit code 1", `${RULE}#outcomes`, async (signal) => {
-    const result = await run(signal, "fixture", "refuse");
-    expectEqual(result.code, 1, "exit code");
-    expectEqual(memberOf(parseJson(result.stdout), "_tag"), "Refused", "_tag");
-  });
-  await checks.run("a defect goes to standard error with exit code 5", `${RULE}#outcomes`, async (signal) => {
-    const result = await run(signal, "fixture", "crash");
-    expectEqual(result.code, 5, "exit code");
-    expect(/"kind":"internal"/.test(result.stderr), "standard error must contain the call failure");
-  });
-  for (const [name, args, code] of [
-    ["an unknown command has exit code 2", ["nothing"], 2],
-    ["a shared prefix alone has exit code 2", ["fixture", "switch"], 2],
-    ["an unknown word after an alias that is the default of a shared prefix has exit code 2", ["fixture", "nope"], 2],
-    ["the first word of two-word aliases alone, with no one-word alias, has exit code 2", ["shout"], 2],
-    ["an unknown second word after the first word of two-word aliases has exit code 2", ["shout", "nope"], 2],
-    ["an unknown second word after a one-word alias with two-word aliases has exit code 2", ["notes", "nope"], 2],
-    ["a capability outside the view has exit code 2", ["call", "fixture.hidden"], 2],
-    ["a missing required flag has exit code 3", ["fixture", "echo"], 3],
-    ["an unknown flag has exit code 3", ["fixture", "echo", "--text", "hello", "--nope", "x"], 3],
-    ["a flag that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--ratio", "soon"], 3],
-    ["an item of a repeated flag that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--steps", "1", "--steps", "soon"], 3],
-    ["an item of a repeated flag as JSON text that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--steps", '[1,"soon"]'], 3],
-    ["invalid input through call has exit code 3", ["call", "fixture.echo", '{"text":1}'], 3],
-  ] as const) {
-    await checks.run(name, `${RULE}#outcomes`, async (signal) => {
-      await expectUsageError(run(signal, ...args), code);
+  await checks.concurrently((check) => {
+    check("a value goes to standard output with exit code 0", `${RULE}#outcomes`, async (signal) => {
+      const result = await run(signal, "fixture", "echo", "--text", "hello");
+      expectEqual(result.code, 0, "exit code");
+      expectEqual(parseJson(result.stdout), { text: "hello" }, "standard output");
     });
-  }
+    check("a failure goes to standard output with exit code 1", `${RULE}#outcomes`, async (signal) => {
+      const result = await run(signal, "fixture", "refuse");
+      expectEqual(result.code, 1, "exit code");
+      expectEqual(memberOf(parseJson(result.stdout), "_tag"), "Refused", "_tag");
+    });
+    check("a defect goes to standard error with exit code 5", `${RULE}#outcomes`, async (signal) => {
+      const result = await run(signal, "fixture", "crash");
+      expectEqual(result.code, 5, "exit code");
+      expect(/"kind":"internal"/.test(result.stderr), "standard error must contain the call failure");
+    });
+    for (const [name, args, code] of [
+      ["an unknown command has exit code 2", ["nothing"], 2],
+      ["a shared prefix alone has exit code 2", ["fixture", "switch"], 2],
+      ["an unknown word after an alias that is the default of a shared prefix has exit code 2", ["fixture", "nope"], 2],
+      ["the first word of two-word aliases alone, with no one-word alias, has exit code 2", ["shout"], 2],
+      ["an unknown second word after the first word of two-word aliases has exit code 2", ["shout", "nope"], 2],
+      ["an unknown second word after a one-word alias with two-word aliases has exit code 2", ["notes", "nope"], 2],
+      ["a capability outside the view has exit code 2", ["call", "fixture.hidden"], 2],
+      ["a missing required flag has exit code 3", ["fixture", "echo"], 3],
+      ["an unknown flag has exit code 3", ["fixture", "echo", "--text", "hello", "--nope", "x"], 3],
+      ["a flag that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--ratio", "soon"], 3],
+      ["an item of a repeated flag that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--steps", "1", "--steps", "soon"], 3],
+      ["an item of a repeated flag as JSON text that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--steps", '[1,"soon"]'], 3],
+      ["invalid input through call has exit code 3", ["call", "fixture.echo", '{"text":1}'], 3],
+    ] as const) {
+      check(name, `${RULE}#outcomes`, async (signal) => {
+        await expectUsageError(run(signal, ...args), code);
+      });
+    }
+  });
   await checks.run("an interrupt cancels the call with exit code 130", `${RULE}#commands`, async (signal) => {
     const directory = await mkdtemp(join(tmpdir(), "acid-cat-conform-"));
     const marker = join(directory, "held");
@@ -159,54 +162,56 @@ export async function checkCli(command: readonly string[], options: { readonly d
       await rm(directory, { recursive: true, force: true });
     }
   });
-  await checks.run("each flag gives the value of its property, and a repeated flag gives one item for each occurrence", `${RULE}#commands`, async (signal) => {
-    const scalars = ["--mode", "slow", "--count", "3", "--ratio=0.5", "--label", "x", "--verbose", "--extra", '{"a":1}'];
-    const repeated = ["--steps", "2", "--tags", '["a"]', "--steps=1", "--tags", "b"];
-    const result = await run(signal, "fixture", "flags", ...scalars, ...repeated);
-    expectEqual(result.code, 0, "exit code");
-    const expected = { mode: "slow", count: 3, ratio: 0.5, label: "x", verbose: true, extra: { a: 1 }, steps: [2, 1], tags: ['["a"]', "b"] };
-    // The order of the members of an object has no meaning in JSON.
-    const output = parseJson(result.stdout);
-    expect(isDeepStrictEqual(output, expected), `standard output: expected ${JSON.stringify(expected)}, got ${JSON.stringify(output)}`);
+  await checks.concurrently((check) => {
+    check("each flag gives the value of its property, and a repeated flag gives one item for each occurrence", `${RULE}#commands`, async (signal) => {
+      const scalars = ["--mode", "slow", "--count", "3", "--ratio=0.5", "--label", "x", "--verbose", "--extra", '{"a":1}'];
+      const repeated = ["--steps", "2", "--tags", '["a"]', "--steps=1", "--tags", "b"];
+      const result = await run(signal, "fixture", "flags", ...scalars, ...repeated);
+      expectEqual(result.code, 0, "exit code");
+      const expected = { mode: "slow", count: 3, ratio: 0.5, label: "x", verbose: true, extra: { a: 1 }, steps: [2, 1], tags: ['["a"]', "b"] };
+      // The order of the members of an object has no meaning in JSON.
+      const output = parseJson(result.stdout);
+      expect(isDeepStrictEqual(output, expected), `standard output: expected ${JSON.stringify(expected)}, got ${JSON.stringify(output)}`);
+    });
+    check("a repeated flag that occurs once with JSON text of an array gives that array", `${RULE}#commands`, async (signal) => {
+      const result = await run(signal, "fixture", "flags", "--steps", "[2,1]", "--mode", "fast", "--verbose", '--tags=["a","b"]');
+      expectEqual(result.code, 0, "exit code");
+      const expected = { mode: "fast", verbose: true, steps: [2, 1], tags: ["a", "b"] };
+      const output = parseJson(result.stdout);
+      expect(isDeepStrictEqual(output, expected), `standard output: expected ${JSON.stringify(expected)}, got ${JSON.stringify(output)}`);
+    });
+    check("call gives the value of a capability", `${RULE}#commands`, async (signal) => {
+      const result = await run(signal, "call", "fixture.echo", '{"text":"hello"}');
+      expectEqual(result.code, 0, "exit code");
+      expectEqual(parseJson(result.stdout), { text: "hello" }, "standard output");
+    });
+    check("list gives the view: the capabilities, then the events", `${RULE}#commands`, async (signal) => {
+      const entries = entriesOf((await run(signal, "list")).stdout);
+      const ids = (kind: string) => entries.filter((entry) => entry.kind === kind).map((entry) => entry.id);
+      expectEqual(sorted(ids("capability")), idsOf("cli"), "the ids of the items with kind: capability");
+      expectEqual(sorted(ids("event")), eventIdsOf("cli"), "the ids of the items with kind: event");
+      expectEqual(entries.length, ids("capability").length + ids("event").length, "the number of items with a kind");
+      const firstEvent = entries.findIndex((entry) => entry.kind === "event");
+      expect(firstEvent === -1 || entries.slice(firstEvent).every((entry) => entry.kind === "event"), "the events must come after the capabilities");
+    });
+    check("list gives the usage of each capability and each event, with its flags", `${RULE}#commands`, async (signal) => {
+      const entries = entriesOf((await run(signal, "list")).stdout);
+      for (const { id, kind, usage } of entries) {
+        expect(typeof usage === "string", `${id} must have a usage`);
+        const [program, ...rest] = usage.split(" ");
+        expect(program !== "" && rest.length > 0, `the usage of ${id} must start with the name of the program, got ${JSON.stringify(usage)}`);
+        expectEqual(rest.join(" "), kind === "event" ? EVENT_USAGES[id] : USAGES[id], `usage of ${id} after the name of the program`);
+      }
+    });
+    checkHelp(check, command);
+    checkAliases(check, command);
+    checkWatch(check, command);
   });
-  await checks.run("a repeated flag that occurs once with JSON text of an array gives that array", `${RULE}#commands`, async (signal) => {
-    const result = await run(signal, "fixture", "flags", "--steps", "[2,1]", "--mode", "fast", "--verbose", '--tags=["a","b"]');
-    expectEqual(result.code, 0, "exit code");
-    const expected = { mode: "fast", verbose: true, steps: [2, 1], tags: ["a", "b"] };
-    const output = parseJson(result.stdout);
-    expect(isDeepStrictEqual(output, expected), `standard output: expected ${JSON.stringify(expected)}, got ${JSON.stringify(output)}`);
-  });
-  await checks.run("call gives the value of a capability", `${RULE}#commands`, async (signal) => {
-    const result = await run(signal, "call", "fixture.echo", '{"text":"hello"}');
-    expectEqual(result.code, 0, "exit code");
-    expectEqual(parseJson(result.stdout), { text: "hello" }, "standard output");
-  });
-  await checks.run("list gives the view: the capabilities, then the events", `${RULE}#commands`, async (signal) => {
-    const entries = entriesOf((await run(signal, "list")).stdout);
-    const ids = (kind: string) => entries.filter((entry) => entry.kind === kind).map((entry) => entry.id);
-    expectEqual(sorted(ids("capability")), idsOf("cli"), "the ids of the items with kind: capability");
-    expectEqual(sorted(ids("event")), eventIdsOf("cli"), "the ids of the items with kind: event");
-    expectEqual(entries.length, ids("capability").length + ids("event").length, "the number of items with a kind");
-    const firstEvent = entries.findIndex((entry) => entry.kind === "event");
-    expect(firstEvent === -1 || entries.slice(firstEvent).every((entry) => entry.kind === "event"), "the events must come after the capabilities");
-  });
-  await checks.run("list gives the usage of each capability and each event, with its flags", `${RULE}#commands`, async (signal) => {
-    const entries = entriesOf((await run(signal, "list")).stdout);
-    for (const { id, kind, usage } of entries) {
-      expect(typeof usage === "string", `${id} must have a usage`);
-      const [program, ...rest] = usage.split(" ");
-      expect(program !== "" && rest.length > 0, `the usage of ${id} must start with the name of the program, got ${JSON.stringify(usage)}`);
-      expectEqual(rest.join(" "), kind === "event" ? EVENT_USAGES[id] : USAGES[id], `usage of ${id} after the name of the program`);
-    }
-  });
-  await checkHelp(checks, command);
-  await checkAliases(checks, command);
-  await checkWatch(checks, command);
-
+  await checkWatchInterrupt(checks, command);
   return checks;
 }
 
-async function checkHelp(checks: Checks, command: readonly string[]): Promise<void> {
+function checkHelp(check: Define, command: readonly string[]): void {
   const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
   const listed = async (signal: AbortSignal) => entriesOf((await run(signal, "list")).stdout);
   const entry = (entries: readonly Entry[], id: string) => {
@@ -222,29 +227,33 @@ async function checkHelp(checks: Checks, command: readonly string[]): Promise<vo
   const commandList = (entries: readonly Entry[], prefix: string) =>
     ["Commands:", ...entries.filter((each) => each.kind === "capability" && each.id.startsWith(`${prefix}.`)).map((each) => `  ${String(each.usage)}`), ""].join("\n");
 
-  await checks.run("--help after the path of a command writes the help of the capability", `${RULE}#commands`, async (signal) => {
+  check("--help after the path of a command writes the help of the capability", `${RULE}#commands`, async (signal) => {
     const entries = await listed(signal);
-    for (const id of ["fixture.echo", "fixture.raw", "fixture.switch.set"]) {
-      const { usage, description } = entry(entries, id);
-      expectHelp(await run(signal, ...id.split("."), "--help"), usage, description);
-    }
-    const { usage, description } = entry(entries, "fixture.echo");
-    expectHelp(await run(signal, "fixture", "echo", "--text", "hello", "--help"), usage, description);
+    const helps = ["fixture.echo", "fixture.raw", "fixture.switch.set"].map((id) => ({ id, args: [...id.split("."), "--help"] }));
+    helps.push({ id: "fixture.echo", args: ["fixture", "echo", "--text", "hello", "--help"] });
+    await Promise.all(
+      helps.map(async ({ id, args }) => {
+        const { usage, description } = entry(entries, id);
+        expectHelp(await run(signal, ...args), usage, description);
+      }),
+    );
   });
-  await checks.run("--help after the name of an alias writes the help of the alias", ALIASES, async (signal) => {
+  check("--help after the name of an alias writes the help of the alias", ALIASES, async (signal) => {
     const entries = await listed(signal);
-    for (const [name, id] of [["say", "fixture.echo"], ["ticks", "fixture.ticks"]] as const) {
-      const { aliases, description } = entry(entries, id);
-      const usage = aliases.find((each) => each.split(" ")[1] === name);
-      expect(usage !== undefined, `list must give the usage of the alias ${name} of ${id}`);
-      expectHelp(await run(signal, name, "--help"), usage ?? "", description);
-    }
+    await Promise.all(
+      ([["say", "fixture.echo"], ["ticks", "fixture.ticks"]] as const).map(async ([name, id]) => {
+        const { aliases, description } = entry(entries, id);
+        const usage = aliases.find((each) => each.split(" ")[1] === name);
+        expect(usage !== undefined, `list must give the usage of the alias ${name} of ${id}`);
+        expectHelp(await run(signal, name, "--help"), usage, description);
+      }),
+    );
   });
-  await checks.run("--help after watch and the id of an event writes the help of the event", `${RULE}#events`, async (signal) => {
+  check("--help after watch and the id of an event writes the help of the event", `${RULE}#events`, async (signal) => {
     const { usage, description } = entry(await listed(signal), "fixture.ticks");
     expectHelp(await run(signal, "watch", "fixture.ticks", "--help"), usage, description);
   });
-  await checks.run("--help after a shared prefix writes its command list to standard output", `${RULE}#commands`, async (signal) => {
+  check("--help after a shared prefix writes its command list to standard output", `${RULE}#commands`, async (signal) => {
     const entries = await listed(signal);
     const result = await run(signal, "fixture", "switch", "--help");
     expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
@@ -258,15 +267,15 @@ async function checkHelp(checks: Checks, command: readonly string[]): Promise<vo
     expectEqual(result.stdout, "", "standard output");
     expectEqual(result.stderr, commandList(entries, "fixture.switch"), "standard error");
   };
-  await checks.run("a shared prefix alone writes its command list to standard error with exit code 2", `${RULE}#commands`, (signal) =>
+  check("a shared prefix alone writes its command list to standard error with exit code 2", `${RULE}#commands`, (signal) =>
     expectUnknown(signal, "fixture", "switch"),
   );
-  await checks.run("a shared prefix and a flag that is not --help write its command list to standard error with exit code 2", `${RULE}#commands`, (signal) =>
+  check("a shared prefix and a flag that is not --help write its command list to standard error with exit code 2", `${RULE}#commands`, (signal) =>
     expectUnknown(signal, "fixture", "switch", "--on"),
   );
 }
 
-async function checkAliases(checks: Checks, command: readonly string[]): Promise<void> {
+function checkAliases(check: Define, command: readonly string[]): void {
   const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
   const expectOutput = (result: Run, expected: JsonObject) => {
     expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
@@ -274,47 +283,47 @@ async function checkAliases(checks: Checks, command: readonly string[]): Promise
     expect(isDeepStrictEqual(output, expected), `standard output: expected ${JSON.stringify(expected)}, got ${JSON.stringify(output)}`);
   };
 
-  await checks.run("a command alias calls its capability with the flags", ALIASES, async (signal) => {
+  check("a command alias calls its capability with the flags", ALIASES, async (signal) => {
     expectOutput(await run(signal, "say", "--text", "hi"), { text: "hi" });
   });
-  await checks.run("a flag alias calls its capability with its fixed input", ALIASES, async (signal) => {
+  check("a flag alias calls its capability with its fixed input", ALIASES, async (signal) => {
     expectOutput(await run(signal, "--hello"), { text: "hello" });
   });
-  await checks.run("the input of an alias is its fixed input with the properties of the flags", ALIASES, async (signal) => {
+  check("the input of an alias is its fixed input with the properties of the flags", ALIASES, async (signal) => {
     expectOutput(await run(signal, "quick", "--count", "2", "--steps", "1", "--steps", "2"), { mode: "fast", count: 2, steps: [1, 2] });
   });
-  await checks.run("an alias of a capability whose input schema has no properties takes the input as JSON text", ALIASES, async (signal) => {
+  check("an alias of a capability whose input schema has no properties takes the input as JSON text", ALIASES, async (signal) => {
     expectOutput(await run(signal, "raw", '{"a":[1]}'), { a: [1] });
     expectOutput(await run(signal, "raw"), {});
   });
-  await checks.run("the flags of an alias come from the type that the $ref of the input schema refers to, whatever other keys it has", ALIASES, async (signal) => {
+  check("the flags of an alias come from the type that the $ref of the input schema refers to, whatever other keys it has", ALIASES, async (signal) => {
     expectOutput(await run(signal, "fixed-note"), { text: "fixed" });
     expectOutput(await run(signal, "fixed-note", "--loud"), { text: "fixed", loud: true });
   });
-  await checks.run("an alias of a capability with no input takes no argument", ALIASES, async (signal) => {
+  check("an alias of a capability with no input takes no argument", ALIASES, async (signal) => {
     const result = await run(signal, "held-keys");
     expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
     expect(isArrayOf(memberOf(parseJson(result.stdout), "keys"), (key) => typeof key === "string"), `standard output must have the keys, got ${result.stdout}`);
   });
-  await checks.run("a two-word alias calls its capability with the flags", ALIASES, async (signal) => {
+  check("a two-word alias calls its capability with the flags", ALIASES, async (signal) => {
     expectOutput(await run(signal, "notes", "add", "--text", "hi"), { text: "hi" });
   });
-  await checks.run("the input of a two-word alias is its fixed input with the properties of the flags", ALIASES, async (signal) => {
+  check("the input of a two-word alias is its fixed input with the properties of the flags", ALIASES, async (signal) => {
     expectOutput(await run(signal, "notes", "loud", "--text", "hi"), { text: "hi", loud: true });
     expectOutput(await run(signal, "shout", "hello"), { text: "HELLO" });
   });
-  await checks.run("a one-word alias runs when the second argument is not the second word of a two-word alias", ALIASES, async (signal) => {
+  check("a one-word alias runs when the second argument is not the second word of a two-word alias", ALIASES, async (signal) => {
     expectOutput(await run(signal, "notes"), {});
     expectOutput(await run(signal, "notes", '{"a":1}'), { a: 1 });
   });
-  await checks.run("an alias that is the default of a shared prefix runs with the prefix alone, and with flags", ALIASES, async (signal) => {
+  check("an alias that is the default of a shared prefix runs with the prefix alone, and with flags", ALIASES, async (signal) => {
     expectOutput(await run(signal, "fixture"), { mode: "slow" });
     expectOutput(await run(signal, "fixture", "--count", "2"), { mode: "slow", count: 2 });
   });
-  await checks.run("a command under a shared prefix with a default alias keeps its path", ALIASES, async (signal) => {
+  check("a command under a shared prefix with a default alias keeps its path", ALIASES, async (signal) => {
     expectOutput(await run(signal, "fixture", "echo", "--text", "hi"), { text: "hi" });
   });
-  await checks.run("a two-word alias with --help writes its usage", ALIASES, async (signal) => {
+  check("a two-word alias with --help writes its usage", ALIASES, async (signal) => {
     const result = await run(signal, "notes", "add", "--help");
     expectEqual(result.code, 0, "exit code");
     expect(result.stdout.includes("notes add --text <string> [--loud]"), `standard output must have the usage of the alias, got ${JSON.stringify(result.stdout)}`);
@@ -325,24 +334,24 @@ async function checkAliases(checks: Checks, command: readonly string[]): Promise
     return occurrencesIn(result.stdout, "fixture.ticks");
   };
   const tickData = async (signal: AbortSignal, ...args: string[]) => (await ticks(signal, ...args)).map((occurrence) => occurrence.data);
-  await checks.run("an alias of an event subscribes with its fixed input and the cursor", ALIASES, async (signal) => {
+  check("an alias of an event subscribes with its fixed input and the cursor", ALIASES, async (signal) => {
     expectEqual(await tickData(signal), [{ n: 1 }, { n: 2 }], "the data of the occurrences");
     expectEqual(await tickData(signal, "--cursor", "1"), [{ n: 2 }], "the data of the occurrences after the cursor 1");
   });
-  await checks.run("an alias of an event takes the flags of the input of its event", ALIASES, async (signal) => {
+  check("an alias of an event takes the flags of the input of its event", ALIASES, async (signal) => {
     expectEqual(
       (await ticks(signal, "--gap", "2")).map((occurrence) => [occurrence.data, occurrence.truncated ?? null]),
       [[{ n: 1 }, null], [{ n: 2 }, true]],
       "the data and truncated of the occurrences",
     );
   });
-  await checks.run("an alias of an event takes --max-age-ms", ALIASES, async (signal) => {
+  check("an alias of an event takes --max-age-ms", ALIASES, async (signal) => {
     expectEqual(await tickData(signal, "--max-age-ms", "60000"), [{ n: 1 }, { n: 2 }], "the data of the occurrences");
   });
-  await checks.run("an alias of an event takes a flag value that starts with - in the form --name=value", ALIASES, async (signal) => {
+  check("an alias of an event takes a flag value that starts with - in the form --name=value", ALIASES, async (signal) => {
     expectEqual(await tickData(signal, "--key=--cursor"), [{ n: 1 }, { n: 2 }], "the data of the occurrences with the key --cursor");
   });
-  await checks.run("an alias of an event whose input schema has no properties takes the input as JSON text", ALIASES, async (signal) => {
+  check("an alias of an event whose input schema has no properties takes the input as JSON text", ALIASES, async (signal) => {
     const echoes = async (...args: string[]) => {
       const result = await run(signal, "echoes", ...args);
       expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
@@ -351,20 +360,20 @@ async function checkAliases(checks: Checks, command: readonly string[]): Promise
     expectEqual(await echoes('{"a":1}'), [{ a: 1 }], "the data of the occurrences");
     expectEqual(await echoes(), [{}], "the data of the occurrences with no input");
   });
-  await checks.run("an alias of an event writes internal to standard error with exit code 5 after a defect", ALIASES, async (signal) => {
+  check("an alias of an event writes internal to standard error with exit code 5 after a defect", ALIASES, async (signal) => {
     const result = await run(signal, "broken-ticks");
     expectEqual(result.code, 5, "exit code");
     expectEqual(occurrencesIn(result.stdout, "fixture.broken").map((occurrence) => occurrence.data), [{ n: 1 }], "the data of the occurrences");
     expect(/"kind":"internal"/.test(result.stderr), `standard error must contain the call failure internal, got ${JSON.stringify(result.stderr)}`);
   });
-  await checks.run("the default alias runs with no arguments", ALIASES, async (signal) => {
+  check("the default alias runs with no arguments", ALIASES, async (signal) => {
     expectOutput(await run(signal), { mode: "fast" });
   });
-  await checks.run("the default alias takes the flags when the first argument is a flag", ALIASES, async (signal) => {
+  check("the default alias takes the flags when the first argument is a flag", ALIASES, async (signal) => {
     expectOutput(await run(signal, "--count", "2", "--verbose"), { mode: "fast", count: 2, verbose: true });
     expectOutput(await run(signal, "--hello"), { text: "hello" });
   });
-  await checks.run("--help writes the help when there is a default alias", ALIASES, async (signal) => {
+  check("--help writes the help when there is a default alias", ALIASES, async (signal) => {
     const result = await run(signal, "--help");
     expectEqual(result.code, 0, "exit code");
     expect(result.stdout.length > 0, "standard output must have the help");
@@ -379,11 +388,11 @@ async function checkAliases(checks: Checks, command: readonly string[]): Promise
     ["JSON text to an alias of a capability whose input schema refers to a type with properties has exit code 3", ["fixed-note", '{"text":"override"}'], 3],
     ["an argument to an alias of a capability with no input has exit code 3", ["held-keys", "{}"], 3],
   ] as const) {
-    await checks.run(name, ALIASES, async (signal) => {
+    check(name, ALIASES, async (signal) => {
       expectEqual((await run(signal, ...args)).code, code, "exit code");
     });
   }
-  await checks.run("list gives the usage of the aliases of each capability", ALIASES, async (signal) => {
+  check("list gives the usage of the aliases of each capability", ALIASES, async (signal) => {
     const entries = entriesOf((await run(signal, "list")).stdout);
     for (const { id, kind, aliases } of entries) {
       const expected = kind === "capability" ? ALIAS_USAGES[id] : EVENT_ALIAS_USAGES[id];
@@ -400,9 +409,9 @@ async function checkAliases(checks: Checks, command: readonly string[]): Promise
 
 const EVENTS = `${RULE}#events`;
 
-async function checkWatch(checks: Checks, command: readonly string[]): Promise<void> {
+function checkWatch(check: Define, command: readonly string[]): void {
   const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
-  await checks.run("watch writes each occurrence as one line of JSON, and exits with 0 when the subscription is complete", EVENTS, async (signal) => {
+  check("watch writes each occurrence as one line of JSON, and exits with 0 when the subscription is complete", EVENTS, async (signal) => {
     const result = await run(signal, "watch", "fixture.ticks", "--count", "2");
     expectEqual(result.code, 0, "exit code");
     expectEqual(
@@ -412,7 +421,7 @@ async function checkWatch(checks: Checks, command: readonly string[]): Promise<v
     );
     expectEqual(result.stderr, "", "standard error");
   });
-  await checks.run("watch with --cursor starts after the cursor", EVENTS, async (signal) => {
+  check("watch with --cursor starts after the cursor", EVENTS, async (signal) => {
     const result = await run(signal, "watch", "fixture.ticks", "--count", "3", "--cursor", "1", "--max-age-ms", "60000");
     expectEqual(result.code, 0, "exit code");
     expectEqual(
@@ -421,12 +430,12 @@ async function checkWatch(checks: Checks, command: readonly string[]): Promise<v
       "the data and the cursor of the occurrences",
     );
   });
-  await checks.run("watch takes a flag value that starts with - in the form --name=value", EVENTS, async (signal) => {
+  check("watch takes a flag value that starts with - in the form --name=value", EVENTS, async (signal) => {
     const result = await run(signal, "watch", "fixture.ticks", "--count", "1", "--key=--cursor");
     expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
     expectEqual(occurrencesIn(result.stdout, "fixture.ticks").map((occurrence) => occurrence.data), [{ n: 1 }], "the data of the occurrences");
   });
-  await checks.run("watch writes an occurrence after a gap with truncated: true", EVENTS, async (signal) => {
+  check("watch writes an occurrence after a gap with truncated: true", EVENTS, async (signal) => {
     const result = await run(signal, "watch", "fixture.ticks", "--count", "3", "--gap", "2");
     expectEqual(result.code, 0, "exit code");
     expectEqual(
@@ -435,7 +444,7 @@ async function checkWatch(checks: Checks, command: readonly string[]): Promise<v
       "the data and truncated of the occurrences",
     );
   });
-  await checks.run("watch writes internal to standard error with exit code 5 after a defect", EVENTS, async (signal) => {
+  check("watch writes internal to standard error with exit code 5 after a defect", EVENTS, async (signal) => {
     const result = await run(signal, "watch", "fixture.broken");
     expectEqual(result.code, 5, "exit code");
     expectEqual(occurrencesIn(result.stdout, "fixture.broken").map((occurrence) => occurrence.data), [{ n: 1 }], "the data of the occurrences");
@@ -449,10 +458,13 @@ async function checkWatch(checks: Checks, command: readonly string[]): Promise<v
     ["watch with a --max-age-ms that is not an integer has exit code 3", ["watch", "fixture.ticks", "--count", "1", "--max-age-ms", "soon"], 3],
     ["watch with a --max-age-ms that is a fraction has exit code 3", ["watch", "fixture.ticks", "--count", "1", "--max-age-ms", "1.5"], 3],
   ] as const) {
-    await checks.run(name, EVENTS, async (signal) => {
+    check(name, EVENTS, async (signal) => {
       await expectUsageError(run(signal, ...args), code);
     });
   }
+}
+
+async function checkWatchInterrupt(checks: Checks, command: readonly string[]): Promise<void> {
   await checks.run("an interrupt cancels watch with exit code 130", EVENTS, async (signal) => {
     const directory = await mkdtemp(join(tmpdir(), "acid-cat-conform-"));
     const marker = join(directory, "watching");

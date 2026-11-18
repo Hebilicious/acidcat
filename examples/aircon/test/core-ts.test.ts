@@ -14,6 +14,7 @@ import { aircon, fanSet, firmwareUpdate, modeSet, Offline, PoweredOff, powerSet,
 import { CallFailureError, catalogOf, createSession, renderCatalog, runCli } from "@acid-cat/core-ts";
 import type { Result } from "@acid-cat/core-ts";
 import { OFFLINE, OUTPUT_ERROR, OUTPUT_FLAG_LINES, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
+import { bundledProgram } from "./bundled-program.ts";
 import { run } from "./run.ts";
 import { assertHelp } from "./help.ts";
 import { shape, writtenText } from "./shape.ts";
@@ -202,7 +203,7 @@ test("the alias follow of the command line writes each change of the status", as
 });
 
 test("the command line runs a capability, and a flag follows a $ref to its type", async () => {
-  const cli = (...args: string[]) => run(new URL("../core-ts/cli.ts", import.meta.url).pathname, ...args);
+  const cli = (...args: string[]) => run(bundledProgram("core-ts/cli.ts"), ...args);
   const [status, poweredOff, unknownMode] = await Promise.all([cli("aircon", "status", "get"), cli("aircon", "mode", "set", "--mode", "heat"), cli("aircon", "mode", "set", "--mode", "boil")]);
   assert.equal(status.code, 0);
   assert.deepEqual(JSON.parse(status.stdout), { power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 });
@@ -212,7 +213,7 @@ test("the command line runs a capability, and a flag follows a $ref to its type"
 });
 
 test("an array input takes one repeated flag for each item, or JSON text of the array", async () => {
-  const cli = (...args: string[]) => run(new URL("../core-ts/cli.ts", import.meta.url).pathname, ...args);
+  const cli = (...args: string[]) => run(bundledProgram("core-ts/cli.ts"), ...args);
   const [schedule, once, jsonText, notADay, notAnHour, list] = await Promise.all([
     cli("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours=18"),
     cli("aircon", "schedule", "set", "--days", "sat"),
@@ -231,7 +232,7 @@ test("an array input takes one repeated flag for each item, or JSON text of the 
 });
 
 test("the command line writes the human form with its output flags", async () => {
-  const cli = (...args: string[]) => run(new URL("../core-ts/cli.ts", import.meta.url).pathname, ...args);
+  const cli = (...args: string[]) => run(bundledProgram("core-ts/cli.ts"), ...args);
   const [status, short, inline, defaultAlias, poweredOff, schedule, list, unknown, json, plain, xml] = await Promise.all([
     cli("status", "--output", "human"),
     cli("-o", "human", "status"),
@@ -285,7 +286,7 @@ function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<{
 }
 
 test("the TypeScript command line controls the unit of a server, and watch follows its changes", async (context) => {
-  const server = spawn(process.execPath, [new URL("../core-ts/serve.ts", import.meta.url).pathname], { stdio: ["ignore", "pipe", "inherit"] });
+  const server = spawn(process.execPath, [bundledProgram("core-ts/serve.ts")], { stdio: ["ignore", "pipe", "inherit"] });
   context.after(() => server.kill());
   const url = await new Promise<string>((resolve, reject) => {
     server.on("error", reject);
@@ -295,7 +296,7 @@ test("the TypeScript command line controls the unit of a server, and watch follo
       if (text.includes("\n")) resolve(text.slice(0, text.indexOf("\n")).trim());
     });
   });
-  const cliPath = new URL("../core-ts/cli.ts", import.meta.url).pathname;
+  const cliPath = bundledProgram("core-ts/cli.ts");
   const remote = (...args: string[]) => spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: url }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
 
   assert.equal((await finish(remote("aircon", "power", "set", "--on"))).code, 0);
@@ -331,10 +332,10 @@ test("aircon.status.export writes a file through the command line", async (conte
   const folder = await mkdtemp(join(tmpdir(), "aircon-"));
   context.after(() => rm(folder, { recursive: true, force: true }));
   const file = join(folder, "status.json");
-  assert.equal((await run(new URL("../core-ts/cli.ts", import.meta.url).pathname, "aircon", "status", "export", "--path", file)).code, 0);
+  assert.equal((await run(bundledProgram("core-ts/cli.ts"), "aircon", "status", "export", "--path", file)).code, 0);
   assert.partialDeepStrictEqual(JSON.parse(await readFile(file, "utf-8")), { power: false });
 });
 
 test("the command line writes the help of a command and the command list of a shared prefix", async () => {
-  await assertHelp((...args) => run(new URL("../core-ts/cli.ts", import.meta.url).pathname, ...args));
+  await assertHelp((...args) => run(bundledProgram("core-ts/cli.ts"), ...args));
 });

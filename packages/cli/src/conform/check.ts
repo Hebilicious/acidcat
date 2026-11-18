@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os";
 import { setTimeout as pause } from "node:timers/promises";
 
 import fixtureJson from "../../conformance/fixture.acidcat.json" with { type: "json" };
@@ -60,6 +61,10 @@ export function expectOccurrence(value: unknown, id: string): Occurrence {
 
 export const DEADLINE = 30_000;
 
+type Body = (signal: AbortSignal) => Promise<void> | void;
+
+export type Define = (name: string, rule: string, body: Body) => void;
+
 export class Checks {
   readonly results: Check[] = [];
   readonly binding: string;
@@ -70,17 +75,32 @@ export class Checks {
     this.deadline = deadline;
   }
 
-  async run(name: string, rule: string, body: (signal: AbortSignal) => Promise<void> | void): Promise<void> {
-    const failure = await this.#settle(body);
-    this.results.push(failure === undefined ? { binding: this.binding, name, rule, passed: true } : { binding: this.binding, name, rule, passed: false, detail: failure });
+  async run(name: string, rule: string, body: Body): Promise<void> {
+    this.results.push(this.#result(name, rule, await this.#settle(body)));
   }
 
-  async should(name: string, rule: string, body: (signal: AbortSignal) => Promise<void> | void): Promise<void> {
+  async concurrently(define: (check: Define) => void): Promise<void> {
+    const defined: { readonly name: string; readonly rule: string; readonly body: Body }[] = [];
+    define((name, rule, body) => defined.push({ name, rule, body }));
+    const queue = defined.entries();
+    const settled: (readonly [number, Check])[] = [];
+    const worker = async () => {
+      for (const [index, { name, rule, body }] of queue) settled.push([index, this.#result(name, rule, await this.#settle(body))]);
+    };
+    await Promise.all(Array.from({ length: availableParallelism() }, worker));
+    this.results.push(...settled.sort(([a], [b]) => a - b).map(([, check]) => check));
+  }
+
+  #result(name: string, rule: string, failure: string | undefined): Check {
+    return failure === undefined ? { binding: this.binding, name, rule, passed: true } : { binding: this.binding, name, rule, passed: false, detail: failure };
+  }
+
+  async should(name: string, rule: string, body: Body): Promise<void> {
     const failure = await this.#settle(body);
     this.results.push(failure === undefined ? { binding: this.binding, name, rule, passed: true } : { binding: this.binding, name, rule, passed: true, warning: true, detail: failure });
   }
 
-  async #settle(body: (signal: AbortSignal) => Promise<void> | void): Promise<string | undefined> {
+  async #settle(body: Body): Promise<string | undefined> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.deadline);
     try {
@@ -91,6 +111,7 @@ export class Checks {
       return controller.signal.aborted ? `did not settle within ${this.deadline} ms: ${message}` : message;
     } finally {
       clearTimeout(timer);
+      controller.abort();
     }
   }
 }

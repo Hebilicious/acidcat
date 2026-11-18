@@ -6,6 +6,7 @@ import { conform, serve } from "@acid-cat/cli";
 import { httpHandler, mcpHandler } from "../src/index.ts";
 import { deadline, didNotSettle, failures, timeout } from "./deadline.ts";
 import { fixture, Holds, options, WatchersThatIgnoreCancellation } from "./fixture.ts";
+import { bundledProgram } from "./bundled-program.ts";
 
 test("acid-cat conform fails only the cancellation checks of events of an implementation whose subscriptions ignore cancellation", { timeout }, async () => {
   const watchersIgnoring = () => options(new Holds(), new WatchersThatIgnoreCancellation());
@@ -17,9 +18,9 @@ test("acid-cat conform fails only the cancellation checks of events of an implem
   try {
     const runs = await Promise.all([
       conform({ mcp: `${served.url}/mcp`, deadline }),
-      conform({ mcpStdio: [process.execPath, new URL("./fixture-mcp-stdio-watch-ignoring-cancellation.ts", import.meta.url).pathname], deadline }),
+      conform({ mcpStdio: [process.execPath, bundledProgram("test/fixture-mcp-stdio-watch-ignoring-cancellation.ts")], deadline }),
       conform({ http: `${served.url}/api`, deadline }),
-      conform({ cli: [process.execPath, new URL("./fixture-cli-watch-ignoring-cancellation.ts", import.meta.url).pathname], deadline }),
+      conform({ cli: [process.execPath, bundledProgram("test/fixture-cli-watch-ignoring-cancellation.ts")], deadline }),
     ]);
     const failed = runs.flat().filter((result) => !result.passed);
     assert.deepEqual(failed.map((result) => `${result.binding}: ${result.name}`).sort(), [

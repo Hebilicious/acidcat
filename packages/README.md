@@ -28,6 +28,8 @@ These packages show one way to implement the specification. Reference implementa
 
 `@acid-cat/spec-ts` holds only the data and pure functions of the specification. Runtime code, such as servers and I/O, goes in the cores, and in `@acid-cat/mcp-handshake`, which works in front of either core.
 
+When a test of a TypeScript package starts a program as a process, it starts the bundle of the program. The `test-programs` task of the package writes the bundles into `.out/programs/` with [`scripts/bundle-programs.ts`](../scripts/bundle-programs.ts), and the `test` task depends on it. A bundle starts in less time than its source modules, because Node does not load and strip the types of each module. Run the tests with `moon run <package>:test`, so that the bundles are up to date.
+
 ### Two TypeScript cores
 
 Each core is complete in its own style. Neither core wraps the other. Both TypeScript cores serve the TypeScript binding and the four protocol bindings: MCP, HTTP, CLI and WebMCP. Both use `@acid-cat/spec-ts` for the fixed details, both write the catalog of an application from its code, and both pass all checks of `acid-cat conform`. The [core for Rust](#reference-implementation-in-rust) is the third core. It has the same features, except the bindings that run in a web page or in TypeScript code.

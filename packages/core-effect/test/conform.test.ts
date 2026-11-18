@@ -12,6 +12,7 @@ import * as NodeWebhook from "../src/NodeWebhook.ts";
 import { fileMarker } from "./file-marker.ts";
 import { fixture, fixtureLayer, holdsLayer, POLL, switchLayer, watchersLayer, WEBHOOK_LIMITS } from "./fixture.ts";
 import { testCertificate } from "./webhook-receiver.ts";
+import { bundledProgram } from "./bundled-program.ts";
 
 const principalOf = (request: Request) => Effect.succeed(Option.fromNullishOr(/^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")?.[1]));
 
@@ -66,7 +67,7 @@ describe("the Effect core passes acid-cat conform", { concurrency: true }, () =>
   });
 
   test("through MCP over stdio", { timeout: CONFORM_TIMEOUT }, async () => {
-    assertConforms(await conform({ mcpStdio: [process.execPath, new URL("./fixture-mcp-stdio.ts", import.meta.url).pathname], poll: POLL }), 50);
+    assertConforms(await conform({ mcpStdio: [process.execPath, bundledProgram("test/fixture-mcp-stdio.ts")], poll: POLL }), 50);
   });
 
   test("through HTTP", { timeout: CONFORM_TIMEOUT }, async () => {
@@ -74,11 +75,11 @@ describe("the Effect core passes acid-cat conform", { concurrency: true }, () =>
   });
 
   test("through the command line", { timeout: CONFORM_TIMEOUT }, async () => {
-    assertConforms(await conform({ cli: [process.execPath, new URL("./fixture-cli.ts", import.meta.url).pathname] }), 20);
+    assertConforms(await conform({ cli: [process.execPath, bundledProgram("test/fixture-cli.ts")] }), 20);
   });
 
   test("through the command line that calls a server", { timeout: CONFORM_TIMEOUT }, async () => {
-    assertConforms(await conform({ cli: [process.execPath, new URL("./fixture-cli-remote.ts", import.meta.url).pathname, `${url}/cli`] }), 20);
+    assertConforms(await conform({ cli: [process.execPath, bundledProgram("test/fixture-cli-remote.ts"), `${url}/cli`] }), 20);
   });
 
   test("through WebMCP, on a model context in Node.js", { timeout: CONFORM_TIMEOUT }, async () => {

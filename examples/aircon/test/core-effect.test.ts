@@ -13,6 +13,7 @@ import { Effect, Fiber, Layer, Schema, Stream } from "effect";
 
 import { aircon, statusChanged, unitLayer } from "../core-effect/aircon.ts";
 import { App, Mcp, Session } from "@acid-cat/core-effect";
+import { bundledProgram } from "./bundled-program.ts";
 import { run } from "./run.ts";
 import { assertHelp } from "./help.ts";
 import type { Run } from "./run.ts";
@@ -78,7 +79,7 @@ test("an agent sees the mcp view through MCP", async () => {
 });
 
 test("a flag follows a $ref to its type", async () => {
-  const cli = (...args: string[]) => run(new URL("../core-effect/cli.ts", import.meta.url).pathname, ...args);
+  const cli = (...args: string[]) => run(bundledProgram("core-effect/cli.ts"), ...args);
   const [poweredOff, unknownMode] = await Promise.all([cli("aircon", "mode", "set", "--mode", "heat"), cli("aircon", "mode", "set", "--mode", "boil")]);
   assert.equal(poweredOff.code, 1);
   assert.deepEqual(JSON.parse(poweredOff.stdout), { _tag: "PoweredOff" });
@@ -86,7 +87,7 @@ test("a flag follows a $ref to its type", async () => {
 });
 
 test("an array input takes one repeated flag for each item, or JSON text of the array", async () => {
-  const cli = (...args: string[]) => run(new URL("../core-effect/cli.ts", import.meta.url).pathname, ...args);
+  const cli = (...args: string[]) => run(bundledProgram("core-effect/cli.ts"), ...args);
   const [schedule, once, jsonText, notADay, notAnHour, list] = await Promise.all([
     cli("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours=18"),
     cli("aircon", "schedule", "set", "--days", "sat"),
@@ -130,10 +131,10 @@ function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<R
   });
 }
 
-const cliPath = new URL("../core-effect/cli.ts", import.meta.url).pathname;
+const cliPath = bundledProgram("core-effect/cli.ts");
 
 async function startServer(context: TestContext): Promise<string> {
-  const server = spawn(process.execPath, [new URL("../core-effect/serve.ts", import.meta.url).pathname], { stdio: ["ignore", "pipe", "inherit"] });
+  const server = spawn(process.execPath, [bundledProgram("core-effect/serve.ts")], { stdio: ["ignore", "pipe", "inherit"] });
   context.after(() => server.kill());
   return await new Promise<string>((resolve, reject) => {
     server.on("error", reject);
@@ -229,7 +230,7 @@ test("aircon.status.export writes a file through the command line", async (conte
   const folder = await mkdtemp(join(tmpdir(), "aircon-"));
   context.after(() => rm(folder, { recursive: true, force: true }));
   const file = join(folder, "status.json");
-  assert.equal((await run(new URL("../core-effect/cli.ts", import.meta.url).pathname, "aircon", "status", "export", "--path", file)).code, 0);
+  assert.equal((await run(bundledProgram("core-effect/cli.ts"), "aircon", "status", "export", "--path", file)).code, 0);
   assert.partialDeepStrictEqual(JSON.parse(await readFile(file, "utf-8")), { power: false });
 });
 
@@ -271,21 +272,9 @@ test("the Effect command line writes the human form with its output flags", asyn
   assert.deepEqual([offline.code, offline.stdout, offline.stderr], [1, `${OFFLINE}\n`, ""]);
 });
 
-const terminalScript = (online: boolean) => `
-import { NodeCli } from "@acid-cat/core-effect/node";
-import { unavailable } from "@acid-cat/spec-ts";
-import { Effect, Layer, SubscriptionRef } from "effect";
-import { aircon, Unit, unitLayer } from ${JSON.stringify(new URL("../core-effect/aircon.ts", import.meta.url).href)};
-import { output } from ${JSON.stringify(new URL("../core-effect/output.ts", import.meta.url).href)};
-process.stdout.isTTY = true;
-const offline = Layer.effectDiscard(Effect.flatMap(Effect.service(Unit), (unit) => SubscriptionRef.set(unit.connection, unavailable("The unit is offline."))));
-NodeCli.main(aircon, ${online ? "unitLayer" : "Layer.provideMerge(offline, unitLayer)"}, { name: "aircon", version: "0.1.0", output }, process.argv.slice(1));
-`;
-
 const terminalCli = (online: boolean, ...args: string[]) =>
   finish(
-    spawn(process.execPath, ["--input-type=module", "--eval", terminalScript(online), "--", ...args], {
-      cwd: new URL("..", import.meta.url).pathname,
+    spawn(process.execPath, [bundledProgram("test/terminal-cli.ts"), online ? "online" : "offline", ...args], {
       env: { PATH: process.env.PATH ?? "", NO_COLOR: "1" },
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 20_000,

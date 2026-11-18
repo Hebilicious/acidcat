@@ -16,7 +16,15 @@ tasks:
     inputs: ["src/**/*", "conformance/*.acidcat.json", "package.json", "tsconfig.json", "tsconfig.build.json", "/tsconfig.base.json", "/scripts/build-package.ts", "/schemas/catalog.schema.json"]
     outputs: ["dist/**/*"]
 
+  test-programs:
+    description: "Bundle each TypeScript program that the tests start as a process into .out/programs/. A bundle starts in less time than its source modules."
+    command: "node"
+    args: ["../../scripts/bundle-programs.ts", "src/main.ts"]
+    inputs: ["src/**/*.ts", "conformance/*.acidcat.json", "package.json", "/scripts/bundle-programs.ts", "/schemas/**/*.json", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts"]
+    outputs: [".out/programs/**/*"]
+
   test:
+    deps: ["test-programs"]
     description: "Test canonical form, views, bundling and the catalog rules."
     command: "node"
     args: ["--test", "test/"]

@@ -167,6 +167,8 @@ node apis/main.ts graphql   # or capnweb, elysia, mcp
 moon run example-aircon:test
 ```
 
+The tests start each TypeScript program of the example as a process from its bundle. The task `example-aircon:test-programs` writes the bundles into `.out/programs/` before the tests, because a bundle starts in less time than its source modules.
+
 `apis/main.ts` serves the API on `http://127.0.0.1:3000`, with `serve` from `@acid-cat/core-ts/node`. The GraphQL API also serves WebSockets on `ws://127.0.0.1:3001/graphql`, and the Cap'n Web API on `ws://127.0.0.1:3001/rpc`. The Elysia API runs on `@elysiajs/node` instead, which serves its routes and its WebSocket `ws://127.0.0.1:3000/status/follow` on one port.
 
 To follow the status, start an API, follow the event in one terminal, and change the unit in another:

@@ -6,6 +6,7 @@ import { conform, serve } from "@acid-cat/cli";
 import { createSession, httpHandler, installWebMcp, mcpHandler } from "../src/index.ts";
 import { deadline, didNotSettle, failures, timeout } from "./deadline.ts";
 import { fixture, HoldsThatIgnoreCancellation, options } from "./fixture.ts";
+import { bundledProgram } from "./bundled-program.ts";
 
 const ignoring = () => options(new HoldsThatIgnoreCancellation());
 
@@ -19,7 +20,7 @@ test("acid-cat conform fails only the cancellation checks of an implementation t
     const runs = await Promise.all([
       conform({ mcp: `${served.url}/mcp`, deadline }),
       conform({ http: `${served.url}/api`, deadline }),
-      conform({ cli: [process.execPath, new URL("./fixture-cli-ignoring-cancellation.ts", import.meta.url).pathname], deadline }),
+      conform({ cli: [process.execPath, bundledProgram("test/fixture-cli-ignoring-cancellation.ts")], deadline }),
       conform({
         webmcp: (modelContext) => {
           const session = createSession(fixture, { target: "app", ...ignoring() });
