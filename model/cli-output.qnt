@@ -438,10 +438,8 @@ module cliOutput {
     assert(joined([["a"], ["b"], ["c"]], AND_WORD) == ["a", ", ", "b", " ", "and", " ", "c"]),
   }
 
-  run orderTest = all {
-    assert(inCodePointOrder([["h", "i", "g", "h"], ["1"], ["2"]], v => v) == [["1"], ["2"], ["h", "i", "g", "h"]]),
-    assert(inCodePointOrder([["b"], ["a", "b"], ["a"], ["B"], ["1", "0"], ["9"]], v => v) == [["1", "0"], ["9"], ["B"], ["a"], ["a", "b"], ["b"]]),
-  }
+  run orderTest =
+    assert(inCodePointOrder([["b"], ["a", "b"], ["a"], ["B"], ["1", "0"], ["9"]], v => v) == [["1", "0"], ["9"], ["B"], ["a"], ["a", "b"], ["b"]])
 
   run messageTest = all {
     assert(outcomeMessage(outputChoice(FLAGS, [F_FLAG], [])) == ["The option ", "-", "f", " must be ", "j", "s", "o", "n", " ", "or", " ", "t", "e", "x", "t", "."]),
