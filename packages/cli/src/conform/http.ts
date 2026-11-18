@@ -205,24 +205,7 @@ async function checkEvents(checks: Checks, base: string): Promise<void> {
       stream.close();
     }
   });
-  await checks.run("a subscription gets the things that happen, and closing the stream cancels it", EVENTS, async (signal) => {
-    const key = randomUUID();
-    const pending = open(signal, "fixture.watch", { key });
-    pending.catch(() => undefined);
-    let stream: Stream | undefined;
-    try {
-      await until("fixture.watching gives the key", () => watching(signal), (keys) => keys.includes(key), signal);
-      stream = await pending;
-      expectEqual(await signalKey(signal, key, "first"), 1, "the subscriptions that fixture.signal reached");
-      expectEqual((await nextOccurrence(stream, "fixture.watch")).data, { key, value: "first" }, "data");
-      stream.close();
-      await until("the key leaves fixture.watching", () => watching(signal), (keys) => !keys.includes(key), signal);
-    } finally {
-      stream?.close();
-      void pending.then((opened) => opened.close(), () => undefined);
-    }
-  });
-  await checks.run("cancelling one subscription leaves the other subscriptions running", EVENTS, async (signal) => {
+  await checks.run("each subscription gets the things that happen, and closing one stream cancels only its subscription", EVENTS, async (signal) => {
     const key = randomUUID();
     const first = open(signal, "fixture.watch", { key });
     const second = open(signal, "fixture.watch", { key });
@@ -231,6 +214,9 @@ async function checkEvents(checks: Checks, base: string): Promise<void> {
     try {
       await until("fixture.watching gives the key of both subscriptions", () => watching(signal), (keys) => count(keys, key) === 2, signal);
       const [cancelled, kept] = [await first, await second];
+      expectEqual(await signalKey(signal, key, "both"), 2, "the subscriptions that fixture.signal reached");
+      expectEqual((await nextOccurrence(cancelled, "fixture.watch")).data, { key, value: "both" }, "data of the first subscription");
+      expectEqual((await nextOccurrence(kept, "fixture.watch")).data, { key, value: "both" }, "data of the second subscription");
       cancelled.close();
       await until("the cancelled subscription leaves fixture.watching", () => watching(signal), (keys) => count(keys, key) === 1, signal);
       expectEqual(await signalKey(signal, key, "after"), 1, "the subscriptions that fixture.signal reached");

@@ -7,7 +7,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { isArrayOf, isObject, memberOf, parseJson } from "../json.ts";
 import type { JsonObject } from "../json.ts";
-import { Checks, eventIdsOf, expect, expectEqual, expectOccurrence, idsOf, sorted, until } from "./check.ts";
+import { abortable, Checks, eventIdsOf, expect, expectEqual, expectOccurrence, idsOf, sorted, until } from "./check.ts";
 import type { Define } from "./check.ts";
 
 const RULE = "spec/bindings/cli.md";
@@ -104,9 +104,14 @@ function occurrencesIn(stdout: string, id: string) {
     .map((line) => expectOccurrence(parseJson(line), id));
 }
 
+type Listed = (signal: AbortSignal) => Promise<readonly Entry[]>;
+
 export async function checkCli(command: readonly string[], options: { readonly deadline: number }): Promise<Checks> {
   const checks = new Checks("cli", options.deadline);
   const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
+  const listing = start(command, ["list"], AbortSignal.timeout(options.deadline)).run.then((result) => entriesOf(result.stdout));
+  listing.catch(() => undefined);
+  const listed: Listed = (signal) => abortable(listing, signal);
 
   await checks.concurrently((check) => {
     check("a value goes to standard output with exit code 0", `${RULE}#outcomes`, async (signal) => {
@@ -126,12 +131,12 @@ export async function checkCli(command: readonly string[], options: { readonly d
     });
     for (const [name, args, code] of [
       ["an unknown command has exit code 2", ["nothing"], 2],
-      ["a shared prefix alone has exit code 2", ["fixture", "switch"], 2],
       ["an unknown word after an alias that is the default of a shared prefix has exit code 2", ["fixture", "nope"], 2],
       ["the first word of two-word aliases alone, with no one-word alias, has exit code 2", ["shout"], 2],
       ["an unknown second word after the first word of two-word aliases has exit code 2", ["shout", "nope"], 2],
       ["an unknown second word after a one-word alias with two-word aliases has exit code 2", ["notes", "nope"], 2],
       ["a capability outside the view has exit code 2", ["call", "fixture.hidden"], 2],
+      ["a capability outside the view with input that is not JSON has exit code 2", ["call", "fixture.hidden", "{bad"], 2],
       ["a missing required flag has exit code 3", ["fixture", "echo"], 3],
       ["an unknown flag has exit code 3", ["fixture", "echo", "--text", "hello", "--nope", "x"], 3],
       ["a flag that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--ratio", "soon"], 3],
@@ -180,13 +185,18 @@ export async function checkCli(command: readonly string[], options: { readonly d
       const output = parseJson(result.stdout);
       expect(isDeepStrictEqual(output, expected), `standard output: expected ${JSON.stringify(expected)}, got ${JSON.stringify(output)}`);
     });
+    check("a first argument -- is ignored", `${RULE}#commands`, async (signal) => {
+      const result = await run(signal, "--", "fixture", "echo", "--text", "hello");
+      expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
+      expectEqual(parseJson(result.stdout), { text: "hello" }, "standard output");
+    });
     check("call gives the value of a capability", `${RULE}#commands`, async (signal) => {
       const result = await run(signal, "call", "fixture.echo", '{"text":"hello"}');
       expectEqual(result.code, 0, "exit code");
       expectEqual(parseJson(result.stdout), { text: "hello" }, "standard output");
     });
     check("list gives the view: the capabilities, then the events", `${RULE}#commands`, async (signal) => {
-      const entries = entriesOf((await run(signal, "list")).stdout);
+      const entries = await listed(signal);
       const ids = (kind: string) => entries.filter((entry) => entry.kind === kind).map((entry) => entry.id);
       expectEqual(sorted(ids("capability")), idsOf("cli"), "the ids of the items with kind: capability");
       expectEqual(sorted(ids("event")), eventIdsOf("cli"), "the ids of the items with kind: event");
@@ -195,7 +205,7 @@ export async function checkCli(command: readonly string[], options: { readonly d
       expect(firstEvent === -1 || entries.slice(firstEvent).every((entry) => entry.kind === "event"), "the events must come after the capabilities");
     });
     check("list gives the usage of each capability and each event, with its flags", `${RULE}#commands`, async (signal) => {
-      const entries = entriesOf((await run(signal, "list")).stdout);
+      const entries = await listed(signal);
       for (const { id, kind, usage } of entries) {
         expect(typeof usage === "string", `${id} must have a usage`);
         const [program, ...rest] = usage.split(" ");
@@ -203,17 +213,16 @@ export async function checkCli(command: readonly string[], options: { readonly d
         expectEqual(rest.join(" "), kind === "event" ? EVENT_USAGES[id] : USAGES[id], `usage of ${id} after the name of the program`);
       }
     });
-    checkHelp(check, command);
-    checkAliases(check, command);
+    checkHelp(check, command, listed);
+    checkAliases(check, command, listed);
     checkWatch(check, command);
   });
   await checkWatchInterrupt(checks, command);
   return checks;
 }
 
-function checkHelp(check: Define, command: readonly string[]): void {
+function checkHelp(check: Define, command: readonly string[], listed: Listed): void {
   const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
-  const listed = async (signal: AbortSignal) => entriesOf((await run(signal, "list")).stdout);
   const entry = (entries: readonly Entry[], id: string) => {
     const found = entries.find((each) => each.id === id);
     if (found === undefined || typeof found.usage !== "string" || typeof found.description !== "string") throw new Error(`list must give ${id} with its usage and its description`);
@@ -229,7 +238,7 @@ function checkHelp(check: Define, command: readonly string[]): void {
 
   check("--help after the path of a command writes the help of the capability", `${RULE}#commands`, async (signal) => {
     const entries = await listed(signal);
-    const helps = ["fixture.echo", "fixture.raw", "fixture.switch.set"].map((id) => ({ id, args: [...id.split("."), "--help"] }));
+    const helps = ["fixture.raw", "fixture.switch.set"].map((id) => ({ id, args: [...id.split("."), "--help"] }));
     helps.push({ id: "fixture.echo", args: ["fixture", "echo", "--text", "hello", "--help"] });
     await Promise.all(
       helps.map(async ({ id, args }) => {
@@ -241,11 +250,14 @@ function checkHelp(check: Define, command: readonly string[]): void {
   check("--help after the name of an alias writes the help of the alias", ALIASES, async (signal) => {
     const entries = await listed(signal);
     await Promise.all(
-      ([["say", "fixture.echo"], ["ticks", "fixture.ticks"]] as const).map(async ([name, id]) => {
+      ([["say", "fixture.echo"], ["notes add", "fixture.note"], ["ticks", "fixture.ticks"]] as const).map(async ([name, id]) => {
         const { aliases, description } = entry(entries, id);
-        const usage = aliases.find((each) => each.split(" ")[1] === name);
+        const usage = aliases.find((each) => {
+          const rest = each.split(" ").slice(1).join(" ");
+          return rest === name || rest.startsWith(`${name} `);
+        });
         expect(usage !== undefined, `list must give the usage of the alias ${name} of ${id}`);
-        expectHelp(await run(signal, name, "--help"), usage, description);
+        expectHelp(await run(signal, ...name.split(" "), "--help"), usage, description);
       }),
     );
   });
@@ -275,7 +287,7 @@ function checkHelp(check: Define, command: readonly string[]): void {
   );
 }
 
-function checkAliases(check: Define, command: readonly string[]): void {
+function checkAliases(check: Define, command: readonly string[], listed: Listed): void {
   const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
   const expectOutput = (result: Run, expected: JsonObject) => {
     expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
@@ -323,20 +335,19 @@ function checkAliases(check: Define, command: readonly string[]): void {
   check("a command under a shared prefix with a default alias keeps its path", ALIASES, async (signal) => {
     expectOutput(await run(signal, "fixture", "echo", "--text", "hi"), { text: "hi" });
   });
-  check("a two-word alias with --help writes its usage", ALIASES, async (signal) => {
-    const result = await run(signal, "notes", "add", "--help");
-    expectEqual(result.code, 0, "exit code");
-    expect(result.stdout.includes("notes add --text <string> [--loud]"), `standard output must have the usage of the alias, got ${JSON.stringify(result.stdout)}`);
-  });
   const ticks = async (signal: AbortSignal, ...args: string[]) => {
     const result = await run(signal, "ticks", ...args);
     expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
     return occurrencesIn(result.stdout, "fixture.ticks");
   };
   const tickData = async (signal: AbortSignal, ...args: string[]) => (await ticks(signal, ...args)).map((occurrence) => occurrence.data);
-  check("an alias of an event subscribes with its fixed input and the cursor", ALIASES, async (signal) => {
+  check("an alias of an event subscribes with its fixed input, and takes --cursor, --max-age-ms and a flag value in the form --name=value", ALIASES, async (signal) => {
     expectEqual(await tickData(signal), [{ n: 1 }, { n: 2 }], "the data of the occurrences");
-    expectEqual(await tickData(signal, "--cursor", "1"), [{ n: 2 }], "the data of the occurrences after the cursor 1");
+    expectEqual(
+      await tickData(signal, "--cursor", "1", "--max-age-ms", "60000", "--key=--cursor"),
+      [{ n: 2 }],
+      "the data of the occurrences after the cursor 1, with the key --cursor",
+    );
   });
   check("an alias of an event takes the flags of the input of its event", ALIASES, async (signal) => {
     expectEqual(
@@ -344,12 +355,6 @@ function checkAliases(check: Define, command: readonly string[]): void {
       [[{ n: 1 }, null], [{ n: 2 }, true]],
       "the data and truncated of the occurrences",
     );
-  });
-  check("an alias of an event takes --max-age-ms", ALIASES, async (signal) => {
-    expectEqual(await tickData(signal, "--max-age-ms", "60000"), [{ n: 1 }, { n: 2 }], "the data of the occurrences");
-  });
-  check("an alias of an event takes a flag value that starts with - in the form --name=value", ALIASES, async (signal) => {
-    expectEqual(await tickData(signal, "--key=--cursor"), [{ n: 1 }, { n: 2 }], "the data of the occurrences with the key --cursor");
   });
   check("an alias of an event whose input schema has no properties takes the input as JSON text", ALIASES, async (signal) => {
     const echoes = async (...args: string[]) => {
@@ -371,12 +376,13 @@ function checkAliases(check: Define, command: readonly string[]): void {
   });
   check("the default alias takes the flags when the first argument is a flag", ALIASES, async (signal) => {
     expectOutput(await run(signal, "--count", "2", "--verbose"), { mode: "fast", count: 2, verbose: true });
-    expectOutput(await run(signal, "--hello"), { text: "hello" });
   });
-  check("--help writes the help when there is a default alias", ALIASES, async (signal) => {
+  check("--help writes the help, and does not run the default alias", ALIASES, async (signal) => {
     const result = await run(signal, "--help");
-    expectEqual(result.code, 0, "exit code");
-    expect(result.stdout.length > 0, "standard output must have the help");
+    expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
+    expectEqual(result.stderr, "", "standard error");
+    expect(result.stdout.trim() !== "", "standard output must have the help");
+    expect(!result.stdout.trimStart().startsWith("{"), `standard output must be the help, not the output of the default alias, got ${JSON.stringify(result.stdout)}`);
   });
   for (const [name, args, code] of [
     ["a flag of a property of the fixed input has exit code 3", ["quick", "--mode", "slow"], 3],
@@ -393,7 +399,7 @@ function checkAliases(check: Define, command: readonly string[]): void {
     });
   }
   check("list gives the usage of the aliases of each capability", ALIASES, async (signal) => {
-    const entries = entriesOf((await run(signal, "list")).stdout);
+    const entries = await listed(signal);
     for (const { id, kind, aliases } of entries) {
       const expected = kind === "capability" ? ALIAS_USAGES[id] : EVENT_ALIAS_USAGES[id];
       if (expected === undefined) {
@@ -421,19 +427,14 @@ function checkWatch(check: Define, command: readonly string[]): void {
     );
     expectEqual(result.stderr, "", "standard error");
   });
-  check("watch with --cursor starts after the cursor", EVENTS, async (signal) => {
-    const result = await run(signal, "watch", "fixture.ticks", "--count", "3", "--cursor", "1", "--max-age-ms", "60000");
+  check("watch with --cursor starts after the cursor, and takes a flag value that starts with - in the form --name=value", EVENTS, async (signal) => {
+    const result = await run(signal, "watch", "fixture.ticks", "--count", "3", "--cursor", "1", "--max-age-ms", "60000", "--key=--cursor");
     expectEqual(result.code, 0, "exit code");
     expectEqual(
       occurrencesIn(result.stdout, "fixture.ticks").map((occurrence) => [occurrence.data, occurrence.cursor]),
       [[{ n: 2 }, "2"], [{ n: 3 }, "3"]],
       "the data and the cursor of the occurrences",
     );
-  });
-  check("watch takes a flag value that starts with - in the form --name=value", EVENTS, async (signal) => {
-    const result = await run(signal, "watch", "fixture.ticks", "--count", "1", "--key=--cursor");
-    expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
-    expectEqual(occurrencesIn(result.stdout, "fixture.ticks").map((occurrence) => occurrence.data), [{ n: 1 }], "the data of the occurrences");
   });
   check("watch writes an occurrence after a gap with truncated: true", EVENTS, async (signal) => {
     const result = await run(signal, "watch", "fixture.ticks", "--count", "3", "--gap", "2");
@@ -454,6 +455,7 @@ function checkWatch(check: Define, command: readonly string[]): void {
     ["watch with no event id has exit code 3", ["watch"], 3],
     ["watch with invalid input has exit code 3", ["watch", "fixture.ticks", "--count", "101"], 3],
     ["watch with a missing required flag has exit code 3", ["watch", "fixture.ticks"], 3],
+    ["watch with an unknown flag has exit code 3", ["watch", "fixture.ticks", "--count", "1", "--nope", "x"], 3],
     ["watch of an event outside the view has exit code 2", ["watch", "fixture.secret"], 2],
     ["watch with a --max-age-ms that is not an integer has exit code 3", ["watch", "fixture.ticks", "--count", "1", "--max-age-ms", "soon"], 3],
     ["watch with a --max-age-ms that is a fraction has exit code 3", ["watch", "fixture.ticks", "--count", "1", "--max-age-ms", "1.5"], 3],

@@ -1,12 +1,13 @@
-import { DEADLINE } from "./check.ts";
+import { Checks, DEADLINE } from "./check.ts";
 import type { Check } from "./check.ts";
 import { checkCli } from "./cli.ts";
 import { checkHttp } from "./http.ts";
-import { checkMcp } from "./mcp.ts";
+import { checkMcp, httpChannel } from "./mcp.ts";
 import { checkMcpStdio } from "./mcp-stdio.ts";
 import { checkProperties, httpInvoke, mcpInvoke } from "./properties.ts";
 import { browserDriver, checkWebMcp, processDriver } from "./webmcp.ts";
 import type { WebMcpInstall } from "./webmcp.ts";
+import { checkPollLease } from "./poll.ts";
 import type { PollSettings } from "./poll.ts";
 import type { WebhookSettings } from "./webhook.ts";
 
@@ -43,9 +44,14 @@ export interface ConformOptions {
   readonly webmcp?: string | WebMcpInstall | undefined;
   /**
    * The poll settings of the deployment, for MCP through HTTP and through stdio. With `bufferLimit`, conform tests a
-   * cursor older than the buffer. With `leaseMs`, it tests that a lease with no poll ends.
+   * cursor older than the buffer. The lease time of the deployment must be longer than the deadline.
    */
   readonly poll?: PollSettings | undefined;
+  /**
+   * An MCP server through HTTP whose lease time is `leaseMs`, shorter than the deadline. conform tests there that a lease
+   * with no poll ends.
+   */
+  readonly pollLease?: { readonly mcp: string; readonly leaseMs: number } | undefined;
   /**
    * Test webhook delivery through `mcp`. conform runs an HTTPS receiver on 127.0.0.1 with this certificate and key. The
    * deployment trusts the certificate, allows deliveries to 127.0.0.1, and gives the principal to each request with the
@@ -74,6 +80,11 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
       results.push(...(await checkProperties("mcp", mcp.invoke, deadline)).results);
       await mcp.close();
     }
+  }
+  if (options.pollLease !== undefined) {
+    const checks = new Checks("mcp", deadline);
+    await checkPollLease(checks, httpChannel(options.pollLease.mcp), options.pollLease.leaseMs);
+    results.push(...checks.results);
   }
   if (options.mcpStdio !== undefined) {
     for (const checks of await checkMcpStdio(options.mcpStdio, { deadline, poll })) results.push(...checks.results);

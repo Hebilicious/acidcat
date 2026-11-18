@@ -9,25 +9,16 @@ mod fixture_settings;
 use acid_cat_core::cli::{INTERRUPT_GRACE, exit};
 
 use fixture_program::fixture;
-use fixture_settings::{
-    POLL_BUFFER, POLL_LEASE_MS, WEBHOOK_MAX_SUBSCRIPTIONS, WEBHOOK_MAX_TTL_MS, WEBHOOK_MIN_TTL_MS,
-};
+use fixture_settings::{POLL_BUFFER, POLL_LEASE_MS, WEBHOOK_MAX_SUBSCRIPTIONS, WEBHOOK_MIN_TTL_MS};
 
 fn poll_flags() -> Vec<String> {
-    vec![
-        "--poll-buffer".into(),
-        POLL_BUFFER.to_string(),
-        "--poll-lease-ms".into(),
-        POLL_LEASE_MS.to_string(),
-    ]
+    vec!["--poll-buffer".into(), POLL_BUFFER.to_string()]
 }
 
 fn webhook_limit_flags() -> Vec<String> {
     vec![
         "--webhook-min-ttl-ms".into(),
         WEBHOOK_MIN_TTL_MS.to_string(),
-        "--webhook-max-ttl-ms".into(),
-        WEBHOOK_MAX_TTL_MS.to_string(),
         "--webhook-max-subscriptions".into(),
         WEBHOOK_MAX_SUBSCRIPTIONS.to_string(),
     ]
@@ -165,9 +156,12 @@ fn through_mcp_over_http_with_the_handshake_poll_and_webhook_delivery() {
     let (cert, key) = (certificate.file("cert.pem"), certificate.file("key.pem"));
     let server = Server::start(&["--webhook-ca", &cert]);
     let mcp = format!("{}/mcp", server.url);
+    let mcp_lease = format!("{}/mcp-lease", server.url);
+    let lease_ms = POLL_LEASE_MS.to_string();
     let (poll, webhook_limits) = (poll_flags(), webhook_limit_flags());
     let mut args = vec!["--mcp", &mcp, "--mcp-handshake"];
     args.extend(poll.iter().map(String::as_str));
+    args.extend(["--poll-lease-mcp", &mcp_lease, "--poll-lease-ms", &lease_ms]);
     args.extend([
         "--webhook-principal",
         "conform",

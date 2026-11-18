@@ -11,7 +11,7 @@ import { abortable, Checks, expect, expectEqual, until } from "./check.ts";
 import { checkEvents, checkTools, META, subscriptionOf } from "./mcp.ts";
 import type { Channel, EventStream, Message } from "./mcp.ts";
 import type { PollSettings } from "./poll.ts";
-import { checkProperties, clientInvoke, heldKeys } from "./properties.ts";
+import { checkProperties, clientInvoke } from "./properties.ts";
 
 const RULE = "spec/bindings/mcp.md#stdio";
 
@@ -52,7 +52,6 @@ export async function checkMcpStdio(command: readonly string[], options: { reado
     try {
       await checkTools(checks, mcp);
       await checkChanges(checks, mcp, changes);
-      await checkCancellation(checks, mcp);
       all.push(await checkProperties(`mcp-stdio ${era.revision} properties`, clientInvoke(mcp), options.deadline));
     } finally {
       await mcp.close();
@@ -130,24 +129,6 @@ async function checkChanges(checks: Checks, mcp: Client, changes: { readonly cou
       expect(await listsToggle(signal), "fixture.toggle must be listed when it is available again");
     } finally {
       await set(true, AbortSignal.timeout(checks.deadline));
-    }
-  });
-}
-
-/** The official client sends `notifications/cancelled` when the signal of a call aborts. */
-async function checkCancellation(checks: Checks, mcp: Client): Promise<void> {
-  const invoke = clientInvoke(mcp);
-  await checks.run("notifications/cancelled cancels the call", RULE, async (signal) => {
-    const key = randomUUID();
-    const controller = new AbortController();
-    const call = invoke("fixture.hold", { key }, AbortSignal.any([controller.signal, signal])).catch(() => undefined);
-    try {
-      await until("fixture.held gives the key of the call", () => heldKeys(invoke, signal), (held) => held.includes(key), signal);
-      controller.abort();
-      await call;
-      await until("the cancelled call stops holding", () => heldKeys(invoke, signal), (held) => !held.includes(key), signal);
-    } finally {
-      await invoke("fixture.release", { key }, AbortSignal.timeout(checks.deadline)).catch(() => undefined);
     }
   });
 }

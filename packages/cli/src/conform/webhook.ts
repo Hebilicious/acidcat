@@ -26,7 +26,10 @@ export interface WebhookSettings {
    * principal can still subscribe.
    */
   readonly otherPrincipal?: string | undefined;
-  /** The maximum lifetime of a subscription in the deployment, in milliseconds. The default is the default of the specification, 3 600 000. */
+  /**
+   * The maximum lifetime of a subscription in the deployment, in milliseconds. The default is the default of the
+   * specification, 3 600 000. It must be longer than the deadline: a subscription must last for a whole check.
+   */
   readonly maxTtlMs?: number | undefined;
   /**
    * The minimum lifetime of a subscription in the deployment, in milliseconds. The default is the default of the
@@ -160,12 +163,13 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
   }
   const main: Client = { channel, principal };
   const subscribe = async (name: string, input: JsonObject, hook: string, secret: string, signal: AbortSignal, extra: JsonObject = {}, client: Client = main) => {
+    const sent = Date.now();
     const result = resultOf(await client.channel.request("events/subscribe", subscribeParams(name, input, hook, secret, extra), signal), "events/subscribe");
     expectEqual(result.resultType, "complete", "resultType");
     expectEqual(result.id, await webhookSubscriptionId(client.principal, hook, name, input), "the subscription id");
     const refreshBefore = result.refreshBefore;
     expect(typeof refreshBefore === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(refreshBefore), `refreshBefore must be an RFC 3339 date and time, got ${JSON.stringify(refreshBefore)}`);
-    expect(Date.parse(refreshBefore) > Date.now(), `refreshBefore must be in the future, got ${refreshBefore}`);
+    expect(Date.parse(refreshBefore) > sent, `refreshBefore must be after the request, got ${refreshBefore}`);
     expect(result.cursor === null || typeof result.cursor === "string", `cursor must be the watermark or null, got ${JSON.stringify(result.cursor)}`);
     expectEqual(result.truncated, false, "truncated");
     const status = result.deliveryStatus;
@@ -185,6 +189,12 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
   const watchedKey = (key: string) => (keys: readonly string[]) => keys.includes(key);
   const minTtlMs = settings.minTtlMs ?? MCP_WEBHOOK_DEFAULTS.minTtlMs;
   const maxTtlMs = settings.maxTtlMs ?? MCP_WEBHOOK_DEFAULTS.maxTtlMs;
+  if (maxTtlMs <= checks.deadline) {
+    await checks.run("the maximum lifetime of a subscription is longer than the deadline", RULE, () => {
+      throw new Error(`conform tests webhook delivery only when the maximum lifetime is longer than the deadline of ${checks.deadline} ms, got ${maxTtlMs}`);
+    });
+    return;
+  }
 
   await checks.run("events/subscribe and events/unsubscribe with no principal are Forbidden", RULE, async (signal) => {
     const hook = receiver.url();
@@ -259,7 +269,7 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
     const input = { key: randomUUID() };
     const [first, second] = [newSecret(), newSecret()];
     try {
-      const started = await subscribe("fixture.watch", input, hook.url, first, signal, { ttlMs: minTtlMs });
+      const started = await subscribe("fixture.watch", input, hook.url, first, signal, { ttlMs: checks.deadline });
       await until("fixture.watching gives the key", () => watching(signal), watchedKey(input.key), signal);
       expectEqual(await signalKey(input.key, "a", signal), 1, "the subscriptions that fixture.signal reached");
       const [a] = await atLeast(hook, 1, signal);
@@ -271,7 +281,7 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
 
       const renewed = await subscribe("fixture.watch", input, hook.url, second, signal);
       expectEqual(renewed.id, started.id, "the subscription id of the renewal");
-      expect(renewed.refreshBefore >= started.refreshBefore, "a renewal with no ttlMs, which grants the maximum lifetime, must not grant a shorter lifetime than the first grant of the minimum lifetime");
+      expect(renewed.refreshBefore > started.refreshBefore, "a renewal with no ttlMs, which grants the maximum lifetime, must end after the first grant of a lifetime of the deadline");
       expectEqual(count(await watching(signal), input.key), 1, "the subscriptions of the key after the renewal");
       expectEqual(await signalKey(input.key, "b", signal), 1, "the subscriptions that fixture.signal reached after the renewal");
       const [, b] = await atLeast(hook, 2, signal);
@@ -391,12 +401,22 @@ async function checkWithReceiver(checks: Checks, url: string, settings: WebhookS
       const hook = receiver.url();
       const input = { key: randomUUID() };
       try {
-        const before = Date.now();
-        await subscribe("fixture.watch", input, hook.url, newSecret(), signal, { ttlMs: minTtlMs });
-        await until("fixture.watching gives the key", () => watching(signal), watchedKey(input.key), signal);
+        expect(minTtlMs < checks.deadline, `conform tests the end of a lifetime only when the minimum lifetime is shorter than the deadline of ${checks.deadline} ms, got ${minTtlMs}`);
+        const secret = newSecret();
+        let renewedAt = Date.now();
+        await until(
+          "fixture.watching gives the key, while each events/subscribe renews the subscription",
+          async () => {
+            renewedAt = Date.now();
+            await subscribe("fixture.watch", input, hook.url, secret, signal, { ttlMs: minTtlMs });
+            return watching(signal);
+          },
+          watchedKey(input.key),
+          signal,
+        );
         await until("the lifetime ends, and the key leaves fixture.watching", () => watching(signal), (keys) => !keys.includes(input.key), signal);
-        const elapsed = Date.now() - before;
-        expect(elapsed >= minTtlMs, `the subscription ended ${elapsed} ms after the request, before its lifetime of ${minTtlMs} ms`);
+        const elapsed = Date.now() - renewedAt;
+        expect(elapsed >= minTtlMs, `the subscription ended ${elapsed} ms after the last events/subscribe, before its lifetime of ${minTtlMs} ms`);
         expectEqual(await signalKey(input.key, "late", signal), 0, "the subscriptions that fixture.signal reached after the end");
         expectEqual(deliveries(hook).length, 0, "the deliveries that the receiver got");
         const ended = errorOf(await unsubscribe("fixture.watch", input, hook.url, signal));

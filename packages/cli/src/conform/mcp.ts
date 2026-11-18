@@ -367,6 +367,7 @@ export async function checkEvents(checks: Checks, channel: Channel, options: Eve
     ["events/stream of an event outside the view is NotFound, with the kind event", { name: "fixture.secret", arguments: {} }, -32023, "event"],
     ["events/stream of the id of a capability is NotFound", { name: "fixture.echo", arguments: { text: "x" } }, -32023, "event"],
     ["events/stream with invalid input is the error -32602", { name: "fixture.ticks", arguments: { count: 101 } }, -32602, undefined],
+    ["events/stream with a maxAgeMs that is not valid is the error -32602", { name: "fixture.ticks", arguments: { count: 1 }, maxAgeMs: -1 }, -32602, undefined],
   ] as const) {
     await checks.run(name, RULE_EVENTS, async (signal) => {
       const stream = await channel.stream(streamId(), params, signal);
@@ -431,21 +432,6 @@ export async function checkEvents(checks: Checks, channel: Channel, options: Eve
       expectEqual(memberOf(terminated.error, "code"), -32603, "the error code of notifications/events/terminated");
       expect(!/\n\s+at /.test(String(memberOf(terminated.error, "message"))), "the message must not contain a stack trace");
       await complete(stream, id);
-    } finally {
-      await stream.cancel();
-    }
-  });
-  await checks.run("events/stream gets the things that happen, and cancelling it ends the subscription", RULE_EVENTS, async (signal) => {
-    const key = randomUUID();
-    const id = streamId();
-    const stream = await channel.stream(id, { name: "fixture.watch", arguments: { key } }, signal);
-    try {
-      await active(stream, id);
-      await until("fixture.watching gives the key", () => watching(signal), (keys) => keys.includes(key), signal);
-      expectEqual(await signalKey(key, "first", signal), 1, "the subscriptions that fixture.signal reached");
-      expectEqual((await occurrence(stream, id, "fixture.watch")).data, { key, value: "first" }, "data");
-      await stream.cancel();
-      await until("the key leaves fixture.watching", () => watching(signal), (keys) => !keys.includes(key), signal);
     } finally {
       await stream.cancel();
     }

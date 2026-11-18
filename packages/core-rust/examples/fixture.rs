@@ -489,7 +489,6 @@ async fn main() {
                     ],
                     retry_delay: Arc::new(|_| std::time::Duration::from_millis(50)),
                     min_ttl: std::time::Duration::from_millis(fixture_settings::WEBHOOK_MIN_TTL_MS),
-                    max_ttl: std::time::Duration::from_millis(fixture_settings::WEBHOOK_MAX_TTL_MS),
                     max_subscriptions: fixture_settings::WEBHOOK_MAX_SUBSCRIPTIONS,
                     ..WebhookOptions::default()
                 });
@@ -511,6 +510,17 @@ async fn main() {
                     ..McpOptions::new("fixture", "0.0.0")
                 },
             );
+            let mcp_lease = McpBinding::new(
+                app.clone(),
+                Arc::new(Fixture::default()),
+                McpOptions {
+                    poll: acid_cat_core::mcp::PollOptions {
+                        lease: std::time::Duration::from_millis(fixture_settings::POLL_LEASE_MS),
+                        ..Default::default()
+                    },
+                    ..McpOptions::new("fixture", "0.0.0")
+                },
+            );
             let cli = HttpBinding::new(
                 app.clone(),
                 context.clone(),
@@ -524,6 +534,7 @@ async fn main() {
                 ("/api".into(), Arc::new(http)),
                 ("/cli".into(), Arc::new(cli)),
                 ("/mcp".into(), Arc::new(mcp)),
+                ("/mcp-lease".into(), Arc::new(mcp_lease)),
             ];
             let served = acid_cat_core::remote::serve("127.0.0.1:0".parse().unwrap(), routes)
                 .await
@@ -598,7 +609,6 @@ async fn main() {
 fn poll() -> acid_cat_core::mcp::PollOptions {
     acid_cat_core::mcp::PollOptions {
         buffer_limit: fixture_settings::POLL_BUFFER,
-        lease: std::time::Duration::from_millis(fixture_settings::POLL_LEASE_MS),
         ..Default::default()
     }
 }

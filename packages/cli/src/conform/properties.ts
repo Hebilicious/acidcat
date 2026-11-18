@@ -103,7 +103,7 @@ const describe = (settled: Settled): string => ("outcome" in settled ? JSON.stri
 const isCancellation = (settled: Settled, reason: unknown): boolean =>
   "outcome" in settled ? "kind" in settled.outcome && settled.outcome.kind === "cancelled" : settled.rejected === reason;
 
-export async function heldKeys(invoke: Invoke, signal: AbortSignal): Promise<readonly string[]> {
+async function heldKeys(invoke: Invoke, signal: AbortSignal): Promise<readonly string[]> {
   const outcome = await invoke("fixture.held", {}, signal);
   expect("ok" in outcome && outcome.ok, `fixture.held gave ${JSON.stringify(outcome)}`);
   const keys = memberOf(outcome.value, "keys");

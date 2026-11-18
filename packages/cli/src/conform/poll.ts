@@ -12,13 +12,12 @@ const RULE = "spec/bindings/mcp.md#poll";
 
 /**
  * The poll settings of the deployment that conform tests. Each one is optional. With a setting, conform also tests the
- * rule that depends on it.
+ * rule that depends on it. The lease time of the deployment must be longer than the deadline: a lease must last for a
+ * whole check.
  */
 export interface PollSettings {
   /** The number of occurrences that a lease keeps. With it, conform tests the occurrences of a cursor older than the buffer. It must be 97 or less. */
   readonly bufferLimit?: number | undefined;
-  /** The lease time, in milliseconds. With it, conform tests that a lease with no poll ends. It must be shorter than the deadline. */
-  readonly leaseMs?: number | undefined;
 }
 
 interface Polled {
@@ -32,7 +31,7 @@ const MAXIMUM_TICKS = 100;
 
 const MAXIMUM_EVENTS = 100;
 
-export async function checkPoll(checks: Checks, channel: Channel, settings: PollSettings): Promise<void> {
+function pollRequests(channel: Channel) {
   const { errorOf, watching, signalKey } = eventRequests(channel);
 
   const polledOf = (message: Message, name: string): Polled => {
@@ -73,23 +72,19 @@ export async function checkPoll(checks: Checks, channel: Channel, settings: Poll
   const signalAll = async (key: string, values: readonly string[], signal: AbortSignal) => {
     for (const value of values) expectEqual(await signalKey(key, value, signal), 1, "the subscriptions that fixture.signal reached");
   };
+  return { errorOf, watching, polledOf, poll, pollUntil, pollError, dataOf, watched, ticks, hasKey, lacksKey, expectStart, startWatch, signalAll };
+}
 
-  await checks.run("events/poll with no cursor and no lease starts a lease with no occurrences, whose subscription starts now", RULE, async (signal) => {
-    const key = randomUUID();
-    const cursor = await startWatch(key, signal);
-    await signalAll(key, ["first"], signal);
-    const polled = await pollUntil("the lease has the occurrence", "fixture.watch", { key }, { cursor }, (each) => each.events.length > 0, signal);
-    expectEqual(dataOf(polled), watched(key, "first"), "the data of the occurrences");
-    expectEqual([polled.truncated, polled.hasMore], [false, false], "truncated and hasMore");
-  });
+export async function checkPoll(checks: Checks, channel: Channel, settings: PollSettings): Promise<void> {
+  const { errorOf, watching, polledOf, poll, pollUntil, pollError, dataOf, watched, ticks, hasKey, expectStart, startWatch, signalAll } = pollRequests(channel);
 
-  await checks.run("a cursor of the lease gives the occurrences after it, in order, and no cursor gives the newest position", RULE, async (signal) => {
+  await checks.run("events/poll with no cursor and no lease starts a lease with no occurrences, whose subscription starts now; a cursor of the lease gives the occurrences after it, in order; and no cursor gives the newest position", RULE, async (signal) => {
     const key = randomUUID();
     const start = await startWatch(key, signal);
     await signalAll(key, ["a", "b"], signal);
     const both = await pollUntil("the lease has both occurrences", "fixture.watch", { key }, { cursor: start }, (each) => each.events.length >= 2, signal);
     expectEqual(dataOf(both), watched(key, "a", "b"), "the data of the occurrences after the start");
-    expectEqual(both.truncated, false, "truncated");
+    expectEqual([both.truncated, both.hasMore], [false, false], "truncated and hasMore");
     const newest = await poll("fixture.watch", { key }, {}, signal);
     expectEqual([newest.events, newest.truncated], [[], false], "the occurrences and truncated of a poll with no cursor");
     await signalAll(key, ["c"], signal);
@@ -226,19 +221,36 @@ export async function checkPoll(checks: Checks, channel: Channel, settings: Poll
     await failure(await start());
     await failure(await start());
   });
+}
 
-  if (settings.leaseMs !== undefined) {
-    const leaseMs = settings.leaseMs;
-    await checks.run("a lease that gets no poll for the lease time ends, and cancels its subscription", RULE, async (signal) => {
-      const key = randomUUID();
-      const before = Date.now();
-      const cursor = await startWatch(key, signal);
-      await until("the lease ends, and the key leaves fixture.watching", () => watching(signal), lacksKey(key), signal);
-      const elapsed = Date.now() - before;
-      expect(elapsed >= leaseMs, `the lease ended ${elapsed} ms after the last poll, before the lease time of ${leaseMs} ms`);
-      const again = await poll("fixture.watch", { key }, { cursor }, signal);
-      expectStart(again, true);
-      await until("fixture.watching gives the key of the new lease", () => watching(signal), hasKey(key), signal);
-    });
-  }
+export async function checkPollLease(checks: Checks, channel: Channel, leaseMs: number): Promise<void> {
+  const { watching, poll, lacksKey, hasKey, expectStart } = pollRequests(channel);
+  const keepUntilWatched = async (key: string, cursor: string, signal: AbortSignal) => {
+    const lease = { cursor, renewedAt: Date.now() };
+    await until(
+      "fixture.watching gives the key of the lease, while each poll renews the lease",
+      async () => {
+        lease.renewedAt = Date.now();
+        lease.cursor = (await poll("fixture.watch", { key }, { cursor: lease.cursor }, signal)).cursor;
+        return watching(signal);
+      },
+      hasKey(key),
+      signal,
+    );
+    return lease;
+  };
+
+  await checks.run("a lease that gets no poll for the lease time ends, and cancels its subscription", RULE, async (signal) => {
+    expect(Number.isSafeInteger(leaseMs) && leaseMs >= 1 && leaseMs < checks.deadline, `conform tests the end of a lease only when the lease time is shorter than the deadline of ${checks.deadline} ms, got ${leaseMs}`);
+    const key = randomUUID();
+    const started = await poll("fixture.watch", { key }, {}, signal);
+    expectStart(started, false);
+    const lease = await keepUntilWatched(key, started.cursor, signal);
+    await until("the lease ends, and the key leaves fixture.watching", () => watching(signal), lacksKey(key), signal);
+    const elapsed = Date.now() - lease.renewedAt;
+    expect(elapsed >= leaseMs, `the lease ended ${elapsed} ms after the last poll, before the lease time of ${leaseMs} ms`);
+    const again = await poll("fixture.watch", { key }, { cursor: lease.cursor }, signal);
+    expectStart(again, true);
+    await keepUntilWatched(key, again.cursor, signal);
+  });
 }
