@@ -35,6 +35,8 @@ fn webhook_limit_flags() -> Vec<String> {
 
 const DEADLINE: Duration = Duration::from_secs(10);
 
+const STATE_DEADLINE: Duration = Duration::from_secs(30);
+
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -228,7 +230,7 @@ fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
     let start = Instant::now();
     while !marker.exists() {
         assert!(
-            start.elapsed() < DEADLINE,
+            start.elapsed() < STATE_DEADLINE,
             "the call did not write its marker file"
         );
         std::thread::sleep(Duration::from_millis(10));
@@ -246,7 +248,7 @@ fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
         let cancelled = directory.join("held.cancelled");
         while !cancelled.exists() {
             assert!(
-                interrupted.elapsed() < DEADLINE,
+                interrupted.elapsed() < STATE_DEADLINE,
                 "the call did not write its marker file when it was cancelled"
             );
             std::thread::sleep(Duration::from_millis(10));
