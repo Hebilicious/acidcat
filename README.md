@@ -1,6 +1,6 @@
 <div align="center">
 
-# AcidCat
+# 🐱 AcidCat
 
 **Describe your application's operations once. Get a CLI, an MCP server, an HTTP API and typed client code from that one description.**
 
@@ -21,7 +21,7 @@
 > [!WARNING]
 > AcidCat is experimental. The specification is a draft, and the packages are `0.x`: any minor release can break their APIs. Pin exact versions.
 
-## Why AcidCat
+## ✨ Why AcidCat
 
 An application today has many front doors. People use a web or mobile app. Developers want a command line. AI agents want an MCP server, or tools in the web page they are looking at. Other services want an HTTP API.
 
@@ -31,17 +31,17 @@ AcidCat replaces those copies with one description, the **catalog**. The catalog
 
 | Surface | The capability `aircon.temperature.set` becomes |
 | --- | --- |
-| Command line | `aircon temperature set --celsius 22` |
-| MCP server | the tool `aircon.temperature.set` |
-| WebMCP | a tool that a browser agent calls inside your web page, as the signed-in user |
-| HTTP | `POST /capabilities/aircon.temperature.set` |
-| Your language | a typed function, for example `execute({ celsius: 22 })` in TypeScript |
+| 💻 Command line | `aircon temperature set --celsius 22` |
+| 🤖 MCP server | the tool `aircon.temperature.set` |
+| 🌐 WebMCP | a tool that a browser agent calls inside your web page, as the signed-in user |
+| 🔌 HTTP | `POST /capabilities/aircon.temperature.set` |
+| 🧩 Your language | a typed function, for example `execute({ celsius: 22 })` in TypeScript |
 
 Every surface validates input against the same schemas and returns the same failures, and each one exposes only the operations its target may use. `acid-cat conform` tests every surface against the specification, so you can check that this holds.
 
 Applications can also publish **events** that clients follow, such as `aircon.status.changed`. The command line prints one JSON line per occurrence, MCP clients get them through the MCP events extension, HTTP clients get a server-sent events stream, and TypeScript code gets an async handle.
 
-## How it works
+## 🧭 How it works
 
 ```
                  catalog (JSON)
@@ -60,7 +60,7 @@ Applications can also publish **events** that clients follow, such as `aircon.st
 
 The catalog is checked at build time. Programs do not read it at run time.
 
-## Example
+## 🌬️ Example
 
 Here is a capability in the TypeScript core, with Zod for the schemas:
 
@@ -102,7 +102,7 @@ The MCP server reports the hints as `destructiveHint` and `idempotentHint`, so a
 
 [`examples/aircon`](examples/aircon/README.md) is the full application. It writes the same catalog from Pkl, TypeScript, Python, Go and Rust, byte for byte ([`aircon.acidcat.json`](examples/aircon/catalog/aircon.acidcat.json)). It then serves it with each core as a command line, an MCP server, a web page with WebMCP tools and an HTTP API, next to hand-written GraphQL, Cap'n Web and Elysia APIs.
 
-## Features
+## 🧳 Features
 
 - Each capability and event lists the targets that can use it, so an agent sees only what you give it. A capability that only makes sense in one place, such as writing a local file, can be given to the `cli` target alone ([example](examples/aircon/README.md#command-line-only)).
 - The hints `readOnly`, `destructive` and `idempotent` tell clients what a call does, so an agent knows when to ask before it acts. MCP clients get them as tool annotations ([catalog](spec/catalog.md#capabilities)).
@@ -112,7 +112,7 @@ The MCP server reports the hints as `destructiveHint` and `idempotentHint`, so a
 - On the command line, each input property becomes a flag, and arrays take repeated flags. The catalog can declare short aliases such as `aircon --on` or `aircon fan high`, and a default command. Output is JSON for scripts and agents, with an optional human format for terminals. Ctrl+C cancels the call and exits with code 130 ([binding](spec/bindings/cli.md)).
 - Bindings cover the common surfaces. For a GraphQL or RPC API that you design yourself, call the same capabilities through a session. [`examples/aircon/apis`](examples/aircon/README.md#apis) shows GraphQL, Cap'n Web and Elysia APIs, and an MCP server written by hand in Effect.
 
-## Specification
+## 📚 Specification
 
 AcidCat is a specification first. The packages in this repository are one implementation of it.
 
@@ -126,32 +126,32 @@ AcidCat is a specification first. The packages in this repository are one implem
 | [Extensions](spec/extensions/README.md) | Attachments, pagination |
 | [Conformance](spec/conformance.md) | How to test a catalog and an implementation |
 
-## Packages
+## 📦 Packages
 
 **Tools for any language.** Use these with any implementation.
 
 | Package | Use |
 | --- | --- |
-| [`@acid-cat/cli`](packages/cli) | `acid-cat check`, `format` and `view` for catalogs, and `acid-cat conform` to test a running implementation |
-| [`Catalog.pkl`](packages/catalog/pkl) | Write a catalog in Pkl |
-| [`@acid-cat/catalog`](packages/catalog/typescript) | Write a catalog in TypeScript |
-| [`acid-cat-catalog`](packages/catalog/python) (PyPI) | Write a catalog in Python |
-| [`github.com/Hebilicious/acidcat/packages/catalog/go`](packages/catalog/go) | Write a catalog in Go |
-| [`acid-cat-catalog`](packages/catalog/rust) (crates.io) | Write a catalog in Rust |
+| [`@acid-cat/cli`](packages/cli) | 🛠️ `acid-cat check`, `format` and `view` for catalogs, and `acid-cat conform` to test a running implementation |
+| [`Catalog.pkl`](packages/catalog/pkl) | 🧾 Write a catalog in Pkl |
+| [`@acid-cat/catalog`](packages/catalog/typescript) | ✍️ Write a catalog in TypeScript |
+| [`acid-cat-catalog`](packages/catalog/python) (PyPI) | 🐍 Write a catalog in Python |
+| [`github.com/Hebilicious/acidcat/packages/catalog/go`](packages/catalog/go) | 🐹 Write a catalog in Go |
+| [`acid-cat-catalog`](packages/catalog/rust) (crates.io) | 🦀 Write a catalog in Rust |
 
 **Cores.** Each core runs capabilities and events and serves the bindings. All three pass every check of `acid-cat conform` for the bindings they serve.
 
 | Package | Language and style | Bindings |
 | --- | --- | --- |
-| [`@acid-cat/core-ts`](packages/core-ts) | Plain TypeScript. Capabilities return promises; schemas use any Standard Schema library | TypeScript, MCP, HTTP, CLI, WebMCP |
-| [`@acid-cat/core-effect`](packages/core-effect) | Effect. Capabilities are Effect programs; schemas use Effect Schema | TypeScript, MCP, HTTP, CLI, WebMCP |
-| [`acid-cat-core`](packages/core-rust) | Rust on Tokio. Schemas come from `serde` and `schemars` types | MCP, HTTP, CLI |
+| [`@acid-cat/core-ts`](packages/core-ts) | 🟦 Plain TypeScript. Capabilities return promises; schemas use any Standard Schema library | TypeScript, MCP, HTTP, CLI, WebMCP |
+| [`@acid-cat/core-effect`](packages/core-effect) | ⚡ Effect. Capabilities are Effect programs; schemas use Effect Schema | TypeScript, MCP, HTTP, CLI, WebMCP |
+| [`acid-cat-core`](packages/core-rust) | 🦀 Rust on Tokio. Schemas come from `serde` and `schemars` types | MCP, HTTP, CLI |
 
 The Rust core has no WebMCP binding, because WebMCP runs in a web page. [`@acid-cat/spec-ts`](packages/spec-ts) holds the specification's fixed data for the TypeScript cores, and [`@acid-cat/mcp-handshake`](packages/mcp-handshake) serves MCP clients that use the older `initialize` handshake. [packages/README.md](packages/README.md) compares the cores and explains how releases work.
 
 **Other languages.** You do not need a package from this repository. Any program that serves the bindings as the specification describes is an implementation. Write a core for your language from [the specification](spec/README.md), and test it with `acid-cat conform`.
 
-## Agent skill
+## 🤖 Agent skill
 
 [`skills/acid-cat`](skills/acid-cat/SKILL.md) teaches a coding agent to build with AcidCat: the catalog rules, how to choose a core, how to add a capability or an event, and how to test. Install it in a project:
 
@@ -159,7 +159,7 @@ The Rust core has no WebMCP binding, because WebMCP runs in a web page. [`@acid-
 gh skill install Hebilicious/acidcat acid-cat
 ```
 
-## Roadmap
+## 🗺️ Roadmap
 
 - [x] `acid-cat conform`: test a running implementation through each binding
 - [x] Cores in TypeScript: `@acid-cat/core-ts` and `@acid-cat/core-effect`
@@ -167,7 +167,7 @@ gh skill install Hebilicious/acidcat acid-cat
 - [ ] Cores in more languages
 - [ ] A site that publishes the specification
 
-## Development
+## 🛠️ Development
 
 [proto](https://moonrepo.dev/proto) installs the tools pinned in `.prototools` (Moon, Node, pnpm, Pkl, Python, uv, Go, Rust, and Java for the Apalache model checker). [Moon](https://moonrepo.dev) runs the tasks.
 
