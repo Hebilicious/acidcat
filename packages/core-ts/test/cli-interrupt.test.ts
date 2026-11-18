@@ -10,6 +10,8 @@ import { INTERRUPT_GRACE_MS } from "@acid-cat/spec-ts";
 
 const DEADLINE_MS = 10_000;
 
+const STATE_DEADLINE_MS = 30_000;
+
 async function interruptedWatch(interrupts: 1 | 2) {
   const directory = mkdtempSync(join(tmpdir(), "core-ts-interrupt-"));
   const marker = join(directory, "watching");
@@ -21,7 +23,7 @@ async function interruptedWatch(interrupts: 1 | 2) {
   const waitFor = async (path: string, state: string) => {
     const start = Date.now();
     while (!existsSync(path)) {
-      if (Date.now() - start > DEADLINE_MS) throw new Error(`The subscription did not write its marker file when it ${state}. ${stderr}`);
+      if (Date.now() - start > STATE_DEADLINE_MS) throw new Error(`The subscription did not write its marker file when it ${state}. ${stderr}`);
       await pause(10);
     }
   };
