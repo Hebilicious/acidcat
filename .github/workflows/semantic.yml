@@ -1,6 +1,6 @@
 name: Semantic
 
-# The pull request title becomes the commit on main, because the repository allows squash merges only.
+# The pull request title and body become the commit on main, because the repository allows squash merges only.
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
@@ -41,3 +41,30 @@ jobs:
           BASE: ${{ steps.pr.outputs.base }}
           HEAD: ${{ steps.pr.outputs.head }}
         run: git log --format=%s "$BASE..$HEAD" | scripts/check-semantic.sh
+
+      # Only node and pnpm, and only the packages of the workspace root, so that this job stays fast.
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          cache: false
+      - run: proto install node && proto install pnpm
+      - run: pnpm install --frozen-lockfile --filter acid-cat-workspace
+
+      # release-please reads the squash commit that GitHub writes: the title and the body wrapped at 72 columns.
+      # GitHub gives that exact text for each pull request.
+      - name: Check that release-please can parse the squash commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          message=$(gh api graphql -F number="$NUMBER" -f owner="${GITHUB_REPOSITORY%/*}" -f name="${GITHUB_REPOSITORY#*/}" -f query='
+            query($owner: String!, $name: String!, $number: Int!) {
+              repository(owner: $owner, name: $name) {
+                pullRequest(number: $number) {
+                  viewerMergeHeadlineText(mergeType: SQUASH)
+                  viewerMergeBodyText(mergeType: SQUASH)
+                }
+              }
+            }' --jq '.data.repository.pullRequest | [.viewerMergeHeadlineText, .viewerMergeBodyText] | map(select(. != "")) | join("\n\n")')
+          PR_BODY=$(gh pr view "$NUMBER" --json body --jq .body)
+          export PR_BODY
+          printf '%s\n' "$message" | node scripts/check-commit-message.ts

@@ -7,6 +7,7 @@
   "devDependencies": {
     "@acid-cat/catalog": "workspace:*",
     "@acid-cat/cli": "workspace:*",
+    "@conventional-commits/parser": "catalog:",
     "@types/node": "catalog:",
     "esbuild": "catalog:",
     "oxlint": "catalog:",
