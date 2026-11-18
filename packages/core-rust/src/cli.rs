@@ -1760,14 +1760,20 @@ fn alias_of_args<'a>(
         return AliasOfArgs::None;
     };
     let words: Vec<String> = alias.name.split(' ').map(str::to_owned).collect();
-    let prefix = paths
+    let under: Vec<&Vec<String>> = paths
         .iter()
-        .any(|path| path.len() > words.len() && path.starts_with(&words));
+        .filter(|path| path.len() > words.len() && path.starts_with(&words))
+        .collect();
+    let next = args.get(words.len());
+    if under.iter().any(|path| next == path.get(words.len())) {
+        return AliasOfArgs::None;
+    }
+    let prefix = !under.is_empty();
     let group = two_words.is_none()
         && aliases
             .iter()
             .any(|other| other.name.starts_with(&format!("{first} ")));
-    match args.get(words.len()) {
+    match next {
         Some(next) if (prefix || group) && is_word(next) => {
             AliasOfArgs::UnknownCommand([words, vec![next.clone()]].concat())
         }

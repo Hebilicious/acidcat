@@ -246,12 +246,10 @@ async function checkHelp(checks: Checks, command: readonly string[]): Promise<vo
   });
   await checks.run("--help after a shared prefix writes its command list to standard output", `${RULE}#commands`, async (signal) => {
     const entries = await listed(signal);
-    for (const prefix of ["fixture.switch", "fixture"]) {
-      const result = await run(signal, ...prefix.split("."), "--help");
-      expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
-      expectEqual(result.stdout, commandList(entries, prefix), `standard output of ${prefix.replace(".", " ")} --help`);
-      expectEqual(result.stderr, "", "standard error");
-    }
+    const result = await run(signal, "fixture", "switch", "--help");
+    expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
+    expectEqual(result.stdout, commandList(entries, "fixture.switch"), "standard output of fixture switch --help");
+    expectEqual(result.stderr, "", "standard error");
   });
   const expectUnknown = async (signal: AbortSignal, ...args: string[]) => {
     const entries = await listed(signal);

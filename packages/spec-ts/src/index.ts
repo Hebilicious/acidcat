@@ -257,7 +257,9 @@ export function cliAliasOfArgs<Alias extends { readonly name: string }>(
   if (named === undefined) return undefined;
   const words = named.name.split(" ");
   const next = args[words.length];
-  const prefix = paths.some((path) => path.length > words.length && words.every((word, index) => path[index] === word));
+  const under = paths.filter((path) => path.length > words.length && words.every((word, index) => path[index] === word));
+  if (under.some((path) => path[words.length] === next)) return undefined;
+  const prefix = under.length > 0;
   const group = twoWords === undefined && aliases.some(({ name }) => name.startsWith(`${first} `));
   if ((prefix || group) && next !== undefined && CLI_WORD_ONLY.test(next)) return { unknownCommand: [...words, next] };
   return { alias: named, rest: args.slice(words.length) };
