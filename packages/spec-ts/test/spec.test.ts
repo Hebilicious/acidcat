@@ -28,6 +28,7 @@ import {
   objectInput,
   occurrenceOf,
   ok,
+  readBounded,
   viewOf,
   type CatalogDocument,
 } from "../src/index.ts";
@@ -80,6 +81,12 @@ test("the help of a command, and the command list of a shared prefix, in the ord
 
 test("a value of a tool with no output schema has no structured content", () => {
   assert.deepEqual(mcpToolResult(ok(null), false), { content: [{ type: "text", text: "null" }] });
+});
+
+test("a request body one byte over the limit is too large", async () => {
+  const request = (body: string) => new Request("https://a.example/mcp", { method: "POST", body });
+  assert.deepEqual(await readBounded(request("123456789"), 8), { rejection: "too-large" });
+  assert.deepEqual(await readBounded(request("12345678"), 8), { text: "12345678" });
 });
 
 test("views keep one target, and bundles keep the types they use", () => {
