@@ -107,9 +107,11 @@ export const watchersLayer = (marker?: Marker) =>
     }),
   );
 
-export const POLL = { bufferLimit: 5, leaseMs: 5000 } as const;
+export const POLL = { bufferLimit: 5 } as const;
 
-export const WEBHOOK_LIMITS = { minTtlMs: 1000, maxTtlMs: 5000, maxSubscriptions: 3 } as const;
+export const POLL_LEASE_MS = 1000;
+
+export const WEBHOOK_LIMITS = { minTtlMs: 1000, maxSubscriptions: 3 } as const;
 
 export const fixtureLayer = Layer.mergeAll(switchLayer, holdsLayer(), watchersLayer());
 

@@ -7,7 +7,7 @@ acid-cat check [--strict] [--output json] <catalog.json ...>  # check catalogs
 acid-cat format [--write] <catalog.json ...>  # write catalogs in canonical form
 acid-cat view <catalog.json> <target>         # write the view of one target
 acid-cat conform --mcp <url> [--mcp-handshake] --mcp-stdio "<command>" --http <url> --cli "<command>" --webmcp <url> [--deadline <ms>] [--max-bytes <n>] [--output json]  # test an implementation
-  [--poll-buffer <n>] [--poll-lease-ms <ms>] [--webhook-principal <name> --webhook-cert <file> --webhook-key <file>]
+  [--poll-buffer <n>] [--poll-lease-mcp <url> --poll-lease-ms <ms>] [--webhook-principal <name> --webhook-cert <file> --webhook-key <file>]
   [--webhook-other-principal <name>] [--webhook-min-ttl-ms <ms>] [--webhook-max-ttl-ms <ms>] [--webhook-max-subscriptions <n>]
 ```
 
@@ -70,7 +70,7 @@ Each flag has an equivalent option for `conform()` in code. Give one or more bin
 | `--deadline <ms>` | `deadline` | The deadline of each check. The default is 30 000 |
 | `--max-bytes <n>` | `maximumBytes` | The body limit of the remote bindings, in bytes. The default is 1 048 576 |
 | `--poll-buffer <n>` | `poll.bufferLimit` | The deployment's poll buffer size, from 1 to 97 |
-| `--poll-lease-ms <ms>` | `poll.leaseMs` | The deployment's poll lease time |
+| `--poll-lease-mcp <url>`, `--poll-lease-ms <ms>` | `pollLease: { mcp, leaseMs }` | An MCP server through HTTP with a poll lease time shorter than the deadline, and that lease time. Give both together |
 | `--webhook-principal <name>`, `--webhook-cert <file>`, `--webhook-key <file>` | `webhook: { principal, cert, key }`, with the PEM text | Test webhook delivery. Give all three together |
 | `--webhook-min-ttl-ms <ms>`, `--webhook-max-ttl-ms <ms>` | `webhook.minTtlMs`, `webhook.maxTtlMs` | The deployment's webhook lifetimes. The defaults are the specification's: 60 000 and 3 600 000 |
 | `--webhook-max-subscriptions <n>` | `webhook.maxSubscriptions` | The deployment's limit of webhook subscriptions for one principal |
@@ -85,8 +85,8 @@ Each flag has an equivalent option for `conform()` in code. Give one or more bin
 - HTTP and CLI: Each outcome, each kind of call failure, availability and rejections. For the CLI: each kind of flag, usage lines, help, shared prefixes, aliases, interrupts with exit code 130, and `watch --cursor`.
 - WebMCP: The checks act as the host: they open the page in Chromium through [Playwright](https://playwright.dev) with a test `modelContext`. Install it first: `pnpm add -D playwright`, then `pnpm exec playwright install chromium`.
 - Events: Through HTTP, MCP and the CLI: the list of events, failures before the first occurrence, each occurrence against `schemas/occurrence.schema.json` and its payload schema, order, `truncated`, the cursor, each end, and cancellation. Through WebMCP, no event is a tool.
-- [Poll delivery](../../spec/bindings/mcp.md#poll): Through MCP, when `events/list` gives `poll`. Otherwise the check gives a warning and `events/poll` must answer `Unsupported`. `--poll-buffer` adds a cursor older than the buffer. `--poll-lease-ms` adds the end of an unused lease; give a few seconds, for example 5000, because a check makes other requests between two polls and a shorter lease can end on a busy computer.
-- [Webhook delivery](../../spec/bindings/mcp.md#webhook): Through MCP over HTTP, with the three `--webhook-*` options. The checks run an HTTPS receiver on `127.0.0.1` with that certificate. Configure the deployment to trust the certificate, allow deliveries to private addresses, and give the principal `<name>` to a request with `Authorization: Bearer <name>`. The deadline must be longer than the deployment's first retry wait. Give `--webhook-other-principal` with `--webhook-max-subscriptions`: the limit check then fills a principal that no other check uses. Without the webhook options, a server that does not list `webhook` must answer `Unsupported`.
+- [Poll delivery](../../spec/bindings/mcp.md#poll): Through MCP, when `events/list` gives `poll`. Otherwise the check gives a warning and `events/poll` must answer `Unsupported`. `--poll-buffer` adds a cursor older than the buffer. The lease time of `--mcp` and `--mcp-stdio` must be longer than the deadline, because a check uses a lease for its whole time. `--poll-lease-mcp` with `--poll-lease-ms` adds the end of an unused lease. Serve it from a second MCP server with a lease time shorter than the deadline, for example 1000.
+- [Webhook delivery](../../spec/bindings/mcp.md#webhook): Through MCP over HTTP, with the three `--webhook-*` options. The checks run an HTTPS receiver on `127.0.0.1` with that certificate. Configure the deployment to trust the certificate, allow deliveries to private addresses, and give the principal `<name>` to a request with `Authorization: Bearer <name>`. The deadline must be longer than the deployment's first retry wait, and the maximum lifetime must be longer than the deadline. Give `--webhook-other-principal` with `--webhook-max-subscriptions`: the limit check then fills a principal that no other check uses. Without the webhook options, a server that does not list `webhook` must answer `Unsupported`.
 - [Hints](../../spec/bindings/mcp.md#tools): Each MCP tool's annotations match its capability's hints.
 - Properties: With fast-check, through MCP and HTTP: concurrent calls each get their own outcome, and a cancellation changes only its own call.
 

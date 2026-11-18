@@ -135,10 +135,8 @@ const conformCommand = Command.make(
       Flag.withDescription("The number of occurrences that a poll lease of the deployment keeps, from 1 to 97. With it, conform tests a cursor older than the buffer"),
       Flag.optional,
     ),
-    pollLeaseMs: Flag.Int("poll-lease-ms").pipe(
-      Flag.withDescription("The lease time of the deployment, in milliseconds, shorter than the deadline. With it, conform tests that a lease with no poll ends"),
-      Flag.optional,
-    ),
+    pollLeaseMcp: url("poll-lease-mcp", "The URL of an MCP server whose lease time is --poll-lease-ms. conform tests there that a lease with no poll ends"),
+    pollLeaseMs: Flag.Int("poll-lease-ms").pipe(Flag.withDescription("The lease time of the MCP server of --poll-lease-mcp, in milliseconds, shorter than the deadline"), Flag.optional),
     webhookPrincipal: url(
       "webhook-principal",
       "Test webhook delivery through --mcp. The deployment gives this principal to a request with the header Authorization: Bearer <principal>",
@@ -172,6 +170,10 @@ const conformCommand = Command.make(
       yield* Console.error("Give --webhook-principal, --webhook-cert and --webhook-key together.");
       return yield* fail;
     }
+    if (Option.isSome(options.pollLeaseMcp) !== Option.isSome(options.pollLeaseMs)) {
+      yield* Console.error("Give --poll-lease-mcp and --poll-lease-ms together.");
+      return yield* fail;
+    }
     const settings = [Option.isSome(options.webhookOtherPrincipal), Option.isSome(options.webhookMaxTtlMs), Option.isSome(options.webhookMinTtlMs), Option.isSome(options.webhookMaxSubscriptions)];
     if (given === 0 && settings.includes(true)) {
       yield* Console.error("The other --webhook-* options need --webhook-principal, --webhook-cert and --webhook-key.");
@@ -197,7 +199,8 @@ const conformCommand = Command.make(
         http: value(options.http),
         cli: words(options.cli),
         webmcp: value(options.webmcp),
-        poll: { bufferLimit: optionalInt(options.pollBuffer), leaseMs: optionalInt(options.pollLeaseMs) },
+        poll: { bufferLimit: optionalInt(options.pollBuffer) },
+        pollLease: Option.isSome(options.pollLeaseMcp) && Option.isSome(options.pollLeaseMs) ? { mcp: options.pollLeaseMcp.value, leaseMs: options.pollLeaseMs.value } : undefined,
         webhook,
         maximumBytes: options.maximumBytes,
         deadline: options.deadline,
