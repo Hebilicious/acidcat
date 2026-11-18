@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.15.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/spec-ts@0.14.0...@acid-cat/spec-ts@0.15.0) (2026-11-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **conform:** keep each lease and webhook subscription alive for the whole check, and remove duplicate conform checks ([#197](https://github.com/Hebilicious/acidcat/issues/197))
+
+### Bug Fixes
+
+* **conform:** keep each lease and webhook subscription alive for the whole check, and remove duplicate conform checks ([#197](https://github.com/Hebilicious/acidcat/issues/197)) ([fc02fe3](https://github.com/Hebilicious/acidcat/commit/fc02fe31483b97e0d4b76972e6f57f786e3ee78c))
+
 ## [0.14.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/spec-ts@0.13.1...@acid-cat/spec-ts@0.14.0) (2026-11-18)
 
 

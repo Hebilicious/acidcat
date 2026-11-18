@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/Hebilicious/acidcat/compare/acid-cat-catalog@0.3.0...acid-cat-catalog@0.3.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **catalog:** write integers above 2^53 as JSON.stringify writes them ([d1dea9d](https://github.com/Hebilicious/acidcat/commit/d1dea9de906ea20f485b1f7c94f00195f9171db0))
+
 ## [0.3.0](https://github.com/Hebilicious/acidcat/compare/acid-cat-catalog@0.2.1...acid-cat-catalog@0.3.0) (2026-11-18)
 
 
