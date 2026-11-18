@@ -215,6 +215,22 @@ export function cliEventUsage(program: string, id: string, input: JsonObject | u
   return [program, "watch", id, ...(input === undefined ? [] : cliFlags(input)), resume].join(" ");
 }
 
+/** The help of a capability, an alias or an event (spec/bindings/cli.md#commands). */
+export const cliHelp = (usage: string, description: string): string => `Usage: ${usage}\n\n${description}`;
+
+/**
+ * The command list of a shared prefix (spec/bindings/cli.md#commands): the usage of each capability under the prefix,
+ * in the order of `capabilities`, the capabilities of `list`. It is `undefined` when `prefix` is not a shared prefix.
+ */
+export function cliCommandList(prefix: readonly string[], capabilities: readonly { readonly id: string; readonly usage: string }[]): string | undefined {
+  const under = capabilities.filter(({ id }) => {
+    const path = commandPath(id);
+    return path.length > prefix.length && prefix.every((word, index) => path[index] === word);
+  });
+  if (prefix.length === 0 || under.length === 0) return undefined;
+  return ["Commands:", ...under.map(({ usage }) => `  ${usage}`)].join("\n");
+}
+
 export const CLI_ALIAS_NAME = /^(--)?[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
 export interface CliAlias {

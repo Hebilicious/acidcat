@@ -32,7 +32,11 @@ node core-ts/cli.ts list
 node core-ts/cli.ts aircon status get --output human
 node core-effect/cli.ts status --json
 cargo run --manifest-path core-rust/Cargo.toml -- cli aircon fan set --speed high
+node core-ts/cli.ts aircon power set --help
+node core-effect/cli.ts aircon status --help
 ```
+
+`aircon power set --help` writes `Usage: aircon aircon power set --on`, an empty line, and the description of the capability. `aircon status --help` writes `Commands:`, then the usage of `aircon.status.get` and of `aircon.status.export`. `aircon status` alone, or with arguments that are not `--help` and are not the path of a command, such as `aircon status --path out.json`, writes the same list to standard error, with exit code 2. The test of each core checks this help.
 
 The human form of the output is off by default in each core. Each command line turns it on with the default form `auto`. Without `auto`, the output is JSON unless an output flag chooses the human form. With `auto`, in a terminal, each command line writes text for a person: `aircon status get` gives `off · cool · fan auto · target 22°C · room 25°C`. Each core formats the status and the `Offline` failure of `aircon.status.get` and the payload of `aircon.status.changed`, and prints the other values in the generic layout. In a pipe, in CI, or for a coding agent, the output is JSON. The output flags choose the form, anywhere in the arguments: `--output human`, `--output json`, `--output=human`, `-o human` and `--json`.
 

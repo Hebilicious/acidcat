@@ -15,6 +15,7 @@ import { CallFailureError, catalogOf, createSession, renderCatalog, runCli } fro
 import type { Result } from "@acid-cat/core-ts";
 import { OFFLINE, OUTPUT_ERROR, OUTPUT_FLAG_LINES, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import { run } from "./run.ts";
+import { assertHelp } from "./help.ts";
 import { shape, writtenText } from "./shape.ts";
 
 test("the code writes a catalog that conforms and agrees with the Pkl catalog", () => {
@@ -297,4 +298,8 @@ test("aircon.status.export writes a file through the command line", async (conte
   const file = join(folder, "status.json");
   assert.equal((await run(new URL("../core-ts/cli.ts", import.meta.url).pathname, "aircon", "status", "export", "--path", file)).code, 0);
   assert.partialDeepStrictEqual(JSON.parse(await readFile(file, "utf-8")), { power: false });
+});
+
+test("the command line writes the help of a command and the command list of a shared prefix", async () => {
+  await assertHelp((...args) => run(new URL("../core-ts/cli.ts", import.meta.url).pathname, ...args));
 });

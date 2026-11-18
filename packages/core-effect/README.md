@@ -413,11 +413,13 @@ node cli.ts aircon schedule set --days mon --days fri --hours 7 --hours 18   # {
 node cli.ts aircon schedule set --days '["mon","fri"]' --hours '[7,18]'      # the same input, as JSON text
 node cli.ts aircon schedule set --days '[]'                                   # an empty array
 node cli.ts list                                                             # the usage of each command
+node cli.ts aircon power set --help                                          # Usage: aircon aircon power set --on, then the description
+node cli.ts aircon status --help                                             # Commands:, then the usage of each command under aircon status
 ```
 
 When the command line breaks a rule of the binding, for example two commands with the same path, `Cli.run` and `Cli.runCommand` die with the error, and `NodeCli.main` and `NodeCli.runCommand` write the message to standard error and stop the program with the exit code 5 (`internal`).
 
-`list` gives a usage line for each capability. The usage of a repeated flag ends with `...`, for example `--days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]`. See the [CLI binding](../../spec/bindings/cli.md#commands) for all the rules.
+`list` gives a usage line for each capability. The usage of a repeated flag ends with `...`, for example `--days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]`. `--help` after the path of a command writes `Usage: ` and its usage, an empty line, and its description, as `<alias> --help` and `watch <id> --help` do for an alias and an event. `--help` after a shared prefix writes `Commands:` and the usage of each command under it, in the order of `list`. A shared prefix alone, or with arguments that are not `--help` and are not the path of a command, writes the same list to standard error, with exit code 2. This help takes the place of the help of `effect/cli` for these commands. The help of the root command, of `call`, of `list` and of `watch` stays the help of `effect/cli`. See the [CLI binding](../../spec/bindings/cli.md#commands) for all the rules.
 
 `watch <id>` follows an event of the view. The flags come from the input schema of the event, with the same rules. When the input schema has no top-level `properties`, `watch <id> '<json>'` takes the input as JSON text. In the JSON form, each occurrence goes to standard output as one line of JSON, as soon as it comes:
 

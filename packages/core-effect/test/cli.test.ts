@@ -214,12 +214,12 @@ describe("the command line of an application", { concurrency: true }, () => {
       [unknownFlag, missingFlag, unknownCommand].map((run) => [run.code, run.stdout]),
       [[3, ""], [3, ""], [2, ""]],
     );
-    assert.match(unknownFlag.stderr, /USAGE\n {2}fixture fixture echo[\s\S]*Unrecognized flag: --nope/);
+    assert.match(unknownFlag.stderr, /^Usage: fixture fixture echo --text <string>\n[\s\S]*Unrecognized flag: --nope/);
 
     const requests = await Promise.all([cli("--help"), cli("-h"), cli("fixture", "echo", "--help"), cli("fixture", "echo", "-h")]);
-    for (const help of requests) {
+    for (const [index, help] of requests.entries()) {
       assert.equal(help.code, 0);
-      assert.match(help.stdout, /USAGE/);
+      assert.match(help.stdout, index < 2 ? /USAGE/ : /^Usage: fixture fixture echo --text <string>\n/);
     }
     const version = await cli("--version");
     assert.equal(version.code, 0);

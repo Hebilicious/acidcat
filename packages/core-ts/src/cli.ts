@@ -7,9 +7,10 @@ import {
   cliAliases,
   cliAliasInput,
   cliAliasUsage,
+  cliCommandList,
   cliEventUsage,
   cliExitCode,
-  cliFlags,
+  cliHelp,
   cliInputSchema,
   cliJsonArray,
   cliRepeatedItems,
@@ -125,6 +126,8 @@ export interface CliCommand<Context> {
 
 const isGenericCommand = (word: string): boolean => CLI_GENERIC_COMMANDS.some((command) => command === word);
 
+const isHelp = (args: readonly string[]): boolean => args.includes("--help") || args.includes("-h");
+
 const NO_FLAGS: JsonObject = { type: "object", properties: {} };
 
 class UsageError extends Error {
@@ -192,6 +195,10 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   }
   const { aliases, default: defaultAlias, errors: aliasErrors } = cliAliases(view, options.target ?? "cli");
   if (aliasErrors.length > 0) throw new Error(aliasErrors.join("\n"));
+  const usageOf = (id: string): string => {
+    const input = viewCapability(view, id).input;
+    return cliUsage(options.name, id, input === undefined ? undefined : cliInputSchema(input, types));
+  };
   const aliasUsage = (alias: CliAlias): string => cliAliasUsage(options.name, alias, cliAliasInput(view, alias));
   const aliasUsages = (kind: CliAlias["kind"], id: string): readonly string[] =>
     aliases.filter((alias) => alias.kind === kind && alias.id === id).map(aliasUsage);
@@ -257,8 +264,8 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     let input: unknown = {};
     if (event !== undefined) {
       const schema = cliInputSchema(event.input ?? { type: "object" }, types);
-      if (flagArgs.includes("--help") || flagArgs.includes("-h")) {
-        io.stdout([`Usage: ${cliEventUsage(options.name, id, event.input === undefined ? undefined : schema)}`, "", event.description].join("\n"));
+      if (isHelp(flagArgs)) {
+        io.stdout(cliHelp(cliEventUsage(options.name, id, event.input === undefined ? undefined : schema), event.description));
         return CLI_EXIT_CODES.value;
       }
       if (schema.properties !== undefined) {
@@ -299,8 +306,8 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   const runAlias = async (alias: CliAlias, rest: readonly string[]): Promise<number> => {
     const entry = alias.kind === "event" ? view.events?.[alias.id] : view.capabilities[alias.id];
     if (entry === undefined) throw new Error(`The view of the session has no ${alias.kind} ${alias.id}.`);
-    if (rest.includes("--help") || rest.includes("-h")) {
-      io.stdout([`Usage: ${aliasUsage(alias)}`, "", entry.description].join("\n"));
+    if (isHelp(rest)) {
+      io.stdout(cliHelp(aliasUsage(alias), entry.description));
       return CLI_EXIT_CODES.value;
     }
     const { flagArgs, resume } = alias.kind === "event" ? resumeFlags(rest) : { flagArgs: rest, resume: {} };
@@ -375,7 +382,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
                 id,
                 description: capability.description,
                 ...(availability.get(id) ?? unavailable("There is no such capability.")),
-                usage: cliUsage(options.name, id, capability.input === undefined ? undefined : cliInputSchema(capability.input, types)),
+                usage: usageOf(id),
                 ...(usages.length > 0 ? { aliases: usages } : {}),
               };
             }),
@@ -422,13 +429,23 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     const match = commands
       .filter(({ path }) => path.every((word, index) => args[index] === word))
       .sort((a, b) => b.path.length - a.path.length)[0];
-    if (match === undefined) throw new UsageError(`There is no command ${args.filter((arg) => !arg.startsWith("-")).join(" ")}.`, CLI_EXIT_CODES["unknown-capability"]);
+    if (match === undefined) {
+      const usages = commands.map(({ id }) => ({ id, usage: usageOf(id) }));
+      for (let length = args.length; length > 0; length--) {
+        const list = cliCommandList(args.slice(0, length), usages);
+        if (list === undefined) continue;
+        if (!isHelp(args.slice(length))) throw new UsageError(list, CLI_EXIT_CODES["unknown-capability"]);
+        io.stdout(list);
+        return CLI_EXIT_CODES.value;
+      }
+      throw new UsageError(`There is no command ${args.filter((arg) => !arg.startsWith("-")).join(" ")}.`, CLI_EXIT_CODES["unknown-capability"]);
+    }
 
     const capability = viewCapability(view, match.id);
     const schema = cliInputSchema(capability.input ?? { type: "object" }, types);
     const flagArgs = args.slice(match.path.length);
-    if (flagArgs.includes("--help") || flagArgs.includes("-h")) {
-      io.stdout(usage(options.name, match.path, capability.description, schema));
+    if (isHelp(flagArgs)) {
+      io.stdout(cliHelp(usageOf(match.id), capability.description));
       return CLI_EXIT_CODES.value;
     }
     return await invoke(match.id, parseFlags(flagArgs, schema));
@@ -579,8 +596,4 @@ function help(
     ...(aliases.length > 0 ? ["", "Aliases:", ...aliases.map((alias) => `  ${alias}`)] : []),
     ...(outputFlags.length > 0 ? ["", "Output:", ...outputFlags.map((flag) => `  ${cliOutputFlagHelp(flag)}`)] : []),
   ].join("\n");
-}
-
-function usage(name: string, path: readonly string[], description: string, schema: JsonObject): string {
-  return [`Usage: ${[name, ...path, ...cliFlags(schema)].join(" ")}`, "", description].join("\n");
 }

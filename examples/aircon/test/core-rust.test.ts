@@ -9,6 +9,7 @@ import { type TestContext, test } from "node:test";
 import { check } from "@acid-cat/cli";
 
 import { OUTPUT_ERROR, OUTPUT_FLAG_LINES, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
+import { assertHelp } from "./help.ts";
 import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 
@@ -189,4 +190,8 @@ test("aircon.status.export writes a file through the command line", async (conte
   const file = join(folder, "status.json");
   assert.equal((await cli("aircon", "status", "export", "--path", file)).code, 0);
   assert.partialDeepStrictEqual(JSON.parse(await readFile(file, "utf-8")), { power: false });
+});
+
+test("the Rust command line writes the help of a command and the command list of a shared prefix", async () => {
+  await assertHelp(cli);
 });
