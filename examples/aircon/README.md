@@ -169,10 +169,10 @@ Every API rejects origins it does not allow.
 
 ### How the APIs use sessions
 
-- **One session per client** ([Sessions](../../spec/invocation.md#sessions)). Each request or Cap'n Web batch opens one with `await using session = openSession(options)`. A WebSocket connection is one session, and closing it ends its subscriptions. The unit is a service in the context, so all sessions share it.
-- **Typed calls.** `session.call(powerSet, input)` checks untrusted input against the input schema and returns a typed result. The MCP API checks its tool parameters with Effect Schema first.
-- **[Outcomes](../../spec/invocation.md#outcomes).** Each API maps a value and a failure to its own form. A call failure rejects as a `CallFailureError`, which each API turns into a protocol error.
-- **Subscriptions.** Each API uses `session.eventHandle(statusChanged).subscribe(…)` and stops when its client goes away:
+- One session per client ([Sessions](../../spec/invocation.md#sessions)): Each request or Cap'n Web batch opens one with `await using session = openSession(options)`. A WebSocket connection is one session, and closing it ends its subscriptions. The unit is a service in the context, so all sessions share it.
+- Typed calls: `session.call(powerSet, input)` checks untrusted input against the input schema and returns a typed result. The MCP API checks its tool parameters with Effect Schema first.
+- [Outcomes](../../spec/invocation.md#outcomes): Each API maps a value and a failure to its own form. A call failure rejects as a `CallFailureError`, which each API turns into a protocol error.
+- Subscriptions: Each API uses `session.eventHandle(statusChanged).subscribe(…)` and stops when its client goes away:
   - GraphQL returns the subscription as the resolver's iterator; GraphQL calls `return()` when the client ends it.
   - Cap'n Web aborts the signal when the client disposes the `Following` object, the connection breaks, or the listener throws.
   - Elysia's `GET /status/changes` uses the request's signal and sends `retry: 1000` first so the response starts at once. `/status/follow` sends `{ "event": "following" }`, then `{ "event": "aircon.status.changed", "data": <status> }` per change. A WebSocket upgrade from a foreign origin gets 403.

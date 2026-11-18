@@ -160,7 +160,7 @@ let binding = HttpBinding::with_request_context(app, move |parts: &http::request
 
 ## Command line
 
-`cli_main` runs the command line and exits the process. `cli::run_cli_process` returns the exit code instead. Commands, help, exit codes and interrupts follow the [CLI binding](../../spec/bindings/cli.md). The grace period after an interrupt is `cli::INTERRUPT_GRACE` (one second). When the application breaks a rule of the binding, for example two commands with the same path, both functions write the message to standard error and return exit code 5.
+`cli_main` runs the command line and exits the process. `cli::run_cli_process` returns the exit code instead. Commands, help, exit codes and interrupts follow the [CLI binding](../../spec/bindings/cli.md). The grace period after an interrupt is `cli::INTERRUPT_GRACE` (one second). When the application breaks a rule of the binding, for example two commands with the same path, both functions write the message to standard error. `run_cli_process` returns 5, and `cli_main` exits with 5.
 
 ### Aliases
 

@@ -37,7 +37,7 @@ AcidCat replaces those copies with one description, the **catalog**. The catalog
 | HTTP | `POST /capabilities/aircon.temperature.set` |
 | Your language | a typed function, for example `execute({ celsius: 22 })` in TypeScript |
 
-Each surface validates input the same way, returns the same failures and hides the same operations. `acid-cat conform` tests every surface against the specification, so you can check that this holds.
+Every surface validates input against the same schemas and returns the same failures, and each one exposes only the operations its target may use. `acid-cat conform` tests every surface against the specification, so you can check that this holds.
 
 Applications can also publish **events** that clients follow, such as `aircon.status.changed`. The command line prints one JSON line per occurrence, MCP clients get them through the MCP events extension, HTTP clients get a server-sent events stream, and TypeScript code gets an async handle.
 
@@ -104,13 +104,13 @@ The MCP server reports the hints as `destructiveHint` and `idempotentHint`, so a
 
 ## Features
 
-- **Audiences per target.** Each capability and event lists the targets that can use it. An agent sees only what you give it. A capability that only makes sense in one place, such as writing a local file, can be given to the `cli` target alone ([example](examples/aircon/README.md#command-line-only)).
-- **Hints for agents.** `readOnly`, `destructive` and `idempotent` tell clients what a call does. MCP clients get them as tool annotations ([catalog](spec/catalog.md#capabilities)).
-- **Failures are data.** A capability declares its failures by tag, for example `Offline`. Clients get a typed failure, not an exception. An unexpected error becomes the call failure `internal`, and its details stay on the server ([invocation](spec/invocation.md)).
-- **Sessions, availability and cancellation.** A session holds the client's identity, so inputs never carry credentials. A capability can be unavailable with a reason, and every call can be cancelled ([invocation](spec/invocation.md)).
-- **WebMCP.** A browser agent calls your page's capabilities directly, with the user's session and state, instead of reading the screen and clicking buttons. `installWebMcp(session)` in core-ts and `WebMcp.install` in core-effect add the tools. The page works as before in a browser without WebMCP ([binding](spec/bindings/webmcp.md), [example](examples/aircon/README.md#webmcp)).
-- **A real command line.** Each input property becomes a flag, and arrays take repeated flags. The catalog can declare short aliases such as `aircon --on` or `aircon fan high`, and a default command. Output is JSON for scripts and agents, with an optional human format for terminals. Ctrl+C cancels the call and exits with code 130 ([binding](spec/bindings/cli.md)).
-- **Bring your own API.** Bindings cover the common surfaces. For a GraphQL or RPC API that you design yourself, call the same capabilities through a session. [`examples/aircon/apis`](examples/aircon/README.md#apis) shows GraphQL, Cap'n Web and Elysia APIs, and an MCP server written by hand in Effect.
+- Each capability and event lists the targets that can use it, so an agent sees only what you give it. A capability that only makes sense in one place, such as writing a local file, can be given to the `cli` target alone ([example](examples/aircon/README.md#command-line-only)).
+- The hints `readOnly`, `destructive` and `idempotent` tell clients what a call does, so an agent knows when to ask before it acts. MCP clients get them as tool annotations ([catalog](spec/catalog.md#capabilities)).
+- A capability declares its failures by tag, for example `Offline`. Clients get a typed failure, not an exception. An unexpected error becomes the call failure `internal`, and its details stay on the server ([invocation](spec/invocation.md)).
+- A session holds the client's identity, so inputs never carry credentials. A capability can be unavailable with a reason, and every call can be cancelled ([invocation](spec/invocation.md)).
+- With WebMCP, a browser agent calls your page's capabilities directly, with the user's session and state, instead of reading the screen and clicking buttons. `installWebMcp(session)` in core-ts and `WebMcp.install` in core-effect add the tools. The page works as before in a browser without WebMCP ([binding](spec/bindings/webmcp.md), [example](examples/aircon/README.md#webmcp)).
+- On the command line, each input property becomes a flag, and arrays take repeated flags. The catalog can declare short aliases such as `aircon --on` or `aircon fan high`, and a default command. Output is JSON for scripts and agents, with an optional human format for terminals. Ctrl+C cancels the call and exits with code 130 ([binding](spec/bindings/cli.md)).
+- Bindings cover the common surfaces. For a GraphQL or RPC API that you design yourself, call the same capabilities through a session. [`examples/aircon/apis`](examples/aircon/README.md#apis) shows GraphQL, Cap'n Web and Elysia APIs, and an MCP server written by hand in Effect.
 
 ## Specification
 
