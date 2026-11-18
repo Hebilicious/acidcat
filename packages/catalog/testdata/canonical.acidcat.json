@@ -1,0 +1,188 @@
+{
+  "acidcat": "0.1",
+  "targets": {
+    "shell": {
+      "bindings": [
+        "cli"
+      ]
+    }
+  },
+  "capabilities": {
+    "edge.values.write": {
+      "description": "Text: \"quotes\", a\\b, C:\\temp, line\nbreak, cr\r, tab\t, form\f, back\b, vt\u000b, nul\u0000, soh\u0001, bell\u0007, esc\u001b, gs\u001d, unit\u001f, del, <&>, ls , para , ü, ø, ç, ñ, 🐈.",
+      "audience": [
+        "shell"
+      ],
+      "output": {
+        "AKey": "A",
+        "bFirst": "b",
+        "cKey": "c",
+        "dKey": "d",
+        "examples": [
+          {
+            "big": [
+              98765432109876540000,
+              161803398874989500000,
+              271828182845904500000,
+              31415926535897930000,
+              123456789012345680000
+            ],
+            "fractions": [
+              0.25,
+              0.1,
+              0.2,
+              0.125,
+              -2.5
+            ],
+            "integers": [
+              7,
+              440,
+              64,
+              1013,
+              42,
+              -7
+            ],
+            "integersAbove2To53": [
+              9223372036854776000,
+              -9223372036854776000,
+              18446744073709552000,
+              18446744073709552000,
+              100000000000000000000,
+              1e+21
+            ],
+            "integersAround2To53": [
+              9007199254740991,
+              9007199254740992,
+              9007199254740992,
+              9007199254740996,
+              -9007199254740992
+            ],
+            "large": [
+              7.5e+22,
+              4.4e+23,
+              3e+25,
+              2.5e+300,
+              1e+21,
+              1000,
+              1.7976931348623157e+308
+            ],
+            "negative": [
+              -1.5e-12,
+              -3.5e-9,
+              -6.25e-15,
+              -9.75e-8
+            ],
+            "small": [
+              0.0000035,
+              0.0000099,
+              0.000015,
+              0.00042,
+              0.000001,
+              1e-7
+            ],
+            "tiny": [
+              4e-9,
+              8.5e-12,
+              1.25e-9,
+              6.5e-11,
+              1.5e-7,
+              1e-7,
+              1.23e-18,
+              5e-324
+            ],
+            "wholeFloat": 250,
+            "wholeFloats": [
+              128,
+              42,
+              3,
+              22
+            ],
+            "zero": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "mKey": "m",
+        "properties": {
+          "0": {
+            "type": "string"
+          },
+          "10": {
+            "type": "string"
+          },
+          "9": {
+            "type": "string"
+          },
+          "N": {
+            "type": "string"
+          },
+          "U": {
+            "type": "string"
+          },
+          "_": {
+            "type": "string"
+          },
+          "c": {
+            "type": "string"
+          },
+          "n": {
+            "type": "string"
+          },
+          "o": {
+            "type": "string"
+          },
+          "u": {
+            "type": "string"
+          },
+          "Ç": {
+            "type": "string"
+          },
+          "Ø": {
+            "type": "string"
+          },
+          "Ü": {
+            "type": "string"
+          },
+          "ç": {
+            "type": "string"
+          },
+          "ñ": {
+            "type": "string"
+          },
+          "ø": {
+            "type": "string"
+          },
+          "ü": {
+            "type": "string"
+          },
+          "ō": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "xKey": "x",
+        "yLast": "y"
+      }
+    }
+  },
+  "events": {
+    "edge.values.cleared": {
+      "description": "The values are cleared."
+    },
+    "edge.values.shown": {
+      "description": "The values are shown.",
+      "audience": [
+        "shell"
+      ],
+      "input": {
+        "type": "object"
+      },
+      "payload": {
+        "type": "object"
+      }
+    }
+  }
+}

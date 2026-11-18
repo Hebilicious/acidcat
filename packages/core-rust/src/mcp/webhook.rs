@@ -21,9 +21,9 @@ use super::{
     KeyGate, KeyGates, OpenSession, RpcAnswer, RpcError, codes, subscribe_error,
     subscription_params,
 };
-use crate::schema::canonical_json;
 use crate::session::SubscribeOptions;
 use crate::subscription::Occurrences;
+use acid_cat_catalog::canonical_json;
 
 /// Tells if a URL is in the allowlist of the deployment.
 pub type Allow = Arc<dyn Fn(&Uri) -> bool + Send + Sync>;

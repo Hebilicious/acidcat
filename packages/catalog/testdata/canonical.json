@@ -1,0 +1,67 @@
+{
+  "events": {
+    "edge.values.shown": {
+      "payload": { "type": "object" },
+      "input": { "type": "object" },
+      "audience": ["shell"],
+      "description": "The values are shown."
+    },
+    "edge.values.cleared": { "description": "The values are cleared." }
+  },
+  "capabilities": {
+    "edge.values.write": {
+      "output": {
+        "yLast": "y",
+        "xKey": "x",
+        "mKey": "m",
+        "dKey": "d",
+        "cKey": "c",
+        "bFirst": "b",
+        "AKey": "A",
+        "type": "object",
+        "properties": {
+          "ü": { "type": "string" },
+          "Ü": { "type": "string" },
+          "u": { "type": "string" },
+          "U": { "type": "string" },
+          "ø": { "type": "string" },
+          "Ø": { "type": "string" },
+          "o": { "type": "string" },
+          "ç": { "type": "string" },
+          "Ç": { "type": "string" },
+          "c": { "type": "string" },
+          "ñ": { "type": "string" },
+          "n": { "type": "string" },
+          "N": { "type": "string" },
+          "ō": { "type": "string" },
+          "_": { "type": "string" },
+          "0": { "type": "string" },
+          "9": { "type": "string" },
+          "10": { "type": "string" }
+        },
+        "examples": [
+          {
+            "wholeFloat": 250.0,
+            "wholeFloats": [128.0, 42.0, 3.0, 22.0],
+            "fractions": [0.25, 0.1, 0.2, 0.125, -2.5],
+            "tiny": [4e-9, 8.5e-12, 1.25e-9, 6.5e-11, 1.5e-7, 1e-7, 123e-20, 5e-324],
+            "small": [0.0000035, 0.0000099, 0.000015, 0.00042, 0.000001, 0.0000001],
+            "large": [7.5e22, 4.4e23, 3e25, 2.5e300, 1e21, 1E3, 1.7976931348623157e308],
+            "big": [98765432109876540000, 161803398874989500000.0, 271828182845904500000.0, 31415926535897930000.0, 123456789012345680000.0],
+            "negative": [-1.5e-12, -3.5e-9, -6.25e-15, -9.75e-8],
+            "zero": [0, 0.0, -0, -0.0],
+            "integers": [7, 440, 64, 1013, 42, -7],
+            "integersAround2To53": [9007199254740991, 9007199254740992, 9007199254740993, 9007199254740995, -9007199254740993],
+            "integersAbove2To53": [9223372036854775807, -9223372036854775808, 18446744073709551615, 18446744073709551616, 100000000000000000000, 1000000000000000000000]
+          }
+        ]
+      },
+      "audience": ["shell"],
+      "description": "Text: \"quotes\", a\\b, C:\\temp, line\nbreak, cr\r, tab\t, form\f, back\b, vt\u000b, nul\u0000, soh\u0001, bell\u0007, esc\u001b, gs\u001d, unit\u001f, del\u007f, <&>, ls\u2028, para\u2029, ü, ø, ç, ñ, 🐈."
+    }
+  },
+  "targets": {
+    "shell": { "bindings": ["cli"] }
+  },
+  "acidcat": "0.1"
+}

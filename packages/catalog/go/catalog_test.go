@@ -1,6 +1,8 @@
 package catalog_test
 
 import (
+	"encoding/json"
+	"math"
 	"os"
 	"reflect"
 	"strings"
@@ -18,39 +20,34 @@ func TestWritesTheGarageCatalogInCanonicalForm(t *testing.T) {
 	expectBytes(t, rendered, "examples/garage/garage.acidcat.json")
 }
 
-// edgeCatalog holds numbers and strings that Go writes differently from the canonical form by default.
-func edgeCatalog() *catalog.Catalog {
-	return catalog.New("", "").
-		Target("console", catalog.Target{Bindings: []string{"cli"}}).
-		Capability("edge.strings.echo", catalog.Capability{
-			Description: "Text: \"said\", D:\\logs, tab\t, vt\v, soh\u0001, us\u001f, <&>, ls\u2028, ç, 🚗.",
-			Audience:    []string{"console"},
-			Output: catalog.Schema{
-				"type": "object",
-				"qKey": "q",
-				"cKey": "c",
-				"properties": catalog.Schema{
-					"ç":  catalog.Schema{"type": "string"},
-					"Ç":  catalog.Schema{"type": "string"},
-					"c":  catalog.Schema{"type": "string"},
-					"_":  catalog.Schema{"type": "string"},
-					"9":  catalog.Schema{"type": "string"},
-					"10": catalog.Schema{"type": "string"},
-				},
-				"examples": []any{map[string]any{
-					"whole": 42.0, "fifth": 0.2, "tiny": 1.25e-9, "small": 0.000015, "large": 3e25,
-					"big": 271828182845904500000.0, "negative": -6.25e-15, "zero": 0.0, "integer": 64,
-				}},
-			},
-		})
-}
-
-func TestWritesTheCanonicalFormOfEveryValue(t *testing.T) {
-	rendered, err := edgeCatalog().Render()
+func TestWritesEveryValueOfTheSharedTestCatalog(t *testing.T) {
+	input, err := os.ReadFile("../testdata/canonical.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectBytes(t, rendered, "testdata/edge.acidcat.json")
+	var document map[string]any
+	if err := json.Unmarshal(input, &document); err != nil {
+		t.Fatal(err)
+	}
+	text, err := catalog.CanonicalText(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectBytes(t, text, "../testdata/canonical.acidcat.json")
+}
+
+// JSON gives Go only float64 numbers, so the integer types are written here.
+func TestWritesGoIntegersAbove2To53AsFloats(t *testing.T) {
+	text, err := catalog.CanonicalText(map[string]any{"x-integers": []any{
+		int(9007199254740992), int(9007199254740993), int64(-9007199254740993), int64(math.MaxInt64),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "{\n  \"x-integers\": [\n    9007199254740992,\n    9007199254740992,\n    -9007199254740992,\n    9223372036854776000\n  ]\n}\n"
+	if text != want {
+		t.Fatalf("got\n%s", text)
+	}
 }
 
 func TestReportsTheRulesACatalogBreaks(t *testing.T) {
@@ -105,57 +102,6 @@ func TestReportsATypeThatIsNotAnObject(t *testing.T) {
 	}
 }
 
-func TestPutsEventsAfterCapabilitiesAndTheMembersOfAnEventInOrder(t *testing.T) {
-	text, err := catalog.CanonicalText(map[string]any{
-		"events": map[string]any{
-			"z.b.changed": map[string]any{"payload": map[string]any{"type": "object"}, "input": map[string]any{"type": "object"}, "description": "b"},
-			"z.a.changed": map[string]any{"description": "a"},
-		},
-		"capabilities": map[string]any{},
-		"targets":      map[string]any{},
-		"acidcat":      "0.1",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := `{
-  "acidcat": "0.1",
-  "targets": {},
-  "capabilities": {},
-  "events": {
-    "z.a.changed": {
-      "description": "a"
-    },
-    "z.b.changed": {
-      "description": "b",
-      "input": {
-        "type": "object"
-      },
-      "payload": {
-        "type": "object"
-      }
-    }
-  }
-}
-`
-	if text != want {
-		t.Fatalf("got\n%s", text)
-	}
-}
-
-func TestACatalogWithNoEventsHasNoEventsMember(t *testing.T) {
-	text, err := catalog.New("", "").
-		Target("cli", catalog.Target{Bindings: []string{"cli"}}).
-		Capability("a.b", catalog.Capability{Description: "x", Audience: []string{"cli"}}).
-		Render()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(text, `"events"`) {
-		t.Fatalf("the catalog has an events member:\n%s", text)
-	}
-}
-
 func TestWritesTheHintsOfACapabilityInCanonicalOrder(t *testing.T) {
 	rendered, err := catalog.New("", "").
 		Target("agents", catalog.Target{Bindings: []string{"mcp"}}).
@@ -171,7 +117,7 @@ func TestWritesTheHintsOfACapabilityInCanonicalOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectBytes(t, rendered, "testdata/hints.acidcat.json")
+	expectBytes(t, rendered, "../testdata/hints.acidcat.json")
 }
 
 func expectBytes(t *testing.T, rendered, path string) {

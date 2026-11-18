@@ -1,4 +1,4 @@
-use acid_cat_catalog::{Capability, Catalog, Event, Target, canonical_text};
+use acid_cat_catalog::{Capability, Catalog, Event, Target, canonical_json, canonical_text};
 use serde_json::json;
 
 #[path = "../examples/player.rs"]
@@ -9,6 +9,10 @@ fn expected(path: &str) -> String {
         .expect("the expected file exists")
 }
 
+fn testdata(name: &str) -> String {
+    expected(&format!("../testdata/{name}"))
+}
+
 #[test]
 fn writes_the_player_catalog_in_canonical_form() {
     let rendered = player::player_catalog()
@@ -17,35 +21,11 @@ fn writes_the_player_catalog_in_canonical_form() {
     assert_eq!(rendered, expected("examples/player.acidcat.json"));
 }
 
-/// A catalog with numbers and strings that Rust writes differently from the canonical form by default.
-fn edge_catalog() -> Catalog {
-    let mut catalog = Catalog::new(None, None);
-    catalog
-        .target("speaker", Target { bindings: vec!["cli".into()], ..Target::default() })
-        .capability("edge.values.print", Capability {
-            description: "Text: \"loud\", E:\\music, newline\n, back\u{8}, gs\u{1d}, del\u{7f}, ps\u{2029}, ø, 🎵.".into(),
-            audience: vec!["speaker".into()],
-            output: Some(json!({
-                "type": "object",
-                "xKey": "x",
-                "dKey": "d",
-                "properties": { "ø": { "type": "string" }, "Ø": { "type": "string" }, "o": { "type": "string" }, "0": { "type": "string" }, "9": { "type": "string" }, "10": { "type": "string" } },
-                "examples": [{
-                    "whole": 128.0, "tenth": 0.1, "tiny": 8.5e-12, "small": 0.0000099, "large": 4.4e23,
-                    "big": 161803398874989500000.0, "negative": -3.5e-9, "zero": 0.0, "integer": 440
-                }]
-            })),
-            ..Capability::default()
-        });
-    catalog
-}
-
 #[test]
-fn writes_the_canonical_form_of_every_value() {
-    assert_eq!(
-        edge_catalog().render().expect("the catalog conforms"),
-        expected("tests/fixtures/edge.acidcat.json")
-    );
+fn writes_every_value_of_the_shared_test_catalog() {
+    let catalog: serde_json::Value =
+        serde_json::from_str(&testdata("canonical.json")).expect("the shared test catalog is JSON");
+    assert_eq!(canonical_text(&catalog), testdata("canonical.acidcat.json"));
 }
 
 #[test]
@@ -73,7 +53,7 @@ fn writes_the_hints_of_a_capability_in_canonical_order() {
         );
     assert_eq!(
         catalog.render().expect("the catalog conforms"),
-        expected("tests/fixtures/hints.acidcat.json")
+        testdata("hints.acidcat.json")
     );
 }
 
@@ -252,58 +232,10 @@ fn reports_a_boolean_schema() {
 }
 
 #[test]
-fn puts_events_after_capabilities_and_the_members_of_an_event_in_order() {
-    let text = canonical_text(&json!({
-        "events": {
-            "z.b.changed": { "payload": { "type": "object" }, "input": { "type": "object" }, "description": "b" },
-            "z.a.changed": { "description": "a" }
-        },
-        "capabilities": {},
-        "targets": {},
-        "acidcat": "0.1"
-    }));
-    let expected = r#"{
-  "acidcat": "0.1",
-  "targets": {},
-  "capabilities": {},
-  "events": {
-    "z.a.changed": {
-      "description": "a"
-    },
-    "z.b.changed": {
-      "description": "b",
-      "input": {
-        "type": "object"
-      },
-      "payload": {
-        "type": "object"
-      }
-    }
-  }
-}
-"#;
-    assert_eq!(text, expected);
-}
-
-#[test]
-fn a_catalog_with_no_events_has_no_events_member() {
-    let mut catalog = Catalog::new(None, None);
-    catalog
-        .target(
-            "cli",
-            Target {
-                bindings: vec!["cli".into()],
-                ..Target::default()
-            },
-        )
-        .capability(
-            "a.b",
-            Capability {
-                description: "x".into(),
-                audience: vec!["cli".into()],
-                ..Capability::default()
-            },
-        );
-    let document = catalog.to_json().expect("the catalog conforms");
-    assert!(document.get("events").is_none());
+fn writes_canonical_json_with_no_spaces_and_every_key_sorted() {
+    let value = json!({ "b": [1.0, "x\u{1}\"\n"], "a": { "d": null, "c": true } });
+    assert_eq!(
+        canonical_json(&value),
+        r#"{"a":{"c":true,"d":null},"b":[1,"x\u0001\"\n"]}"#
+    );
 }

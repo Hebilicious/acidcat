@@ -66,6 +66,6 @@ A target with two aliases and a default:
 
 ## Tests
 
-`moon run catalog-pkl:test` packages the module into `.out/`, then evaluates the example, which checks the example's catalog rules. The package does not contain the example.
+`moon run catalog-pkl:test` packages the module into `.out/`, then evaluates the example, which checks the example's catalog rules. The package does not contain the example. Then the task evaluates each catalog in [`rejected/`](rejected). Each one breaks one catalog rule, and its first line names the error that Pkl must give.
 
 The root `moon run check` renders each `.pkl` catalog that has an `.acidcat.json` file beside it and compares the two. It also checks that each committed catalog file is in canonical form.

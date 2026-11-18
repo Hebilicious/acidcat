@@ -12,9 +12,9 @@ use super::{
     KeyGate, KeyGates, OpenSession, RpcAnswer, RpcError, codes, subscribe_error,
     subscription_params,
 };
-use crate::schema::canonical_json;
 use crate::session::{Session, SubscribeOptions};
 use crate::subscription::Occurrence;
+use acid_cat_catalog::canonical_json;
 
 /// The settings of poll delivery. Each one has the default of spec/bindings/mcp.md#poll.
 #[derive(Clone, Debug)]

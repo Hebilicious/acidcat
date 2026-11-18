@@ -30,23 +30,25 @@ The libraries check the [catalog rules](../../spec/conformance.md#catalog) that 
 
 ## How the libraries stay byte-identical
 
-Each library tests its own catalogs, with files in its own directory. The libraries share no test file.
+Each library tests its example catalog, and all libraries share the test files in [`testdata/`](testdata).
 
-| Library | Example catalog | Edge-case catalog |
-| --- | --- | --- |
-| TypeScript | A lending library: [`typescript/examples/library.acidcat.json`](typescript/examples/library.acidcat.json) | [`typescript/test/fixtures/edge.acidcat.json`](typescript/test/fixtures/edge.acidcat.json) |
-| Python | A weather station: [`python/examples/weather.acidcat.json`](python/examples/weather.acidcat.json) | [`python/tests/fixtures/edge.acidcat.json`](python/tests/fixtures/edge.acidcat.json) |
-| Go | A garage door: [`go/examples/garage/garage.acidcat.json`](go/examples/garage/garage.acidcat.json) | [`go/testdata/edge.acidcat.json`](go/testdata/edge.acidcat.json) |
-| Rust | A music player: [`rust/examples/player.acidcat.json`](rust/examples/player.acidcat.json) | [`rust/tests/fixtures/edge.acidcat.json`](rust/tests/fixtures/edge.acidcat.json) |
-| Pkl | A greenhouse: [`pkl/examples/greenhouse.acidcat.json`](pkl/examples/greenhouse.acidcat.json) | None. `acid-cat format` writes the canonical form of the Pkl output. |
+| Library | Example catalog |
+| --- | --- |
+| TypeScript | A lending library: [`typescript/examples/library.acidcat.json`](typescript/examples/library.acidcat.json) |
+| Python | A weather station: [`python/examples/weather.acidcat.json`](python/examples/weather.acidcat.json) |
+| Go | A garage door: [`go/examples/garage/garage.acidcat.json`](go/examples/garage/garage.acidcat.json) |
+| Rust | A music player: [`rust/examples/player.acidcat.json`](rust/examples/player.acidcat.json) |
+| Pkl | A greenhouse: [`pkl/examples/greenhouse.acidcat.json`](pkl/examples/greenhouse.acidcat.json) |
 
 - An example catalog's test builds the catalog with the library and compares the output with the committed file, byte for byte.
-- An edge-case catalog holds values that languages write differently by default: a number with a zero fraction, very small and very large numbers, escapes and control characters in strings, and non-ASCII keys. Each library uses different values.
-- Each committed catalog file in the repository MUST be in canonical form, and the root `moon run check` checks this. That one check is what makes every library agree on the form.
-- Pkl writes JSON in its own key order, so `moon run examples` sends the Pkl output through `acid-cat format`.
+- Each library reads [`testdata/canonical.json`](testdata/canonical.json), writes its canonical form, and compares the output with [`testdata/canonical.acidcat.json`](testdata/canonical.acidcat.json), byte for byte. The input holds values that languages write differently by default: numbers with a zero fraction, very small and very large numbers, integers above 2^53, negative zero, escapes and control characters in strings, non-ASCII keys, and members out of order.
+- Each library builds a capability with every hint and compares the output with [`testdata/hints.acidcat.json`](testdata/hints.acidcat.json).
+- A library that has integer types that JSON parsing does not give, such as `int64` in Go, tests them in its own test.
+- Each committed catalog file in the repository MUST be in canonical form, and the root `moon run check` checks this.
+- Pkl writes JSON in its own key order, so `moon run examples` sends the Pkl output through `acid-cat format`. Each catalog in [`pkl/rejected/`](pkl/rejected) breaks one catalog rule, and `moon run catalog-pkl:test` checks that Pkl rejects it with the error that its first line names.
 
 [`examples/aircon/catalog`](../../examples/aircon/catalog) writes one catalog in Pkl, TypeScript, Python, Go and Rust, and its test checks that each language gives the same bytes.
 
 ## Add a language
 
-Follow the same steps and rules, and write the canonical form. In the new library's directory, add an example catalog in a new domain and an edge-case catalog with new values, and test the library's output against both.
+Follow the same steps and rules, and write the canonical form. In the new library's directory, add an example catalog in a new domain. Test the library's output against the example catalog and against the files in [`testdata/`](testdata).

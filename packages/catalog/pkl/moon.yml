@@ -7,8 +7,14 @@ project:
 
 tasks:
   test:
-    description: "Package the module, evaluate the greenhouse example, and check that each catalog in rejected/ fails because a schema is a boolean. Packaging evaluates every module in the package."
-    script: "pkl project package --skip-publish-check && pkl eval examples/greenhouse.pkl > /dev/null && for file in rejected/*.pkl; do pkl eval $file 2>&1 | grep -q 'but got type .Boolean.' || { echo \"$file is not rejected for a boolean schema\"; exit 1; }; done"
+    description: "Package the module, evaluate the greenhouse example, and check that each catalog in rejected/ fails with the error that its first line names. Packaging evaluates every module in the package."
+    script: |
+      pkl project package --skip-publish-check && pkl eval examples/greenhouse.pkl > /dev/null || exit 1
+      for file in rejected/*.pkl; do
+        expected=$(sed -n '1s#^// pkl eval fails with: ##p' "$file")
+        [ -n "$expected" ] || { echo "$file does not name its error on its first line"; exit 1; }
+        pkl eval "$file" 2>&1 | grep -qF -- "$expected" || { echo "$file does not fail with: $expected"; exit 1; }
+      done
     inputs: ["*.pkl", "examples/*.pkl", "rejected/*.pkl", "PklProject", "version.txt", "LICENSE"]
     outputs: [".out/**/*"]
     toolchains: ["system"]

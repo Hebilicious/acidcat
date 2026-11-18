@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -10,6 +11,7 @@ from acid_cat_catalog import Catalog, CatalogError, canonical_text  # noqa: E402
 from weather import weather_catalog  # noqa: E402
 
 PACKAGE = HERE.parent
+TESTDATA = PACKAGE.parent / "testdata"
 
 
 class CatalogTest(unittest.TestCase):
@@ -17,34 +19,10 @@ class CatalogTest(unittest.TestCase):
         expected = (PACKAGE / "examples" / "weather.acidcat.json").read_text(encoding="utf-8")
         self.assertEqual(weather_catalog().render(), expected)
 
-    def test_writes_the_canonical_form_of_every_value(self) -> None:
-        catalog = Catalog().target("terminal", bindings=["cli"])
-        catalog.capability(
-            "edge.numbers.show",
-            description='Text: "inner", C:\\temp, cr\r, form\f, nul\u0000, esc\u001b, ls\u2028, ñ, 🌦.',
-            audience=["terminal"],
-            output={
-                "type": "object",
-                "mKey": "middle",
-                "AKey": "upper",
-                "properties": {"ñ": {"type": "string"}, "n": {"type": "string"}, "N": {"type": "string"}, "ō": {"type": "string"}, "9": {"type": "string"}, "10": {"type": "string"}},
-                "examples": [
-                    {
-                        "whole": 3.0,
-                        "eighth": 0.125,
-                        "tiny": 6.5e-11,
-                        "small": 0.00042,
-                        "large": 2.5e300,
-                        "big": 31415926535897930000.0,
-                        "negative": -9.75e-8,
-                        "zero": 0.0,
-                        "integer": 1013,
-                    }
-                ],
-            },
-        )
-        expected = (HERE / "fixtures" / "edge.acidcat.json").read_text(encoding="utf-8")
-        self.assertEqual(catalog.render(), expected)
+    def test_writes_every_value_of_the_shared_test_catalog(self) -> None:
+        catalog = json.loads((TESTDATA / "canonical.json").read_text(encoding="utf-8"))
+        expected = (TESTDATA / "canonical.acidcat.json").read_text(encoding="utf-8")
+        self.assertEqual(canonical_text(catalog), expected)
 
     def test_writes_the_hints_of_a_capability_in_canonical_order(self) -> None:
         catalog = Catalog().target("agents", bindings=["mcp"])
@@ -57,7 +35,7 @@ class CatalogTest(unittest.TestCase):
             audience=["agents"],
             description="Read the number of notes.",
         )
-        expected = (HERE / "fixtures" / "hints.acidcat.json").read_text(encoding="utf-8")
+        expected = (TESTDATA / "hints.acidcat.json").read_text(encoding="utf-8")
         self.assertEqual(catalog.render(), expected)
 
     def test_reports_the_rules_a_catalog_breaks(self) -> None:
@@ -118,30 +96,6 @@ class CatalogTest(unittest.TestCase):
                 "a.c payload is not a JSON object",
             ],
         )
-
-    def test_puts_events_after_capabilities_and_the_members_of_an_event_in_order(self) -> None:
-        text = canonical_text(
-            {
-                "events": {
-                    "z.b.changed": {"payload": {"type": "object"}, "input": {"type": "object"}, "description": "b"},
-                    "z.a.changed": {"description": "a"},
-                },
-                "capabilities": {},
-                "targets": {},
-                "acidcat": "0.1",
-            }
-        )
-        expected = (
-            '{\n  "acidcat": "0.1",\n  "targets": {},\n  "capabilities": {},\n  "events": {\n'
-            '    "z.a.changed": {\n      "description": "a"\n    },\n'
-            '    "z.b.changed": {\n      "description": "b",\n      "input": {\n        "type": "object"\n      },\n'
-            '      "payload": {\n        "type": "object"\n      }\n    }\n  }\n}\n'
-        )
-        self.assertEqual(text, expected)
-
-    def test_a_catalog_with_no_events_has_no_events_member(self) -> None:
-        catalog = Catalog().target("cli", bindings=["cli"]).capability("a.b", description="x", audience=["cli"])
-        self.assertNotIn("events", catalog.to_json())
 
 
 if __name__ == "__main__":

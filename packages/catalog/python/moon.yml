@@ -7,10 +7,10 @@ project:
 
 tasks:
   test:
-    description: "Rebuild the example catalogs and the edge-case catalog, byte for byte."
+    description: "Rebuild the example catalogs and the shared test catalogs, byte for byte."
     command: "python"
     args: ["-m", "unittest", "discover", "-s", "tests"]
-    inputs: ["acid_cat_catalog/**/*.py", "examples/**/*.py", "tests/**/*.py", "examples/**/*.acidcat.json", "tests/fixtures/**/*"]
+    inputs: ["acid_cat_catalog/**/*.py", "examples/**/*.py", "tests/**/*.py", "examples/**/*.acidcat.json", "/packages/catalog/testdata/**/*"]
     toolchains: ["system"]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
