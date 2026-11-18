@@ -2,7 +2,7 @@
 
 mod canonical;
 
-pub use canonical::canonical_text;
+pub use canonical::{canonical_json, canonical_text};
 
 use std::collections::HashSet;
 use std::sync::LazyLock;

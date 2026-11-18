@@ -33,6 +33,42 @@ pub fn canonical_text(catalog: &Value) -> String {
     out
 }
 
+/// The canonical JSON of a value (spec/bindings/mcp.md#canonical-json): no spaces, the keys of each object sorted by
+/// code point, and strings and numbers as the canonical form writes them.
+pub fn canonical_json(value: &Value) -> String {
+    let mut out = String::new();
+    write_compact(&mut out, &sorted(value));
+    out
+}
+
+fn write_compact(out: &mut String, value: &Value) {
+    match value {
+        Value::Object(object) => {
+            out.push('{');
+            for (i, (key, item)) in object.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_string(out, key);
+                out.push(':');
+                write_compact(out, item);
+            }
+            out.push('}');
+        }
+        Value::Array(items) => {
+            out.push('[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_compact(out, item);
+            }
+            out.push(']');
+        }
+        scalar => write(out, scalar, ""),
+    }
+}
+
 fn canonical_catalog(catalog: &Value) -> Value {
     ordered(catalog, &CATALOG_ORDER, |key, value| match key {
         "targets" => by_key(value, |target| {
@@ -154,12 +190,14 @@ fn write_string(out: &mut String, text: &str) {
     out.push('"');
 }
 
-/// Write a number the way ECMAScript's Number::toString does, from its shortest round-trip digits.
+const EXACT_INTEGER_LIMIT: u64 = 1 << 53;
+
+/// Write a number the way ECMAScript's Number::toString does, from its shortest round-trip digits. ECMAScript reads
+/// each JSON number as a 64-bit float, so an integer above 2^53 is written from its float value.
 fn number_text(number: &Number) -> String {
-    if let Some(integer) = number.as_i64() {
-        return integer.to_string();
-    }
-    if let Some(integer) = number.as_u64() {
+    if let Some(integer) = number.as_i64()
+        && integer.unsigned_abs() <= EXACT_INTEGER_LIMIT
+    {
         return integer.to_string();
     }
     let value = number

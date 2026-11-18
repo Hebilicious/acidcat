@@ -18,6 +18,9 @@ var (
 	eventOrder      = []string{"description", "audience", "input", "payload"}
 )
 
+// ECMAScript reads each JSON number as a 64-bit float, which holds every integer up to 2^53 exactly.
+const exactIntegerLimit = 1 << 53
+
 // CanonicalText writes a catalog, given as JSON values (maps, slices, strings, numbers, booleans, nil), in
 // canonical form.
 func CanonicalText(catalog map[string]any) (string, error) {
@@ -174,9 +177,13 @@ func write(out *strings.Builder, value any, indent string) error {
 	case string:
 		writeString(out, v)
 	case int:
-		out.WriteString(strconv.Itoa(v))
+		return write(out, int64(v), indent)
 	case int64:
-		out.WriteString(strconv.FormatInt(v, 10))
+		if -exactIntegerLimit <= v && v <= exactIntegerLimit {
+			out.WriteString(strconv.FormatInt(v, 10))
+			return nil
+		}
+		return write(out, float64(v), indent)
 	case float64:
 		text, err := number(v)
 		if err != nil {

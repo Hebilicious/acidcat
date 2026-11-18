@@ -15,6 +15,9 @@ _TARGET_ORDER = ["bindings", "description", "options"]
 _CAPABILITY_ORDER = ["description", "audience", "input", "output", "failures", "readOnly", "destructive", "idempotent", "state"]
 _EVENT_ORDER = ["description", "audience", "input", "payload"]
 
+# ECMAScript reads each JSON number as a 64-bit float, which holds every integer up to 2^53 exactly.
+_EXACT_INTEGER_LIMIT = 2**53
+
 
 def canonical_text(catalog: dict[str, Any]) -> str:
     return _write(_catalog(catalog), "") + "\n"
@@ -75,7 +78,7 @@ def _write(value: Any, indent: str) -> str:
     if value is False:
         return "false"
     if isinstance(value, int):
-        return str(value)
+        return str(value) if abs(value) <= _EXACT_INTEGER_LIMIT else _number(float(value))
     if isinstance(value, float):
         return _number(value)
     if isinstance(value, str):

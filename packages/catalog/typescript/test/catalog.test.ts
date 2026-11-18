@@ -13,31 +13,9 @@ test("the library writes the lending-library catalog in canonical form", () => {
   assert.equal(libraryCatalog().render(), expected("examples/library.acidcat.json"));
 });
 
-test("the library writes the canonical form of every value", () => {
-  const catalog = new Catalog().target("shell", { bindings: ["cli"] }).capability("edge.values.write", {
-    description: "Text: \"quotes\", a\\b, line\nbreak, bell\u0007, unit\u001f, del\u007f, para , ü, 🐈.",
-    audience: ["shell"],
-    output: {
-      type: "object",
-      yLast: "y",
-      bFirst: "b",
-      properties: { ü: { type: "string" }, Ü: { type: "string" }, u: { type: "string" }, U: { type: "string" }, "9": { type: "string" }, "10": { type: "string" } },
-      examples: [
-        {
-          whole: 250.0,
-          quarter: 0.25,
-          tiny: 4e-9,
-          small: 0.0000035,
-          large: 7.5e22,
-          big: 98765432109876540000,
-          negative: -1.5e-12,
-          integer: 7,
-          zero: 0,
-        },
-      ],
-    },
-  });
-  assert.equal(catalog.render(), expected("test/fixtures/edge.acidcat.json"));
+test("the canonical form writes every value of the shared test catalog", () => {
+  const input: unknown = JSON.parse(expected("../testdata/canonical.json"));
+  assert.equal(canonicalText(input), expected("../testdata/canonical.acidcat.json"));
 });
 
 test("the library writes the hints of a capability in canonical order", () => {
@@ -49,7 +27,7 @@ test("the library writes the hints of a capability in canonical order", () => {
     audience: ["agents"],
     description: "Read the number of notes.",
   });
-  assert.equal(catalog.render(), expected("test/fixtures/hints.acidcat.json"));
+  assert.equal(catalog.render(), expected("../testdata/hints.acidcat.json"));
 });
 
 test("the library reports the catalog rules a catalog breaks", () => {
@@ -114,39 +92,4 @@ test("the library reports a boolean schema", () => {
     "a.c payload is not a JSON object",
   ]);
   assert.throws(() => catalog.render());
-});
-
-test("the canonical form puts events after capabilities, and the members of an event in order", () => {
-  const text = canonicalText({
-    events: { "z.b.changed": { payload: { type: "object" }, input: { type: "object" }, description: "b" }, "z.a.changed": { description: "a" } },
-    capabilities: {},
-    targets: {},
-    acidcat: "0.1",
-  });
-  const expectedText = `{
-  "acidcat": "0.1",
-  "targets": {},
-  "capabilities": {},
-  "events": {
-    "z.a.changed": {
-      "description": "a"
-    },
-    "z.b.changed": {
-      "description": "b",
-      "input": {
-        "type": "object"
-      },
-      "payload": {
-        "type": "object"
-      }
-    }
-  }
-}
-`;
-  assert.equal(text, expectedText);
-});
-
-test("a catalog with no events has no events member", () => {
-  const catalog = new Catalog().target("cli", { bindings: ["cli"] }).capability("a.b", { description: "x", audience: ["cli"] });
-  assert.equal("events" in catalog.toJSON(), false);
 });

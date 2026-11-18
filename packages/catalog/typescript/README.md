@@ -50,7 +50,7 @@ Run `moon run catalog-typescript:test`. The tests compare the library's output, 
 | File | Contents |
 | --- | --- |
 | [`examples/library.acidcat.json`](examples/library.acidcat.json) | The lending-library catalog |
-| [`test/fixtures/edge.acidcat.json`](test/fixtures/edge.acidcat.json) | Values that languages write differently by default |
-| [`test/fixtures/hints.acidcat.json`](test/fixtures/hints.acidcat.json) | Each hint of a capability, in canonical order |
+| [`../testdata/canonical.acidcat.json`](../testdata/canonical.acidcat.json) | The canonical form of [`../testdata/canonical.json`](../testdata/canonical.json): values that languages write differently by default |
+| [`../testdata/hints.acidcat.json`](../testdata/hints.acidcat.json) | Each hint of a capability, in canonical order |
 
-The air-conditioner example writes its catalog with this library in [`examples/aircon/catalog/typescript.ts`](../../../examples/aircon/catalog/typescript.ts), and its test compares the output with the Pkl catalog. The root `moon run check` checks that each committed catalog file is in canonical form, so the catalog libraries agree on the form without sharing a test file.
+The air-conditioner example writes its catalog with this library in [`examples/aircon/catalog/typescript.ts`](../../../examples/aircon/catalog/typescript.ts), and its test compares the output with the Pkl catalog. The root `moon run check` checks that each committed catalog file is in canonical form.

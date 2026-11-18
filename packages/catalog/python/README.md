@@ -50,7 +50,7 @@ Run `moon run catalog-python:test`. The tests compare the library's output, byte
 | File | Contents |
 | --- | --- |
 | [`examples/weather.acidcat.json`](examples/weather.acidcat.json) | The weather-station catalog |
-| [`tests/fixtures/edge.acidcat.json`](tests/fixtures/edge.acidcat.json) | Values that languages write differently by default |
-| [`tests/fixtures/hints.acidcat.json`](tests/fixtures/hints.acidcat.json) | Each hint of a capability, in canonical order |
+| [`../testdata/canonical.acidcat.json`](../testdata/canonical.acidcat.json) | The canonical form of [`../testdata/canonical.json`](../testdata/canonical.json): values that languages write differently by default |
+| [`../testdata/hints.acidcat.json`](../testdata/hints.acidcat.json) | Each hint of a capability, in canonical order |
 
-The air-conditioner example writes its catalog with this library in [`examples/aircon/catalog/python.py`](../../../examples/aircon/catalog/python.py), and its test compares the output with the Pkl catalog. The root `moon run check` checks that each committed catalog file is in canonical form, so the catalog libraries agree on the form without sharing a test file.
+The air-conditioner example writes its catalog with this library in [`examples/aircon/catalog/python.py`](../../../examples/aircon/catalog/python.py), and its test compares the output with the Pkl catalog. The root `moon run check` checks that each committed catalog file is in canonical form.
