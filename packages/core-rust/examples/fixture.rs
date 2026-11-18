@@ -268,6 +268,7 @@ pub fn fixture() -> Arc<Application<Fixture>> {
                             "held-keys": { "capability": "fixture.held" },
                             "--hello": { "capability": "fixture.echo", "input": { "text": "hello" } },
                             "quick": { "capability": "fixture.flags", "input": { "mode": "fast" } },
+                            "fixture": { "capability": "fixture.flags", "input": { "mode": "slow" } },
                             "fixed-note": { "capability": "fixture.note", "input": { "text": "fixed" } },
                             "ticks": { "event": "fixture.ticks", "input": { "count": 2 } },
                             "broken-ticks": { "event": "fixture.broken" },

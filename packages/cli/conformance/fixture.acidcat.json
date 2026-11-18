@@ -39,6 +39,12 @@
                 "text": "fixed"
               }
             },
+            "fixture": {
+              "capability": "fixture.flags",
+              "input": {
+                "mode": "slow"
+              }
+            },
             "held-keys": {
               "capability": "fixture.held"
             },

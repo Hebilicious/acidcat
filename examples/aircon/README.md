@@ -51,7 +51,7 @@ AIRCON_URL=http://localhost:8081/cli node core-effect/cli.ts aircon power set --
 AIRCON_URL=http://localhost:8082/cli core-rust/target/debug/aircon cli aircon power set --on
 ```
 
-The `cli` target gives seven [aliases](../../spec/bindings/cli.md#aliases). Each core gives them from the capability and event objects, and the catalog writes them in `options.cli`. `status` calls `aircon.status.get`, and it is the default alias. `--on` and `--off` call `aircon.power.set` with the fixed input `{ "on": true }` or `{ "on": false }`. `follow` subscribes to the event `aircon.status.changed`. `fan`, `fan auto` and `fan high` are a group: `fan` calls `aircon.fan.set` with the flag `--speed`, and `fan auto` and `fan high` call it with the fixed input `{ "speed": "auto" }` or `{ "speed": "high" }`. `fan medium` is an unknown command, because the group has no alias `fan medium`:
+The `cli` target gives eight [aliases](../../spec/bindings/cli.md#aliases). Each core gives them from the capability and event objects, and the catalog writes them in `options.cli`. `status` calls `aircon.status.get`, and it is the default alias. `--on` and `--off` call `aircon.power.set` with the fixed input `{ "on": true }` or `{ "on": false }`. `follow` subscribes to the event `aircon.status.changed`. `fan`, `fan auto` and `fan high` are a group: `fan` calls `aircon.fan.set` with the flag `--speed`, and `fan auto` and `fan high` call it with the fixed input `{ "speed": "auto" }` or `{ "speed": "high" }`. `fan medium` is an unknown command, because the group has no alias `fan medium`. `aircon power` is the prefix default of the shared prefix `aircon power`: it calls `aircon.power.set` with the flag `--on`, and the command `aircon power set` keeps its path. `aircon power nope` is an unknown command, because no command under `aircon power` has the name `nope`:
 
 ```sh
 node core-ts/cli.ts --on
@@ -60,6 +60,7 @@ node core-ts/cli.ts                  # the default alias: the same as status
 node core-ts/cli.ts follow           # the same as watch aircon.status.changed
 node core-effect/cli.ts fan high     # the same as aircon fan set --speed high
 node core-ts/cli.ts fan --speed low
+node core-ts/cli.ts aircon power --on # the same as aircon power set --on
 cargo run --manifest-path core-rust/Cargo.toml -- cli --off
 ```
 

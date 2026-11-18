@@ -146,11 +146,21 @@ const pathKey = (words: readonly string[]): string => words.join(" ");
 
 const SharedPrefixes = Context.Reference<ReadonlySet<string>>("@acid-cat/core-effect/Cli/SharedPrefixes", { defaultValue: () => new Set() });
 
+const CommandPaths = Context.Reference<ReadonlyArray<ReadonlyArray<string>>>("@acid-cat/core-effect/Cli/CommandPaths", { defaultValue: () => [] });
+
 /**
- * `effect/cli` reads a flag alias such as `--on` as a flag, never as a command, so `runCommand` selects the subcommand
- * of each alias by this other name. The arguments of a process cannot contain NUL, so no user can give it.
+ * `effect/cli` reads a flag alias such as `--on` as a flag, never as a command, and the arguments of a process cannot
+ * contain NUL, so no user can give this name.
  */
-const aliasWord = (name: string): string => `\u0000${name}`;
+const aliasSubcommandName = (name: string): string => `\u0000${name}`;
+
+const withoutAliasMarks = (text: string): string => text.replaceAll("\u0000", "");
+
+/** The formatter of `effect/cli` escapes the NUL of a command in an error, so the command loses it before. */
+const withoutAliasMarksIn = (error: CliError.CliError): CliError.CliError =>
+  error._tag === "UnrecognizedOption" && error.command !== undefined
+    ? new CliError.UnrecognizedOption({ option: error.option, suggestions: error.suggestions, command: error.command.map(withoutAliasMarks) })
+    : error;
 
 interface Provider {
   readonly invoke: (id: string, input: unknown) => Effect.Effect<Outcome<unknown, unknown>>;
@@ -229,18 +239,20 @@ function parentUsageError(commandPath: readonly string[]): { readonly message: s
  * code with `exitCodeOf`. Other failures of the command stay in the error channel. Standard output carries only the
  * outcomes, so the logs and the usage errors go to standard error.
  *
- * When the first one or two arguments are the name of an alias (spec/bindings/cli.md#aliases), the subcommand of the
- * alias makes the call or the subscription, and `<alias> --help` writes the usage of the alias. With a default alias, the program
- * runs it when there is no argument, or when the first argument starts with `--` and is not a flag alias or a global
- * flag: then all the arguments are its flags. The help of the root command ends with the aliases. The program stops
- * with a defect when it starts if the name of a flag alias, or of a flag of the default alias, is the name of a global
- * flag: a flag of `effect/cli`, such as `--log-level`, or a flag of the application.
+ * When the first one or two arguments are the name of an alias (spec/bindings/cli.md#aliases), and do not start with
+ * the path of a command, the subcommand of the alias makes the call or the subscription, and `<alias> --help` writes
+ * the usage of the alias. With a default alias, the program runs it when there is no argument, or when the first
+ * argument starts with `--` and is not a flag alias or a global flag: then all the arguments are its flags. The help of
+ * the root command ends with the aliases. The program stops with a defect when it starts if the name of a flag alias,
+ * or of a flag of the default alias, is the name of a global flag: a flag of `effect/cli`, such as `--log-level`, or a
+ * flag of the application.
  */
 export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   command: Command.Command<Name, Input, ContextInput, E, R>,
   options: { readonly version: string },
 ): Effect.Effect<void | number, Exclude<E, CliError.CliError>, R | Command.Environment> => {
   const aliases = Context.get(command.annotations, Aliases);
+  const paths = Context.get(command.annotations, CommandPaths);
   const settings = Context.get(command.annotations, OutputSettings);
   const claimed = new Set(settings?.output.flags?.flatMap(({ names }) => names) ?? []);
   const sharedPrefixes = Context.get(command.annotations, SharedPrefixes);
@@ -260,10 +272,10 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
       return yield* Effect.die(new Error(`The default alias ${fallback.name} has the flag --${shadowed}, which is a flag of the command line.`));
     }
     const runAlias = (alias: AliasEntry, rest: readonly string[]) =>
-      rest.includes("--help") || rest.includes("-h") ? Console.log(cliHelp(alias.usage, alias.description)) : runWith([aliasWord(alias.name), ...rest]);
-    const named = cliAliasOfArgs(aliases, args);
-    if (named === "unknown-command") {
-      yield* Console.error(`There is no command ${args.slice(0, 2).join(" ")}.`);
+      rest.includes("--help") || rest.includes("-h") ? Console.log(cliHelp(alias.usage, alias.description)) : runWith([aliasSubcommandName(alias.name), ...rest]);
+    const named = cliAliasOfArgs(aliases, paths, args);
+    if (named !== undefined && "unknownCommand" in named) {
+      yield* Console.error(`There is no command ${named.unknownCommand.join(" ")}.`);
       process.exitCode = CLI_EXIT_CODES["unknown-capability"];
       return;
     }
@@ -300,11 +312,11 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
     Effect.updateService(
       CliOutput.Formatter,
       (formatter): CliOutput.Formatter => ({
-        formatHelpDoc: (doc) => Context.get(doc.annotations, HelpText) ?? withOutputFlags(withAliases(formatter.formatHelpDoc(withoutClaimedAliases(doc, claimed)), doc), doc),
-        formatCliError: (error) => formatter.formatCliError(error),
+        formatHelpDoc: (doc) => Context.get(doc.annotations, HelpText) ?? withOutputFlags(withAliases(withoutAliasMarks(formatter.formatHelpDoc(withoutClaimedAliases(doc, claimed))), doc), doc),
+        formatCliError: (error) => formatter.formatCliError(withoutAliasMarksIn(error)),
         formatError: (error) => formatter.formatError(error),
         formatVersion: (name, version) => formatter.formatVersion(name, version),
-        formatErrors: (errors) => formatter.formatErrors(errors),
+        formatErrors: (errors) => formatter.formatErrors(errors.map(withoutAliasMarksIn)),
       }),
     ),
     Effect.provideService(Logger.LogToStderr, true),
@@ -599,13 +611,14 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
       default: alias.name === defaultAlias?.name,
       flags: cliAliasFlagNames(catalogView, alias),
     };
-    const finish: Finish = (made) => made.pipe(Command.withDescription(described.description), Command.unlisted, Command.withAlias(aliasWord(alias.name)));
+    const finish: Finish = (made) => made.pipe(Command.withDescription(described.description), Command.unlisted);
+    const name = aliasSubcommandName(alias.name);
     const subcommand =
       alias.kind === "event"
-        ? followCommand(entry.name, alias.id, schema, alias.input, finish)
+        ? followCommand(name, alias.id, schema, alias.input, finish)
         : schema !== undefined && schema.properties === undefined
-          ? finish(Command.make(entry.name, jsonInput, ({ input }) => invokeJson(alias.id, input)))
-          : finish(Command.make(entry.name, flagsOfBundled(schema ?? { type: "object" }), (parsed: Record<string, unknown>) => invoke(alias.id, { ...alias.input, ...inputFrom(parsed) })));
+          ? finish(Command.make(name, jsonInput, ({ input }) => invokeJson(alias.id, input)))
+          : finish(Command.make(name, flagsOfBundled(schema ?? { type: "object" }), (parsed: Record<string, unknown>) => invoke(alias.id, { ...alias.input, ...inputFrom(parsed) })));
     return { kind: alias.kind, id: alias.id, entry, subcommand };
   });
 
@@ -641,6 +654,10 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
       aliasCommands.map(({ entry }) => entry),
     ),
     Command.annotate(SharedPrefixes, new Set(leaves.flatMap(({ path }) => path.slice(1).map((_, index) => pathKey(path.slice(0, index + 1)))))),
+    Command.annotate(
+      CommandPaths,
+      leaves.map(({ path }) => path),
+    ),
     Command.annotate(OutputSettings, options.output === undefined ? undefined : { output: options.output, commands: (options.commands ?? []).map(({ name }) => name) }),
   );
 }

@@ -138,7 +138,7 @@ test("the aliases of the command line call their capabilities with their fixed i
   const list: unknown = JSON.parse((await cli("list")).stdout);
   assert.ok(Array.isArray(list));
   assert.partialDeepStrictEqual(list.find((item: unknown) => typeof item === "object" && item !== null && "id" in item && item.id === "aircon.power.set"), {
-    aliases: ["aircon --off", "aircon --on"],
+    aliases: ["aircon --off", "aircon --on", "aircon aircon power --on"],
   });
   assert.partialDeepStrictEqual(list.find((item: unknown) => typeof item === "object" && item !== null && "id" in item && item.id === "aircon.fan.set"), {
     aliases: ["aircon fan --speed <auto|low|medium|high>", "aircon fan auto", "aircon fan high"],
@@ -159,6 +159,22 @@ test("the two-word aliases of the command line and the one-word alias of their g
   assert.equal((await cli("fan", "auto")).code, 0);
   assert.equal(unit.state.fan, "auto");
   assert.deepEqual(await cli("fan", "medium"), { code: 2, stdout: "" }, "medium is not the second word of an alias of the group fan");
+});
+
+test("the alias aircon power is the default of the prefix aircon power, and the command aircon power set keeps its path", async () => {
+  const unit = new Unit();
+  const cli = async (...args: string[]) => {
+    const out: string[] = [];
+    const code = await runCli(aircon, { name: "aircon", version: "0.1.0", context: { unit }, toJsonSchema }, args, { stdout: (text) => out.push(text), stderr: () => undefined });
+    return { code, stdout: out.join("\n") };
+  };
+  assert.equal((await cli("aircon", "power", "--on")).code, 0);
+  assert.equal(unit.state.power, true);
+  assert.equal((await cli("--off")).code, 0);
+  assert.equal((await cli("aircon", "power", "set", "--on")).code, 0);
+  assert.equal(unit.state.power, true);
+  assert.equal((await cli("aircon", "power")).code, 3, "the alias aircon power runs, without its required flag --on");
+  assert.deepEqual(await cli("aircon", "power", "nope"), { code: 2, stdout: "" }, "nope is not a command under the prefix aircon power");
 });
 
 test("the alias follow of the command line writes each change of the status", async () => {

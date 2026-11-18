@@ -217,6 +217,7 @@ export const fixture = defineApp<Context>({
             say: { capability: "fixture.echo" },
             "--hello": { capability: "fixture.echo", input: { text: "hello" } },
             quick: { capability: "fixture.flags", input: { mode: "fast" } },
+            fixture: { capability: "fixture.flags", input: { mode: "slow" } },
             raw: { capability: "fixture.raw" },
             "held-keys": { capability: "fixture.held" },
             "fixed-note": { capability: "fixture.note", input: { text: "fixed" } },

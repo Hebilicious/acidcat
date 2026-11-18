@@ -89,10 +89,8 @@ pub(crate) const RESERVED_NAME_MESSAGE: &str =
     "{where}: the alias {name} has the name of a command or a flag of the command line";
 pub(crate) const RESERVED_FIRST_WORD_MESSAGE: &str =
     "{where}: the first word of the alias {name} is the name of a command of the command line";
-pub(crate) const FIRST_WORD_MESSAGE: &str =
-    "{where}: the alias {name} has the name of the first word of the command of a capability";
-pub(crate) const GROUP_FIRST_WORD_MESSAGE: &str =
-    "{where}: the first word of the alias {name} is the first word of the command of a capability";
+pub(crate) const COMMAND_PATH_MESSAGE: &str =
+    "{where}: the alias {name} has the path of the command of a capability";
 pub(crate) const BAD_TARGET_MESSAGE: &str = "{where}: the alias {name} must be an object with the id of a capability in capability, or the id of an event in event";
 pub(crate) const UNKNOWN_MEMBER_MESSAGE: &str =
     "{where}: the alias {name} has the unknown member {members}";

@@ -53,10 +53,7 @@ module cliAliases {
 
   pure def isTwoWords(name: Text): bool = not(startsWithDoubleDash(name)) and wordsOf(name).length() == 2
 
-  pure def firstWord(id: Text): Text =
-    id.foldl({ word: [], done: false }, (state, c) =>
-      if (state.done or c == ".") { word: state.word, done: true } else { word: state.word.append(c), done: false }
-    ).word
+  pure def pathOf(id: Text): Text = id.foldl([], (path, c) => path.append(if (c == ".") " " else c))
 
   pure def startsWithXDash(name: Text): bool = name.length() >= 2 and name[0] == "x" and name[1] == "-"
 
@@ -79,11 +76,11 @@ module cliAliases {
   type Checked = Rejected(AliasProblem) | Accepted(Alias)
 
   pure def checkAlias(capabilities: List[Entry], events: List[Entry], name: Text, value: AliasValue): Checked = {
-    val firstWords = capabilities.select(entry => entry.inView).foldl([], (words, entry) => words.append(firstWord(entry.id)))
+    val paths = capabilities.select(entry => entry.inView).foldl([], (found, entry) => found.append(pathOf(entry.id)))
     val leading = leadingWord(name)
     if (not(isAliasName(name))) Rejected(problem("badName", name, []))
     else if (isReserved(leading)) Rejected(problem(if (isTwoWords(name)) "reservedFirstWord" else "reservedName", name, []))
-    else if (firstWords.includes(leading)) Rejected(problem(if (isTwoWords(name)) "groupFirstWord" else "firstWord", name, []))
+    else if (paths.includes(name)) Rejected(problem("commandPath", name, []))
     else match value {
       | NotObject => Rejected(problem("badTarget", name, []))
       | AliasObject(alias) => {
@@ -195,7 +192,7 @@ module cliAliases {
     assert(not(isAliasName(["a", " "]))),
     assert(not(isAliasName(["-", "-", "a", " ", "b"]))),
     assert(leadingWord(["i", "n", " ", "a"]) == ["i", "n"]),
-    assert(firstWord(READ) == ["p", "r", "o", "b", "e"]),
+    assert(pathOf(READ) == ["p", "r", "o", "b", "e", " ", "r", "e", "a", "d"]),
   }
 
   pure def declaredWith(aliases: List[(Text, AliasValue)], fallback: DefaultSetting): Declared =
@@ -211,11 +208,11 @@ module cliAliases {
         default: DefaultAlias(status),
       }),
       assert(aliasesOf(TEST_CAPABILITIES, [], declaredWith([(status, capabilityAlias(READ, FixedKeys([HELP])))], DefaultName(status))).problems == []),
-      assert(aliasesOf(TEST_CAPABILITIES, [], declaredWith([(["p", "r", "o", "b", "e"], capabilityAlias(READ, NoFixedInput))], NoDefault)).problems ==
-        [problem("firstWord", ["p", "r", "o", "b", "e"], [])]),
+      assert(aliasesOf(TEST_CAPABILITIES, [], declaredWith([(["p", "r", "o", "b", "e"], capabilityAlias(READ, NoFixedInput))], NoDefault)).problems == []),
+      assert(aliasesOf(TEST_CAPABILITIES, [], declaredWith([(pathOf(READ), capabilityAlias(READ, NoFixedInput))], NoDefault)).problems ==
+        [problem("commandPath", pathOf(READ), [])]),
       assert(aliasesOf(TEST_CAPABILITIES, [], declaredWith([], DefaultName(status))).problems == [{ key: "badDefault", parts: [] }]),
-      assert(aliasesOf(TEST_CAPABILITIES, [], declaredWith([(["p", "r", "o", "b", "e", " ", "x"], capabilityAlias(READ, NoFixedInput))], NoDefault)).problems ==
-        [problem("groupFirstWord", ["p", "r", "o", "b", "e", " ", "x"], [])]),
+      assert(aliasesOf(TEST_CAPABILITIES, [], declaredWith([(["p", "r", "o", "b", "e", " ", "x"], capabilityAlias(READ, NoFixedInput))], NoDefault)).problems == []),
       assert(aliasesOf(TEST_CAPABILITIES, [], declaredWith([(["l", "i", "s", "t", " ", "x"], capabilityAlias(READ, NoFixedInput))], NoDefault)).problems ==
         [problem("reservedFirstWord", ["l", "i", "s", "t", " ", "x"], [])]),
       assert(aliasesOf(TEST_CAPABILITIES, [], declaredWith([

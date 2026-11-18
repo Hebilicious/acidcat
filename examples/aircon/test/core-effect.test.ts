@@ -166,6 +166,14 @@ test("the aliases of the Effect command line call their capabilities with their 
   assert.partialDeepStrictEqual(JSON.parse((await remote("status")).stdout), { fan: "low" });
   const unknown = await remote("fan", "medium");
   assert.deepEqual([unknown.code, unknown.stdout], [2, ""], "medium is not the second word of an alias of the group fan");
+  assert.equal((await remote("aircon", "power", "--on")).code, 0);
+  assert.partialDeepStrictEqual(JSON.parse((await remote("status")).stdout), { power: true }, "aircon power is the default of the prefix aircon power");
+  assert.equal((await remote("--off")).code, 0);
+  assert.equal((await remote("aircon", "power", "set", "--on")).code, 0);
+  assert.partialDeepStrictEqual(JSON.parse((await remote("status")).stdout), { power: true }, "aircon power set is still the command of aircon.power.set");
+  assert.equal((await remote("aircon", "power")).code, 3, "the alias aircon power runs, without its required flag --on");
+  const nope = await remote("aircon", "power", "nope");
+  assert.deepEqual([nope.code, nope.stdout], [2, ""], "nope is not a command under the prefix aircon power");
 });
 
 test("the alias follow of the Effect command line writes each change of the status", async (context) => {

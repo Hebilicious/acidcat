@@ -423,8 +423,12 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       return await invoke(id, input);
     }
     if (first === "watch") return await watch(rest);
-    const named = cliAliasOfArgs(aliases, [first, ...rest]);
-    if (named === "unknown-command") throw new UsageError(`There is no command ${[first, ...rest].slice(0, 2).join(" ")}.`, CLI_EXIT_CODES["unknown-capability"]);
+    const named = cliAliasOfArgs(
+      aliases,
+      commands.map(({ path }) => path),
+      [first, ...rest],
+    );
+    if (named !== undefined && "unknownCommand" in named) throw new UsageError(`There is no command ${named.unknownCommand.join(" ")}.`, CLI_EXIT_CODES["unknown-capability"]);
     if (named !== undefined) return await runAlias(named.alias, named.rest);
     const command = added.find(({ name }) => name === first);
     if (command !== undefined) return await command.run(rest, { ...io, output, context: options.context });

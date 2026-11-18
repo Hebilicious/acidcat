@@ -22,7 +22,7 @@ pnpm add @acid-cat/spec-ts
 | `resolveType` | The type that the `$ref` of a schema refers to, whatever other keys the schema has |
 | `ownMember` | The member of an object with a key, or `undefined`. Inherited names, such as `constructor`, are not members |
 | `mcpToolAnnotations` | The MCP `annotations` of a capability: `readOnlyHint` from `readOnly`, and `destructiveHint` and `idempotentHint` from `destructive` and `idempotent` when the capability has them. See [Tools](../../spec/bindings/mcp.md#tools) |
-| `cliAliases`, `cliAliasOfArgs`, `cliAliasUsage` | Check the [aliases](../../spec/bindings/cli.md#aliases) of a target, find the alias that the arguments of the command line name, and write the usage of an alias. A command alias has one word or two words. `cliAliasOfArgs` gives `"unknown-command"` for a group and a second word that no alias of the group has |
+| `cliAliases`, `cliAliasOfArgs`, `cliAliasUsage` | Check the [aliases](../../spec/bindings/cli.md#aliases) of a target, find the alias that the arguments of the command line name, and write the usage of an alias. A command alias has one word or two words, and its name can be a shared prefix but not the path of a command. `cliAliasOfArgs` takes the paths of the commands: arguments that start with the path of a command name no alias, and it gives `{ unknownCommand }` for a word after a prefix default, or after the one-word alias of a group, that names no command and no alias |
 | `byCodePoint` | Order strings by Unicode code point, as the [canonical form](../../spec/catalog.md#canonical-form) sorts keys |
 
 The other exports give the names, flags, exit codes and tool shapes of each [binding](../../spec/bindings/README.md).

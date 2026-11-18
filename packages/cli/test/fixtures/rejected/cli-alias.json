@@ -26,9 +26,6 @@
             },
             "list x": {
               "capability": "shop.item.get"
-            },
-            "shop x": {
-              "capability": "shop.item.get"
             }
           }
         }
