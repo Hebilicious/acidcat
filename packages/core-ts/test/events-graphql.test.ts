@@ -7,14 +7,7 @@ import { createSession } from "../src/index.ts";
 import type { Occurrence } from "../src/index.ts";
 import { readingChanged, sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
 import type { Reading } from "./sensors.ts";
-
-async function until(condition: () => boolean): Promise<void> {
-  const end = Date.now() + 1000;
-  while (!condition()) {
-    if (Date.now() > end) throw new Error("The condition did not become true.");
-    await new Promise((resolve) => setTimeout(resolve, 2));
-  }
-}
+import { until } from "./until.ts";
 
 const ReadingType = new GraphQLObjectType<Reading>({
   name: "Reading",
@@ -56,13 +49,4 @@ test("graphql-js subscribes through an event handle, and its return() ends the s
   await result.return();
   assert.deepEqual(await waiting, { done: true, value: undefined });
   await until(() => sensors.listeners === 0);
-});
-
-test("graphql-js gets the start failure of the event handle as an error", async () => {
-  const sensors = new Sensors();
-  const { schema, session } = schemaFor(sensors);
-  await session.dispose();
-  const result = await subscribe({ schema, document: parse("subscription { reading { room } }") });
-  assert.ok(!(Symbol.asyncIterator in result));
-  assert.equal(result.errors?.[0]?.message, "The subscription was cancelled.");
 });

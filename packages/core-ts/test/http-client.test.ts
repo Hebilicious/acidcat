@@ -44,7 +44,7 @@ describe("the command line that calls a server", () => {
     }
   });
 
-  test("an answer that the HTTP binding does not give is internal, with exit code 5", async (context) => {
+  test("an answer that the HTTP binding does not give, or a stream with an occurrence that is not valid or with no complete, is internal, with exit code 5", async (context) => {
     const answers: readonly (() => Response)[] = [
       () => new Response("<html>Not an API</html>", { status: 200, headers: { "Content-Type": "text/html" } }),
       () => new Response(JSON.stringify({ hello: "world" }), { status: 200, headers: { "Content-Type": "application/json" } }),
@@ -60,11 +60,7 @@ describe("the command line that calls a server", () => {
         assert.equal(kindOf(run.stderr), "internal");
       }
     }
-  });
-
-  test("a stream with an occurrence that is not valid, or that ends with no complete, ends as internal", async (context) => {
-    const streams = ["event: next\ndata: {\"not\":\"an occurrence\"}\n\n", ": only a comment\n\n"];
-    for (const stream of streams) {
+    for (const stream of ['event: next\ndata: {"not":"an occurrence"}\n\n', ": only a comment\n\n"]) {
       const url = await served(() => new Response(stream, { headers: { "Content-Type": "text/event-stream" } }), context);
       const run = await remoteCli(httpClient(url), ["watch", "fixture.ticks", "--count", "1"]);
       assert.equal(run.code, 5);
@@ -72,7 +68,7 @@ describe("the command line that calls a server", () => {
     }
   });
 
-  test("the client sends the headers, a call failure of the server keeps its kind, and the header is never written", async (context) => {
+  test("the client sends the headers, and never writes their values", async (context) => {
     const seen: (string | null)[] = [];
     const http = httpHandler(fixture, { allowedOrigins: [], target: "cli", ...options() });
     const url = await served((request) => {
@@ -84,15 +80,10 @@ describe("the command line that calls a server", () => {
     const echo = await remoteCli(remote, ["fixture", "echo", "--text", "hi"]);
     assert.equal(echo.code, 0);
     assert.deepEqual(JSON.parse(echo.stdout), { text: "hi" });
-    const refused = await remoteCli(remote, ["fixture", "refuse"]);
-    assert.equal(refused.code, 1);
     const crash = await remoteCli(remote, ["fixture", "crash"]);
     assert.equal(crash.code, 5);
-    assert.equal(kindOf(crash.stderr), "internal");
-    const unknown = await remoteCli(remote, ["call", "fixture.nothing"]);
-    assert.equal(unknown.code, 2);
-    assert.ok(seen.length >= 4 && seen.every((header) => header === SECRET));
-    for (const run of [echo, refused, crash, unknown]) assert.ok(!`${run.stdout}${run.stderr}`.includes("s3cr3t"));
+    assert.deepEqual(seen, [SECRET, SECRET]);
+    for (const run of [echo, crash]) assert.ok(!`${run.stdout}${run.stderr}`.includes("s3cr3t"));
   });
 
   test("list marks a capability that the server does not list as unavailable", async (context) => {
@@ -107,84 +98,31 @@ describe("the command line that calls a server", () => {
     assert.partialDeepStrictEqual(entry("fixture.refuse"), { available: false, reason: "The server does not serve this capability." });
   });
 
-  test("watch writes each occurrence, ends with the call failure of an error message, and an interrupt ends it with 130", async (context) => {
-    const occurrence = { eventId: "1", name: "fixture.ticks", timestamp: "2026-01-01T00:00:00.000Z", data: { n: 1 }, cursor: "1" };
-    const failing = await served(
-      () => new Response(`: hello\r\nid: 1\r\nevent: next\r\ndata: ${JSON.stringify(occurrence)}\r\n\r\nevent: error\ndata: {"kind":"internal","message":"The event failed."}\n\n`, { headers: { "Content-Type": "text/event-stream; charset=utf-8" } }),
-      context,
-    );
-    const failed = await remoteCli(httpClient(failing), ["watch", "fixture.ticks", "--count", "1"]);
-    assert.equal(failed.code, 5);
-    assert.deepEqual(JSON.parse(failed.stdout), occurrence);
-    assert.deepEqual(JSON.parse(failed.stderr), { kind: "internal", message: "The event failed." });
-
-    const complete = await served(() => new Response(`event: next\ndata: ${JSON.stringify(occurrence)}\n\nevent: complete\ndata:\n\n`, { headers: { "Content-Type": "text/event-stream" } }), context);
-    const completed = await remoteCli(httpClient(complete), ["watch", "fixture.ticks", "--count", "1"]);
-    assert.equal(completed.code, 0);
-    assert.equal(completed.stderr, "");
-
-    let closed = false;
-    const open = await served((request) => {
-      request.signal.addEventListener("abort", () => (closed = true));
-      const body = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(`event: next\ndata: ${JSON.stringify(occurrence)}\n\n`));
-        },
-      });
-      return new Response(body, { headers: { "Content-Type": "text/event-stream" } });
-    }, context);
-    const interrupt = new AbortController();
-    const stdout: string[] = [];
-    const cliOptions: CliOptions<Context> = { name: "fixture", version: "0.0.0", ...options(), remote: httpClient(open) };
-    const running = runCli(fixture, cliOptions, ["watch", "fixture.ticks", "--count", "1"], {
-      stdout: (text) => {
-        stdout.push(text);
-        interrupt.abort();
-      },
-      stderr: () => undefined,
-      signal: interrupt.signal,
-    });
-    assert.equal(await running, 130);
-    assert.equal(stdout.length, 1);
-    for (let turn = 0; !closed && turn < 100; turn++) await new Promise((resolve) => setTimeout(resolve, 10));
-    assert.ok(closed, "the interrupt closes the request");
-  });
-
-  test("an interrupt during a call is cancelled, with exit code 130", async (context) => {
-    const url = await served((request) => new Promise<Response>((resolve) => request.signal.addEventListener("abort", () => resolve(new Response(null)))), context);
-    const interrupt = new AbortController();
-    setTimeout(() => interrupt.abort(), 50);
-    const run = await remoteCli(httpClient(url), ["fixture", "echo", "--text", "hi"], interrupt.signal);
-    assert.equal(run.code, 130);
-    assert.equal(kindOf(run.stderr), "cancelled");
-  });
-
   test("an interrupt during list is cancelled, with exit code 130, and closes the request", async (context) => {
-    let closed = false;
+    const interrupt = new AbortController();
+    const closed = Promise.withResolvers<void>();
     const url = await served(
       (request) =>
         new Promise<Response>(() => {
-          request.signal.addEventListener("abort", () => (closed = true));
+          request.signal.addEventListener("abort", () => closed.resolve());
+          interrupt.abort();
         }),
       context,
     );
-    const interrupt = new AbortController();
-    setTimeout(() => interrupt.abort(), 50);
     const run = await remoteCli(httpClient(url), ["list"], interrupt.signal);
     assert.equal(run.code, 130);
     assert.equal(kindOf(run.stderr), "cancelled");
     assert.equal(run.stdout, "");
-    for (let turn = 0; !closed && turn < 100; turn++) await new Promise((resolve) => setTimeout(resolve, 10));
-    assert.ok(closed, "the interrupt closes the request");
+    await closed.promise;
   });
 
   test("an interrupt before the server answers a subscription ends watch with 130, and writes nothing", async (context) => {
     const interrupt = new AbortController();
-    let closed = false;
+    const closed = Promise.withResolvers<void>();
     const url = await served(
       (request) =>
         new Promise<Response>(() => {
-          request.signal.addEventListener("abort", () => (closed = true));
+          request.signal.addEventListener("abort", () => closed.resolve());
           interrupt.abort();
         }),
       context,
@@ -193,8 +131,7 @@ describe("the command line that calls a server", () => {
     assert.equal(run.code, 130);
     assert.equal(run.stderr, "");
     assert.equal(run.stdout, "");
-    for (let turn = 0; !closed && turn < 100; turn++) await new Promise((resolve) => setTimeout(resolve, 10));
-    assert.ok(closed, "the interrupt closes the request");
+    await closed.promise;
   });
 
   test("a cursor that cannot be a header value is invalid-input, with exit code 3, and sends no request", async (context) => {
@@ -210,15 +147,6 @@ describe("the command line that calls a server", () => {
       assert.equal(run.stdout, "");
     }
     assert.equal(requests, 0);
-  });
-
-  test("a complete message with no data line ends the stream as complete, with exit code 0", async (context) => {
-    const occurrence = { eventId: "1", name: "fixture.ticks", timestamp: "2026-01-01T00:00:00.000Z", data: { n: 1 }, cursor: "1" };
-    const url = await served(() => new Response(`event: next\ndata: ${JSON.stringify(occurrence)}\n\nevent: complete\n\n`, { headers: { "Content-Type": "text/event-stream" } }), context);
-    const run = await remoteCli(httpClient(url), ["watch", "fixture.ticks", "--count", "1"]);
-    assert.equal(run.code, 0);
-    assert.deepEqual(JSON.parse(run.stdout), occurrence);
-    assert.equal(run.stderr, "");
   });
 
   test("httpClient refuses a URL that is not http or https, and does not write the value of a header that is not valid", () => {

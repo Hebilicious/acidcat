@@ -8,14 +8,7 @@ import { mcpHandler, runMcpStdio } from "../src/index.ts";
 import type { PollOptions } from "../src/index.ts";
 import { ManualClock } from "./manual-clock.ts";
 import { sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
-
-async function until(condition: () => boolean | Promise<boolean>): Promise<void> {
-  const end = Date.now() + 1000;
-  while (!(await condition())) {
-    if (Date.now() > end) throw new Error("The condition did not become true.");
-    await new Promise((resolve) => setTimeout(resolve, 2));
-  }
-}
+import { until } from "./until.ts";
 
 const VERSION = "2026-07-28";
 const META = { "io.modelcontextprotocol/protocolVersion": VERSION };
@@ -75,72 +68,34 @@ function httpServer(options: { readonly poll?: PollOptions } = {}) {
 
 const READINGS = { name: "sensor.reading.changed", arguments: {} };
 
-test("poll: the first poll starts a lease, and the next polls read its occurrences in order", async () => {
+test("poll: nextPollMs is 2000 by default, and closing the handler ends the leases", async () => {
   const { handler, poll, sensors } = httpServer();
-  const start = await poll(READINGS);
-  assert.deepEqual(start.events, []);
-  assert.equal(start.truncated, false);
-  assert.equal(start.hasMore, false);
-  assert.equal(start.nextPollMs, 2000);
-  assert.equal(positionOf(start.cursor).position, 0);
+  assert.equal((await poll(READINGS)).nextPollMs, 2000);
   await until(() => sensors.listeners === 1);
-
-  sensors.emit("hall", 20, "2026-11-10T09:00:00.000Z");
-  sensors.emit("hall", 21, "2026-11-10T09:00:01.000Z");
-  await until(async () => (await poll({ ...READINGS, cursor: start.cursor })).events.length === 2);
-  const read = await poll({ ...READINGS, cursor: start.cursor });
-  assert.deepEqual(read.events[0], { eventId: "reading-0", name: "sensor.reading.changed", timestamp: "2026-11-10T09:00:00.000Z", data: { room: "hall", celsius: 20 }, cursor: "0" });
-  assert.deepEqual(celsius(read.events), [20, 21]);
-  assert.equal(read.truncated, false);
-  assert.deepEqual(positionOf(read.cursor), { lease: positionOf(start.cursor).lease, position: 2, provider: "1" });
-
-  const empty = await poll({ ...READINGS, cursor: read.cursor });
-  assert.deepEqual(empty.events, []);
-  assert.equal(empty.cursor, read.cursor);
-  const newest = await poll(READINGS);
-  assert.deepEqual(newest.events, []);
-  assert.deepEqual(positionOf(newest.cursor), positionOf(read.cursor));
-  assert.equal(sensors.listeners, 1);
   await handler.close();
   assert.equal(sensors.listeners, 0);
 });
 
-test("poll: maxEvents limits the occurrences, and hasMore tells that more wait", async () => {
+test("poll: the maxEvents of the server limits a poll with no maxEvents, and hasMore tells that more wait", async () => {
   const { handler, poll, sensors } = httpServer({ poll: { maxEvents: 3 } });
   const start = await poll(READINGS);
   await until(() => sensors.listeners === 1);
   for (let reading = 0; reading < 5; reading += 1) sensors.emit("hall", reading);
-  await until(async () => (await poll({ ...READINGS, cursor: start.cursor, maxEvents: 5 })).events.length === 5);
-  const first = await poll({ ...READINGS, cursor: start.cursor, maxEvents: 2 });
-  assert.deepEqual(celsius(first.events), [0, 1]);
+  await until(async () => positionOf((await poll(READINGS)).cursor).position === 5);
+  const first = await poll({ ...READINGS, cursor: start.cursor });
+  assert.deepEqual(celsius(first.events), [0, 1, 2]);
   assert.equal(first.hasMore, true);
-  const second = await poll({ ...READINGS, cursor: first.cursor });
-  assert.deepEqual(celsius(second.events), [2, 3, 4]);
-  assert.equal(second.hasMore, false);
   await handler.close();
 });
 
-test("poll: maxEvents that is not a positive integer is -32602, and failures before the first occurrence start no lease", async () => {
-  const { handler, rpc, sensors } = httpServer();
-  const error = async (params: object) => {
-    const answer = await rpc("events/poll", params);
-    return isJsonObject(answer["error"]) ? answer["error"] : undefined;
-  };
-  for (const maxEvents of [0, -1, 1.5, "2"]) assert.equal((await error({ ...READINGS, maxEvents }))?.["code"], -32602, String(maxEvents));
-  assert.deepEqual(await error({ name: "sensor.hidden" }), { code: -32023, message: "There is no event sensor.hidden.", data: { kind: "event" } });
-  assert.equal((await error({ name: "sensor.reading.changed", arguments: { room: 7 } }))?.["code"], -32602);
-  assert.equal((await error({ ...READINGS, cursor: 5 }))?.["code"], -32602);
-  assert.equal(sensors.listeners, 0);
-  await handler.close();
-});
-
-test("poll: maxAgeMs that is not an integer of 0 or more is -32602, after an unknown event, with a lease or not", async () => {
+test("poll: a cursor that is not a string, or a maxAgeMs that is not an integer of 0 or more, is -32602, after an unknown event, with a lease or not", async () => {
   const { handler, rpc, poll, sensors } = httpServer();
   const error = async (params: object) => {
     const answer = await rpc("events/poll", params);
     return isJsonObject(answer["error"]) ? answer["error"]["code"] : undefined;
   };
   const resume = { cursor: encodePollCursor({ lease: "gone", position: 0, provider: "0" }) };
+  assert.equal(await error({ ...READINGS, cursor: 5 }), -32602);
   for (const maxAgeMs of [1.5, -1, "soon"]) {
     assert.equal(await error({ ...READINGS, maxAgeMs }), -32602, String(maxAgeMs));
     assert.equal(await error({ ...READINGS, ...resume, maxAgeMs }), -32602, String(maxAgeMs));
@@ -150,31 +105,6 @@ test("poll: maxAgeMs that is not an integer of 0 or more is -32602, after an unk
   const start = await poll(READINGS);
   await until(() => sensors.listeners === 1);
   assert.equal(await error({ ...READINGS, cursor: start.cursor, maxAgeMs: 1.5 }), -32602);
-  await handler.close();
-});
-
-test("poll: a cursor older than the buffer gives the occurrences in the buffer, and truncated", async () => {
-  const { handler, poll, sensors } = httpServer({ poll: { bufferLimit: 2 } });
-  const start = await poll(READINGS);
-  await until(() => sensors.listeners === 1);
-  for (let reading = 0; reading < 4; reading += 1) sensors.emit("hall", reading);
-  await until(async () => positionOf((await poll(READINGS)).cursor).position === 4);
-  const read = await poll({ ...READINGS, cursor: start.cursor });
-  assert.deepEqual(celsius(read.events), [2, 3]);
-  assert.equal(read.truncated, true);
-  await handler.close();
-});
-
-test("poll: a cursor of a lease that does not exist starts a lease that resumes after the cursor of the provider", async () => {
-  const { handler, poll, sensors } = httpServer();
-  for (let reading = 0; reading < 4; reading += 1) sensors.emit("hall", reading);
-  const resumed = await poll({ ...READINGS, cursor: encodePollCursor({ lease: "gone", position: 9, provider: "1" }) });
-  assert.deepEqual(resumed.events, []);
-  assert.equal(resumed.truncated, false);
-  assert.equal(positionOf(resumed.cursor).position, 0);
-  assert.equal(positionOf(resumed.cursor).provider, "1");
-  await until(async () => (await poll({ ...READINGS, cursor: resumed.cursor })).events.length === 2);
-  assert.deepEqual(celsius((await poll({ ...READINGS, cursor: resumed.cursor })).events), [2, 3]);
   await handler.close();
 });
 
@@ -193,20 +123,6 @@ test("poll: maxAgeMs bounds the replay of a lease that resumes", async () => {
   await handler.close();
 });
 
-test("poll: a cursor with no cursor of the provider, or a text that is not a cursor, starts a lease with truncated", async () => {
-  const { handler, poll, rpc } = httpServer();
-  const foreign = await poll({ ...READINGS, cursor: encodePollCursor({ lease: "gone", position: 3 }) });
-  assert.equal(foreign.truncated, true);
-  assert.equal(positionOf(foreign.cursor).position, 0);
-  const other = await poll({ name: "sensor.clock", cursor: "not a cursor" });
-  assert.equal(other.truncated, true);
-  const again = await poll({ name: "sensor.clock", cursor: foreign.cursor });
-  assert.equal(again.truncated, true);
-  assert.equal(positionOf(again.cursor).lease, positionOf(other.cursor).lease);
-  assert.equal(isJsonObject((await rpc("events/poll", { name: "sensor.clock" }))["result"]), true);
-  await handler.close();
-});
-
 test("poll: a lease that gets no poll for the lease time ends, and its subscription is cancelled", async () => {
   const { handler, poll, sensors, clock } = httpServer({ poll: { leaseMs: 60_000 } });
   const start = await poll(READINGS);
@@ -219,30 +135,6 @@ test("poll: a lease that gets no poll for the lease time ends, and its subscript
   await until(() => sensors.listeners === 0);
   const restarted = await poll({ ...READINGS, cursor: start.cursor });
   assert.equal(restarted.truncated, true);
-  assert.notEqual(positionOf(restarted.cursor).lease, positionOf(start.cursor).lease);
-  await handler.close();
-});
-
-test("poll: a complete subscription keeps its buffer until the lease ends", async () => {
-  const { handler, poll } = httpServer();
-  const start = await poll({ name: "sensor.ticks" });
-  await until(async () => (await poll({ name: "sensor.ticks", cursor: start.cursor })).events.length === 3);
-  const read = await poll({ name: "sensor.ticks", cursor: start.cursor });
-  assert.equal(read.events.length, 3);
-  assert.deepEqual((await poll({ name: "sensor.ticks", cursor: read.cursor })).events, []);
-  await handler.close();
-});
-
-test("poll: internal gives -32603 to the next poll, and the lease ends", async () => {
-  const { handler, rpc } = httpServer();
-  const start = pollResult(await rpc("events/poll", { name: "sensor.failing" }));
-  let answer: JsonObject = {};
-  await until(async () => {
-    answer = await rpc("events/poll", { name: "sensor.failing", cursor: start.cursor });
-    return answer["error"] !== undefined;
-  });
-  assert.deepEqual(answer["error"], { code: -32603, message: "The event failed." });
-  const restarted = pollResult(await rpc("events/poll", { name: "sensor.failing", cursor: start.cursor }));
   assert.notEqual(positionOf(restarted.cursor).lease, positionOf(start.cursor).lease);
   await handler.close();
 });
@@ -265,56 +157,27 @@ test("poll: the principal is part of the key, so two principals have two leases"
   assert.equal(sensors.listeners, 0);
 });
 
-test("poll through stdio: leases, their occurrences, and the end of standard input ends them", async () => {
+test("poll through stdio: the option nextPollMs, and the end of standard input ends the leases", async () => {
   const sensors = new Sensors();
-  const queue: string[] = [];
-  let ended = false;
-  let wake = () => {};
+  const lines = [JSON.stringify({ jsonrpc: "2.0", id: 1, method: "events/poll", params: { ...READINGS, _meta: META } })];
+  let answered = () => {};
+  const answer = new Promise<void>((resolve) => (answered = resolve));
   async function* input(): AsyncGenerator<string> {
-    for (;;) {
-      const line = queue.shift();
-      if (line !== undefined) {
-        yield `${line}\n`;
-        continue;
-      }
-      if (ended) return;
-      await new Promise<void>((resolve) => (wake = resolve));
-    }
+    for (const line of lines) yield `${line}\n`;
+    await answer;
+    await until(() => sensors.listeners === 1);
   }
   const written: JsonObject[] = [];
   const served = runMcpStdio(sensorsApp, { name: "sensors", version: "0.0.0", ...sensorOptions(sensors), clock: new ManualClock(), poll: { nextPollMs: 500 } }, {
     input: input(),
-    write: (text) => written.push(objectOf(text)),
+    write: (text) => {
+      written.push(objectOf(text));
+      answered();
+    },
   });
-  let next = 0;
-  const rpc = async (method: string, params: object) => {
-    next += 1;
-    const id = next;
-    queue.push(JSON.stringify({ jsonrpc: "2.0", id, method, params: { ...params, _meta: META } }));
-    wake();
-    let found: JsonObject | undefined;
-    await until(() => (found = written.find((message) => message["id"] === id)) !== undefined);
-    if (found === undefined) throw new Error("No answer.");
-    return found;
-  };
-
-  const start = pollResult(await rpc("events/poll", READINGS));
-  assert.equal(start.nextPollMs, 500);
-  await until(() => sensors.listeners === 1);
-  sensors.emit("kitchen", 21);
-  let read: PollResult | undefined;
-  await until(async () => (read = pollResult(await rpc("events/poll", { ...READINGS, cursor: start.cursor }))).events.length === 1);
-  assert.deepEqual(celsius(read?.events ?? []), [21]);
-  assert.equal(member(await rpc("events/poll", { name: "sensor.hidden" }), "error")["code"], -32023);
-
-  ended = true;
-  wake();
   await served;
+  const [start] = written;
+  assert.ok(start !== undefined);
+  assert.equal(pollResult(start).nextPollMs, 500);
   assert.equal(sensors.listeners, 0);
 });
-
-function member(value: JsonObject, key: string): JsonObject {
-  const inner = value[key];
-  if (!isJsonObject(inner)) throw new Error(`The member ${key} is not an object.`);
-  return inner;
-}

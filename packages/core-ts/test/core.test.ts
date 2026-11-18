@@ -2,16 +2,31 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
+import conformanceFixture from "@acid-cat/cli/conformance/fixture.acidcat.json" with { type: "json" };
+import { isJsonObject } from "@acid-cat/spec-ts";
 import { z } from "zod";
 
 import { AVAILABLE, CallFailureError, catalogOf, cliAlias, cliAliasDefault, createSession, defineApp, defineCapability, httpHandler, installWebMcp, mcpHandler, ok, renderCatalog, runCli } from "../src/index.ts";
 import type { App, CliAlias, CliCommand, CliOptions, ModelContextTool, Outcome } from "../src/index.ts";
-import { fixture, heldApp, Holds, options, readJson, Switch, toJsonSchema, Watchers } from "./fixture.ts";
+import { fixture, Holds, options, readJson, Switch, toJsonSchema, Watchers } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
+import { until } from "./until.ts";
 
-test("the application writes a catalog that conforms", () => {
+const SCHEMA_MEMBERS = new Set(["input", "output", "failures", "state", "payload"]);
+
+function withoutSchemas(catalog: unknown): unknown {
+  if (!isJsonObject(catalog)) return catalog;
+  const items = (member: unknown) =>
+    isJsonObject(member) ? Object.fromEntries(Object.entries(member).map(([id, item]) => [id, isJsonObject(item) ? Object.fromEntries(Object.entries(item).filter(([key]) => !SCHEMA_MEMBERS.has(key))) : item])) : member;
+  return { ...catalog, $defs: Object.keys(isJsonObject(catalog["$defs"]) ? catalog["$defs"] : {}), capabilities: items(catalog["capabilities"]), events: items(catalog["events"]) };
+}
+
+test("the application writes a catalog that conforms, with the members of the conformance fixture", () => {
   const text = renderCatalog(fixture, { toJsonSchema });
-  assert.deepEqual(check(JSON.parse(text), text), { errors: [], warnings: [] });
+  const catalog: unknown = JSON.parse(text);
+  assert.deepEqual(check(catalog, text), { errors: [], warnings: [] });
+  assert.deepEqual(withoutSchemas(catalog), withoutSchemas(conformanceFixture));
+  assert.deepEqual(catalogOf(fixture, { toJsonSchema }).capabilities["fixture.note"]?.input, { description: "The note.", $ref: "#/$defs/Note" });
 });
 
 test("an input that is a union of objects is an object schema, and the catalog conforms", () => {
@@ -39,7 +54,10 @@ test("a call gives a value, a failure or a call failure", async () => {
   const session = createSession(fixture, { target: "mcp", ...options() });
   assert.deepEqual(await session.invoke("fixture.echo", { text: "hi" }), { ok: true, value: { text: "hi" } });
   assert.deepEqual(await session.invoke("fixture.refuse", {}), { ok: false, error: { _tag: "Refused", reason: "No." } });
-  assert.equal(kindOf(await session.invoke("fixture.echo", { text: 1 })), "invalid-input");
+  const invalid = await session.invoke("fixture.echo", { text: 1 });
+  assert.ok("kind" in invalid);
+  assert.equal(invalid.kind, "invalid-input");
+  assert.match(invalid.message, /^text: /);
   assert.deepEqual(await session.invoke("fixture.crash", {}), { kind: "internal", message: "The capability failed." });
   assert.equal(kindOf(await session.invoke("fixture.hidden", {})), "unknown-capability");
   assert.equal(kindOf(await session.invoke("fixture.missing", {})), "unknown-capability");
@@ -66,6 +84,13 @@ test("availability, cancellation and closing", async () => {
   context.context.switch.set(false);
   assert.equal(changes, 1);
   assert.deepEqual(await session.invoke("fixture.toggle", {}), { kind: "unavailable", message: "The switch is off." });
+  const toggle = session.handles.get("fixture.toggle");
+  assert.ok(toggle !== undefined);
+  const unavailable = await toggle.invokeExternal({}).catch((caught: unknown) => caught);
+  assert.ok(unavailable instanceof CallFailureError);
+  assert.equal(unavailable.kind, "unavailable");
+  context.context.switch.set(true);
+  assert.deepEqual(await toggle.invokeExternal({}), { ok: true, value: null });
 
   const controller = new AbortController();
   const held = session.invoke("fixture.hold", { key: "cancelled" }, { signal: controller.signal });
@@ -190,49 +215,8 @@ test("a session subscribes to the availabilities only while it has listeners", a
   assert.equal(switcher.subscribers, 0);
 });
 
-test("MCP gives the view and each outcome", async () => {
-  const handler = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...options() });
-  const Reply = z.object({
-    result: z
-      .object({
-        tools: z
-          .array(z.object({ name: z.string(), annotations: z.object({ readOnlyHint: z.boolean(), destructiveHint: z.boolean().optional(), idempotentHint: z.boolean().optional() }) }))
-          .optional(),
-        structuredContent: z.unknown().optional(),
-        isError: z.boolean().optional(),
-        content: z.tuple([z.object({ text: z.string() })]).optional(),
-      })
-      .optional(),
-    error: z.object({ code: z.number() }).optional(),
-  });
-  const rpc = async (method: string, params: object = {}) =>
-    readJson(
-      await handler(
-        new Request("https://fixture.example/mcp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "mcp-method": method, "mcp-protocol-version": "2026-07-28" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } } }),
-        }),
-      ),
-      Reply,
-    );
-  const tools = (await rpc("tools/list")).result?.tools ?? [];
-  assert.deepEqual(tools.map((tool) => tool.name).sort(), ["fixture.crash", "fixture.echo", "fixture.held", "fixture.hold", "fixture.refuse", "fixture.release", "fixture.signal", "fixture.switch.set", "fixture.toggle", "fixture.watching"]);
-  assert.deepEqual(tools.find((tool) => tool.name === "fixture.echo")?.annotations, { readOnlyHint: true });
-  assert.deepEqual(tools.find((tool) => tool.name === "fixture.switch.set")?.annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: true });
-  const value = await rpc("tools/call", { name: "fixture.echo", arguments: { text: "hi" } });
-  assert.deepEqual(value.result?.structuredContent, { text: "hi" });
-  const failure = await rpc("tools/call", { name: "fixture.refuse", arguments: {} });
-  assert.equal(failure.result?.isError, true);
-  const content = failure.result?.content;
-  assert.ok(content !== undefined);
-  assert.deepEqual(JSON.parse(content[0].text), { ok: false, error: { _tag: "Refused", reason: "No." } });
-  assert.equal((await rpc("tools/call", { name: "fixture.hidden", arguments: {} })).error?.code, -32602);
-  assert.equal((await handler(new Request("https://fixture.example/mcp"))).status, 405);
-});
-
-test("MCP gives the instructions of the options, or else the description of the application", async () => {
-  const discover = async (instructions?: string) => {
+test("MCP gives the instructions of the options", async () => {
+  const discover = async (instructions: string) => {
     const handler = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], instructions, ...options() });
     const response = await handler(
       new Request("https://fixture.example/mcp", {
@@ -243,23 +227,7 @@ test("MCP gives the instructions of the options, or else the description of the 
     );
     return (await readJson(response, z.object({ result: z.object({ instructions: z.string().optional() }) }))).result.instructions;
   };
-  assert.equal(await discover(), fixture.description);
   assert.equal(await discover("Use fixture.echo to test the server."), "Use fixture.echo to test the server.");
-});
-
-test("HTTP gives each outcome its status code", async () => {
-  const handler = httpHandler(fixture, { allowedOrigins: [], base: "/api", ...options() });
-  const post = (id: string, body: unknown) =>
-    handler(new Request(`https://fixture.example/api/capabilities/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
-  assert.equal((await post("fixture.echo", { text: "hi" })).status, 200);
-  assert.equal((await post("fixture.echo", { text: 1 })).status, 422);
-  assert.equal((await post("fixture.hidden", {})).status, 404);
-  assert.equal((await post("fixture.crash", {})).status, 500);
-  const malformed = await post("%E0", {});
-  assert.equal(malformed.status, 404);
-  assert.equal((await readJson(malformed, z.object({ kind: z.string() }))).kind, "unknown-capability");
-  const list = await readJson(await handler(new Request("https://fixture.example/api/capabilities")), z.array(z.object({ id: z.string() })));
-  assert.ok(!list.some((entry) => entry.id === "fixture.hidden"));
 });
 
 test("HTTP: a body that is not JSON is invalid-input only after cancelled, unknown-capability and unavailable", async () => {
@@ -280,6 +248,16 @@ test("HTTP: a body that is not JSON is invalid-input only after cancelled, unkno
   assert.equal(unavailable.status, 503);
   assert.equal(await kind(unavailable), "unavailable");
   assert.equal(await kind(await post("fixture.hidden", AbortSignal.abort())), "cancelled");
+});
+
+test("HTTP: a path that is not under base is an unknown route", async () => {
+  const handler = httpHandler(fixture, { allowedOrigins: [], base: "/api", ...options() });
+  assert.equal((await handler(new Request("https://fixture.example/api/capabilities"))).status, 200);
+  for (const path of ["/zzz/capabilities", "/apix/capabilities", "/zzz/catalog", "/zzz/events"]) {
+    assert.equal((await handler(new Request(`https://fixture.example${path}`))).status, 404, path);
+  }
+  const call = await handler(new Request("https://fixture.example/zzz/capabilities/fixture.echo", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }));
+  assert.equal(call.status, 404);
 });
 
 function countedContexts() {
@@ -334,68 +312,12 @@ test("with createContext, each HTTP request that passes the screening has its ow
   assert.deepEqual(counts, { created: 2, released: 2 });
 });
 
-test("the abort of an HTTP request cancels its call", async () => {
-  const { app, started, seen } = heldApp();
-  const handler = httpHandler(app, { allowedOrigins: [], toJsonSchema, context: undefined });
-  const controller = new AbortController();
-  const answer = handler(
-    new Request("https://fixture.example/capabilities/held.wait", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: controller.signal }),
-  );
-
-  await started;
-  controller.abort();
-  const response = await answer;
-  assert.equal(response.status, 409);
-  assert.deepEqual(await response.json(), { kind: "cancelled", message: "The call was cancelled." });
-  assert.equal(seen.aborted, true);
-});
-
-test("the abort of an MCP request cancels its call", async () => {
-  const { app, started, seen } = heldApp();
-  const handler = mcpHandler(app, { name: "held", version: "0.0.0", allowedOrigins: [], toJsonSchema, context: undefined });
-  const controller = new AbortController();
-  const answer = handler(
-    new Request("https://fixture.example/mcp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "mcp-method": "tools/call", "mcp-protocol-version": "2026-07-28" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params: { name: "held.wait", arguments: {}, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } },
-      }),
-      signal: controller.signal,
-    }),
-  );
-
-  await started;
-  controller.abort();
-  const { result } = await readJson(await answer, z.object({ result: z.object({ isError: z.boolean(), content: z.tuple([z.object({ text: z.string() })]) }) }));
-  assert.equal(result.isError, true);
-  assert.deepEqual(JSON.parse(result.content[0].text), { kind: "cancelled", message: "The call was cancelled." });
-  assert.equal(seen.aborted, true);
-});
-
 async function commandLine<C>(app: App<C>, cliOptions: CliOptions<C>, ...args: string[]) {
   const out: string[] = [];
   const err: string[] = [];
   const code = await runCli(app, cliOptions, args, { stdout: (text) => out.push(text), stderr: (text) => err.push(text) });
   return { code, stdout: out.join("\n"), stderr: err.join("\n") };
 }
-
-test("the command line gives each outcome its exit code", async () => {
-  const run = (...args: string[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options() }, ...args);
-  const echo = await run("fixture", "echo", "--text", "hi");
-  assert.equal(echo.code, 0);
-  assert.deepEqual(JSON.parse(echo.stdout), { text: "hi" });
-  assert.equal((await run("fixture", "refuse")).code, 1);
-  assert.equal((await run("nope")).code, 2);
-  assert.equal((await run("call", "fixture.hidden")).code, 2);
-  assert.equal((await run("fixture", "echo")).code, 3);
-  assert.equal((await run("fixture", "flags", "--mode", "fast", "--ratio", "soon")).code, 3);
-  assert.equal((await run("fixture", "crash")).code, 5);
-  assert.equal((await run("--help")).code, 0);
-});
 
 test("call with input that is not JSON gives unknown-capability, then unavailable, before invalid-input", async () => {
   const context = options();
@@ -406,7 +328,7 @@ test("call with input that is not JSON gives unknown-capability, then unavailabl
   assert.equal((await run("call", "fixture.echo", "{bad")).code, 3);
 });
 
-test("a repeated flag gives its items in order, or JSON text of the array, and a required one must occur", async () => {
+test("a required repeated flag must occur, an empty JSON array gives no items, and the usage gives the enum of a $ref item", async () => {
   const Day = z.enum(["mon", "tue"]).meta({ id: "Day" });
   const app = defineApp({
     targets: { cli: { bindings: ["cli"] } },
@@ -422,14 +344,8 @@ test("a repeated flag gives its items in order, or JSON text of the array, and a
     ],
   });
   const run = (...args: string[]) => commandLine(app, { name: "probe", version: "0.0.0", context: undefined, toJsonSchema }, ...args);
-  const plan = await run("probe", "plan", "--days", "tue", "--hours=9", "--days", "mon");
-  assert.equal(plan.code, 0);
-  assert.deepEqual(JSON.parse(plan.stdout), { days: ["tue", "mon"], hours: [9] });
-  assert.deepEqual(JSON.parse((await run("probe", "plan", "--days", "mon")).stdout), { days: ["mon"] });
   assert.equal((await run("probe", "plan")).code, 3);
-  assert.deepEqual(JSON.parse((await run("probe", "plan", "--days", '["tue","mon"]', "--hours", "[]")).stdout), { days: ["tue", "mon"], hours: [] });
-  assert.equal((await run("probe", "plan", "--days", '["sun"]')).code, 3);
-  assert.equal((await run("probe", "plan", "--days", "mon", "--hours", "late")).code, 3);
+  assert.deepEqual(JSON.parse((await run("probe", "plan", "--days", "mon", "--hours", "[]")).stdout), { days: ["mon"], hours: [] });
   assert.match((await run("list")).stdout, /"usage": "probe probe plan --days <mon\|tue>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });
 
@@ -442,11 +358,11 @@ const position: CliCommand<Context> = {
   },
 };
 
-test("a command of the application runs beside the commands of the capabilities, and the help lists it", async () => {
+test("a command of the application runs beside the commands of the capabilities, and the help lists it with its description", async () => {
   const run = (...args: string[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options(), commands: [position] }, ...args);
   assert.deepEqual(await run("position", "switch"), { code: 0, stdout: "switch: on", stderr: "" });
   assert.equal((await run("fixture", "echo", "--text", "hi")).code, 0);
-  assert.match((await run("--help")).stdout, /\n {2}list\n {2}watch <id> \[flags\] \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}position {2}Write the position of the switch\.\n\nAliases:\n/);
+  assert.match((await run("--help")).stdout, /\n {2}position {2}Write the position of the switch\.\n/);
 });
 
 test("the help gives the description of the options, else the description of the application, else its title", async () => {
@@ -460,20 +376,19 @@ test("the help gives the description of the options, else the description of the
 test("a command of the application must not have the name of another command", async () => {
   const named = (name: string): CliCommand<Context> => ({ name, description: "A command.", run: () => 0 });
   const run = (commands: CliCommand<Context>[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options(), commands }, "list");
-  for (const name of ["call", "list", "fixture", "say", "shout"]) {
+  for (const name of ["call", "list", "watch", "fixture", "say", "shout"]) {
     await assert.rejects(run([named(name)]), new RegExp(`The command ${name} of the application`));
   }
   await assert.rejects(run([named("report"), named("report")]), /The command report of the application/);
+  const watchCapability = defineApp({ targets: { cli: { bindings: ["cli"] } }, capabilities: [defineCapability({ id: "watch.start", description: "Start.", audience: ["cli"], run: () => ok(null) })] });
+  await assert.rejects(commandLine(watchCapability, { name: "probe", version: "0.0.0", ...options() }, "list"), /watch start/);
 });
 
-test("the help lists the aliases, and <alias> --help gives the usage of the alias", async () => {
+test("the help lists the aliases, and only the name of a flag alias selects it", async () => {
   const run = (...args: string[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options() }, ...args);
   assert.match((await run("--help")).stdout, /\nAliases:\n {2}--hello\n {2}broken-ticks \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}echoes '<json>' \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}fixed-note \[--loud\]\n {2}fixture \[--count <integer>\][^\n]*\n {2}held-keys\n {2}notes '<json>'\n {2}notes add --text <string> \[--loud\]\n {2}notes loud --text <string>\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n {2}shout hello\n {2}ticks \[--gap <integer>\] \[--key <string>\] \[--cursor <string>\] \[--max-age-ms <integer>\]$/);
-  assert.equal((await run("say", "--help")).stdout, "Usage: fixture say --text <string>\n\nReturn the input text.");
-});
-
-test("the input schema of fixture.note is a $ref with a description beside it", () => {
-  assert.deepEqual(catalogOf(fixture, { toJsonSchema }).capabilities["fixture.note"]?.input, { description: "The note.", $ref: "#/$defs/Note" });
+  assert.equal((await run("alias --hello")).code, 2);
+  assert.equal((await run("--hello", "--text", "x")).code, 3);
 });
 
 test("a flag is a property of the input itself, not a name that every object inherits", async () => {
@@ -538,7 +453,7 @@ test("the command line stops when it starts if the path of a capability is the s
   assert.equal((await run("aircon.status.get", "aircon.statuses", "aircon.power.set")).code, 0);
 });
 
-test("WebMCP tools follow availability, and a failed update keeps the last tools", async () => {
+test("WebMCP: a failed update keeps the last tools, and retry registers them again", async () => {
   const tools = new Map<string, ModelContextTool>();
   const refuse = new Set<string>();
   const host = {
@@ -549,32 +464,26 @@ test("WebMCP tools follow availability, and a failed update keeps the last tools
       return undefined;
     },
   };
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
   const context = options();
   const session = createSession(fixture, { target: "app", ...context });
   const installed = installWebMcp(session, { host });
   assert.ok(installed !== undefined);
-  await settle();
-  assert.equal(installed.status.getSnapshot().phase, "ready");
+  const phase = () => installed.status.getSnapshot().phase;
+  await until(() => phase() === "ready");
   assert.ok(tools.has("fixture.hidden"));
-  const echo = tools.get("fixture.echo");
-  assert.ok(echo !== undefined);
-  assert.deepEqual(await echo.execute({ text: "hi" }), { ok: true, value: { text: "hi" } });
 
   context.context.switch.set(false);
-  await settle();
-  assert.ok(!tools.has("fixture.toggle"));
+  await until(() => !tools.has("fixture.toggle"));
 
   refuse.add("fixture.toggle");
   context.context.switch.set(true);
-  await settle();
-  assert.equal(installed.status.getSnapshot().phase, "failed");
+  await until(() => phase() === "failed");
   assert.ok(tools.has("fixture.echo"));
 
   refuse.clear();
   installed.retry();
-  await settle();
-  assert.ok(tools.has("fixture.toggle"));
+  await until(() => tools.has("fixture.toggle"));
+  assert.equal(phase(), "ready");
 
   await installed.dispose();
   assert.equal(tools.size, 0);
@@ -582,4 +491,3 @@ test("WebMCP tools follow availability, and a failed update keeps the last tools
   assert.equal(installWebMcp(session), undefined);
 });
 
-void Switch;

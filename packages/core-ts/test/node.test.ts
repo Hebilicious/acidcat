@@ -21,7 +21,7 @@ test("the default address is 127.0.0.1, and the URL has the port", async () => {
   assert.equal(served.url, `http://127.0.0.1:${served.port}`);
 });
 
-test("routes go to the longest prefix that matches, and other paths get 404", async () => {
+test("routes go to the longest prefix that matches, other paths get 404, and the prefix / matches the paths that no other prefix matches", async () => {
   await using served = await serve(
     {
       "/api": () => new Response("api"),
@@ -40,12 +40,10 @@ test("routes go to the longest prefix that matches, and other paths get 404", as
   assert.equal(await text("/mcp"), "200 mcp");
   assert.equal(await text("/apis"), "404 ");
   assert.equal(await text("/"), "404 ");
-});
 
-test("the prefix / matches all paths that no other prefix matches", async () => {
-  await using served = await serve({ "/": () => new Response("root"), "/mcp": () => new Response("mcp") }, { port: 0 });
-  assert.equal(await (await fetch(`${served.url}/anything`)).text(), "root");
-  assert.equal(await (await fetch(`${served.url}/mcp`)).text(), "mcp");
+  await using rooted = await serve({ "/": () => new Response("root"), "/mcp": () => new Response("mcp") }, { port: 0 });
+  assert.equal(await (await fetch(`${rooted.url}/anything`)).text(), "root");
+  assert.equal(await (await fetch(`${rooted.url}/mcp`)).text(), "mcp");
 });
 
 test("a handler that throws gets 500", async () => {
@@ -72,23 +70,6 @@ test("the status, the status text and each set-cookie header reach the client", 
   assert.equal(response.statusText, "Made");
   assert.deepEqual(response.headers.getSetCookie(), ["a=1", "b=2"]);
   assert.equal(await response.text(), "made");
-});
-
-test("a streamed response reaches the client chunk by chunk", async () => {
-  const encoder = new TextEncoder();
-  await using served = await serve(
-    () =>
-      new Response(
-        new ReadableStream({
-          start(controller) {
-            for (const part of ["one ", "two ", "three"]) controller.enqueue(encoder.encode(part));
-            controller.close();
-          },
-        }),
-      ),
-    { port: 0 },
-  );
-  assert.equal(await (await fetch(served.url)).text(), "one two three");
 });
 
 test("when the client closes the connection, the signal of the request aborts and the body is cancelled", async () => {

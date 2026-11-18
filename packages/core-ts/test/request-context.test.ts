@@ -10,6 +10,7 @@ import { readJson, toJsonSchema } from "./fixture.ts";
 import { ManualClock } from "./manual-clock.ts";
 import { sseReader } from "./sse.ts";
 import { startReceiver, testCertificate } from "./webhook-receiver.ts";
+import { until } from "./until.ts";
 
 interface Services {
   readonly caller: string;
@@ -70,24 +71,7 @@ function bearerContexts() {
   return { counts, createContext };
 }
 
-async function until(condition: () => boolean): Promise<void> {
-  const end = Date.now() + 1000;
-  while (!condition()) {
-    if (Date.now() > end) throw new Error("The condition did not become true.");
-    await new Promise((resolve) => setTimeout(resolve, 2));
-  }
-}
-
 const Message = z.object({ message: z.string() }).strict();
-
-test("refuse gives a refusal, and isRefusal tells it from a context", () => {
-  const refusal = refuse(403, "No.");
-  assert.equal(isRefusal(refusal), true);
-  assert.equal(refusal.status, 403);
-  assert.equal(refusal.message, "No.");
-  assert.equal(isRefusal({ status: 403, message: "No.", headers: new Headers() }), false);
-  assert.equal(isRefusal(null), false);
-});
 
 test("through HTTP, a capability reads the caller from the context of the request and the target from the call", async () => {
   const { counts, createContext } = bearerContexts();
@@ -235,7 +219,13 @@ test("through MCP, a webhook subscription uses the context of the request that s
   }
 });
 
-test("refuse throws a RangeError for a status that is not an integer from 400 to 599", () => {
+test("refuse gives a refusal that isRefusal tells from a context, and throws a RangeError for a status that is not an integer from 400 to 599", () => {
+  const refusal = refuse(403, "No.");
+  assert.equal(isRefusal(refusal), true);
+  assert.equal(refusal.status, 403);
+  assert.equal(refusal.message, "No.");
+  assert.equal(isRefusal({ status: 403, message: "No.", headers: new Headers() }), false);
+  assert.equal(isRefusal(null), false);
   for (const status of [200, 399, 600, 401.5, Number.NaN]) assert.throws(() => refuse(status, "No."), RangeError, String(status));
   assert.equal(refuse(400, "No.").status, 400);
   assert.equal(refuse(599, "No.").status, 599);

@@ -197,10 +197,7 @@ test("an application command gets its arguments unchanged and the chosen form, a
   ]);
 });
 
-test("the default form is json, and auto gives the human form only on a terminal", async () => {
-  const human = [{ names: ["--human"], form: "human" }] as const;
-  assert.deepEqual(await runWith({ flags: human }, ["probe", "read"], "human"), { code: 0, out: [PROBE_JSON], err: [] });
-  assert.deepEqual(await runWith({ flags: human }, ["probe", "read", "--human"], "human"), { code: 0, out: [PROBE_TEXT], err: [] });
+test("auto gives the human form only on a terminal", async () => {
   assert.deepEqual(await runWith({ default: "auto" }, ["probe", "read"], "human"), { code: 0, out: [PROBE_TEXT], err: [] });
   assert.deepEqual(await runWith({ default: "auto" }, ["probe", "read"]), { code: 0, out: [PROBE_JSON], err: [] });
 });
