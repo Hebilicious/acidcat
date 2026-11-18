@@ -86,7 +86,7 @@ fn the_help_lists_the_aliases_and_an_alias_with_help_gives_its_usage() {
     let (_, help) = fixture_cli(&["--help"]);
     assert!(
         help.ends_with(
-            "\nAliases:\n  --hello\n  broken-ticks [--cursor <string>] [--max-age-ms <integer>]\n  echoes '<json>' [--cursor <string>] [--max-age-ms <integer>]\n  fixed-note [--loud]\n  held-keys\n  quick [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]\n  raw '<json>'\n  say --text <string>\n  ticks [--gap <integer>] [--key <string>] [--cursor <string>] [--max-age-ms <integer>]\n"
+            "\nAliases:\n  --hello\n  broken-ticks [--cursor <string>] [--max-age-ms <integer>]\n  echoes '<json>' [--cursor <string>] [--max-age-ms <integer>]\n  fixed-note [--loud]\n  held-keys\n  notes '<json>'\n  notes add --text <string> [--loud]\n  notes loud --text <string>\n  quick [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]\n  raw '<json>'\n  say --text <string>\n  shout hello\n  ticks [--gap <integer>] [--key <string>] [--cursor <string>] [--max-age-ms <integer>]\n"
         ),
         "{help}"
     );
@@ -150,9 +150,9 @@ fn the_input_schema_of_fixture_note_is_a_ref_with_a_description_beside_it() {
 }
 
 #[tokio::test]
-async fn a_command_of_the_application_must_not_have_the_name_of_an_alias() {
+async fn a_command_of_the_application_must_not_have_the_first_word_of_an_alias() {
     let app = probe(
-        json!({ "say": { "capability": "probe.ping" } }),
+        json!({ "say it": { "capability": "probe.ping" } }),
         vec![ping()],
     );
     let mut options = CliOptions::new("probe", "0.0.0");

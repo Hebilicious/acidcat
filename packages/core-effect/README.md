@@ -447,7 +447,7 @@ A subscription that cannot start has the exit code of its call failure. Each ite
 
 #### Aliases
 
-The `cli` target can give [aliases](../../spec/bindings/cli.md#aliases) in its member `cli`: short names for capabilities and events, with an optional fixed input. A command alias is one word, and a flag alias is `--` and one word. `App.alias` takes the capability or the event, and the type of the fixed input is the encoded side of the input schema. `App.aliasDefault` also makes the alias the default alias. The catalog writes the aliases in `options.cli`:
+The `cli` target can give [aliases](../../spec/bindings/cli.md#aliases) in its member `cli`: short names for capabilities and events, with an optional fixed input. A command alias is one word or two words, and a flag alias is `--` and one word. `App.alias` takes the capability or the event, and the type of the fixed input is the encoded side of the input schema. `App.aliasDefault` also makes the alias the default alias. The catalog writes the aliases in `options.cli`:
 
 ```ts
 targets: {
@@ -459,6 +459,8 @@ targets: {
         "--on": App.alias(powerSet, { on: true }),
         "--off": App.alias(powerSet, { on: false }),
         follow: App.alias(statusChanged),
+        fan: App.alias(fanSet),
+        "fan high": App.alias(fanSet, { speed: "high" }),
       },
     },
   },
@@ -470,9 +472,13 @@ node cli.ts --on      # the same call as: node cli.ts aircon power set --on
 node cli.ts status    # the same call as: node cli.ts aircon status get
 node cli.ts follow    # the same subscription as: node cli.ts watch aircon.status.changed
 node cli.ts           # the default alias: node cli.ts status
+node cli.ts fan high  # the same call as: node cli.ts aircon fan set --speed high
+node cli.ts fan --speed low
 ```
 
-The properties of the fixed input are not flags of the alias. The other properties are flags, with the rules above. An alias of an event subscribes as `watch` does, with the same exit codes, and also takes `--cursor` and `--max-age-ms`. `list` gives the usage of the aliases of each capability and each event in `aliases`, and the help lists them. If an alias breaks a rule, `Cli.command` throws, so the program stops with an error when it starts. A command of the application must not have the name of an alias.
+The command aliases with the same first word are a group, such as `fan` and `fan high`. The first two arguments that are the name of a two-word alias run it. If not, the one-word alias runs with the other arguments. A second argument that is a word and not the second word of an alias of the group, such as `node cli.ts fan medium`, is an unknown command with exit code 2.
+
+The properties of the fixed input are not flags of the alias. The other properties are flags, with the rules above. An alias of an event subscribes as `watch` does, with the same exit codes, and also takes `--cursor` and `--max-age-ms`. `list` gives the usage of the aliases of each capability and each event in `aliases`, and the help lists them. If an alias breaks a rule, `Cli.command` throws, so the program stops with an error when it starts. A command of the application must not have the first word of a command alias.
 
 With no arguments, the program runs the default alias. If the first argument starts with `--`, and it is not `--help`, `--version`, a flag alias or a global flag, the program runs the default alias with all the arguments as its flags. `Cli.runCommand` stops with a defect when it starts if a flag of the default alias has the name of a global flag of `effect/cli` or of the application.
 

@@ -460,7 +460,7 @@ test("the help gives the description of the options, else the description of the
 test("a command of the application must not have the name of another command", async () => {
   const named = (name: string): CliCommand<Context> => ({ name, description: "A command.", run: () => 0 });
   const run = (commands: CliCommand<Context>[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options(), commands }, "list");
-  for (const name of ["call", "list", "fixture", "say"]) {
+  for (const name of ["call", "list", "fixture", "say", "shout"]) {
     await assert.rejects(run([named(name)]), new RegExp(`The command ${name} of the application`));
   }
   await assert.rejects(run([named("report"), named("report")]), /The command report of the application/);
@@ -468,7 +468,7 @@ test("a command of the application must not have the name of another command", a
 
 test("the help lists the aliases, and <alias> --help gives the usage of the alias", async () => {
   const run = (...args: string[]) => commandLine(fixture, { name: "fixture", version: "0.0.0", ...options() }, ...args);
-  assert.match((await run("--help")).stdout, /\nAliases:\n {2}--hello\n {2}broken-ticks \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}echoes '<json>' \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}fixed-note \[--loud\]\n {2}held-keys\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n {2}ticks \[--gap <integer>\] \[--key <string>\] \[--cursor <string>\] \[--max-age-ms <integer>\]$/);
+  assert.match((await run("--help")).stdout, /\nAliases:\n {2}--hello\n {2}broken-ticks \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}echoes '<json>' \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}fixed-note \[--loud\]\n {2}held-keys\n {2}notes '<json>'\n {2}notes add --text <string> \[--loud\]\n {2}notes loud --text <string>\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n {2}shout hello\n {2}ticks \[--gap <integer>\] \[--key <string>\] \[--cursor <string>\] \[--max-age-ms <integer>\]$/);
   assert.equal((await run("say", "--help")).stdout, "Usage: fixture say --text <string>\n\nReturn the input text.");
 });
 

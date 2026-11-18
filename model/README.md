@@ -28,7 +28,7 @@ The model does not cover the human layout, the formatters, or the input and outp
 [`cli-aliases.qnt`](cli-aliases.qnt) models the check of the aliases of a target ([Aliases](../spec/bindings/cli.md#aliases)). Its input is abstract: the capabilities and the events, each with its id, whether it is in the view of the target, and an input schema with properties, with no properties or no input schema; whether the target has the binding `cli`; `options.cli`, with its aliases and its default alias. Each alias has a name and a value: not an object, or an object with `capability`, `event`, a fixed input and other members. The output is the list of errors, the accepted aliases and the default alias:
 
 - `options.cli` that is not an object, a target with no binding `cli`, and `options.cli.aliases` that is not an object.
-- The checks of each alias, in code point order of the names, and the first problem of each alias only: a name that is not one word or `--` and one word; a name of a command or a flag of the command line (`CLI_GENERIC_COMMANDS`, `PROGRAM_FLAGS`); a name that is the first word of the id of a capability in the view; a value that does not give exactly one id; a member that is not `capability`, `event`, `input` or a member that starts with `x-`; an id that is not in the view; a fixed input that is not an object; a fixed input for an input schema with no properties; and a key of the fixed input that is not a property.
+- The checks of each alias, in code point order of the names, and the first problem of each alias only: a name that is not one word, two words with one space between them, or `--` and one word; a name, or the first word of a two-word name, that is a command or a flag of the command line (`CLI_GENERIC_COMMANDS`, `PROGRAM_FLAGS`); a name, or the first word of a two-word name, that is the first word of the id of a capability in the view; a value that does not give exactly one id; a member that is not `capability`, `event`, `input` or a member that starts with `x-`; an id that is not in the view; a fixed input that is not an object; a fixed input for an input schema with no properties; and a key of the fixed input that is not a property.
 - The default alias: it must be the name of a command alias. The checks of its flags apply only when the alias is accepted: a flag with the name of a flag of the program, and a flag alias with the name of a flag of the default alias. The flags of an alias of an event include the flags of `watch` (`RESUME_FLAGS`).
 
 Each problem has the key of its template in `ALIAS_MESSAGES` and the parts that fill it. The generator fills the templates. The model does not cover the names of the commands and the flags that the application adds. The start of each core checks them with the commands of the application and the output flags.
@@ -66,7 +66,7 @@ A message is a template with a named placeholder for each part, for example `The
 
 ## Properties
 
-[`cli-output-properties.qnt`](cli-output-properties.qnt) has two state machines. Each one chooses its inputs with `nondet` from small finite domains in `init`. `quint verify --max-steps=0` then proves each invariant for every choice.
+[`cli-output-properties.qnt`](cli-output-properties.qnt) has two state machines, and [`cli-alias-properties.qnt`](cli-alias-properties.qnt) has one. Each one chooses its inputs with `nondet` from small finite domains in `init`. `quint verify --max-steps=0` then proves each invariant for every choice.
 
 The properties of the arguments are about `readOutputFlags`: the reading of the arguments after the program ignores a first `--`. `outputChoice` is `programArguments`, then `readOutputFlags`.
 
@@ -77,10 +77,12 @@ The properties of the arguments are about `readOutputFlags`: the reading of the 
 | P3. The arguments from `--`, or from an application command that is the first remaining argument, stay unchanged and in order. An application command in another place does not stop the reading. | `argumentsAfterTheStopStay` | `cliOutputArguments` |
 | P4. When the arguments have output flags with valid values, the form is the form of the last one. | `lastOutputFlagWins` | `cliOutputArguments` |
 | P5. A value flag with no value, or with an unknown value, stops the command line with exit code 3, and gives no form. | `badValueStops` | `cliOutputArguments` |
+| P6. An accepted alias has no space at its start or its end, and one space at most; a flag alias has no space. Its first word is not a command or a flag of the command line, and not the first word of the path of a capability. Thus the first one or two arguments tell which alias runs, and an alias takes the place of no other command. | `acceptedAliasNamesAreSafe` | `cliAliasNames` |
 
 The bounds are `MOST_SEGMENTS`, `MOST_AFTER` and `MOST_NAMES` in the module, and the domains beside them. Larger bounds prove more cases, and take more time.
 
 - `cliOutputNames`: up to 2 output flags, each with up to 2 names from 9 names (valid, not valid and taken), and 4 kinds of flags.
+- `cliAliasNames`: one alias of a capability, with one of 13 names: one word, two words, a flag alias, names with a bad space, and names whose first word is taken.
 - `cliOutputArguments`: up to 2 output flags, each with up to 2 names from 4 valid names, and 4 kinds of flags; up to 3 segments of arguments (a plain word, the name of an application command, or a use of an output flag in each style); a stop (`--` or an application command); up to 1 argument after the stop; a value flag with no value or an unknown value; and an environment with `CI` and one variable of a coding agent.
 
 ## Cases
@@ -96,8 +98,8 @@ The bounds are `MOST_SEGMENTS`, `MOST_AFTER` and `MOST_NAMES` in the module, and
 [`cli-alias-cases.qnt`](cli-alias-cases.qnt) makes every case of a bounded domain of the aliases, with 4 capabilities and 3 events in a fixed catalog:
 
 - The target: each kind of `options.cli`, with and without the binding `cli`.
-- One alias: each of 11 names, each of 24 values and 4 default aliases (none, not text, the alias, and a name that is not an alias).
-- Two aliases: each pair of 5 names in reverse order, each pair of 6 values, with the second name as the default alias.
+- One alias: each of 20 names, with names of two words, each of 24 values and 4 default aliases (none, not text, the alias, and a name that is not an alias).
+- Two aliases: each pair of 6 names in reverse order, with a one-word alias and a two-word alias that starts with that word, each pair of 6 values, with the second name as the default alias.
 
 ## Tasks
 

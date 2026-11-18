@@ -37,6 +37,8 @@ The JSON document comes only when the options are correct. With options that are
 
 A capability can have the hints `readOnly`, `destructive` and `idempotent`. Each hint is a boolean. `check` gives an error for a hint that is not a boolean, and `format` writes the hints in this order.
 
+Each [alias](../../spec/bindings/cli.md#aliases) in `options.cli` is checked too. A command alias has one word, or two words with one space between them, such as `inbox adopt`. The first word of a two-word alias follows the rules of the name of a one-word alias. A one-word alias and two-word aliases can have the same first word.
+
 The exit code is 0 if there are no errors. It is 1 if there are errors. With `--strict`, warnings also give the exit code 1.
 
 ## format

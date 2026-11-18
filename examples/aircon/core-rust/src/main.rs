@@ -120,7 +120,7 @@ struct Temperature {
     celsius: f64,
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Serialize, Deserialize, JsonSchema)]
 struct Fan {
     speed: FanSpeed,
 }
@@ -270,6 +270,16 @@ pub fn aircon() -> (Arc<Application<Unit>>, CliOutput) {
         .run(|Power { on }, call| async move {
             call.context().change::<Offline>(|status| status.power = on)
         });
+    let fan_set = Capability::new("aircon.fan.set", "Set the fan speed.")
+        .audience(CONTROLS)
+        .destructive(true)
+        .idempotent(true)
+        .input::<Fan>()
+        .failures::<Offline>()
+        .run(|Fan { speed }, call| async move {
+            call.context()
+                .change::<Offline>(|status| status.fan = speed)
+        });
     let status_changed = Event::new("aircon.status.changed", "The status of the unit changed.")
         .audience(EVERYWHERE)
         .input::<NoInput>()
@@ -340,7 +350,22 @@ pub fn aircon() -> (Arc<Application<Unit>>, CliOutput) {
                 .alias_default("status", &status_get)
                 .alias_with("--on", &power_set, Power { on: true })
                 .alias_with("--off", &power_set, Power { on: false })
-                .alias("follow", &status_changed),
+                .alias("follow", &status_changed)
+                .alias("fan", &fan_set)
+                .alias_with(
+                    "fan auto",
+                    &fan_set,
+                    Fan {
+                        speed: FanSpeed::Auto,
+                    },
+                )
+                .alias_with(
+                    "fan high",
+                    &fan_set,
+                    Fan {
+                        speed: FanSpeed::High,
+                    },
+                ),
         )
         .target_with("mcp", target("Agents, through an MCP server.", &["mcp"]))
         .target_with(
@@ -379,18 +404,7 @@ pub fn aircon() -> (Arc<Application<Unit>>, CliOutput) {
                     .change::<Offline>(|status| status.target_celsius = celsius)
             }),
         )
-        .capability(
-            Capability::new("aircon.fan.set", "Set the fan speed.")
-                .audience(CONTROLS)
-                .destructive(true)
-                .idempotent(true)
-                .input::<Fan>()
-                .failures::<Offline>()
-                .run(|Fan { speed }, call| async move {
-                    call.context()
-                        .change::<Offline>(|status| status.fan = speed)
-                }),
-        )
+        .capability(fan_set)
         .capability(
             Capability::new(
                 "aircon.schedule.set",

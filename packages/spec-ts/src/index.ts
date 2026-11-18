@@ -231,7 +231,32 @@ export function cliCommandList(prefix: readonly string[], capabilities: readonly
   return ["Commands:", ...under.map(({ usage }) => `  ${usage}`)].join("\n");
 }
 
-export const CLI_ALIAS_NAME = /^(--)?[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+const CLI_WORD = "[a-z][a-z0-9]*(-[a-z0-9]+)*";
+
+/** The name of an alias: one word, two words with one space between them, or `--` and one word. */
+export const CLI_ALIAS_NAME = new RegExp(`^(--${CLI_WORD}|${CLI_WORD}( ${CLI_WORD})?)$`);
+
+const CLI_WORD_ONLY = new RegExp(`^${CLI_WORD}$`);
+
+/**
+ * The alias that the first arguments name, with the arguments after its name (spec/bindings/cli.md#aliases), or
+ * `"unknown-command"` when the first argument is a one-word alias, the second argument is a word, and no two-word alias
+ * has these two words.
+ */
+export function cliAliasOfArgs<Alias extends { readonly name: string }>(
+  aliases: readonly Alias[],
+  args: readonly string[],
+): { readonly alias: Alias; readonly rest: readonly string[] } | "unknown-command" | undefined {
+  const [first, second] = args;
+  if (first === undefined) return undefined;
+  const twoWords = second === undefined ? undefined : aliases.find(({ name }) => name === `${first} ${second}`);
+  if (twoWords !== undefined) return { alias: twoWords, rest: args.slice(2) };
+  const oneWord = aliases.find(({ name }) => name === first);
+  if (oneWord === undefined) return undefined;
+  const group = aliases.some(({ name }) => name.startsWith(`${first} `));
+  if (group && second !== undefined && CLI_WORD_ONLY.test(second)) return "unknown-command";
+  return { alias: oneWord, rest: args.slice(1) };
+}
 
 export interface CliAlias {
   readonly name: string;
@@ -278,12 +303,13 @@ export function cliAliases(catalog: CatalogDocument, target: string): CliAliases
       problem(ALIAS_MESSAGES.badName);
       continue;
     }
-    if (name.startsWith("--") ? isOneOf(CLI_RESERVED_FLAGS, name) : isOneOf(CLI_GENERIC_COMMANDS, name)) {
-      problem(ALIAS_MESSAGES.reservedName);
+    const [leading = name, second] = name.split(" ");
+    if (name.startsWith("--") ? isOneOf(CLI_RESERVED_FLAGS, name) : isOneOf(CLI_GENERIC_COMMANDS, leading)) {
+      problem(second === undefined ? ALIAS_MESSAGES.reservedName : ALIAS_MESSAGES.reservedFirstWord);
       continue;
     }
-    if (firstWords.has(name)) {
-      problem(ALIAS_MESSAGES.firstWord);
+    if (firstWords.has(leading)) {
+      problem(second === undefined ? ALIAS_MESSAGES.firstWord : ALIAS_MESSAGES.groupFirstWord);
       continue;
     }
     if (!isJsonObject(value) || typeof (value.capability ?? value.event) !== "string" || (value.capability !== undefined && value.event !== undefined)) {

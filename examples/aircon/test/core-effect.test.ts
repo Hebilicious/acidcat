@@ -160,6 +160,12 @@ test("the aliases of the Effect command line call their capabilities with their 
   const none = await remote();
   assert.equal(none.code, 0, "the default alias is status");
   assert.partialDeepStrictEqual(JSON.parse(none.stdout), { power: false });
+  assert.equal((await remote("fan", "high")).code, 0);
+  assert.partialDeepStrictEqual(JSON.parse((await remote("status")).stdout), { fan: "high" });
+  assert.equal((await remote("fan", "--speed", "low")).code, 0);
+  assert.partialDeepStrictEqual(JSON.parse((await remote("status")).stdout), { fan: "low" });
+  const unknown = await remote("fan", "medium");
+  assert.deepEqual([unknown.code, unknown.stdout], [2, ""], "medium is not the second word of an alias of the group fan");
 });
 
 test("the alias follow of the Effect command line writes each change of the status", async (context) => {

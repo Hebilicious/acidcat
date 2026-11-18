@@ -34,6 +34,9 @@ def aircon_catalog() -> Catalog:
                     "--on": {"capability": "aircon.power.set", "input": {"on": True}},
                     "--off": {"capability": "aircon.power.set", "input": {"on": False}},
                     "follow": {"event": "aircon.status.changed"},
+                    "fan": {"capability": "aircon.fan.set"},
+                    "fan auto": {"capability": "aircon.fan.set", "input": {"speed": "auto"}},
+                    "fan high": {"capability": "aircon.fan.set", "input": {"speed": "high"}},
                 },
                 "default": "status",
             }

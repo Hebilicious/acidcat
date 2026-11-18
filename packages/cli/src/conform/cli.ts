@@ -35,11 +35,11 @@ const EVENT_USAGES: { readonly [id: string]: string } = {
 };
 
 const ALIAS_USAGES: { readonly [id: string]: readonly string[] } = {
-  "fixture.echo": ["--hello", "say --text <string>"],
+  "fixture.echo": ["--hello", "say --text <string>", "shout hello"],
   "fixture.flags": ["quick [--count <integer>] [--extra <json>] [--label <string>] [--ratio <number>] [--steps <integer>...] [--tags <string>...] [--verbose]"],
   "fixture.held": ["held-keys"],
-  "fixture.note": ["fixed-note [--loud]"],
-  "fixture.raw": ["raw '<json>'"],
+  "fixture.note": ["fixed-note [--loud]", "notes add --text <string> [--loud]", "notes loud --text <string>"],
+  "fixture.raw": ["notes '<json>'", "raw '<json>'"],
 };
 
 const EVENT_ALIAS_USAGES: { readonly [id: string]: readonly string[] } = {
@@ -122,6 +122,9 @@ export async function checkCli(command: readonly string[], options: { readonly d
   for (const [name, args, code] of [
     ["an unknown command has exit code 2", ["fixture", "nothing"], 2],
     ["a shared prefix alone has exit code 2", ["fixture"], 2],
+    ["the first word of two-word aliases alone, with no one-word alias, has exit code 2", ["shout"], 2],
+    ["an unknown second word after the first word of two-word aliases has exit code 2", ["shout", "nope"], 2],
+    ["an unknown second word after a one-word alias with two-word aliases has exit code 2", ["notes", "nope"], 2],
     ["a capability outside the view has exit code 2", ["call", "fixture.hidden"], 2],
     ["a missing required flag has exit code 3", ["fixture", "echo"], 3],
     ["an unknown flag has exit code 3", ["fixture", "echo", "--text", "hello", "--nope", "x"], 3],
@@ -290,6 +293,22 @@ async function checkAliases(checks: Checks, command: readonly string[]): Promise
     const result = await run(signal, "held-keys");
     expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
     expect(isArrayOf(memberOf(parseJson(result.stdout), "keys"), (key) => typeof key === "string"), `standard output must have the keys, got ${result.stdout}`);
+  });
+  await checks.run("a two-word alias calls its capability with the flags", ALIASES, async (signal) => {
+    expectOutput(await run(signal, "notes", "add", "--text", "hi"), { text: "hi" });
+  });
+  await checks.run("the input of a two-word alias is its fixed input with the properties of the flags", ALIASES, async (signal) => {
+    expectOutput(await run(signal, "notes", "loud", "--text", "hi"), { text: "hi", loud: true });
+    expectOutput(await run(signal, "shout", "hello"), { text: "HELLO" });
+  });
+  await checks.run("a one-word alias runs when the second argument is not the second word of a two-word alias", ALIASES, async (signal) => {
+    expectOutput(await run(signal, "notes"), {});
+    expectOutput(await run(signal, "notes", '{"a":1}'), { a: 1 });
+  });
+  await checks.run("a two-word alias with --help writes its usage", ALIASES, async (signal) => {
+    const result = await run(signal, "notes", "add", "--help");
+    expectEqual(result.code, 0, "exit code");
+    expect(result.stdout.includes("notes add --text <string> [--loud]"), `standard output must have the usage of the alias, got ${JSON.stringify(result.stdout)}`);
   });
   const ticks = async (signal: AbortSignal, ...args: string[]) => {
     const result = await run(signal, "ticks", ...args);

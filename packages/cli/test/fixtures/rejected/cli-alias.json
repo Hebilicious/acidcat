@@ -23,6 +23,12 @@
             "odd": {
               "capability": "shop.item.get",
               "extra": 1
+            },
+            "list x": {
+              "capability": "shop.item.get"
+            },
+            "shop x": {
+              "capability": "shop.item.get"
             }
           }
         }

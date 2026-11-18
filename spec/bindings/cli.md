@@ -29,7 +29,7 @@ A protocol binding that serves a view as a command line. The commands come from 
 
   1. The name of the program.
   2. If the capability has an input schema with no top-level `properties` member: `call <id> '<json>'`, with the id of the capability. Nothing comes after it.
-  3. If not, the path of the command, then one part for each flag. The required flags come first. In each group, the flags are in code point order of their names.
+  3. If not, the path of the command, then one part for each flag. The required flags come first, then the optional flags. In each of these two lists, the flags are in code point order of their names.
 
   | Property schema | Required flag | Optional flag |
   | --- | --- | --- |
@@ -59,7 +59,7 @@ A protocol binding that serves a view as a command line. The commands come from 
   A shared prefix can have one word or more words: `aircon --help` and `aircon status --help` are both the help of a shared prefix, if no capability has the path `aircon` or `aircon status`. The program uses the longest shared prefix at the start of the arguments. If the arguments after it do not continue the path of a command, the command is unknown. If one of these arguments is `--help`, the program writes the command list to standard output. If not, the program writes the command list to standard error. For example, `aircon power --on`, `aircon power nope` and `aircon power` all write the command list of `aircon power` to standard error, with exit code 2.
 - **Cancellation.** An interrupt (`SIGINT`) cancels the call. If the call has not ended within a grace period after the interrupt, the program SHOULD exit with code 130. At a second interrupt, it SHOULD exit with code 130 at once.
 
-An application MAY add its own commands and flags. The name of a command of the application is one word. This name MUST NOT be `call`, `list`, `watch`, the name of a different command of the application, the name of an alias, or the first word of the path of a capability. If a name breaks this rule, if two commands have the same path, or if two flags have the same name, the program MUST stop with an error when it starts.
+An application MAY add its own commands and flags. The name of a command of the application is one word. This name MUST NOT be `call`, `list`, `watch`, the name of a different command of the application, the first word of the name of a command alias, or the first word of the path of a capability. If a name breaks this rule, if two commands have the same path, or if two flags have the same name, the program MUST stop with an error when it starts.
 
 ## Aliases
 
@@ -86,7 +86,9 @@ An alias can also have members whose names start with `x-`. A program ignores th
             "status": { "capability": "aircon.status.get" },
             "--on": { "capability": "aircon.power.set", "input": { "on": true } },
             "--off": { "capability": "aircon.power.set", "input": { "on": false } },
-            "follow": { "event": "aircon.status.changed" }
+            "follow": { "event": "aircon.status.changed" },
+            "fan": { "capability": "aircon.fan.set" },
+            "fan high": { "capability": "aircon.fan.set", "input": { "speed": "high" } }
           },
           "default": "status"
         }
@@ -97,14 +99,16 @@ An alias can also have members whose names start with `x-`. A program ignores th
 ```
 
 - **Target.** A target that has `options.cli` MUST have the binding `cli`.
-- **Names.** A **command alias** has a name that is one word. A **flag alias** has a name that is `--` and one word. Each word matches `[a-z][a-z0-9]*(-[a-z0-9]+)*`. The name of a command alias MUST NOT be `call`, `list`, `watch`, the name of a command of the application, or the first word of the path of a capability. The name of a flag alias MUST NOT be `--help`, `--version`, or the name of a different flag of the program, for example a flag that the application adds.
-- **Call.** The name of an alias is the first argument: `aircon status`, `aircon --on`. The flags come after the name, with the rules of [Commands](#commands). The flags come from the properties of the input schema that are not in the fixed input. A property in the fixed input is not a flag: a flag with its name is not valid. The input is the fixed input with the properties of the flags. The provider validates this input, fixed input included, as it validates the input of each call or subscription. If an argument after the name is `--help`, the program MUST write the [help](#commands) of the alias to standard output, with the usage of the alias, and the exit code is 0.
+- **Names.** A **command alias** has a name that is one word, or two words with one space between them, for example `fan high`. A **flag alias** has a name that is `--` and one word. Each word matches `[a-z][a-z0-9]*(-[a-z0-9]+)*`. The first word of the name of a command alias MUST NOT be `call`, `list`, `watch`, the name of a command of the application, or the first word of the path of a capability. The name of a flag alias MUST NOT be `--help`, `--version`, or the name of a different flag of the program, for example a flag that the application adds.
+- **Group.** The command aliases whose names have the same first word are a **group**. A group can have a one-word alias with that word and two-word aliases: `fan`, `fan auto` and `fan high`.
+- **Call.** The name of an alias is the first argument, or the first two arguments for a two-word alias: `aircon status`, `aircon --on`, `aircon fan high`. The flags come after the name, with the rules of [Commands](#commands). The flags come from the properties of the input schema that are not in the fixed input. A property in the fixed input is not a flag: a flag with its name is not valid. The input is the fixed input with the properties of the flags. The provider validates this input, fixed input included, as it validates the input of each call or subscription. If an argument after the name is `--help`, the program MUST write the [help](#commands) of the alias to standard output, with the usage of the alias, and the exit code is 0.
+- **Call of a group.** If the first two arguments are the name of a two-word alias, the program runs that alias. This is also true when the one-word alias of the group takes the input as JSON text. If not, and the first argument is the name of a one-word alias, the program runs the one-word alias with the other arguments. But if the group of that alias has two-word aliases, and the second argument is a word, the arguments are an unknown command: `aircon fan medium`. A word is a text that matches the pattern of a word in **Names**. If the first argument is the first word of a group with no one-word alias, and the first two arguments are not the name of an alias, the arguments are an unknown command.
 - **Capability.** An alias of a capability makes the same call as the command of the capability, with the outcomes of [Outcomes](#outcomes).
 - **Event.** An alias of an event subscribes as `watch` does, with the same ends and exit codes: `aircon follow` is `aircon watch aircon.status.changed`. It also takes `--cursor` and `--max-age-ms`, as in [Events](#events).
 - **No input.** If the capability or the event has no input schema, the alias has no flags from the input, and takes no other argument.
 - **No properties.** If the capability or the event has an input schema with no top-level `properties` member, the alias takes the input as JSON text, as `call` and `watch` do: `<name> [input]`. The default input is `{}`. Such an alias MUST NOT have a fixed input.
-- **Usage.** The usage of an alias is the name of the program, the name of the alias, then the flags as in [Commands](#commands), with only the properties that are not in the fixed input. If the input schema has no top-level `properties` member, the flags are replaced by `'<json>'`. The usage of an alias of an event ends with `[--cursor <string>] [--max-age-ms <integer>]`. For example: `aircon status`, `aircon --on` and `aircon follow [--cursor <string>] [--max-age-ms <integer>]`.
-- **Default alias.** With no arguments, the program runs the default alias: `aircon` is `aircon status`. If the first argument starts with `--`, and it is not the name of a flag alias or a flag of the program, the program runs the default alias with all the arguments as its flags. A flag of the default alias MUST NOT have the name of a flag alias or of a different flag of the program. `--help` writes the help. With no default alias, the program writes the help when it gets no arguments.
+- **Usage.** The usage of an alias is the name of the program, the name of the alias with each of its words, then the flags as in [Commands](#commands), with only the properties that are not in the fixed input. If the input schema has no top-level `properties` member, the flags are replaced by `'<json>'`. The usage of an alias of an event ends with `[--cursor <string>] [--max-age-ms <integer>]`. For example: `aircon status`, `aircon --on`, `aircon fan high` and `aircon follow [--cursor <string>] [--max-age-ms <integer>]`.
+- **Default alias.** With no arguments, the program runs the default alias: `aircon` is `aircon status`. The default alias can have one word or two words. If the first argument starts with `--`, and it is not the name of a flag alias or a flag of the program, the program runs the default alias with all the arguments as its flags. A flag of the default alias MUST NOT have the name of a flag alias or of a different flag of the program. `--help` writes the help. With no default alias, the program writes the help when it gets no arguments.
 
 If an alias breaks a rule of this section, the program MUST stop with an error when it starts. `acid-cat check` rejects a catalog with an alias that breaks a rule of this section.
 
@@ -164,6 +168,8 @@ Different exit codes let a script or an agent know if "the capability said no" o
 One line of JSON for each occurrence lets a script read occurrences one at a time, for example with `jq`, while the subscription continues.
 
 A default alias gives a program one main operation, such as `build`, with no command word.
+
+A group gives a short path to a few related operations, such as `inbox adopt` and `inbox reject`, with no namespace word before them. Its one-word alias, such as `inbox`, is the main operation of the group. A command alias has two words at most, so the first two arguments always tell which alias runs. A second argument that is one word, and that is not the second word of an alias of the group, is an unknown command and not the input of the one-word alias. Thus a mistyped name, such as `inbox adpot`, stops with exit code 2. It does not run the one-word alias.
 
 An alias is in the catalog, and not only in the code of the program. Thus `acid-cat check` tests it, `list` gives it to agents, and each core serves the same aliases. A flag alias, such as `--on`, gives a command line the form of a switch, which the commands of the capabilities cannot have, because each id has two or more segments.
 
