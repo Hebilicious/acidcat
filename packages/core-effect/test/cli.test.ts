@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, watch } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { setTimeout as pause } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 
 import { INTERRUPT_GRACE_MS } from "@acid-cat/spec-ts";
 
@@ -30,11 +31,17 @@ const cliWithInherited = commandLine("test/fixture-cli-inherited.ts");
 
 const DEADLINE_MS = 10_000;
 
+const PROBE = fileURLToPath(new URL("interrupt-probe.ts", import.meta.url));
+
 async function interruptedIgnoring(command: readonly string[], interrupts: 1 | 2) {
   const directory = mkdtempSync(join(tmpdir(), "core-effect-interrupt-"));
   const marker = join(directory, "held");
+  const record = join(directory, "exit");
   const fixture = bundledProgram("test/fixture-cli-ignoring-interruption.ts");
-  const child = spawn(process.execPath, [fixture, ...command, "--key", "k", "--marker", marker], { stdio: ["ignore", "ignore", "pipe"] });
+  const child = spawn(process.execPath, ["--import", PROBE, fixture, ...command, "--key", "k", "--marker", marker], {
+    stdio: ["ignore", "ignore", "pipe"],
+    env: { ...process.env, INTERRUPT_PROBE_RECORD: record },
+  });
   let stderr = "";
   child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
   const exited = new Promise<[number | null, NodeJS.Signals | null]>((resolve) => child.on("close", (...exit) => resolve(exit)));
@@ -57,7 +64,8 @@ async function interruptedIgnoring(command: readonly string[], interrupts: 1 | 2
     }
     const ended = await Promise.race([exited, pause(DEADLINE_MS, "running" as const)]);
     const [code, signal] = ended === "running" ? [null, null] : ended;
-    return { code, signal, stderr, elapsed: Date.now() - interrupted, running: ended === "running" };
+    const exit = existsSync(record) ? readFileSync(record, "utf-8") : undefined;
+    return { code, signal, stderr, exit, elapsed: Date.now() - interrupted, running: ended === "running" };
   } finally {
     child.kill("SIGKILL");
     rmSync(directory, { recursive: true, force: true });
@@ -133,9 +141,9 @@ describe("the command line of an application", { concurrency: true }, () => {
     const runs = await Promise.all(commands.flatMap((command) => [interruptedIgnoring(command, 1), interruptedIgnoring(command, 2)]));
     for (const [index, run] of runs.entries()) {
       const what = `${commands[Math.floor(index / 2)]?.join(" ")} with ${index % 2 === 0 ? "one interrupt" : "two interrupts"}`;
-      assert.deepEqual({ ...run, elapsed: undefined }, { code: 130, signal: null, stderr: "", elapsed: undefined, running: false }, what);
+      const exit = index % 2 === 0 ? "exit after interrupt 1" : "exit during interrupt 2";
+      assert.deepEqual({ ...run, elapsed: undefined }, { code: 130, signal: null, stderr: "", exit, elapsed: undefined, running: false }, what);
       if (index % 2 === 0) assert.ok(run.elapsed >= INTERRUPT_GRACE_MS, `${what}: exited ${run.elapsed} ms after the interrupt, before the grace period`);
-      else assert.ok(run.elapsed < INTERRUPT_GRACE_MS, `${what}: exited ${run.elapsed} ms after the second interrupt, not at once`);
     }
   });
 
