@@ -156,10 +156,17 @@ describe("the command line of an application", { concurrency: true }, () => {
     assert.match(help.stdout, /\n {2}position +Write the position of the switch\.\n\nALIASES\n/);
   });
 
-  test("a first -- is not an argument", async () => {
-    const [plain, dashed] = await Promise.all([cli("say", "--text", "hi"), cli("--", "say", "--text", "hi")]);
+  test("a first -- is not an argument, and a -- after the first argument is an argument", async () => {
+    const [plain, dashed, extra, value] = await Promise.all([
+      cli("say", "--text", "hi"),
+      cli("--", "say", "--text", "hi"),
+      cli("fixture", "echo", "--text", "hi", "--"),
+      cli("fixture", "echo", "--text", "--"),
+    ]);
     assert.equal(plain.code, 0);
     assert.deepEqual(dashed, plain);
+    assert.deepEqual([extra.code, extra.stdout], [3, ""]);
+    assert.deepEqual([value.code, JSON.parse(value.stdout)], [0, { text: "--" }]);
   });
 
   test("the help lists the aliases, and a flag alias with --help gives the usage of the alias", async () => {
