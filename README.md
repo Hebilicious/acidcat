@@ -37,48 +37,36 @@ AcidCat lists those operations once, in a **catalog**. Every surface comes from 
 
 ## 🌬️ Example
 
-### 1. The catalog
+### 1. Write the catalog
 
-The catalog is a JSON document. It names the **targets** (groups of clients) and the **capabilities** (operations), with a JSON Schema for each input, output and failure:
+Write the catalog in a typed language and let the tool write the JSON. The tool checks the catalog rules, and every tool writes the same canonical JSON. With the TypeScript catalog library:
 
-```json
-{
-  "acidcat": "0.1",
-  "title": "Air conditioner",
-  "targets": {
-    "cli": { "bindings": ["cli"] },
-    "mcp": { "bindings": ["mcp"] }
-  },
-  "capabilities": {
-    "aircon.power.set": {
-      "description": "Turn the unit on or off.",
-      "audience": ["cli", "mcp"],
-      "input": {
-        "additionalProperties": false,
-        "properties": { "on": { "type": "boolean" } },
-        "required": ["on"],
-        "type": "object"
-      },
-      "failures": {
-        "Offline": {
-          "additionalProperties": false,
-          "properties": { "_tag": { "const": "Offline", "type": "string" } },
-          "required": ["_tag"],
-          "type": "object"
-        }
-      },
-      "destructive": true,
-      "idempotent": true
-    }
-  }
-}
+```ts
+import { writeFile } from "node:fs/promises";
+
+import { Catalog } from "@acid-cat/catalog";
+
+const catalog = new Catalog({ title: "Air conditioner" });
+catalog.target("cli", { bindings: ["cli"] });
+catalog.target("mcp", { bindings: ["mcp"] });
+const offline = catalog.type("Offline", { type: "object" });
+catalog.capability("aircon.power.set", {
+  description: "Turn the unit on or off.",
+  audience: ["cli", "mcp"],
+  input: { type: "object", required: ["on"], properties: { on: { type: "boolean" } } },
+  failures: { Offline: offline },
+  destructive: true,
+  idempotent: true,
+});
+
+await writeFile("aircon.acidcat.json", catalog.render());
 ```
 
-Write it whichever way suits you: by hand, from your code (step 2), with a catalog library for [TypeScript](packages/catalog/typescript), [Python](packages/catalog/python), [Go](packages/catalog/go) or [Rust](packages/catalog/rust), or in [Pkl](packages/catalog/pkl). They all write the same canonical JSON, and `acid-cat check` validates it.
+The same catalog in [Pkl](packages/catalog/pkl), [Python](packages/catalog/python), [Go](packages/catalog/go) or [Rust](packages/catalog/rust) gives the same bytes. Commit the JSON with its source, and run `acid-cat check` on it in CI.
 
-### 2. The code
+### 2. Implement it
 
-A **core** runs your code behind the catalog. This is the same capability in the TypeScript core, with Zod schemas:
+A **core** runs your code behind the catalog. This is the capability in the TypeScript core, with Zod schemas:
 
 ```ts
 import { cliMain, defineApp, defineCapability, fail, ok } from "@acid-cat/core-ts";
@@ -116,7 +104,7 @@ const toJsonSchema: ToJsonSchema = (schema) => {
 cliMain(aircon, { name: "home", version: "0.1.0", context: {}, toJsonSchema });
 ```
 
-`renderCatalog(aircon, { toJsonSchema })` writes the catalog from step 1 out of this code. When several programs share one catalog, each one's tests compare its catalog with the shared one, as [`examples/aircon`](examples/aircon/README.md) does.
+The core also writes a catalog from this code, with `renderCatalog(aircon, { toJsonSchema })`. A test compares it with `aircon.acidcat.json`, so the code cannot drift from the contract ([`examples/aircon`](examples/aircon/README.md) does this for every core). A single program with one core can skip step 1 and use its code as the catalog source.
 
 ### 3. Run it
 
@@ -133,7 +121,7 @@ Pass the same `aircon` to `mcpStdioMain` for an MCP server, or to `httpHandler` 
 
 | Part | What it is |
 | --- | --- |
-| Catalog | The contract. Checked at build time; programs do not read it at run time |
+| Catalog | The contract, written in Pkl, a catalog library or a core's code, and stored as JSON. Checked at build time; programs do not read it at run time |
 | Binding | The rules for one surface: CLI, MCP, HTTP, WebMCP or a language such as TypeScript. Defined in the [specification](spec/bindings/README.md) |
 | Core | A library that runs your capabilities and serves the bindings |
 | `acid-cat conform` | Tests a running program from the outside, through each binding |
