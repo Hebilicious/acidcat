@@ -20,6 +20,7 @@ The squash commit is the pull request title and its body, which GitHub wraps at 
 The parser reads a line that starts with a word followed by "(" as a footer. It fails when a "(" or the end of
 the line comes before the ")". A fenced code block does not help.
 Change the body: start that line with another word, or put a space at the start of the line.
+Write the override markers only for an override: release-please reads the text after the first marker as the commit.
 Or put the commit that release-please must read in the body:
 
 BEGIN_COMMIT_OVERRIDE
