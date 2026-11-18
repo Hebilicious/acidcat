@@ -113,7 +113,7 @@ Pass the same `aircon` to `mcpStdioMain` for an MCP server, or to `httpHandler` 
 
 | Part | What it is |
 | --- | --- |
-| Catalog | The contract, stored as JSON. Write it in a core's code, or, when several programs share it, in [Pkl](packages/catalog/pkl) or with a [catalog library](packages/catalog). Checked at build time; programs do not read it at run time |
+| Catalog | The contract, stored as JSON. Write it in the typed language of your choice: a core's code, a [catalog library](packages/catalog) for TypeScript, Python, Go or Rust, or [Pkl](packages/catalog/pkl). Checked at build time; programs do not read it at run time |
 | Binding | The rules for one surface: CLI, MCP, HTTP, WebMCP or a language such as TypeScript. Defined in the [specification](spec/bindings/README.md) |
 | Core | A library that runs your capabilities and serves the bindings |
 | `acid-cat conform` | Tests a running program from the outside, through each binding |
