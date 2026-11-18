@@ -33,8 +33,15 @@ tasks:
       - "core-rust/target/debug/aircon"
     toolchains: ["system"]
 
+  test-programs:
+    description: "Bundle each TypeScript program that the tests start as a process into .out/programs/. A bundle starts in less time than its source modules."
+    command: "node"
+    args: ["../../scripts/bundle-programs.ts", "core-ts/cli.ts", "core-ts/serve.ts", "core-ts/mcp-stdio.ts", "core-effect/cli.ts", "core-effect/serve.ts", "core-effect/mcp-stdio.ts", "test/terminal-cli.ts"]
+    inputs: ["core-ts/**/*.ts", "core-effect/**/*.ts", "test/**/*.ts", "/packages/core-ts/src/**/*.ts", "/packages/core-effect/src/**/*.ts", "/scripts/bundle-programs.ts", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/mcp-handshake/src/**/*.ts"]
+    outputs: [".out/programs/**/*"]
+
   test:
-    deps: ["test-rust", "cli:browser"]
+    deps: ["test-programs", "test-rust", "cli:browser"]
     description: "Write the catalog in each language, run the application on each core and its command line, open the web page of each TypeScript core in Chromium with a test WebMCP host, and call each API."
     command: "node"
     args: ["--test", "--test-timeout=60000", "test/"]

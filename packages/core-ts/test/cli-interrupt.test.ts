@@ -8,6 +8,8 @@ import { setTimeout as pause } from "node:timers/promises";
 
 import { INTERRUPT_GRACE_MS } from "@acid-cat/spec-ts";
 
+import { bundledProgram } from "./bundled-program.ts";
+
 const DEADLINE_MS = 10_000;
 
 const STATE_DEADLINE_MS = 30_000;
@@ -15,7 +17,7 @@ const STATE_DEADLINE_MS = 30_000;
 async function interruptedWatch(interrupts: 1 | 2) {
   const directory = mkdtempSync(join(tmpdir(), "core-ts-interrupt-"));
   const marker = join(directory, "watching");
-  const fixture = new URL("./fixture-cli-watch-ignoring-cancellation.ts", import.meta.url).pathname;
+  const fixture = bundledProgram("test/fixture-cli-watch-ignoring-cancellation.ts");
   const child = spawn(process.execPath, [fixture, "watch", "fixture.watch", "--key", "k", "--marker", marker], { stdio: ["ignore", "ignore", "pipe"] });
   let stderr = "";
   child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));

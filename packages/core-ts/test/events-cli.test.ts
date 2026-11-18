@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 import { isJsonObject, isOccurrence } from "@acid-cat/spec-ts";
@@ -8,6 +7,7 @@ import { z } from "zod";
 
 import { defineApp, defineCapability, defineEvent, ok, runCli } from "../src/index.ts";
 import { sensorOptions, Sensors, sensorsApp, toJsonSchema } from "./sensors.ts";
+import { bundledProgram } from "./bundled-program.ts";
 
 async function until(condition: () => boolean): Promise<void> {
   const end = Date.now() + 1000;
@@ -111,7 +111,7 @@ test("watch is a command of the command line: no capability and no command of th
 });
 
 test("in a process, a command line that breaks a rule stops when it starts, with the message and the exit code 5", () => {
-  const fixture = fileURLToPath(new URL("./fixture-sensors-cli-setup-error.ts", import.meta.url));
+  const fixture = bundledProgram("test/fixture-sensors-cli-setup-error.ts");
   const { status, stdout, stderr } = spawnSync(process.execPath, [fixture, "list"], { encoding: "utf-8" });
   assert.equal(status, 5);
   assert.equal(stdout, "");
@@ -119,7 +119,7 @@ test("in a process, a command line that breaks a rule stops when it starts, with
 });
 
 test("in a process, an interrupt ends watch with the exit code 130", async () => {
-  const fixture = fileURLToPath(new URL("./fixture-sensors-cli.ts", import.meta.url));
+  const fixture = bundledProgram("test/fixture-sensors-cli.ts");
   const child = spawn(process.execPath, [fixture, "watch", "sensor.clock"], { stdio: ["ignore", "pipe", "pipe"] });
   let out = "";
   let err = "";

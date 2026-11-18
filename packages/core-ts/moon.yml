@@ -16,8 +16,15 @@ tasks:
     inputs: ["src/**/*", "package.json", "tsconfig.json", "tsconfig.build.json", "/tsconfig.base.json", "/scripts/build-package.ts"]
     outputs: ["dist/**/*"]
 
+  test-programs:
+    description: "Bundle each TypeScript program that the tests start as a process into .out/programs/. A bundle starts in less time than its source modules."
+    command: "node"
+    args: ["../../scripts/bundle-programs.ts", "test/fixture-cli.ts", "test/fixture-cli-remote.ts", "test/fixture-cli-ignoring-cancellation.ts", "test/fixture-cli-watch-ignoring-cancellation.ts", "test/fixture-cli-without-marker.ts", "test/fixture-mcp-stdio.ts", "test/fixture-mcp-stdio-watch-ignoring-cancellation.ts", "test/fixture-sensors-cli.ts", "test/fixture-sensors-cli-setup-error.ts"]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "/scripts/bundle-programs.ts", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/mcp-handshake/src/**/*.ts"]
+    outputs: [".out/programs/**/*"]
+
   test:
-    deps: ["cli:browser"]
+    deps: ["test-programs", "cli:browser"]
     description: "Test sessions, handles, event handles and the MCP, HTTP, CLI and WebMCP bindings, with the test application, the kettle, the sensors and the air conditioner. WebMCP also runs in Chromium."
     command: "node"
     args: ["--test", "--test-timeout=60000", "test/"]

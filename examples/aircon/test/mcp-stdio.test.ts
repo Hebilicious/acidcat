@@ -4,11 +4,13 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
+import { bundledProgram } from "./bundled-program.ts";
+
 const rust = new URL("../core-rust/target/debug/aircon", import.meta.url).pathname;
 
 function command(core: "core-ts" | "core-effect" | "core-rust") {
   if (core === "core-rust") return { command: rust, args: ["mcp-stdio"] };
-  return { command: process.execPath, args: [new URL(`../${core}/mcp-stdio.ts`, import.meta.url).pathname] };
+  return { command: process.execPath, args: [bundledProgram(`${core}/mcp-stdio.ts`)] };
 }
 
 async function connect(core: "core-ts" | "core-effect" | "core-rust") {

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { canonicalText } from "@acid-cat/catalog";
 import { bundle, check, viewOf, type Catalog } from "../src/catalog.ts";
+import { bundledProgram } from "./bundled-program.ts";
 
 const isCatalog = (value: unknown): value is Catalog => check(value).errors.length === 0;
 
@@ -151,7 +152,7 @@ test("an input that refers to an object type is an object, whatever other keys i
 });
 
 test("view rejects a target name that only an object inherits, such as constructor", () => {
-  const main = fileURLToPath(new URL("../src/main.ts", import.meta.url));
+  const main = bundledProgram("src/main.ts");
   const fixture = fileURLToPath(new URL("./fixtures/bakery.acidcat.json", import.meta.url));
   const result = spawnSync(process.execPath, [main, "view", fixture, "constructor"], { encoding: "utf-8" });
   assert.equal(result.status, 1);
@@ -160,7 +161,7 @@ test("view rejects a target name that only an object inherits, such as construct
 });
 
 test("a first -- is not an argument", () => {
-  const main = fileURLToPath(new URL("../src/main.ts", import.meta.url));
+  const main = bundledProgram("src/main.ts");
   const fixture = fileURLToPath(new URL("./fixtures/bakery.acidcat.json", import.meta.url));
   const result = spawnSync(process.execPath, [main, "--", "check", fixture], { encoding: "utf-8" });
   assert.equal(result.status, 0, result.stderr);
@@ -196,7 +197,7 @@ test("a file that is not in canonical form gets a warning", () => {
 });
 
 test("check with --output json writes the report of each catalog, also one that cannot be read, to standard output, and keeps the exit code", () => {
-  const main = fileURLToPath(new URL("../src/main.ts", import.meta.url));
+  const main = bundledProgram("src/main.ts");
   const fixture = fileURLToPath(new URL("./fixtures/bakery.acidcat.json", import.meta.url));
   const rejected = fileURLToPath(new URL("./fixtures/rejected/output-boolean.json", import.meta.url));
   const rejectedText = readFileSync(rejected, "utf-8");

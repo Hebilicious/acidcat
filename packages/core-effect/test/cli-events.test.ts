@@ -5,8 +5,9 @@ import { Schema } from "effect";
 
 import { decodeText } from "./decode.ts";
 import { run } from "./run.ts";
+import { bundledProgram } from "./bundled-program.ts";
 
-const file = new URL("./events-cli.ts", import.meta.url).pathname;
+const file = bundledProgram("test/events-cli.ts");
 
 const cli = (...args: string[]) => run(file, ...args);
 
@@ -102,7 +103,7 @@ describe("the command line of an application with events", { concurrency: true }
   });
 
   test("the program stops with an error when it starts if an input property of an event is named cursor or max-age-ms", async () => {
-    const reserved = new URL("./events-cli-reserved.ts", import.meta.url).pathname;
+    const reserved = bundledProgram("test/events-cli-reserved.ts");
     await Promise.all(
       ["cursor", "max-age-ms"].map(async (name) => {
         const started = await run(reserved, name, "list");

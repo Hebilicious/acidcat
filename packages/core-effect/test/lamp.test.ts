@@ -8,6 +8,7 @@ import { Effect, Fiber, Layer, Schema, Scope, Stream, SubscriptionRef } from "ef
 import { App, Mcp, Session } from "../src/index.ts";
 import { Lamp, lamp, lampLayer, makeLampLayer } from "./lamp.ts";
 import { run } from "./run.ts";
+import { bundledProgram } from "./bundled-program.ts";
 
 const withSession = <A, E>(
   target: string,
@@ -133,7 +134,7 @@ test("an agent sees the available capabilities of the mcp view through MCP", asy
 });
 
 test("the command line of the lamp gives each outcome its exit code, and a flag follows a $ref to its type", async () => {
-  const cli = (...args: string[]) => run(new URL("./lamp-cli.ts", import.meta.url).pathname, ...args);
+  const cli = (...args: string[]) => run(bundledProgram("test/lamp-cli.ts"), ...args);
   const [scene, unknownScene, power, brightness, temperature, pair] = await Promise.all([
     cli("lamp", "scene", "set", "--scene", "night"),
     cli("lamp", "scene", "set", "--scene", "disco"),

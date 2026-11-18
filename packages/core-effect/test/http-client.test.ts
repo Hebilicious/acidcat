@@ -8,8 +8,9 @@ import { Http } from "../src/index.ts";
 import { occurrences } from "../src/internal/httpClient.ts";
 import * as NodeServer from "../src/NodeServer.ts";
 import { runWith } from "./run.ts";
+import { bundledProgram } from "./bundled-program.ts";
 
-const remoteCli = new URL("./fixture-cli-remote.ts", import.meta.url).pathname;
+const remoteCli = bundledProgram("test/fixture-cli-remote.ts");
 const TOKEN = "Bearer secret-token-of-the-test";
 
 async function serve(handler: NodeServer.WebHandler): Promise<{ readonly url: string; readonly close: () => Promise<void> }> {

@@ -16,16 +16,17 @@ import { App, Capability, Cli } from "../src/index.ts";
 import { CliListing, decodeText } from "./decode.ts";
 import { fixture } from "./fixture.ts";
 import { run } from "./run.ts";
+import { bundledProgram } from "./bundled-program.ts";
 
-const program = (file: string) => (...args: string[]) => run(new URL(file, import.meta.url).pathname, ...args);
+const commandLine = (file: string) => (...args: string[]) => run(bundledProgram(file), ...args);
 
-const cli = program("./fixture-cli.ts");
-const cliWithFlag = program("./fixture-cli-flags.ts");
-const cliWithCommand = program("./fixture-cli-commands.ts");
+const cli = commandLine("test/fixture-cli.ts");
+const cliWithFlag = commandLine("test/fixture-cli-flags.ts");
+const cliWithCommand = commandLine("test/fixture-cli-commands.ts");
 
-const cliWithRepeated = program("./fixture-cli-repeated.ts");
+const cliWithRepeated = commandLine("test/fixture-cli-repeated.ts");
 
-const cliWithInherited = program("./fixture-cli-inherited.ts");
+const cliWithInherited = commandLine("test/fixture-cli-inherited.ts");
 
 const DEADLINE_MS = 10_000;
 
@@ -34,7 +35,7 @@ const STATE_DEADLINE_MS = 30_000;
 async function interruptedHold(interrupts: 1 | 2) {
   const directory = mkdtempSync(join(tmpdir(), "core-effect-interrupt-"));
   const marker = join(directory, "held");
-  const fixture = new URL("./fixture-cli-ignoring-interruption.ts", import.meta.url).pathname;
+  const fixture = bundledProgram("test/fixture-cli-ignoring-interruption.ts");
   const child = spawn(process.execPath, [fixture, "fixture", "hold", "--key", "k", "--marker", marker], { stdio: ["ignore", "ignore", "pipe"] });
   let stderr = "";
   child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
@@ -119,7 +120,7 @@ describe("the command line of an application", { concurrency: true }, () => {
     const directory = mkdtempSync(join(tmpdir(), "core-effect-cli-"));
     const interrupted = async (run: number) => {
       const marker = join(directory, `held-${run}`);
-      const child = spawn(process.execPath, [new URL("./fixture-cli.ts", import.meta.url).pathname, "fixture", "hold", "--key", "k", "--marker", marker]);
+      const child = spawn(process.execPath, [bundledProgram("test/fixture-cli.ts"), "fixture", "hold", "--key", "k", "--marker", marker]);
       let stderr = "";
       child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
       const watcher = watch(directory, (_, name) => {

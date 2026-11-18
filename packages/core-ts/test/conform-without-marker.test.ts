@@ -4,9 +4,10 @@ import { test } from "node:test";
 import { conform } from "@acid-cat/cli";
 
 import { deadline, didNotSettle, failures, timeout } from "./deadline.ts";
+import { bundledProgram } from "./bundled-program.ts";
 
 test("acid-cat conform fails the interrupt check of a command line that never writes its marker, and goes on", { timeout }, async () => {
-  const results = await conform({ cli: [process.execPath, new URL("./fixture-cli-without-marker.ts", import.meta.url).pathname], deadline });
+  const results = await conform({ cli: [process.execPath, bundledProgram("test/fixture-cli-without-marker.ts")], deadline });
   const interrupt = results.find((result) => result.name === "an interrupt cancels the call with exit code 130");
   assert.equal(interrupt?.passed, false);
   assert.match(interrupt.detail ?? "", new RegExp(`${didNotSettle.source}: waiting until the call writes its marker file`));
