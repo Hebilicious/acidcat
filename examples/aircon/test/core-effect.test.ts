@@ -14,6 +14,7 @@ import { Effect, Fiber, Layer, Schema, Stream } from "effect";
 import { aircon, statusChanged, unitLayer } from "../core-effect/aircon.ts";
 import { App, Mcp, Session } from "@acid-cat/core-effect";
 import { run } from "./run.ts";
+import { assertHelp } from "./help.ts";
 import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 import { OFFLINE, OUTPUT_ERROR, OUTPUT_FLAG_LINES, POWERED_OFF_LAYOUT, SCHEDULE_LAYOUT, STATUS_OFF } from "./human.ts";
@@ -295,4 +296,8 @@ test("the human form of the Effect command line is the same for a server, and wa
   }
   const line = watched.slice(0, watched.indexOf("\n"));
   assert.ok([STATUS_OFF.replace("fan auto", "fan low"), STATUS_OFF.replace("fan auto", "fan high")].includes(line), line);
+});
+
+test("the Effect command line writes the help of a command and the command list of a shared prefix", async () => {
+  await assertHelp((...args) => run(cliPath, ...args));
 });

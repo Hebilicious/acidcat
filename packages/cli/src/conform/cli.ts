@@ -192,10 +192,67 @@ export async function checkCli(command: readonly string[], options: { readonly d
       expectEqual(rest.join(" "), kind === "event" ? EVENT_USAGES[id] : USAGES[id], `usage of ${id} after the name of the program`);
     }
   });
+  await checkHelp(checks, command);
   await checkAliases(checks, command);
   await checkWatch(checks, command);
 
   return checks;
+}
+
+async function checkHelp(checks: Checks, command: readonly string[]): Promise<void> {
+  const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
+  const listed = async (signal: AbortSignal) => entriesOf((await run(signal, "list")).stdout);
+  const entry = (entries: readonly Entry[], id: string) => {
+    const found = entries.find((each) => each.id === id);
+    if (found === undefined || typeof found.usage !== "string" || typeof found.description !== "string") throw new Error(`list must give ${id} with its usage and its description`);
+    return { usage: found.usage, description: found.description, aliases: isArrayOf(found.aliases, (alias) => typeof alias === "string") ? found.aliases : [] };
+  };
+  const expectHelp = (result: Run, usage: string, description: string) => {
+    expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
+    expectEqual(result.stdout, `Usage: ${usage}\n\n${description}\n`, "standard output");
+    expectEqual(result.stderr, "", "standard error");
+  };
+  const commandList = (entries: readonly Entry[], prefix: string) =>
+    ["Commands:", ...entries.filter((each) => each.kind === "capability" && each.id.startsWith(`${prefix}.`)).map((each) => `  ${String(each.usage)}`), ""].join("\n");
+
+  await checks.run("--help after the path of a command writes the help of the capability", `${RULE}#commands`, async (signal) => {
+    const entries = await listed(signal);
+    for (const id of ["fixture.echo", "fixture.raw", "fixture.switch.set"]) {
+      const { usage, description } = entry(entries, id);
+      expectHelp(await run(signal, ...id.split("."), "--help"), usage, description);
+    }
+    const { usage, description } = entry(entries, "fixture.echo");
+    expectHelp(await run(signal, "fixture", "echo", "--text", "hello", "--help"), usage, description);
+  });
+  await checks.run("--help after the name of an alias writes the help of the alias", ALIASES, async (signal) => {
+    const entries = await listed(signal);
+    for (const [name, id] of [["say", "fixture.echo"], ["ticks", "fixture.ticks"]] as const) {
+      const { aliases, description } = entry(entries, id);
+      const usage = aliases.find((each) => each.split(" ")[1] === name);
+      expect(usage !== undefined, `list must give the usage of the alias ${name} of ${id}`);
+      expectHelp(await run(signal, name, "--help"), usage ?? "", description);
+    }
+  });
+  await checks.run("--help after watch and the id of an event writes the help of the event", `${RULE}#events`, async (signal) => {
+    const { usage, description } = entry(await listed(signal), "fixture.ticks");
+    expectHelp(await run(signal, "watch", "fixture.ticks", "--help"), usage, description);
+  });
+  await checks.run("--help after a shared prefix writes its command list to standard output", `${RULE}#commands`, async (signal) => {
+    const entries = await listed(signal);
+    for (const prefix of ["fixture.switch", "fixture"]) {
+      const result = await run(signal, ...prefix.split("."), "--help");
+      expectEqual(result.code, 0, `exit code, with standard error ${JSON.stringify(result.stderr)}`);
+      expectEqual(result.stdout, commandList(entries, prefix), `standard output of ${prefix.replace(".", " ")} --help`);
+      expectEqual(result.stderr, "", "standard error");
+    }
+  });
+  await checks.run("a shared prefix alone writes its command list to standard error with exit code 2", `${RULE}#commands`, async (signal) => {
+    const entries = await listed(signal);
+    const result = await run(signal, "fixture", "switch");
+    expectEqual(result.code, 2, "exit code");
+    expectEqual(result.stdout, "", "standard output");
+    expectEqual(result.stderr, commandList(entries, "fixture.switch"), "standard error");
+  });
 }
 
 async function checkAliases(checks: Checks, command: readonly string[]): Promise<void> {

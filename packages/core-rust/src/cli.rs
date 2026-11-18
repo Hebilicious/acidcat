@@ -638,6 +638,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
             .get("input")
             .map(|input| cli_input_schema(input, &types))
     };
+    let usage_of = |id: &str| usage(&options.name, id, schema_of(&capability(id)).as_ref());
     let alias_usage_of =
         |alias: &Alias| alias_usage(&options.name, alias, alias_input(&view, alias).as_ref());
     let alias_usages = |kind: AliasKind, id: &str| -> Vec<String> {
@@ -760,10 +761,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                         entry.get("description").cloned().unwrap_or(Value::Null),
                     );
                     item.extend(available.members());
-                    item.insert(
-                        "usage".into(),
-                        json!(usage(&options.name, id, schema_of(&entry).as_ref())),
-                    );
+                    item.insert("usage".into(), json!(usage_of(id)));
                     let usages = alias_usages(AliasKind::Capability, id);
                     if !usages.is_empty() {
                         item.insert("aliases".into(), json!(usages));
@@ -892,29 +890,39 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                     })
                     .max_by_key(|(_, path)| path.len());
                 let Some((id, path)) = found else {
-                    let words: Vec<&str> = args
+                    let first_flag = args
                         .iter()
-                        .map(String::as_str)
-                        .filter(|arg| !arg.starts_with('-'))
-                        .collect();
-                    return Err(usage_error(
-                        format!("There is no command {}.", words.join(" ")),
-                        exit::UNKNOWN_CAPABILITY,
-                    ));
+                        .position(|arg| arg.starts_with('-'))
+                        .unwrap_or(args.len());
+                    let (prefix, rest) = args.split_at(first_flag);
+                    let list = command_list(
+                        prefix,
+                        commands.iter().map(|(id, path)| (path, usage_of(id))),
+                    );
+                    if let Some(list) = &list
+                        && is_help(rest)
+                    {
+                        (io.stdout)(list);
+                        return Ok(exit::VALUE);
+                    }
+                    let message = match list {
+                        Some(list) if rest.is_empty() => list,
+                        _ => {
+                            let words: Vec<&str> = args
+                                .iter()
+                                .map(String::as_str)
+                                .filter(|arg| !arg.starts_with('-'))
+                                .collect();
+                            format!("There is no command {}.", words.join(" "))
+                        }
+                    };
+                    return Err(usage_error(message, exit::UNKNOWN_CAPABILITY));
                 };
                 let entry = capability(id);
                 let schema = schema_of(&entry).unwrap_or_else(|| json!({ "type": "object" }));
                 let flags = &args[path.len()..];
-                if flags.iter().any(|flag| flag == "--help" || flag == "-h") {
-                    let description = entry
-                        .get("description")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default();
-                    let words: Vec<String> = std::iter::once(options.name.clone())
-                        .chain(path.iter().cloned())
-                        .chain(cli_flags(&schema))
-                        .collect();
-                    (io.stdout)(&format!("Usage: {}\n\n{description}", words.join(" ")));
+                if is_help(flags) {
+                    (io.stdout)(&help(&usage_of(id), description_of(&entry)));
                     return Ok(exit::VALUE);
                 }
                 let input = parse_flags(flags, &schema)?;
@@ -945,13 +953,9 @@ async fn run_alias<C: Send + Sync + 'static>(
         .cloned()
         .unwrap_or_default();
     let schema = alias_input(view, alias);
-    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
-        let description = entry
-            .get("description")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+    if is_help(args) {
         let usage = alias_usage(program, alias, schema.as_ref());
-        (io.stdout)(&format!("Usage: {usage}\n\n{description}"));
+        (io.stdout)(&help(&usage, description_of(&entry)));
         return Ok(exit::VALUE);
     }
     let schema = schema.unwrap_or_else(no_flags);
@@ -1043,15 +1047,9 @@ async fn watch<C: Send + Sync + 'static>(
             event.get("input").unwrap_or(&json!({ "type": "object" })),
             types,
         );
-        if flags.iter().any(|flag| flag == "--help" || flag == "-h") {
-            let description = event
-                .get("description")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            (io.stdout)(&format!(
-                "Usage: {}\n\n{description}",
-                event_usage(program, id, event.get("input").map(|_| &schema))
-            ));
+        if is_help(flags) {
+            let usage = event_usage(program, id, event.get("input").map(|_| &schema));
+            (io.stdout)(&help(&usage, description_of(event)));
             return Ok(exit::VALUE);
         }
         if schema.get("properties").is_some() {
@@ -1383,6 +1381,40 @@ fn cli_flags(input: &Value) -> Vec<String> {
             }
         })
         .collect()
+}
+
+fn is_help(args: &[String]) -> bool {
+    args.iter().any(|arg| arg == "--help" || arg == "-h")
+}
+
+fn description_of(entry: &Value) -> &str {
+    entry
+        .get("description")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+}
+
+fn help(usage: &str, description: &str) -> String {
+    format!("Usage: {usage}\n\n{description}")
+}
+
+fn command_list<'a>(
+    prefix: &[String],
+    capabilities: impl Iterator<Item = (&'a Vec<String>, String)>,
+) -> Option<String> {
+    let lines: Vec<String> = capabilities
+        .filter(|(path, _)| path.len() > prefix.len() && path.starts_with(prefix))
+        .map(|(_, usage)| format!("  {usage}"))
+        .collect();
+    if prefix.is_empty() || lines.is_empty() {
+        return None;
+    }
+    Some(
+        std::iter::once("Commands:".to_owned())
+            .chain(lines)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
 }
 
 fn usage(program: &str, id: &str, input: Option<&Value>) -> String {

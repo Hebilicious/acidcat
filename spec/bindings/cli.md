@@ -42,6 +42,21 @@ A protocol binding that serves a view as a command line. The commands come from 
   | Other | `--name <json>` | `[--name <json>]` |
 
   If a property schema or an `items` schema is a `$ref`, use the type that it refers to. A capability with no input schema, or with `"properties": {}`, has no flags. For example, with the program name `aircon`: `aircon power set --on`, `aircon fan set --speed <auto|low|medium|high>`, `aircon schedule set --days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]` and `aircon status get`.
+- **Help.** If an argument after the path of a command is `--help`, the program MUST write the help of the capability to standard output, and the exit code is 0. The program does not call the capability. The **help** of a capability, an alias or an event has three parts, each on its own line:
+
+  1. `Usage: ` and the usage.
+  2. An empty line.
+  3. The description.
+
+  For example: `aircon power set --help` writes `Usage: aircon power set --on`, an empty line, and `Turn the unit on or off.`
+- **Shared prefix.** The **command list** of a shared prefix has the line `Commands:`, then one line for each capability whose path starts with the words of the shared prefix. Each of these lines is two spaces and the usage of the capability. The capabilities are in the order of `list`. For example, `aircon status` has the command list `Commands:`, `  aircon status get` and `  aircon status export --path <string>`.
+
+  | Arguments | Standard output | Standard error | Exit code |
+  | --- | --- | --- | --- |
+  | `<prefix> --help` | The command list | Nothing | 0 |
+  | `<prefix>` | Nothing | The command list | 2 |
+
+  A shared prefix can have one word or more words: `aircon --help` and `aircon status --help` are both the help of a shared prefix, if no capability has the path `aircon` or `aircon status`.
 - **Cancellation.** An interrupt (`SIGINT`) cancels the call. If the call has not ended within a grace period after the interrupt, the program SHOULD exit with code 130. At a second interrupt, it SHOULD exit with code 130 at once.
 
 An application MAY add its own commands and flags. The name of a command of the application is one word. This name MUST NOT be `call`, `list`, `watch`, the name of a different command of the application, the name of an alias, or the first word of the path of a capability. If a name breaks this rule, if two commands have the same path, or if two flags have the same name, the program MUST stop with an error when it starts.
@@ -83,7 +98,7 @@ An alias can also have members whose names start with `x-`. A program ignores th
 
 - **Target.** A target that has `options.cli` MUST have the binding `cli`.
 - **Names.** A **command alias** has a name that is one word. A **flag alias** has a name that is `--` and one word. Each word matches `[a-z][a-z0-9]*(-[a-z0-9]+)*`. The name of a command alias MUST NOT be `call`, `list`, `watch`, the name of a command of the application, or the first word of the path of a capability. The name of a flag alias MUST NOT be `--help`, `--version`, or the name of a different flag of the program, for example a flag that the application adds.
-- **Call.** The name of an alias is the first argument: `aircon status`, `aircon --on`. The flags come after the name, with the rules of [Commands](#commands). The flags come from the properties of the input schema that are not in the fixed input. A property in the fixed input is not a flag: a flag with its name is not valid. The input is the fixed input with the properties of the flags. The provider validates this input, fixed input included, as it validates the input of each call or subscription. `<name> --help` writes the usage of the alias.
+- **Call.** The name of an alias is the first argument: `aircon status`, `aircon --on`. The flags come after the name, with the rules of [Commands](#commands). The flags come from the properties of the input schema that are not in the fixed input. A property in the fixed input is not a flag: a flag with its name is not valid. The input is the fixed input with the properties of the flags. The provider validates this input, fixed input included, as it validates the input of each call or subscription. If an argument after the name is `--help`, the program MUST write the [help](#commands) of the alias to standard output, with the usage of the alias, and the exit code is 0.
 - **Capability.** An alias of a capability makes the same call as the command of the capability, with the outcomes of [Outcomes](#outcomes).
 - **Event.** An alias of an event subscribes as `watch` does, with the same ends and exit codes: `aircon follow` is `aircon watch aircon.status.changed`. It also takes `--cursor` and `--max-age-ms`, as in [Events](#events).
 - **No input.** If the capability or the event has no input schema, the alias has no flags from the input, and takes no other argument.
@@ -99,6 +114,7 @@ If an alias breaks a rule of this section, the program MUST stop with an error w
 - **Input.** If the input schema of the event has a top-level `properties` member, each property is a flag, with the rules of [Commands](#commands): `aircon watch aircon.status.changed --room kitchen`. If not, `watch <id> [input]` takes the input as JSON text. The default input is `{}`.
 - **Cursor.** `--cursor <cursor>` gives the cursor, and `--max-age-ms <integer>` gives `maxAgeMs`. Each occurrence on standard output has its cursor, so a script can keep the last cursor, and resume with it after the program stops. These two flags are not properties of the input. If the input schema of an event has a top-level property `cursor` or `max-age-ms`, the program MUST stop with an error when it starts.
 - **Usage.** The `usage` of an event is the name of the program, `watch`, the id, the flags as for a capability, and then `[--cursor <string>] [--max-age-ms <integer>]`. If the input schema has no top-level `properties` member, it is the name of the program, `watch <id> '<json>'`, and the same two flags.
+- **Help.** If an argument after `watch <id>` is `--help`, and the event is in the view, the program MUST write the [help](#commands) of the event to standard output, with the usage of the event, and the exit code is 0. The program does not subscribe.
 - **Occurrences.** Each occurrence goes to standard output as its JSON on one line, as soon as it comes.
 - **Cancellation.** An interrupt (`SIGINT`) cancels the subscription. If the subscription has not ended within a grace period after the interrupt, the program SHOULD exit with code 130, and write nothing to standard error. At a second interrupt, it SHOULD exit in the same way at once.
 

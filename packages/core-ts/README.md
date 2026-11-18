@@ -326,9 +326,11 @@ node cli.ts aircon schedule set --days mon --days fri --hours 7 --hours 18   # {
 node cli.ts aircon schedule set --days '["mon","fri"]' --hours '[7,18]'      # the same input, as JSON text
 node cli.ts aircon schedule set --days '[]'                                   # an empty array
 node cli.ts list                                                             # the usage of each command
+node cli.ts aircon power set --help                                          # Usage: aircon aircon power set --on, then the description
+node cli.ts aircon status --help                                             # Commands:, then the usage of each command under aircon status
 ```
 
-`list` gives a usage line for each capability, then for each event. Each item has `kind`: `"capability"` or `"event"`. The usage of a repeated flag ends with `...`, for example `--days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]`. See the [CLI binding](../../spec/bindings/cli.md#commands) for all the rules.
+`list` gives a usage line for each capability, then for each event. Each item has `kind`: `"capability"` or `"event"`. The usage of a repeated flag ends with `...`, for example `--days <mon|tue|wed|thu|fri|sat|sun>... [--hours <integer>...]`. `--help` after the path of a command writes `Usage: ` and its usage, an empty line, and its description, as `<alias> --help` and `watch <id> --help` do for an alias and an event. `--help` after a shared prefix writes `Commands:` and the usage of each command under it, in the order of `list`. A shared prefix alone writes the same list to standard error, with exit code 2. See the [CLI binding](../../spec/bindings/cli.md#commands) for all the rules.
 
 `watch <id>` subscribes to an event. The flags come from the input schema, with the same rules as for a capability. If the input schema has no top-level `properties` member, `watch <id> '<json>'` takes the input as JSON text. Each occurrence goes to standard output as JSON on one line, with its cursor. The exit code is 0 when the subscription is complete, 130 after an interrupt (`SIGINT`), and 5 after `internal`, with `{ "kind", "message" }` on standard error. A failure before the first occurrence has the exit code of a call.
 

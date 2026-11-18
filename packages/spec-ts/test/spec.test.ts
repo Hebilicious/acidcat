@@ -23,6 +23,8 @@ import {
   cliExitCode,
   cliJsonArray,
   cliUsage,
+  cliCommandList,
+  cliHelp,
   cliAliases,
   cliAliasSchema,
   cliAliasInput,
@@ -86,6 +88,20 @@ test("the usage of a command gives its flags, required flags first", () => {
   assert.equal(cliUsage("aircon", "aircon.status.get", undefined), "aircon aircon status get");
   assert.equal(cliUsage("aircon", "aircon.status.get", { type: "object", properties: {} }), "aircon aircon status get");
   assert.equal(cliUsage("aircon", "aircon.batch.run", { oneOf: [{ type: "object" }] }), "aircon call aircon.batch.run '<json>'");
+});
+
+test("the help of a command, and the command list of a shared prefix, in the order of the capabilities", () => {
+  assert.equal(cliHelp("aircon aircon power set --on", "Turn the unit on or off."), "Usage: aircon aircon power set --on\n\nTurn the unit on or off.");
+  const capabilities = [
+    { id: "aircon.status.get", usage: "aircon aircon status get" },
+    { id: "aircon.power.set", usage: "aircon aircon power set --on" },
+    { id: "aircon.status.export", usage: "aircon aircon status export --path <string>" },
+  ];
+  assert.equal(cliCommandList(["aircon", "status"], capabilities), "Commands:\n  aircon aircon status get\n  aircon aircon status export --path <string>");
+  assert.equal(cliCommandList(["aircon"], capabilities), "Commands:\n  aircon aircon status get\n  aircon aircon power set --on\n  aircon aircon status export --path <string>");
+  assert.equal(cliCommandList(["aircon", "power", "set"], capabilities), undefined);
+  assert.equal(cliCommandList(["aircon", "fan"], capabilities), undefined);
+  assert.equal(cliCommandList([], capabilities), undefined);
 });
 
 test("each outcome has its exit code, status code and MCP result", () => {

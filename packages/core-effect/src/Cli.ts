@@ -7,8 +7,10 @@ import {
   cliAliasFlagNames,
   cliAliasInput,
   cliAliasUsage,
+  cliCommandList,
   cliEventUsage,
   cliExitCode,
+  cliHelp,
   cliInputSchema,
   cliJsonArray,
   cliRepeatedItems,
@@ -131,6 +133,12 @@ interface AliasEntry {
   readonly flags: readonly string[];
 }
 
+/**
+ * The help of a capability or an event, or the command list of a shared prefix (spec/bindings/cli.md#commands). The
+ * help formatter writes it in place of the help of `effect/cli`.
+ */
+const HelpText = Context.Reference<string | undefined>("@acid-cat/core-effect/Cli/HelpText", { defaultValue: () => undefined });
+
 const Aliases = Context.Reference<ReadonlyArray<AliasEntry>>("@acid-cat/core-effect/Cli/Aliases", { defaultValue: () => [] });
 
 /**
@@ -193,7 +201,7 @@ const usageErrorsOnStderr: CliOutput.Presenter = {
             if (usage === undefined) return yield* CliOutput.defaultPresenter.present(event);
             const formatter = yield* CliOutput.Formatter;
             yield* Console.error(formatter.formatHelpDoc(event.helpDoc));
-            yield* Console.error(usage.message);
+            if (Context.get(event.helpDoc.annotations, HelpText) === undefined) yield* Console.error(usage.message);
           })
         : CliOutput.defaultPresenter.present(event),
 };
@@ -244,7 +252,7 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
       return yield* Effect.die(new Error(`The default alias ${fallback.name} has the flag --${shadowed}, which is a flag of the command line.`));
     }
     const runAlias = (alias: AliasEntry, rest: readonly string[]) =>
-      rest.includes("--help") || rest.includes("-h") ? Console.log(`Usage: ${alias.usage}\n\n${alias.description}`) : runWith([aliasWord(alias.name), ...rest]);
+      rest.includes("--help") || rest.includes("-h") ? Console.log(cliHelp(alias.usage, alias.description)) : runWith([aliasWord(alias.name), ...rest]);
     const [first, ...rest] = args;
     const named = aliases.find(({ name }) => name === first);
     if (named !== undefined) return yield* runAlias(named, rest);
@@ -279,7 +287,7 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
     Effect.updateService(
       CliOutput.Formatter,
       (formatter): CliOutput.Formatter => ({
-        formatHelpDoc: (doc) => withOutputFlags(withAliases(formatter.formatHelpDoc(withoutClaimedAliases(doc, claimed)), doc), doc),
+        formatHelpDoc: (doc) => Context.get(doc.annotations, HelpText) ?? withOutputFlags(withAliases(formatter.formatHelpDoc(withoutClaimedAliases(doc, claimed)), doc), doc),
         formatCliError: (error) => formatter.formatCliError(error),
         formatError: (error) => formatter.formatError(error),
         formatVersion: (name, version) => formatter.formatVersion(name, version),
@@ -406,6 +414,9 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     );
   };
 
+  const usageOf = (id: string, input: JsonObject | undefined) => cliUsage(options.name, id, input === undefined ? undefined : cliInputSchema(input, types));
+  const usages = Object.entries(catalogView.capabilities).map(([id, capability]) => ({ id, usage: usageOf(id, capability.input) }));
+
   const leaves = Object.entries(catalogView.capabilities).map(([id, capability]) => {
     const flags = flagsOf(capability.input);
     const path = commandPath(id);
@@ -413,6 +424,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     if (name === undefined) throw new Error(`The capability id ${id} has no words.`);
     const leaf: AppCommand<R> = Command.make(name, flags, (parsed: Record<string, unknown>) => invoke(id, inputFrom(parsed))).pipe(
       Command.withDescription(capability.description),
+      Command.annotate(HelpText, cliHelp(usageOf(id, capability.input), capability.description)),
     );
     return { path, leaf };
   });
@@ -471,15 +483,14 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
         }
         const entries = [];
         for (const [index, [id, capability]] of capabilities.entries()) {
-          const usage = cliUsage(options.name, id, capability.input === undefined ? undefined : cliInputSchema(capability.input, types));
-          const usages = aliasUsages("capability", id);
+          const aliases = aliasUsages("capability", id);
           entries.push({
             kind: "capability",
             id,
             description: capability.description,
             ...availability.success[index],
-            usage,
-            ...(usages.length > 0 ? { aliases: usages } : {}),
+            usage: usageOf(id, capability.input),
+            ...(aliases.length > 0 ? { aliases } : {}),
           });
         }
         for (const [id, event] of Object.entries(catalogView.events ?? {})) {
@@ -550,7 +561,8 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     for (const name of CLI_RESUME_FLAGS) {
       if (name in properties) throw new Error(filled(MESSAGES.resumeProperty, { id, flag: name }));
     }
-    return followCommand(id, id, schema, undefined, (made) => made.pipe(Command.withDescription(event.description)));
+    const help = cliHelp(cliEventUsage(options.name, id, schema), event.description);
+    return followCommand(id, id, schema, undefined, (made) => made.pipe(Command.withDescription(event.description), Command.annotate(HelpText, help)));
   });
   const watch = Command.make("watch").pipe(
     Command.withDescription(
@@ -610,7 +622,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
 
   return Command.make(options.name).pipe(
     Command.withDescription(options.description ?? app.description ?? app.title ?? options.name),
-    Command.withSubcommands([call, list, watch, ...group(leaves, []), ...aliasCommands.map(({ subcommand }) => subcommand), ...(options.commands ?? [])]),
+    Command.withSubcommands([call, list, watch, ...group(leaves, [], usages), ...aliasCommands.map(({ subcommand }) => subcommand), ...(options.commands ?? [])]),
     Command.annotate(
       Aliases,
       aliasCommands.map(({ entry }) => entry),
@@ -643,7 +655,7 @@ interface Leaf<R> {
   readonly leaf: AppCommand<R>;
 }
 
-function group<R>(leaves: readonly Leaf<R>[], prefix: readonly string[]): AppCommand<R>[] {
+function group<R>(leaves: readonly Leaf<R>[], prefix: readonly string[], usages: readonly { readonly id: string; readonly usage: string }[]): AppCommand<R>[] {
   const commands: AppCommand<R>[] = [];
   const byWord = new Map<string, Leaf<R>[]>();
   for (const entry of leaves) {
@@ -657,10 +669,12 @@ function group<R>(leaves: readonly Leaf<R>[], prefix: readonly string[]): AppCom
     byWord.set(word, children);
   }
   for (const [word, children] of byWord) {
+    const path = [...prefix, word];
     commands.push(
       Command.make(word).pipe(
-        Command.withDescription(`The ${[...prefix, word].join(".")} capabilities.`),
-        Command.withSubcommands(group(children, [...prefix, word])),
+        Command.withDescription(`The ${path.join(".")} capabilities.`),
+        Command.withSubcommands(group(children, path, usages)),
+        Command.annotate(HelpText, cliCommandList(path, usages)),
       ),
     );
   }
