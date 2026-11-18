@@ -46,7 +46,7 @@ export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Con
     if ("rejection" in body) return rejection(body.rejection);
 
     const url = new URL(request.url);
-    const path = url.pathname.slice((options.base ?? "").length);
+    const path = pathUnder(url.pathname, options.base ?? "");
     const opened = await openContext<Context>(options, request);
     if ("refusal" in opened) return refusalResponse(opened.refusal);
     const session = createSession(app, {
@@ -69,7 +69,7 @@ export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Con
       }
       if (request.method === "GET" && path === "/events") return json(200, [...session.eventHandles.keys()].map((id) => ({ id })));
       if (request.method === "GET" && path === "/catalog" && options.serveCatalog !== false) return json(200, session.view);
-      const route = request.method === "POST" ? postRoute(path) : undefined;
+      const route = request.method === "POST" && path !== undefined ? postRoute(path) : undefined;
       if (route === undefined) return json(404, callFailure("unknown-capability", "There is no such route."));
 
       const id = decodedId(route.id);
@@ -92,6 +92,11 @@ export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Con
       if (!streamOwnsClose) await close();
     }
   };
+}
+
+function pathUnder(pathname: string, base: string): string | undefined {
+  if (pathname !== base && !pathname.startsWith(`${base}/`)) return undefined;
+  return pathname.slice(base.length);
 }
 
 function postRoute(path: string): { readonly kind: "capability" | "event"; readonly id: string } | undefined {
