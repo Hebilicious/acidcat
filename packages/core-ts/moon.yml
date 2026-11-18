@@ -23,6 +23,8 @@ tasks:
     args: ["--test", "--test-timeout=60000", "test/"]
     env:
       NODE_COMPILE_CACHE: "node_modules/.cache/node-compile-cache"
+    options:
+      mutex: "node-test-processes"
     inputs: ["src/**/*.ts", "test/**/*.ts", "test/fixtures/*.json", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/cli/src/**/*.ts", "/packages/cli/conformance/*.acidcat.json"]
 
   typecheck:

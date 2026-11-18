@@ -40,6 +40,8 @@ tasks:
     args: ["--test", "--test-timeout=60000", "test/"]
     env:
       NODE_COMPILE_CACHE: "node_modules/.cache/node-compile-cache"
+    options:
+      mutex: "node-test-processes"
     inputs:
       - "catalog/**/*"
       - "core-ts/**/*.ts"
