@@ -62,6 +62,11 @@ test("the unit works through a session, and a handle gives the state as copies, 
   const invalid = await session.invoke("aircon.temperature.set", { celsius: 40 });
   assert.ok("kind" in invalid, "a temperature outside 16 to 31 is a call failure");
   assert.equal(invalid.kind, "invalid-input");
+  assert.deepEqual(await session.invoke("aircon.schedule.set", { days: ["sat"] }), { ok: true, value: { days: ["sat"], hours: [7] } }, "the default hour is 7");
+  for (const input of [{ days: ["noon"] }, { days: ["mon"], hours: [24] }]) {
+    const outside = await session.invoke("aircon.schedule.set", input);
+    assert.equal("kind" in outside && outside.kind, "invalid-input", JSON.stringify(input));
+  }
 });
 
 async function cli(unit: Unit, ...args: string[]): Promise<{ readonly code: number; readonly stdout: string }> {

@@ -43,6 +43,11 @@ test("the unit works through a session", () =>
         assert.deepEqual(yield* session.invoke("aircon.mode.set", { mode: "heat" }), { ok: true, value: null });
         const invalid = yield* session.invoke("aircon.temperature.set", { celsius: 40 });
         assert.equal("kind" in invalid && invalid.kind, "invalid-input");
+        assert.deepEqual(yield* session.invoke("aircon.schedule.set", { days: ["sat"] }), { ok: true, value: { days: ["sat"], hours: [7] } }, "the default hour is 7");
+        for (const input of [{ days: ["noon"] }, { days: ["mon"], hours: [24] }]) {
+          const outside = yield* session.invoke("aircon.schedule.set", input);
+          assert.equal("kind" in outside && outside.kind, "invalid-input", JSON.stringify(input));
+        }
       }),
     ).pipe(Effect.provide(Layer.fresh(unitLayer))),
   ));

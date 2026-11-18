@@ -563,6 +563,25 @@ mod tests {
             panic!("a temperature outside 16 to 31 is a call failure");
         };
         assert_eq!(invalid.kind, acid_cat_core::Kind::InvalidInput);
+        assert_eq!(
+            session
+                .invoke("aircon.schedule.set", json!({ "days": ["sat"] }), &cancel)
+                .await,
+            Outcome::Value(json!({ "days": ["sat"], "hours": [7] })),
+            "the default hour is 7"
+        );
+        for input in [
+            json!({ "days": ["noon"] }),
+            json!({ "days": ["mon"], "hours": [24] }),
+        ] {
+            let outcome = session
+                .invoke("aircon.schedule.set", input.clone(), &cancel)
+                .await;
+            assert!(
+                matches!(&outcome, Outcome::CallFailure(failure) if failure.kind == acid_cat_core::Kind::InvalidInput),
+                "{input}: {outcome:?}"
+            );
+        }
         unit.set_online(false);
         assert_eq!(
             session
