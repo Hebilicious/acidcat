@@ -84,7 +84,9 @@ fn caller(
                     alive: alive.clone(),
                 })
             }
-            None => Err(Refusal::new(401, "Give a token.").header("WWW-Authenticate", "Bearer")),
+            None => Err(Refusal::new(401, "Give a token.")
+                .header("WWW-Authenticate", "Bearer")
+                .header("Content-Type", "text/plain")),
         })
     }
 }
@@ -137,6 +139,8 @@ async fn through_http_the_capability_gets_the_caller_of_the_request_and_the_targ
 
     let refused = binding.handle(request(None)).await;
     assert_eq!(refused.headers()["www-authenticate"], "Bearer");
+    let types: Vec<_> = refused.headers().get_all("content-type").iter().collect();
+    assert_eq!(types, ["application/json"]);
     let (status, body) = answer(refused).await;
     assert_eq!(status, 401);
     assert_eq!(body, json!({ "message": "Give a token." }));
@@ -181,32 +185,11 @@ async fn through_mcp_the_capability_gets_the_caller_of_the_request_and_the_targe
 
     let refused = binding.handle(request(None)).await;
     assert_eq!(refused.headers()["www-authenticate"], "Bearer");
+    let types: Vec<_> = refused.headers().get_all("content-type").iter().collect();
+    assert_eq!(types, ["application/json"]);
     let (status, body) = answer(refused).await;
     assert_eq!(status, 401);
     assert_eq!(body, json!({ "message": "Give a token." }));
-}
-
-#[tokio::test]
-async fn a_refusal_answers_with_one_media_type_application_json() {
-    let binding = HttpBinding::with_request_context(
-        app(),
-        |_: &http::request::Parts| {
-            std::future::ready(Err::<Caller, _>(
-                Refusal::new(403, "No.").header("Content-Type", "text/plain"),
-            ))
-        },
-        HttpOptions::default(),
-    );
-    let refused = binding
-        .handle(request_body(
-            post("/capabilities/who.get", None)
-                .body(Full::new(bytes::Bytes::from("{}")))
-                .expect("a request"),
-        ))
-        .await;
-    let types: Vec<_> = refused.headers().get_all("content-type").iter().collect();
-    assert_eq!(types, ["application/json"]);
-    assert_eq!(answer(refused).await.0, 403);
 }
 
 #[test]

@@ -7,6 +7,7 @@ mod fixture_program;
 mod fixture_settings;
 
 use acid_cat_core::cli::{INTERRUPT_GRACE, exit};
+use serde_json::{Map, Value, json};
 
 use fixture_program::fixture;
 use fixture_settings::{POLL_BUFFER, POLL_LEASE_MS, WEBHOOK_MAX_SUBSCRIPTIONS, WEBHOOK_MIN_TTL_MS};
@@ -68,15 +69,14 @@ fn assert_conforms(args: &[&str], minimum: usize) {
         .current_dir(repository())
         .output()
         .expect("pnpm runs acid-cat conform");
-    let report: serde_json::Value =
-        serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
-            panic!(
-                "conform writes no JSON report ({error}):\n{}\n{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            )
-        });
-    let problems: Vec<&serde_json::Value> = report["checks"]
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+        panic!(
+            "conform writes no JSON report ({error}):\n{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
+    });
+    let problems: Vec<&Value> = report["checks"]
         .as_array()
         .expect("the report has checks")
         .iter()
@@ -307,8 +307,44 @@ fn through_the_command_line_that_calls_a_server() {
     assert_conforms(&["--cli", &command], 20);
 }
 
+fn shape(catalog: &Value) -> Value {
+    let mark = |items: &Value, schemas: &[&str]| -> Value {
+        let items = items.as_object().expect("a map of items");
+        items
+            .iter()
+            .map(|(id, item)| {
+                let members = item.as_object().expect("an item is an object");
+                let members: Map<String, Value> = members
+                    .iter()
+                    .map(|(key, value)| {
+                        let value = if schemas.contains(&key.as_str()) {
+                            Value::Bool(true)
+                        } else if key == "failures" {
+                            let tags = value.as_object().expect("a map of failures");
+                            tags.keys()
+                                .map(|tag| (tag.clone(), Value::Bool(true)))
+                                .collect()
+                        } else {
+                            value.clone()
+                        };
+                        (key.clone(), value)
+                    })
+                    .collect();
+                (id.clone(), Value::Object(members))
+            })
+            .collect()
+    };
+    json!({
+        "acidcat": catalog["acidcat"],
+        "description": catalog["description"],
+        "targets": catalog["targets"],
+        "capabilities": mark(&catalog["capabilities"], &["input", "output", "state"]),
+        "events": mark(&catalog["events"], &["input", "payload"]),
+    })
+}
+
 #[test]
-fn the_fixture_writes_a_catalog_that_conforms() {
+fn the_fixture_writes_a_catalog_that_conforms_and_agrees_with_the_catalog_of_conform() {
     let output = Command::new(fixture())
         .arg("catalog")
         .output()
@@ -325,8 +361,21 @@ fn the_fixture_writes_a_catalog_that_conforms() {
         .output()
         .expect("pnpm runs acid-cat check");
     let _ = std::fs::remove_file(&file);
-    let report: serde_json::Value =
+    let report: Value =
         serde_json::from_slice(&check.stdout).expect("acid-cat check writes a JSON report");
     assert!(check.status.success(), "acid-cat check: {report:#}");
     assert_eq!(report["conforms"], true, "acid-cat check: {report:#}");
+
+    let catalog: Value = serde_json::from_slice(&output.stdout).expect("the catalog is JSON");
+    let conform_catalog: Value = serde_json::from_str(
+        &std::fs::read_to_string(
+            repository().join("packages/cli/conformance/fixture.acidcat.json"),
+        )
+        .expect("the catalog of conform"),
+    )
+    .expect("the catalog of conform is JSON");
+    assert_eq!(shape(&catalog), shape(&conform_catalog));
+    let input = &catalog["capabilities"]["fixture.note"]["input"];
+    assert_eq!(input["$ref"], json!("#/$defs/Note"));
+    assert_eq!(input["description"], json!("The note."));
 }
