@@ -1,28 +1,50 @@
 # @acid-cat/spec-ts
 
-The fixed details of the [AcidCat specification](../../spec/README.md), as TypeScript data and pure functions. npm package: `@acid-cat/spec-ts`. It has no dependencies.
+`@acid-cat/spec-ts` holds the fixed details of the [AcidCat specification](../../spec/README.md) as TypeScript data and pure functions. It has no dependencies.
 
-This package is part of the TypeScript reference implementation. [`@acid-cat/core-effect`](../core-effect) and [`@acid-cat/core-ts`](../core-ts) use it, so that both cores agree on each detail. An implementation in another language does not use it.
-
-The constants that each core shares, such as the exit codes, the call failure kinds, the HTTP status of each kind, the reserved flags and the MCP constants, are in `src/facts.generated.ts`. `moon run model:generate` writes this file from [`model/facts.qnt`](../../model/facts.qnt), and writes the same facts into the Rust core. Do not change the file by hand: change the model, and write the file again. `moon run verify` fails when the file is not the output of the model.
+The package is part of the TypeScript reference implementation. [`@acid-cat/core-effect`](../core-effect) and [`@acid-cat/core-ts`](../core-ts) both use it, so the two cores agree on every detail. An implementation in another language does not use it.
 
 ```sh
 pnpm add @acid-cat/spec-ts
 ```
 
-## Contents
+```ts
+import { callFailure, fail, isCallFailure, ok } from "@acid-cat/spec-ts";
+
+const outcomes = [ok({ power: true }), fail({ _tag: "Offline" }), callFailure("unavailable", "The unit does not answer.")];
+
+for (const outcome of outcomes) {
+  if (isCallFailure(outcome)) console.log(`call failure: ${outcome.kind}`);
+  else if (outcome.ok) console.log("value", outcome.value);
+  else console.log("failure", outcome.error._tag);
+}
+```
+
+## Exports
 
 | Export | Use |
 | --- | --- |
 | `ok`, `fail`, `callFailure`, `isCallFailure` | Make and test [outcomes](../../spec/invocation.md#outcomes). `fail` takes the whole failure: `fail({ _tag: "Offline", since })` |
-| `isJsonObject` | Tell if a value is a JSON object: not `null`, and not an array |
-| `CALL_FAILURE_KINDS`, `CallFailureError` | The kinds of call failure, and the JavaScript error for one |
+| `isJsonObject` | Tell whether a value is a JSON object: not `null` and not an array |
+| `CALL_FAILURE_KINDS`, `CallFailureError` | The call failure kinds, and the JavaScript error for one call failure |
 | `AVAILABLE`, `unavailable` | Make [availability](../../spec/invocation.md#availability) values |
-| `viewOf`, `bundle` | The [view](../../spec/catalog.md#views) of a target, and a schema with its shared types |
-| `resolveType` | The type that the `$ref` of a schema refers to, whatever other keys the schema has |
-| `ownMember` | The member of an object with a key, or `undefined`. Inherited names, such as `constructor`, are not members |
-| `mcpToolAnnotations` | The MCP `annotations` of a capability: `readOnlyHint` from `readOnly`, and `destructiveHint` and `idempotentHint` from `destructive` and `idempotent` when the capability has them. See [Tools](../../spec/bindings/mcp.md#tools) |
-| `cliAliases`, `cliAliasOfArgs`, `cliAliasUsage` | Check the [aliases](../../spec/bindings/cli.md#aliases) of a target, find the alias that the arguments of the command line name, and write the usage of an alias. A command alias has one word or two words, and its name can be a shared prefix but not the path of a command. `cliAliasOfArgs` takes the paths of the commands: arguments that start with the path of a command name no alias, and it gives `{ unknownCommand }` for a word after a prefix default, or after the one-word alias of a group, that names no command and no alias |
-| `byCodePoint` | Order strings by Unicode code point, as the [canonical form](../../spec/catalog.md#canonical-form) sorts keys |
+| `viewOf`, `bundle` | A target's [view](../../spec/catalog.md#views), and a schema together with its shared types |
+| `resolveType` | The type that a schema's `$ref` points to, whatever other keys the schema has |
+| `ownMember` | An object's member for a key, or `undefined`. Inherited names, such as `constructor`, are not members |
+| `mcpToolAnnotations` | A capability's MCP `annotations`: `readOnlyHint` from `readOnly`, plus `destructiveHint` and `idempotentHint` from `destructive` and `idempotent` when the capability has them. See [Tools](../../spec/bindings/mcp.md#tools) |
+| `cliAliases`, `cliAliasOfArgs`, `cliAliasUsage` | Check a target's [aliases](../../spec/bindings/cli.md#aliases), find the alias that the command-line arguments name, and write an alias's usage. See below |
+| `byCodePoint` | Sort strings by Unicode code point, as the [canonical form](../../spec/catalog.md#canonical-form) sorts keys |
 
-The other exports give the names, flags, exit codes and tool shapes of each [binding](../../spec/bindings/README.md).
+The remaining exports give each [binding](../../spec/bindings/README.md)'s names, flags, exit codes and tool shapes.
+
+### Aliases
+
+- A command alias has one or two words. Its name can be a shared prefix, but not a command's path.
+- `cliAliasOfArgs` takes the command paths. Arguments that start with a command's path name no alias.
+- `cliAliasOfArgs` returns `{ unknownCommand }` for a word that names no command and no alias, when the word follows a prefix default or the one-word alias of a group.
+
+## Generated facts
+
+`src/facts.generated.ts` holds the constants that every core shares: the exit codes, the call failure kinds, the HTTP status of each kind, the reserved flags and the MCP constants.
+
+`moon run model:generate` writes this file from [`model/facts.qnt`](../../model/facts.qnt), and writes the same facts into the Rust core. Do not edit the file by hand: change the model and generate again. `moon run verify` fails when the file differs from the model's output.

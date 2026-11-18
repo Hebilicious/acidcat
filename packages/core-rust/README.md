@@ -1,14 +1,12 @@
 # acid-cat-core
 
-The AcidCat core for Rust. crates.io package: `acid-cat-core`.
-
-Serve the capabilities and the events of an application through the [MCP](../../spec/bindings/mcp.md), [HTTP](../../spec/bindings/http.md) and [CLI](../../spec/bindings/cli.md) bindings. The application writes its catalog from its code. The core passes all checks of `acid-cat conform` for these bindings.
+`acid-cat-core` is the AcidCat core for Rust, published on crates.io. It serves your application's capabilities and events through the [MCP](../../spec/bindings/mcp.md), [HTTP](../../spec/bindings/http.md) and [CLI](../../spec/bindings/cli.md) bindings. You declare everything in code, and the core writes the catalog from it. The core passes every `acid-cat conform` check for these three bindings.
 
 ```sh
 cargo add acid-cat-core
 ```
 
-The core uses [Tokio](https://tokio.rs). Types give the schemas: an input, a value, a failure or a payload is a type that derives `serde` and `schemars::JsonSchema`. The core validates each input against its JSON Schema before the work starts, and checks each value, failure and payload against its schema.
+The core runs on [Tokio](https://tokio.rs). Each input, value, failure and payload is a Rust type that derives `serde` and `schemars::JsonSchema`, and the core checks each one against that type's schema.
 
 ## Example
 
@@ -79,92 +77,140 @@ async fn main() {
 }
 ```
 
-The full example is [`examples/fixture.rs`](examples/fixture.rs): the conformance fixture, with each binding.
+[`examples/fixture.rs`](examples/fixture.rs), the conformance fixture, uses every binding.
 
 ## Capabilities
 
-`Capability::new(id, description)` starts a capability. Then:
+`Capability::new(id, description)` starts a capability. Chain these methods:
 
 | Method | Use |
 | --- | --- |
 | `audience([...])` | The targets that can use the capability |
-| `input::<T>()` | The input type. Its schema is the input schema. With no input, the work gets `()` |
-| `output::<T>()` | The type of the value. Its schema is the output schema. With no output, the value is `null`, and the work gives `()` |
+| `input::<T>()` | The input type. Without it, the work gets `()` |
+| `output::<T>()` | The value type. Without it, the work returns `()` and the value is `null` |
 | `failures::<T>()` | An enum with `#[serde(tag = "_tag")]`. Each variant is one failure, and its name is the tag |
-| `read_only()` | A call changes nothing that a client can see |
-| `destructive(bool)` | `true`: a call can delete or overwrite something that a client can see. `false`: a call only adds things |
-| `idempotent(bool)` | `true`: a second call with the same input has no more effect that a client can see |
-| `availability(f)` | A `tokio::sync::watch::Receiver<Availability>` for each session, from the services |
-| `state(f)` | The [state](../../spec/invocation.md#state): a `tokio::sync::watch::Receiver<T>` for each session, from the services. Its type gives the state schema. `Session::state(id)` observes it |
-| `input_schema`, `output_schema`, `failure_schemas` | Give a schema that you write, for example with `serde_json::json!` |
-| `run(f)` | The work: `f(input, call)` gives a future of `Result<value, RunError<failure>>` |
+| `read_only()`, `destructive(bool)`, `idempotent(bool)` | The [hints](../../spec/catalog.md#capabilities) |
+| `availability(f)` | Returns a `watch::Receiver<Availability>` for each session, from the services |
+| `state(f)` | The [state](../../spec/invocation.md#state): returns a `watch::Receiver<T>` for each session. `T` gives the state schema. Read it with `Session::state(id)` |
+| `input_schema`, `output_schema`, `failure_schemas` | Set a schema that you write yourself, for example with `serde_json::json!` |
+| `run(f)` | The work: `f(input, call)` returns a future of `Result<value, RunError<failure>>` |
 
-The work ends in one of three ways:
+The work returns `Ok(value)`, or `fail(failure)` for a failure. An error (through `?` or a `Defect`) or a panic becomes the call failure `internal`, with no internal data in its message. `App::on_defect` records the cause; by default it writes to standard error.
 
-- `Ok(value)`: the value.
-- `fail(failure)`: a failure of the capability.
-- An error, with `?`, a [`Defect`], or a panic: the call failure `internal`. Its message shows no internal data. `App::on_defect` records the cause. The default writes it to standard error.
+On cancellation, the core drops the work's future and cancels `call.cancel_token()`. `call.context()` gives the services, and `call.target()` the session's target, such as `mcp` or `cli`. A subscription has the same two methods.
 
-When a call is cancelled, the core drops the future of the work. `call.cancel_token()` is also cancelled. `call.context()` gives the services, and `call.target()` the target of the session, for example `mcp` or `cli`. A subscription has the same `context()` and `target()`.
-
-An `Option` field that is not required takes the value of its type, not `null`. Add `#[serde(skip_serializing_if = "Option::is_none")]` to the fields of a value. Integers and numbers have no `format` in the catalog.
+An optional `Option` field takes the value of its type, not `null`, so add `#[serde(skip_serializing_if = "Option::is_none")]` to such fields on value types. Integers and numbers have no `format` in the catalog.
 
 ## Events
 
-`Event::new(id, description)` starts an event. `input::<T>()` and `payload::<T>()` give the schemas. `subscribe(f)` gives the provider: `f(input, subscription)` gives a `Stream` of `Result<Emitted<P>, Defect>`.
+`Event::new(id, description)` starts an event. `input::<T>()` and `payload::<T>()` give the schemas. `subscribe(f)` sets the provider: `f(input, subscription)` returns a `Stream` of `Result<Emitted<P>, Defect>`.
 
-- `Emitted::new(data)` is one occurrence. `event_id`, `timestamp`, `cursor` and `truncated` add its other members.
-- The end of the stream ends the subscription as complete. An `Err` item, or a panic, ends it with the call failure `internal`.
-- When the client cancels the subscription, or the session closes, the core drops the stream.
-- `subscription.cursor()` and `subscription.max_age_ms()` tell where to start ([Resuming](../../spec/events.md#resuming)).
+- `Emitted::new(data)` is one occurrence. `event_id`, `timestamp`, `cursor` and `truncated` set its other members.
+- The end of the stream completes the subscription. An `Err` item or a panic ends it with `internal`. The core drops the stream when the subscription is cancelled or the session closes. See [Ending](../../spec/events.md#ending).
+- `subscription.cursor()` and `subscription.max_age_ms()` tell the provider where to [resume](../../spec/events.md#resuming).
 
 ## The application
 
-`App::new()` declares the targets with `target(name, bindings)`, or `target_with(name, Target { .. })` for a target with a description or options, then the capabilities and the events. `build()` checks the application, compiles its schemas and writes its catalog. It gives an `Arc<Application<C>>`, or the rules that the application breaks. A schema with a `title`, or a failure, that the application uses in two or more places becomes a shared type in `$defs`, with its title or its tag as its name. `render_catalog()` gives the catalog in canonical form. Write it to a file in a build step, and check it with `acid-cat check`.
+`App::new()` takes the targets, then the capabilities and events. Declare a target with `target(name, bindings)`, or `target_with(name, Target { .. })` for a description or options.
 
-`Session::open(&app, target, context)` opens a session for code in the same process: `invoke` calls a capability with an input in its JSON form, and `subscribe` follows an event.
+`build()` checks the application and returns an `Arc<Application<C>>`, or the rules that it breaks. A schema with a `title`, or a failure, that appears in more than one place becomes a shared type in `$defs`, named by its title or tag.
+
+`render_catalog()` returns the catalog in canonical form. Write it to a file at build time and run `acid-cat check` on it.
+
+`Session::open(&app, target, context)` opens a session in the same process, with `invoke` and `subscribe`.
 
 ## Bindings
 
 | Binding | Function |
 | --- | --- |
-| MCP through HTTP | `mcp::McpBinding::new(app, context, McpOptions::new(name, version))`. It serves revision `2026-07-28`, and the `initialize` handshake of earlier revisions. Poll delivery is on. Webhook delivery is on with `McpOptions::webhooks`, and the principal of each request comes from `McpOptions::principal` |
+| MCP through HTTP | `mcp::McpBinding::new(app, context, McpOptions::new(name, version))` |
 | MCP through stdio | `mcp::serve_stdio(app, context, McpStdioOptions::new(name, version))` |
 | HTTP | `http::HttpBinding::new(app, context, HttpOptions::default())` |
-| CLI | `cli::cli_main(app, context, CliOptions::new(name, version))`. An interrupt cancels the call or the subscription. If the process has not exited `cli::INTERRUPT_GRACE` (one second) after the interrupt, for example because a capability blocks a thread of the runtime, it exits with 130 and writes nothing more. A second interrupt exits with 130 at once. `cli::run_cli_process` does the same, and gives the exit code in place of the exit. With `CliOptions::remote`, it calls a server: see [A command line for a server](#a-command-line-for-a-server) |
+| CLI | `cli::cli_main(app, context, CliOptions::new(name, version))` |
 
-`--help` after the path of a command writes `Usage: ` and its usage, an empty line, and its description, as `<alias> --help` and `watch <id> --help` do for an alias and an event. `--help` after a shared prefix writes `Commands:` and the usage of each command under it, in the order of `list`. A shared prefix alone, or with arguments that are not `--help` and are not the path of a command, writes the same list to standard error, with exit code 2. See the [CLI binding](../../spec/bindings/cli.md#commands).
+MCP through HTTP also accepts the [`initialize` handshake of earlier revisions](../../spec/bindings/mcp.md#earlier-revisions-through-http). Poll delivery is on. `McpOptions::webhooks` turns on webhook delivery, and `McpOptions::principal` gives the principal of each request.
 
-When the command line breaks a rule of the binding, for example two commands with the same path, `cli_main` and `run_cli_process` write the message to standard error and give the exit code 5 (`internal`).
+### Serving the remote bindings
 
-The command line has the [aliases](../../spec/bindings/cli.md#aliases) of its target. Give them with `App::cli_aliases(target, CliAliases::new()...)`: `.alias(name, &definition)`, `.alias_with(name, &definition, fixed)` for a fixed input, and `.alias_default(name, &definition)` or `.alias_default_with(name, &definition, fixed)` for the default alias. Each takes a `CapabilityDefinition<C, X>` or an `EventDefinition<C, X>`, where `X` is the type of the input, so bind the definition before you give it to `App::capability` or `App::event`. The fixed input is a value of `X`, for example `.alias_with("--on", &power_set, Power { on: true })`. A command alias has one word or two words, for example `.alias("fan", &fan_set)` and `.alias_with("fan high", &fan_set, Fan { speed: FanSpeed::High })`. The command aliases with the same first word are a group. The first two arguments that are the name of a two-word alias run it. If not, the one-word alias runs with the other arguments. A second argument that is a word and not the second word of an alias of the group, such as `fan medium`, is an unknown command with exit code 2. The name of a command alias can be a shared prefix, but not the path of a command: `.alias("aircon power", &power_set)` makes `aircon power --on` call `aircon.power.set`, and `aircon power set --on` stays its command. A word after this prefix default that names no command, such as `aircon power nope`, is an unknown command with exit code 2. A property that serializes to `null`, such as an `Option` that is `None`, is not fixed: it stays a flag of the alias. A required property (not an `Option`) is always fixed, because each value of `X` has it. A definition with no input has `X = NoInput`, a type with no serialized form, so `alias_with` gives a type error for it. To keep definitions with different inputs in one list, call `.untyped()` on each. The catalog writes the aliases in `options.cli` of the target. An alias of a capability calls it, and an alias of an event subscribes to it as `watch` does. With no arguments, or with a first flag that is not a flag alias, the command line runs the default alias. An alias that breaks a rule stops the command line when it starts.
+`McpBinding` and `HttpBinding` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. To use another server, pass each request through `remote::request_body`, then to `handle`.
 
-### The form of the output
+Each request gets its own session. With `new`, requests share one context.
 
-The command line writes JSON for programs. It can also write text for a person: the human form. The human form is off by default. Without `CliOptions::output`, the command line writes JSON only, also on a terminal, and takes no output flag.
+### A context for each request
 
-To turn the human form on, give `CliOptions::output(CliOutput::new()...)`:
+`HttpBinding::with_request_context(app, make, options)` and `McpBinding::with_request_context(app, make, options)` build a context for each request that passes screening. `make` gets the request head and returns a future of `Result<C, Refusal>`. Use it to authenticate callers:
 
-- `.switch(names, form)`: a flag with no value that chooses a form, for example `.switch(["--json"], OutputForm::Json)`.
-- `.values(names, values)`: a flag with a value, and the form of each value, for example `.values(["--format", "-f"], [("text", OutputForm::Human), ("json", OutputForm::Json)])`. It takes `--format text`, `--format=text` and `-f text`. A value that is missing or not known is a usage error with exit code 3: `The option --format must be json or text.`
-- `.default_form(default)`: the form when the arguments give no output flag: `OutputDefault::Json` (the default) or `OutputDefault::Auto`. With `OutputDefault::Json`, the output is JSON unless an output flag chooses the human form.
-- `.formats(formats)`: the formats of the human form (see below).
+```rust,ignore
+let binding = HttpBinding::with_request_context(app, move |parts: &http::request::Parts| {
+    let token = parts.headers.get("authorization").and_then(|value| value.to_str().ok()).map(str::to_owned);
+    let accounts = accounts.clone();
+    async move {
+        match accounts.caller(token.as_deref()).await {
+            Some(caller) => Ok(Services { caller, accounts }),
+            None => Err(Refusal::new(401, "Give a valid token.").header("WWW-Authenticate", "Bearer")),
+        }
+    }
+}, HttpOptions::default());
+```
 
-Each name is `--word` or `-x`, with one letter or digit. The command line ignores a first argument `--`, which package runners such as `pnpm` and `npx` pass to it. An output flag can be anywhere in the arguments, before a later `--`. For a command of the application, an output flag must come before the name of the command: the command gets the arguments after its name unchanged, and `io.form` is the chosen form. When the arguments give more than one, the last one wins. The help lists the output flags under `Output:`. An output flag can have the name `-h`: then `-h` chooses its form, and `--help` writes the help. The command line stops with an error when it starts if the name of an output flag is not valid, is in two output flags, or is the name of another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or a flag of the input of a capability or an event of the view.
+- A `Refusal` answers with its status, headers and the JSON body `{ "message" }`. No capability runs. `Refusal::new` panics when the status is outside 400 to 599.
+- The core drops the context when the request's session ends. Release resources in `Drop`.
+- An MCP poll lease or webhook subscription keeps the context of the request that started it until it ends ([Subscriptions that outlive a request](../../spec/bindings/mcp.md#subscriptions-that-outlive-a-request)). Set `McpOptions::principal` from the same caller: without a principal, two callers that poll the same event with the same input share one [lease](../../spec/bindings/mcp.md#poll).
+- The command line and MCP through stdio have one context for the whole process.
 
-With `OutputDefault::Auto`, `cli_main` and `run_cli_process` write the human form only when standard output is a terminal, the environment variable `CI` is not truthy, and no variable of a coding agent is truthy (`AI_AGENT`, `CLAUDECODE`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `GEMINI_CLI`, `OPENCODE`, `AMP_CURRENT_THREAD_ID`, `AUGMENT_AGENT`, `QWEN_CODE_SESSION_ID`, `PI_CODING_AGENT`, `CRUSH`, `COPILOT_AGENT`). A variable is truthy when it is set and its value is not empty, `0`, `false`, `no` or `off`. `cli::output_form(is_terminal, env)` gives this choice. `run_cli` takes this form from `CliOptions::auto_form`, and the default is JSON.
+## Command line
 
-The human form has color only when standard output is a terminal and `NO_COLOR` is unset or empty. The exit code and the stream of each outcome are the same in each form. Help, usage and usage errors do not change.
+`cli_main` runs the command line and exits the process. `cli::run_cli_process` returns the exit code instead. Commands, help, exit codes and interrupts follow the [CLI binding](../../spec/bindings/cli.md). The grace period after an interrupt is `cli::INTERRUPT_GRACE` (one second). When the application breaks a rule of the binding, for example two commands with the same path, both functions write the message to standard error. `run_cli_process` returns 5, and `cli_main` exits with 5.
+
+### Aliases
+
+`App::cli_aliases(target, CliAliases::new()...)` gives the target's [aliases](../../spec/bindings/cli.md#aliases):
+
+| Method | Alias |
+| --- | --- |
+| `.alias(name, &definition)` | An alias |
+| `.alias_with(name, &definition, fixed)` | An alias with a fixed input |
+| `.alias_default(name, &definition)` | The default alias |
+| `.alias_default_with(name, &definition, fixed)` | The default alias with a fixed input |
+
+```rust,ignore
+.alias("fan", &fan_set)
+.alias_with("fan high", &fan_set, Fan { speed: FanSpeed::High })
+.alias_with("--on", &power_set, Power { on: true })
+.alias("aircon power", &power_set) // the prefix default of `aircon power`
+```
+
+- Each method takes a `CapabilityDefinition<C, X>` or an `EventDefinition<C, X>`, where `X` is the input type. Bind the definition to a variable before you pass it to `App::capability` or `App::event`.
+- The fixed input is a value of `X`. A property that serializes to `null`, such as an `Option` that is `None`, is not fixed and stays a flag. A required property is always fixed.
+- A definition with no input has `X = NoInput`, so `alias_with` is a type error for it.
+- `.untyped()` lets definitions with different inputs share one list.
+
+### Output for people
+
+By default the command line writes only JSON, even on a terminal, and takes no output flag. `CliOptions::output(CliOutput::new()...)` adds the human form:
+
+| Method | Use |
+| --- | --- |
+| `.switch(names, form)` | A flag with no value, for example `.switch(["--json"], OutputForm::Json)` |
+| `.values(names, values)` | A flag with a value, for example `.values(["--format", "-f"], [("text", OutputForm::Human), ("json", OutputForm::Json)])` |
+| `.default_form(default)` | The form with no output flag: `OutputDefault::Json` (the default) or `OutputDefault::Auto` |
+| `.formats(formats)` | The [formats](#formats) of the human form |
+
+[Output flags](../../model/README.md#output-flags-and-the-automatic-form) has the rules for names, parsing and startup checks. For an application command, the output flag comes before the command name, and `io.form` holds the chosen form. The help lists the output flags under `Output:`.
+
+With `OutputDefault::Auto`, the form is human when standard output is a terminal, `CI` is not truthy, and none of these variables is truthy: `AI_AGENT`, `CLAUDECODE`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `GEMINI_CLI`, `OPENCODE`, `AMP_CURRENT_THREAD_ID`, `AUGMENT_AGENT`, `QWEN_CODE_SESSION_ID`, `PI_CODING_AGENT`, `CRUSH`, `COPILOT_AGENT`. `cli::output_form(is_terminal, env)` makes this choice. `run_cli` takes the form from `CliOptions::auto_form` instead, and defaults to JSON.
+
+The human form uses color only on a terminal with `NO_COLOR` unset or empty. Exit codes and streams do not change.
 
 | Outcome | Human form |
 | --- | --- |
-| Value | The format of the value, or the generic layout. A `null` value writes nothing |
-| Failure | The format of the failures, or the generic layout of the failure object |
+| Value | Its format, or the generic layout. `null` writes nothing |
+| Failure | Its format, or the generic layout |
 | Call failure | `error (<kind>): <message>` on standard error |
-| Occurrence | The format of the payload, or the generic layout of `data`. Before an occurrence with `truncated`, the line `(some occurrences were lost)` |
-| `list` | The section `Capabilities`, then the section `Events`, with the command and the description of each one |
+| Occurrence | Its format, or the generic layout of `data`. With `truncated`, the line `(some occurrences were lost)` comes first |
+| `list` | The sections `Capabilities` and `Events` |
 
-Give the formats with `CliOutput::formats(CliFormats::new()...)`:
+### Formats
 
 ```rust,ignore
 fn power(status: &Status, ui: &CliUi) -> String {
@@ -184,57 +230,27 @@ let output = CliOutput::new()
 cli_main(app, context, CliOptions::new("aircon", "1.0.0").output(output)).await;
 ```
 
-- Each method takes the definition, as the alias methods do. A `CapabilityDefinition<C, X, O, F>` keeps the type of the value `O` and of the failures `F`, and an `EventDefinition<C, X, P>` keeps the type of the payload `P`. So bind each definition before you give it to `App::capability` or `App::event`. `untyped()` removes these types.
-- `failure` takes one function for the failure enum. Match each tag in it.
-- A format gets the value decoded again with `serde_json::from_value`, so the type must derive `Deserialize`. When the value does not decode, or the format panics, the command line writes the generic layout. The exit code does not change.
-- `ui` is a `CliUi`: `bold`, `dim`, `ok` (green), `warn` (yellow) and `error` (red) style a text, and `table(header, rows)` aligns columns.
-- Two formats for the same value of one definition, or a format for a capability or an event that is not in the view of the target, stop the command line when it starts.
+- Each method takes a bound definition, which keeps the value, failure or payload type. `untyped()` removes them.
+- `failure` takes one function for the whole failure enum.
+- The value is decoded with `serde_json::from_value`, so its type must derive `Deserialize`. If decoding fails or the format panics, the command line writes the generic layout.
+- `CliUi` styles text with `bold`, `dim`, `ok` (green), `warn` (yellow) and `error` (red), and aligns columns with `table(header, rows)`.
+- Two formats for one value, or a format outside the target's view, stop the command line at start.
 
-The generic layout writes a string as it is, a number as JSON, and an array of scalars as its items joined with `, ` (`(none)` when it is empty). An array of flat objects is a table with a header row. Another array is a list, one `- ` item for each element. An object writes one `key  value` line for each scalar member, with the values aligned, and `key:` with the indented layout for each other member. An empty object is `(empty)`.
-
-`McpBinding` and `HttpBinding` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. To use another server, give each request to `handle` after `remote::request_body`.
-
-Each request of a remote binding has its own session. With `new`, all requests share one context.
-
-### A context for each request
-
-`HttpBinding::with_request_context(app, make, options)` and `McpBinding::with_request_context(app, make, options)` make a context for each request that passes the screening. `make` gets the head of the request (the method, the URI and the headers), and gives a future of `Result<C, Refusal>`. Use it to authenticate the caller, and to give the work of each capability who calls:
-
-```rust,ignore
-let binding = HttpBinding::with_request_context(app, move |parts: &http::request::Parts| {
-    let token = parts.headers.get("authorization").and_then(|value| value.to_str().ok()).map(str::to_owned);
-    let accounts = accounts.clone();
-    async move {
-        match accounts.caller(token.as_deref()).await {
-            Some(caller) => Ok(Services { caller, accounts }),
-            None => Err(Refusal::new(401, "Give a valid token.").header("WWW-Authenticate", "Bearer")),
-        }
-    }
-}, HttpOptions::default());
-```
-
-- A `Refusal` answers the request with its status, its headers, and the JSON body `{ "message" }`. No capability runs.
-- The core drops the context when the session of the request ends: after the answer, or after the stream of a subscription. Release resources in `Drop`.
-- Through MCP, a poll lease or a webhook subscription keeps the context of the request that started it, until it ends. Set the `McpOptions::principal` too, from the same caller. A poll lease is keyed by the principal, the event and the input: with no principal, two callers that poll the same event with the same input share one lease, and the second caller reads the occurrences of the session of the first caller.
-- `Refusal::new` panics when the status is not from 400 to 599. The answer always has the media type `application/json`.
-- The command line and MCP through stdio have one context for the process.
+The generic layout writes a string as it is and a number as JSON. An array of scalars is joined with `, ` (`(none)` when empty), an array of flat objects is a table, and any other array is a `- ` list. An object is one aligned `key  value` line per scalar member, and `key:` with an indented layout for other members. An empty object is `(empty)`.
 
 ### A command line for a server
 
-The command line can run on another machine than the application. `CliOptions::remote(client)` sends each call and each subscription to the HTTP binding of a server, with `http::HttpClient`:
+`CliOptions::remote(client)` makes the command line a [client of a server's HTTP binding](../../spec/bindings/cli.md#server):
 
 ```rust,ignore
 let client = HttpClient::new("http://pi.local:8080/cli")?.header("Authorization", &format!("Bearer {token}"))?;
 cli_main(app, context, CliOptions::new("aircon", "1.0.0").remote(client)).await;
 ```
 
-- The commands, the flags and the usage come from the view of the target in the program. The program and the server use the same application, so that they have the same catalog.
-- Serve the HTTP binding at the server with the same target: `HttpOptions { target: "cli".into(), base: "/cli".into(), .. }`. A capability that the server does not serve gives `unknown-capability`.
-- `list` gets the availability of each capability from the server.
-- An interrupt closes the request, and the server cancels the call or the subscription.
-- When the server does not answer, the call failure is `unavailable`, with exit code 4.
+- Build the program and the server from one application, so they share a catalog.
+- Serve the HTTP binding with the same target: `HttpOptions { target: "cli".into(), base: "/cli".into(), .. }`.
 - `HttpClient::trust_certificate(pem)` trusts a self-signed certificate for an `https` URL.
 
 ## Tests
 
-`cargo test` runs `acid-cat conform` of the repository against the fixture, through MCP over HTTP with the handshake, poll and webhook delivery, MCP over stdio, HTTP, and the command line, in the same process and for a server. It needs `pnpm install` at the root of the repository, and `openssl`. Test with `moon run core-rust:test`.
+`moon run core-rust:test` runs the tests. It needs `pnpm install` at the repository root, and `openssl`. The tests run `acid-cat conform` against the fixture through every binding, including poll and webhook delivery and the command line against a server.

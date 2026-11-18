@@ -1,14 +1,16 @@
 # github.com/Hebilicious/acidcat/packages/catalog/go
 
-The AcidCat catalog library for Go. Go module: `github.com/Hebilicious/acidcat/packages/catalog/go`.
+The AcidCat catalog library for Go, published as the Go module `github.com/Hebilicious/acidcat/packages/catalog/go`. Build a catalog in code and write it in [canonical form](../../../spec/catalog.md#canonical-form). The library uses only the standard library. Use it at build time to write `acidcat.catalog.json`.
 
-Write a catalog in Go, and write it in canonical form. The library uses only the standard library. Use it at build time to write `acidcat.catalog.json`.
+## Install
 
 ```sh
 go get github.com/Hebilicious/acidcat/packages/catalog/go
 ```
 
-The name of the Go package is `catalog`. Import it with `import "github.com/Hebilicious/acidcat/packages/catalog/go"`, and use it as `catalog`.
+The Go package is named `catalog`. Import it with `import "github.com/Hebilicious/acidcat/packages/catalog/go"` and refer to it as `catalog`.
+
+## Example
 
 ```go
 c := catalog.New("Garage door", "")
@@ -30,8 +32,22 @@ c.Event("garage.door.moved", catalog.Event{
 text, err := c.Render()
 ```
 
-`Event` declares an [event](../../../spec/events.md): clients subscribe to it, and get its payload in each occurrence. A payload is an object, or a reference to a type that is an object. `Validate()` lists the rules a catalog breaks, and `Render()` returns an error for one that breaks any. The full example is [`examples/garage/garage.go`](examples/garage/garage.go), a garage door.
+The full example, a garage door, is [`examples/garage/garage.go`](examples/garage/garage.go).
 
-`ReadOnly`, `Destructive` and `Idempotent` are the [hints](../../../spec/catalog.md#capabilities) of a capability for clients. `Destructive` and `Idempotent` are `*bool`: write `new(true)` or `new(false)`, or leave them nil. A hint that is not given is not in the catalog.
+## API
 
-The tests compare the output of the library with files in this directory: the garage-door catalog [`examples/garage/garage.acidcat.json`](examples/garage/garage.acidcat.json), a catalog of values that languages write differently, [`testdata/edge.acidcat.json`](testdata/edge.acidcat.json), and a catalog with each hint of a capability, [`testdata/hints.acidcat.json`](testdata/hints.acidcat.json), which shows the order of the hints. The air-conditioner example of the repository also writes its catalog with this library, in [`examples/aircon/catalog/go`](../../../examples/aircon/catalog/go). Its test compares the output with the Pkl catalog. Each committed catalog file is in [canonical form](../../../spec/catalog.md#canonical-form), and the root `moon run check` checks this. Thus all catalog libraries agree on the canonical form, and they do not share a test file. Test with `moon run catalog-go:test`.
+- `Event` declares an [event](../../../spec/events.md). Clients subscribe to it and get its payload in each occurrence. A payload is an object, or a reference to a type that is an object.
+- `ReadOnly`, `Destructive` and `Idempotent` are a capability's [hints](../../../spec/catalog.md#capabilities) for clients. `Destructive` and `Idempotent` are `*bool`: write `new(true)` or `new(false)`, or leave them nil. A hint you leave out is not in the catalog.
+- `Validate()` lists the rules that the catalog breaks. `Render()` returns an error for a catalog that breaks any rule.
+
+## Tests
+
+Run `moon run catalog-go:test`. The tests compare the library's output, byte for byte, with these files:
+
+| File | Contents |
+| --- | --- |
+| [`examples/garage/garage.acidcat.json`](examples/garage/garage.acidcat.json) | The garage-door catalog |
+| [`testdata/edge.acidcat.json`](testdata/edge.acidcat.json) | Values that languages write differently by default |
+| [`testdata/hints.acidcat.json`](testdata/hints.acidcat.json) | Each hint of a capability, in canonical order |
+
+The air-conditioner example writes its catalog with this library in [`examples/aircon/catalog/go`](../../../examples/aircon/catalog/go), and its test compares the output with the Pkl catalog. The root `moon run check` checks that each committed catalog file is in canonical form, so the catalog libraries agree on the form without sharing a test file.

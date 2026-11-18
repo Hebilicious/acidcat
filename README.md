@@ -2,9 +2,7 @@
 
 # 🐱 AcidCat
 
-**One catalog. Every surface.**
-
-A language-neutral specification. Describe what your application can do one time. Serve it to your app, your command line, your agents and your APIs, in any language.
+**Describe what your application can do once. Serve it as a CLI, an MCP server, an HTTP API and typed client code.**
 
 [![CI](https://github.com/Hebilicious/acidcat/actions/workflows/ci.yml/badge.svg)](https://github.com/Hebilicious/acidcat/actions/workflows/ci.yml)
 ![Specification](https://img.shields.io/badge/spec-0.1_draft-ff69b4)
@@ -21,163 +19,143 @@ A language-neutral specification. Describe what your application can do one time
 </div>
 
 > [!WARNING]
-> **AcidCat is experimental and a work in progress.** The specification is a draft. The packages have versions `0.x`, and each minor version can break their APIs. Pin exact versions.
+> AcidCat is experimental. The specification is a draft, and the packages are `0.x`: any minor release can break their APIs. Pin exact versions.
 
----
+## ✨ Why AcidCat
 
-## ✨ What is AcidCat?
+An application has many front doors: its UI, a command line, an MCP server for AI agents, an HTTP API. Each one usually reimplements the same operations with its own names, validation and errors, and they drift apart.
 
-**AcidCat** (Application Capability IDentification Category) is a specification. It does not depend on a language or a library. An application writes one **catalog**: a JSON document that lists its capabilities, their inputs, outputs and failures, the **events** that clients can follow, and the **targets** that can use each one. Each surface comes from the catalog through a **binding**:
+AcidCat lists those operations once, in a **catalog**. Every surface comes from it, so every surface takes the same input, returns the same failures and shows each client only what it is allowed to use.
 
-| Surface | `aircon.temperature.set` becomes |
+| Surface | The capability `aircon.power.set` becomes |
 | --- | --- |
-| 💻 Command line | `aircon temperature set --celsius 22` |
-| 🤖 MCP server | the tool `aircon.temperature.set` |
-| 🌐 WebMCP | a tool that a browser agent calls in your web page, with the session of the person who uses it |
-| 🔌 HTTP | `POST /capabilities/aircon.temperature.set` |
-| 🧩 Your language | a typed function, for example `execute({ celsius: 22 })` in TypeScript |
-
-An event, such as `aircon.status.changed`, gives a stream of **occurrences** to each client that subscribes:
-
-| Surface | `aircon.status.changed` becomes |
-| --- | --- |
-| 💻 Command line | `aircon watch aircon.status.changed`, one JSON line for each occurrence |
-| 🤖 MCP server | the event `aircon.status.changed` of the MCP events extension |
-| 🔌 HTTP | `POST /events/aircon.status.changed`, a stream of server-sent events |
-| 🧩 Your language | an event handle, for example `subscribe({})` in TypeScript |
-
-The HTTP stream uses the framing of the GraphQL over server-sent events protocol. The WebMCP binding does not serve events.
-
-A capability can give [hints](spec/catalog.md#capabilities) for clients: `readOnly` (a call changes nothing), `destructive` (a call can delete or overwrite something) and `idempotent` (a second call with the same input has no more effect). The MCP server gives them as the tool annotations `readOnlyHint`, `destructiveHint` and `idempotentHint`. An agent client uses them to decide when to ask the user before a call.
-
-On the command line, each input property is a flag. `aircon power set --help` writes the usage of the command and its description. `aircon status --help` lists the usage of each command under `aircon status`, and `aircon status` alone, or with arguments that are not `--help` and are not the path of a command, writes that list to standard error with exit code 2. An array of simple values takes one flag for each item, `aircon schedule set --days mon --days fri --hours 7`, or the whole array as JSON text, `--days '["mon","fri"]'`. The program ignores a first `--`, which package runners such as `pnpm` and `npx` pass to it: `pnpm exec aircon -- status` runs `aircon status`.
-
-The catalog can give the command line [aliases](spec/bindings/cli.md#aliases): short names for capabilities and events, with an optional fixed input. A command alias has one word or two words, and a flag alias is `--` and one word: `aircon status`, `aircon --on`, `aircon fan high`. The aliases with the same first word are a group, such as `fan`, `fan auto` and `fan high`. `aircon fan --speed low` runs the one-word alias `fan`. `aircon fan medium` is an unknown command, because the group has no alias `fan medium`. The name of an alias can be a shared prefix of commands, but not the path of a command. The alias is then the prefix default of that prefix: `aircon aircon power --on` runs the alias `aircon power`, and `aircon aircon power set --on` stays the command of `aircon.power.set`. A default alias runs when the program gets no command.
-
-An interrupt (Ctrl+C) cancels the call or the subscription, with exit code 130. If the capability cannot stop, the command line of each core exits with 130 one second later, or at once at a second interrupt.
-
-The command line writes JSON, for scripts and agents. An application can also give it a form for a person: the application chooses the flags that select the form, such as `--output human` or `--json`, and gives a typed formatter for each capability or event. Without a formatter, the command line prints a generic layout of the value. The human form is off by default. With `default: "auto"`, it is the default only on a terminal with no CI and no coding agent ([core-ts](packages/core-ts/README.md), [core-effect](packages/core-effect/README.md), [core-rust](packages/core-rust/README.md)).
-
-The catalog is checked at build time. Programs do not read it at run time.
-
-## 🧭 How it works
-
-```
-                         catalog
-          (one document: what the application can do)
-                            │
-          ┌─────────────────┼──────────────────┐
-      provider          bindings            clients
-   (does the        (rules that make     (web, mobile,
-   operations)       one kind of          desktop, cli,
-                     surface)             mcp, api, …)
-```
+| 💻 Command line | `home aircon power set --on` |
+| 🤖 MCP server | the tool `aircon.power.set` |
+| 🌐 WebMCP | a tool that a browser agent calls in your web page, as the signed-in user |
+| 🔌 HTTP | `POST /capabilities/aircon.power.set` |
+| 🧩 Your language | a typed function, for example `execute({ on: true })` in TypeScript |
 
 ## 🌬️ Example
 
-An air conditioner, written in Pkl ([full example](examples/aircon/catalog/aircon.pkl)):
+### 1. Write the catalog
 
-```pkl
-amends "../../../packages/catalog/pkl/Catalog.pkl"
-
-targets {
-  ["app"] { bindings { "typescript"; "webmcp" } }
-  ["mcp"] { bindings { "mcp" } }
-}
-
-capabilities {
-  ["aircon.temperature.set"] {
-    description = "Set the target temperature in degrees Celsius."
-    audience { "app"; "mcp" }
-    input {
-      type = "object"
-      required { "celsius" }
-      properties { ["celsius"] { type = "number"; minimum = 16; maximum = 31 } }
-    }
-    failures { ["Offline"] { type = "object" } }
-  }
-}
-```
-
-The best way to write a catalog is in Pkl, with a catalog library, or from the code of the application. A tool then writes the JSON, in [canonical form](spec/catalog.md#canonical-form). JSON written by hand is also a catalog, if it conforms. The same catalog in [TypeScript](examples/aircon/catalog/typescript.ts), [Python](examples/aircon/catalog/python.py), [Go](examples/aircon/catalog/go/main.go) or [Rust](examples/aircon/catalog/rust/src/main.rs) gives the same bytes: [`aircon.acidcat.json`](examples/aircon/catalog/aircon.acidcat.json). [`examples/aircon`](examples/aircon/README.md) also serves the air conditioner with both TypeScript cores and the Rust core: as a command line, as a web page with WebMCP tools, through MCP, and through APIs.
-
-## 🌐 WebMCP: agents in your web page
-
-[WebMCP](spec/bindings/webmcp.md) gives a browser agent the capabilities of the page that it is on. The agent does not read the screen or click buttons. It calls the same capabilities as your user interface, in the page, with the session, the state and the sign-in of the person who uses it.
-
-Add the `webmcp` binding to a target, then install it from the session of the page:
+Declare each capability in code: its schemas, its targets and the function that runs it. These declarations are the catalog. With the TypeScript core and Zod:
 
 ```ts
-import { createSession, installWebMcp } from "@acid-cat/core-ts";
+// aircon.ts
+import { defineApp, defineCapability, fail, ok } from "@acid-cat/core-ts";
+import type { ToJsonSchema } from "@acid-cat/core-ts";
+import { z } from "zod";
 
-const session = createSession(aircon, { target: "app", context: { unit }, toJsonSchema });
-const webmcp = installWebMcp(session); // undefined when the browser has no WebMCP
+const unit = { online: true, on: false };
+
+const powerSet = defineCapability({
+  id: "aircon.power.set",
+  description: "Turn the unit on or off.",
+  audience: ["cli", "mcp"],
+  destructive: true,
+  idempotent: true,
+  input: z.object({ on: z.boolean() }),
+  failures: { Offline: z.object({ _tag: z.literal("Offline") }) },
+  run: ({ on }) => {
+    if (!unit.online) return fail({ _tag: "Offline" });
+    unit.on = on;
+    return ok(null);
+  },
+});
+
+export const aircon = defineApp({
+  title: "Air conditioner",
+  targets: { cli: { bindings: ["cli"] }, mcp: { bindings: ["mcp"] } },
+  capabilities: [powerSet],
+});
+
+export const toJsonSchema: ToJsonSchema = (schema) => {
+  if (!(schema instanceof z.ZodType)) throw new Error("Only Zod schemas.");
+  return z.toJSONSchema(schema, { target: "draft-2020-12" });
+};
 ```
 
-- Each capability of the view that is available is one tool, with its description and its input schema. A capability that becomes unavailable loses its tool, and gets it again when it is available.
-- A value or a failure is the result of the tool. A call failure rejects with its `kind`. The agent can cancel a call.
-- The page can observe the status of the tools (`loading`, `ready`, `failed`, …), try again, and remove all its tools.
-- The binding needs a browser with `document.modelContext` or `navigator.modelContext`. Without one, the page works as before.
-- `acid-cat conform --webmcp <url>` tests the WebMCP binding of a core in Chromium, with a page that serves the conformance fixture. Test the page of an application with a test host in a browser, as `examples/aircon` does.
+At build time, write the catalog as JSON and check it:
 
-Both TypeScript cores serve WebMCP: `installWebMcp` in `@acid-cat/core-ts`, and `WebMcp.install` in `@acid-cat/core-effect`. [`examples/aircon`](examples/aircon/README.md#webmcp) has a web page of the air conditioner for each of them, with its WebMCP tools and a test in Chromium. The Rust core does not serve WebMCP, because WebMCP runs in a web page.
+```ts
+// catalog.ts
+import { writeFile } from "node:fs/promises";
+import { renderCatalog } from "@acid-cat/core-ts";
+import { aircon, toJsonSchema } from "./aircon.ts";
 
-## 🧳 Capabilities for one environment
+await writeFile("aircon.acidcat.json", renderCatalog(aircon, { toJsonSchema }));
+```
 
-A command line runs on the computer of its user. An MCP server often does not. A capability that only works in one place, such as writing a local file, gets only that target in its audience, and the program that runs there gives the session what the work needs. In the example, `aircon.status.export` has the audience `cli`: MCP and WebMCP clients do not see it, and only the command line gives the file system ([example](examples/aircon/README.md#command-line-only)).
+```sh
+node catalog.ts
+acid-cat check aircon.acidcat.json
+```
+
+### 2. Serve it
+
+```ts
+// cli.ts
+import { cliMain } from "@acid-cat/core-ts";
+import { aircon, toJsonSchema } from "./aircon.ts";
+
+cliMain(aircon, { name: "home", version: "0.1.0", context: {}, toJsonSchema });
+```
+
+```sh
+$ node cli.ts aircon power set --on
+null
+```
+
+Pass the same `aircon` to `mcpStdioMain` for an MCP server, or to `httpHandler` for an HTTP API. MCP clients get `destructiveHint` and `idempotentHint`, so an agent knows to ask before it turns the unit off.
+
+## 🧭 How it works
+
+| Part | What it is |
+| --- | --- |
+| Catalog | The contract, stored as JSON. Write it in the typed language of your choice: a core's code, a [catalog library](packages/catalog) for TypeScript, Python, Go or Rust, or [Pkl](packages/catalog/pkl). Checked at build time; programs do not read it at run time |
+| Binding | The rules for one surface: CLI, MCP, HTTP, WebMCP or a language such as TypeScript. Defined in the [specification](spec/bindings/README.md) |
+| Core | A library that runs your capabilities and serves the bindings |
+| `acid-cat conform` | Tests a running program from the outside, through each binding |
+
+## 🧳 Features
+
+- Each target sees only its own capabilities. A capability that writes a local file can belong to the `cli` target alone ([example](examples/aircon/README.md#command-line-only)).
+- Failures are typed data, declared by tag. An unexpected error becomes the call failure `internal`, and its details stay on the server.
+- Events, such as `aircon.status.changed`, stream occurrences to subscribers over the CLI, MCP, HTTP (server-sent events) and TypeScript ([events](spec/events.md)).
+- WebMCP lets a browser agent call your page's capabilities directly, with the user's session ([binding](spec/bindings/webmcp.md)).
+- The command line has aliases such as `home --on`, JSON or human output, and Ctrl+C cancellation ([binding](spec/bindings/cli.md)).
+- For an API you design yourself, such as GraphQL, call the same capabilities through a session ([examples](examples/aircon/README.md#apis)).
 
 ## 📚 Specification
 
+AcidCat is a specification first. The packages here are one implementation of it.
+
 | Document | Contents |
 | --- | --- |
-| [Overview and vocabulary](spec/README.md) | The terms and the documents |
+| [Overview and vocabulary](spec/README.md) | The terms used in every document |
 | [Catalog](spec/catalog.md) | Targets, capabilities, events, types, views, canonical form |
 | [Invocation](spec/invocation.md) | Outcomes, availability, sessions, cancellation |
-| [Events](spec/events.md) | Events, subscriptions, occurrences, resuming |
+| [Events](spec/events.md) | Subscriptions, occurrences, resuming |
 | [Bindings](spec/bindings/README.md) | TypeScript, WebMCP, MCP, CLI, HTTP |
 | [Extensions](spec/extensions/README.md) | Attachments, pagination |
 | [Conformance](spec/conformance.md) | How to test a catalog and an implementation |
 
 ## 📦 Packages
 
-### Tools for all implementations
-
-These tools work with an implementation in any language.
-
 | Package | Use |
 | --- | --- |
-| [`@acid-cat/cli`](packages/cli) | 🛠️ `acid-cat check`, `format` and `view` for catalogs. `acid-cat conform` tests a running implementation through its bindings |
-| [`@acid-cat/catalog`](packages/catalog/typescript) | ✍️ Write a catalog in TypeScript |
-| [`acid-cat-catalog`](packages/catalog/python) | 🐍 Write a catalog in Python |
-| [`github.com/Hebilicious/acidcat/packages/catalog/go`](packages/catalog/go) | 🐹 Write a catalog in Go |
-| [`acid-cat-catalog`](packages/catalog/rust) | 🦀 Write a catalog in Rust |
-| [`Catalog.pkl`](packages/catalog/pkl/Catalog.pkl) | 🧾 Write a catalog in Pkl |
+| [`@acid-cat/cli`](packages/cli) | 🛠️ `acid-cat check`, `format`, `view` and `conform` |
+| [`@acid-cat/core-ts`](packages/core-ts) | 🟦 Core in plain TypeScript, with any Standard Schema library |
+| [`@acid-cat/core-effect`](packages/core-effect) | ⚡ Core in Effect, with Effect Schema |
+| [`acid-cat-core`](packages/core-rust) | 🦀 Core in Rust, on Tokio. No WebMCP |
+| [Catalog libraries](packages/catalog) | ✍️ Write a catalog in TypeScript, Python, Go, Rust or Pkl |
 
-### Reference implementation in TypeScript
-
-These packages show one way to implement the specification. They serve the TypeScript binding and the MCP, WebMCP, CLI and HTTP bindings, and they pass all checks of `acid-cat conform`. The specification does not depend on them.
-
-| Package | Use |
-| --- | --- |
-| [`@acid-cat/spec-ts`](packages/spec-ts) | 📐 The fixed details of the specification, as TypeScript data and functions |
-| [`@acid-cat/core-effect`](packages/core-effect) | ⚡ Serve capabilities, written fully in Effect |
-| [`@acid-cat/core-ts`](packages/core-ts) | 🟦 Serve capabilities in plain TypeScript, with no Effect dependency |
-
-### Reference implementation in Rust
-
-This crate shows one way to implement the specification in Rust, on Tokio. It serves the MCP, CLI and HTTP bindings, and it passes all checks of `acid-cat conform` for them.
-
-| Package | Use |
-| --- | --- |
-| [`acid-cat-core`](packages/core-rust) | 🦀 Serve capabilities and events in Rust. Schemas come from types that derive `serde` and `schemars` |
-
-Reference implementations in more languages will follow. You do not need a package from this repository to implement AcidCat. A program that serves the bindings as the specification tells is an implementation. You, or an agent, can write a core for your language from [the specification](spec/README.md), and test it with `acid-cat conform`.
-
-To build your own API, for example in GraphQL, see [the APIs of the air conditioner](examples/aircon/README.md#apis): GraphQL, Cap'n Web and Elysia APIs, each beside the HTTP binding, and an MCP server in Effect beside the MCP binding. Each of these three APIs follows the event `aircon.status.changed`: GraphQL with a subscription, through WebSockets and through server-sent events, Cap'n Web with a function of the client that the server calls, through WebSockets, and Elysia with a stream of server-sent events and a WebSocket.
+You do not need these packages: any program that follows the [specification](spec/README.md) and passes `acid-cat conform` is an implementation. [packages/README.md](packages/README.md) lists every package and compares the cores.
 
 ## 🤖 Agent skill
 
-[`skills/acid-cat`](skills/acid-cat/SKILL.md) is a skill for coding agents that build with AcidCat. It tells an agent the rules of the catalog, how to choose a core, how to add a capability, which function serves each binding, and how to test. Install it in a project with the GitHub CLI:
+[`skills/acid-cat`](skills/acid-cat/SKILL.md) teaches coding agents to build with AcidCat:
 
 ```sh
 gh skill install Hebilicious/acidcat acid-cat
@@ -186,36 +164,26 @@ gh skill install Hebilicious/acidcat acid-cat
 ## 🗺️ Roadmap
 
 - [x] `acid-cat conform`: test a running implementation through each binding
-- [x] A reference implementation in TypeScript: `@acid-cat/spec-ts`, `@acid-cat/core-effect` and `@acid-cat/core-ts`
-- [x] A reference implementation in Rust: `acid-cat-core`
-- [ ] Reference implementations in more languages
+- [x] Cores in TypeScript: `@acid-cat/core-ts` and `@acid-cat/core-effect`
+- [x] A core in Rust: `acid-cat-core`
+- [ ] Cores in more languages
 - [ ] A site that publishes the specification
-
-See [packages/README.md](packages/README.md).
 
 ## 🛠️ Development
 
-[proto](https://moonrepo.dev/proto) installs the tools in `.prototools`: Moon, Node, pnpm, Pkl, Python, uv, Go, Rust and Java (for the Apalache model checker). [Moon](https://moonrepo.dev) runs the tasks.
+[proto](https://moonrepo.dev/proto) installs the tools in `.prototools`, and [Moon](https://moonrepo.dev) runs the tasks:
 
 ```sh
 proto install
 pnpm install
-moon run verify
+moon run verify   # every check and test, as in CI
 ```
-
-CI runs `moon run verify` on each push to `main` and on each pull request. The rules that each core must follow in the same way have a formal model in Quint, in [`model/`](model/README.md). `quint verify` proves its properties, and each core runs every case that the model generates.
-
-Changes go into `main` only through a pull request, with a squash merge. The `semantic` check requires the pull request title and each commit title to have the form `type(scope): subject`, for example `fix(catalog): reject duplicate ids`.
 
 | Command | Use |
 | --- | --- |
-| `moon run examples` | Render every Pkl catalog, and write every catalog of the repository in canonical form |
-| `moon run check` | Check that every catalog of the repository is rendered, canonical and conforms |
-| `moon run model:generate` | Write the data and the cases of the formal models into each core. See [model/README.md](model/README.md) |
-| `moon run lint` | Lint all TypeScript with type information, and check that no code turns the type checks off |
 | `moon run :test` | Test all packages |
-| `moon run verify` | Do all checks and tests |
-| `pnpm exec acid-cat …` | Run the command line |
-| `moon run :build` | Build the npm packages into `dist/` |
+| `moon run lint` | Lint all TypeScript |
+| `moon run examples` | Write every catalog in canonical form |
+| `moon run model:generate` | Write the cases of the [formal model](model/README.md) into each core |
 
-To publish the packages, see [Publishing](packages/README.md#publishing).
+Pull requests are squash-merged, with titles like `fix(catalog): reject duplicate ids`. Releases: see [Publishing](packages/README.md#publishing).
