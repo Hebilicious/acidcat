@@ -1,0 +1,5 @@
+// pkl eval fails with: Type constraint `matches(Regex(#"[a-z][a-z0-9]*(-[a-z0-9]+)*(\.[a-z]
+amends "../Catalog.pkl"
+
+targets { ["cli"] { bindings { "cli" } } }
+capabilities { ["Shop.Item.get"] { description = "Get an item."; audience { "cli" } } }

@@ -1,3 +1,4 @@
+// pkl eval fails with: Expected value of type `Dynamic`, but got type `Boolean`.
 amends "../Catalog.pkl"
 
 targets { ["cli"] { bindings { "cli" } } }
