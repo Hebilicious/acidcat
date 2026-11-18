@@ -228,3 +228,44 @@ async fn through_http_an_event_gets_the_target_and_the_context_lives_until_the_s
         "the context is dropped when the stream ends"
     );
 }
+
+#[tokio::test]
+async fn through_http_a_path_that_is_not_under_base_is_an_unknown_route() {
+    let alive = Arc::new(AtomicUsize::new(0));
+    let options = HttpOptions {
+        base: "/api".into(),
+        ..HttpOptions::default()
+    };
+    let binding = HttpBinding::with_request_context(app(), caller(&alive), options);
+    let get = |path: &str| {
+        request_body(
+            Request::get(path)
+                .header("authorization", "Bearer dashboard")
+                .body(Full::new(bytes::Bytes::new()))
+                .expect("a request"),
+        )
+    };
+
+    assert_eq!(binding.handle(get("/api/capabilities")).await.status(), 200);
+    for path in [
+        "/zzz/capabilities",
+        "/apix/capabilities",
+        "/zzz/catalog",
+        "/zzz/events",
+    ] {
+        let (status, body) = answer(binding.handle(get(path)).await).await;
+        assert_eq!(
+            (status, &body["kind"]),
+            (404, &json!("unknown-capability")),
+            "{path}"
+        );
+    }
+    let call = binding
+        .handle(request_body(
+            post("/zzz/capabilities/who.get", Some("dashboard"))
+                .body(Full::new(bytes::Bytes::from("{}")))
+                .expect("a request"),
+        ))
+        .await;
+    assert_eq!(call.status(), 404);
+}
