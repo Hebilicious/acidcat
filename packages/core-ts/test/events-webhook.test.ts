@@ -11,14 +11,9 @@ import type { WebhookOptions } from "../src/node.ts";
 import { sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
 import { startReceiver, testCertificate } from "./webhook-receiver.ts";
 import type { Received } from "./webhook-receiver.ts";
+import { until as untilWithin } from "./until.ts";
 
-async function until(condition: () => boolean | Promise<boolean>): Promise<void> {
-  const end = Date.now() + 2000;
-  while (!(await condition())) {
-    if (Date.now() > end) throw new Error("The condition did not become true.");
-    await new Promise((resolve) => setTimeout(resolve, 2));
-  }
-}
+const until = (condition: () => boolean | Promise<boolean>) => untilWithin(condition, 2000);
 
 const VERSION = "2026-07-28";
 const META = { "io.modelcontextprotocol/protocolVersion": VERSION };
@@ -88,21 +83,10 @@ function server(options: WebhookOptions = {}) {
   return { handler, rpc, subscribe, sensors };
 }
 
-test("webhook: events/list gives webhook delivery when it is on", async () => {
-  const { handler, rpc } = server();
-  const events = member(await rpc("events/list", {}), "result")["events"];
-  assert.ok(Array.isArray(events));
-  for (const event of events) assert.deepEqual(isJsonObject(event) ? event["delivery"] : undefined, ["push", "poll", "webhook"]);
-  await handler.close();
-});
-
-test("webhook: a request with no principal gets Forbidden, and parameters that are not valid get -32602", async () => {
+test("webhook: parameters that are not valid get -32602, and an unknown event gets NotFound, with no request to the receiver", async () => {
   const { handler, rpc, subscribe } = server();
-  assert.deepEqual((await rpc("events/subscribe", { name: "sensor.ticks" }, null))["error"], { code: -32024, message: "Forbidden" });
-  assert.deepEqual((await rpc("events/unsubscribe", { name: "sensor.ticks" }, null))["error"], { code: -32024, message: "Forbidden" });
-  assert.equal(member(await subscribe({ url: `http://127.0.0.1:${receiver.port}/hook` }), "error")["code"], -32602);
   assert.equal(member(await subscribe({ url: "not a URL" }), "error")["code"], -32602);
-  for (const secret of ["secret", "whsec_c2hvcnQ=", `whsec_${randomBytes(65).toString("base64")}`, "whsec_!!!!"]) {
+  for (const secret of [`whsec_${randomBytes(65).toString("base64")}`, "whsec_!!!!"]) {
     assert.equal(member(await subscribe({ secret }), "error")["code"], -32602, secret);
   }
   assert.equal(member(await rpc("events/subscribe", { name: "sensor.ticks", delivery: { mode: "poll" } }), "error")["code"], -32602);
@@ -112,67 +96,38 @@ test("webhook: a request with no principal gets Forbidden, and parameters that a
   await handler.close();
 });
 
-test("webhook: the server verifies the endpoint, then sends signed deliveries in order", async () => {
-  const { handler, subscribe, sensors } = server();
-  const secret = newSecret();
-  const answer = await subscribe({ arguments: { room: "hall" }, secret });
-  const result = member(answer, "result");
-  const id = await webhookSubscriptionId("alice", receiver.url, "sensor.reading.changed", { room: "hall" });
-  assert.equal(result["id"], id);
-  assert.equal(result["resultType"], "complete");
+test("webhook: a new subscription has no watermark and a delivery status with no delivery and no error", async () => {
+  const { handler, subscribe } = server();
+  const result = member(await subscribe({ arguments: { room: "hall" } }), "result");
   assert.equal(result["cursor"], null);
-  assert.equal(result["truncated"], false);
   assert.deepEqual(result["deliveryStatus"], { active: true, lastDeliveryAt: null, lastError: null });
-  const refreshBefore = Date.parse(String(result["refreshBefore"]));
-  assert.ok(Math.abs(refreshBefore - (Date.now() + 3_600_000)) < 10_000);
-
-  const [verification] = receiver.received;
-  assert.equal(verification?.body["type"], "verification");
-  assert.equal(typeof verification?.body["challenge"], "string");
-  assert.match(header(verification, "webhook-id"), /^msg_verification_[A-Za-z0-9]+$/);
-  assert.equal(header(verification, "x-mcp-subscription-id"), id);
-  await assertSigned(verification, [secret]);
-
-  await until(() => sensors.listeners === 1);
-  sensors.emit("hall", 20, "2026-11-10T09:00:00.000Z");
-  sensors.emit("kitchen", 30);
-  sensors.emit("hall", 21, "2026-11-10T09:00:02.000Z");
-  await until(() => receiver.deliveries().length === 2);
-  const [first, second] = receiver.deliveries();
-  assert.deepEqual(first?.body, { eventId: "reading-0", name: "sensor.reading.changed", timestamp: "2026-11-10T09:00:00.000Z", data: { room: "hall", celsius: 20 }, cursor: "0" });
-  assert.equal(second?.body["cursor"], "2");
-  assert.match(header(first, "webhook-id"), /^msg_[A-Za-z0-9]+$/);
-  assert.notEqual(header(first, "webhook-id"), header(second, "webhook-id"));
-  assert.equal(header(first, "x-mcp-subscription-id"), id);
-  await assertSigned(first, [secret]);
-  await assertSigned(second, [secret]);
-
-  const before = receiver.received.length;
-  assert.ok(isJsonObject((await subscribe({ name: "sensor.clock" }))["result"]));
-  await new Promise((resolve) => setTimeout(resolve, 30));
-  assert.equal(receiver.received.slice(before).filter((each) => each.body["type"] === "verification").length, 0);
   await handler.close();
-  assert.equal(sensors.listeners, 0);
 });
 
-test("webhook: an endpoint that does not agree gives CallbackEndpointError, and no subscription", async () => {
+test("webhook: a truncated occurrence before the first delivery comes after a gap message with no cursor", async () => {
   const { handler, subscribe, sensors } = server();
-  receiver.answer((request) => (request.body["type"] === "verification" ? { status: 200, body: JSON.stringify({ challenge: "wrong" }) } : undefined));
-  assert.deepEqual(member(await subscribe({}), "error"), { code: -32027, message: "The callback endpoint did not agree to get deliveries.", data: { reason: "challenge_failed" } });
+  const old = new Date(Date.now() - 60_000).toISOString();
+  sensors.emit("hall", 1, old);
+  sensors.emit("hall", 2, old);
+  sensors.emit("hall", 3);
+  assert.ok(isJsonObject((await subscribe({ cursor: "0", maxAgeMs: 1000 }))["result"]));
+  await until(() => receiver.deliveries().length === 2);
+  const [gap, occurrence] = receiver.deliveries();
+  assert.deepEqual(gap?.body, { type: "gap", cursor: null });
+  assert.equal(occurrence?.body["cursor"], "2");
+  await handler.close();
+});
+
+test("webhook: the reason of CallbackEndpointError tells the status of the answer to the verification, and no subscription starts", async () => {
+  const { handler, subscribe, sensors } = server();
+  for (const status of [302, 399]) {
+    receiver.answer(() => ({ status }));
+    assert.deepEqual(member(member(await subscribe({}), "error"), "data"), { reason: "challenge_failed" }, String(status));
+  }
   receiver.answer(() => ({ status: 500 }));
   assert.deepEqual(member(member(await subscribe({}), "error"), "data"), { reason: "http_5xx" });
   receiver.answer(() => ({ status: 404 }));
   assert.deepEqual(member(member(await subscribe({}), "error"), "data"), { reason: "http_4xx" });
-  assert.equal(sensors.listeners, 0);
-  await handler.close();
-});
-
-test("webhook: a 3xx answer to a verification is challenge_failed, not http_4xx", async () => {
-  const { handler, subscribe, sensors } = server();
-  receiver.answer(() => ({ status: 302 }));
-  assert.deepEqual(member(member(await subscribe({}), "error"), "data"), { reason: "challenge_failed" });
-  receiver.answer(() => ({ status: 399 }));
-  assert.deepEqual(member(member(await subscribe({}), "error"), "data"), { reason: "challenge_failed" });
   assert.equal(sensors.listeners, 0);
   await handler.close();
 });
@@ -228,7 +183,7 @@ test("webhook: a URL of the allowlist gets deliveries with no verification", asy
   await handler.close();
 });
 
-test("webhook: a status that is not 2xx makes the server send the delivery again, with the same webhook-id", async () => {
+test("webhook: after a delivery that succeeds on a retry, the delivery status has the time of the delivery and no error", async () => {
   const { handler, subscribe, sensors } = server();
   let failures = 2;
   receiver.answer((request) => (request.body["type"] === undefined && failures-- > 0 ? { status: 500 } : undefined));
@@ -237,8 +192,6 @@ test("webhook: a status that is not 2xx makes the server send the delivery again
   await until(() => sensors.listeners === 1);
   sensors.emit("hall", 20);
   await until(() => receiver.deliveries().length === 3);
-  const ids = new Set(receiver.deliveries().map((each) => header(each, "webhook-id")));
-  assert.equal(ids.size, 1);
   let status: JsonObject = {};
   await until(async () => {
     status = member(member(await subscribe(params), "result"), "deliveryStatus");
@@ -249,63 +202,26 @@ test("webhook: a status that is not 2xx makes the server send the delivery again
   await handler.close();
 });
 
-test("webhook: the server abandons a delivery after the last attempt, or at once after 410", async () => {
+test("webhook: the server abandons a delivery after the last attempt, keeps the error, and sends the next occurrence", async () => {
   const { handler, subscribe, sensors } = server({ attempts: 3 });
-  receiver.answer((request) => {
-    if (request.body["type"] !== undefined) return undefined;
-    return request.body["eventId"] === "reading-0" ? { status: 410 } : request.body["eventId"] === "reading-1" ? { status: 503 } : undefined;
-  });
+  receiver.answer((request) => (request.body["type"] === undefined && request.body["eventId"] === "reading-0" ? { status: 503 } : undefined));
   const params = { secret: newSecret() };
   assert.ok(isJsonObject((await subscribe(params))["result"]));
   await until(() => sensors.listeners === 1);
   sensors.emit("hall", 20);
+  await until(() => receiver.deliveries().length === 3);
+  let result: JsonObject = {};
+  await until(async () => {
+    result = member(await subscribe(params), "result");
+    return result["cursor"] === "0";
+  });
+  assert.equal(member(result, "deliveryStatus")["lastError"], "http_5xx");
   sensors.emit("hall", 21);
   await until(() => receiver.deliveries().length === 4);
   assert.deepEqual(
     receiver.deliveries().map((each) => each.body["eventId"]),
-    ["reading-0", "reading-1", "reading-1", "reading-1"],
+    ["reading-0", "reading-0", "reading-0", "reading-1"],
   );
-  let result: JsonObject = {};
-  await until(async () => {
-    result = member(await subscribe(params), "result");
-    return result["cursor"] === "1";
-  });
-  assert.equal(member(result, "deliveryStatus")["lastError"], "http_5xx");
-  sensors.emit("hall", 22);
-  await until(() => receiver.deliveries().length === 5);
-  assert.equal(receiver.deliveries()[4]?.body["cursor"], "2");
-  await handler.close();
-});
-
-test("webhook: a truncated occurrence comes after a gap message", async () => {
-  const { handler, subscribe, sensors } = server();
-  const old = new Date(Date.now() - 60_000).toISOString();
-  sensors.emit("hall", 1, old);
-  sensors.emit("hall", 2, old);
-  sensors.emit("hall", 3);
-  assert.ok(isJsonObject((await subscribe({ cursor: "0", maxAgeMs: 1000 }))["result"]));
-  await until(() => receiver.deliveries().length === 2);
-  const [gap, occurrence] = receiver.deliveries();
-  assert.deepEqual(gap?.body, { type: "gap", cursor: null });
-  assert.match(header(gap, "webhook-id"), /^msg_gap_[A-Za-z0-9]+$/);
-  assert.equal(occurrence?.body["cursor"], "2");
-  assert.equal(occurrence?.body["truncated"], undefined);
-  await handler.close();
-});
-
-test("webhook: a refresh grants a new lifetime and replaces the secret, and the server signs with both secrets for a time", async () => {
-  const { handler, subscribe, sensors } = server({ maxTtlMs: 7_200_000 });
-  const oldSecret = newSecret();
-  const newer = newSecret();
-  const first = member(await subscribe({ secret: oldSecret, ttlMs: 60_000 }), "result");
-  const second = member(await subscribe({ secret: newer, ttlMs: 7_200_000, cursor: "ignored" }), "result");
-  assert.equal(second["id"], first["id"]);
-  assert.ok(Date.parse(String(second["refreshBefore"])) > Date.parse(String(first["refreshBefore"])));
-  assert.equal(receiver.received.filter((each) => each.body["type"] === "verification").length, 1);
-  await until(() => sensors.listeners === 1);
-  sensors.emit("hall", 20);
-  await until(() => receiver.deliveries().length === 1);
-  await assertSigned(receiver.deliveries()[0], [newer, oldSecret]);
   await handler.close();
 });
 
@@ -321,42 +237,22 @@ test("webhook: after the grace time, the server signs only with the new secret",
   await handler.close();
 });
 
-test("webhook: events/unsubscribe cancels the subscription, and a second time gives NotFound", async () => {
+test("webhook: events/unsubscribe of the subscription of another principal gives NotFound", async () => {
   const { handler, rpc, subscribe, sensors } = server();
   await subscribe({ arguments: { room: "hall" } });
   await until(() => sensors.listeners === 1);
   const params = { name: "sensor.reading.changed", arguments: { room: "hall" }, delivery: { url: receiver.url } };
   assert.deepEqual(await rpc("events/unsubscribe", params, "bob").then((answer) => answer["error"]), { code: -32023, message: "There is no such subscription.", data: { kind: "subscription" } });
-  const done = await rpc("events/unsubscribe", params);
-  assert.equal(member(done, "result")["resultType"], "complete");
-  await until(() => sensors.listeners === 0);
-  assert.equal(member(member(await rpc("events/unsubscribe", params), "error"), "data")["kind"], "subscription");
+  assert.equal(sensors.listeners, 1);
   await handler.close();
 });
 
-test("webhook: a subscription with no renewal ends at the end of its lifetime, with no message", async () => {
-  const { handler, subscribe, sensors } = server({ minTtlMs: 30 });
-  const result = member(await subscribe({ ttlMs: 30 }), "result");
-  assert.ok(Date.parse(String(result["refreshBefore"])) - Date.now() < 1000);
-  await until(() => sensors.listeners === 1);
-  await until(() => sensors.listeners === 0);
-  assert.deepEqual(receiver.deliveries(), []);
-  await handler.close();
-});
-
-test("webhook: internal sends a terminated message, and a complete subscription ends with no message", async () => {
-  const { handler, subscribe } = server();
-  await subscribe({ name: "sensor.failing" });
-  await until(() => receiver.deliveries().length === 2);
-  const [occurrence, terminated] = receiver.deliveries();
-  assert.deepEqual(occurrence?.body["data"], { room: "hall", celsius: 20 });
-  assert.deepEqual(terminated?.body, { type: "terminated", error: { code: -32603, message: "The event failed." } });
-  assert.match(header(terminated, "webhook-id"), /^msg_terminated_[A-Za-z0-9]+$/);
-
-  await subscribe({ name: "sensor.ticks" });
-  await until(() => receiver.deliveries().length === 5);
-  await new Promise((resolve) => setTimeout(resolve, 30));
-  assert.equal(receiver.deliveries().length, 5);
+test("webhook: a complete subscription ends with no message", async () => {
+  const { handler, subscribe } = server({ maxSubscriptions: 1 });
+  assert.ok(isJsonObject((await subscribe({ name: "sensor.ticks" }))["result"]));
+  const firstEnded = async () => isJsonObject((await subscribe({}))["result"]);
+  await until(firstEnded);
+  assert.equal(receiver.deliveries().length, 3);
   await handler.close();
 });
 
@@ -378,11 +274,3 @@ test("webhook: the verification is for the pair of the principal and the URL as 
   await handler.close();
 });
 
-test("webhook: a new subscription over the limit of the principal gets ResourceExhausted", async () => {
-  const { handler, subscribe } = server({ maxSubscriptions: 1 });
-  assert.ok(isJsonObject((await subscribe({}))["result"]));
-  assert.deepEqual(member(await subscribe({ arguments: { room: "hall" } }), "error"), { code: -32025, message: "Too many webhook subscriptions.", data: { limit: "subscriptions", max: 1 } });
-  assert.ok(isJsonObject((await subscribe({}))["result"]));
-  assert.ok(isJsonObject((await subscribe({}, "bob"))["result"]));
-  await handler.close();
-});

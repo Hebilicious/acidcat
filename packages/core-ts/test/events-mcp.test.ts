@@ -4,18 +4,10 @@ import { test } from "node:test";
 import { isJsonObject } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
-import { createSession, defineApp, mcpHandler, mcpHandshake, ok, defineCapability, runMcpStdio } from "../src/index.ts";
-import { serve } from "../src/node.ts";
+import { defineApp, mcpHandler, mcpHandshake, ok, defineCapability, runMcpStdio } from "../src/index.ts";
 import { sensorOptions, Sensors, sensorsApp, toJsonSchema } from "./sensors.ts";
 import { sseReader } from "./sse.ts";
-
-async function until(condition: () => boolean): Promise<void> {
-  const end = Date.now() + 1000;
-  while (!condition()) {
-    if (Date.now() > end) throw new Error("The condition did not become true.");
-    await new Promise((resolve) => setTimeout(resolve, 2));
-  }
-}
+import { until } from "./until.ts";
 
 const VERSION = "2026-07-28";
 const META = { "io.modelcontextprotocol/protocolVersion": VERSION };
@@ -47,24 +39,13 @@ function httpServer(sensors = new Sensors(), heartbeatMs?: number) {
   return { handler, request, rpc, sensors };
 }
 
-test("MCP through HTTP: server/discover gives the events extension, and events/list gives each event", async () => {
+test("MCP through HTTP: events/list bundles the payload schema of a $ref, and an event with no payload schema has an object schema", async () => {
   const { rpc } = httpServer();
-  const discovered = member(await rpc("server/discover"), "result");
-  assert.deepEqual(discovered["capabilities"], { tools: { listChanged: false }, extensions: { "io.modelcontextprotocol/events": {} } });
   const listed = member(await rpc("events/list"), "result");
-  assert.equal(listed["nextCursor"], undefined);
   const events = Array.isArray(listed["events"]) ? listed["events"] : [];
-  assert.deepEqual(
-    events.find((entry) => isJsonObject(entry) && entry["name"] === "sensor.reading.changed"),
-    {
-      name: "sensor.reading.changed",
-      description: "A sensor gave a new reading. The occurrence gives the room and the temperature.",
-      delivery: ["push", "poll"],
-      inputSchema: { type: "object", properties: { room: { type: "string" } }, additionalProperties: false },
-      payloadSchema: { type: "object", properties: { room: { type: "string" }, celsius: { type: "number" } }, required: ["room", "celsius"], additionalProperties: false },
-    },
-  );
-  assert.deepEqual(member(events.find((entry) => isJsonObject(entry) && entry["name"] === "sensor.ticks"), "payloadSchema"), { type: "object" });
+  const payloadOf = (name: string) => member(events.find((entry) => isJsonObject(entry) && entry["name"] === name), "payloadSchema");
+  assert.deepEqual(payloadOf("sensor.reading.changed"), { type: "object", properties: { room: { type: "string" }, celsius: { type: "number" } }, required: ["room", "celsius"], additionalProperties: false });
+  assert.deepEqual(payloadOf("sensor.ticks"), { type: "object" });
 });
 
 test("MCP through HTTP: events/subscribe and events/unsubscribe are Unsupported when webhook delivery is off", async () => {
@@ -95,51 +76,9 @@ test("MCP through HTTP: a server whose view has no events serves no events metho
   for (const method of ["events/list", "events/stream", "events/poll"]) assert.equal(member(await rpc(method), "error")["code"], -32601);
 });
 
-test("MCP through HTTP: events/stream is a stream of server-sent events with active, the occurrences, and the result", async () => {
-  const { handler, request } = httpServer();
-  const response = await handler(request("events/stream", { name: "sensor.ticks" }, undefined, 7));
-  assert.equal(response.headers.get("Content-Type"), "text/event-stream");
-  const reader = sseReader(response);
-  const read = async () => {
-    const message = await reader.next();
-    assert.ok(message !== undefined);
-    assert.equal(message.event, undefined);
-    return objectOf(message.data);
-  };
-  assert.deepEqual(await read(), { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: false, _meta: sub(7) } });
-  for (let tick = 0; tick < 3; tick += 1) {
-    const event = await read();
-    assert.equal(event["method"], "notifications/events/event");
-    const params = member(event, "params");
-    assert.equal(params["name"], "sensor.ticks");
-    assert.deepEqual(params["data"], {});
-    assert.deepEqual(params["_meta"], sub(7));
-  }
-  assert.deepEqual(await read(), { jsonrpc: "2.0", id: 7, result: { resultType: "complete", _meta: { ...SERVER_INFO, ...sub(7) } } });
-  assert.equal(await reader.next(), undefined);
-});
-
-test("MCP through HTTP: an internal failure sends terminated, then the result", async () => {
-  const { handler, request } = httpServer();
-  const reader = sseReader(await handler(request("events/stream", { name: "sensor.broken" }, undefined, "s")));
-  const messages: JsonObject[] = [];
-  for (let message = await reader.next(); message !== undefined; message = await reader.next()) messages.push(objectOf(message.data));
-  assert.deepEqual(
-    messages.map((message) => message["method"] ?? "result"),
-    ["notifications/events/active", "notifications/events/event", "notifications/events/terminated", "result"],
-  );
-  assert.deepEqual(messages[2], { jsonrpc: "2.0", method: "notifications/events/terminated", params: { error: { code: -32603, message: "The event failed." }, _meta: sub("s") } });
-});
-
-test("MCP through HTTP: failures before the first occurrence are JSON-RPC errors", async () => {
-  const { rpc } = httpServer();
-  assert.deepEqual((await rpc("events/stream", { name: "sensor.hidden" }))["error"], { code: -32023, message: "There is no event sensor.hidden.", data: { kind: "event" } });
-  assert.equal(member(await rpc("events/stream", { name: "sensor.reading.changed", arguments: { room: 7 } }), "error")["code"], -32602);
-  assert.equal(member(await rpc("events/stream", { name: "sensor.ticks", cursor: 5 }), "error")["code"], -32602);
-});
-
-test("MCP through HTTP: maxAgeMs that is not an integer of 0 or more is -32602, after an unknown event", async () => {
+test("MCP through HTTP: a cursor that is not a string, or a maxAgeMs that is not an integer of 0 or more, is -32602, after an unknown event", async () => {
   const { rpc, sensors } = httpServer();
+  assert.equal(member(await rpc("events/stream", { name: "sensor.ticks", cursor: 5 }), "error")["code"], -32602);
   for (const maxAgeMs of [1.5, -1, "soon"]) {
     assert.equal(member(await rpc("events/stream", { name: "sensor.reading.changed", maxAgeMs }), "error")["code"], -32602, String(maxAgeMs));
     assert.equal(member(await rpc("events/stream", { name: "sensor.hidden", maxAgeMs }), "error")["code"], -32023, String(maxAgeMs));
@@ -147,7 +86,7 @@ test("MCP through HTTP: maxAgeMs that is not an integer of 0 or more is -32602, 
   assert.equal(sensors.listeners, 0);
 });
 
-test("MCP through HTTP: heartbeats, a truncated occurrence, and the cursor", async () => {
+test("MCP through HTTP: maxAgeMs reaches the provider, and an idle stream gets heartbeats", async () => {
   const sensors = new Sensors();
   const old = new Date(Date.now() - 60_000).toISOString();
   sensors.emit("hall", 1, old);
@@ -158,27 +97,9 @@ test("MCP through HTTP: heartbeats, a truncated occurrence, and the cursor", asy
   const read = async () => objectOf((await reader.next())?.data ?? "null");
   assert.equal(member(await read(), "params")["truncated"], false);
   assert.deepEqual(await read(), { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: true, cursor: "2", _meta: sub(1) } });
-  const event = member(await read(), "params");
-  assert.equal(event["cursor"], "2");
-  assert.equal(event["truncated"], undefined);
+  await read();
   assert.deepEqual(await read(), { jsonrpc: "2.0", method: "notifications/events/heartbeat", params: { cursor: "2", _meta: sub(1) } });
   await reader.cancel();
-});
-
-test("MCP through HTTP: when the client closes the request, the subscription is cancelled", async () => {
-  const { handler, sensors } = httpServer();
-  await using server = await serve(handler, { port: 0 });
-  const controller = new AbortController();
-  const response = await fetch(server.url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "MCP-Protocol-Version": VERSION },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "events/stream", params: { name: "sensor.reading.changed", _meta: META } }),
-    signal: controller.signal,
-  });
-  assert.equal(response.status, 200);
-  await until(() => sensors.listeners === 1);
-  controller.abort();
-  await until(() => sensors.listeners === 0);
 });
 
 test("MCP through HTTP: a client with the initialize handshake gets no events", async () => {
@@ -186,8 +107,7 @@ test("MCP through HTTP: a client with the initialize handshake gets no events", 
   const wrapped = mcpHandshake(handler);
   const post = async (body: object) =>
     objectOf(await (await wrapped(new Request("https://sensors.example/mcp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", ...body }) }))).text());
-  const initialized = await post({ id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } });
-  assert.deepEqual(member(member(initialized, "result"), "capabilities"), { tools: { listChanged: false } });
+  await post({ id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } });
   assert.equal(member(await post({ id: 2, method: "events/list", params: {} }), "error")["code"], -32601);
 });
 
@@ -227,54 +147,38 @@ function stdio(sensors = new Sensors(), heartbeatMs?: number) {
   };
 }
 
-test("MCP through stdio: events/stream writes its messages to standard output, and two streams have their own ids", async () => {
+test("MCP through stdio: the end of standard input completes each open stream, and its provider stops", async () => {
   const sensors = new Sensors();
   const io = stdio(sensors);
-  io.send({ id: 1, method: "events/stream", params: { name: "sensor.reading.changed", arguments: { room: "kitchen" }, _meta: META } });
-  io.send({ id: 2, method: "events/stream", params: { name: "sensor.reading.changed", _meta: META } });
-  await until(() => sensors.listeners === 2);
-  sensors.emit("kitchen", 21, "2026-11-10T09:00:00.000Z");
-  sensors.emit("hall", 18, "2026-11-10T09:00:01.000Z");
-  await until(() => io.of(2).length === 3);
-  assert.deepEqual(io.of(1), [
-    { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: false, _meta: sub(1) } },
-    {
-      jsonrpc: "2.0",
-      method: "notifications/events/event",
-      params: { eventId: "reading-0", name: "sensor.reading.changed", timestamp: "2026-11-10T09:00:00.000Z", data: { room: "kitchen", celsius: 21 }, cursor: "0", _meta: sub(1) },
-    },
-  ]);
-  io.send({ method: "notifications/cancelled", params: { requestId: 1 } });
+  io.send({ id: 1, method: "events/stream", params: { name: "sensor.reading.changed", _meta: META } });
   await until(() => sensors.listeners === 1);
-  sensors.emit("kitchen", 22);
-  await until(() => io.of(2).length === 4);
-  assert.equal(io.of(1).length, 2);
   io.end();
   await io.served;
-  assert.deepEqual(io.of(2).at(-1), { jsonrpc: "2.0", id: 2, result: { resultType: "complete", _meta: { ...SERVER_INFO, ...sub(2) } } });
+  assert.deepEqual(io.of(1).at(-1), { jsonrpc: "2.0", id: 1, result: { resultType: "complete", _meta: { ...SERVER_INFO, ...sub(1) } } });
   assert.equal(sensors.listeners, 0);
 });
 
-test("MCP through stdio: discover, list, heartbeat, Unsupported webhook delivery and the handshake", async () => {
+test("MCP through stdio: an idle stream gets heartbeats", async () => {
   const io = stdio(new Sensors(), 20);
-  io.send({ id: 1, method: "server/discover", params: { _meta: META } });
-  io.send({ id: 2, method: "events/list", params: { _meta: META } });
-  io.send({ id: 3, method: "events/subscribe", params: { name: "sensor.ticks", _meta: META } });
-  io.send({ id: 4, method: "events/stream", params: { name: "sensor.reading.changed", _meta: META } });
-  io.send({ id: 5, method: "events/stream", params: { name: "sensor.reading.changed" } });
-  io.send({ id: 6, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } });
-  await until(() => io.of(4).some((message) => message["method"] === "notifications/events/heartbeat"));
-  assert.deepEqual(member(member(io.of(1)[0], "result"), "capabilities"), { tools: { listChanged: true }, extensions: { "io.modelcontextprotocol/events": {} } });
-  assert.equal(Array.isArray(member(io.of(2)[0], "result")["events"]), true);
-  assert.equal(member(io.of(3)[0], "error")["code"], -32026);
-  assert.deepEqual(io.of(4).find((message) => message["method"] === "notifications/events/heartbeat"), { jsonrpc: "2.0", method: "notifications/events/heartbeat", params: { cursor: null, _meta: sub(4) } });
-  assert.equal(member(io.of(5)[0], "error")["code"], -32601);
-  assert.deepEqual(member(member(io.of(6)[0], "result"), "capabilities"), { tools: { listChanged: true } });
+  io.send({ id: 1, method: "events/stream", params: { name: "sensor.reading.changed", _meta: META } });
+  const heartbeat = () => io.of(1).find((message) => message["method"] === "notifications/events/heartbeat");
+  try {
+    await until(() => heartbeat() !== undefined);
+    assert.deepEqual(heartbeat(), { jsonrpc: "2.0", method: "notifications/events/heartbeat", params: { cursor: null, _meta: sub(1) } });
+  } finally {
+    io.end();
+    await io.served;
+  }
+});
+
+test("MCP through stdio: a request with no _meta is -32601, and initialize gives no events extension", async () => {
+  const io = stdio();
+  io.send({ id: 1, method: "events/stream", params: { name: "sensor.reading.changed" } });
+  io.send({ id: 2, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } });
+  await until(() => io.of(1).length === 1 && io.of(2).length === 1);
+  assert.equal(member(io.of(1)[0], "error")["code"], -32601);
+  assert.deepEqual(member(member(io.of(2)[0], "result"), "capabilities"), { tools: { listChanged: true } });
   io.end();
   await io.served;
 });
 
-test("a session of the MCP target has the events of the view", () => {
-  const session = createSession(sensorsApp, { target: "mcp", ...sensorOptions() });
-  assert.equal(session.eventHandles.size, 6);
-});

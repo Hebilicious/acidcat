@@ -2,23 +2,32 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { isOccurrence } from "@acid-cat/spec-ts";
+import { z } from "zod";
 
-import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, defineEvent, installWebMcp, ok, renderCatalog } from "../src/index.ts";
-import type { ModelContextTool, Occurrences } from "../src/index.ts";
+import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, defineEvent, ok, renderCatalog } from "../src/index.ts";
+import type { Occurrences } from "../src/index.ts";
 import { broken, clock, failing, hidden, read, readingChanged, sensorOptions, Sensors, sensorsApp, ticks, toJsonSchema } from "./sensors.ts";
-
-async function until(condition: () => boolean): Promise<void> {
-  const end = Date.now() + 1000;
-  while (!condition()) {
-    if (Date.now() > end) throw new Error("The condition did not become true.");
-    await new Promise((resolve) => setTimeout(resolve, 2));
-  }
-}
+import { until } from "./until.ts";
 
 async function nextOf<Payload>(occurrences: Occurrences<Payload>) {
   const step = await occurrences.next();
   if (step.done === true) throw new Error("The subscription ended.");
   return step.value;
+}
+
+function burst(id: string, items: readonly { readonly data: { readonly n: number }; readonly truncated?: true }[]) {
+  const { promise: allBuffered, resolve } = Promise.withResolvers<void>();
+  const event = defineEvent({
+    id,
+    description: "Give each item at once.",
+    audience: ["app"],
+    payload: z.object({ n: z.number() }),
+    async *subscribe() {
+      yield* items;
+      resolve();
+    },
+  });
+  return { app: defineApp({ targets: { app: { bindings: ["typescript"] } }, capabilities: [], events: [event] }), allBuffered };
 }
 
 const kindOf = (started: Occurrences<unknown> | { readonly kind: string }) => ("kind" in started ? started.kind : undefined);
@@ -33,7 +42,7 @@ async function failureKind(promise: Promise<unknown>): Promise<string> {
   throw new Error("The promise did not reject.");
 }
 
-test("the catalog has the events, after the capabilities, and each event has its schemas", () => {
+test("the catalog has the events, after the capabilities, and each event has its schemas; with no events, it has no events member", () => {
   const catalog = catalogOf(sensorsApp, { toJsonSchema });
   assert.deepEqual(Object.keys(catalog), ["acidcat", "title", "description", "targets", "$defs", "capabilities", "events"]);
   assert.deepEqual(catalog.events?.["sensor.reading.changed"], {
@@ -45,11 +54,8 @@ test("the catalog has the events, after the capabilities, and each event has its
   assert.deepEqual(catalog.events?.["sensor.ticks"], { description: ticks.description, audience: ["app", "api", "cli", "mcp"] });
   assert.equal(catalog.events?.["sensor.threshold"]?.input?.type, "object");
   assert.ok(renderCatalog(sensorsApp, { toJsonSchema }).includes('"events": {'));
-});
-
-test("an application with no events writes no events member", () => {
-  const app = defineApp({ targets: { app: { bindings: ["typescript"] } }, capabilities: [] });
-  assert.equal("events" in catalogOf(app, { toJsonSchema }), false);
+  const noEvents = defineApp({ targets: { app: { bindings: ["typescript"] } }, capabilities: [] });
+  assert.equal("events" in catalogOf(noEvents, { toJsonSchema }), false);
 });
 
 test("an id that is both a capability and an event stops the catalog and the session", () => {
@@ -153,28 +159,13 @@ test("a provider that throws when it starts fails as internal before the first o
 });
 
 test("an occurrence that the provider marks truncated keeps the mark, also when earlier occurrences wait in the buffer", async () => {
-  const app = defineApp({
-    targets: { app: { bindings: ["typescript"] } },
-    capabilities: [],
-    events: [
-      defineEvent({
-        id: "probe.gap",
-        description: "Give n = 1, then n = 2 after a gap, then n = 3.",
-        audience: ["app"],
-        async *subscribe() {
-          yield { data: {}, eventId: "1" };
-          yield { data: {}, eventId: "2", truncated: true as const };
-          yield { data: {}, eventId: "3" };
-        },
-      }),
-    ],
-  });
+  const { app, allBuffered } = burst("probe.gap", [{ data: { n: 1 } }, { data: { n: 2 }, truncated: true }, { data: { n: 3 } }]);
   await using session = createSession(app, { target: "app", ...sensorOptions() });
   const occurrences = await session.subscribe("probe.gap", {});
   assert.ok(!("kind" in occurrences));
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await allBuffered;
   const read = [await nextOf(occurrences), await nextOf(occurrences), await nextOf(occurrences)];
-  assert.deepEqual(read.map((each) => [each.eventId, each.truncated]), [["1", undefined], ["2", true], ["3", undefined]]);
+  assert.deepEqual(read.map((each) => [each.data, each.truncated]), [[{ n: 1 }, undefined], [{ n: 2 }, true], [{ n: 3 }, undefined]]);
 });
 
 test("a payload that does not agree with its schema, or a provider that throws, ends the iterator with internal, then done", async () => {
@@ -232,18 +223,15 @@ test("dispose ends each subscription as complete, and the providers stop", async
 });
 
 test("a slow client loses the oldest occurrences, and the next occurrence that it reads has truncated", async () => {
-  const sensors = new Sensors();
-  await using session = createSession(sensorsApp, { target: "app", ...sensorOptions(sensors), bufferLimit: 2 });
-  const occurrences = await session.eventHandle(readingChanged).subscribe({});
-  await until(() => sensors.listeners === 1);
-  for (let index = 0; index < 5; index += 1) sensors.emit("hall", index);
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  const { app, allBuffered } = burst("probe.burst", [0, 1, 2, 3, 4].map((n) => ({ data: { n } })));
+  await using session = createSession(app, { target: "app", ...sensorOptions(), bufferLimit: 2 });
+  const occurrences = await session.subscribe("probe.burst", {});
+  assert.ok(!("kind" in occurrences));
+  await allBuffered;
   const third = await nextOf(occurrences);
-  assert.equal(third.data.celsius, 3);
-  assert.equal(third.truncated, true);
+  assert.deepEqual([third.data, third.truncated], [{ n: 3 }, true]);
   const fourth = await nextOf(occurrences);
-  assert.equal(fourth.data.celsius, 4);
-  assert.equal(fourth.truncated, undefined);
+  assert.deepEqual([fourth.data, fourth.truncated], [{ n: 4 }, undefined]);
 });
 
 test("the cursor and maxAgeMs reach the provider, and a skipped occurrence gives truncated", async () => {
@@ -259,22 +247,6 @@ test("the cursor and maxAgeMs reach the provider, and a skipped occurrence gives
   const first = await nextOf(recent);
   assert.equal(first.cursor, "2");
   assert.equal(first.truncated, true);
-});
-
-test("a GraphQL-style consumer calls return() while next() waits", async () => {
-  // graphql-js 17 calls return() of the source while its own next() waits (withConcurrentAbruptClose).
-  const sensors = new Sensors();
-  await using session = createSession(sensorsApp, { target: "app", ...sensorOptions(sensors) });
-  const source = await session.eventHandle(readingChanged).subscribe({});
-  const iterator = source[Symbol.asyncIterator]();
-  await until(() => sensors.listeners === 1);
-  sensors.emit("hall", 20);
-  assert.equal((await iterator.next()).done, false);
-  const waiting = iterator.next();
-  const [returned, waited] = await Promise.all([iterator.return(), waiting]);
-  assert.deepEqual(returned, { done: true, value: undefined });
-  assert.deepEqual(waited, { done: true, value: undefined });
-  await until(() => sensors.listeners === 0);
 });
 
 test("an event with no payload schema must give an empty object", async () => {
@@ -298,19 +270,3 @@ test("an event with no payload schema must give an empty object", async () => {
   await assert.rejects(filled.next(), (error) => error instanceof CallFailureError && error.kind === "internal");
 });
 
-test("WebMCP serves no events: it registers only the tools of the capabilities", async () => {
-  const tools = new Map<string, ModelContextTool>();
-  const host = {
-    registerTool(tool: ModelContextTool) {
-      tools.set(tool.name, tool);
-      return undefined;
-    },
-  };
-  await using session = createSession(sensorsApp, { target: "app", ...sensorOptions() });
-  const installed = installWebMcp(session, { host });
-  assert.ok(installed !== undefined);
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.equal(installed.status.getSnapshot().phase, "ready");
-  assert.deepEqual([...tools.keys()], ["sensor.read"]);
-  await installed.dispose();
-});

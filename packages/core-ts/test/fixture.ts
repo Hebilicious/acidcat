@@ -73,7 +73,15 @@ export class Holds {
 }
 
 export class HoldsThatIgnoreCancellation extends Holds {
-  override hold(key: string, marker: string | undefined): Promise<void> {
+  readonly #marker: Marker | undefined;
+
+  constructor(marker?: Marker) {
+    super(marker);
+    this.#marker = marker;
+  }
+
+  override hold(key: string, marker: string | undefined, signal: AbortSignal): Promise<void> {
+    if (marker !== undefined) signal.addEventListener("abort", () => void this.#marker?.write(`${marker}.cancelled`), { once: true });
     return super.hold(key, marker, new AbortController().signal);
   }
 }
@@ -204,7 +212,7 @@ const after = (cursor: string | undefined): number => {
 };
 
 export const fixture = defineApp<Context>({
-  title: "Fixture",
+  title: "AcidCat conformance fixture",
   description: "One capability or event for each behavior that acid-cat conform tests.",
   targets: {
     app: { bindings: ["typescript", "webmcp"] },
@@ -436,28 +444,3 @@ export const WEBHOOK_LIMITS = { minTtlMs: 1000, maxSubscriptions: 3 } as const;
 export const principalOf = (request: Request): string | undefined => /^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")?.[1];
 
 export const options = (holds = new Holds(), watchers = new Watchers()) => ({ context: { switch: new Switch(), holds, watchers }, toJsonSchema, onDefect: () => undefined });
-
-export function heldApp() {
-  const started = Promise.withResolvers<void>();
-  const seen = { aborted: false };
-  const app = defineApp({
-    targets: { mcp: { bindings: ["mcp"] }, api: { bindings: ["http"] } },
-    capabilities: [
-      defineCapability({
-        id: "held.wait",
-        description: "Wait until the call is cancelled.",
-        audience: ["mcp", "api"],
-        run: (_input, { signal }) => {
-          started.resolve();
-          return new Promise((resolve) =>
-            signal.addEventListener("abort", () => {
-              seen.aborted = true;
-              resolve(ok(null));
-            }),
-          );
-        },
-      }),
-    ],
-  });
-  return { app, started: started.promise, seen };
-}

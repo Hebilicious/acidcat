@@ -19,7 +19,7 @@ tasks:
   test-programs:
     description: "Bundle each TypeScript program that the tests start as a process into .out/programs/. A bundle starts in less time than its source modules."
     command: "node"
-    args: ["../../scripts/bundle-programs.ts", "test/fixture-cli.ts", "test/fixture-cli-remote.ts", "test/fixture-cli-ignoring-cancellation.ts", "test/fixture-cli-watch-ignoring-cancellation.ts", "test/fixture-cli-without-marker.ts", "test/fixture-mcp-stdio.ts", "test/fixture-mcp-stdio-watch-ignoring-cancellation.ts", "test/fixture-sensors-cli.ts", "test/fixture-sensors-cli-setup-error.ts"]
+    args: ["../../scripts/bundle-programs.ts", "test/fixture-cli.ts", "test/fixture-cli-remote.ts", "test/fixture-cli-ignoring-cancellation.ts", "test/fixture-cli-watch-ignoring-cancellation.ts", "test/fixture-cli-without-marker.ts", "test/fixture-mcp-stdio.ts", "test/fixture-mcp-stdio-watch-ignoring-cancellation.ts", "test/fixture-sensors-cli-setup-error.ts"]
     inputs: ["src/**/*.ts", "test/**/*.ts", "/scripts/bundle-programs.ts", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/mcp-handshake/src/**/*.ts"]
     outputs: [".out/programs/**/*"]
 
