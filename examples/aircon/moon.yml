@@ -19,7 +19,7 @@ tasks:
       runInCI: false
 
   test-rust:
-    description: "Build the program of the air conditioner on the Rust core, and run its tests: the session, the events and the state. The tests of the command line and of the MCP server start this program."
+    description: "Build the program of the air conditioner on the Rust core, and run its tests: the session, the events, the state, the aliases of the command line and its human form on a terminal. The tests of the command line and of the MCP server start this program."
     script: "cd core-rust && cargo build --quiet --locked && cargo test --quiet --locked"
     inputs:
       - "core-rust/src/**/*.rs"
@@ -36,8 +36,8 @@ tasks:
   test-programs:
     description: "Bundle each TypeScript program that the tests start as a process into .out/programs/. A bundle starts in less time than its source modules."
     command: "node"
-    args: ["../../scripts/bundle-programs.ts", "core-ts/cli.ts", "core-ts/serve.ts", "core-ts/mcp-stdio.ts", "core-effect/cli.ts", "core-effect/serve.ts", "core-effect/mcp-stdio.ts", "test/terminal-cli.ts"]
-    inputs: ["core-ts/**/*.ts", "core-effect/**/*.ts", "test/**/*.ts", "/packages/core-ts/src/**/*.ts", "/packages/core-effect/src/**/*.ts", "/scripts/bundle-programs.ts", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/mcp-handshake/src/**/*.ts"]
+    args: ["../../scripts/bundle-programs.ts", "core-ts/cli.ts", "core-ts/serve.ts", "core-ts/mcp-stdio.ts", "core-effect/cli.ts", "core-effect/serve.ts", "core-effect/mcp-stdio.ts"]
+    inputs: ["core-ts/**/*.ts", "core-effect/**/*.ts", "/packages/core-ts/src/**/*.ts", "/packages/core-effect/src/**/*.ts", "/scripts/bundle-programs.ts", "/packages/spec-ts/src/**/*.ts", "/packages/catalog/typescript/src/**/*.ts", "/packages/mcp-handshake/src/**/*.ts"]
     outputs: [".out/programs/**/*"]
 
   test:

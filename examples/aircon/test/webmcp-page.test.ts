@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { after, before, test } from "node:test";
 
 import { serve } from "@acid-cat/core-ts/node";
 import { chromium } from "playwright";
-import type { Page } from "playwright";
+import type { Browser, Page } from "playwright";
 import { z } from "zod";
 
 import { pageHandler } from "../web/page.ts";
@@ -64,13 +64,18 @@ const waitForTool = (page: Page, name: string, present: boolean) =>
     return names.includes(`"name":"${String(tool)}"`) === wanted;
   }, [name, present] as const);
 
+let browser: Browser;
+before(async () => {
+  browser = await chromium.launch();
+});
+after(() => browser.close());
+
 for (const core of ["core-ts", "core-effect"]) {
   test(`the page of ${core} gives a browser agent one WebMCP tool for each available capability of the app view`, async () => {
     const handler = await pageHandler(new URL(`../${core}/page.ts`, import.meta.url));
     await using served = await serve({ "/": handler }, { port: 0 });
-    const browser = await chromium.launch();
+    const page = await browser.newPage();
     try {
-      const page = await browser.newPage();
       const errors: string[] = [];
       page.on("pageerror", (error) => errors.push(error.message));
       await page.addInitScript(testHost);
@@ -122,7 +127,7 @@ for (const core of ["core-ts", "core-effect"]) {
 
       assert.deepEqual(errors, []);
     } finally {
-      await browser.close();
+      await page.close();
     }
   });
 }
@@ -131,15 +136,14 @@ for (const core of ["core-ts", "core-effect"]) {
   test(`the page of ${core} works, and tells it, when the browser has no WebMCP host`, async () => {
     const handler = await pageHandler(new URL(`../${core}/page.ts`, import.meta.url));
     await using served = await serve({ "/": handler }, { port: 0 });
-    const browser = await chromium.launch();
+    const page = await browser.newPage();
     try {
-      const page = await browser.newPage();
       await page.goto(`${served.url}/`);
       await page.locator("#webmcp-phase", { hasText: "no host" }).waitFor();
       await page.locator("#power").click();
       await page.locator("#status-power", { hasText: "on" }).waitFor();
     } finally {
-      await browser.close();
+      await page.close();
     }
   });
 }

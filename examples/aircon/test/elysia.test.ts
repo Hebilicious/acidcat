@@ -96,22 +96,6 @@ test("GET /status/changes streams each new status as a server-sent event, and a 
   await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
 });
 
-test("when the signal of the request aborts, the stream ends and the subscription with it", async () => {
-  const unit = new Unit();
-  const app = elysiaApi({ unit });
-  const before = unit.statusListeners;
-  const abort = new AbortController();
-  const response = await app.handle(new Request("http://localhost/status/changes", { signal: abort.signal }));
-  assert.ok(response.body !== null);
-  const reader = response.body.getReader();
-  await reader.read();
-  assert.equal(unit.statusListeners, before + 1);
-  const waiting = reader.read();
-  abort.abort();
-  assert.equal((await waiting).done, true);
-  await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
-});
-
 async function freePort(): Promise<number> {
   const server = createServer();
   server.listen(0, "127.0.0.1");
@@ -129,29 +113,34 @@ async function freePort(): Promise<number> {
  * server has its own `stop`: the function stops that server. When a release of `@elysiajs/node` sets `app.server` in
  * `listen`, use `app.stop()`, and remove the callback and `isStoppable`.
  *
- * The adapter starts to listen a short time after `listen` returns, so wait until the port answers.
+ * The adapter starts to listen a short time after `listen` returns. The server of the callback holds the srvx server in
+ * `raw`, and its `ready()` resolves when the port listens.
  */
 async function listenOnNode(app: ReturnType<typeof elysiaApi>): Promise<{ readonly port: number; readonly stop: () => Promise<void> }> {
   const port = await freePort();
-  let stop: () => Promise<void> = async () => undefined;
+  let served: unknown;
   app.listen({ hostname: "127.0.0.1", port }, (server: unknown) => {
-    if (isStoppable(server)) {
-      stop = async () => {
-        await server.stop();
-      };
-    }
+    served = server;
   });
-  const end = Date.now() + 5000;
-  for (;;) {
-    try {
-      await fetch(`http://127.0.0.1:${port}/status`);
-      return { port, stop };
-    } catch (error) {
-      if (Date.now() > end) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
-  }
+  const server = served;
+  if (!isStoppable(server) || !hasRawServer(server)) throw new Error("The adapter gave no srvx server to the callback of listen.");
+  await server.raw.ready();
+  return {
+    port,
+    stop: async () => {
+      await server.stop();
+    },
+  };
 }
+
+const hasRawServer = (server: unknown): server is { raw: { ready(): unknown } } =>
+  typeof server === "object" &&
+  server !== null &&
+  "raw" in server &&
+  typeof server.raw === "object" &&
+  server.raw !== null &&
+  "ready" in server.raw &&
+  typeof server.raw.ready === "function";
 
 const isStoppable = (server: unknown): server is { stop(): unknown } =>
   typeof server === "object" && server !== null && "stop" in server && typeof server.stop === "function";

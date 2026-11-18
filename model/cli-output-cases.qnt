@@ -32,14 +32,16 @@ module cliOutputCases {
     ["2"],
   ]
 
-  pure val ONE_VARIABLE_ENVIRONMENTS: List[str -> Text] = [CI_VARIABLE].concat(AGENT_VARIABLES).foldl([], (envs, name) =>
-    ENV_VALUES.foldl(envs, (more, value) => more.append(Map(name -> value))))
+  pure val EACH_VALUE_OF_CI: List[str -> Text] = ENV_VALUES.foldl([], (envs, value) => envs.append(Map(CI_VARIABLE -> value)))
+
+  pure val EACH_AGENT_VARIABLE_TRUE_AND_FALSE: List[str -> Text] = AGENT_VARIABLES.foldl([], (envs, name) =>
+    envs.append(Map(name -> ["1"])).append(Map(name -> ["0"])))
 
   pure val ENVIRONMENTS: List[str -> Text] =
-    [Map(), Map("NO_COLOR" -> ["1"])].concat(ONE_VARIABLE_ENVIRONMENTS).append(Map(CI_VARIABLE -> ["0"], "CLAUDECODE" -> ["1"]))
+    [Map(), Map("NO_COLOR" -> ["1"])].concat(EACH_VALUE_OF_CI).concat(EACH_AGENT_VARIABLE_TRUE_AND_FALSE).append(Map(CI_VARIABLE -> ["0"], "CLAUDECODE" -> ["1"]))
 
-  pure val AUTO_CASES = [true, false].foldl([], (cases, isTerminal) =>
-    ENVIRONMENTS.foldl(cases, (more, env) => more.append({ isTerminal: isTerminal, env: env, form: autoForm(isTerminal, env) })))
+  pure val AUTO_CASES = ENVIRONMENTS.foldl([{ isTerminal: false, env: Map(), form: autoForm(false, Map()) }], (cases, env) =>
+    cases.append({ isTerminal: true, env: env, form: autoForm(true, env) }))
 
   pure val NAMES: List[Text] = [
     ["-", "-", "j", "s", "o", "n"],

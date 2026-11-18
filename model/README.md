@@ -121,7 +121,7 @@ The bounds are `MOST_SEGMENTS`, `MOST_AFTER` and `MOST_NAMES` in each module, wi
 
 ## Cases
 
-[`cli-output-cases.qnt`](cli-output-cases.qnt) and [`cli-alias-cases.qnt`](cli-alias-cases.qnt) list every case of a bounded domain with the model's result. The output cases cover the automatic form (including U+0085 and U+FEFF, which the trim keeps), the flag check, reading, form choice and help lines. The alias cases run against a fixed catalog with 4 capabilities and 3 events, with one alias, pairs of aliases (such as `fan` and `fan high`), each kind of `options.cli`, and several default aliases. Read the modules for the exact domains.
+[`cli-output-cases.qnt`](cli-output-cases.qnt) and [`cli-alias-cases.qnt`](cli-alias-cases.qnt) list every case of a bounded domain with the model's result. The output cases cover the automatic form (including U+0085 and U+FEFF, which the trim keeps), the flag check, reading, form choice and help lines. Each core reads `CI` and the coding-agent variables with one function, so the automatic-form cases give every test value to `CI`, and one true and one false value to each coding-agent variable. The alias cases run against a fixed catalog with 4 capabilities and 3 events, with one alias, pairs of aliases (such as `fan` and `fan high`), each kind of `options.cli`, and several default aliases. Read the modules for the exact domains.
 
 ## Generated files
 
