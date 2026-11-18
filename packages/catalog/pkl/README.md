@@ -39,6 +39,8 @@ pkl eval greenhouse.pkl --output-path greenhouse.acidcat.json
 acid-cat format --write greenhouse.acidcat.json
 ```
 
+The members `readOnly`, `destructive` and `idempotent` of a capability are its [hints](../../../spec/catalog.md#capabilities) for clients.
+
 `events` declares the [events](../../../spec/events.md) that clients can subscribe to. The module checks that each audience names a target, that each input and payload is an object or a reference, and that no id is also the id of a capability.
 
 The member `cli` of a target gives the options of the [command line](../../../spec/bindings/cli.md#aliases), and renders as `options.cli`. Its classes `CliOptions` and `CliAlias` reject a misspelled member name. `acid-cat check` checks the rules of the aliases:

@@ -16,7 +16,7 @@ A server serves one transport or both. The rules for the [server](#server) and t
 
 - **Names and listing.** `tools/list` gives one tool for each available capability in the view. An unavailable capability is not listed. A call to it gets the same answer as a call to an unknown tool. The `name` of the tool is the id. Its `description` is the description of the capability. Its `inputSchema` is the [bundled](../catalog.md#bundling) input schema.
 - **Output schema.** If the bundled output schema has `"type": "object"`, the tool gives it as `outputSchema`. If not, the tool has no `outputSchema`.
-- **Hints.** For a `readOnly` capability, `annotations.readOnlyHint` is `true`.
+- **Hints.** For a `readOnly` capability, `annotations.readOnlyHint` is `true`. If the capability has `destructive`, `annotations.destructiveHint` has the same value. If the capability has `idempotent`, `annotations.idempotentHint` has the same value. If the capability does not have one of these two members, the tool has no annotation for it, or the default value of MCP: `destructiveHint: true` and `idempotentHint: false`. A client cannot see a difference between the two forms. MCP gives these two annotations a meaning only when `readOnlyHint` is `false`.
 - **Cancellation.** When the client cancels the request of a call, the call is cancelled. Each transport tells how the client cancels a request. The server does not have to answer a cancelled call.
 - **Outcomes.**
 

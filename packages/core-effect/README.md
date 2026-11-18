@@ -37,6 +37,7 @@ export const aircon = App.make({
 
 - `input` is a `Schema.Struct`, or a `Schema.Union` of structs. The catalog writes a union with `"type": "object"`, so that it is an object schema. With no `input`, `run` gets the object that the client sent, as a `Capability.NoInput`. Use `Schema.Finite` or `Schema.Int` for numbers: `Schema.Number` also accepts `Infinity` and `NaN`, which JSON cannot hold.
 - Each failure is a `Schema.TaggedStruct`. Its tag is the tag in the catalog.
+- `readOnly`, `destructive` and `idempotent` are optional booleans: the [hints](../../spec/catalog.md#capabilities) of the capability for clients. The MCP binding gives them as the tool annotations `readOnlyHint`, `destructiveHint` and `idempotentHint`.
 - `availability` is an optional Effect that gives a `SubscriptionRef` of availability values. With no `availability`, the capability is always available.
 - `state` is an optional `{ schema, value }`: the schema of the [state](../../spec/invocation.md#state), and an Effect that gives a `SubscriptionRef` of its values. Handles need a state schema that encodes synchronously, because `getSnapshot` is synchronous. `Handles.make` fails with an error that names the capability if the schema does not.
 - `Capability.make` builds the `pipeline` of the capability: the calls that a session makes when it does not know the types of the schemas. Each part checks its values with the schemas of the same capability. Declare each capability with `Capability.make`.

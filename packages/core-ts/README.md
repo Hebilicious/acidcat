@@ -36,6 +36,7 @@ export const aircon = defineApp<{ unit: Unit }>({
 - `run` gets the input, and `{ signal, context, target }`: an `AbortSignal`, the context, and the target of the session, for example `"mcp"` or `"cli"`. It returns `ok(value)` or `fail(failure)`, for example `fail({ _tag: "Offline", since })`. The types check that the value agrees with the output schema, that the failure has a tag of `failures`, and that it has the members of the schema of that tag. If `run` throws, the call fails as `internal`.
 - With an input schema, `run` gets the output of the schema. With none, it gets an empty object.
 - A failure schema describes the whole failure object, with its `_tag`.
+- `readOnly`, `destructive` and `idempotent` are optional booleans: the [hints](../../spec/catalog.md#capabilities) of the capability for clients. The MCP binding gives them as the tool annotations `readOnlyHint`, `destructiveHint` and `idempotentHint`.
 - `availability` is an optional function that returns an observable availability. A session reads it with `getSnapshot` when a call comes in. It subscribes to it only while `onChange` or the handle has listeners.
 - `state` is an optional `{ schema, source }`: the schema of the [state](../../spec/invocation.md#state), and a function that returns an observable. The handle gives it as `snapshot`.
 - `capabilitiesFor<Context>()` sets the context type one time. The other types come from the schemas.

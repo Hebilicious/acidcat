@@ -62,6 +62,8 @@ export function airconCatalog(): Catalog {
   const setting = (name: string, property: Schema) => ({
     input: { type: "object", required: [name], properties: { [name]: property } },
     failures: { Offline: offline },
+    destructive: true,
+    idempotent: true,
   });
 
   return catalog
@@ -81,7 +83,7 @@ export function airconCatalog(): Catalog {
     .capability("aircon.mode.set", {
       description: "Choose how the unit runs.",
       audience: controls,
-      input: setting("mode", mode).input,
+      ...setting("mode", mode),
       failures: {
         Offline: offline,
         PoweredOff: { type: "object", description: "The unit must be on before its mode can change." },
@@ -107,6 +109,8 @@ export function airconCatalog(): Catalog {
       },
       output: schedule,
       failures: { Offline: offline },
+      destructive: true,
+      idempotent: true,
     })
     .capability("aircon.status.export", {
       description: "Write the status to a JSON file. A cancelled call can still write the file.",

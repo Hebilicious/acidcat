@@ -209,6 +209,8 @@ pub struct Capability<C, I = (), O = (), F = NoFailure, X = NoInput> {
     description: String,
     audience: Vec<String>,
     read_only: bool,
+    destructive: Option<bool>,
+    idempotent: Option<bool>,
     input: Option<Value>,
     output: Option<Value>,
     failures: Vec<(String, Value)>,
@@ -227,6 +229,8 @@ impl<C> Capability<C> {
             description: description.into(),
             audience: Vec::new(),
             read_only: false,
+            destructive: None,
+            idempotent: None,
             input: None,
             output: None,
             failures: Vec::new(),
@@ -247,6 +251,8 @@ impl<C, I, O, F, X> Capability<C, I, O, F, X> {
             description: self.description,
             audience: self.audience,
             read_only: self.read_only,
+            destructive: self.destructive,
+            idempotent: self.idempotent,
             input: self.input,
             output: self.output,
             failures: self.failures,
@@ -280,6 +286,18 @@ impl<C, I, O, F, X> Capability<C, I, O, F, X> {
     /// A call changes nothing that a client can see.
     pub fn read_only(mut self) -> Self {
         self.read_only = true;
+        self
+    }
+
+    /// `true`: a call can delete or overwrite something that a client can see. `false`: a call only adds.
+    pub fn destructive(mut self, destructive: bool) -> Self {
+        self.destructive = Some(destructive);
+        self
+    }
+
+    /// `true`: a second call with the same input has no further effect that a client can see.
+    pub fn idempotent(mut self, idempotent: bool) -> Self {
+        self.idempotent = Some(idempotent);
         self
     }
 
@@ -392,6 +410,8 @@ where
             description: self.description,
             audience: self.audience,
             read_only: self.read_only,
+            destructive: self.destructive,
+            idempotent: self.idempotent,
             input: self.input,
             output: self.output,
             failures: self.failures,
@@ -439,6 +459,8 @@ pub struct CapabilityDefinition<C, X = NoInput, O = (), F = NoFailure> {
     pub(crate) description: String,
     pub(crate) audience: Vec<String>,
     pub(crate) read_only: bool,
+    pub(crate) destructive: Option<bool>,
+    pub(crate) idempotent: Option<bool>,
     pub(crate) input: Option<Value>,
     pub(crate) output: Option<Value>,
     pub(crate) failures: Vec<(String, Value)>,
@@ -460,6 +482,8 @@ impl<C, X, O, F> CapabilityDefinition<C, X, O, F> {
             description: self.description,
             audience: self.audience,
             read_only: self.read_only,
+            destructive: self.destructive,
+            idempotent: self.idempotent,
             input: self.input,
             output: self.output,
             failures: self.failures,
@@ -826,6 +850,8 @@ impl<C: Send + Sync + 'static> App<C> {
                     output: capability.output.clone(),
                     failures: capability.failures.clone(),
                     read_only: capability.read_only,
+                    destructive: capability.destructive,
+                    idempotent: capability.idempotent,
                     state: capability.state.as_ref().map(|(schema, _)| schema.clone()),
                 },
             );

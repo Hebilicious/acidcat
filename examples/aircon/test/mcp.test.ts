@@ -30,6 +30,9 @@ test("the server of the application has its own tools", async () => {
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((tool) => tool.name).sort(), ["get_status", "set_controls"]);
   assert.equal(tools.find((tool) => tool.name === "get_status")?.annotations?.readOnlyHint, true);
+  const setControls = tools.find((tool) => tool.name === "set_controls");
+  assert.equal(setControls?.annotations?.destructiveHint, true);
+  assert.equal(setControls?.annotations?.idempotentHint, true);
 
   const poweredOff = await client.callTool({ name: "set_controls", arguments: { mode: "heat" } });
   assert.equal(poweredOff.isError, true);

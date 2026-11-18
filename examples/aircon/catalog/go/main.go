@@ -84,6 +84,8 @@ func airconCatalog() *catalog.Catalog {
 			Audience:    everywhere,
 			Input:       setting("on", schema{"type": "boolean"}),
 			Failures:    offlineOnly,
+			Destructive: new(true),
+			Idempotent:  new(true),
 		}).
 		Capability("aircon.mode.set", catalog.Capability{
 			Description: "Choose how the unit runs.",
@@ -93,18 +95,24 @@ func airconCatalog() *catalog.Catalog {
 				"Offline":    offline,
 				"PoweredOff": {"type": "object", "description": "The unit must be on before its mode can change."},
 			},
+			Destructive: new(true),
+			Idempotent:  new(true),
 		}).
 		Capability("aircon.temperature.set", catalog.Capability{
 			Description: "Set the target temperature in degrees Celsius.",
 			Audience:    controls,
 			Input:       setting("celsius", schema{"type": "number", "minimum": 16, "maximum": 31}),
 			Failures:    offlineOnly,
+			Destructive: new(true),
+			Idempotent:  new(true),
 		}).
 		Capability("aircon.fan.set", catalog.Capability{
 			Description: "Set the fan speed.",
 			Audience:    controls,
 			Input:       setting("speed", fanSpeed),
 			Failures:    offlineOnly,
+			Destructive: new(true),
+			Idempotent:  new(true),
 		}).
 		Capability("aircon.schedule.set", catalog.Capability{
 			Description: "Turn the unit on at each given hour, on each given day. The default hour is 7.",
@@ -117,8 +125,10 @@ func airconCatalog() *catalog.Catalog {
 					"hours": schema{"type": "array", "items": hour},
 				},
 			},
-			Output:   schedule,
-			Failures: offlineOnly,
+			Output:      schedule,
+			Failures:    offlineOnly,
+			Destructive: new(true),
+			Idempotent:  new(true),
 		}).
 		Capability("aircon.status.export", catalog.Capability{
 			Description: "Write the status to a JSON file. A cancelled call can still write the file.",

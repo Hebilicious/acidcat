@@ -124,6 +124,8 @@ fn aircon_catalog() -> Catalog {
             audience: everywhere.clone(),
             input: Some(setting("on", json!({ "type": "boolean" }))),
             failures: offline_only(),
+            destructive: Some(true),
+            idempotent: Some(true),
             ..Capability::default()
         })
         .capability("aircon.mode.set", Capability {
@@ -137,6 +139,8 @@ fn aircon_catalog() -> Catalog {
                     "description": "The unit must be on before its mode can change."
                 })),
             ],
+            destructive: Some(true),
+            idempotent: Some(true),
             ..Capability::default()
         })
         .capability("aircon.temperature.set", Capability {
@@ -144,6 +148,8 @@ fn aircon_catalog() -> Catalog {
             audience: controls.clone(),
             input: Some(setting("celsius", json!({ "type": "number", "minimum": 16, "maximum": 31 }))),
             failures: offline_only(),
+            destructive: Some(true),
+            idempotent: Some(true),
             ..Capability::default()
         })
         .capability("aircon.fan.set", Capability {
@@ -151,6 +157,8 @@ fn aircon_catalog() -> Catalog {
             audience: controls.clone(),
             input: Some(setting("speed", fan_speed)),
             failures: offline_only(),
+            destructive: Some(true),
+            idempotent: Some(true),
             ..Capability::default()
         })
         .capability("aircon.schedule.set", Capability {
@@ -166,6 +174,8 @@ fn aircon_catalog() -> Catalog {
             })),
             output: Some(schedule),
             failures: offline_only(),
+            destructive: Some(true),
+            idempotent: Some(true),
             ..Capability::default()
         })
         .capability("aircon.status.export", Capability {

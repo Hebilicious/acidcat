@@ -48,6 +48,8 @@ An event, such as `aircon.status.changed`, gives a stream of **occurrences** to 
 
 The HTTP stream uses the framing of the GraphQL over server-sent events protocol. The WebMCP binding does not serve events.
 
+A capability can give [hints](spec/catalog.md#capabilities) for clients: `readOnly` (a call changes nothing), `destructive` (a call can delete or overwrite something) and `idempotent` (a second call with the same input has no more effect). The MCP server gives them as the tool annotations `readOnlyHint`, `destructiveHint` and `idempotentHint`. An agent client uses them to decide when to ask the user before a call.
+
 On the command line, each input property is a flag. An array of simple values takes one flag for each item, `aircon schedule set --days mon --days fri --hours 7`, or the whole array as JSON text, `--days '["mon","fri"]'`. The program ignores a first `--`, which package runners such as `pnpm` and `npx` pass to it: `pnpm exec aircon -- status` runs `aircon status`.
 
 An interrupt (Ctrl+C) cancels the call or the subscription, with exit code 130. If the capability cannot stop, the command line of each core exits with 130 one second later, or at once at a second interrupt.

@@ -20,7 +20,7 @@ export interface Report {
 const KNOWN_MEMBERS = {
   catalog: ["acidcat", "title", "description", "targets", "$defs", "capabilities", "events"],
   target: ["bindings", "description", "options"],
-  capability: ["description", "audience", "input", "output", "failures", "readOnly", "state"],
+  capability: ["description", "audience", "input", "output", "failures", "readOnly", "destructive", "idempotent", "state"],
   event: ["description", "audience", "input", "payload"],
   cliOptions: ["aliases", "default"],
 };
@@ -29,6 +29,8 @@ const optional = (object: JsonObject, key: string, isMember: (value: unknown) =>
   !Object.hasOwn(object, key) || isMember(object[key]);
 
 const isString = (value: unknown): value is string => typeof value === "string";
+
+const isBoolean = (value: unknown): value is boolean => typeof value === "boolean";
 
 const isTarget = (value: unknown): value is Catalog["targets"][string] => isObject(value) && isStringArray(value.bindings);
 
@@ -40,7 +42,9 @@ const isCapability = (value: unknown): value is CatalogCapability =>
   optional(value, "output", isObject) &&
   optional(value, "state", isObject) &&
   optional(value, "failures", (failures) => isRecordOf(failures, isObject)) &&
-  optional(value, "readOnly", (readOnly) => typeof readOnly === "boolean");
+  optional(value, "readOnly", isBoolean) &&
+  optional(value, "destructive", isBoolean) &&
+  optional(value, "idempotent", isBoolean);
 
 const isEvent = (value: unknown): value is CatalogEvent =>
   isObject(value) &&

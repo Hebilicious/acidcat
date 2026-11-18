@@ -17,6 +17,7 @@ The specification is at https://github.com/Hebilicious/acidcat/tree/main/spec. R
 - **Prefer a source to JSON by hand.** Write the catalog as a Pkl module that amends `Catalog.pkl`, a program with a catalog library, or the code of the application when a core writes the catalog, and let the tool write the JSON. A source finds errors, shares types and gives the canonical form. JSON by hand is allowed: then run `acid-cat check --strict` and `acid-cat format --write` after each change. When a catalog has a source, never change its JSON: change the source, and write the JSON again.
 - **Ids are names, not versions.** An id is two or more segments with dots between them: `aircon.power.set`. Each segment matches `[a-z][a-z0-9]*(-[a-z0-9]+)*`. Do not change the meaning of an id. Give a new meaning a new id.
 - **Each audience is explicit.** A capability or an event with no audience is available to no target. Give agents (`mcp` and WebMCP targets) only the capabilities that they must have.
+- **Give the hints that are true.** `readOnly`: a call changes nothing. `destructive`: `true` if a call can delete or overwrite something, `false` if a call only adds things. `idempotent`: a second call with the same input has no more effect. Each hint is optional. The MCP binding gives them as `readOnlyHint`, `destructiveHint` and `idempotentHint`, and agent clients use them to decide when to ask the user before a call.
 - **A failure is data.** Declare each failure that a capability can return, by tag, in `failures`. A failure value has its tag in `_tag`. A defect (an exception) becomes the call failure `internal`, and its details stay on the server.
 - **Inputs carry no identity.** No user id, token or credential in an input. The session holds the identity of the client.
 - **Descriptions are for people and for agents.** In one sentence, tell what the capability does, or what the event is and when it happens. Add the effects that stay after a cancellation. Do not repeat the audience, the schemas or the failures.
@@ -29,7 +30,7 @@ The specification is at https://github.com/Hebilicious/acidcat/tree/main/spec. R
 | One application with one core | The code: the core writes the catalog from its capabilities | `renderCatalog(app, { toJsonSchema })` (core-ts), `App.render(app)` (core-effect), `app.render_catalog()` (core-rust) |
 | A catalog that several implementations share, for example a server in core-effect and a web page in core-ts | A Pkl module, or a program with a catalog library | `pkl eval <module>`, then `acid-cat format --write`; or the program of the library |
 
-When several implementations share one catalog, each implementation has a test that compares its own catalog with the shared catalog: the same targets, and for each capability the same audience, failure tags, `readOnly` and `state`. `examples/aircon` in the repository does this for each core.
+When several implementations share one catalog, each implementation has a test that compares its own catalog with the shared catalog: the same targets, and for each capability the same audience, failure tags, `readOnly`, `destructive`, `idempotent` and `state`. `examples/aircon` in the repository does this for each core.
 
 Commit the source and the JSON together. Add a check to the build that writes the JSON again and fails when it differs.
 
@@ -45,7 +46,7 @@ A core in another language follows the specification and passes `acid-cat confor
 
 ## Add a capability
 
-1. Add it to the source of the catalog: id, description, audience, input, output, failures, `readOnly`, `state`.
+1. Add it to the source of the catalog: id, description, audience, input, output, failures, `readOnly`, `destructive`, `idempotent`, `state`.
 2. Implement it in the core. See [references/cores.md](references/cores.md) for each core.
 3. Write the JSON of the catalog again, and run `acid-cat check --strict <catalog>`.
 4. Run the tests of the application, and `acid-cat conform` for each binding that the application serves.

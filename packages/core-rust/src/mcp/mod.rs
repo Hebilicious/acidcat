@@ -165,7 +165,13 @@ pub(crate) fn list_tools<C: Send + Sync + 'static>(session: &Session<C>) -> Vec<
             {
                 tool["outputSchema"] = output;
             }
-            tool["annotations"] = json!({ "readOnlyHint": capability.get("readOnly") == Some(&json!(true)) });
+            let mut annotations = json!({ "readOnlyHint": capability.get("readOnly") == Some(&json!(true)) });
+            for (member, hint) in [("destructive", "destructiveHint"), ("idempotent", "idempotentHint")] {
+                if let Some(value) = capability.get(member) {
+                    annotations[hint] = value.clone();
+                }
+            }
+            tool["annotations"] = annotations;
             Some(tool)
         })
         .collect()

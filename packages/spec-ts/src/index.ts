@@ -728,6 +728,21 @@ export function mcpToolResult(outcome: Outcome<unknown, unknown>, hasOutputSchem
     : { content: text(outcome.value) };
 }
 
+export interface McpToolAnnotations {
+  readonly readOnlyHint: boolean;
+  readonly destructiveHint?: boolean;
+  readonly idempotentHint?: boolean;
+}
+
+/** A hint that the capability does not give has no annotation. */
+export function mcpToolAnnotations(capability: CatalogCapability): McpToolAnnotations {
+  return {
+    readOnlyHint: capability.readOnly === true,
+    ...(capability.destructive === undefined ? {} : { destructiveHint: capability.destructive }),
+    ...(capability.idempotent === undefined ? {} : { idempotentHint: capability.idempotent }),
+  };
+}
+
 export type JsonObject = { readonly [key: string]: unknown };
 
 export interface CatalogCapability extends JsonObject {
@@ -737,6 +752,8 @@ export interface CatalogCapability extends JsonObject {
   readonly output?: JsonObject;
   readonly failures?: { readonly [tag: string]: JsonObject };
   readonly readOnly?: boolean;
+  readonly destructive?: boolean;
+  readonly idempotent?: boolean;
   readonly state?: JsonObject;
 }
 

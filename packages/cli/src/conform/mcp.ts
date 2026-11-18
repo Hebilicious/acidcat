@@ -135,8 +135,16 @@ export async function checkTools(checks: Checks, mcp: Client): Promise<void> {
     const { tools } = await mcp.listTools(undefined, { signal });
     const echo = tools.find((tool) => tool.name === "fixture.echo");
     const refuse = tools.find((tool) => tool.name === "fixture.refuse");
+    const switchSet = tools.find((tool) => tool.name === "fixture.switch.set");
     expect(echo?.annotations?.readOnlyHint === true, "fixture.echo must have readOnlyHint: true");
     expect(refuse?.annotations?.readOnlyHint !== true, "fixture.refuse must not have readOnlyHint: true");
+    const signalTool = tools.find((tool) => tool.name === "fixture.signal");
+    expect(switchSet?.annotations?.destructiveHint === true, "fixture.switch.set must have destructiveHint: true");
+    expect(switchSet?.annotations?.idempotentHint === true, "fixture.switch.set must have idempotentHint: true");
+    expect(signalTool?.annotations?.destructiveHint === false, "fixture.signal must have destructiveHint: false");
+    expect(signalTool?.annotations?.idempotentHint === false, "fixture.signal must have idempotentHint: false");
+    expect(refuse?.annotations?.destructiveHint !== false, "fixture.refuse has no destructive member, so it must have no destructiveHint or the MCP default true");
+    expect(refuse?.annotations?.idempotentHint !== true, "fixture.refuse has no idempotent member, so it must have no idempotentHint or the MCP default false");
     expect(echo?.outputSchema?.type === "object", "fixture.echo must have an object outputSchema");
     expect(refuse?.outputSchema === undefined, "fixture.refuse has no object output, so it must have no outputSchema");
     expect(echo?.inputSchema.type === "object", "an inputSchema must be an object");

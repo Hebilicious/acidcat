@@ -103,6 +103,7 @@ test("a catalog that breaks a rule gets an error", () => {
 });
 
 const rejected: Readonly<Record<string, readonly string[]>> = {
+  "capability-hint-not-boolean.json": ['["capabilities"]["shop.item.remove"]["destructive"]: Expected boolean'],
   "cli-alias.json": [
     "target shop: the alias --buy has the fixed input count, which is not a property of the input of shop.item.buy",
     "target shop: the alias gone refers to shop.item.gone, which is not a capability in the view of the target",

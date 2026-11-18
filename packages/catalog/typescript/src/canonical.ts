@@ -9,7 +9,7 @@ const isObject = (value: unknown): value is JsonObject => value !== null && type
 
 const CATALOG_ORDER = ["acidcat", "title", "description", "targets", "$defs", "capabilities", "events"];
 const TARGET_ORDER = ["bindings", "description", "options"];
-const CAPABILITY_ORDER = ["description", "audience", "input", "output", "failures", "readOnly", "state"];
+const CAPABILITY_ORDER = ["description", "audience", "input", "output", "failures", "readOnly", "destructive", "idempotent", "state"];
 const EVENT_ORDER = ["description", "audience", "input", "payload"];
 
 export function canonicalText(catalog: unknown): string {

@@ -40,6 +40,18 @@ test("the library writes the canonical form of every value", () => {
   assert.equal(catalog.render(), expected("test/fixtures/edge.acidcat.json"));
 });
 
+test("the library writes the hints of a capability in canonical order", () => {
+  const catalog = new Catalog().target("agents", { bindings: ["mcp"] }).capability("notes.count.read", {
+    state: { type: "integer" },
+    idempotent: true,
+    destructive: false,
+    readOnly: true,
+    audience: ["agents"],
+    description: "Read the number of notes.",
+  });
+  assert.equal(catalog.render(), expected("test/fixtures/hints.acidcat.json"));
+});
+
 test("the library reports the catalog rules a catalog breaks", () => {
   const catalog = new Catalog()
     .target("cli", { bindings: ["cli"] })

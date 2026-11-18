@@ -49,6 +49,35 @@ fn writes_the_canonical_form_of_every_value() {
 }
 
 #[test]
+fn writes_the_hints_of_a_capability_in_canonical_order() {
+    let mut catalog = Catalog::new(None, None);
+    catalog
+        .target(
+            "agents",
+            Target {
+                bindings: vec!["mcp".into()],
+                ..Target::default()
+            },
+        )
+        .capability(
+            "notes.count.read",
+            Capability {
+                state: Some(json!({ "type": "integer" })),
+                idempotent: Some(true),
+                destructive: Some(false),
+                read_only: true,
+                audience: vec!["agents".into()],
+                description: "Read the number of notes.".into(),
+                ..Capability::default()
+            },
+        );
+    assert_eq!(
+        catalog.render().expect("the catalog conforms"),
+        expected("tests/fixtures/hints.acidcat.json")
+    );
+}
+
+#[test]
 fn reports_the_rules_a_catalog_breaks() {
     let mut catalog = Catalog::new(None, None);
     catalog

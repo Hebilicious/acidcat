@@ -163,7 +163,9 @@
         "SoldOut": {
           "$ref": "#/$defs/SoldOut"
         }
-      }
+      },
+      "destructive": false,
+      "idempotent": false
     },
     "bakery.oven.start": {
       "description": "Heat the oven to a temperature in degrees Celsius.",
@@ -210,7 +212,9 @@
           "cents"
         ],
         "type": "object"
-      }
+      },
+      "destructive": true,
+      "idempotent": true
     }
   },
   "events": {

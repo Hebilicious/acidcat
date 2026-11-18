@@ -37,7 +37,9 @@ const SetControls = Tool.make("set_controls", {
   }),
   success: Status,
   failure: Schema.Union([Offline, PoweredOff]),
-});
+})
+  .annotate(Tool.Destructive, true)
+  .annotate(Tool.Idempotent, true);
 
 export const AirconTools = Toolkit.make(GetStatus, SetControls);
 

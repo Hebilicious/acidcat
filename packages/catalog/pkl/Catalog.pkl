@@ -118,6 +118,13 @@ class Capability {
   /// `true` when a call changes nothing anyone can observe. A hint for clients.
   readOnly: Boolean?
 
+  /// `true` when a call can delete or overwrite something that a client can see, `false` when a call only adds.
+  /// A hint for clients.
+  destructive: Boolean?
+
+  /// `true` when a second call with the same input has no further effect that a client can see. A hint for clients.
+  idempotent: Boolean?
+
   /// The schema of a value that clients can observe.
   state: Schema?
 
