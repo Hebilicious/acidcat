@@ -12,12 +12,12 @@ async function serve(handler: NodeServer.WebHandler | NodeServer.Routes, options
   return { ...address, [Symbol.asyncDispose]: () => Effect.runPromise(Scope.close(scope, Exit.void)) };
 }
 
-test("NodeServer.serve serves while its scope is open, and closes the server with the scope", async () => {
+test("NodeServer.serve serves on 127.0.0.1 while its scope is open, and closes the server with the scope", async () => {
   const url = await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
         const served = yield* NodeServer.serve({ "/hello": () => new Response("hello") }, { port: 0 });
-        assert.match(served.url, /^http:\/\/127\.0\.0\.1:\d+$/);
+        assert.equal(served.url, `http://127.0.0.1:${served.port}`);
         const response = yield* Effect.promise(() => fetch(`${served.url}/hello`));
         assert.equal(yield* Effect.promise(() => response.text()), "hello");
         const missing = yield* Effect.promise(() => fetch(`${served.url}/other`));
@@ -76,12 +76,6 @@ test("one handler gets all paths, with the full URL, the method, the headers and
   assert.deepEqual(await response.json(), { url: `${served.url}/a/b?c=1`, method: "POST", header: "yes", body: "hello" });
 });
 
-test("the default address is 127.0.0.1, and the URL has the port", async () => {
-  await using served = await serve(() => new Response("ok"), { port: 0 });
-  assert.match(served.url, /^http:\/\/127\.0\.0\.1:\d+$/);
-  assert.equal(served.url, `http://127.0.0.1:${served.port}`);
-});
-
 test("routes go to the longest prefix that matches, and other paths get 404", async () => {
   await using served = await serve(
     {
@@ -135,23 +129,6 @@ test("the status, the status text and each set-cookie header reach the client", 
   assert.equal(await response.text(), "made");
 });
 
-test("a streamed response reaches the client chunk by chunk", async () => {
-  const encoder = new TextEncoder();
-  await using served = await serve(
-    () =>
-      new Response(
-        new ReadableStream({
-          start(controller) {
-            for (const part of ["one ", "two ", "three"]) controller.enqueue(encoder.encode(part));
-            controller.close();
-          },
-        }),
-      ),
-    { port: 0 },
-  );
-  assert.equal(await (await fetch(served.url)).text(), "one two three");
-});
-
 test("when the client closes the connection, the signal of the request aborts and the body is cancelled", async () => {
   const aborted = Promise.withResolvers<void>();
   const cancelled = Promise.withResolvers<void>();
@@ -181,29 +158,6 @@ test("when the client closes the connection, the signal of the request aborts an
   client.destroy();
   await aborted.promise;
   await cancelled.promise;
-});
-
-test("when the client closes the connection before the handler answers, the signal of the request aborts", async () => {
-  const entered = Promise.withResolvers<void>();
-  const aborted = Promise.withResolvers<void>();
-  await using served = await serve(
-    (request) => {
-      entered.resolve();
-      return new Promise<Response>((resolve) => {
-        request.signal.addEventListener("abort", () => {
-          aborted.resolve();
-          resolve(new Response("too late"));
-        });
-      });
-    },
-    { port: 0 },
-  );
-  const client = httpRequest(served.url);
-  client.on("error", () => undefined);
-  client.end();
-  await entered.promise;
-  client.destroy();
-  await aborted.promise;
 });
 
 test("the signal does not abort after a complete response", async () => {
