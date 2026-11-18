@@ -88,6 +88,9 @@ const AnyObject = Schema.Record(Schema.String, Schema.Unknown);
 
 const EmptyPayload = Schema.Struct({});
 
+// Schema.Struct({}) accepts an object with any members, so the data of an event with no payload schema is encoded with this.
+const NoMembers = Schema.Record(Schema.String, Schema.Never);
+
 function hasInput<With extends { readonly input: object }, Without extends { readonly input?: undefined }>(
   definition: With | Without,
 ): definition is With {
@@ -105,7 +108,7 @@ export function make<Input extends AnySchema, R, Payload extends AnySchema, cons
 ): Event<Input, Payload, R, Id> {
   const disagrees = () => new PayloadDisagrees();
   const encoded = (data: unknown) =>
-    Schema.encodeUnknownEffect(definition.payload ?? EmptyPayload)(data).pipe(
+    Schema.encodeUnknownEffect(definition.payload ?? NoMembers)(data).pipe(
       Effect.mapError(disagrees),
       Effect.flatMap((json) => Effect.try({ try: () => structuredClone(json), catch: disagrees })),
     );

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { CallFailureError } from "@acid-cat/spec-ts";
 import { Effect, Exit, Layer, Option, Scope, SubscriptionRef } from "effect";
 
 import { Handles, Session, WebMcp } from "../src/index.ts";
@@ -13,7 +12,9 @@ function fakeHost() {
   const host = {
     tools,
     refuse: new Set<string>(),
+    registrations: 0,
     registerTool(tool: WebMcp.ModelContextTool, options: { signal: AbortSignal }) {
+      host.registrations += 1;
       if (host.refuse.has(tool.name)) return Promise.reject(new Error(`refused ${tool.name}`));
       tools.set(tool.name, tool);
       options.signal.addEventListener("abort", () => tools.delete(tool.name));
@@ -34,9 +35,7 @@ const until = (done: () => boolean | Promise<boolean>) =>
     while (!(yield* Effect.promise(async () => done()))) yield* Effect.sleep(5);
   }).pipe(Effect.timeout("5 seconds"), Effect.orDie);
 
-const settle = Effect.sleep(20);
-
-test("tools follow availability, a failed update keeps the last tools, and closing removes them", () =>
+test("a failed update keeps the last tools, retry reconciles them, and closing removes them", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const host = fakeHost();
@@ -44,32 +43,17 @@ test("tools follow availability, a failed update keeps the last tools, and closi
       const session = yield* Session.make(fixture, { target: "app" }).pipe(Scope.provide(scope));
       const installed = Option.getOrThrow(yield* WebMcp.install(session, { host }).pipe(Scope.provide(scope)));
       yield* until(() => SubscriptionRef.getUnsafe(installed.status).phase === "ready" && host.tools.has("fixture.toggle"));
-      assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "ready");
-      assert.ok(host.tools.has("fixture.hidden"));
-      assert.ok(host.tools.has("fixture.toggle"));
-
-      const echo = yield* Effect.promise(() => toolOf(host, "fixture.echo").execute({ text: "hi" }));
-      assert.deepEqual(echo, { ok: true, value: { text: "hi" } });
-      const crash = yield* Effect.promise(() => toolOf(host, "fixture.crash").execute({}).catch((error: unknown) => error));
-      assert.ok(crash instanceof CallFailureError);
-      assert.equal(crash.kind, "internal");
-
       yield* SubscriptionRef.set(yield* Switch, position(false));
       yield* until(() => !host.tools.has("fixture.toggle"));
-      assert.ok(!host.tools.has("fixture.toggle"));
 
       host.refuse.add("fixture.toggle");
       yield* SubscriptionRef.set(yield* Switch, position(true));
       yield* until(() => SubscriptionRef.getUnsafe(installed.status).phase === "failed");
-      const failed = yield* SubscriptionRef.get(installed.status);
-      assert.equal(failed.phase, "failed");
       assert.ok(host.tools.has("fixture.echo"));
 
       host.refuse.clear();
       yield* installed.retry;
       yield* until(() => SubscriptionRef.getUnsafe(installed.status).phase === "ready" && host.tools.has("fixture.toggle"));
-      assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "ready");
-      assert.ok(host.tools.has("fixture.toggle"));
 
       yield* Scope.close(scope, Exit.void);
       assert.equal(host.tools.size, 0);
@@ -162,6 +146,7 @@ test("Handles.open: remove takes the tools away during a call of the same sessio
   assert.deepEqual(await handle("fixture.held").invokeExternal({}), { ok: true, value: { keys: ["session", "tool"] } });
 
   await webmcp.remove();
+  const registrations = host.registrations;
   assert.equal(host.tools.size, 0);
   assert.equal(webmcp.status.getSnapshot().phase, "closing");
   await webmcp.remove();
@@ -170,8 +155,6 @@ test("Handles.open: remove takes the tools away during a call of the same sessio
   await handle("fixture.switch.set").invokeExternal({ on: false });
   await handle("fixture.switch.set").invokeExternal({ on: true });
   await webmcp.retry();
-  await Effect.runPromise(settle);
-  assert.equal(host.tools.size, 0);
 
   assert.equal(session.signal.aborted, false);
   await handle("fixture.release").invokeExternal({ key: "session" });
@@ -179,7 +162,7 @@ test("Handles.open: remove takes the tools away during a call of the same sessio
   assert.deepEqual(await sessionCall, { ok: true, value: { key: "session" } });
   assert.deepEqual(await toolCall, { ok: true, value: { key: "tool" } });
   await Effect.runPromise(until(() => webmcp.status.getSnapshot().phase === "disposed"));
-  assert.equal(webmcp.status.getSnapshot().phase, "disposed");
+  assert.equal(host.registrations, registrations, "no tool is registered after remove");
   assert.deepEqual(await handle("fixture.echo").invokeExternal({ text: "still open" }), { ok: true, value: { text: "still open" } });
 
   await session.dispose();

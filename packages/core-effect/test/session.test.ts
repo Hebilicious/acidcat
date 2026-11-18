@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { check } from "@acid-cat/cli";
+import { isJsonObject } from "@acid-cat/spec-ts";
 import type { Availability } from "@acid-cat/spec-ts";
 import type { CatalogDocument } from "@acid-cat/spec-ts";
-import { Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream, SubscriptionRef } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability, Session } from "../src/index.ts";
-import { echo, fixture, fixtureLayer, hidden, position, refuse, Switch } from "./fixture.ts";
+import { echo, fixture, fixtureLayer, hidden, holdsLayer, position, refuse, Switch, switchLayer, watchersLayer } from "./fixture.ts";
 
 const withSession = <A, E>(target: string, body: (session: Session.Session) => Effect.Effect<A, E, Switch | Scope.Scope>) =>
   Effect.runPromise(
@@ -20,21 +21,25 @@ function capabilityIn(document: CatalogDocument, id: string) {
   return capability;
 }
 
-test("the application writes a catalog that conforms", () => {
+test("the application writes a catalog that conforms, with the JSON Schema of each form of input", () => {
   const text = App.render(fixture);
   assert.deepEqual(check(JSON.parse(text), text), { errors: [], warnings: [] });
   const document = App.document(fixture);
   assert.deepEqual(Object.keys(capabilityIn(document, "fixture.refuse").failures ?? {}), ["Refused"]);
   assert.equal(capabilityIn(document, "fixture.echo").readOnly, true);
+  assert.deepEqual(capabilityIn(document, "fixture.note").input, { $ref: "#/$defs/Note", description: "The note." });
+  assert.deepEqual(capabilityIn(document, "fixture.toggle").input, { type: "object", properties: {} });
+  assert.deepEqual(capabilityIn(document, "fixture.raw").input, { type: "object" });
+  const flags = capabilityIn(document, "fixture.flags").input?.properties;
+  assert.ok(isJsonObject(flags));
+  assert.deepEqual(flags.extra, { type: "object" });
 });
 
-test("an empty struct is an input with no properties, and a record is an input that takes any object", () => {
-  const capability = (input: Capability.AnySchema) =>
-    Capability.make({ id: "probe.run", description: "Probe.", audience: ["cli"], input, run: () => Effect.succeed(null) });
-  const inputOf = (input: Capability.AnySchema) =>
-    capabilityIn(App.document(App.make({ targets: { cli: { bindings: ["cli"] } }, capabilities: [capability(input)] })), "probe.run").input;
-  assert.deepEqual(inputOf(Schema.Struct({})), { type: "object", properties: {} });
-  assert.deepEqual(inputOf(Schema.Record(Schema.String, Schema.Json)), { type: "object" });
+test("two different schemas with the same identifier stop the catalog", () => {
+  const capability = (id: string, choices: readonly [string, string]) =>
+    Capability.make({ id, description: "Use a choice.", audience: ["mcp"], input: Schema.Struct({ choice: Schema.Literals(choices).annotate({ identifier: "Choice" }) }), run: () => Effect.succeed(null) });
+  const app = App.make({ targets: { mcp: { bindings: ["mcp"] } }, capabilities: [capability("probe.first", ["a", "b"]), capability("probe.second", ["c", "d"])] });
+  assert.throws(() => App.document(app), /probe\.second: two different schemas have the identifier Choice/);
 });
 
 test("an input that is a union of objects is an object schema, and the catalog conforms", () => {
@@ -117,12 +122,14 @@ test("changes announce each change after they start, and follow the availability
   ));
 
 test("closing a session cancels its calls, and later calls fail as cancelled", async () => {
+  const holding = Effect.runSync(Deferred.make<void>());
+  const marker = { write: () => Deferred.succeed(holding, undefined), remove: () => Effect.void };
   const scope = await Effect.runPromise(Scope.make());
   const session = await Effect.runPromise(
-    Session.make(fixture, { target: "mcp" }).pipe(Scope.provide(scope), Effect.provide(Layer.fresh(fixtureLayer))),
+    Session.make(fixture, { target: "mcp" }).pipe(Scope.provide(scope), Effect.provide(Layer.fresh(Layer.mergeAll(switchLayer, holdsLayer(marker), watchersLayer())))),
   );
-  const held = Effect.runPromise(session.invoke("fixture.hold", { key: "pending" }));
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  const held = Effect.runPromise(session.invoke("fixture.hold", { key: "pending", marker: "holding" }));
+  await Effect.runPromise(Deferred.await(holding));
   await Effect.runPromise(Scope.close(scope, Exit.void));
   const outcome = await held;
   assert.ok("kind" in outcome);
@@ -132,23 +139,16 @@ test("closing a session cancels its calls, and later calls fail as cancelled", a
   assert.equal(later.kind, "cancelled");
 });
 
-test("execute puts failures and call failures in the error channel", () =>
-  withSession("app", (session) =>
-    Effect.gen(function* () {
-      assert.deepEqual(yield* Effect.flip(session.execute(refuse, {})), { _tag: "Refused", reason: "No." });
-      const value = yield* session.execute(hidden, {});
-      assert.equal(value, null);
-    }),
-  ));
-
 const callFailureKind = (error: unknown) => {
   assert.ok(error instanceof Session.CallFailed);
   return error.kind;
 };
 
-test("call decodes the input with the schema of the capability, and calls only the capability object that the session serves", () =>
+test("call decodes the input with the schema of the capability, execute puts failures in the error channel, and both call only the capability object that the session serves", () =>
   withSession("app", (session) =>
     Effect.gen(function* () {
+      assert.deepEqual(yield* Effect.flip(session.execute(refuse, {})), { _tag: "Refused", reason: "No." });
+      assert.equal(yield* session.execute(hidden, {}), null);
       const value: { readonly text: string } = yield* session.call(echo, { text: "hi" });
       assert.deepEqual(value, { text: "hi" });
       assert.deepEqual(yield* Effect.flip(session.call(refuse, {})), { _tag: "Refused", reason: "No." });

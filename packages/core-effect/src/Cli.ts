@@ -148,6 +148,8 @@ const SharedPrefixes = Context.Reference<ReadonlySet<string>>("@acid-cat/core-ef
 
 const CommandPaths = Context.Reference<ReadonlyArray<ReadonlyArray<string>>>("@acid-cat/core-effect/Cli/CommandPaths", { defaultValue: () => [] });
 
+const ApplicationCommands = Context.Reference<ReadonlySet<string>>("@acid-cat/core-effect/Cli/ApplicationCommands", { defaultValue: () => new Set() });
+
 /**
  * `effect/cli` reads a flag alias such as `--on` as a flag, never as a command, and the arguments of a process cannot
  * contain NUL, so no user can give this name.
@@ -245,7 +247,8 @@ function parentUsageError(commandPath: readonly string[]): { readonly message: s
  * argument starts with `--` and is not a flag alias or a global flag: then all the arguments are its flags. The help of
  * the root command ends with the aliases. The program stops with a defect when it starts if the name of a flag alias,
  * or of a flag of the default alias, is the name of a global flag: a flag of `effect/cli`, such as `--log-level`, or a
- * flag of the application.
+ * flag of the application. A `--` after the first argument is an argument, but a command of the application gets its
+ * arguments unchanged.
  */
 export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   command: Command.Command<Name, Input, ContextInput, E, R>,
@@ -258,11 +261,13 @@ export const runCommand = <Name extends string, Input, ContextInput, E, R>(
   const sharedPrefixes = Context.get(command.annotations, SharedPrefixes);
   const isSharedPrefix = (commandPath: readonly string[]) => sharedPrefixes.has(pathKey(commandPath.slice(1)));
   const isInvalidSharedPrefix = (error: CliError.CliError) => error._tag === "ShowHelp" && error.errors.length > 0 && isSharedPrefix(error.commandPath);
-  const dispatch = (args: readonly string[]) =>
+  const applicationCommands = Context.get(command.annotations, ApplicationCommands);
+  const dispatch = (given: readonly string[]) =>
     Effect.gen(function* () {
     const runWith = Command.runWith(command, { version: options.version });
-    if (aliases.length === 0) return yield* runWith(args);
     const { builtIns } = yield* CliConfig.CliConfig;
+    const args = startsApplicationCommand(command, builtIns, applicationCommands, given) ? given : dashesAsArguments(given);
+    if (aliases.length === 0) return yield* runWith(args);
     const taken = new Set(globalFlagsOfEveryCommand(command, builtIns).flatMap(flagNames));
     const clash = aliases.find(({ name }) => name.startsWith("--") && taken.has(name.slice(2)));
     if (clash !== undefined) return yield* Effect.die(new Error(`The alias ${clash.name} has the name of a flag of the command line.`));
@@ -343,6 +348,29 @@ function globalFlagsOfEveryCommand(command: Command.Command.Any, builtIns: Built
 const flagNames = (flag: CommandSpec.Flag): readonly string[] => [flag.name, ...flag.aliases, ...(flag.negation === undefined ? [] : [flag.negation])];
 
 const longFlagName = (arg: string): string => arg.slice(2).split("=", 1)[0] ?? "";
+
+function startsApplicationCommand(command: Command.Command.Any, builtIns: BuiltIns, applicationCommands: ReadonlySet<string>, args: readonly string[]): boolean {
+  const root = CommandSpec.resolve(command, [command.name], { builtIns });
+  const names = new Set(Option.isNone(root) ? [] : root.value.subcommands.flatMap(({ name, alias }) => (alias === undefined ? [name] : [name, alias])));
+  const head = args.find((arg) => names.has(arg));
+  return head !== undefined && applicationCommands.has(head);
+}
+
+/**
+ * `effect/cli` reads a `--` as the end of the flags (spec/bindings/cli.md: after the first argument, it is an
+ * argument). A `--` after a long flag with no value becomes the value of the flag. For any other `--`, a second `--`
+ * goes before it, so that `effect/cli` reads it as a positional argument.
+ */
+function dashesAsArguments(args: readonly string[]): readonly string[] {
+  const result: string[] = [];
+  for (const [index, arg] of args.entries()) {
+    const previous = result.at(-1);
+    if (arg !== "--") result.push(arg);
+    else if (previous !== undefined && previous.startsWith("--") && previous.length > 2 && !previous.includes("=")) result[result.length - 1] = `${previous}=--`;
+    else return [...result, "--", ...args.slice(index)];
+  }
+  return result;
+}
 
 const ACTIONS_OF_THE_ROOT = new Set(PROGRAM_FLAGS.map((flag) => flag.slice("--".length)));
 
@@ -658,6 +686,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
       CommandPaths,
       leaves.map(({ path }) => path),
     ),
+    Command.annotate(ApplicationCommands, new Set((options.commands ?? []).map(({ name }) => name))),
     Command.annotate(OutputSettings, options.output === undefined ? undefined : { output: options.output, commands: (options.commands ?? []).map(({ name }) => name) }),
   );
 }

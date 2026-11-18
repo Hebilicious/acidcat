@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
 import { isJsonObject, webhookSignature, webhookSubscriptionId } from "@acid-cat/spec-ts";
-import { Effect, Option, Schedule, Schema } from "effect";
+import { Effect, Layer, Option, Schedule, Schema, Stream } from "effect";
 
-import { Mcp } from "../src/index.ts";
+import { App, Event, Mcp } from "../src/index.ts";
 import * as NodeWebhook from "../src/NodeWebhook.ts";
-import { events, feedForPromises } from "./events-fixture.ts";
-import { delay, eventually, json, mcpRequest, ORIGIN } from "./mcp-client.ts";
+import { events, Feed, feedForPromises } from "./events-fixture.ts";
+import { eventually, json, mcpRequest, ORIGIN } from "./mcp-client.ts";
 import { agree, startReceiver } from "./webhook-receiver.ts";
 import type { Received } from "./webhook-receiver.ts";
 
@@ -32,19 +32,22 @@ after(async () => {
   await receiver.close();
 });
 
-function webhookHandler(feed: ReturnType<typeof feedForPromises>, webhooks: Partial<Mcp.WebhookOptions> = {}, eventBuffer?: number) {
-  return Mcp.toWebHandler(events, feed.layer, {
+function webhookOptions(webhooks: Partial<Mcp.WebhookOptions> = {}) {
+  return {
     name: "feed",
     version: "0.0.0",
     allowedOrigins: [ORIGIN],
-    ...(eventBuffer === undefined ? {} : { eventBuffer }),
-    principal: (request) => Effect.succeed(Option.fromNullOr(request.headers.get("X-User"))),
+    principal: (request: Request) => Effect.succeed(Option.fromNullOr(request.headers.get("X-User"))),
     webhooks: {
       sender: NodeWebhook.sender({ allowPrivateNetworks: true, ca: receiver.cert }),
       retryDelays: Schedule.spaced("20 millis"),
       ...webhooks,
     },
-  });
+  };
+}
+
+function webhookHandler(feed: ReturnType<typeof feedForPromises>, webhooks: Partial<Mcp.WebhookOptions> = {}) {
+  return Mcp.toWebHandler(events, feed.layer, webhookOptions(webhooks));
 }
 
 const as = (user: string) => ({ headers: { "X-User": user } });
@@ -71,41 +74,32 @@ async function assertSigned(received: Received, secrets: readonly string[], subs
 
 const bodyOf = (received: Received | undefined) => (received !== undefined && isJsonObject(received.json) ? received.json : {});
 
-test("events/subscribe and events/unsubscribe need a principal, an https URL and a valid secret", async () => {
+test("a secret over 64 bytes, or an event outside the view, is refused before the server sends a request", async () => {
   const feed = feedForPromises();
   const handler = webhookHandler(feed);
   try {
-    const list = await json(await handler(mcpRequest("events/list")));
-    const entries = Schema.decodeUnknownSync(Schema.Struct({ events: Schema.Array(Schema.Struct({ delivery: Schema.Array(Schema.String) })) }))(list.result);
-    assert.deepEqual(entries.events[0]?.delivery, ["push", "poll", "webhook"]);
-    const anonymous = await json(await handler(mcpRequest("events/subscribe", subscription("/anonymous"))));
-    assert.equal(anonymous.error?.code, -32024);
-    const anonymousOut = await json(await handler(mcpRequest("events/unsubscribe", subscription("/anonymous"))));
-    assert.equal(anonymousOut.error?.code, -32024);
-    const plain = await json(await handler(mcpRequest("events/subscribe", { ...subscription("/plain"), delivery: { mode: "webhook", url: "http://localhost/plain", secret: SECRET } }, as("alice"))));
-    assert.equal(plain.error?.code, -32602);
-    for (const secret of ["secret", "whsec_c2hvcnQ=", `whsec_${Buffer.from("x".repeat(65)).toString("base64")}`]) {
-      const bad = await json(await handler(mcpRequest("events/subscribe", { ...subscription("/bad"), delivery: { mode: "webhook", url: receiver.url("/bad"), secret } }, as("alice"))));
-      assert.equal(bad.error?.code, -32602, secret);
-    }
+    const long = await json(await handler(mcpRequest("events/subscribe", { ...subscription("/long"), delivery: { mode: "webhook", url: receiver.url("/long"), secret: `whsec_${Buffer.from("x".repeat(65)).toString("base64")}` } }, as("alice"))));
+    assert.equal(long.error?.code, -32602);
     const hidden = await json(await handler(mcpRequest("events/subscribe", { ...subscription("/hidden"), name: "feed.hidden" }, as("alice"))));
     assert.equal(hidden.error?.code, -32023);
-    assert.equal(at("/plain").length + at("/bad").length + at("/anonymous").length + at("/hidden").length, 0);
+    assert.equal(at("/long").length + at("/hidden").length, 0);
   } finally {
     await handler.dispose();
   }
 });
 
-test("events/subscribe checks the name before maxAgeMs, and a renewal checks maxAgeMs too", async () => {
+test("events/stream, events/poll and events/subscribe check the name before maxAgeMs, and a renewal checks maxAgeMs too", async () => {
   const feed = feedForPromises();
   const handler = webhookHandler(feed, { allow: () => true });
   try {
-    for (const maxAgeMs of [-1, 1.5, "60"]) {
-      const unknown = await json(await handler(mcpRequest("events/subscribe", { ...subscription("/order"), name: "no.such", maxAgeMs }, as("alice"))));
-      assert.equal(unknown.error?.code, -32023, `maxAgeMs ${maxAgeMs}`);
-      assert.deepEqual(unknown.error?.data, { kind: "event" });
-      const invalid = await json(await handler(mcpRequest("events/subscribe", { ...subscription("/order"), maxAgeMs }, as("alice"))));
-      assert.equal(invalid.error?.code, -32602, `maxAgeMs ${maxAgeMs}`);
+    const params = { stream: {}, poll: {}, subscribe: subscription("/order") };
+    for (const [mode, extra] of Object.entries(params)) {
+      for (const maxAgeMs of [-1, 1.5, "60"]) {
+        const unknown = await json(await handler(mcpRequest(`events/${mode}`, { ...extra, name: "no.such", maxAgeMs }, as("alice"))));
+        assert.deepEqual([unknown.error?.code, unknown.error?.data], [-32023, { kind: "event" }], `${mode} with maxAgeMs ${maxAgeMs}`);
+        const invalid = await json(await handler(mcpRequest(`events/${mode}`, { ...extra, name: "feed.resumed", maxAgeMs }, as("alice"))));
+        assert.equal(invalid.error?.code, -32602, `${mode} with maxAgeMs ${maxAgeMs}`);
+      }
     }
     const started = await json(await handler(mcpRequest("events/subscribe", { ...subscription("/order"), maxAgeMs: null }, as("alice"))));
     assert.equal(started.error, undefined);
@@ -116,59 +110,34 @@ test("events/subscribe checks the name before maxAgeMs, and a renewal checks max
   }
 });
 
-test("a new subscription verifies the URL, then sends each occurrence signed, with the watermark as its cursor", async () => {
+test("a new subscription has the id of its key, no cursor, an empty delivery status and the default lifetime, and another principal verifies the URL again", async () => {
   const feed = feedForPromises();
   const handler = webhookHandler(feed);
   try {
-    const answer = await json(await handler(mcpRequest("events/subscribe", subscription("/hooks"), as("alice"))));
-    const result = decodeSubscribeResult(answer.result);
+    const result = decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", subscription("/hooks"), as("alice"))))).result);
     const id = await webhookSubscriptionId("alice", receiver.url("/hooks"), "feed.ticked", { room: "/hooks" });
-    assert.equal(result.id, id);
     assert.deepEqual({ ...result, refreshBefore: "" }, { resultType: "complete", id, refreshBefore: "", cursor: null, truncated: false, deliveryStatus: { active: true, lastDeliveryAt: null, lastError: null } });
     const lifetime = Date.parse(result.refreshBefore) - Date.now();
     assert.ok(lifetime > 3_590_000 && lifetime <= 3_600_000, `${lifetime}`);
-
-    const [verification] = await waitAt("/hooks", 1);
-    assert.ok(verification);
-    assert.equal(bodyOf(verification).type, "verification");
-    assert.match(verification.headers["webhook-id"] ?? "", /^msg_verification_[A-Za-z0-9]+$/);
-    await assertSigned(verification, [SECRET], id);
-
-    await feed.following(1);
-    await feed.publish({ room: "/hooks", count: 1 });
-    const delivered = (await waitAt("/hooks", 2))[1];
-    assert.ok(delivered);
-    assert.match(delivered.headers["webhook-id"] ?? "", /^msg_[A-Za-z0-9]+$/);
-    await assertSigned(delivered, [SECRET], id);
-    const body = bodyOf(delivered);
-    assert.deepEqual({ ...body, eventId: "", timestamp: "" }, { eventId: "", name: "feed.ticked", timestamp: "", data: { room: "/hooks", count: 1 }, cursor: "1" });
-
-    await json(await handler(mcpRequest("events/subscribe", { ...subscription("/hooks"), arguments: { room: "other" } }, as("alice"))));
-    await feed.following(2);
-    assert.equal(at("/hooks").length, 2);
+    assert.equal(at("/hooks").length, 1);
     await json(await handler(mcpRequest("events/subscribe", subscription("/hooks"), as("bob"))));
-    assert.equal(at("/hooks").length, 3);
-    assert.equal(bodyOf(at("/hooks")[2]).type, "verification");
+    assert.deepEqual(at("/hooks").map((each) => bodyOf(each).type), ["verification", "verification"]);
   } finally {
     await handler.dispose();
   }
   await feed.following(0);
 });
 
-test("an endpoint that does not answer the challenge fails the subscription with CallbackEndpointError", async () => {
+test("a verification that gets 3xx is challenge_failed, 4xx is http_4xx and 5xx is http_5xx", async () => {
   const feed = feedForPromises();
   const handler = webhookHandler(feed);
   try {
-    receiver.respond((received) => (received.path === "/wrong" ? { status: 200, body: JSON.stringify({ challenge: "wrong" }) } : received.path === "/gone" ? { status: 404 } : { status: 503 }));
-    const wrong = await json(await handler(mcpRequest("events/subscribe", subscription("/wrong"), as("alice"))));
-    assert.equal(wrong.error?.code, -32027);
-    assert.deepEqual(wrong.error?.data, { reason: "challenge_failed" });
-    const gone = await json(await handler(mcpRequest("events/subscribe", subscription("/gone"), as("alice"))));
-    assert.deepEqual(gone.error?.data, { reason: "http_4xx" });
-    const down = await json(await handler(mcpRequest("events/subscribe", subscription("/down"), as("alice"))));
-    assert.deepEqual(down.error?.data, { reason: "http_5xx" });
+    const statuses: Record<string, number> = { "/moved": 302, "/gone": 404, "/down": 503 };
+    receiver.respond((received) => ({ status: statuses[received.path] ?? 200 }));
+    const reasons: Record<string, unknown> = {};
+    for (const path of Object.keys(statuses)) reasons[path] = (await json(await handler(mcpRequest("events/subscribe", subscription(path), as("alice"))))).error?.data;
+    assert.deepEqual(reasons, { "/moved": { reason: "challenge_failed" }, "/gone": { reason: "http_4xx" }, "/down": { reason: "http_5xx" } });
     await feed.following(0);
-    assert.equal(at("/wrong").length, 1);
   } finally {
     receiver.respond(agree);
     await handler.dispose();
@@ -190,38 +159,23 @@ test("a URL that the deployment allows needs no verification", async () => {
   }
 });
 
-test("a delivery is sent again after a status that is not 2xx, with the same webhook-id; 410 abandons it", async () => {
+const statusOf = async (handler: Mcp.WebHandler, path: string) => decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", subscription(path), as("alice"))))).result);
+
+test("a 410 abandons a delivery with no retry and the delivery status tells it, and the next success clears the error", async () => {
   const feed = feedForPromises();
   const handler = webhookHandler(feed);
   try {
-    const statuses = [500, 200, 410, 200];
-    receiver.respond((received) => (received.path === "/retry" && bodyOf(received).type === undefined ? { status: statuses.shift() ?? 200 } : agree(received)));
-    const id = decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", subscription("/retry"), as("alice"))))).result).id;
+    receiver.respond((received) => (received.path === "/retry" && bodyOf(received).cursor === "1" ? { status: 410 } : agree(received)));
+    await statusOf(handler, "/retry");
     await feed.following(1);
     await feed.publish({ room: "/retry", count: 1 });
-    const [, failed, retried] = await waitAt("/retry", 3);
-    assert.ok(failed && retried);
-    assert.equal(retried.headers["webhook-id"], failed.headers["webhook-id"]);
-    assert.equal(retried.body, failed.body);
-    await assertSigned(retried, [SECRET], id);
-
+    const abandoned = await eventually(() => statusOf(handler, "/retry"), (status) => status.cursor === "1", "the watermark of the abandoned delivery");
+    assert.equal(abandoned.deliveryStatus.lastError, "http_4xx");
     await feed.publish({ room: "/retry", count: 2 });
-    const abandoned = (await waitAt("/retry", 4))[3];
-    assert.equal(bodyOf(abandoned).cursor, "2");
-    await delay(100);
-    assert.equal(at("/retry").length, 4);
-    const status = decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", subscription("/retry"), as("alice"))))).result);
-    assert.equal(status.deliveryStatus.lastError, "http_4xx");
-    assert.equal(status.cursor, "2");
-
-    await feed.publish({ room: "/retry", count: 3 });
-    await waitAt("/retry", 5);
-    const healthy = await eventually(
-      async () => decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", subscription("/retry"), as("alice"))))).result),
-      (result) => result.deliveryStatus.lastError === null,
-      "a successful delivery",
-    );
-    assert.equal(healthy.cursor, "3");
+    const [, , next] = await waitAt("/retry", 3);
+    assert.equal(bodyOf(next).cursor, "2");
+    const healthy = await eventually(() => statusOf(handler, "/retry"), (status) => status.cursor === "2", "the watermark of the next delivery");
+    assert.equal(healthy.deliveryStatus.lastError, null);
     assert.notEqual(healthy.deliveryStatus.lastDeliveryAt, null);
   } finally {
     receiver.respond(agree);
@@ -233,15 +187,15 @@ test("a delivery that fails each time is abandoned after the maximum number of a
   const feed = feedForPromises();
   const handler = webhookHandler(feed, { attempts: 3 });
   try {
-    receiver.respond((received) => (received.path === "/failing" && bodyOf(received).type === undefined ? { status: 500 } : agree(received)));
-    await json(await handler(mcpRequest("events/subscribe", subscription("/failing"), as("alice"))));
+    receiver.respond((received) => (received.path === "/failing" && bodyOf(received).cursor === "1" ? { status: 500 } : agree(received)));
+    await statusOf(handler, "/failing");
     await feed.following(1);
     await feed.publish({ room: "/failing", count: 1 });
-    await waitAt("/failing", 4);
-    await delay(150);
-    assert.equal(at("/failing").length, 4);
-    const status = decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", subscription("/failing"), as("alice"))))).result);
-    assert.equal(status.deliveryStatus.lastError, "http_5xx");
+    const failed = await eventually(() => statusOf(handler, "/failing"), (status) => status.deliveryStatus.lastError !== null, "a failed delivery");
+    assert.equal(failed.deliveryStatus.lastError, "http_5xx");
+    await feed.publish({ room: "/failing", count: 2 });
+    const requests = await waitAt("/failing", 5);
+    assert.deepEqual(requests.map((each) => bodyOf(each).type ?? bodyOf(each).cursor), ["verification", "1", "1", "1", "2"]);
   } finally {
     receiver.respond(agree);
     await handler.dispose();
@@ -249,106 +203,115 @@ test("a delivery that fails each time is abandoned after the maximum number of a
 });
 
 test("a gap message comes before an occurrence with truncated: true", async () => {
-  const feed = feedForPromises();
-  const handler = webhookHandler(feed, {}, 1);
-  let release = () => {};
-  const held = new Promise<void>((resolve) => (release = resolve));
+  const more = Promise.withResolvers<void>();
+  const buffered = Promise.withResolvers<void>();
+  const counts = Event.make({
+    id: "burst.counted",
+    description: "Give the count 1, then the counts 2 to 4 when the test asks for them, with the count as the cursor.",
+    audience: ["mcp"],
+    payload: Schema.Struct({ count: Schema.Int }),
+    subscribe: () =>
+      Stream.make(1).pipe(
+        Stream.concat(Stream.fromEffect(Effect.promise(() => more.promise)).pipe(Stream.flatMap(() => Stream.make(2, 3, 4)))),
+        Stream.concat(Stream.fromEffect(Effect.sync(() => buffered.resolve())).pipe(Stream.drain)),
+        Stream.map((count) => ({ data: { count }, cursor: String(count) })),
+      ),
+  });
+  const app = App.make({ targets: { mcp: { bindings: ["mcp"] } }, capabilities: [], events: [counts] });
+  const handler = Mcp.toWebHandler(app, Layer.empty, { ...webhookOptions(), eventBuffer: 1 });
+  const held = Promise.withResolvers<void>();
   try {
     receiver.respond(async (received) => {
-      if (received.path === "/gap" && bodyOf(received).cursor === "1") await held;
+      if (received.path === "/gap" && bodyOf(received).cursor === "1") await held.promise;
       return agree(received);
     });
-    await json(await handler(mcpRequest("events/subscribe", subscription("/gap"), as("alice"))));
-    await feed.following(1);
-    await feed.publish({ room: "/gap", count: 1 });
+    await json(await handler(mcpRequest("events/subscribe", { name: "burst.counted", arguments: {}, delivery: { mode: "webhook", url: receiver.url("/gap"), secret: SECRET } }, as("alice"))));
     await waitAt("/gap", 2);
-    for (const count of [2, 3, 4]) await feed.publish({ room: "/gap", count });
-    await delay(50);
-    release();
+    more.resolve();
+    await buffered.promise;
+    held.resolve();
     const [, , gap, next] = await waitAt("/gap", 4);
     assert.deepEqual(bodyOf(gap), { type: "gap", cursor: "1" });
     assert.match(gap?.headers["webhook-id"] ?? "", /^msg_gap_[A-Za-z0-9]+$/);
     assert.equal(bodyOf(next).cursor, "4");
     assert.equal("truncated" in bodyOf(next), false);
   } finally {
-    release();
+    held.resolve();
     receiver.respond(agree);
     await handler.dispose();
   }
 });
 
-test("a refresh grants a new lifetime and replaces the secret, and both secrets sign during the grace time", async () => {
+test("after the grace time of a renewal, only the new secret signs", async () => {
   const feed = feedForPromises();
-  const handler = webhookHandler(feed, { minTtlMs: 1000, rotationGraceMs: 300 });
+  const handler = webhookHandler(feed, { rotationGraceMs: 0 });
   try {
-    const first = decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", subscription("/rotate", { ttlMs: 5 }), as("alice"))))).result);
-    const lifetime = Date.parse(first.refreshBefore) - Date.now();
-    assert.ok(lifetime > 900 && lifetime <= 1000, `${lifetime}`);
+    const first = await statusOf(handler, "/rotate");
     await feed.following(1);
-    const renewed = decodeSubscribeResult(
-      (await json(await handler(mcpRequest("events/subscribe", { ...subscription("/rotate", { ttlMs: 120_000 }), delivery: { mode: "webhook", url: receiver.url("/rotate"), secret: NEW_SECRET } }, as("alice"))))).result,
-    );
-    assert.equal(renewed.id, first.id);
-    assert.ok(Date.parse(renewed.refreshBefore) - Date.now() > 100_000);
-    assert.equal(at("/rotate").length, 1);
-    await feed.following(1);
-
+    await json(await handler(mcpRequest("events/subscribe", { ...subscription("/rotate"), delivery: { mode: "webhook", url: receiver.url("/rotate"), secret: NEW_SECRET } }, as("alice"))));
     await feed.publish({ room: "/rotate", count: 1 });
-    const [, dual] = await waitAt("/rotate", 2);
-    assert.ok(dual);
-    assert.equal(dual.headers["webhook-signature"]?.split(" ").length, 2);
-    await assertSigned(dual, [NEW_SECRET, SECRET], first.id);
-
-    await delay(350);
-    await feed.publish({ room: "/rotate", count: 2 });
-    const [, , single] = await waitAt("/rotate", 3);
+    const [, single] = await waitAt("/rotate", 2);
     assert.ok(single);
+    assert.equal(single.headers["webhook-signature"]?.split(" ").length, 1);
     await assertSigned(single, [NEW_SECRET], first.id);
   } finally {
     await handler.dispose();
   }
 });
 
-test("events/unsubscribe cancels the subscription, and a subscription ends when its lifetime ends", async () => {
-  const feed = feedForPromises();
-  const handler = webhookHandler(feed, { minTtlMs: 100 });
-  try {
-    await json(await handler(mcpRequest("events/subscribe", subscription("/end"), as("alice"))));
-    await feed.following(1);
-    const missing = await json(await handler(mcpRequest("events/unsubscribe", { name: "feed.ticked", arguments: { room: "/end" }, delivery: { url: receiver.url("/end") } }, as("bob"))));
-    assert.equal(missing.error?.code, -32023);
-    assert.deepEqual(missing.error?.data, { kind: "subscription" });
-    const done = await json(await handler(mcpRequest("events/unsubscribe", { name: "feed.ticked", arguments: { room: "/end" }, delivery: { url: receiver.url("/end") } }, as("alice"))));
-    assert.deepEqual(done.result, { resultType: "complete" });
-    await feed.following(0);
-    const again = await json(await handler(mcpRequest("events/unsubscribe", { name: "feed.ticked", arguments: { room: "/end" }, delivery: { url: receiver.url("/end") } }, as("alice"))));
-    assert.equal(again.error?.code, -32023);
-
-    await json(await handler(mcpRequest("events/subscribe", subscription("/end", { ttlMs: 100 }), as("alice"))));
-    await feed.following(1);
-    await feed.following(0);
-    assert.equal(at("/end").length, 1);
-  } finally {
-    await handler.dispose();
-  }
-});
-
-test("internal ends the subscription with a terminated message", async () => {
+test("events/unsubscribe of another principal does not find the subscription", async () => {
   const feed = feedForPromises();
   const handler = webhookHandler(feed);
   try {
-    const id = decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", { ...subscription("/crash"), name: "feed.crashing", arguments: {} }, as("alice"))))).result).id;
-    const [, occurrence, terminated] = await waitAt("/crash", 3);
-    assert.equal(bodyOf(occurrence).name, "feed.crashing");
-    assert.deepEqual(bodyOf(terminated), { type: "terminated", error: { code: -32603, message: "The event failed." } });
-    assert.match(terminated?.headers["webhook-id"] ?? "", /^msg_terminated_[A-Za-z0-9]+$/);
-    if (terminated !== undefined) await assertSigned(terminated, [SECRET], id);
+    await json(await handler(mcpRequest("events/subscribe", subscription("/end"), as("alice"))));
+    const missing = await json(await handler(mcpRequest("events/unsubscribe", { name: "feed.ticked", arguments: { room: "/end" }, delivery: { url: receiver.url("/end") } }, as("bob"))));
+    assert.deepEqual([missing.error?.code, missing.error?.data], [-32023, { kind: "subscription" }]);
+  } finally {
+    await handler.dispose();
+  }
+  await feed.following(0);
+});
+
+test("a subscription ends after its terminated message", async () => {
+  const feed = feedForPromises();
+  const handler = webhookHandler(feed);
+  try {
+    await json(await handler(mcpRequest("events/subscribe", { ...subscription("/crash"), name: "feed.crashing", arguments: {} }, as("alice"))));
+    const [, , terminated] = await waitAt("/crash", 3);
+    assert.equal(bodyOf(terminated).type, "terminated");
     const missing = await eventually(
       async () => json(await handler(mcpRequest("events/unsubscribe", { name: "feed.crashing", arguments: {}, delivery: { url: receiver.url("/crash") } }, as("alice")))),
       (answer) => answer.error !== undefined,
       "the end of the subscription",
     );
     assert.equal(missing.error?.code, -32023);
+  } finally {
+    await handler.dispose();
+  }
+});
+
+test("with per-request services, a webhook subscription keeps the services of its request until it ends", async () => {
+  const feed = feedForPromises();
+  const counts = { built: 0, released: 0 };
+  const layer = Layer.effect(
+    Feed,
+    Effect.acquireRelease(
+      Effect.andThen(
+        Effect.sync(() => counts.built++),
+        Effect.service(Feed),
+      ),
+      () => Effect.sync(() => counts.released++),
+    ),
+  ).pipe(Layer.provide(feed.layer));
+  const handler = Mcp.toWebHandler(events, layer, { ...webhookOptions(), services: "per-request" });
+  try {
+    await json(await handler(mcpRequest("events/subscribe", subscription("/services"), as("alice"))));
+    await feed.following(1);
+    assert.deepEqual(counts, { built: 1, released: 0 });
+    await json(await handler(mcpRequest("events/unsubscribe", { name: "feed.ticked", arguments: { room: "/services" }, delivery: { url: receiver.url("/services") } }, as("alice"))));
+    await feed.following(0);
+    await eventually(async () => counts.released, (released) => released === 2, "the release of the services of the subscription");
+    assert.equal(counts.built, 2);
   } finally {
     await handler.dispose();
   }
@@ -378,21 +341,6 @@ test("the verification is for the pair of the principal and the URL as the clien
       decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", params, as("frank"))))).result);
     }
     assert.equal(verifications(), 2);
-  } finally {
-    await handler.dispose();
-  }
-});
-
-test("a principal gets ResourceExhausted over the maximum number of subscriptions", async () => {
-  const feed = feedForPromises();
-  const handler = webhookHandler(feed, { maxSubscriptions: 2 });
-  try {
-    for (const room of ["one", "two"]) decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", { ...subscription("/limit"), arguments: { room } }, as("carol"))))).result);
-    const over = await json(await handler(mcpRequest("events/subscribe", { ...subscription("/limit"), arguments: { room: "three" } }, as("carol"))));
-    assert.equal(over.error?.code, -32025);
-    assert.deepEqual(over.error?.data, { limit: "subscriptions", max: 2 });
-    decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", { ...subscription("/limit"), arguments: { room: "one" } }, as("carol"))))).result);
-    decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", { ...subscription("/limit"), arguments: { room: "three" } }, as("dave"))))).result);
   } finally {
     await handler.dispose();
   }

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, watch } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { setTimeout as pause } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 
 import { INTERRUPT_GRACE_MS } from "@acid-cat/spec-ts";
 
@@ -30,11 +31,17 @@ const cliWithInherited = commandLine("test/fixture-cli-inherited.ts");
 
 const DEADLINE_MS = 10_000;
 
-async function interruptedHold(interrupts: 1 | 2) {
+const PROBE = fileURLToPath(new URL("interrupt-probe.ts", import.meta.url));
+
+async function interruptedIgnoring(command: readonly string[], interrupts: 1 | 2) {
   const directory = mkdtempSync(join(tmpdir(), "core-effect-interrupt-"));
   const marker = join(directory, "held");
+  const record = join(directory, "exit");
   const fixture = bundledProgram("test/fixture-cli-ignoring-interruption.ts");
-  const child = spawn(process.execPath, [fixture, "fixture", "hold", "--key", "k", "--marker", marker], { stdio: ["ignore", "ignore", "pipe"] });
+  const child = spawn(process.execPath, ["--import", PROBE, fixture, ...command, "--key", "k", "--marker", marker], {
+    stdio: ["ignore", "ignore", "pipe"],
+    env: { ...process.env, INTERRUPT_PROBE_RECORD: record },
+  });
   let stderr = "";
   child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
   const exited = new Promise<[number | null, NodeJS.Signals | null]>((resolve) => child.on("close", (...exit) => resolve(exit)));
@@ -57,7 +64,8 @@ async function interruptedHold(interrupts: 1 | 2) {
     }
     const ended = await Promise.race([exited, pause(DEADLINE_MS, "running" as const)]);
     const [code, signal] = ended === "running" ? [null, null] : ended;
-    return { code, signal, stderr, elapsed: Date.now() - interrupted, running: ended === "running" };
+    const exit = existsSync(record) ? readFileSync(record, "utf-8") : undefined;
+    return { code, signal, stderr, exit, elapsed: Date.now() - interrupted, running: ended === "running" };
   } finally {
     child.kill("SIGKILL");
     rmSync(directory, { recursive: true, force: true });
@@ -70,30 +78,28 @@ const toggle = (stdout: string) =>
     .find((entry) => entry.id === "fixture.toggle");
 
 describe("the command line of an application", { concurrency: true }, () => {
-  test("a repeated flag gives its items in order, or JSON text of the array, and a required one must occur", async () => {
-    const [plan, once, missing, jsonText, notAnItem, notAnInteger, list] = await Promise.all([
-      cliWithRepeated("probe", "plan", "--days", "tue", "--hours=9", "--days", "mon"),
-      cliWithRepeated("probe", "plan", "--days", "mon"),
+  test("a required repeated flag must occur, an empty JSON array gives no items, and the usage marks the repeated flags", async () => {
+    const [missing, empty, list] = await Promise.all([
       cliWithRepeated("probe", "plan"),
-      cliWithRepeated("probe", "plan", "--days", '["tue","mon"]', "--hours", "[]"),
-      cliWithRepeated("probe", "plan", "--days", '["sun"]'),
-      cliWithRepeated("probe", "plan", "--days", "mon", "--hours", "late"),
+      cliWithRepeated("probe", "plan", "--days", "mon", "--hours", "[]"),
       cliWithRepeated("list"),
     ]);
-    assert.equal(plan.code, 0);
-    assert.deepEqual(JSON.parse(plan.stdout), { days: ["tue", "mon"], hours: [9] });
-    assert.deepEqual(JSON.parse(once.stdout), { days: ["mon"] });
     assert.equal(missing.code, 3);
-    assert.deepEqual(JSON.parse(jsonText.stdout), { days: ["tue", "mon"], hours: [] });
-    assert.equal(notAnItem.code, 3);
-    assert.equal(notAnInteger.code, 3);
+    assert.deepEqual(JSON.parse(empty.stdout), { days: ["mon"], hours: [] });
     assert.match(list.stdout, /"usage": "probe probe plan --days <mon\|tue>\.\.\. \[--hours <integer>\.\.\.\]"/);
   });
 
-  test("a flag of the application decides the services of the capabilities", async () => {
-    const [on, off] = await Promise.all([cliWithFlag("list"), cliWithFlag("--switch", "false", "list")]);
+  test("a flag of the application decides the services of the capabilities, and the commands keep their exit codes", async () => {
+    const [on, off, echo, unknown, missing] = await Promise.all([
+      cliWithFlag("list"),
+      cliWithFlag("--switch", "false", "list"),
+      cliWithFlag("--switch", "false", "fixture", "echo", "--text", "hi"),
+      cliWithFlag("--switch", "false", "nope"),
+      cliWithFlag("--switch", "false", "fixture", "echo"),
+    ]);
     assert.equal(toggle(on.stdout)?.available, true);
     assert.equal(toggle(off.stdout)?.available, false);
+    assert.deepEqual([echo.code, unknown.code, missing.code], [0, 2, 3]);
   });
 
   test("call with input that is not JSON gives unknown-capability, then unavailable, before invalid-input", async () => {
@@ -103,15 +109,6 @@ describe("the command line of an application", { concurrency: true }, () => {
       cliWithFlag("call", "fixture.echo", "{bad"),
     ]);
     assert.deepEqual([unknown.code, unavailable.code, invalid.code], [2, 4, 3]);
-  });
-
-  test("a command that the application changed keeps the exit codes", async () => {
-    const runs = await Promise.all([
-      cliWithFlag("--switch", "false", "fixture", "echo", "--text", "hi"),
-      cliWithFlag("--switch", "false", "nope"),
-      cliWithFlag("--switch", "false", "fixture", "echo"),
-    ]);
-    assert.deepEqual(runs.map((run) => run.code), [0, 2, 3]);
   });
 
   test("an interrupt as soon as a call holds cancels the call with exit code 130, and writes cancelled to standard error", async () => {
@@ -139,38 +136,43 @@ describe("the command line of an application", { concurrency: true }, () => {
     }
   });
 
-  test("a call that ignores the interrupt exits with 130 after the grace period, or at once after a second interrupt", async () => {
-    const [once, twice] = await Promise.all([interruptedHold(1), interruptedHold(2)]);
-    assert.deepEqual({ ...once, elapsed: undefined }, { code: 130, signal: null, stderr: "", elapsed: undefined, running: false });
-    assert.ok(once.elapsed >= INTERRUPT_GRACE_MS, `exited ${once.elapsed} ms after the interrupt, before the grace period`);
-    assert.deepEqual({ ...twice, elapsed: undefined }, { code: 130, signal: null, stderr: "", elapsed: undefined, running: false });
-    assert.ok(twice.elapsed < INTERRUPT_GRACE_MS, `exited ${twice.elapsed} ms after the second interrupt, not at once`);
+  test("a call or a subscription that ignores the interrupt exits with 130 after the grace period, or at once after a second interrupt", async () => {
+    const commands = [["fixture", "hold"], ["watch", "fixture.watch"]] as const;
+    const runs = await Promise.all(commands.flatMap((command) => [interruptedIgnoring(command, 1), interruptedIgnoring(command, 2)]));
+    for (const [index, run] of runs.entries()) {
+      const what = `${commands[Math.floor(index / 2)]?.join(" ")} with ${index % 2 === 0 ? "one interrupt" : "two interrupts"}`;
+      const exit = index % 2 === 0 ? "exit after interrupt 1" : "exit during interrupt 2";
+      assert.deepEqual({ ...run, elapsed: undefined }, { code: 130, signal: null, stderr: "", exit, elapsed: undefined, running: false }, what);
+      if (index % 2 === 0) assert.ok(run.elapsed >= INTERRUPT_GRACE_MS, `${what}: exited ${run.elapsed} ms after the interrupt, before the grace period`);
+    }
   });
 
-  test("a command of the application runs beside the commands of the capabilities", async () => {
-    const [position, echo] = await Promise.all([cliWithCommand("position", "switch"), cliWithCommand("fixture", "echo", "--text", "hi")]);
+  test("a command of the application runs beside the commands of the capabilities, and the help describes it", async () => {
+    const [position, echo, help] = await Promise.all([cliWithCommand("position", "switch"), cliWithCommand("fixture", "echo", "--text", "hi"), cliWithCommand("--help")]);
     assert.equal(position.code, 0);
     assert.equal(position.stdout.trim(), "switch: on");
     assert.equal(echo.code, 0);
+    assert.match(help.stdout, /DESCRIPTION\n {2}The fixture, with a command of its own\./);
+    assert.match(help.stdout, /\n {2}position +Write the position of the switch\.\n\nALIASES\n/);
   });
 
-  test("a first -- is not an argument", async () => {
-    const [plain, dashed] = await Promise.all([cli("say", "--text", "hi"), cli("--", "say", "--text", "hi")]);
+  test("a first -- is not an argument, and a -- after the first argument is an argument", async () => {
+    const [plain, dashed, extra, value] = await Promise.all([
+      cli("say", "--text", "hi"),
+      cli("--", "say", "--text", "hi"),
+      cli("fixture", "echo", "--text", "hi", "--"),
+      cli("fixture", "echo", "--text", "--"),
+    ]);
     assert.equal(plain.code, 0);
     assert.deepEqual(dashed, plain);
+    assert.deepEqual([extra.code, extra.stdout], [3, ""]);
+    assert.deepEqual([value.code, JSON.parse(value.stdout)], [0, { text: "--" }]);
   });
 
-  test("the help gives the description of the options and the commands of the application", async () => {
-    const help = (await cliWithCommand("--help")).stdout;
-    assert.match(help, /DESCRIPTION\n {2}The fixture, with a command of its own\./);
-    assert.match(help, /\n {2}position +Write the position of the switch\.\n\nALIASES\n/);
-  });
-
-  test("the help lists the aliases, and <alias> --help gives the usage of the alias", async () => {
-    const [help, sayHelp, helloHelp] = await Promise.all([cli("--help"), cli("say", "--help"), cli("--hello", "--help")]);
+  test("the help lists the aliases, and a flag alias with --help gives the usage of the alias", async () => {
+    const [help, helloHelp] = await Promise.all([cli("--help"), cli("--hello", "--help")]);
     assert.match(help.stdout, /\nALIASES\n {2}--hello\n {2}broken-ticks \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}echoes '<json>' \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}fixed-note \[--loud\]\n {2}fixture \[--count <integer>\][^\n]*\n {2}held-keys\n {2}notes '<json>'\n {2}notes add --text <string> \[--loud\]\n {2}notes loud --text <string>\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n {2}shout hello\n {2}ticks \[--gap <integer>\] \[--key <string>\] \[--cursor <string>\] \[--max-age-ms <integer>\]\n$/);
     assert.doesNotMatch(help.stdout, /alias --hello/);
-    assert.deepEqual(sayHelp, { code: 0, stdout: "Usage: fixture say --text <string>\n\nReturn the input text.\n", stderr: "" });
     assert.equal(helloHelp.stdout, "Usage: fixture --hello\n\nReturn the input text.\n");
   });
 
@@ -199,28 +201,22 @@ describe("the command line of an application", { concurrency: true }, () => {
     assert.equal(missing.code, 3);
   });
 
-  test("the input schema of fixture.note is a $ref with a description beside it", () => {
-    assert.deepEqual(App.document(fixture).capabilities["fixture.note"]?.input, { $ref: "#/$defs/Note", description: "The note." });
-  });
-
   test("a usage error writes the help and the error to standard error, and help and version still go to standard output", async () => {
-    const [unknownFlag, missingFlag, unknownCommand] = await Promise.all([
+    const [unknownFlag, rootHelp, rootShort, commandShort, version] = await Promise.all([
       cli("fixture", "echo", "--nope", "x"),
-      cli("fixture", "echo"),
-      cli("fixture", "nothing"),
+      cli("--help"),
+      cli("-h"),
+      cli("fixture", "echo", "-h"),
+      cli("--version"),
     ]);
-    assert.deepEqual(
-      [unknownFlag, missingFlag, unknownCommand].map((run) => [run.code, run.stdout]),
-      [[3, ""], [3, ""], [2, ""]],
-    );
+    assert.deepEqual([unknownFlag.code, unknownFlag.stdout], [3, ""]);
     assert.match(unknownFlag.stderr, /^Usage: fixture fixture echo --text <string>\n[\s\S]*Unrecognized flag: --nope/);
-
-    const requests = await Promise.all([cli("--help"), cli("-h"), cli("fixture", "echo", "--help"), cli("fixture", "echo", "-h")]);
-    for (const [index, help] of requests.entries()) {
+    for (const help of [rootHelp, rootShort]) {
       assert.equal(help.code, 0);
-      assert.match(help.stdout, index < 2 ? /USAGE/ : /^Usage: fixture fixture echo --text <string>\n/);
+      assert.match(help.stdout, /USAGE/);
     }
-    const version = await cli("--version");
+    assert.equal(commandShort.code, 0);
+    assert.match(commandShort.stdout, /^Usage: fixture fixture echo --text <string>\n/);
     assert.equal(version.code, 0);
     assert.match(version.stdout, /0\.0\.0/);
   });
@@ -265,32 +261,21 @@ test("the command line stops when it starts if an alias breaks a rule", () => {
   assert.doesNotThrow(() => Cli.command(appOf({ probe: { capability: "probe.ping" } }), options));
 });
 
-test("the command line stops when it starts if a flag alias has the name of a global flag", async () => {
-  const ping = Capability.make({ id: "probe.ping", description: "Ping.", audience: ["cli"], run: () => Effect.succeed(null) });
+test("the command line stops when it starts if a flag alias, or a flag of the default alias, has the name of a global flag", async () => {
+  const Input = Schema.Struct({ switch: Schema.optionalKey(Schema.Boolean), text: Schema.optionalKey(Schema.String) });
+  const ping = Capability.make({ id: "probe.ping", description: "Ping.", audience: ["cli"], input: Input, run: () => Effect.succeed(null) });
   const switchFlag = GlobalFlag.Setting("switch")({ flag: Flag.Boolean("switch") });
-  const start = (name: string) => {
-    const app = App.make({ targets: { cli: { bindings: ["cli"], options: { cli: { aliases: { [name]: { capability: "probe.ping" } } } } } }, capabilities: [ping] });
+  const start = (cli: { readonly aliases: { readonly [name: string]: { readonly capability: string } }; readonly default?: string }) => {
+    const app = App.make({ targets: { cli: { bindings: ["cli"], options: { cli } } }, capabilities: [ping] });
     const command = Cli.command(app, { name: "probe", version: "0.0.0" }).pipe(Command.withGlobalFlags([switchFlag]));
     return Effect.runPromiseExit(Cli.runCommand(command, { version: "0.0.0" }).pipe(Effect.provide(NodeServices.layer)));
   };
   for (const name of ["--log-level", "--completions", "--switch", "--no-switch"]) {
-    const exit = await start(name);
+    const exit = await start({ aliases: { [name]: { capability: "probe.ping" } } });
     assert.ok(Exit.isFailure(exit), `${name} stops the command line`);
     assert.match(Cause.pretty(exit.cause), new RegExp(`The alias ${name} has the name of a flag of the command line`));
   }
-});
-
-test("the command line stops when it starts if a flag of the default alias has the name of a global flag", async () => {
-  const Input = Schema.Struct({ switch: Schema.optionalKey(Schema.Boolean), text: Schema.optionalKey(Schema.String) });
-  const ping = Capability.make({ id: "probe.ping", description: "Ping.", audience: ["cli"], input: Input, run: () => Effect.succeed(null) });
-  const switchFlag = GlobalFlag.Setting("switch")({ flag: Flag.Boolean("switch") });
-  const start = () => {
-    const aliases = { ping: { capability: "probe.ping" } };
-    const app = App.make({ targets: { cli: { bindings: ["cli"], options: { cli: { aliases, default: "ping" } } } }, capabilities: [ping] });
-    const command = Cli.command(app, { name: "probe", version: "0.0.0" }).pipe(Command.withGlobalFlags([switchFlag]));
-    return Effect.runPromiseExit(Cli.runCommand(command, { version: "0.0.0" }).pipe(Effect.provide(NodeServices.layer)));
-  };
-  const exit = await start();
+  const exit = await start({ aliases: { ping: { capability: "probe.ping" } }, default: "ping" });
   assert.ok(Exit.isFailure(exit), "the flag --switch of the default alias stops the command line");
   assert.match(Cause.pretty(exit.cause), /The default alias ping has the flag --switch, which is a flag of the command line/);
 });

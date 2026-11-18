@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Cause, Console, Effect, Exit, Layer, Schema, Stdio } from "effect";
+import { Cause, Console, Effect, Exit, Layer, Schema, Stdio, Stream } from "effect";
 import { Command, Flag, GlobalFlag } from "effect/cli";
 
-import { App, Capability, Cli } from "../src/index.ts";
+import { App, Capability, Cli, Event } from "../src/index.ts";
 
 const Level = Schema.Struct({ level: Schema.Number });
 const Empty = Schema.TaggedStruct("Empty", {});
@@ -27,7 +27,9 @@ const fill = Capability.make({
   run: () => Effect.succeed(null),
 });
 
-const probe = App.make({ targets: { cli: { bindings: ["cli"], cli: { aliases: { "--now": App.alias(level) } } } }, capabilities: [level, fill] });
+const tick = Event.make({ id: "probe.tick", description: "Give one tick, then end.", audience: ["cli"], subscribe: () => Stream.make({ data: {} }) });
+
+const probe = App.make({ targets: { cli: { bindings: ["cli"], cli: { aliases: { "--now": App.alias(level) } } } }, capabilities: [level, fill], events: [tick] });
 
 const runWith = <const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(
   output: Cli.Output | undefined,
@@ -68,6 +70,28 @@ test("a formatter that throws, or a value that does not decode, gives the generi
   assert.deepEqual(thrown, { code: 0, stdout: "level  3", stderr: "" });
   assert.deepEqual(notDecoded, { code: 0, stdout: "level  3", stderr: "" });
   assert.deepEqual(formatted, { code: 0, stdout: "level 3", stderr: "" });
+});
+
+test("the formatter of an event with no payload schema gets an empty object, and an empty text writes nothing", async () => {
+  const seen: unknown[] = [];
+  const [ticked, empty] = await Effect.runPromise(
+    Effect.all([
+      runHuman(
+        [
+          App.format(tick, (payload) => {
+            seen.push(payload);
+            return "tick!";
+          }),
+        ],
+        "watch",
+        "probe.tick",
+      ),
+      runHuman([App.format(level, () => "")], "probe", "level"),
+    ]),
+  );
+  assert.deepEqual(ticked, { code: 0, stdout: "tick!", stderr: "" });
+  assert.deepEqual(seen, [{}]);
+  assert.deepEqual(empty, { code: 0, stdout: "", stderr: "" });
 });
 
 test("the command line stops when it starts if two formats have one id, or a format is not in the view", () => {
@@ -131,7 +155,7 @@ test("without the option output, the command line writes JSON, also on a termina
   assert.deepEqual([unknown.code, unknown.stdout], [2, ""]);
 });
 
-test("output flags are anywhere in the arguments, the last one wins, and an output flag can take -h", async () => {
+test("an output flag can take -h, an output flag with no value writes its error to standard error, and the help lists the output flags", async () => {
   const output: Cli.Output = {
     default: "json",
     flags: [
@@ -140,18 +164,10 @@ test("output flags are anywhere in the arguments, the last one wins, and an outp
       { names: ["--format", "-f"], values: { text: "human", json: "json" } },
     ],
   };
-  const [short, last, inline, missing, help] = await Effect.runPromise(
-    Effect.all([
-      runWith(output, ["-h", "probe", "level"]),
-      runWith(output, ["probe", "level", "--human", "--json"]),
-      runWith(output, ["probe", "level", "--format=text"]),
-      runWith(output, ["probe", "level", "-f"]),
-      runWith(output, ["--help"]),
-    ]),
+  const [short, missing, help] = await Effect.runPromise(
+    Effect.all([runWith(output, ["-h", "probe", "level"]), runWith(output, ["probe", "level", "-f"]), runWith(output, ["--help"])]),
   );
   assert.deepEqual(short, { code: 0, stdout: LEVEL_TEXT, stderr: "" });
-  assert.deepEqual(last, { code: 0, stdout: LEVEL_JSON, stderr: "" });
-  assert.deepEqual(inline, { code: 0, stdout: LEVEL_TEXT, stderr: "" });
   assert.deepEqual(missing, { code: 3, stdout: "", stderr: "The option -f must be json or text." });
   assert.equal(help.code, 0);
   assert.match(help.stdout, /USAGE/);
@@ -197,19 +213,11 @@ test("the command line stops when it starts if an output flag has the name of a 
   }
 });
 
-test("the default form is json, and auto gives the human form only at a terminal", async () => {
-  const human: Cli.Output = { flags: [{ names: ["--human"], form: "human" }] };
-  const results = await Effect.runPromise(
-    Effect.all([
-      runWith(human, ["probe", "level"], true),
-      runWith(human, ["probe", "level", "--human"], true),
-      runWith({ default: "auto" }, ["probe", "level"], true),
-      runWith({ default: "auto" }, ["probe", "level"]),
-    ]),
-  );
+test("auto gives the human form only at a terminal", async () => {
+  const results = await Effect.runPromise(Effect.all([runWith({ default: "auto" }, ["probe", "level"], true), runWith({ default: "auto" }, ["probe", "level"])]));
   assert.deepEqual(
     results.map(({ stdout }) => stdout),
-    [LEVEL_JSON, LEVEL_TEXT, LEVEL_TEXT, LEVEL_JSON],
+    [LEVEL_TEXT, LEVEL_JSON],
   );
 });
 

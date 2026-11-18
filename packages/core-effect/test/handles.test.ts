@@ -3,10 +3,10 @@ import { test } from "node:test";
 
 import { CallFailureError } from "@acid-cat/spec-ts";
 import type { Availability, Result } from "@acid-cat/spec-ts";
-import { Context, Effect, Layer, Option, Schema, SchemaGetter, SchemaTransformation, Stream, SubscriptionRef } from "effect";
+import { Context, Deferred, Effect, Layer, Option, Schema, SchemaGetter, SchemaTransformation, Stream, SubscriptionRef } from "effect";
 
 import { App, Capability, Handles, Session } from "../src/index.ts";
-import { fixture, fixtureLayer, holdsLayer, position, Switch, watchersLayer } from "./fixture.ts";
+import { fixture, holdsLayer, position, Switch, switchLayer, watchersLayer } from "./fixture.ts";
 import { Burnt, Lamp, lamp, lampLayer, Light, lightGet, pair, powerSet, sceneSet, Unreachable } from "./lamp.ts";
 
 const rejection = (promise: Promise<unknown>) => promise.then(() => assert.fail("the promise must reject"), (error: unknown) => error);
@@ -27,7 +27,9 @@ const handleOf = (handles: ReadonlyMap<string, Handles.Handle>, id: string) => {
 };
 
 test("handles give results, and reject call failures with their kind", async () => {
-  const session = await Handles.open(fixture, fixtureLayer, { target: "app" });
+  const holding = Effect.runSync(Deferred.make<void>());
+  const marker = { write: () => Deferred.succeed(holding, undefined), remove: () => Effect.void };
+  const session = await Handles.open(fixture, Layer.mergeAll(switchLayer, holdsLayer(marker), watchersLayer()), { target: "app" });
   try {
     assert.deepEqual([...session.handles.keys()], Object.keys(session.view.capabilities));
     const handle = (id: string) => handleOf(session.handles, id);
@@ -42,8 +44,9 @@ test("handles give results, and reject call failures with their kind", async () 
     assert.equal((await callFailure(handle("fixture.crash").execute({}))).kind, "internal");
 
     const controller = new AbortController();
-    const held = callFailure(handle("fixture.hold").execute({ key: "cancelled" }, { signal: controller.signal }));
-    setTimeout(() => controller.abort(), 20);
+    const held = callFailure(handle("fixture.hold").execute({ key: "cancelled", marker: "holding" }, { signal: controller.signal }));
+    await Effect.runPromise(Deferred.await(holding));
+    controller.abort();
     const cancelled = await held;
     assert.equal(cancelled.kind, "cancelled");
     assert.equal(cancelled.name, "AbortError");

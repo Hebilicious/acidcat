@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { test } from "node:test";
 
-import { Effect, Exit, Scope, Stream } from "effect";
+import { Effect, Exit, Schema, Scope, Stream } from "effect";
 
 import { Http } from "../src/index.ts";
 import { occurrences } from "../src/internal/httpClient.ts";
 import * as NodeServer from "../src/NodeServer.ts";
+import { decodeText } from "./decode.ts";
 import { runWith } from "./run.ts";
 import { bundledProgram } from "./bundled-program.ts";
 
@@ -39,13 +40,22 @@ test("a server that does not answer gives unavailable", async () => {
   assert.equal(subscribed.kind, "unavailable");
 });
 
-test("an answer that the HTTP binding does not give is internal", async (context) => {
+const badLists: Record<string, unknown> = {
+  "no-reason": [{ id: "fixture.echo", available: true }, { id: "fixture.toggle", available: false }],
+  "no-id": [{ available: true }],
+  "not-boolean": [{ id: "fixture.echo", available: "yes" }],
+  "reason-not-text": [{ id: "fixture.toggle", available: false, reason: 1 }],
+};
+
+test("an answer that the HTTP binding does not give is internal, also an item of GET /capabilities without an id, a boolean available, or a reason when it is not available", async (context) => {
   const server = await serve((request) => {
     const path = new URL(request.url).pathname;
     if (path === "/not-json/capabilities/fixture.echo") return new Response("<html></html>", { status: 200 });
     if (path === "/no-ok/capabilities/fixture.echo") return Response.json({ value: 1 });
     if (path === "/bad-failure/capabilities/fixture.echo") return Response.json({ kind: "teapot", message: "no" }, { status: 418 });
     if (path === "/not-a-list/capabilities") return Response.json({ id: "fixture.echo" });
+    const list = badLists[path.split("/")[1] ?? ""];
+    if (list !== undefined) return Response.json(list);
     if (path === "/cut/events/fixture.watch") return new Response(`event: next\ndata: ${JSON.stringify(occurrence("1"))}\n\n`, { headers: { "Content-Type": "text/event-stream" } });
     return new Response(null, { status: 404 });
   });
@@ -54,7 +64,9 @@ test("an answer that the HTTP binding does not give is internal", async (context
     const outcome = await Effect.runPromise(Http.client(`${server.url}/${base}`).invoke("fixture.echo", {}));
     assert.equal("kind" in outcome && outcome.kind, "internal", base);
   }
-  assert.equal((await Effect.runPromise(Effect.flip(Http.client(`${server.url}/not-a-list`).capabilities))).kind, "internal");
+  for (const base of ["not-a-list", ...Object.keys(badLists)]) {
+    assert.equal((await Effect.runPromise(Effect.flip(Http.client(`${server.url}/${base}`).capabilities))).kind, "internal", base);
+  }
   const cut = await Effect.runPromise(
     Effect.scoped(Effect.flatMap(Http.client(`${server.url}/cut`).subscribe("fixture.watch", {}), (stream) => Stream.runCollect(stream).pipe(Effect.result))),
   );
@@ -85,13 +97,19 @@ test("the client sends its headers and the cursor, and gives the call failure of
   assert.deepEqual(seen.at(-1), { authorization: TOKEN, lastEventId: "c-7", query: "?maxAgeMs=1000" });
 });
 
-test("a base that is not an http URL, or a header that is not valid, throws with no header value in the message", () => {
+test("a base that is not an http URL, that has credentials, a query or a fragment, or a header that is not valid, throws with no secret in the message", () => {
   assert.throws(() => Http.client("ftp://example.com"), /not an http or https URL/);
   assert.throws(() => Http.client("not a url"), /not a URL/);
   assert.throws(
     () => Http.client("http://example.com", { headers: { Authorization: "Bearer a\nb" } }),
     (error: unknown) => error instanceof Error && error.message.includes("Authorization") && !error.message.includes("Bearer"),
   );
+  const credentials = (error: unknown) => error instanceof Error && /user name or a password\. Give them in a header/.test(error.message) && !error.message.includes("TOKEN");
+  assert.throws(() => Http.client("http://user:TOKEN@example.com/cli"), credentials);
+  assert.throws(() => Http.client("http://TOKEN@example.com/cli"), credentials);
+  assert.throws(() => Http.client("http://example.com/cli?k=v"), /must not have a query or a fragment/);
+  assert.throws(() => Http.client("http://example.com/cli#part"), /must not have a query or a fragment/);
+  assert.throws(() => Http.client("not a url TOKEN"), (error: unknown) => error instanceof Error && !error.message.includes("TOKEN"));
 });
 
 test("the reader of server-sent events reads comments, line ends, split chunks and lines of data", async () => {
@@ -144,38 +162,14 @@ test("the command line that calls a server never writes its headers", async (con
   }
 });
 
-test("an item of GET /capabilities without an id, a boolean available, or a reason when it is not available makes the answer internal", async (context) => {
-  const lists: Record<string, unknown> = {
-    "no-reason": [{ id: "fixture.echo", available: true }, { id: "fixture.toggle", available: false }],
-    "no-id": [{ available: true }],
-    "not-boolean": [{ id: "fixture.echo", available: "yes" }],
-    "reason-not-text": [{ id: "fixture.toggle", available: false, reason: 1 }],
-  };
-  const server = await serve((request) => Response.json(lists[new URL(request.url).pathname.split("/")[1] ?? ""] ?? null));
-  context.after(server.close);
-  for (const base of Object.keys(lists)) {
-    const failure = await Effect.runPromise(Effect.flip(Http.client(`${server.url}/${base}`).capabilities));
-    assert.equal(failure.kind, "internal", base);
-  }
-});
-
-test("a base URL with a user name, a password, a query or a fragment throws, with no credentials in the message", () => {
-  const credentials = (error: unknown) => error instanceof Error && /user name or a password\. Give them in a header/.test(error.message) && !error.message.includes("TOKEN");
-  assert.throws(() => Http.client("http://user:TOKEN@example.com/cli"), credentials);
-  assert.throws(() => Http.client("http://TOKEN@example.com/cli"), credentials);
-  assert.throws(() => Http.client("http://example.com/cli?k=v"), /must not have a query or a fragment/);
-  assert.throws(() => Http.client("http://example.com/cli#part"), /must not have a query or a fragment/);
-  assert.throws(() => Http.client("not a url TOKEN"), (error: unknown) => error instanceof Error && !error.message.includes("TOKEN"));
-});
-
 test("an interrupt before the server answers a subscription ends watch with 130, and writes nothing", async (context) => {
   let received: () => void = () => undefined;
   const subscribed = new Promise<void>((resolve) => (received = resolve));
-  let closed = false;
+  const closed = Promise.withResolvers<void>();
   const server = await serve(
     (request) =>
       new Promise<Response>(() => {
-        request.signal.addEventListener("abort", () => (closed = true));
+        request.signal.addEventListener("abort", () => closed.resolve());
         received();
       }),
   );
@@ -191,26 +185,49 @@ test("an interrupt before the server answers a subscription ends watch with 130,
   assert.equal(await exited, 130);
   assert.equal(stderr, "");
   assert.equal(stdout, "");
-  for (let turn = 0; !closed && turn < 100; turn++) await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.ok(closed, "the interrupt closes the request");
+  await closed.promise;
 });
 
-test("an interrupt during list of a server that does not answer is cancelled, with exit code 130", async (context) => {
-  let received: () => void = () => undefined;
-  const requested = new Promise<void>((resolve) => (received = resolve));
-  const server = await serve(() => new Promise<Response>(() => received()));
+test("an interrupt during a call or list of a server that does not answer is cancelled, with exit code 130", async (context) => {
+  const requested = Promise.withResolvers<void>();
+  const paths: string[] = [];
+  const server = await serve(
+    (request) =>
+      new Promise<Response>(() => {
+        paths.push(new URL(request.url).pathname);
+        if (paths.length === 2) requested.resolve();
+      }),
+  );
   context.after(server.close);
-  const child = spawn(process.execPath, [remoteCli, server.url, "list"], { stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
-  let stdout = "";
-  let stderr = "";
-  child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));
-  child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
-  const exited = new Promise<number | null>((resolve) => child.on("close", resolve));
-  await requested;
-  child.kill("SIGINT");
-  assert.equal(await exited, 130);
-  assert.deepEqual(JSON.parse(stderr), { kind: "cancelled", message: "The call was cancelled." });
-  assert.equal(stdout, "");
+  const interrupted = (...args: string[]) => {
+    const child = spawn(process.execPath, [remoteCli, server.url, ...args], { stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));
+    child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
+    const exited = new Promise<number | null>((resolve) => child.on("close", resolve));
+    return { child, ended: exited.then((code) => ({ code, stdout, stderr })) };
+  };
+  const runs = [interrupted("fixture", "echo", "--text", "hi"), interrupted("list")];
+  await requested.promise;
+  assert.deepEqual(paths.sort(), ["/capabilities", "/capabilities/fixture.echo"]);
+  for (const { child } of runs) child.kill("SIGINT");
+  const cancelled = { code: 130, stdout: "", stderr: `${JSON.stringify({ kind: "cancelled", message: "The call was cancelled." })}\n` };
+  assert.deepEqual(await Promise.all(runs.map(({ ended }) => ended)), [cancelled, cancelled]);
+});
+
+test("list marks a capability that the server does not list as unavailable", async (context) => {
+  const server = await serve(() => Response.json([{ id: "fixture.echo", available: true }, { id: "fixture.toggle", available: false, reason: "Off." }]));
+  context.after(server.close);
+  const listed = await runWith({}, remoteCli, server.url, "list");
+  assert.equal(listed.code, 0, listed.stderr);
+  const Entry = Schema.Struct({ id: Schema.String, available: Schema.optionalKey(Schema.Boolean), reason: Schema.optionalKey(Schema.String) });
+  const entries = decodeText(Schema.Array(Entry), listed.stdout);
+  const entry = (id: string) => entries.find((each) => each.id === id);
+  assert.deepEqual(entry("fixture.echo")?.available, true);
+  assert.deepEqual(entry("fixture.toggle")?.reason, "Off.");
+  assert.deepEqual(entry("fixture.refuse")?.reason, "The server does not serve this capability.");
+  assert.equal(entry("fixture.refuse")?.available, false);
 });
 
 test("a cursor that is not a header value is invalid-input, and the client sends no request", async (context) => {
@@ -233,19 +250,16 @@ test("a cursor that is not a header value is invalid-input, and the client sends
 });
 
 test("a 200 answer to a subscription that is not a stream of server-sent events is internal at once", async (context) => {
-  let closed = false;
+  const closed = Promise.withResolvers<void>();
   const server = await serve(() => {
     const body = new ReadableStream<Uint8Array>({
       start: (controller) => controller.enqueue(new TextEncoder().encode("{")),
-      cancel: () => {
-        closed = true;
-      },
+      cancel: () => closed.resolve(),
     });
     return new Response(body, { status: 200, headers: { "Content-Type": "application/json" } });
   });
   context.after(server.close);
   const failure = await Effect.runPromise(Effect.scoped(Effect.flip(Http.client(server.url).subscribe("fixture.watch", {}))).pipe(Effect.timeout("5 seconds")));
   assert.equal(failure.kind, "internal");
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.ok(closed, "the client closes the body");
+  await closed.promise;
 });

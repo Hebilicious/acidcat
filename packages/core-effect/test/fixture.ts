@@ -72,7 +72,7 @@ export class Watchers extends Context.Service<
   }
 >()("fixture/Watchers") {}
 
-export const watchersLayer = (marker?: Marker) =>
+export const watchersLayer = (marker?: Marker, { ignoreInterruption = false }: { readonly ignoreInterruption?: boolean } = {}) =>
   Layer.effect(
     Watchers,
     Effect.gen(function* () {
@@ -91,6 +91,10 @@ export const watchersLayer = (marker?: Marker) =>
                 ({ entry }) => Effect.sync(() => watching.delete(entry)),
               );
               if (path !== undefined && marker !== undefined) yield* Effect.acquireRelease(marker.write(path), () => marker.remove(path));
+              if (ignoreInterruption) {
+                const cancelled = path === undefined || marker === undefined ? Effect.void : marker.write(`${path}.cancelled`);
+                return Stream.fromEffect(Effect.never.pipe(Effect.interruptible, Effect.onInterrupt(() => cancelled), Effect.exit, Effect.andThen(Effect.never), Effect.uninterruptible));
+              }
               return Stream.fromSubscription(subscription.subscription).pipe(
                 Stream.filter((signal) => signal.key === key),
                 Stream.map((signal) => signal.value),

@@ -73,18 +73,6 @@ export const counted = Event.make({
   subscribe: (input) => Stream.fromIterable(Object.entries(input).map(([key, value]) => ({ data: { key, value }, eventId: key }))),
 });
 
-export const timed = Event.make({
-  id: "feed.timed",
-  description: "Give one occurrence every few milliseconds. With a count, end after that number of occurrences.",
-  audience: everywhere,
-  input: Schema.Struct({ every: Schema.Int, count: Schema.optionalKey(Schema.Int) }),
-  payload: Schema.Struct({ index: Schema.Int }),
-  subscribe: ({ every, count }) => {
-    const all = Stream.iterate(0, (index) => index + 1).pipe(Stream.mapEffect((index) => Effect.as(Effect.sleep(every), { data: { index } })));
-    return count === undefined ? all : Stream.take(all, count);
-  },
-});
-
 export const resumed = Event.make({
   id: "feed.resumed",
   description: "Give one occurrence with the cursor and maxAgeMs of the subscription, then end.",
@@ -133,5 +121,5 @@ export const events = App.make({
       run: (tick) => Effect.as(publish(tick), null),
     }),
   ],
-  events: [ticked, counted, timed, resumed, crashing, disagreeing, hiddenEvent],
+  events: [ticked, counted, resumed, crashing, disagreeing, hiddenEvent],
 });

@@ -121,7 +121,6 @@
     "@types/node": "catalog:",
     "effect": "catalog:",
     "esbuild": "catalog:",
-    "graphql": "catalog:",
     "playwright": "catalog:",
     "typescript": "catalog:"
   }
