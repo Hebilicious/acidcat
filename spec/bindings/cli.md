@@ -146,6 +146,8 @@ The output is JSON. A result goes to standard output. A call failure goes to sta
 
 A core MAY also write a form of the output for a person. That form, and the way to choose it, are a concern of the core. The flags that choose the form are flags that the application adds. When standard output is not a terminal, the output MUST be JSON, unless the user asks for another form. The exit code and the stream of each outcome are the same in each form.
 
+When standard output is not a terminal, the program SHOULD write a result, a failure and the output of `list` in the JSON form each as one line of JSON. On a terminal, the layout of the JSON is a concern of the core.
+
 | Outcome | Standard output | Exit code |
 | --- | --- | --- |
 | Value | The value | 0 |
@@ -176,6 +178,8 @@ The command line can serve a view of an application that runs in another process
 Different exit codes let a script or an agent know if "the capability said no" or "the call did not run", without reading text.
 
 One line of JSON for each occurrence lets a script read occurrences one at a time, for example with `jq`, while the subscription continues.
+
+One line of JSON for a result, a failure and the output of `list` gives an agent or a script less text to read. JSON with an indent is easier for a person to read on a terminal.
 
 A default alias gives a program one main operation, such as `build`, with no command word.
 

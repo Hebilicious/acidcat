@@ -112,6 +112,11 @@ export interface CliIo {
   readonly output?: CliForm | undefined;
   /** Style the human form with ANSI colors. The default is `false`. */
   readonly color?: boolean | undefined;
+  /**
+   * Write a result, a failure and the output of `list` in the JSON form on many lines with an indent of 2. The default
+   * is `false`: one line of JSON. `main` sets it when standard output is a terminal.
+   */
+  readonly pretty?: boolean | undefined;
 }
 
 export interface CliCommand<Context> {
@@ -161,6 +166,7 @@ export function main<Context>(app: App<Context>, options: CliOptions<Context>, a
     signal: interrupt.signal,
     output: defaultCliOutput(process.stdout.isTTY, process.env),
     color: process.stdout.isTTY && (process.env.NO_COLOR ?? "") === "",
+    pretty: process.stdout.isTTY,
   }).then(
     (code) => {
       process.exitCode = code;
@@ -216,6 +222,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   const output: CliForm = chosen.exitCode === undefined ? chosen.form : "json";
   const formatOf = (id: string): CliFormat | undefined => formats.find((format) => format.id === id);
   const ui = cliUi(io.color === true);
+  const jsonText = (value: unknown): string => (io.pretty === true ? JSON.stringify(value, null, 2) : JSON.stringify(value));
   const render = async (format: CliRender | undefined, json: unknown): Promise<string> => {
     try {
       return (await format?.(json, ui)) ?? cliLayout(json);
@@ -250,7 +257,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   const print = async (outcome: Outcome<unknown, unknown>, id?: string): Promise<number> => {
     if (isCallFailure(outcome)) printFailure(outcome);
     else if (output === "human" && id !== undefined) await printHuman(id, outcome);
-    else io.stdout(JSON.stringify(outcome.ok ? outcome.value : outcome.error, null, 2));
+    else io.stdout(jsonText(outcome.ok ? outcome.value : outcome.error));
     return cliExitCode(outcome);
   };
   const invoke = async (id: string, input: unknown): Promise<number> => await print(await provider.invoke(id, input, io.signal), id);
@@ -375,19 +382,18 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
         return CLI_EXIT_CODES.value;
       }
       io.stdout(
-        JSON.stringify(
-          [
-            ...Object.entries(view.capabilities).map(([id, capability]) => {
-              const usages = aliasUsages("capability", id);
-              return {
-                kind: "capability",
-                id,
-                description: capability.description,
-                ...(availability.get(id) ?? unavailable("There is no such capability.")),
-                usage: usageOf(id),
-                ...(usages.length > 0 ? { aliases: usages } : {}),
-              };
-            }),
+        jsonText([
+          ...Object.entries(view.capabilities).map(([id, capability]) => {
+            const usages = aliasUsages("capability", id);
+            return {
+              kind: "capability",
+              id,
+              description: capability.description,
+              ...(availability.get(id) ?? unavailable("There is no such capability.")),
+              usage: usageOf(id),
+              ...(usages.length > 0 ? { aliases: usages } : {}),
+            };
+          }),
           ...Object.entries(view.events ?? {}).map(([id, event]) => {
             const usages = aliasUsages("event", id);
             return {
@@ -398,10 +404,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
               ...(usages.length > 0 ? { aliases: usages } : {}),
             };
           }),
-        ],
-          null,
-          2,
-        ),
+        ]),
       );
       return CLI_EXIT_CODES.value;
     }

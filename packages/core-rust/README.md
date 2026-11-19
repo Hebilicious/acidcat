@@ -187,6 +187,8 @@ let binding = HttpBinding::with_request_context(app, move |parts: &http::request
 
 ### Output for people
 
+In the JSON form, a result, a failure and the output of `list` are one line of JSON when standard output is not a terminal, and have an indent of 2 on a terminal. `CliOptions::pretty` chooses the layout: with `None`, `run_cli` writes one line, and `cli_main` and `run_cli_process` choose from standard output.
+
 By default the command line writes only JSON, even on a terminal, and takes no output flag. `CliOptions::output(CliOutput::new()...)` adds the human form:
 
 | Method | Use |

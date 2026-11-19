@@ -24,7 +24,8 @@ const fill = Capability.make({
   description: "Fill the probe.",
   audience: ["cli"],
   input: Schema.Struct({ litres: Schema.Number }),
-  run: () => Effect.succeed(null),
+  failures: [Empty],
+  run: ({ litres }) => (litres > 0 ? Effect.succeed(null) : Effect.fail(Empty.make({}))),
 });
 
 const tick = Event.make({ id: "probe.tick", description: "Give one tick, then end.", audience: ["cli"], subscribe: () => Stream.make({ data: {} }) });
@@ -149,7 +150,7 @@ const LEVEL_JSON = JSON.stringify({ level: 3 }, null, 2);
 
 const LEVEL_TEXT = "level  3";
 
-test("without the option output, the command line writes JSON, also on a terminal, and --output is an unknown argument", async () => {
+test("without the option output, the command line writes JSON, with an indent of 2 on a terminal, and --output is an unknown argument", async () => {
   const [json, unknown] = await Effect.runPromise(Effect.all([runWith(undefined, ["probe", "level"], true), runWith(undefined, ["--output", "human", "probe", "level"], true)]));
   assert.deepEqual(json, { code: 0, stdout: LEVEL_JSON, stderr: "" });
   assert.deepEqual([unknown.code, unknown.stdout], [2, ""]);
@@ -217,8 +218,16 @@ test("auto gives the human form only at a terminal", async () => {
   const results = await Effect.runPromise(Effect.all([runWith({ default: "auto" }, ["probe", "level"], true), runWith({ default: "auto" }, ["probe", "level"])]));
   assert.deepEqual(
     results.map(({ stdout }) => stdout),
-    [LEVEL_TEXT, LEVEL_JSON],
+    [LEVEL_TEXT, JSON.stringify({ level: 3 })],
   );
+});
+
+test("when standard output is not a terminal, the JSON form writes a value, a failure and the list on one line", async () => {
+  const [value, failure, list] = await Effect.runPromise(Effect.all([runWith(undefined, ["probe", "level"]), runWith(undefined, ["probe", "fill", "--litres", "0"]), runWith(undefined, ["list"])]));
+  assert.deepEqual(value, { code: 0, stdout: JSON.stringify({ level: 3 }), stderr: "" });
+  assert.deepEqual(failure, { code: 1, stdout: JSON.stringify({ _tag: "Empty" }), stderr: "" });
+  assert.equal(list.code, 0);
+  assert.equal(list.stdout, JSON.stringify(JSON.parse(list.stdout)));
 });
 
 test("the command line stops when it starts if an output flag has the name of a flag of watch, an alias or an input", () => {

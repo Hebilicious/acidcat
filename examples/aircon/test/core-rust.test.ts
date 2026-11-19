@@ -39,12 +39,13 @@ test("the Rust code writes a catalog that conforms and agrees with the Pkl catal
   assert.deepEqual(shape(JSON.parse(text)), shape(JSON.parse(writtenText)));
 });
 
-test("the Rust command line runs a capability, and a flag follows a $ref to its type", async () => {
+test("the Rust command line runs a capability, writes JSON on one line when standard output is not a terminal, and a flag follows a $ref to its type", async () => {
   const [status, poweredOff] = await Promise.all([cli("aircon", "status", "get"), cli("aircon", "mode", "set", "--mode", "heat")]);
   assert.equal(status.code, 0);
+  assert.match(status.stdout, /^[^\n]+\n$/);
   assert.deepEqual(JSON.parse(status.stdout), { power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 });
   assert.equal(poweredOff.code, 1);
-  assert.deepEqual(JSON.parse(poweredOff.stdout), { _tag: "PoweredOff" });
+  assert.equal(poweredOff.stdout, `${JSON.stringify({ _tag: "PoweredOff" })}\n`);
 });
 
 test("the Rust command line writes the human form with its output flags", async () => {

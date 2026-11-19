@@ -86,7 +86,7 @@ describe("the command line of an application", { concurrency: true }, () => {
     ]);
     assert.equal(missing.code, 3);
     assert.deepEqual(JSON.parse(empty.stdout), { days: ["mon"], hours: [] });
-    assert.match(list.stdout, /"usage": "probe probe plan --days <mon\|tue>\.\.\. \[--hours <integer>\.\.\.\]"/);
+    assert.match(list.stdout, /"usage":"probe probe plan --days <mon\|tue>\.\.\. \[--hours <integer>\.\.\.\]"/);
   });
 
   test("a flag of the application decides the services of the capabilities, and the commands keep their exit codes", async () => {

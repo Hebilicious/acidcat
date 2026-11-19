@@ -93,7 +93,8 @@ export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = r
 
 /**
  * Standard output, and the environment of the process, that decide the form of the output under `default: "auto"`
- * of `Output`. The default is no terminal, so the form is JSON. `NodeCli` gives the ones of the process.
+ * of `Output`, and the layout of the JSON form: one line, or many lines with an indent of 2 on a terminal. The
+ * default is no terminal, so the form is JSON on one line. `NodeCli` gives the ones of the process.
  */
 export interface Terminal {
   readonly stdoutIsTerminal: boolean;
@@ -110,6 +111,12 @@ interface Presentation {
 }
 
 const Presentation = Context.Reference<Presentation>("@acid-cat/core-effect/Cli/Presentation", { defaultValue: () => ({ form: "json", ui: ui(false) }) });
+
+const writeJson = (value: unknown) =>
+  Effect.gen(function* () {
+    const { stdoutIsTerminal } = yield* Terminal;
+    yield* Console.log(stdoutIsTerminal ? JSON.stringify(value, null, 2) : JSON.stringify(value));
+  });
 
 /**
  * The form of the output that the arguments and `Options.output` choose. A command of the application reads it to
@@ -442,7 +449,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     Effect.gen(function* () {
       const { form, ui } = yield* Presentation;
       if (isCallFailure(outcome)) yield* writeCallFailure(outcome);
-      else if (form === "json") yield* Console.log(JSON.stringify(outcome.ok ? outcome.value : outcome.error, null, 2));
+      else if (form === "json") yield* writeJson(outcome.ok ? outcome.value : outcome.error);
       else if (outcome.ok) yield* writeText(humanValue(formats.get(id), outcome.value, ui));
       else yield* writeText(humanFailure(formats.get(id), outcome.error, ui));
       process.exitCode = cliExitCode(outcome);
@@ -551,7 +558,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
           const usages = aliasUsages("event", id);
           entries.push({ kind: "event", id, description: event.description, usage, ...(usages.length > 0 ? { aliases: usages } : {}) });
         }
-        yield* Console.log(JSON.stringify(entries, null, 2));
+        yield* writeJson(entries);
       }),
     ).pipe(cancelledByInterrupt),
   ).pipe(Command.withDescription("List the capabilities, with their availability, and the events."));

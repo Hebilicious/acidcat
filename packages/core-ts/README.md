@@ -369,6 +369,8 @@ node cli.ts fan high  # same as: node cli.ts aircon fan set --speed high
 
 #### Human output
 
+In the JSON form, a result, a failure and the output of `list` are one line of JSON when standard output is not a terminal, and have an indent of 2 on a terminal. `cliMain` sets `io.pretty` from standard output. `runCli` writes one line unless `io.pretty` is `true`.
+
 Without the `output` option, the command line writes JSON only, even on a terminal. The `output` option adds a human form:
 
 - `flags`: the output flags. Each has `names` (`--word`, or `-x` with one letter or digit) and either `form: "human" | "json"` for a switch, or `values` that map each value to a form. An output flag can appear anywhere before a later `--`; for an application command it comes before the command name, and `io.output` holds the form. The last output flag wins. A missing or unknown value exits with 3.
