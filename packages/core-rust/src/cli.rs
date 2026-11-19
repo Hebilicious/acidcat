@@ -304,6 +304,10 @@ pub struct CliOptions<C> {
     /// Color in the human form. With `None`, [`run_cli`] writes no color, and [`cli_main`] and [`run_cli_process`]
     /// write color when standard output is a terminal and `NO_COLOR` is unset or empty.
     pub color: Option<bool>,
+    /// The layout of a result, a failure and the output of `list` in the JSON form: many lines with an indent of 2, or
+    /// one line. With `None`, [`run_cli`] writes one line, and [`cli_main`] and [`run_cli_process`] write many lines
+    /// when standard output is a terminal.
+    pub pretty: Option<bool>,
 }
 
 impl<C> CliOptions<C> {
@@ -318,6 +322,7 @@ impl<C> CliOptions<C> {
             output: None,
             auto_form: None,
             color: None,
+            pretty: None,
         }
     }
 
@@ -450,6 +455,7 @@ pub async fn run_cli_process<C: Send + Sync + 'static>(
     options
         .color
         .get_or_insert_with(|| output_color(is_terminal, env));
+    options.pretty.get_or_insert(is_terminal);
     let cancel = CancellationToken::new();
     listen_for_interrupt(cancel.clone());
     let mut io = CliIo::standard(cancel);
@@ -675,6 +681,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
             form,
             formats,
             ui: CliUi::new(options.color.unwrap_or(false)),
+            pretty: options.pretty.unwrap_or(false),
         };
         let printer = &printer;
         let args = args_with_default_alias(&args, default_alias.as_ref(), &aliases);
@@ -809,7 +816,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 if printer.form == OutputForm::Human {
                     (io.stdout)(&human_list(&capability_rows, &event_rows));
                 } else {
-                    (io.stdout)(&serde_json::to_string_pretty(&entries).unwrap_or_default());
+                    (io.stdout)(&printer.json(&entries));
                 }
                 Ok(exit::VALUE)
             }
@@ -1145,9 +1152,18 @@ struct Printer<'a> {
     form: OutputForm,
     formats: &'a CliFormats,
     ui: CliUi,
+    pretty: bool,
 }
 
 impl Printer<'_> {
+    fn json(&self, value: &impl serde::Serialize) -> String {
+        if self.pretty {
+            serde_json::to_string_pretty(value).unwrap_or_default()
+        } else {
+            serde_json::to_string(value).unwrap_or_default()
+        }
+    }
+
     fn human(&self, io: &mut CliIo, of: Formatted, id: &str, value: &Value) {
         let text = self.formats.render(of, id, value, &self.ui);
         if !text.is_empty() {
@@ -1163,7 +1179,7 @@ impl Printer<'_> {
                 exit::VALUE
             }
             (Outcome::Value(value), OutputForm::Json) => {
-                (io.stdout)(&serde_json::to_string_pretty(value).unwrap_or_default());
+                (io.stdout)(&self.json(value));
                 exit::VALUE
             }
             (Outcome::Failure(error), OutputForm::Human) => {
@@ -1171,7 +1187,7 @@ impl Printer<'_> {
                 exit::FAILURE
             }
             (Outcome::Failure(error), OutputForm::Json) => {
-                (io.stdout)(&serde_json::to_string_pretty(error).unwrap_or_default());
+                (io.stdout)(&self.json(error));
                 exit::FAILURE
             }
             (Outcome::CallFailure(failure), _) => self.call_failure(io, failure),

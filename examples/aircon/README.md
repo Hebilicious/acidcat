@@ -55,7 +55,7 @@ Each command line in this example sets its default form to `auto`: text for a pe
 off · cool · fan auto · target 22°C · room 25°C
 ```
 
-`--output human`, `--output json`, `-o human` and `--json` choose the form anywhere in the arguments. Each core formats the status, the `Offline` failure and the payload of `aircon.status.changed`. See [Human output](../../packages/core-ts/README.md#human-output) for how a core sets this up.
+`--output human`, `--output json`, `-o human` and `--json` choose the form anywhere in the arguments. In a pipe, the JSON of a result, a failure and `list` is one line: `node core-ts/cli.ts status | cat` prints `{"power":false,"mode":"cool","fan":"auto","targetCelsius":22,"roomCelsius":25}`. In a terminal, `--json` prints the same JSON with an indent of 2. Each core formats the status, the `Offline` failure and the payload of `aircon.status.changed`. See [Human output](../../packages/core-ts/README.md#human-output) for how a core sets this up.
 
 ### Aliases
 

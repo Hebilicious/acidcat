@@ -116,12 +116,12 @@ test("the alias follow of the command line writes each change of the status", as
 
 const program = bundledProgram("core-ts/cli.ts");
 
-test("the command line runs a capability, and a flag follows a $ref to its type", async () => {
+test("the command line runs a capability, writes JSON on one line when standard output is not a terminal, and a flag follows a $ref to its type", async () => {
   const [status, poweredOff] = await Promise.all([run(program, "aircon", "status", "get"), run(program, "aircon", "mode", "set", "--mode", "heat")]);
   assert.equal(status.code, 0);
-  assert.deepEqual(JSON.parse(status.stdout), OFF);
+  assert.equal(status.stdout, `${JSON.stringify(OFF)}\n`);
   assert.equal(poweredOff.code, 1);
-  assert.deepEqual(JSON.parse(poweredOff.stdout), { _tag: "PoweredOff" });
+  assert.equal(poweredOff.stdout, `${JSON.stringify({ _tag: "PoweredOff" })}\n`);
 });
 
 test("the command line writes the human form with its output flags, and on a terminal by default", async () => {

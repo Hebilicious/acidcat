@@ -510,7 +510,9 @@ The specification gives the naming, group, prefix default and dispatch rules. An
 
 #### Output for a person
 
-The command line writes JSON. The `output` option (a `Cli.Output`) adds a human form, which the [spec](../../spec/bindings/cli.md#outcomes) leaves to each core. Without it, output is always JSON and there are no output flags.
+The command line writes JSON. A result, a failure and the output of `list` are one line of JSON when standard output is not a terminal, and have an indent of 2 on a terminal. The layout follows the `Cli.Terminal` reference, also without the `output` option.
+
+The `output` option (a `Cli.Output`) adds a human form, which the [spec](../../spec/bindings/cli.md#outcomes) leaves to each core. Without it, output is always JSON and there are no output flags.
 
 - `flags`: the output flags. Each has `names` (`--word`, or `-x` with one letter or digit), and either `form` for a switch (`{ names: ["--json"], form: "json" }`) or `values` for a flag with a value (`{ names: ["--format", "-f"], values: { text: "human", json: "json" } }`).
   - An output flag can be anywhere before a later `--`; `runCommand` removes it before `effect/cli` parses. For an application command, it must come before the command name, and the command reads the choice with `Cli.outputForm`.

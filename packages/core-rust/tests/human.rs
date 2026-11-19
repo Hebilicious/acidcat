@@ -155,7 +155,7 @@ async fn two_formats_for_one_value_stop_the_command_line_when_it_starts() {
     );
 }
 
-const COUNT_JSON: &str = "{\n  \"n\": 2\n}";
+const COUNT_JSON: &str = r#"{"n":2}"#;
 
 const COUNT_TEXT: &str = "n  2";
 
@@ -170,6 +170,25 @@ async fn without_the_option_output_the_command_line_writes_json_also_when_auto_g
     .await
     .unwrap();
     assert_eq!((json.code, json.stdout.as_str()), (exit::VALUE, COUNT_JSON));
+}
+
+#[tokio::test]
+async fn the_json_form_writes_a_value_a_failure_and_the_list_on_one_line_and_pretty_writes_an_indent_of_2()
+ {
+    let failure = run_with(None, &["probe", "jam"], None).await.unwrap();
+    assert_eq!(
+        (failure.code, failure.stdout.as_str()),
+        (exit::FAILURE, r#"{"_tag":"Jammed","at":3}"#)
+    );
+    let list = run_with(None, &["list"], None).await.unwrap();
+    let entries: serde_json::Value = serde_json::from_str(&list.stdout).unwrap();
+    assert_eq!(list.stdout, entries.to_string());
+    let mut options = CliOptions::new("probe", "0.0.0");
+    options.pretty = Some(true);
+    let pretty = run_options(&options, &["probe", "count", "--count", "2"])
+        .await
+        .unwrap();
+    assert_eq!(pretty.stdout, "{\n  \"n\": 2\n}");
 }
 
 #[tokio::test]

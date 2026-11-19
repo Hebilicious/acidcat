@@ -346,7 +346,7 @@ test("a required repeated flag must occur, an empty JSON array gives no items, a
   const run = (...args: string[]) => commandLine(app, { name: "probe", version: "0.0.0", context: undefined, toJsonSchema }, ...args);
   assert.equal((await run("probe", "plan")).code, 3);
   assert.deepEqual(JSON.parse((await run("probe", "plan", "--days", "mon", "--hours", "[]")).stdout), { days: ["mon"], hours: [] });
-  assert.match((await run("list")).stdout, /"usage": "probe probe plan --days <mon\|tue>\.\.\. \[--hours <integer>\.\.\.\]"/);
+  assert.match((await run("list")).stdout, /"usage":"probe probe plan --days <mon\|tue>\.\.\. \[--hours <integer>\.\.\.\]"/);
 });
 
 const position: CliCommand<Context> = {

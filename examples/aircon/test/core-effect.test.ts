@@ -70,12 +70,12 @@ test("aircon.status.changed gives the new status after each change, and nothing 
     ).pipe(Effect.provide(Layer.fresh(unitLayer))),
   ));
 
-test("the command line runs a capability, and a flag follows a $ref to its type", async () => {
+test("the command line runs a capability, writes JSON on one line when standard output is not a terminal, and a flag follows a $ref to its type", async () => {
   const [status, poweredOff] = await Promise.all([run(cliPath, "aircon", "status", "get"), run(cliPath, "aircon", "mode", "set", "--mode", "heat")]);
   assert.equal(status.code, 0);
-  assert.deepEqual(JSON.parse(status.stdout), OFF);
+  assert.equal(status.stdout, `${JSON.stringify(OFF)}\n`);
   assert.equal(poweredOff.code, 1);
-  assert.deepEqual(JSON.parse(poweredOff.stdout), { _tag: "PoweredOff" });
+  assert.equal(poweredOff.stdout, `${JSON.stringify({ _tag: "PoweredOff" })}\n`);
 });
 
 test("the state gives the current value, then each change", () =>

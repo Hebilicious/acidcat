@@ -37,13 +37,14 @@ const toJsonSchema: ToJsonSchema = (schema) => {
   return z.toJSONSchema(schema, { unrepresentable: "any" });
 };
 
-const runWith = async (output: CliOutput | undefined, args: readonly string[], terminal?: CliForm, commands?: readonly CliCommand<{}>[]) => {
+const runWith = async (output: CliOutput | undefined, args: readonly string[], terminal?: CliForm, commands?: readonly CliCommand<{}>[], pretty?: boolean) => {
   const out: string[] = [];
   const err: string[] = [];
   const code = await runCli(app, { name: "probe", version: "0.0.0", context: {}, toJsonSchema, output, commands }, args, {
     stdout: (text) => out.push(text),
     stderr: (text) => err.push(text),
     output: terminal,
+    pretty,
   });
   return { code, out, err };
 };
@@ -141,7 +142,7 @@ test("the generic layout writes nested objects, tables and other arrays", () => 
   assert.equal(cliLayout(null), "");
 });
 
-const PROBE_JSON = JSON.stringify({ name: "attic", celsius: 21 }, null, 2);
+const PROBE_JSON = JSON.stringify({ name: "attic", celsius: 21 });
 
 const PROBE_TEXT = "name     attic\ncelsius  21";
 
@@ -200,6 +201,15 @@ test("an application command gets its arguments unchanged and the chosen form, a
 test("auto gives the human form only on a terminal", async () => {
   assert.deepEqual(await runWith({ default: "auto" }, ["probe", "read"], "human"), { code: 0, out: [PROBE_TEXT], err: [] });
   assert.deepEqual(await runWith({ default: "auto" }, ["probe", "read"]), { code: 0, out: [PROBE_JSON], err: [] });
+});
+
+test("the JSON form writes a value, a failure and the list on one line, and on a terminal it writes the value with an indent of 2", async () => {
+  assert.deepEqual(await runWith(undefined, ["probe", "read", "--broken"]), { code: 1, out: [JSON.stringify({ _tag: "Broken", part: "sensor" })], err: [] });
+  const { code, out } = await runWith(undefined, ["list"]);
+  assert.equal(code, 0);
+  assert.equal(out.length, 1);
+  assert.equal(out[0], JSON.stringify(JSON.parse(out[0] ?? "")));
+  assert.deepEqual(await runWith(undefined, ["probe", "read"], undefined, undefined, true), { code: 0, out: ['{\n  "name": "attic",\n  "celsius": 21\n}'], err: [] });
 });
 
 test("the command line stops when it starts if an output flag has the name of a flag of watch, an alias or an input", async () => {
