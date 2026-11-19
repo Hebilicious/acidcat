@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.15.0...@acid-cat/core-ts@0.16.0) (2026-11-19)
+
+
+### Features
+
+* **cli:** write JSON output on one line when standard output is not a terminal ([#203](https://github.com/Hebilicious/acidcat/issues/203)) ([6ea22b2](https://github.com/Hebilicious/acidcat/commit/6ea22b2d17cdc15ed238cce7b1a7659ecaa250fc)), closes [#202](https://github.com/Hebilicious/acidcat/issues/202)
+
 ## [0.15.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-ts@0.14.0...@acid-cat/core-ts@0.15.0) (2026-11-18)
 
 
