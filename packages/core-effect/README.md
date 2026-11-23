@@ -383,6 +383,10 @@ The specification defines subscription, verification, signing, retries and netwo
 | `retryDelays` | 5 s, then 4 times longer each time | A `Schedule` of the waits between attempts |
 | `timeoutMs` | `5000` | How long the server waits for each answer |
 | `rotationGraceMs` | `300000` | How long after a secret change the server signs with both secrets |
+| `signingKeys` | None | Ed25519 keys, as private JWKs with `kid` and `d`. Each request gets one `v1a,` signature for each key after its `v1,` signatures. To change keys, give the new key beside the old one |
+| `egressIpRanges` | None | The IP ranges from which the server sends, as CIDR text, for the Server Card |
+
+A signing key of another form, two keys with the same `kid`, or a range that is not CIDR text make the server fail when it starts.
 
 `NodeWebhook.sender` follows the spec's network safety rules: it resolves the host for each request, connects only to globally routable addresses (pinned, with the host name in `Host` and TLS), follows no redirects, and reads at most `maxResponseBytes`.
 
@@ -393,6 +397,22 @@ The specification defines subscription, verification, signing, retries and netwo
 | `maxResponseBytes` | `65536` | The most bytes of an answer that the sender reads |
 
 Subscriptions, verifications and limit counts live in process memory and are lost on restart.
+
+#### Server Card
+
+With the `serverCard` option, `Mcp.toWebHandler`, `Mcp.makeHandle` and `Mcp.handle` serve an MCP [Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. The name has the reverse-DNS form with one `/`. The description is `serverCard.description`, or else the description of the catalog, from 1 to 100 characters. The card gives the version of the server, and the URL of the server with the origin of the request. Behind a platform that ends TLS, the server gets `http` URLs: give the `https` URL in `serverCard.url`. With webhook delivery, it also gives the public keys of `signingKeys` and the `egressIpRanges`. `Mcp.withHandshake` adds its revisions to the card. With no `serverCard`, a `GET` request to that URL gets 404. A name, a description or a version that breaks the rules makes the server fail when it starts.
+
+```ts
+const mcp = Mcp.withHandshake(
+  Mcp.toWebHandler(aircon, unitLayer, {
+    ...mcpOptions,
+    serverCard: { name: "com.example/aircon" },
+    webhooks: { sender: NodeWebhook.sender(), signingKeys: [signingJwk], egressIpRanges: ["203.0.113.0/24"] },
+  }),
+);
+```
+
+`Mcp.withEvents` serves no card: the card describes your own server.
 
 #### Events beside your own MCP server
 

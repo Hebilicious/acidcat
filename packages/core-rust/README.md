@@ -130,6 +130,30 @@ An optional `Option` field takes the value of its type, not `null`, so add `#[se
 
 MCP through HTTP also accepts the [`initialize` handshake of earlier revisions](../../spec/bindings/mcp.md#earlier-revisions-through-http). Poll delivery is on. `McpOptions::heartbeat` and `McpStdioOptions::heartbeat` (default 15 seconds) set the push heartbeat interval when the client suggests none. A client that suggests `heartbeatMs` in `events/stream` gets a grant from 1 to 60 seconds ([Push](../../spec/bindings/mcp.md#push)). MCP through HTTP checks the [headers](../../spec/bindings/mcp.md#headers) of each request of revision `2026-07-28` against its body: `Mcp-Method`, `Mcp-Name`, and an `Mcp-Param-*` header for each property that has `x-mcp-header`. A mismatch gets 400 and `-32020`. To annotate a field, use `#[schemars(extend("x-mcp-header" = "Region"))]`. `McpOptions::webhooks` turns on webhook delivery, and `McpOptions::principal` gives the principal of each request.
 
+### Server Card
+
+`McpOptions::server_card` serves an [MCP Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. The default is `None`: a `GET` request to that URL gets 404.
+
+```rust,ignore
+let options = McpOptions {
+    server_card: Some(ServerCard::new("com.example/aircon")),
+    webhooks: Some(WebhookOptions {
+        signing_keys: vec![private_jwk],
+        egress_ip_ranges: vec!["203.0.113.0/24".into()],
+        ..WebhookOptions::default()
+    }),
+    ..McpOptions::new("aircon", "1.0.0")
+};
+```
+
+- `ServerCard::new(name)` gives the name of the card, in reverse-DNS form: 3 to 200 characters, and one `/`. `ServerCard::description` gives the description of the card. The default is the description of the application.
+- The card gives `McpOptions::version`, and the URL of the server with the scheme and the host of the request. Behind a platform that ends TLS, the server gets `http` requests: give the `https` URL in `ServerCard::url`. It gives `2026-07-28` and, if `McpOptions::handshake` is `true`, the revisions of the `initialize` handshake.
+- `WebhookOptions::signing_keys` is a list of private Ed25519 JSON Web Keys: `kty: "OKP"`, `crv: "Ed25519"`, a `kid` that is not empty, and `d`, the base64url of 32 bytes with no padding. The `webhook-signature` header of each webhook request gets one `v1a,` signature for each key, after the `v1,` signatures. The card gives the public key of each key, and never `d`. The core takes the public key from `d`, and does not read `x`. To change keys, give the new key beside the old one.
+- `WebhookOptions::egress_ip_ranges` is a list of CIDR ranges, for example `203.0.113.0/24` or `2001:db8::/32`. The card gives them as they are.
+- The card gives the keys and the ranges only if webhook delivery is on.
+
+`McpBinding::new` and `McpBinding::with_request_context` panic when an option is not valid: a card name that does not have the reverse-DNS form, a card with no description or a description that is longer than 100 characters, a version that is longer than 255 characters with a card, a card URL that is not an `http` or `https` URL, a signing key of another form, two signing keys with the same `kid`, or an egress range that is not CIDR text.
+
 ### Serving the remote bindings
 
 `McpBinding` and `HttpBinding` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. To use another server, pass each request through `remote::request_body`, then to `handle`.

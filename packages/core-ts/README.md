@@ -201,8 +201,30 @@ await serve({ "/mcp": mcp });
 | `retryDelayMs(attempt)` | 10 s, 30 s, 90 s, 270 s | The wait before the next attempt |
 | `timeoutMs` | 5 seconds | Wait for each response |
 | `rotationGraceMs` | 5 minutes | How long the old secret still signs after a new one |
+| `signingKeys` | None | Ed25519 keys, as private JWKs with `kid` and `d`. Each request gets one `v1a,` signature for each key after its `v1,` signatures. To change keys, give the new key beside the old one |
+| `egressIpRanges` | None | The IP ranges from which the server sends, as CIDR text, for the Server Card |
+
+`webhookDelivery` throws for a signing key of another form, two keys with the same `kid`, or a range that is not CIDR text.
 
 Verifications are kept in memory while the process runs. The server checks the endpoint's TLS certificate, never logs or returns a secret, and never passes on the endpoint's response text: `lastError` and `CallbackEndpointError` carry only a category such as `http_4xx`.
+
+### MCP Server Card
+
+With the `serverCard` option, `mcpHandler` serves an MCP [Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. The name has the reverse-DNS form with one `/`. The description is `serverCard.description`, or else the description of the catalog, from 1 to 100 characters. The card gives the version of the server, and the URL of the server with the origin of the request. Behind a platform that ends TLS, the server gets `http` URLs: give the `https` URL in `serverCard.url`. With webhook delivery, it also gives the public keys of `signingKeys` and the `egressIpRanges`. `mcpHandshake` adds its revisions to the card. With no `serverCard`, a `GET` request to that URL gets 404. A name, a description or a version that breaks the rules makes `mcpHandler` throw.
+
+```ts
+const mcp = mcpHandler(aircon, {
+  name: "aircon",
+  version: "1.0.0",
+  allowedOrigins: [],
+  toJsonSchema,
+  context: { unit },
+  serverCard: { name: "com.example/aircon" },
+  principal: (request) => verifiedSubject(request),
+  webhooks: webhookDelivery({ signingKeys: [signingJwk], egressIpRanges: ["203.0.113.0/24"] }),
+});
+await serve({ "/mcp": mcpHandshake(mcp) });
+```
 
 ### Serve on Node.js
 

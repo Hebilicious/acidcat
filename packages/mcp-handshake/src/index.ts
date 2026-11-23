@@ -1,5 +1,5 @@
 /** The `initialize` handshake of earlier MCP revisions through HTTP (spec/bindings/mcp.md#earlier-revisions-through-http). */
-import { encodeMcpHeaderValue, isJsonObject, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, mcpParamHeaders, readBounded } from "@acid-cat/spec-ts";
+import { encodeMcpHeaderValue, isJsonObject, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, MCP_SERVER_CARD_MEDIA_TYPE, mcpParamHeaders, mcpServerCardResponse, mcpServerUrlOfCardRequest, readBounded } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
 export type WebHandler = (request: Request) => Promise<Response>;
@@ -20,11 +20,13 @@ const CURRENT_ONLY_MEMBERS = new Set(["_meta", "resultType", "ttlMs", "cacheScop
 
 /**
  * A web handler that serves the `initialize` handshake of revisions 2025-11-25 and 2025-06-18, and gives all other
- * requests to `handler` unchanged.
+ * requests to `handler`. It adds these revisions to the `supportedProtocolVersions` of the Server Card of `handler`
+ * (spec/bindings/mcp.md#server-card).
  */
 export function mcpHandshake(handler: WebHandler, options: McpHandshakeOptions = {}): WebHandler {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
   return async (request) => {
+    if (request.method === "GET" && mcpServerUrlOfCardRequest(request) !== undefined) return cardWithHandshake(handler, request);
     const header = request.headers.get("MCP-Protocol-Version");
     if (request.method !== "POST" || header === MCP_PROTOCOL_VERSION) return handler(request);
     const message = await readMessage(request.clone(), maximumBytes);
@@ -49,6 +51,23 @@ async function answer(handler: WebHandler, request: Request, message: JsonObject
   if (method === "ping") return json({ jsonrpc: "2.0", id, result: {} });
   if (ownMethod === "server/discover") return json({ jsonrpc: "2.0", id, error: { code: -32601, message: `Method not found: ${method}` } });
   return json({ jsonrpc: "2.0", id, result: Object.fromEntries(Object.entries(result).filter(([member]) => !CURRENT_ONLY_MEMBERS.has(member))) });
+}
+
+async function cardWithHandshake(handler: WebHandler, request: Request): Promise<Response> {
+  const headers = new Headers(request.headers);
+  headers.delete("If-None-Match");
+  const response = await handler(new Request(request.url, { method: "GET", headers, signal: request.signal }));
+  if (response.status !== 200 || response.headers.get("Content-Type") !== MCP_SERVER_CARD_MEDIA_TYPE) return response;
+  const card = parseObject(await response.text());
+  if (card === undefined) return new Response(null, { status: 502 });
+  const remotes = Array.isArray(card["remotes"]) ? card["remotes"].map((remote: unknown) => (isJsonObject(remote) ? withHandshakeVersions(remote) : remote)) : card["remotes"];
+  return mcpServerCardResponse(request, { ...card, remotes });
+}
+
+function withHandshakeVersions(remote: JsonObject): JsonObject {
+  const listed: unknown = remote["supportedProtocolVersions"];
+  const versions: readonly unknown[] = Array.isArray(listed) ? listed : [];
+  return { ...remote, supportedProtocolVersions: [...versions, ...HANDSHAKE_VERSIONS.filter((version) => !versions.includes(version))] };
 }
 
 function isHandshakeRequest(header: string | null, metaVersion: unknown): boolean {

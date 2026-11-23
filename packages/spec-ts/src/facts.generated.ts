@@ -54,6 +54,14 @@ export const MCP_HEARTBEAT_MIN_MS = 1000;
 
 export const MCP_HEARTBEAT_MAX_MS = 60000;
 
+export const MCP_SERVER_CARD_PATH = "/server-card";
+
+export const MCP_SERVER_CARD_MEDIA_TYPE = "application/mcp-server-card+json";
+
+export const MCP_SERVER_CARD_SCHEMA = "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json";
+
+export const MCP_SERVER_CARD_CACHE_CONTROL = "public, max-age=3600";
+
 export const MCP_EVENT_ERRORS = {
   notFound: -32023,
   forbidden: -32024,

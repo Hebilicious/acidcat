@@ -100,6 +100,7 @@ A message template has a named placeholder for each part, such as `The option {n
 | `MCP_HEADER_MISMATCH` | JSON-RPC error `HeaderMismatch`, for a header that does not agree with the body | same | same |
 | `MCP_NAMED_METHODS` | Methods whose requests have an `Mcp-Name` header | same | same |
 | `MCP_HEARTBEAT_MIN_MS`, `MCP_HEARTBEAT_MAX_MS` | Bounds of the heartbeat interval that a server grants for a suggestion | same | same |
+| `MCP_SERVER_CARD_PATH`, `MCP_SERVER_CARD_MEDIA_TYPE`, `MCP_SERVER_CARD_SCHEMA`, `MCP_SERVER_CARD_CACHE_CONTROL` | Path suffix, media type, `$schema` and `Cache-Control` of the MCP Server Card | same | same |
 | `MCP_EVENT_ERRORS` | JSON-RPC errors of the events extension | same | `event_errors` |
 | `MCP_REJECTIONS` | HTTP status and JSON-RPC error of each request rejection | same | `Rejection::status`, `Rejection::rpc_code` |
 | `ALIAS_MESSAGES` | Messages for a target's aliases | same, filled by `cliAliases` | one `*_MESSAGE` constant per message |

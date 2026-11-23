@@ -165,6 +165,10 @@ const mcpHeaderMismatch = integer(field(facts, "mcpHeaderMismatch"));
 const mcpNamedMethods = list(field(facts, "mcpNamedMethods")).map(string);
 const mcpHeartbeatMinMs = integer(field(facts, "mcpHeartbeatMinMs"));
 const mcpHeartbeatMaxMs = integer(field(facts, "mcpHeartbeatMaxMs"));
+const mcpServerCardPath = string(field(facts, "mcpServerCardPath"));
+const mcpServerCardMediaType = string(field(facts, "mcpServerCardMediaType"));
+const mcpServerCardSchema = string(field(facts, "mcpServerCardSchema"));
+const mcpServerCardCacheControl = string(field(facts, "mcpServerCardCacheControl"));
 const mcpEventErrors = numbered(field(facts, "mcpEventErrors"));
 const mcpRejections = list(field(facts, "mcpRejections")).map((each) => {
   const code = variant(field(each, "code"), ["NoCode", "Code"]);
@@ -424,6 +428,14 @@ const specFacts = [
   "",
   `export const MCP_HEARTBEAT_MAX_MS = ${mcpHeartbeatMaxMs};`,
   "",
+  `export const MCP_SERVER_CARD_PATH = ${JSON.stringify(mcpServerCardPath)};`,
+  "",
+  `export const MCP_SERVER_CARD_MEDIA_TYPE = ${JSON.stringify(mcpServerCardMediaType)};`,
+  "",
+  `export const MCP_SERVER_CARD_SCHEMA = ${JSON.stringify(mcpServerCardSchema)};`,
+  "",
+  `export const MCP_SERVER_CARD_CACHE_CONTROL = ${JSON.stringify(mcpServerCardCacheControl)};`,
+  "",
   typescriptRecord("MCP_EVENT_ERRORS", numbers(mcpEventErrors)),
   "",
   typescriptRecord(
@@ -548,6 +560,10 @@ const rustFacts = [
   rustList("MCP_NAMED_METHODS", mcpNamedMethods),
   rustConst("MCP_HEARTBEAT_MIN_MS", "u64", String(mcpHeartbeatMinMs)),
   rustConst("MCP_HEARTBEAT_MAX_MS", "u64", String(mcpHeartbeatMaxMs)),
+  rustConst("MCP_SERVER_CARD_PATH", "&str", rustString(mcpServerCardPath)),
+  rustConst("MCP_SERVER_CARD_MEDIA_TYPE", "&str", rustString(mcpServerCardMediaType)),
+  rustConst("MCP_SERVER_CARD_SCHEMA", "&str", rustString(mcpServerCardSchema)),
+  rustConst("MCP_SERVER_CARD_CACHE_CONTROL", "&str", rustString(mcpServerCardCacheControl)),
   "",
   "pub(crate) mod event_errors {",
   ...mcpEventErrors.map(([name, code]) => `    pub const ${screaming(name)}: i64 = ${code};`),

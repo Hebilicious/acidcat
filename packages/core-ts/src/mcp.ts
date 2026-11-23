@@ -1,5 +1,24 @@
-import { bundle, isJsonObject, KEEPALIVE_MS, MCP_HEADER_MISMATCH, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpHeaderMismatch, mcpToolAnnotations, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage } from "@acid-cat/spec-ts";
-import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
+import {
+  bundle,
+  isJsonObject,
+  KEEPALIVE_MS,
+  MCP_HEADER_MISMATCH,
+  MCP_PROTOCOL_VERSION,
+  MCP_REJECTIONS,
+  MCP_UNKNOWN_TOOL,
+  mcpHeaderMismatch,
+  mcpServerCard,
+  mcpServerCardIdentity,
+  mcpServerCardResponse,
+  mcpServerUrlOfCardRequest,
+  mcpToolAnnotations,
+  mcpToolResult,
+  readBounded,
+  screenRequest,
+  SSE_MEDIA_TYPE,
+  sseMessage,
+} from "@acid-cat/spec-ts";
+import type { JsonObject, McpServerCardSettings, Rejection } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
 import { openContext, refusalResponse } from "./context.ts";
@@ -48,6 +67,12 @@ export interface McpSettings {
   readonly webhooks?: WebhookDelivery | undefined;
   /** The clock of the poll leases. The default is the clock of the system. */
   readonly clock?: Clock | undefined;
+  /**
+   * Serve a Server Card at the URL of the server and `/server-card` (spec/bindings/mcp.md#server-card). With no card,
+   * a `GET` request to that URL gets 404. A card whose name, description or version breaks the rules makes
+   * `mcpHandler` throw.
+   */
+  readonly serverCard?: McpServerCardSettings | undefined;
 }
 
 /**
@@ -97,7 +122,11 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
   const closeAll = async () => {
     await Promise.allSettled([leases.close(), options.webhooks?.close()]);
   };
+  const identity = options.serverCard === undefined ? undefined : mcpServerCardIdentity(options.serverCard, options.version, app.description);
   const handle = async (request: Request): Promise<Response> => {
+    const serverUrl = mcpServerUrlOfCardRequest(request);
+    if (serverUrl !== undefined && identity !== undefined) return mcpServerCardResponse(request, mcpServerCard(identity, serverUrl, await options.webhooks?.cardInfo?.()));
+    if (serverUrl !== undefined && request.method === "GET") return new Response(null, { status: 404 });
     const screened = screenRequest(request, {
       methods: ["POST"],
       allowedOrigins: options.allowedOrigins,

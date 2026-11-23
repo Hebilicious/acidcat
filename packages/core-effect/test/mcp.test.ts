@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { isJsonObject } from "@acid-cat/spec-ts";
 import { Deferred, Effect, Layer, Schema } from "effect";
 
 import { Mcp } from "../src/index.ts";
@@ -115,3 +116,52 @@ for (const services of ["shared", "per-request"] as const) {
     assert.equal(record.ran, false);
   });
 }
+
+const CARD_URL = `${ORIGIN}/mcp/server-card`;
+
+test("the Server Card gives the name, the version, the description of the catalog and the URL of the server, with CORS and cache headers", async () => {
+  const handler = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "1.2.3", allowedOrigins: [], serverCard: { name: "dev.acid-cat/fixture" } });
+  try {
+    const response = await handler(new Request(CARD_URL));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("Content-Type"), "application/mcp-server-card+json");
+    assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*");
+    assert.equal(response.headers.get("Access-Control-Expose-Headers"), "ETag");
+    assert.equal(response.headers.get("Cache-Control"), "public, max-age=3600");
+    assert.deepEqual(await response.json(), {
+      $schema: "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
+      name: "dev.acid-cat/fixture",
+      version: "1.2.3",
+      description: fixture.description,
+      remotes: [{ type: "streamable-http", url: `${ORIGIN}/mcp`, supportedProtocolVersions: ["2026-07-28"] }],
+    });
+    const unchanged = await handler(new Request(CARD_URL, { headers: { "If-None-Match": response.headers.get("ETag") ?? "" } }));
+    assert.equal(unchanged.status, 304);
+    assert.equal((await handler(new Request(CARD_URL, { method: "OPTIONS" }))).status, 204);
+    const post = await handler(new Request(CARD_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }));
+    assert.deepEqual([post.status, post.headers.get("Allow")], [405, "GET, OPTIONS"]);
+    const behindTls = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "1.2.3", allowedOrigins: [], serverCard: { name: "dev.acid-cat/fixture", url: "https://mcp.example.com/mcp" } });
+    const given: unknown = await (await behindTls(new Request("http://10.0.0.1:3000/mcp/server-card"))).json();
+    await behindTls.dispose();
+    const givenRemotes = isJsonObject(given) ? given.remotes : undefined;
+    assert.equal(Array.isArray(givenRemotes) && isJsonObject(givenRemotes[0]) ? givenRemotes[0].url : undefined, "https://mcp.example.com/mcp");
+    const legacy: unknown = await (await Mcp.withHandshake(handler)(new Request(CARD_URL))).json();
+    const remotes = isJsonObject(legacy) ? legacy.remotes : undefined;
+    assert.deepEqual(Array.isArray(remotes) && isJsonObject(remotes[0]) ? remotes[0].supportedProtocolVersions : undefined, ["2026-07-28", "2025-11-25", "2025-06-18"]);
+  } finally {
+    await handler.dispose();
+  }
+});
+
+test("with no Server Card, a GET request to its URL gets 404, and a card that breaks the rules makes the server fail when it starts", async () => {
+  const handler = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [] });
+  try {
+    assert.equal((await handler(new Request(CARD_URL))).status, 404);
+  } finally {
+    await handler.dispose();
+  }
+  const starts = (serverCard: Mcp.ServerCardSettings) => () => Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [], serverCard });
+  assert.throws(starts({ name: "fixture" }), TypeError);
+  assert.throws(starts({ name: "dev.acid-cat/fixture", description: "x".repeat(101) }), TypeError);
+  assert.throws(starts({ name: "dev.acid-cat/fixture", url: "ftp://mcp.example.com/mcp" }), TypeError);
+});

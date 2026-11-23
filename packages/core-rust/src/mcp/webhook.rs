@@ -7,6 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use bytes::Bytes;
+use ed25519_dalek::{Signer, SigningKey};
 use hmac::{Hmac, Mac};
 use http::Uri;
 use http_body_util::{BodyExt, Full};
@@ -57,6 +58,13 @@ pub struct WebhookOptions {
     /// The wait before the next attempt, after attempt number `attempt` (1 for the first) failed. The default is 10
     /// seconds, multiplied by 3 for each attempt.
     pub retry_delay: Arc<dyn Fn(u32) -> Duration + Send + Sync>,
+    /// Private Ed25519 JSON Web Keys: `kty: "OKP"`, `crv: "Ed25519"`, a `kid` that is not empty, and `d`, the
+    /// base64url of 32 bytes with no padding. Each request gets one `v1a,` signature for each key, in order, and the
+    /// Server Card gives the public keys. The default is no key.
+    pub signing_keys: Vec<Value>,
+    /// The IP ranges from which the server sends its requests, as CIDR text, for the Server Card. The default is no
+    /// range.
+    pub egress_ip_ranges: Vec<String>,
 }
 
 impl Default for WebhookOptions {
@@ -75,6 +83,8 @@ impl Default for WebhookOptions {
             retry_delay: Arc::new(|attempt| {
                 Duration::from_secs(10 * 3u64.pow(attempt.saturating_sub(1)))
             }),
+            signing_keys: Vec::new(),
+            egress_ip_ranges: Vec::new(),
         }
     }
 }
@@ -87,6 +97,7 @@ impl fmt::Debug for WebhookOptions {
             .field("max_ttl", &self.max_ttl)
             .field("min_ttl", &self.min_ttl)
             .field("max_subscriptions", &self.max_subscriptions)
+            .field("egress_ip_ranges", &self.egress_ip_ranges)
             .finish_non_exhaustive()
     }
 }
@@ -131,8 +142,75 @@ impl Subscription {
     }
 }
 
+struct WebhookSigner {
+    kid: String,
+    key: SigningKey,
+}
+
+impl WebhookSigner {
+    fn read(jwk: &Value) -> Option<Self> {
+        let member = |name: &str| jwk.get(name).and_then(Value::as_str);
+        if member("kty") != Some("OKP") || member("crv") != Some("Ed25519") {
+            return None;
+        }
+        let kid = member("kid").filter(|kid| !kid.is_empty())?;
+        let seed: [u8; 32] = URL_SAFE_NO_PAD.decode(member("d")?).ok()?.try_into().ok()?;
+        Some(WebhookSigner {
+            kid: kid.to_owned(),
+            key: SigningKey::from_bytes(&seed),
+        })
+    }
+
+    fn public_jwk(&self) -> Value {
+        json!({
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "kid": self.kid,
+            "x": URL_SAFE_NO_PAD.encode(self.key.verifying_key().to_bytes()),
+        })
+    }
+}
+
+fn read_signing_keys(jwks: &[Value]) -> Vec<WebhookSigner> {
+    let mut kids = HashSet::new();
+    jwks.iter()
+        .enumerate()
+        .map(|(index, jwk)| {
+            let signer = WebhookSigner::read(jwk).unwrap_or_else(|| {
+                panic!(
+                    "webhooks.signing_keys[{index}] must be a private Ed25519 JWK: kty \"OKP\", crv \"Ed25519\", a kid that is not empty, and d, the base64url of 32 bytes with no padding"
+                )
+            });
+            assert!(
+                kids.insert(signer.kid.clone()),
+                "webhooks.signing_keys has the kid {} more than one time",
+                signer.kid
+            );
+            signer
+        })
+        .collect()
+}
+
+fn is_cidr(text: &str) -> bool {
+    let Some((address, prefix)) = text.split_once('/') else {
+        return false;
+    };
+    let decimal = !prefix.is_empty()
+        && prefix.bytes().all(|byte| byte.is_ascii_digit())
+        && (prefix == "0" || !prefix.starts_with('0'));
+    let Some(length) = prefix.parse::<u8>().ok().filter(|_| decimal) else {
+        return false;
+    };
+    match address.parse::<IpAddr>() {
+        Ok(IpAddr::V4(_)) => length <= 32,
+        Ok(IpAddr::V6(_)) => length <= 128,
+        Err(_) => false,
+    }
+}
+
 pub(crate) struct Webhooks {
     options: WebhookOptions,
+    signers: Vec<WebhookSigner>,
     tls: Arc<rustls::ClientConfig>,
     registry: Arc<Mutex<Registry>>,
     starting: KeyGates<tokio::sync::Mutex<()>>,
@@ -207,9 +285,18 @@ fn granted_lifetime(ttl_ms: Option<f64>, min_ttl: Duration, max_ttl: Duration) -
 
 impl Webhooks {
     pub(crate) fn new(options: WebhookOptions) -> Arc<Self> {
+        let signers = read_signing_keys(&options.signing_keys);
+        if let Some(range) = options
+            .egress_ip_ranges
+            .iter()
+            .find(|range| !is_cidr(range))
+        {
+            panic!("webhooks.egress_ip_ranges has {range:?}, which is not CIDR text");
+        }
         let tls = Arc::new(crate::client::tls_config(&options.trusted_certificates));
         Arc::new(Webhooks {
             options,
+            signers,
             tls,
             registry: Arc::default(),
             starting: Mutex::new(HashMap::new()),
@@ -217,6 +304,21 @@ impl Webhooks {
             closed: CancellationToken::new(),
             pumps: TaskTracker::new(),
         })
+    }
+
+    pub(crate) fn card_info(&self) -> Option<Value> {
+        let mut info = Map::new();
+        if !self.signers.is_empty() {
+            let keys: Vec<Value> = self.signers.iter().map(WebhookSigner::public_jwk).collect();
+            info.insert("signingKeys".into(), json!({ "keys": keys }));
+        }
+        if !self.options.egress_ip_ranges.is_empty() {
+            info.insert(
+                "egressIpRanges".into(),
+                json!(self.options.egress_ip_ranges),
+            );
+        }
+        (!info.is_empty()).then_some(Value::Object(info))
     }
 
     pub(crate) async fn close(&self) {
@@ -511,7 +613,13 @@ impl Webhooks {
             if subscription.ended.is_cancelled() {
                 return Sent::Stopped;
             }
-            let headers = headers(&subscription.id, &subscription.secrets(), webhook_id, body);
+            let headers = headers(
+                &subscription.id,
+                &subscription.secrets(),
+                &self.signers,
+                webhook_id,
+                body,
+            );
             let posted = self.post(&subscription.url, &headers, body).await;
             match posted {
                 Ok((status, _)) if (200..300).contains(&status) => {
@@ -562,6 +670,7 @@ impl Webhooks {
         let headers = headers(
             id,
             &[secret.to_owned()],
+            &self.signers,
             &webhook_id(Some("verification")),
             &body,
         );
@@ -665,6 +774,7 @@ fn result_of(subscription: &Subscription) -> Map<String, Value> {
 fn headers(
     subscription_id: &str,
     secrets: &[String],
+    signers: &[WebhookSigner],
     webhook_id: &str,
     body: &str,
 ) -> Vec<(String, String)> {
@@ -672,17 +782,21 @@ fn headers(
         .duration_since(UNIX_EPOCH)
         .map_or(0, |time| time.as_secs());
     let signed = format!("{webhook_id}.{timestamp}.{body}");
-    let signatures: Vec<String> = secrets
-        .iter()
-        .filter_map(|secret| {
-            let mut mac = Hmac::<Sha256>::new_from_slice(&secret_bytes(secret)?).ok()?;
-            mac.update(signed.as_bytes());
-            Some(format!(
-                "v1,{}",
-                STANDARD.encode(mac.finalize().into_bytes())
-            ))
-        })
-        .collect();
+    let hmacs = secrets.iter().filter_map(|secret| {
+        let mut mac = Hmac::<Sha256>::new_from_slice(&secret_bytes(secret)?).ok()?;
+        mac.update(signed.as_bytes());
+        Some(format!(
+            "v1,{}",
+            STANDARD.encode(mac.finalize().into_bytes())
+        ))
+    });
+    let ed25519 = signers.iter().map(|signer| {
+        format!(
+            "v1a,{}",
+            STANDARD.encode(signer.key.sign(signed.as_bytes()).to_bytes())
+        )
+    });
+    let signatures: Vec<String> = hmacs.chain(ed25519).collect();
     vec![
         ("Content-Type".into(), "application/json".into()),
         ("webhook-id".into(), webhook_id.into()),
@@ -807,6 +921,54 @@ mod tests {
             "ttlMs": ttl_ms,
         });
         params.as_object().cloned().unwrap_or_default()
+    }
+
+    #[test]
+    fn each_signing_key_adds_one_ed25519_signature_after_the_hmac_signatures() {
+        let jwk = |kid: &str, seed: u8| json!({ "kty": "OKP", "crv": "Ed25519", "kid": kid, "d": URL_SAFE_NO_PAD.encode([seed; 32]) });
+        let signers = read_signing_keys(&[jwk("one", 1), jwk("two", 2)]);
+        let secret = format!("whsec_{}", STANDARD.encode([7u8; 32]));
+        let field = |headers: &[(String, String)], name: &str| {
+            headers
+                .iter()
+                .find(|(each, _)| each == name)
+                .map(|(_, value)| value.clone())
+                .unwrap_or_default()
+        };
+
+        let unsigned = headers("sub", std::slice::from_ref(&secret), &[], "msg_1", "{}");
+        let entries = field(&unsigned, "webhook-signature");
+        assert!(
+            entries.starts_with("v1,") && !entries.contains(' '),
+            "{entries}"
+        );
+
+        let signed = headers("sub", &[secret], &signers, "msg_1", "{}");
+        let entries = field(&signed, "webhook-signature");
+        let entries: Vec<&str> = entries.split(' ').collect();
+        assert_eq!(entries.len(), 3, "{entries:?}");
+        assert!(entries[0].starts_with("v1,"));
+        let message = format!("msg_1.{}.{{}}", field(&signed, "webhook-timestamp"));
+        for (entry, signer) in entries[1..].iter().zip(&signers) {
+            let public: Value = signer.public_jwk();
+            let x: [u8; 32] = URL_SAFE_NO_PAD
+                .decode(public["x"].as_str().unwrap_or_default())
+                .ok()
+                .and_then(|bytes| bytes.try_into().ok())
+                .unwrap_or_else(|| panic!("the public key of {}", signer.kid));
+            let signature: [u8; 64] = entry
+                .strip_prefix("v1a,")
+                .and_then(|text| STANDARD.decode(text).ok())
+                .and_then(|bytes| bytes.try_into().ok())
+                .unwrap_or_else(|| panic!("a v1a signature: {entry}"));
+            let verified = ed25519_dalek::VerifyingKey::from_bytes(&x).and_then(|key| {
+                key.verify_strict(
+                    message.as_bytes(),
+                    &ed25519_dalek::Signature::from_bytes(&signature),
+                )
+            });
+            assert!(verified.is_ok(), "{} verifies {entry}", signer.kid);
+        }
     }
 
     #[test]

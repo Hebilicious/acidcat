@@ -11,7 +11,7 @@ import * as NodeServer from "../src/NodeServer.ts";
 import * as NodeWebhook from "../src/NodeWebhook.ts";
 import { fileMarker } from "./file-marker.ts";
 import { fixture, fixtureLayer, holdsLayer, POLL, POLL_LEASE_MS, switchLayer, watchersLayer, WEBHOOK_LIMITS } from "./fixture.ts";
-import { testCertificate } from "./webhook-receiver.ts";
+import { testCertificate, testSigningKey } from "./webhook-receiver.ts";
 import { bundledProgram } from "./bundled-program.ts";
 
 const principalOf = (request: Request) => Effect.succeed(Option.fromNullishOr(/^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")?.[1]));
@@ -33,7 +33,14 @@ const mcp = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), {
   allowedOrigins: [],
   poll: POLL,
   principal: principalOf,
-  webhooks: { sender: NodeWebhook.sender({ allowPrivateNetworks: true, ca: certificate.cert }), retryDelays: Schedule.spaced("50 millis"), ...WEBHOOK_LIMITS },
+  webhooks: {
+    sender: NodeWebhook.sender({ allowPrivateNetworks: true, ca: certificate.cert }),
+    retryDelays: Schedule.spaced("50 millis"),
+    ...WEBHOOK_LIMITS,
+    signingKeys: [testSigningKey("fixture-1"), testSigningKey("fixture-2")],
+    egressIpRanges: ["203.0.113.0/24", "2001:db8::/32"],
+  },
+  serverCard: { name: "dev.acid-cat/fixture" },
 });
 const mcpLease = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "0.0.0", path: "/mcp-lease", allowedOrigins: [], poll: { leaseMs: POLL_LEASE_MS } });
 const server = Effect.runSync(Scope.make());

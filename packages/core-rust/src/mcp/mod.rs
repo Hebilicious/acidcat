@@ -1,6 +1,7 @@
 //! The MCP binding (spec/bindings/mcp.md): tools, and events through the MCP events extension. The HTTP and the
 //! stdio transports share this module.
 
+mod card;
 mod headers;
 mod http;
 mod poll;
@@ -19,6 +20,7 @@ use crate::schema::bundle;
 use crate::session::{Session, SubscribeOptions, is_max_age_ms};
 use crate::subscription::Occurrences;
 
+pub use card::ServerCard;
 pub use http::{McpBinding, McpOptions, Principal};
 pub use poll::PollOptions;
 pub use stdio::{McpStdioOptions, run_stdio, serve_stdio};

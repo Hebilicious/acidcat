@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
+import { generateKeyPairSync } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { isJsonObject } from "@acid-cat/spec-ts";
+import type { WebhookSigningJwk } from "@acid-cat/spec-ts";
 
 export interface Received {
   readonly path: string;
@@ -91,4 +93,10 @@ export async function startReceiver() {
         server.close(() => resolve());
       }),
   };
+}
+
+export function testSigningKey(kid: string): WebhookSigningJwk {
+  const { d } = generateKeyPairSync("ed25519").privateKey.export({ format: "jwk" });
+  if (d === undefined) throw new Error("Node.js gave no private key.");
+  return { kty: "OKP", crv: "Ed25519", kid, d };
 }

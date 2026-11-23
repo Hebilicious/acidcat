@@ -79,6 +79,11 @@ pub(crate) const MCP_NAMED_METHODS: [&str; 5] = [
 ];
 pub(crate) const MCP_HEARTBEAT_MIN_MS: u64 = 1000;
 pub(crate) const MCP_HEARTBEAT_MAX_MS: u64 = 60000;
+pub(crate) const MCP_SERVER_CARD_PATH: &str = "/server-card";
+pub(crate) const MCP_SERVER_CARD_MEDIA_TYPE: &str = "application/mcp-server-card+json";
+pub(crate) const MCP_SERVER_CARD_SCHEMA: &str =
+    "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json";
+pub(crate) const MCP_SERVER_CARD_CACHE_CONTROL: &str = "public, max-age=3600";
 
 pub(crate) mod event_errors {
     pub const NOT_FOUND: i64 = -32023;

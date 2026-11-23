@@ -61,6 +61,14 @@ module facts {
 
   pure val MCP_HEARTBEAT_MAX_MS: int = 60000
 
+  pure val MCP_SERVER_CARD_PATH: str = "/server-card"
+
+  pure val MCP_SERVER_CARD_MEDIA_TYPE: str = "application/mcp-server-card+json"
+
+  pure val MCP_SERVER_CARD_SCHEMA: str = "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json"
+
+  pure val MCP_SERVER_CARD_CACHE_CONTROL: str = "public, max-age=3600"
+
   pure val MCP_EVENT_ERRORS: List[(str, int)] = [
     ("notFound", -32023),
     ("forbidden", -32024),
@@ -127,6 +135,10 @@ module factsData {
     mcpNamedMethods: List[str],
     mcpHeartbeatMinMs: int,
     mcpHeartbeatMaxMs: int,
+    mcpServerCardPath: str,
+    mcpServerCardMediaType: str,
+    mcpServerCardSchema: str,
+    mcpServerCardCacheControl: str,
     mcpEventErrors: List[(str, int)],
     mcpRejections: List[{ rejection: str, status: int, code: RpcCode }],
     startMessages: { genericCommand: str, sharedPrefix: str, resumeProperty: str },
@@ -152,6 +164,10 @@ module factsData {
     mcpNamedMethods: MCP_NAMED_METHODS,
     mcpHeartbeatMinMs: MCP_HEARTBEAT_MIN_MS,
     mcpHeartbeatMaxMs: MCP_HEARTBEAT_MAX_MS,
+    mcpServerCardPath: MCP_SERVER_CARD_PATH,
+    mcpServerCardMediaType: MCP_SERVER_CARD_MEDIA_TYPE,
+    mcpServerCardSchema: MCP_SERVER_CARD_SCHEMA,
+    mcpServerCardCacheControl: MCP_SERVER_CARD_CACHE_CONTROL,
     mcpEventErrors: MCP_EVENT_ERRORS,
     mcpRejections: MCP_REJECTIONS,
     startMessages: START_MESSAGES,

@@ -1,5 +1,25 @@
-import { bundle, isJsonObject, KEEPALIVE_MS, MCP_EVENTS_EXTENSION, MCP_HEADER_MISMATCH, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, mcpHeaderMismatch, mcpToolAnnotations, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage, viewOf } from "@acid-cat/spec-ts";
-import type { JsonObject, Outcome, Rejection } from "@acid-cat/spec-ts";
+import {
+  bundle,
+  isJsonObject,
+  KEEPALIVE_MS,
+  MCP_EVENTS_EXTENSION,
+  MCP_HEADER_MISMATCH,
+  MCP_PROTOCOL_VERSION,
+  MCP_REJECTIONS,
+  mcpHeaderMismatch,
+  mcpServerCard,
+  mcpServerCardIdentity,
+  mcpServerCardResponse,
+  mcpServerUrlOfCardRequest,
+  mcpToolAnnotations,
+  mcpToolResult,
+  readBounded,
+  screenRequest,
+  SSE_MEDIA_TYPE,
+  sseMessage,
+  viewOf,
+} from "@acid-cat/spec-ts";
+import type { JsonObject, McpServerCardIdentity, McpServerCardSettings, Outcome, Rejection } from "@acid-cat/spec-ts";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberMap, Layer, Logger, Option, Queue, Schema, Scope, Semaphore, Sink, Stdio, Stream, SubscriptionRef } from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -18,6 +38,7 @@ import type { IncomingRequest } from "./Remote.ts";
 import * as Session from "./Session.ts";
 
 export type { PollOptions } from "./internal/poll.ts";
+export type { McpServerCardSettings as ServerCardSettings, WebhookSigningJwk } from "@acid-cat/spec-ts";
 export { WebhookSendError } from "./internal/webhooks.ts";
 export type { WebhookOptions, WebhookRequest, WebhookResponse, WebhookSender } from "./internal/webhooks.ts";
 
@@ -73,6 +94,12 @@ export interface Options {
    * absent. `NodeWebhook.sender` from `@acid-cat/core-effect/node` gives a sender for Node.js.
    */
   readonly webhooks?: WebhookOptions | undefined;
+  /**
+   * Serve a Server Card at the URL of the server and `/server-card` (spec/bindings/mcp.md#server-card). With no card,
+   * a `GET` request to that URL gets 404. A card whose name, description or version breaks the rules makes the server
+   * fail when it starts.
+   */
+  readonly serverCard?: McpServerCardSettings | undefined;
 }
 
 export interface WebHandler {
@@ -108,10 +135,13 @@ const makeDeliveries = (options: Pick<Options, "poll" | "webhooks">): Effect.Eff
 export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E, IncomingRequest>, options: Options & { readonly services: "per-request" }): WebHandler;
 export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, options: Options): WebHandler;
 export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E, IncomingRequest>, options: Options): WebHandler {
+  const identity = cardIdentity(app, options);
   const { answer, dispose: release } = answerWith(layer, options.services);
   const scope = Effect.runSync(Scope.make());
   const deliveries = Effect.runSync(makeDeliveries(options).pipe(Scope.provide(scope)));
   const handler = async (request: Request): Promise<Response> => {
+    const card = await Effect.runPromise(answerCard(request, identity, deliveries.webhooks));
+    if (card !== undefined) return card;
     const admitted = await admit(request, options);
     if (admitted instanceof Response) return admitted;
     return answer(admitted.request, (requestScope, keep) => respond(app, admitted, options, requestScope, { ...deliveries, keep }));
@@ -132,12 +162,16 @@ export function toWebHandler<R, E>(app: App.App<R>, layer: Layer.Layer<R, E, Inc
  * webhook methods answer `Unsupported`. Use `makeHandle` for a server that also delivers with poll and webhooks.
  */
 export const handle = <R>(app: App.App<R>, request: Request, options: Options) =>
-  Effect.flatMap(
-    Effect.promise(() => admit(request, options)),
-    (admitted) =>
-      admitted instanceof Response
-        ? Effect.succeed(admitted)
-        : Effect.flatMap(Scope.make(), (scope) => respond(app, admitted, options, scope, { polls: undefined, webhooks: undefined, keep: keepNothing })),
+  Effect.flatMap(answerCard(request, cardIdentity(app, options), undefined), (card) =>
+    card !== undefined
+      ? Effect.succeed(card)
+      : Effect.flatMap(
+          Effect.promise(() => admit(request, options)),
+          (admitted) =>
+            admitted instanceof Response
+              ? Effect.succeed(admitted)
+              : Effect.flatMap(Scope.make(), (scope) => respond(app, admitted, options, scope, { polls: undefined, webhooks: undefined, keep: keepNothing })),
+        ),
   );
 
 /**
@@ -147,18 +181,31 @@ export const handle = <R>(app: App.App<R>, request: Request, options: Options) =
  * subscription that the request started ends.
  */
 export const makeHandle = <R>(app: App.App<R>, options: Options) =>
-  Effect.map(
-    makeDeliveries(options),
-    (deliveries) =>
-      (request: Request) =>
-        Effect.flatMap(
-          Effect.promise(() => admit(request, options)),
-          (admitted) =>
-            admitted instanceof Response
-              ? Effect.succeed(admitted)
-              : Effect.flatMap(Scope.make(), (scope) => respond(app, admitted, options, scope, { ...deliveries, keep: keepNothing })),
-        ),
+  Effect.map(Effect.zip(Effect.sync(() => cardIdentity(app, options)), makeDeliveries(options)), ([identity, deliveries]) => (request: Request) =>
+    Effect.flatMap(answerCard(request, identity, deliveries.webhooks), (card) =>
+      card !== undefined
+        ? Effect.succeed(card)
+        : Effect.flatMap(
+            Effect.promise(() => admit(request, options)),
+            (admitted) =>
+              admitted instanceof Response
+                ? Effect.succeed(admitted)
+                : Effect.flatMap(Scope.make(), (scope) => respond(app, admitted, options, scope, { ...deliveries, keep: keepNothing })),
+          ),
+    ),
   );
+
+const cardIdentity = <R>(app: App.App<R>, options: Options): McpServerCardIdentity | undefined =>
+  options.serverCard === undefined ? undefined : mcpServerCardIdentity(options.serverCard, options.version, app.description);
+
+const answerCard = (request: Request, identity: McpServerCardIdentity | undefined, webhooks: Webhooks | undefined): Effect.Effect<Response | undefined> =>
+  Effect.gen(function* () {
+    const serverUrl = mcpServerUrlOfCardRequest(request);
+    if (serverUrl === undefined) return undefined;
+    if (identity === undefined) return request.method === "GET" ? new Response(null, { status: 404 }) : undefined;
+    const info = webhooks === undefined ? undefined : yield* webhooks.cardInfo;
+    return yield* Effect.promise(() => mcpServerCardResponse(request, mcpServerCard(identity, serverUrl, info)));
+  });
 
 interface Admitted {
   readonly request: Request;

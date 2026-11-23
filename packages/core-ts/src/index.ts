@@ -47,4 +47,4 @@ export { findHost, installWebMcp } from "./webmcp.ts";
 export type { Installation, ModelContext, ModelContextTool, Phase, Status } from "./webmcp.ts";
 export type { StandardSchemaV1 } from "./standard-schema.ts";
 export { AVAILABLE, CallFailureError, fail, ok, unavailable } from "@acid-cat/spec-ts";
-export type { Availability, CallFailure, CallFailureKind, Emitted, Occurrence, Outcome, Result } from "@acid-cat/spec-ts";
+export type { Availability, CallFailure, CallFailureKind, Emitted, McpServerCardSettings, Occurrence, Outcome, Result, WebhookSigningJwk } from "@acid-cat/spec-ts";

@@ -471,7 +471,9 @@ async fn main() {
         Some("catalog") => print!("{}", app.render_catalog()),
         Some("serve") => {
             use acid_cat_core::http::{HttpBinding, HttpOptions};
-            use acid_cat_core::mcp::{McpBinding, McpOptions, Principal, WebhookOptions};
+            use acid_cat_core::mcp::{
+                McpBinding, McpOptions, Principal, ServerCard, WebhookOptions,
+            };
             let http = HttpBinding::new(
                 app.clone(),
                 context.clone(),
@@ -492,6 +494,8 @@ async fn main() {
                     retry_delay: Arc::new(|_| std::time::Duration::from_millis(50)),
                     min_ttl: std::time::Duration::from_millis(fixture_settings::WEBHOOK_MIN_TTL_MS),
                     max_subscriptions: fixture_settings::WEBHOOK_MAX_SUBSCRIPTIONS,
+                    signing_keys: vec![signing_key("fixture-1"), signing_key("fixture-2")],
+                    egress_ip_ranges: vec!["203.0.113.0/24".into(), "2001:db8::/32".into()],
                     ..WebhookOptions::default()
                 });
             let principal: Principal = Arc::new(|headers| {
@@ -509,6 +513,7 @@ async fn main() {
                     poll: poll(),
                     principal: Some(principal),
                     webhooks,
+                    server_card: Some(ServerCard::new("dev.acid-cat/fixture")),
                     ..McpOptions::new("fixture", "0.0.0")
                 },
             );
@@ -606,6 +611,17 @@ async fn main() {
             std::process::exit(2);
         }
     }
+}
+
+fn signing_key(kid: &str) -> Value {
+    use base64::Engine;
+    let seed: [u8; 32] = rand::random();
+    json!({
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "kid": kid,
+        "d": base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(seed),
+    })
 }
 
 fn poll() -> acid_cat_core::mcp::PollOptions {

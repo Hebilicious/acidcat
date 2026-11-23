@@ -55,6 +55,7 @@ The server serves events through the MCP events extension, `io.modelcontextproto
   | `internal` | `-32603` |
 
 - **Earlier revisions.** A client that opens the session with the `initialize` handshake gets no events. The capabilities of `initialize` have no `extensions` member for events.
+- **Server Card.** The entry `io.modelcontextprotocol/events` in the `extensionsInfo` of a [Server Card](#server-card) gives information about webhook delivery. It does not tell that the server serves the extension. A client learns that from `server/discover`.
 
 ### Subscriptions that outlive a request
 
@@ -119,6 +120,8 @@ The server sends occurrences in HTTP `POST` requests to a URL of the client. Web
 - **Limit.** The deployment sets the maximum number of webhook subscriptions for one principal. The default is 100. A new subscription over the limit gets the error `ResourceExhausted` (`-32025`), with `data: { "limit": "subscriptions", "max" }`. A new subscription counts for the limit from the moment that the server accepts the request, also while the server verifies the URL.
 - **Verification.** The server sends nothing to a URL until the endpoint agrees to get deliveries, for each pair of principal and URL. The URL is `params.delivery.url` as the client sent it. The URL agrees if it matches the allowlist of the deployment, or if the endpoint answers a verification. To verify, the server sends the control message `{ "type": "verification", "challenge": <random text> }`, with the headers of a delivery. The endpoint agrees if it answers with a `2xx` status and the JSON `{ "challenge": <the same text> }`. The server compares the two texts in constant time. If the endpoint does not agree, the error is `CallbackEndpointError` (`-32027`) with `data: { "reason" }`: `challenge_failed`, `connection_refused`, `timeout`, `tls_error`, `http_4xx` or `http_5xx`. A `3xx` status is `http_4xx` for a delivery, and `challenge_failed` for a verification. A failure to resolve the host name, or an address that is not allowed, is `connection_refused`. The server keeps each verification while the process runs.
 - **Delivery.** Each occurrence is one `POST`. The body is the occurrence without `truncated`, and its `cursor` is the watermark after this delivery, or no `cursor`. Before an occurrence with `"truncated": true`, the server sends the control message `{ "type": "gap", "cursor" }`, with the watermark, or `null`. Each request has the headers `Content-Type: application/json`, `webhook-id`, `webhook-timestamp`, `webhook-signature` and `X-MCP-Subscription-Id`. `webhook-id` is `msg_` and random letters and digits, or `msg_<type>_` and random letters and digits for a control message. The signature is `v1,` and the base64 of the HMAC-SHA256 of `<webhook-id>.<webhook-timestamp>.<body>`, with the bytes of the secret after `whsec_`.
+- **Server signature.** The deployment MAY give signing keys. Each key is a private JSON Web Key (JWK, [RFC 8037](https://www.rfc-editor.org/rfc/rfc8037)) of an Ed25519 key: `kty: "OKP"`, `crv: "Ed25519"`, a `kid` that is not empty, and `d`, the base64url of 32 bytes with no padding. The server takes the public key from `d`, and does not read `x`. Two keys with the same `kid`, or a key of another form, make the server fail when it starts. With signing keys, the `webhook-signature` header of each request, deliveries and verifications, has after its `v1,` signatures one `v1a,` signature for each key, in the order of the keys. A `v1a,` signature is `v1a,` and the base64 of the Ed25519 signature of `<webhook-id>.<webhook-timestamp>.<body>`. With no signing keys, the header has only `v1,` signatures. The [Server Card](#server-card) gives the public keys.
+- **Egress ranges.** The deployment MAY give the IP ranges from which the server sends its requests, as CIDR text: an IPv4 address and `/` and a prefix length from 0 to 32, or an IPv6 address and `/` and a prefix length from 0 to 128. A value of another form makes the server fail when it starts. The [Server Card](#server-card) gives the ranges.
 - **Order and retries.** The server sends the deliveries of one subscription one at a time, in order. It sends a delivery again after a status that is not `2xx`, with a longer wait each time, for a maximum of 5 attempts in 15 minutes. It makes no attempt whose wait ends after the 15 minutes. After that, it abandons the delivery. A `410` or a `413` status abandons the delivery at once. Each new attempt has the same `webhook-id`, and a new timestamp and signature. The server waits 5 seconds for each answer.
 - **Watermark.** The watermark is the cursor of the provider of the last occurrence whose delivery succeeded or was abandoned. It is `null` until such an occurrence has a cursor.
 - **Network safety.** For each request, the server resolves the host name of the URL, and connects only to an address that is globally routable. The deployment can allow other addresses, for example for tests. The server connects to the address that it checked, with the host name in the `Host` header and in TLS. It does not follow redirects.
@@ -138,6 +141,7 @@ The canonical JSON of a value is its JSON text with no spaces, with the keys of 
 - Each request has its own session. The session closes when the response is complete.
 - When the client closes the request of a call, the call is cancelled.
 - The server accepts requests that have no `Origin` header.
+- A request to the URL of the [Server Card](#server-card) is not a JSON-RPC request. That section gives its answers.
 
 The server rejects requests as follows. Each rejection has the header `Cache-Control: no-store`.
 
@@ -172,6 +176,24 @@ Many MCP clients open the session with the `initialize` handshake of revision `2
 - **Results.** A result has no `_meta`, `resultType`, `ttlMs` or `cacheScope` member. These members are only in revision `2026-07-28`.
 
 A translation layer in front of a server of revision `2026-07-28` can serve the handshake. It sends each request to the server as `server/discover`, `tools/list` or `tools/call`, and changes the result. It gives each request the [headers](#headers) that the server checks. For `tools/call`, it takes the input schema of the tool from `tools/list` of the server.
+
+## Server Card
+
+A server through HTTP MAY serve an MCP Server Card: a JSON document that tells a client how to connect to the server before it connects. The [Server Card extension](https://github.com/modelcontextprotocol/ext-server-card), `io.modelcontextprotocol/server-card`, gives the form of the card, at commit `28db12c` of its repository. The server serves a card only if the deployment gives the card a name.
+
+- **Location.** The URL of the card is the URL of the server and `/server-card`, for example `/mcp/server-card`. A `GET` request to it gets the card, with the HTTP status 200 and `Content-Type: application/mcp-server-card+json`. If the server serves no card, a `GET` request to it gets 404.
+- **Members.** The card has these members, and no other members:
+  - `$schema`: `https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json`.
+  - `name`: the name that the deployment gives. It has the reverse-DNS form of the extension: 3 to 200 characters, and one `/`, for example `com.example/aircon`.
+  - `version`: the version of the server, the same as in `server/discover`.
+  - `description`: the description that the deployment gives for the card, or else the `description` of the catalog. It has 1 to 100 characters.
+  - `remotes`: one entry. Its `type` is `streamable-http`. Its `url` is the URL that the deployment gives, or else the URL of the server with the origin of the request of the card. A deployment behind a platform that ends TLS gives the `https` URL, because the server gets the request as `http`. Its `supportedProtocolVersions` are `2026-07-28` and each revision of the [`initialize` handshake](#earlier-revisions-through-http) that the server serves at that URL.
+- **Webhook information.** If webhook delivery is on and the deployment gives [signing keys or egress ranges](#webhook), the entry of `remotes` has `extensionsInfo: { "io.modelcontextprotocol/events": { "webhooks": … } }`. `webhooks` has the members of what the deployment gives:
+  - `signingKeys`: a JWK set, `{ "keys": [...] }`, with the public key of each signing key, in the order of the keys. Each public key has only `kty: "OKP"`, `crv: "Ed25519"`, the `kid` and `x`, the base64url of the public key with no padding.
+  - `egressIpRanges`: the egress ranges, as the deployment gives them, in the same order.
+- **Startup.** A server whose card has a name that does not have the reverse-DNS form, no description, a description that is longer than 100 characters, a version that is longer than 255 characters, or a URL that is not an `http` or `https` URL, fails when it starts.
+- **Secrets.** The card has no secret. A client reads the keys of the card to verify `v1a,` signatures. It uses them only if it got the card through HTTPS from the origin of the URL of the server, with no redirect to another origin, as the extension tells.
+- **Headers.** The response of the card has the headers `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Content-Type, If-None-Match`, `Access-Control-Expose-Headers: ETag`, `Cache-Control: public, max-age=3600` and an `ETag`. A `GET` request whose `If-None-Match` header has the entity tag of the card gets 304, with no body. An `OPTIONS` request gets 204, with the same headers and no `ETag`. A request with another method gets 405, with `Allow: GET, OPTIONS`.
 
 ## Stdio
 

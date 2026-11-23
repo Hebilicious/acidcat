@@ -8,7 +8,7 @@ import { App, Event, Mcp } from "../src/index.ts";
 import * as NodeWebhook from "../src/NodeWebhook.ts";
 import { events, Feed, feedForPromises } from "./events-fixture.ts";
 import { eventually, json, mcpRequest, ORIGIN } from "./mcp-client.ts";
-import { agree, startReceiver } from "./webhook-receiver.ts";
+import { agree, startReceiver, testSigningKey } from "./webhook-receiver.ts";
 import type { Received } from "./webhook-receiver.ts";
 
 const SECRET = `whsec_${Buffer.from("a".repeat(32)).toString("base64")}`;
@@ -257,6 +257,56 @@ test("after the grace time of a renewal, only the new secret signs", async () =>
   } finally {
     await handler.dispose();
   }
+});
+
+test("with signing keys, the verification and each delivery have a v1a signature for each key after the v1 signature, which the keys of the Server Card verify", async () => {
+  const feed = feedForPromises();
+  const egressIpRanges = ["203.0.113.0/24", "2001:db8::/32"];
+  const handler = Mcp.toWebHandler(events, feed.layer, {
+    ...webhookOptions({ signingKeys: [testSigningKey("first"), testSigningKey("second")], egressIpRanges }),
+    serverCard: { name: "dev.acid-cat/feed" },
+  });
+  try {
+    await statusOf(handler, "/signed");
+    await feed.following(1);
+    await feed.publish({ room: "/signed", count: 1 });
+    const requests = await waitAt("/signed", 2);
+    const card: unknown = await (await handler(new Request(`${ORIGIN}/mcp/server-card`))).json();
+    const remotes = isJsonObject(card) ? card.remotes : undefined;
+    const extensions = Array.isArray(remotes) && isJsonObject(remotes[0]) ? remotes[0].extensionsInfo : undefined;
+    const events = isJsonObject(extensions) ? extensions["io.modelcontextprotocol/events"] : undefined;
+    const webhooks = isJsonObject(events) && isJsonObject(events.webhooks) ? events.webhooks : {};
+    assert.deepEqual(webhooks.egressIpRanges, egressIpRanges);
+    const keys = isJsonObject(webhooks.signingKeys) && Array.isArray(webhooks.signingKeys.keys) ? webhooks.signingKeys.keys : [];
+    assert.deepEqual(
+      keys.map((key: unknown) => (isJsonObject(key) ? [key.kid, Object.keys(key).sort()] : undefined)),
+      [["first", ["crv", "kid", "kty", "x"]], ["second", ["crv", "kid", "kty", "x"]]],
+    );
+    for (const received of requests) {
+      const id = received.headers["webhook-id"] ?? "";
+      const timestamp = Number(received.headers["webhook-timestamp"]);
+      const [hmac, ...asymmetric] = (received.headers["webhook-signature"] ?? "").split(" ");
+      assert.equal(hmac, await webhookSignature([SECRET], id, timestamp, received.body));
+      assert.equal(asymmetric.length, keys.length);
+      for (const [index, signature] of asymmetric.entries()) {
+        const jwk: unknown = keys[index];
+        assert.ok(isJsonObject(jwk) && typeof jwk.x === "string" && signature.startsWith("v1a,"));
+        const publicKey = await crypto.subtle.importKey("jwk", { kty: "OKP", crv: "Ed25519", x: jwk.x }, "Ed25519", false, ["verify"]);
+        assert.ok(await crypto.subtle.verify("Ed25519", publicKey, Buffer.from(signature.slice(4), "base64"), new TextEncoder().encode(`${id}.${timestamp}.${received.body}`)));
+      }
+    }
+  } finally {
+    await handler.dispose();
+  }
+});
+
+test("a signing key of another form, two keys with the same kid, or an egress range that is not CIDR text, make the server fail when it starts", () => {
+  const feed = feedForPromises();
+  const key = testSigningKey("same");
+  const starts = (webhooks: Partial<Mcp.WebhookOptions>) => () => webhookHandler(feed, webhooks);
+  assert.throws(starts({ signingKeys: [{ ...key, d: "short" }] }), /Signing key 0/);
+  assert.throws(starts({ signingKeys: [key, { ...testSigningKey("other"), kid: "same" }] }), /same/);
+  for (const range of ["10.0.0.0/33", "10.0.0.0", "bad/8", "2001:db8::/129"]) assert.throws(starts({ egressIpRanges: [range] }), /CIDR/, range);
 });
 
 test("events/unsubscribe of another principal does not find the subscription", async () => {

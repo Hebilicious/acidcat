@@ -9,6 +9,7 @@ import { Checks, eventIdsOf, expect, expectEqual, expectOccurrence, fixture, FOR
 import { checkPoll } from "./poll.ts";
 import type { PollSettings } from "./poll.ts";
 import { sseReader } from "./sse.ts";
+import { checkServerCard, signingKeysOf } from "./server-card.ts";
 import { checkWebhook } from "./webhook.ts";
 import type { WebhookSettings } from "./webhook.ts";
 
@@ -77,8 +78,9 @@ export async function checkMcp(url: string, options: McpCheckOptions): Promise<C
   });
 
   await checkHeaders(checks, url);
+  const card = await checkServerCard(checks, url, httpChannel(url));
   await checkEvents(checks, httpChannel(url), { transport: "http", poll: options.poll, webhook: options.webhook !== undefined });
-  if (options.webhook !== undefined) await checkWebhook(checks, url, options.webhook);
+  if (options.webhook !== undefined) await checkWebhook(checks, url, options.webhook, card === undefined ? [] : signingKeysOf(card));
   if (options.handshake) await checkHandshake(checks, url, options.deadline);
   return checks;
 }
