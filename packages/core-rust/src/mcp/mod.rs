@@ -500,8 +500,7 @@ mod tests {
     }
 
     #[test]
-    fn heartbeat_grant_keeps_the_deployment_interval_without_a_suggestion_and_rejects_an_invalid_one()
-     {
+    fn heartbeat_grant_defaults_to_the_deployment_and_rejects_an_invalid_suggestion() {
         let deployment = Duration::from_millis(7_000);
         let grant = |value: Value| {
             let params = Map::from_iter([("heartbeatMs".to_owned(), value)]);
