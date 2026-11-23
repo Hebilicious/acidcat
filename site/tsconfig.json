@@ -1,4 +1,4 @@
 {
   "extends": "../tsconfig.base.json",
-  "include": ["src/lib", "src/content.config.ts", "test", "astro.config.ts", "cssforge.config.ts", "cloudflare.config.ts"]
+  "include": ["src/lib", "src/route-middleware.ts", "src/content.config.ts", "test", "astro.config.ts", "cssforge.config.ts", "cloudflare.config.ts"]
 }

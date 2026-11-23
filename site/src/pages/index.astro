@@ -6,6 +6,8 @@ import Blueprint from "../components/Blueprint.astro";
 import CoreScreens from "../components/CoreScreens.astro";
 import Surfaces from "../components/Surfaces.astro";
 import Mark from "../components/Mark.astro";
+import FontPreload from "../components/site/FontPreload.astro";
+import SiteNav from "../components/site/SiteNav.astro";
 import Schematic from "../components/Schematic.astro";
 
 const repository = "https://github.com/Hebilicious/acidcat";
@@ -22,6 +24,7 @@ const description = "Describe what your application can do once. Serve it as a C
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
+    <FontPreload />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#0b0e14" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -31,16 +34,7 @@ const description = "Describe what your application can do once. Serve it as a C
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <header class="nav">
-      <a class="brand" href="/" aria-label="AcidCat home">
-        <Mark size={34} />
-        <span>AcidCat</span>
-      </a>
-      <nav aria-label="Main">
-        <a href="/docs/" aria-label="Docs"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" /><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5" /><path d="M9 8h7M9 12h5" /></svg><span class="nav-label">Docs</span></a>
-        <a href="/spec/" aria-label="Specification"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /><path d="M9 13h6M9 17h4" /></svg><span class="nav-label">Spec</span></a>
-        <a href="/packages/" aria-label="Packages"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 3.5 7v10l8.5 4.5 8.5-4.5V7z" /><path d="M3.5 7 12 11.5 20.5 7M12 11.5v10" /></svg><span class="nav-label">Packages</span></a>
-        <a class="nav-github" href={repository} aria-label="GitHub"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21" /></svg><span class="nav-label">GitHub</span></a>
-      </nav>
+      <SiteNav />
     </header>
 
     <main id="main">

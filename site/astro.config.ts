@@ -1,6 +1,10 @@
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
+import { fileURLToPath } from "node:url";
 import { codeTheme } from "./src/lib/code-theme.ts";
+import { specSidebar } from "./src/lib/spec-pages.ts";
+
+const specItems = await specSidebar(fileURLToPath(new URL("..", import.meta.url)));
 
 export default defineConfig({
   site: "https://acidcat.hebilicious.workers.dev",
@@ -9,12 +13,17 @@ export default defineConfig({
       title: "AcidCat",
       description: "Describe what your application can do once. Serve it as a CLI, an MCP server, an HTTP API and typed client code.",
       logo: { src: "./src/assets/mark.svg", alt: "AcidCat" },
-      social: [{ icon: "github", label: "GitHub", href: "https://github.com/Hebilicious/acidcat" }],
       customCss: ["./src/styles/starlight.css"],
       components: {
+        Head: "./src/components/starlight/Head.astro",
+        Header: "./src/components/starlight/Header.astro",
+        PageSidebar: "./src/components/starlight/PageSidebar.astro",
         ThemeSelect: "./src/components/starlight/ThemeSelect.astro",
         ThemeProvider: "./src/components/starlight/ThemeProvider.astro",
       },
+      routeMiddleware: "./src/route-middleware.ts",
+      editLink: { baseUrl: "https://github.com/Hebilicious/acidcat/edit/main/site/" },
+      pagination: true,
       expressiveCode: {
         themes: [codeTheme],
         useStarlightDarkModeSwitch: false,
@@ -44,8 +53,7 @@ export default defineConfig({
             { label: "Reference", items: [{ autogenerate: { directory: "docs/reference" } }] },
           ],
         },
-        { label: "Specification", items: [{ autogenerate: { directory: "spec" } }] },
-        { label: "Packages", link: "/packages/" },
+        { label: "Specification", items: specItems },
       ],
     }),
   ],

@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, posix, relative, sep } from "node:path";
+import { replaceDiagrams } from "./spec-diagrams.ts";
 
 export const repositoryUrl = "https://github.com/Hebilicious/acidcat";
 
@@ -76,7 +77,7 @@ export const readSpecPages = async (repositoryRoot: string): Promise<SpecPage[]>
       const text = await readFile(join(specDirectory, file), "utf8");
       const heading = /^#\s+(.+)$/m.exec(text);
       const title = heading?.[1]?.trim() ?? posix.basename(dirname(file));
-      const body = rewriteLinks(heading === null ? text : text.replace(heading[0], "").trimStart(), file, specRoot);
+      const body = replaceDiagrams(rewriteLinks(heading === null ? text : text.replace(heading[0], "").trimStart(), file, specRoot));
       const position = order.indexOf(file);
       return {
         id: pageId(file),
@@ -89,4 +90,36 @@ export const readSpecPages = async (repositoryRoot: string): Promise<SpecPage[]>
     }),
   );
   return pages.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+};
+
+export interface SpecSidebarLink {
+  readonly label: string;
+  readonly link: string;
+}
+
+export interface SpecSidebarGroup {
+  readonly label: string;
+  readonly items: SpecSidebarLink[];
+}
+
+export const specSidebar = async (repositoryRoot: string): Promise<(SpecSidebarLink | SpecSidebarGroup)[]> => {
+  const pages = await readSpecPages(repositoryRoot);
+  const groups = new Map<string, SpecSidebarLink[]>();
+  const items: (SpecSidebarLink | SpecSidebarGroup)[] = [];
+  for (const page of pages) {
+    const parts = page.id.split("/");
+    const link = { label: page.id === "spec" ? "Overview" : page.title, link: `/${page.id}/` };
+    if (parts.length < 3) {
+      if (parts.length === 2 && ["bindings", "extensions"].includes(parts[1] ?? "")) {
+        const children: SpecSidebarLink[] = [{ label: "Overview", link: link.link }];
+        groups.set(parts[1] ?? "", children);
+        items.push({ label: page.title, items: children });
+      } else {
+        items.push(link);
+      }
+      continue;
+    }
+    groups.get(parts[1] ?? "")?.push(link);
+  }
+  return items;
 };

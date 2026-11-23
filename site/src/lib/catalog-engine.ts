@@ -21,12 +21,15 @@ void main() {
   float vignette = max(.12, 1.-2.0*dot(p,p));
   float scan = .95 + .05*cos(gl_FragCoord.y*2.1);
   float beam = exp(-18.*abs(fract(time*.095)-uv.y));
-  vec3 glass = mix(vec3(.012,.016,.019), vec3(.045,.084,.074), vignette);
-  glass += vec3(.075,.085,.064)*smoothstep(.62,1.2, v.y-.24*v.x);
+  vec3 glass = mix(vec3(.010,.016,.028), vec3(.030,.078,.120), vignette);
+  glass += vec3(.040,.090,.130)*smoothstep(.62,1.2, v.y-.24*v.x);
+  float rows = .5 + .5*sin(uv.y*size.y*1.35);
+  glass += vec3(.010,.030,.045)*rows*vignette;
   vec2 spread = 1.6 / size;
   float glow = texture2D(content, uv+spread).a + texture2D(content, uv-spread).a;
-  glass += (.025 + type*.085)*glow;
-  vec3 phosphor = type;
+  glass += (vec3(.012,.035,.055) + type*.085)*glow;
+  vec3 phosphor = mix(type, type*vec3(.82,.97,1.12) + vec3(0.,.025,.05)*ink.a, .55);
+  glass += vec3(.10,.55,.85)*beam*.035;
   gl_FragColor = vec4((glass*(1.+beam*.09+excitation*.75)+phosphor*ink.a*(1.28+excitation*.24))*scan*(.994+.006*sin(time*35.)),1.);
 }`;
 

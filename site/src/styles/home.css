@@ -103,9 +103,9 @@ h2 em {
   z-index: 5;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing_fluid-space-s);
-  padding: var(--spacing_fluid-space-xs) var(--layout-gutter-inline);
+  height: 4rem;
+  padding: 0 var(--layout-gutter-inline);
+  view-transition-name: site-header;
   background: linear-gradient(color-mix(in oklch, var(--palette-ink-900) 92%, transparent), color-mix(in oklch, var(--palette-ink-900) 70%, transparent));
   backdrop-filter: blur(12px);
   border-bottom: 1px solid color-mix(in oklch, var(--palette-brass-400) 28%, transparent);
@@ -120,48 +120,6 @@ h2 em {
   transform: translateX(-50%) rotate(45deg);
   background: var(--palette-brass-400);
 }
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing_fluid-space-xs);
-  text-decoration: none;
-  font-family: var(--font-family-display);
-  font-size: var(--typography_fluid-display-m);
-  font-weight: var(--typography-weight-display-bold);
-  letter-spacing: -0.01em;
-}
-.nav nav {
-  display: flex;
-  gap: var(--spacing_fluid-space-s-m);
-  font-size: var(--typography_fluid-text-s);
-}
-.nav nav a {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing_fluid-space-2xs);
-  text-decoration: none;
-  color: var(--palette-cream-400);
-  transition: color 0.2s;
-}
-.nav-icon {
-  width: 1em;
-  height: 1em;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.7;
-  transition: opacity 0.2s;
-}
-.nav nav a:hover .nav-icon {
-  opacity: 1;
-}
-.nav nav a:hover {
-  color: var(--palette-acid-400);
-}
-
-
 .hero {
   position: relative;
   display: grid;
@@ -516,22 +474,6 @@ h2 em {
 @media (max-width: 560px) {
   .footer-columns {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-  .nav nav {
-    gap: var(--spacing_fluid-space-s);
-  }
-  .nav-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  .nav-icon {
-    width: 1.35em;
-    height: 1.35em;
-    opacity: 0.9;
   }
   .button {
     flex: 1 1 100%;

@@ -36,7 +36,8 @@ const headings = groups
                 <span class="package-registry">{entry.registry}</span>
                 <span class="package-version" data-live-version>v{entry.version}</span>
               </div>
-              <h3><a href={entry.url}>{entry.name}</a></h3>
+              <h3><a href={entry.url}>{entry.title}</a></h3>
+              {entry.title !== entry.name && <p class="package-name" title={entry.name}>{entry.name}</p>}
               <p class="package-description">{entry.description}</p>
               <pre class="package-install"><code>{entry.install}</code></pre>
               <p class="package-meta">
@@ -108,6 +109,15 @@ const headings = groups
   .package-card h3 a:hover {
     color: var(--palette-acid-400);
   }
+  .package-name {
+    margin: 0;
+    overflow: hidden;
+    font-family: var(--font-family-mono);
+    font-size: var(--typography_fluid-text-xs);
+    color: color-mix(in oklch, var(--palette-cream-400) 80%, transparent);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .package-description {
     margin: 0;
     color: var(--palette-cream-400);
@@ -121,6 +131,8 @@ const headings = groups
     border-radius: 0;
     background: var(--palette-ink-950);
     font-size: var(--typography_fluid-text-xs);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
   .package-meta {
     display: flex;

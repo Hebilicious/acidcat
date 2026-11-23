@@ -5,6 +5,7 @@ export type Registry = "npm" | "crates.io" | "PyPI" | "Go" | "Pkl";
 
 export interface PublishedPackage {
   readonly name: string;
+  readonly title: string;
   readonly registry: Registry;
   readonly directory: string;
   readonly version: string;
@@ -65,12 +66,14 @@ export const readPublishedPackages = async (root: string): Promise<PublishedPack
       const use = uses.get(directory) ?? "";
       const releaseType = text(settings["release-type"]);
       const base = { directory, version, kind: kindOf(directory) };
+      const short = (name: string): string => name.replace(/^@acid-cat\//, "").replace(/^package:\/\/.*\//, "").replace(/^github\.com\/Hebilicious\/acidcat\/packages\//, "");
       if (releaseType === "node") {
         const manifestJson = await readJson(join(root, directory, "package.json"));
         const name = text(manifestJson["name"]) ?? directory;
         return {
           ...base,
           name,
+          title: short(name),
           registry: "npm",
           description: text(manifestJson["description"]) ?? use,
           install: `npm install ${name}`,
@@ -84,6 +87,7 @@ export const readPublishedPackages = async (root: string): Promise<PublishedPack
         return {
           ...base,
           name,
+          title: short(name),
           registry: "crates.io",
           description: (await tomlField(cargo, "description")) ?? use,
           install: `cargo add ${name}`,
@@ -97,6 +101,7 @@ export const readPublishedPackages = async (root: string): Promise<PublishedPack
         return {
           ...base,
           name,
+          title: short(name),
           registry: "PyPI",
           description: (await tomlField(pyproject, "description")) ?? use,
           install: `pip install ${name}`,
@@ -109,6 +114,7 @@ export const readPublishedPackages = async (root: string): Promise<PublishedPack
         return {
           ...base,
           name,
+          title: short(name),
           registry: "Go",
           description: use,
           install: `go get ${name}`,
@@ -120,6 +126,7 @@ export const readPublishedPackages = async (root: string): Promise<PublishedPack
       return {
         ...base,
         name: `package://${pklPackage}/${component}`,
+        title: component,
         registry: "Pkl",
         description: use,
         install: `amends "package://${pklPackage}/${component}@${version}#/Catalog.pkl"`,
