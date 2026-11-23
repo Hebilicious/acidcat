@@ -286,17 +286,22 @@ h2 em {
 }
 .button-brass .button-face {
   color: var(--palette-brass-200);
-  background-image: linear-gradient(100deg, var(--palette-ink-800) 0 45%, var(--palette-brass-700) 70%, var(--palette-copper-400) 85%, var(--palette-brass-400));
+  background: linear-gradient(180deg, var(--palette-brass-200), var(--palette-brass-500) 55%, var(--palette-brass-700));
 }
 .button-brass .button-face::before {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: 2px;
   z-index: 0;
-  padding: 2px;
-  background: linear-gradient(180deg, var(--palette-brass-200), var(--palette-brass-500) 55%, var(--palette-brass-700));
-  clip-path: inherit;
-  mask: linear-gradient(var(--palette-neutral-black) 0 0) content-box exclude, linear-gradient(var(--palette-neutral-black) 0 0);
+  clip-path: polygon(calc(var(--cut) - 1px) 0, calc(100% - var(--cut) + 1px) 0, 100% 50%, calc(100% - var(--cut) + 1px) 100%, calc(var(--cut) - 1px) 100%, 0 50%);
+  background-image: linear-gradient(100deg, var(--palette-ink-800) 0 45%, var(--palette-brass-700) 70%, var(--palette-copper-400) 85%, var(--palette-brass-400));
+  background-size: 220% 100%;
+  background-position: 0% 50%;
+  transition: background-position 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.button-brass:hover .button-face::before,
+.button-brass:focus-visible .button-face::before {
+  background-position: 100% 50%;
 }
 .button-brass .button-text {
   text-shadow: 0 1px 0 var(--palette-neutral-black);
