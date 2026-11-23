@@ -220,7 +220,7 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
         return yield* call(program.success);
       });
 
-    const outcome: Session<R>["outcome"] = (capability, input) => perform(capability, Effect.succeed(capability.run(input)));
+    const outcome: Session<R>["outcome"] = (capability, input) => perform(capability, Effect.succeed(Effect.suspend(() => capability.run(input))));
     const execute: Session<R>["execute"] = (capability, input) => lift(outcome(capability, input));
     const typedCall: Session<R>["call"] = (capability, input) => lift(perform(capability, capability.prepare(input)));
 

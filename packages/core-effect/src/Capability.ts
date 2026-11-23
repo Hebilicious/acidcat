@@ -214,7 +214,7 @@ export function make<
   ): Capability<Input, Output, Failure, R | RAvailability | RState, State, Id> => ({
     ...declared,
     run,
-    prepare: (input) => Effect.map(calls.decode(input), calls.run),
+    prepare: (input) => Effect.map(calls.decode(input), (decoded) => Effect.suspend(() => calls.run(decoded))),
     pipeline: pipeline({ ...parts, ...calls }),
   });
   if (hasInput(definition)) {
