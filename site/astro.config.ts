@@ -2,6 +2,7 @@ import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 
 export default defineConfig({
+  site: "https://acidcat.hebilicious.workers.dev",
   integrations: [
     starlight({
       title: "AcidCat",

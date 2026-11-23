@@ -26,6 +26,7 @@
     "@hebilicious/cssforge": "catalog:",
     "@types/node": "catalog:",
     "@types/three": "catalog:",
+    "cf": "catalog:",
     "playwright": "catalog:",
     "typescript": "catalog:"
   }

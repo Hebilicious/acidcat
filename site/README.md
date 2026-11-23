@@ -11,6 +11,7 @@ The homepage and the documentation of AcidCat. The site uses [Astro](https://ast
 | `moon run site:tokens-check` | Check that `.cssforge/output.css` matches `cssforge.config.ts`. `site:test` runs it |
 | `moon run site:build` | Build the static site into `dist/` |
 | `moon run site:test` | Test the geometry of the logo, check that every design token in use exists, and render the homepage in Chromium at desktop and phone widths |
+| `moon run site:deploy` | Build the site and deploy it to https://acidcat.hebilicious.workers.dev as an assets-only Worker, with the `cf` command. Set `CLOUDFLARE_ACCOUNT_ID` first |
 | `moon run site:typecheck` | Type-check the geometry, the tests and the configuration |
 
 ## Structure
@@ -30,6 +31,7 @@ The homepage and the documentation of AcidCat. The site uses [Astro](https://ast
 | `src/components/Mark.astro`, `src/assets/mark.svg`, `public/favicon.svg`, `art/logo/` | The logo (a brass cat in profile), the favicon, and the explorations behind them |
 | `src/lib/geometry.ts` | Pure functions that compute gears |
 | `src/content/docs/docs/` | The Starlight documentation, served under `/docs/` |
+| `cloudflare.config.ts` | The Worker that serves the site: its name, and the 404 page for unknown paths |
 | `cssforge.config.ts` | The design tokens: colors, fluid type and spacing scales, font families, tracking, radii and layout widths. [cssforge](https://github.com/Hebilicious/cssforge) writes them as CSS variables into `.cssforge/output.css`, which is committed |
 | `src/styles/tokens.css` | Imports the design tokens and the fonts that the homepage and the documentation share |
 | `public/hero/` | The hero textures. `art/pack.sh` writes them |
@@ -83,5 +85,3 @@ The renderer lowers its resolution when frames are slow, and shows a still frame
 ## Roadmap
 
 - [ ] Documentation content
-- [ ] A production URL in `site` of `astro.config.ts`, for the sitemap and the canonical links
-- [ ] Deployment

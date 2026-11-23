@@ -41,6 +41,15 @@ tasks:
     inputs: ["src/**/*", "public/**/*", "astro.config.ts", "cssforge.config.ts", "package.json"]
     outputs: ["dist/**/*"]
 
+  deploy:
+    deps: ["build"]
+    description: "Deploy dist/ as an assets-only Worker, with the cf command. Set CLOUDFLARE_ACCOUNT_ID first."
+    command: "cf"
+    args: ["deploy", "dist"]
+    options:
+      cache: false
+      runInCI: false
+
   test:
     deps: ["build", "tokens-check"]
     description: "Test the geometry of the art, and render the homepage in Chromium at desktop and phone widths."
