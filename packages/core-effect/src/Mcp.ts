@@ -6,6 +6,7 @@ import {
   MCP_HEADER_MISMATCH,
   MCP_PROTOCOL_VERSION,
   MCP_REJECTIONS,
+  mcpDiscovered,
   mcpHeaderMismatch,
   mcpServerCard,
   mcpServerCardIdentity,
@@ -15,6 +16,7 @@ import {
   mcpServerUrlOfCardRequest,
   mcpToolAnnotations,
   mcpToolResult,
+  mcpWrappedRequest,
   publishesOnServerCard,
   readBounded,
   screenRequest,
@@ -395,24 +397,11 @@ interface Discovered {
   readonly supportedVersions: readonly string[];
 }
 
-const SERVER_INFO = "io.modelcontextprotocol/serverInfo";
-
 async function discover(server: (request: Request) => Promise<Response>, url: string, signal: AbortSignal): Promise<Discovered | undefined> {
-  const body = JSON.stringify({
-    jsonrpc: "2.0",
-    id: 0,
-    method: "server/discover",
-    params: { _meta: { "io.modelcontextprotocol/protocolVersion": MCP_PROTOCOL_VERSION, "io.modelcontextprotocol/clientCapabilities": {} } },
-  });
-  const headers = {
-    "Content-Type": "application/json",
-    Accept: `application/json, ${SSE_MEDIA_TYPE}`,
-    "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
-    "Mcp-Method": "server/discover",
-  };
   let message: unknown;
   try {
-    const response = await server(new Request(url, { method: "POST", headers, body, signal }));
+    const { headers, body } = mcpWrappedRequest("server/discover");
+    const response = await server(new Request(url, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body, signal }));
     if (!response.ok) return undefined;
     message = JSON.parse(await response.text());
   } catch {
@@ -420,16 +409,9 @@ async function discover(server: (request: Request) => Promise<Response>, url: st
   }
   const result = isJsonObject(message) ? message["result"] : undefined;
   if (!isJsonObject(result)) return undefined;
-  const meta = result["_meta"];
-  const info = isJsonObject(meta) ? meta[SERVER_INFO] : undefined;
-  if (!isJsonObject(info) || typeof info["name"] !== "string" || typeof info["version"] !== "string") return undefined;
-  const { instructions, supportedVersions } = result;
-  return {
-    name: info["name"],
-    version: info["version"],
-    instructions: typeof instructions === "string" ? instructions : undefined,
-    supportedVersions: Array.isArray(supportedVersions) && supportedVersions.every((each) => typeof each === "string") ? supportedVersions : [MCP_PROTOCOL_VERSION],
-  };
+  const { name, version, instructions, supportedVersions } = mcpDiscovered(result);
+  if (name === undefined || version === undefined) return undefined;
+  return { name, version, instructions, supportedVersions: supportedVersions ?? [MCP_PROTOCOL_VERSION] };
 }
 
 const respondToEvents = <R>(

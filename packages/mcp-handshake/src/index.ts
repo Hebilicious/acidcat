@@ -1,5 +1,5 @@
 /** The `initialize` handshake of earlier MCP revisions through HTTP (spec/bindings/mcp.md#earlier-revisions-through-http). */
-import { encodeMcpHeaderValue, isJsonObject, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, MCP_SERVER_CARD_MEDIA_TYPE, mcpParamHeaders, mcpServerCardResponse, mcpServerUrlOfCardRequest, readBounded } from "@acid-cat/spec-ts";
+import { isJsonObject, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, MCP_SERVER_CARD_MEDIA_TYPE, mcpDiscovered, mcpParamHeaders, mcpServerCardResponse, mcpServerUrlOfCardRequest, mcpWrappedRequest, readBounded } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
 export type WebHandler = (request: Request) => Promise<Response>;
@@ -10,8 +10,6 @@ export interface McpHandshakeOptions {
 }
 
 const PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
-const CLIENT_CAPABILITIES_KEY = "io.modelcontextprotocol/clientCapabilities";
-const SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo";
 
 const HANDSHAKE_VERSIONS = ["2025-11-25", "2025-06-18"] as const;
 const [LATEST_HANDSHAKE_VERSION] = HANDSHAKE_VERSIONS;
@@ -84,15 +82,10 @@ async function inputSchemaOf(handler: WebHandler, request: Request, name: unknow
 }
 
 function asCurrentRevisionRequest(request: Request, method: string, params: JsonObject, paramHeaders: Record<string, string> = {}): Request {
+  const wrapped = mcpWrappedRequest(method, params);
   const headers = new Headers([...request.headers].filter(([name]) => !name.startsWith("mcp-param-")));
-  headers.set("MCP-Protocol-Version", MCP_PROTOCOL_VERSION);
-  headers.set("Mcp-Method", method);
-  headers.set("Accept", "application/json, text/event-stream");
-  if (method === "tools/call" && typeof params["name"] === "string") headers.set("Mcp-Name", encodeMcpHeaderValue(params["name"]));
-  for (const [name, value] of Object.entries(paramHeaders)) headers.set(name, value);
-  const meta = { ...metaOf({ params }), [PROTOCOL_VERSION_KEY]: MCP_PROTOCOL_VERSION, [CLIENT_CAPABILITIES_KEY]: {} };
-  const body = JSON.stringify({ jsonrpc: "2.0", id: 0, method, params: { ...params, _meta: meta } });
-  return new Request(request.url, { method: "POST", headers, body, signal: request.signal });
+  for (const [name, value] of Object.entries({ ...wrapped.headers, ...paramHeaders })) headers.set(name, value);
+  return new Request(request.url, { method: "POST", headers, body: wrapped.body, signal: request.signal });
 }
 
 /**
@@ -101,11 +94,7 @@ function asCurrentRevisionRequest(request: Request, method: string, params: Json
  * have it (spec/bindings/mcp.md#events).
  */
 function initializeResult(offered: unknown, discovered: JsonObject): JsonObject {
-  const info = metaOf({ params: discovered })[SERVER_INFO_KEY];
-  const name = isJsonObject(info) && typeof info["name"] === "string" ? info["name"] : "";
-  const version = isJsonObject(info) && typeof info["version"] === "string" ? info["version"] : "";
-  const instructions = typeof discovered["instructions"] === "string" ? discovered["instructions"] : undefined;
-  const capabilities = isJsonObject(discovered["capabilities"]) ? discovered["capabilities"] : {};
+  const { name = "", version = "", instructions, capabilities = {} } = mcpDiscovered(discovered);
   return {
     protocolVersion: HANDSHAKE_VERSIONS.find((each) => each === offered) ?? LATEST_HANDSHAKE_VERSION,
     capabilities: { ...withoutEvents(capabilities), tools: { listChanged: false } },

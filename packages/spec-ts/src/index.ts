@@ -23,6 +23,7 @@ import {
   MCP_SERVER_CARD_SCHEMA,
   MCP_SERVER_CARD_VERSION_MAX_LENGTH,
   MCP_SUBSCRIPTION_ID,
+  SSE_MEDIA_TYPE,
 } from "./facts.generated.ts";
 
 export {
@@ -1087,6 +1088,51 @@ export function mcpServerCard(identity: McpServerCardIdentity, url: string, webh
         ...(webhooks === undefined ? {} : { extensionsInfo: { [MCP_EVENTS_EXTENSION]: { webhooks } } }),
       },
     ],
+  };
+}
+
+const MCP_PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
+const MCP_CLIENT_CAPABILITIES_KEY = "io.modelcontextprotocol/clientCapabilities";
+const MCP_SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo";
+
+/**
+ * The MCP headers and the body of a request of revision 2026-07-28 that a wrapper sends, with no session, to the server
+ * that it wraps. The `_meta` of `params` stays, and gets the revision and empty client capabilities. The caller gives
+ * `Content-Type`, so that the server still rejects the media type of a request that is not JSON.
+ */
+export function mcpWrappedRequest(method: string, params: JsonObject = {}): { readonly headers: { readonly [name: string]: string }; readonly body: string } {
+  const name = params["name"];
+  const headers = {
+    Accept: `application/json, ${SSE_MEDIA_TYPE}`,
+    "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
+    "Mcp-Method": method,
+    ...(NAMED_METHODS.has(method) && typeof name === "string" ? { "Mcp-Name": encodeMcpHeaderValue(name) } : {}),
+  };
+  const given = params["_meta"];
+  const meta = { ...(isJsonObject(given) ? given : {}), [MCP_PROTOCOL_VERSION_KEY]: MCP_PROTOCOL_VERSION, [MCP_CLIENT_CAPABILITIES_KEY]: {} };
+  return { headers, body: JSON.stringify({ jsonrpc: "2.0", id: 0, method, params: { ...params, _meta: meta } }) };
+}
+
+/** What a client reads from the result of `server/discover`. A member is `undefined` when the result does not have it in the right form. */
+export interface McpDiscovered {
+  readonly name: string | undefined;
+  readonly version: string | undefined;
+  readonly instructions: string | undefined;
+  readonly supportedVersions: readonly string[] | undefined;
+  readonly capabilities: JsonObject | undefined;
+}
+
+export function mcpDiscovered(result: JsonObject): McpDiscovered {
+  const meta = result["_meta"];
+  const info = isJsonObject(meta) ? meta[MCP_SERVER_INFO_KEY] : undefined;
+  const text = (value: unknown) => (typeof value === "string" ? value : undefined);
+  const { instructions, supportedVersions, capabilities } = result;
+  return {
+    name: isJsonObject(info) ? text(info["name"]) : undefined,
+    version: isJsonObject(info) ? text(info["version"]) : undefined,
+    instructions: text(instructions),
+    supportedVersions: Array.isArray(supportedVersions) && supportedVersions.every((each) => typeof each === "string") ? supportedVersions : undefined,
+    capabilities: isJsonObject(capabilities) ? capabilities : undefined,
   };
 }
 
