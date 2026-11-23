@@ -547,7 +547,6 @@ export function mcpHeartbeatGrant(suggestion: number | null | undefined, deploym
   return Math.min(MCP_HEARTBEAT_MAX_MS, Math.max(MCP_HEARTBEAT_MIN_MS, suggestion));
 }
 
-/** The requests whose `Mcp-Name` header carries `params.name` (spec/bindings/mcp.md#http). */
 const NAMED_METHODS: ReadonlySet<string> = new Set(MCP_NAMED_METHODS);
 
 const BASE64_PREFIX = "=?base64?";
