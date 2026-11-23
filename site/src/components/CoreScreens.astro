@@ -12,7 +12,24 @@ const packages: Record<string, string> = {
   "core-effect": "@acid-cat/core-effect",
   "core-rust": "acid-cat-core",
 };
-const cores = (await coreSnippets()).map((snippet) => ({
+const yourLanguage = {
+  id: "core-yours",
+  label: "Your language",
+  language: "shellscript",
+  source: "spec/conformance.md",
+  code: [
+    "# 1. Follow the specification: spec/README.md",
+    "# 2. Serve the conformance fixture: packages/cli/conformance/fixture.pkl",
+    "# 3. Test each binding from outside:",
+    "npx @acid-cat/cli conform \\",
+    "  --http http://localhost:8080 \\",
+    "  --mcp http://localhost:8080/mcp \\",
+    '  --cli "./your-program"',
+  ].join("\n"),
+};
+notes["core-yours"] = "Any language. A core that follows the specification and passes acid-cat conform is an implementation.";
+packages["core-yours"] = "acid-cat conform";
+const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
   ...snippet,
   note: notes[snippet.id] ?? "",
   packageName: packages[snippet.id] ?? snippet.label,
@@ -23,8 +40,8 @@ const cores = (await coreSnippets()).map((snippet) => ({
 <section class="cores" aria-labelledby="cores-title">
   <div class="cores-inner">
     <header class="section-head">
-      <p class="eyebrow">Fig. 4 — The cores</p>
-      <h2 id="cores-title">Serve it from <em>your</em> runtime.</h2>
+      <p class="eyebrow">Fig. 4 — Cores</p>
+      <h2 id="cores-title">Run the capabilities <em>with a core</em></h2>
       <p class="lede">A core runs the capabilities and serves the bindings. Each core has the same features in its own style, and each one passes <code>acid-cat conform</code>.</p>
     </header>
 
@@ -70,9 +87,11 @@ const cores = (await coreSnippets()).map((snippet) => ({
     margin-top: var(--spacing_fluid-space-xl);
   }
   .console-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--spacing_fluid-space-xs);
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: var(--spacing_fluid-space-2xs);
+    overflow-x: auto;
   }
   .console-tabs button {
     display: grid;
@@ -106,7 +125,7 @@ const cores = (await coreSnippets()).map((snippet) => ({
   }
   .console-frame {
     padding: var(--spacing_fluid-space-2xs);
-    border-radius: 0 var(--radius-size-l) var(--radius-size-l) var(--radius-size-l);
+    border-radius: 0 0 var(--radius-size-l) var(--radius-size-l);
     background: linear-gradient(135deg, var(--palette-brass-200), var(--palette-brass-500) 40%, var(--palette-brass-700) 70%, var(--palette-brass-400));
     box-shadow:
       0 0 0 2px var(--palette-ink-900),
@@ -132,8 +151,8 @@ const cores = (await coreSnippets()).map((snippet) => ({
   }
   .console-code {
     overflow-x: auto;
-    font-size: var(--typography_fluid-text-s);
-    line-height: 1.6;
+    font-size: var(--typography_fluid-text-m);
+    line-height: 1.65;
     max-height: 34rem;
   }
   .console-source {
@@ -143,6 +162,11 @@ const cores = (await coreSnippets()).map((snippet) => ({
     font-size: var(--typography_fluid-text-xs);
     color: var(--palette-brass-300);
   }
+  @media (max-width: 680px) {
+    .console-tabs {
+      grid-auto-columns: max-content;
+    }
+  }
 </style>
 
 <script>
@@ -151,7 +175,7 @@ const cores = (await coreSnippets()).map((snippet) => ({
   const screen = document.querySelector<HTMLElement>("[data-console-screen]");
   const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-core-tab]"));
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const bluescreen = screen !== null && !reduced && supportsHtmlInCanvas() ? createBluescreen(screen) : undefined;
+  const bluescreen = screen !== null && !reduced && supportsHtmlInCanvas() ? createBluescreen(screen, { intensity: 0.45, revealMs: 900, replayMs: 380 }) : undefined;
 
   const select = (tab: HTMLButtonElement) => {
     for (const other of tabs) {

@@ -2,6 +2,7 @@
 import "../styles/tokens.css";
 import "../styles/home.css";
 import LivingPlate from "../components/LivingPlate.astro";
+import Blueprint from "../components/Blueprint.astro";
 import CoreScreens from "../components/CoreScreens.astro";
 import Surfaces from "../components/Surfaces.astro";
 import Mark from "../components/Mark.astro";
@@ -11,32 +12,6 @@ const repository = "https://github.com/Hebilicious/acidcat";
 const title = "AcidCat — One catalog. Every surface.";
 const description = "Describe what your application can do once. Serve it as a CLI, an MCP server, an HTTP API and typed client code.";
 
-const parts = [
-  {
-    number: "I",
-    name: "Catalog",
-    text: "The contract, stored as JSON. Write it in the typed language of your choice. It is checked at build time; programs do not read it at run time.",
-    image: "catalog",
-  },
-  {
-    number: "II",
-    name: "Binding",
-    text: "The rules for one surface: CLI, MCP, HTTP, WebMCP or a language such as TypeScript. The specification defines each one.",
-    image: "bindings",
-  },
-  {
-    number: "III",
-    name: "Core",
-    text: "A library that runs your capabilities and serves the bindings. One core for Effect, one for plain TypeScript, one for Rust.",
-    image: "core",
-  },
-  {
-    number: "IV",
-    name: "acid-cat conform",
-    text: "Tests a running program from the outside, through each binding. Any program that passes it is an implementation.",
-    image: "conform",
-  },
-];
 
 
 ---
@@ -75,50 +50,33 @@ const parts = [
         </div>
         <div class="hero-copy">
           <p class="eyebrow reveal">An open specification · 0.1 draft</p>
-          <h1 id="hero-title" class="reveal">
-            One catalog.
-            <em>Every surface.</em>
-          </h1>
+          <h1 id="hero-title" class="reveal">AcidCat</h1>
           <div class="ornament reveal" aria-hidden="true">
             <span></span>
             <svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="2" /><path d="M12 1v5M12 18v5M1 12h5M18 12h5M4.2 4.2l3.5 3.5M16.3 16.3l3.5 3.5M4.2 19.8l3.5-3.5M16.3 7.7l3.5-3.5" stroke="currentColor" stroke-width="2" /></svg>
             <span></span>
           </div>
           <p class="hero-lede reveal">
-            Describe what your application can do once. Serve it as a <strong>CLI</strong>, an <strong>MCP server</strong>, an <strong>HTTP API</strong> and <strong>typed client code</strong>. Every surface takes the same input and returns the same failures.
+            AcidCat is an open specification. Describe what your application can do once, in a <strong>catalog</strong>. Each operation then becomes a <strong>command line</strong>, a tool in an <strong>MCP server</strong> for AI agents, an <strong>HTTP API</strong> and <strong>typed code</strong>, with the same input and the same failures everywhere.
           </p>
           <div class="actions reveal">
             <a class="button button-acid" href="/docs/">Get started</a>
             <a class="button button-brass" href={`${repository}/blob/main/spec/README.md`}>Read the spec</a>
-          </div>
-          <div class="install reveal">
-            <span class="prompt" aria-hidden="true">$</span>
-            <code>npx @acid-cat/cli check aircon.acidcat.json</code>
-            <button class="copy" type="button" data-copy="npx @acid-cat/cli check aircon.acidcat.json" aria-label="Copy the command">Copy</button>
           </div>
         </div>
       </section>
 
       <Schematic />
 
-      <section class="parts" aria-labelledby="parts-title">
-        <header class="section-head">
-          <p class="eyebrow">Fig. 2 — Parts list</p>
-          <h2 id="parts-title">Four parts. <em>No magic.</em></h2>
-          <p class="lede">The specification comes first. The packages in the repository are one implementation of it, and an implementation in any language can replace them.</p>
-        </header>
-        <ol class="parts-grid">
-          {parts.map((part) => (
-            <li class="part">
-              <div class="part-icon" aria-hidden="true">
-                <img src={`/parts/${part.image}.webp`} alt="" width="560" height="300" loading="lazy" decoding="async" />
-              </div>
-              <span class="part-number">{part.number}</span>
-              <h3>{part.name}</h3>
-              <p>{part.text}</p>
-            </li>
-          ))}
-        </ol>
+      <section class="flow" aria-labelledby="flow-title">
+        <div class="flow-inner">
+          <header class="section-head">
+            <p class="eyebrow">Fig. 2 — How the parts fit</p>
+            <h2 id="flow-title">Spec, catalog, <em>runtime, verify</em></h2>
+            <p class="lede">The specification defines the catalog and the bindings. A catalog lists the capabilities of one application. A core runs them, and <code>acid-cat conform</code> tests the result from outside.</p>
+          </header>
+          <Blueprint />
+        </div>
       </section>
 
       <Surfaces />
@@ -137,21 +95,6 @@ const parts = [
     </footer>
 
     <script>
-      for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
-        button.addEventListener("click", () => {
-          const text = button.dataset["copy"] ?? "";
-          navigator.clipboard.writeText(text).then(
-            () => {
-              button.textContent = "Copied";
-              window.setTimeout(() => (button.textContent = "Copy"), 1600);
-            },
-            () => {
-              button.textContent = "Select";
-            },
-          );
-        });
-      }
-
       const reveal = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
@@ -162,7 +105,7 @@ const parts = [
         },
         { threshold: 0.15 },
       );
-      for (const element of document.querySelectorAll(".section-head, .part, .surface, .machine:not([drawable]), .blueprint, .spec-sheet")) {
+      for (const element of document.querySelectorAll(".section-head, .surface, .machine:not([drawable]), .blueprint, .spec-sheet")) {
         element.classList.add("will-reveal");
         reveal.observe(element);
       }

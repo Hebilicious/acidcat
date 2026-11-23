@@ -45,14 +45,68 @@ const canonical = async (): Promise<string> => {
   return `"aircon.power.set": ${JSON.stringify(entry, null, 2)}`;
 };
 
+const joined = async (...parts: Promise<string>[]): Promise<string> => (await Promise.all(parts)).join("\n\n");
+
 export const catalogSnippets = async (): Promise<Snippet[]> => [
-  { id: "json", label: "JSON", language: "json", source: "examples/aircon/catalog/aircon.acidcat.json", code: await canonical() },
-  { id: "ts", label: "TypeScript", language: "typescript", source: "examples/aircon/catalog/typescript.ts", code: await block("examples/aircon/catalog/typescript.ts", /\.capability\("aircon\.power\.set"/, /^\s*\}\)$/) },
-  { id: "py", label: "Python", language: "python", source: "examples/aircon/catalog/python.py", code: await block("examples/aircon/catalog/python.py", /^\s+"aircon\.power\.set",$/, /^\s*\)$/, 1) },
-  { id: "go", label: "Go", language: "go", source: "examples/aircon/catalog/go/main.go", code: await block("examples/aircon/catalog/go/main.go", /Capability\("aircon\.power\.set"/, /^\s*\}\)\.$/) },
-  { id: "rs", label: "Rust", language: "rust", source: "examples/aircon/catalog/rust/src/main.rs", code: await block("examples/aircon/catalog/rust/src/main.rs", /\.capability\("aircon\.power\.set"/, /^\s*\}\)$/) },
-  { id: "pkl", label: "Pkl", language: "pkl", source: "examples/aircon/catalog/aircon.pkl", code: await block("examples/aircon/catalog/aircon.pkl", /\["aircon\.power\.set"\]/, /^\s{2}\}$/) },
+  {
+    id: "ts",
+    label: "TypeScript",
+    language: "typescript",
+    source: "examples/aircon/catalog/typescript.ts",
+    code: await joined(
+      block("examples/aircon/catalog/typescript.ts", /const setting = \(name: string/, /^\s*\}\);$/),
+      block("examples/aircon/catalog/typescript.ts", /\.capability\("aircon\.power\.set"/, /^\s*\}\)$/),
+    ),
+  },
+  {
+    id: "py",
+    label: "Python",
+    language: "python",
+    source: "examples/aircon/catalog/python.py",
+    code: await joined(
+      block("examples/aircon/catalog/python.py", /def setting\(name: str/, /return \{"type": "object"/),
+      block("examples/aircon/catalog/python.py", /^\s+"aircon\.power\.set",$/, /^\s*\)$/, 1),
+    ),
+  },
+  {
+    id: "go",
+    label: "Go",
+    language: "go",
+    source: "examples/aircon/catalog/go/main.go",
+    code: await joined(
+      block("examples/aircon/catalog/go/main.go", /setting := func\(name string/, /offlineOnly :=/),
+      block("examples/aircon/catalog/go/main.go", /Capability\("aircon\.power\.set"/, /^\s*\}\)\.$/),
+    ),
+  },
+  {
+    id: "rs",
+    label: "Rust",
+    language: "rust",
+    source: "examples/aircon/catalog/rust/src/main.rs",
+    code: await joined(
+      block("examples/aircon/catalog/rust/src/main.rs", /let setting = \|name: &str/, /let offline_only = /),
+      block("examples/aircon/catalog/rust/src/main.rs", /\.capability\("aircon\.power\.set"/, /^\s*\}\)$/),
+    ),
+  },
+  {
+    id: "pkl",
+    label: "Pkl",
+    language: "pkl",
+    source: "examples/aircon/catalog/aircon.pkl",
+    code: await joined(
+      block("examples/aircon/catalog/aircon.pkl", /^local function setting\(/, /^\}$/),
+      block("examples/aircon/catalog/aircon.pkl", /\["aircon\.power\.set"\]/, /^\s{2}\}$/),
+    ),
+  },
 ];
+
+export const canonicalSnippet = async (): Promise<Snippet> => ({
+  id: "json",
+  label: "JSON",
+  language: "json",
+  source: "examples/aircon/catalog/aircon.acidcat.json",
+  code: await canonical(),
+});
 
 export const coreSnippets = async (): Promise<Snippet[]> => [
   { id: "core-ts", label: "TypeScript", language: "typescript", source: "packages/core-ts/README.md", code: await fence("packages/core-ts/README.md", "ts") },

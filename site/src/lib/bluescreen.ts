@@ -39,6 +39,7 @@ uniform vec2 uPointer;
 uniform float uPointerActive;
 uniform float uTime;
 uniform float uReveal;
+uniform float uIntensity;
 in vec2 vUv;
 out vec4 outColor;
 
@@ -66,16 +67,16 @@ void main() {
 
   vec2 toPointer = px - uPointer;
   float lens = uPointerActive * exp(-dot(toPointer, toPointer) / (2.0 * 140.0 * 140.0));
-  uv -= toPointer / uResolution * lens * 0.06;
+  uv -= toPointer / uResolution * lens * 0.06 * uIntensity;
 
   float beamY = fract(t * 0.16) * 1.4 - 0.2;
   float beam = exp(-pow((uv.y - beamY) * 18.0, 2.0));
   float row = floor(px.y / 3.0);
-  float glitch = step(0.985, hash(vec2(row, floor(t * 12.0)))) * (hash(vec2(row, t)) - 0.5) * 0.012;
-  uv.x += glitch + beam * 0.0025 * sin(px.y * 0.35 + t * 20.0);
+  float glitch = step(0.985, hash(vec2(row, floor(t * 12.0)))) * (hash(vec2(row, t)) - 0.5) * 0.012 * uIntensity * uIntensity;
+  uv.x += glitch + beam * 0.0025 * uIntensity * sin(px.y * 0.35 + t * 20.0);
 
   vec2 center = uv - 0.5;
-  float fringe = (0.00035 + length(center) * 0.0012 + beam * 0.0018) * (1.0 + lens * 2.0);
+  float fringe = (0.00035 + length(center) * 0.0012 + beam * 0.0018) * (1.0 + lens * 2.0) * uIntensity;
   vec4 base = content(uv);
   float r = content(uv + vec2(fringe, 0.0)).r;
   float b = content(uv - vec2(fringe, 0.0)).b;
@@ -88,10 +89,10 @@ void main() {
   float signal = max(glowColor.g - glowColor.r * 0.6, 0.0) + max(glowColor.b - glowColor.r, 0.0) * 0.6;
   vec3 bloom = glowColor * (0.35 + signal * 1.6);
 
-  float scan = 0.9 + 0.1 * sin(px.y * 3.14159 * 0.5);
-  float flicker = 0.97 + 0.03 * noise(vec2(t * 7.0, 0.0));
+  float scan = 1.0 - uIntensity * (0.1 - 0.1 * sin(px.y * 3.14159 * 0.5));
+  float flicker = 1.0 - uIntensity * (0.03 - 0.03 * noise(vec2(t * 7.0, 0.0)));
   color *= scan * flicker;
-  color += vec3(0.25, 0.95, 1.0) * beam * 0.18 * alpha;
+  color += vec3(0.25, 0.95, 1.0) * beam * 0.18 * alpha * uIntensity;
   color += vec3(0.2, 0.9, 1.0) * lens * 0.12 * alpha;
 
   float buildRow = uv.y * 0.85 + noise(px * vec2(0.08, 0.3)) * 0.15;
@@ -104,8 +105,8 @@ void main() {
   float emitter = exp(-pow((uv.y - 0.985) * 90.0, 2.0)) * smoothstep(0.0, 0.08, uv.x) * smoothstep(1.0, 0.92, uv.x) * uReveal;
   vec3 projection = vec3(0.2, 0.85, 1.0) * (haze * 0.22 + emitter * 0.9);
 
-  vec3 premultiplied = color * alpha * shown + bloom * shown * 0.9 + vec3(0.2, 0.9, 1.0) * edge * 0.2 + projection * (1.0 - alpha * 0.8);
-  float outAlpha = clamp(alpha * shown + length(bloom) * 0.6 * shown + edge * 0.2 + (haze * 0.22 + emitter * 0.9) * 0.6, 0.0, 1.0);
+  vec3 premultiplied = color * alpha * shown + bloom * shown * 0.9 * uIntensity + vec3(0.2, 0.9, 1.0) * edge * 0.2 + projection * (1.0 - alpha * 0.8);
+  float outAlpha = clamp(alpha * shown + length(bloom) * 0.6 * shown * uIntensity + edge * 0.2 + (haze * 0.22 + emitter * 0.9) * 0.6, 0.0, 1.0);
   outColor = vec4(premultiplied, outAlpha);
 }
 `;
@@ -124,7 +125,15 @@ export interface Bluescreen {
   readonly destroy: () => void;
 }
 
-export const createBluescreen = (host: HTMLElement): Bluescreen | undefined => {
+export interface BluescreenOptions {
+  readonly intensity?: number;
+  readonly revealMs?: number;
+  readonly replayMs?: number;
+}
+
+export const createBluescreen = (host: HTMLElement, options: BluescreenOptions = {}): Bluescreen | undefined => {
+  const intensity = options.intensity ?? 1;
+  let revealMs = options.revealMs ?? 1600;
   if (host.parentElement === null) return undefined;
   const canvas = document.createElement("canvas");
   canvas.setAttribute("content", "drawable");
@@ -168,6 +177,7 @@ export const createBluescreen = (host: HTMLElement): Bluescreen | undefined => {
     pointerActive: gl.getUniformLocation(program, "uPointerActive"),
     time: gl.getUniformLocation(program, "uTime"),
     reveal: gl.getUniformLocation(program, "uReveal"),
+    intensity: gl.getUniformLocation(program, "uIntensity"),
   };
 
   const content = host;
@@ -205,7 +215,8 @@ export const createBluescreen = (host: HTMLElement): Bluescreen | undefined => {
     gl.uniform2f(uniforms.pointer, pointer.x, pointer.y);
     gl.uniform1f(uniforms.pointerActive, pointer.active);
     gl.uniform1f(uniforms.time, (now - started) / 1000);
-    gl.uniform1f(uniforms.reveal, visibleSince < 0 ? 0 : Math.min(1, (now - visibleSince) / 1600));
+    gl.uniform1f(uniforms.reveal, visibleSince < 0 ? 0 : Math.min(1, (now - visibleSince) / revealMs));
+    gl.uniform1f(uniforms.intensity, intensity);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   };
 
@@ -255,6 +266,7 @@ export const createBluescreen = (host: HTMLElement): Bluescreen | undefined => {
 
   return {
     replay: () => {
+      revealMs = options.replayMs ?? revealMs;
       visibleSince = performance.now();
       canvas.requestPaint();
     },

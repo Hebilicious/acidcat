@@ -1,13 +1,12 @@
 ---
 import { catalogSnippets, highlight } from "../lib/snippets";
-import Blueprint from "./Blueprint.astro";
 
 const surfaces = [
   { id: "cli", label: "CLI", kind: "Command line", output: "home aircon power set --on" },
   { id: "mcp", label: "MCP", kind: "Tool for agents", output: "aircon.power.set  destructiveHint" },
   { id: "webmcp", label: "WebMCP", kind: "Tool in your web page", output: "modelContext.registerTool" },
   { id: "http", label: "HTTP", kind: "API endpoint", output: "POST /capabilities/aircon.power.set" },
-  { id: "ts", label: "TypeScript", kind: "Typed function", output: "execute({ on: true })" },
+  { id: "ts", label: "Programmatic", kind: "Programmatic access", output: "execute({ on: true })" },
 ];
 
 const outletY = (index: number) => 50 + index * 90;
@@ -22,8 +21,8 @@ const snippets = await catalogSnippets();
 <section class="schematic" aria-labelledby="schematic-title">
   <div class="schematic-inner">
     <header class="section-head">
-      <p class="eyebrow">Fig. 1 — The catalog engine</p>
-      <h2 id="schematic-title">Declare it once. <em>Every door opens.</em></h2>
+      <p class="eyebrow">Fig. 1 — From catalog to surfaces</p>
+      <h2 id="schematic-title">One capability, <em>five surfaces</em></h2>
       <p class="lede">
         A capability is one entry in the catalog: its input, its failures and the targets that may call it. Each binding turns that entry into a surface. No surface has its own copy of the rules.
       </p>
@@ -35,7 +34,7 @@ const snippets = await catalogSnippets();
         <div class="engine-plate" data-catalog-screen>
           <span class="rivet" /><span class="rivet" /><span class="rivet" /><span class="rivet" />
           {snippets.map(snippet => (
-            <div data-fig1-panel id={`fig1-${snippet.id}`} hidden={snippet.id !== "json"}>
+            <div data-fig1-panel id={`fig1-${snippet.id}`} hidden={snippet.id !== "ts"}>
               <p class="plate-title">{snippet.source.split("/").pop()}</p>
               <div class="catalog-code" tabindex="0" role="region" aria-label={`${snippet.label} capability definition`} set:html={highlight(snippet.code, snippet.language)} />
             </div>
@@ -43,8 +42,8 @@ const snippets = await catalogSnippets();
         </div>
         <div class="language-rail" role="group" aria-label="Catalog language">
           {snippets.map(snippet => (
-            <button type="button" data-language={snippet.id} aria-label={snippet.label} aria-controls={`fig1-${snippet.id}`} aria-pressed={snippet.id === "json"}>
-              {snippet.id === "json" ? "{}" : snippet.id.toUpperCase()}
+            <button type="button" data-language={snippet.id} aria-label={snippet.label} aria-controls={`fig1-${snippet.id}`} aria-pressed={snippet.id === "ts"}>
+              {snippet.id.toUpperCase()}
             </button>
           ))}
         </div>
@@ -77,7 +76,6 @@ const snippets = await catalogSnippets();
 
     </div>
 
-    <Blueprint />
   </div>
 </section>
 
@@ -220,8 +218,6 @@ const snippets = await catalogSnippets();
   .engine-stage { position: relative; }
   .engine-plate { min-width: 0; }
   .catalog-code { height: 17rem; overflow: auto; scrollbar-color: var(--palette-brass-600) transparent; }
-  #fig1-json { --code-token-keyword: var(--code-foreground); }
-  #fig1-json :global(.line:first-child span:first-child) { color: var(--code-foreground) !important; }
   .catalog-code :global(pre) {
     font-family: var(--font-family-mono);
     font-size: var(--typography_fluid-text-xs);
