@@ -33,7 +33,7 @@ void main() {
 export function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gl: ElementTextureContext) {
   const renderer = new WebGLRenderer({ canvas, context: gl, alpha: true, antialias: true });
   const scene = new Scene();
-  const camera = new OrthographicCamera(-600, 600, 280, -280, 1, 2500);
+  const camera = new OrthographicCamera(-600, 600, 312, -312, 1, 2500);
   scene.fog = new FogExp2(0x111a19, .00015);
   const studio = new RoomEnvironment();
   const pmrem = new PMREMGenerator(renderer);
@@ -48,24 +48,26 @@ export function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gl: Elem
   const { device, pipe, finish } = hardware(scene);
   const time = { value: 0 };
   const inputs = Array.from(host.querySelectorAll<HTMLElement>("[data-catalog-screen], [data-surface]"));
-  const inlet = device(490, 340, -322, 27, true);
+  const catalogWidth = 600;
+  const catalogHeight = 436;
+  const inlet = device(catalogWidth, catalogHeight, -274, -40, true);
   const rail = host.querySelector<HTMLElement>(".language-rail");
   const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-language]"));
   const railMarker = document.createTextNode("");
   rail?.before(railMarker);
   if (rail) host.after(rail);
-  const bulbs = tubeBank(buttons.map(button => button.textContent.trim()));
+  const bulbs = tubeBank(buttons.map(button => button.textContent.trim()), catalogHeight / 2 + 48);
   for (const { tube } of bulbs) inlet.add(tube);
   const screens = inputs.map((element, index) => {
     const catalog = index === 0;
-    const w = catalog ? 490 : 403;
-    const h = catalog ? 340 : 68;
+    const w = catalog ? catalogWidth : 384;
+    const h = catalog ? catalogHeight : 68;
     const y = catalog ? 0 : (3 - index) * 108;
-    const chassis = catalog ? inlet : device(w, h, 366, y, false);
+    const chassis = catalog ? inlet : device(w, h, 383, y, false);
     const excitation = { value: 0 };
     if (!catalog) {
-      const outlet = inlet.localToWorld(new Vector3(259, (3 - index) * 48, -18));
-      const port = chassis.localToWorld(new Vector3(-212, 0, -18));
+      const outlet = inlet.localToWorld(new Vector3(catalogWidth / 2 + 30, (3 - index) * 48, -18));
+      const port = chassis.localToWorld(new Vector3(-w / 2 - 19, 0, -18));
       pipe(outlet, port, time, excitation);
     }
     const texture = gl.createTexture();
@@ -182,8 +184,8 @@ export function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gl: Elem
       const button = buttons[i];
       const hover = button?.matches(":hover, :focus-visible");
       const selected = button?.getAttribute("aria-pressed") === "true";
-      emission.opacity = selected || hover ? 1 : .81;
-      emission.color.setScalar(selected || hover ? 1.45 : .9);
+      emission.opacity = selected || hover ? 1 : .69;
+      emission.color.setScalar(selected || hover ? 1.45 : .78);
       tube.rotation.y += ((hover ? .17 : 0) - tube.rotation.y) * .12;
     }
     renderer.render(scene, camera);

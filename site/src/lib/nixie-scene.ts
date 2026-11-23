@@ -184,7 +184,7 @@ function buildTube() {
   return group;
 }
 
-export function tubeBank(labels: string[]) {
+export function tubeBank(labels: string[], socketY: number) {
   const template = buildTube();
   return labels.map((label, index) => {
     const tube = template.clone();
@@ -194,7 +194,7 @@ export function tubeBank(labels: string[]) {
     filament.renderOrder = 1;
     tube.add(filament);
     tube.scale.set(52, 35, 44);
-    tube.position.set((index - (labels.length - 1) / 2) * 75, -275, 16);
+    tube.position.set((index - (labels.length - 1) / 2) * 86, socketY, 16);
     return { tube, emission };
   });
 }

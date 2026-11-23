@@ -1,4 +1,4 @@
-import { AdditiveBlending, PlaneGeometry, TorusGeometry, BoxGeometry, CubicBezierCurve3, CylinderGeometry, ExtrudeGeometry, Group, Mesh, MeshPhongMaterial, MeshStandardMaterial, ShaderMaterial, Shape, TubeGeometry, Vector3 } from "three";
+import { AdditiveBlending, PlaneGeometry, InstancedMesh, TorusGeometry, BoxGeometry, CubicBezierCurve3, CylinderGeometry, ExtrudeGeometry, Group, Mesh, MeshPhongMaterial, MeshStandardMaterial, ShaderMaterial, Shape, TubeGeometry, Vector3 } from "three";
 import { machinedFinish } from "./engine-finish.js";
 import type * as Three from "three";
 
@@ -38,6 +38,25 @@ export function hardware(scene: Three.Scene) {
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 137, uv.getY(i) / 137);
     mesh(group, geometry, material, 0, 0, z);
   }
+  function cable(group: Three.Group, start: Three.Vector3, end: Three.Vector3, droop: number, radius: number, material: Three.Material) {
+    const bend = new Vector3((end.x - start.x) * .4, -droop, 6);
+    const curve = new CubicBezierCurve3(start, start.clone().add(bend), end.clone().add(new Vector3(-bend.x, bend.y, bend.z)), end);
+    mesh(group, new TubeGeometry(curve, 24, radius, 8, false), material, 0, 0, 0);
+  }
+  function cornerCasting() {
+    const outline = new Shape();
+    outline.moveTo(0, 13);
+    outline.lineTo(13, 0);
+    outline.lineTo(57, 0);
+    outline.lineTo(50, 8);
+    outline.lineTo(19, 8);
+    outline.lineTo(9, 18);
+    outline.lineTo(9, 28);
+    outline.lineTo(0, 35);
+    outline.closePath();
+    return new ExtrudeGeometry(outline, { depth: 3, bevelSize: 1.6, bevelThickness: 1.6, bevelSegments: 2 });
+  }
+  const casting = cornerCasting();
   function device(w: number, h: number, x: number, y: number, catalog: boolean) {
     const group = new Group();
     group.position.set(x, y, 0);
@@ -70,6 +89,11 @@ export function hardware(scene: Three.Scene) {
       for (const dy of [-1, 1]) {
         const bx = dx * (w / 2 + margin / 3.5);
         const by = dy * (h / 2 + margin / 3.5);
+        const corner = mesh(group, casting, copper, dx * (width / 2 - 1), dy * (height / 2 - 1), 5);
+        corner.scale.set(-dx, -dy, 1);
+        for (const inset of [20, 44]) {
+          mesh(group, bolt, nickel, dx * (width / 2 - inset), dy * (height / 2 - 5), 10).scale.setScalar(.68);
+        }
         mesh(group, bolt, nickel, bx, by, 6);
         const slot = mesh(group, unitBox, rubber, bx, by, 7.3);
         slot.scale.set(4.5, 0.85, 0.3);
@@ -93,13 +117,29 @@ export function hardware(scene: Three.Scene) {
     }
     if (catalog) {
       const rail = new Group();
-      rail.position.set(0,-275,8);
+      const socketY = h / 2 + 48;
+      rail.position.set(0, socketY - 7, 9);
       group.add(rail);
-      slab(rail, 464, 14, -16, 28, 3, brass);
-      for (const side of [-1,1]) {
-        const support = mesh(group, cylinder, copper, side*211,-225,-10);
-        support.scale.set(7,98,7);
-        for (const y of [-262,-250,-202,-193]) mesh(group,cylinder,brass,side*211,y,-10).scale.set(9,5,9);
+      slab(rail, 424, 11, -21, 30, 3, steel);
+      slab(rail, 418, 4, 9, 3, 1, brass);
+      for (const side of [-1, 1]) {
+        const post = mesh(group, cylinder, copper, side * 194, socketY - 20, -3);
+        post.scale.set(8, 30, 8);
+        for (const y of [socketY - 16, socketY - 31]) {
+          mesh(group, cylinder, brass, post.position.x, y, -3).scale.set(12, 5, 12);
+        }
+        const foot = new Group();
+        foot.position.set(side * w * .36, -height / 2 - 14, -16);
+        group.add(foot);
+        slab(foot, 39, 24, -16, 35, 4, steel);
+        const sole = new Group();
+        sole.position.y = -12;
+        foot.add(sole);
+        slab(sole, 72, 8, -22, 50, 3, brass);
+      }
+      for (let socket = -2; socket <= 2; socket++) {
+        cable(group, new Vector3(socket * 86, socketY - 6, 1), new Vector3(socket * 86 + 42, h / 2 + 19, -7), 16, 2.8, rubber);
+        cable(group, new Vector3(socket * 86 + 6, socketY - 6, 0), new Vector3(socket * 86 + 49, h / 2 + 19, -7), 13, 1.6, copper);
       }
       const columnX = w / 2 + 29;
       const column = mesh(group, cylinder, copper, columnX, 0, -16);
@@ -150,7 +190,7 @@ export function hardware(scene: Three.Scene) {
     return group;
   }
   function pipe(start: Three.Vector3, end: Three.Vector3, time: Three.IUniform<number>, excitation: Three.IUniform<number>) {
-    const curve = new CubicBezierCurve3(start, start.clone().add(new Vector3(95, 0, 5)), end.clone().sub(new Vector3(100, 0, 0)), end);
+    const curve = new CubicBezierCurve3(start, start.clone().add(new Vector3(78, -20, 14)), end.clone().sub(new Vector3(83, 25, 6)), end);
     const fluid = new ShaderMaterial({
       uniforms: { time, excitation },
       vertexShader: 'varying vec2 v; void main(){ v=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',
@@ -160,6 +200,9 @@ export function hardware(scene: Three.Scene) {
           float pulse = pow(.5+.5*cos(v.x*38.-time*3.2), 5.);
           float tube = .55+.45*cos(v.y*6.283);
           vec3 acid = mix(vec3(.18,.48,.04), vec3(.75,1.,.22), pulse);
+          vec2 cell = vec2(fract(v.x*13.-time*.65)-.5, sin(v.y*6.283 + floor(v.x*13.-time*.65)*2.4));
+          float bubble = length(cell*vec2(3.4,1.7));
+          acid += vec3(.52,.62,.40)*(1.-smoothstep(.08,.24,abs(bubble-.69)));
           gl_FragColor = vec4(mix(acid, vec3(.6,1.,.74), excitation*.72)*(.62+.38*tube)+excitation*.12,1.);
         }`,
     });
@@ -178,12 +221,41 @@ export function hardware(scene: Three.Scene) {
     });
     mesh(scene, new TubeGeometry(curve, 54, 14, 20, false), halo, 0, 0, 0);
     const axis = new Vector3(0, 1, 0);
-    for (const t of [0.035, 0.09, 0.14, 0.51, 0.88, 0.93, 0.975]) {
-      const joint = mesh(scene, cylinder, t === 0.09 || t === 0.93 ? copper : brass, 0, 0, 0);
-      joint.position.copy(curve.getPointAt(t));
-      joint.quaternion.setFromUnitVectors(axis, curve.getTangentAt(t));
-      const small = t === 0.51 || t === 0.14 || t === 0.88;
-      joint.scale.set(small ? 8 : 11, small ? 4 : 10, small ? 8 : 11);
+    function sleeve(t: number, radius: number, length: number, material: Three.Material, geometry = cylinder) {
+      const part = mesh(scene, geometry, material, 0, 0, 0);
+      part.position.copy(curve.getPointAt(t));
+      part.quaternion.setFromUnitVectors(axis, curve.getTangentAt(t));
+      part.scale.set(radius, length, radius);
+      return part;
+    }
+    const nut = new CylinderGeometry(1, 1, 1, 6);
+    for (const side of [0, 1]) {
+      const sign = side === 0 ? 1 : -1;
+      const flange = sleeve(side, 17, 8, steel);
+      for (let i = 0; i < 6; i++) {
+        const angle = i * Math.PI / 3;
+        const stud = mesh(scene, nut, nickel, 0, 0, 0);
+        stud.position.set(Math.cos(angle)*13, sign*5, Math.sin(angle)*13).applyQuaternion(flange.quaternion).add(flange.position);
+        stud.quaternion.copy(flange.quaternion);
+        stud.scale.set(2.4, 4, 2.4);
+      }
+      sleeve(side + sign*.045, 12, 12, brass, nut);
+      sleeve(side + sign*.09, 9, 6, copper);
+    }
+    const ring = new TorusGeometry(7.2, 1.4, 8, 20).rotateX(Math.PI / 2);
+    const seams = new InstancedMesh(ring, glass, 16);
+    const station = new Group();
+    for (let i = 0; i < seams.count; i++) {
+      const t = .14 + i * .048;
+      station.position.copy(curve.getPointAt(t));
+      station.quaternion.setFromUnitVectors(axis, curve.getTangentAt(t));
+      station.updateMatrix();
+      seams.setMatrixAt(i, station.matrix);
+    }
+    scene.add(seams);
+    for (const t of [.32, .69]) {
+      sleeve(t, 9.3, 11, copper);
+      sleeve(t, 10.5, 5, brass, nut);
     }
   }
   return { device, pipe, finish };

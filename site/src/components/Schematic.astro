@@ -6,7 +6,7 @@ const surfaces = [
   { id: "mcp", label: "MCP", kind: "Tool for agents", output: "aircon.power.set  destructiveHint" },
   { id: "webmcp", label: "WebMCP", kind: "Tool in your web page", output: "modelContext.registerTool" },
   { id: "http", label: "HTTP", kind: "API endpoint", output: "POST /capabilities/aircon.power.set" },
-  { id: "ts", label: "Programmatic", kind: "Programmatic access", output: "execute({ on: true })" },
+  { id: "ts", label: "Programmatic", kind: "Access from code", output: "execute({ on: true })" },
 ];
 
 const outletY = (index: number) => 50 + index * 90;
@@ -31,6 +31,13 @@ const snippets = await catalogSnippets();
     <div class="engine-stage">
     <div class="machine" data-machine>
       <div class="engine-card">
+        <div class="language-rail" role="group" aria-label="Catalog language">
+          {snippets.map(snippet => (
+            <button type="button" data-language={snippet.id} aria-label={snippet.label} aria-controls={`fig1-${snippet.id}`} aria-pressed={snippet.id === "ts"}>
+              {snippet.id.toUpperCase()}
+            </button>
+          ))}
+        </div>
         <div class="engine-plate" data-catalog-screen>
           <span class="rivet" /><span class="rivet" /><span class="rivet" /><span class="rivet" />
           {snippets.map(snippet => (
@@ -38,13 +45,6 @@ const snippets = await catalogSnippets();
               <p class="plate-title">{snippet.source.split("/").pop()}</p>
               <div class="catalog-code" tabindex="0" role="region" aria-label={`${snippet.label} capability definition`} set:html={highlight(snippet.code, snippet.language)} />
             </div>
-          ))}
-        </div>
-        <div class="language-rail" role="group" aria-label="Catalog language">
-          {snippets.map(snippet => (
-            <button type="button" data-language={snippet.id} aria-label={snippet.label} aria-controls={`fig1-${snippet.id}`} aria-pressed={snippet.id === "ts"}>
-              {snippet.id.toUpperCase()}
-            </button>
           ))}
         </div>
       </div>
@@ -103,7 +103,7 @@ const snippets = await catalogSnippets();
 
   .machine {
     display: grid;
-    grid-template-columns: minmax(0, 1.05fr) minmax(80px, 0.5fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.4fr) minmax(80px, 0.5fr) minmax(0, 1fr);
     align-items: center;
     margin-top: var(--spacing_fluid-space-2xl);
   }
@@ -117,7 +117,7 @@ const snippets = await catalogSnippets();
     display: none;
   }
   :global(.holo-canvas) {
-    aspect-ratio: 1200 / 560;
+    aspect-ratio: 1200 / 624;
   }
   :global(.holo-canvas) > [drawable] {
     position: absolute;
@@ -253,7 +253,7 @@ const snippets = await catalogSnippets();
   .engine-stage > .language-rail button:focus-visible { opacity: 1; background: transparent; color: transparent; outline: 2px solid var(--palette-brass-200); }
   :global(.holo-canvas) .plate-title { color: var(--palette-brass-300); }
   :global(.holo-canvas) .engine-plate { align-content: start; grid-template-columns: minmax(0, 1fr); }
-  :global(.holo-canvas) .catalog-code { height: 260px; }
+  :global(.holo-canvas) .catalog-code { height: auto; overflow: visible; }
   .manifold {
     width: 100%;
     height: 460px;
