@@ -70,8 +70,13 @@ pub(crate) const MCP_EVENTS_EXTENSION: &str = "io.modelcontextprotocol/events";
 pub(crate) const MCP_SUBSCRIPTION_ID: &str = "io.modelcontextprotocol/subscriptionId";
 pub(crate) const MCP_UNKNOWN_TOOL: i64 = -32602;
 pub(crate) const MCP_HEADER_MISMATCH: i64 = -32020;
-pub(crate) const MCP_NAMED_METHODS: [&str; 5] =
-    ["tools/call", "events/stream", "events/poll", "events/subscribe", "events/unsubscribe"];
+pub(crate) const MCP_NAMED_METHODS: [&str; 5] = [
+    "tools/call",
+    "events/stream",
+    "events/poll",
+    "events/subscribe",
+    "events/unsubscribe",
+];
 pub(crate) const MCP_HEARTBEAT_MIN_MS: u64 = 1000;
 pub(crate) const MCP_HEARTBEAT_MAX_MS: u64 = 60000;
 
