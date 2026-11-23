@@ -51,9 +51,11 @@ export default defineConfig({
       value: {
         family: {
           value: {
-            display: '"Fraunces Variable", "Iowan Old Style", "Palatino Linotype", Georgia, serif',
-            sans: '"Space Grotesk Variable", ui-sans-serif, system-ui, sans-serif',
-            mono: '"JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace',
+            display: '"Monaspace Xenon", ui-monospace, "SFMono-Regular", Menlo, monospace',
+            accent: '"Monaspace Radon", "Monaspace Xenon", ui-monospace, monospace',
+            sans: '"Monaspace Argon", ui-monospace, "SFMono-Regular", Menlo, monospace',
+            label: '"Monaspace Krypton", ui-monospace, "SFMono-Regular", Menlo, monospace',
+            mono: '"Monaspace Neon", ui-monospace, "SFMono-Regular", Menlo, monospace',
           },
         },
         tracking: {

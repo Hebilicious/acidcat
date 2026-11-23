@@ -12,11 +12,14 @@
   },
   "dependencies": {
     "@astrojs/starlight": "catalog:",
-    "@fontsource-variable/fraunces": "catalog:",
-    "@fontsource-variable/jetbrains-mono": "catalog:",
-    "@fontsource-variable/space-grotesk": "catalog:",
+    "@fontsource/monaspace-argon": "catalog:",
+    "@fontsource/monaspace-krypton": "catalog:",
+    "@fontsource/monaspace-neon": "catalog:",
+    "@fontsource/monaspace-radon": "catalog:",
+    "@fontsource/monaspace-xenon": "catalog:",
     "astro": "catalog:",
     "sharp": "catalog:",
+    "shiki": "catalog:",
     "three": "catalog:"
   },
   "devDependencies": {

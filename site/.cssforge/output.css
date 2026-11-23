@@ -114,9 +114,11 @@
 --typography-weight-display-bold: 600;
 /*____ Primitives ____*/
 /* font */
---font-family-display: "Fraunces Variable", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
---font-family-sans: "Space Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
---font-family-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
+--font-family-display: "Monaspace Xenon", ui-monospace, "SFMono-Regular", Menlo, monospace;
+--font-family-accent: "Monaspace Radon", "Monaspace Xenon", ui-monospace, monospace;
+--font-family-sans: "Monaspace Argon", ui-monospace, "SFMono-Regular", Menlo, monospace;
+--font-family-label: "Monaspace Krypton", ui-monospace, "SFMono-Regular", Menlo, monospace;
+--font-family-mono: "Monaspace Neon", ui-monospace, "SFMono-Regular", Menlo, monospace;
 --font-tracking-tight: -0.02em;
 --font-tracking-normal: 0;
 --font-tracking-label: 0.24em;

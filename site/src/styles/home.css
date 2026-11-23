@@ -60,12 +60,12 @@ h3 {
   line-height: 1.02;
   letter-spacing: var(--font-tracking-tight);
   margin: 0;
-  font-variation-settings: "SOFT" 30, "WONK" 0;
 }
 h1 em,
 h2 em {
-  font-style: italic;
-  font-variation-settings: "SOFT" 100, "WONK" 1;
+  font-family: var(--font-family-accent);
+  font-style: normal;
+  font-weight: var(--typography-weight-display-medium);
   background: linear-gradient(100deg, var(--palette-brass-200), var(--palette-brass-400) 45%, var(--palette-copper-300));
   -webkit-background-clip: text;
   background-clip: text;
@@ -74,7 +74,7 @@ h2 em {
 
 .eyebrow {
   margin: 0 0 var(--spacing_fluid-space-s);
-  font-family: var(--font-family-mono);
+  font-family: var(--font-family-label);
   font-size: var(--typography_fluid-text-xs);
   letter-spacing: var(--font-tracking-wide);
   text-transform: uppercase;
@@ -309,7 +309,7 @@ h2 em {
   border-radius: var(--radius-size-s);
   background: transparent;
   color: var(--palette-brass-300);
-  font: 500 0.78rem var(--font-family-mono);
+  font: 500 0.78rem var(--font-family-label);
   letter-spacing: 0.08em;
   cursor: pointer;
 }

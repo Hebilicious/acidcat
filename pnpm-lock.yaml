@@ -179,13 +179,19 @@ catalogs:
     '@elysiajs/node':
       specifier: 1.4.5
       version: 1.4.5
-    '@fontsource-variable/fraunces':
+    '@fontsource/monaspace-argon':
       specifier: 5.3.0
       version: 5.3.0
-    '@fontsource-variable/jetbrains-mono':
+    '@fontsource/monaspace-krypton':
       specifier: 5.3.0
       version: 5.3.0
-    '@fontsource-variable/space-grotesk':
+    '@fontsource/monaspace-neon':
+      specifier: 5.3.0
+      version: 5.3.0
+    '@fontsource/monaspace-radon':
+      specifier: 5.3.0
+      version: 5.3.0
+    '@fontsource/monaspace-xenon':
       specifier: 5.3.0
       version: 5.3.0
     '@hebilicious/cssforge':
@@ -254,6 +260,9 @@ catalogs:
     sharp:
       specifier: 0.35.5
       version: 0.35.5
+    shiki:
+      specifier: 4.6.0
+      version: 4.6.0
     three:
       specifier: 0.187.0
       version: 0.187.0
@@ -522,13 +531,19 @@ importers:
       '@astrojs/starlight':
         specifier: 'catalog:'
         version: 0.42.10(astro@7.4.7(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(supports-color@7.2.0)(typescript@7.0.2)
-      '@fontsource-variable/fraunces':
+      '@fontsource/monaspace-argon':
         specifier: 'catalog:'
         version: 5.3.0
-      '@fontsource-variable/jetbrains-mono':
+      '@fontsource/monaspace-krypton':
         specifier: 'catalog:'
         version: 5.3.0
-      '@fontsource-variable/space-grotesk':
+      '@fontsource/monaspace-neon':
+        specifier: 'catalog:'
+        version: 5.3.0
+      '@fontsource/monaspace-radon':
+        specifier: 'catalog:'
+        version: 5.3.0
+      '@fontsource/monaspace-xenon':
         specifier: 'catalog:'
         version: 5.3.0
       astro:
@@ -537,6 +552,9 @@ importers:
       sharp:
         specifier: 'catalog:'
         version: 0.35.5(@types/node@26.6.6)
+      shiki:
+        specifier: 'catalog:'
+        version: 4.6.0
       three:
         specifier: 'catalog:'
         version: 0.187.0
@@ -1051,14 +1069,20 @@ packages:
   '@fastify/busboy@3.2.3':
     resolution: {integrity: sha512-fmo/IKgkenPzz3qTKG+sIUXdF/Kv83AkvvOXJHPTHJeKJbat8SsL1ihUaFaDotqoEl4UZ1Lf8Eb/3vK6eaWX2A==}
 
-  '@fontsource-variable/fraunces@5.3.0':
-    resolution: {integrity: sha512-9BYGySn4AHEJdgp9Z28tQ3X+laJMEOITXkQarZXeloWQZDq5oOvXJ3kDA8c7MGIfpogIaZfjrQBqmda8POOCKA==}
+  '@fontsource/monaspace-argon@5.3.0':
+    resolution: {integrity: sha512-sfP9wbeL7OLt/vxHCOtssa4AadPFjQAClYg1rl+PybqfJLw8yG86f8q3qtx4dCHpsN82x8Cb2z0BmP7y93QUNQ==}
 
-  '@fontsource-variable/jetbrains-mono@5.3.0':
-    resolution: {integrity: sha512-F32xpS2NsGYoQi2ADSkKTgpJj7ozajsGgDJ8woTnqjmIB+dxDIqImjl4pXZVEExu8UFZ2ndhmX18EBS/hdz3Lw==}
+  '@fontsource/monaspace-krypton@5.3.0':
+    resolution: {integrity: sha512-dAvofm5VNugRpprnOYMOEnlcnlAJWrQXcoy0PEnmdc9NU+fyDeSDYOTFoJPmJBADwcnVqXA6fLgTlz7TUQQx6g==}
 
-  '@fontsource-variable/space-grotesk@5.3.0':
-    resolution: {integrity: sha512-2IxmvfB08i9vnGB3Ym/AXvhRE+8XOjWMXIyDum03c+tPwH0FUoMNQfGpU8NXPxjbws0Vvss3AH0Zqt4oJBBAdw==}
+  '@fontsource/monaspace-neon@5.3.0':
+    resolution: {integrity: sha512-a4B4L4nmW+mW42gDb6JUugy2fA3DC0QKi2yRMXKzuNsN+wHhUvrqgYndIBMds+Evq/cWaMJgd06x14dHuBNxwA==}
+
+  '@fontsource/monaspace-radon@5.3.0':
+    resolution: {integrity: sha512-aadcdk9Gg4yOwk4Zei93k3pzL1jufhrPQIxpLluqO+RoVv5MoSqNlsvFuYEEthE5N1ORaS3RleohBdP0yBzDGQ==}
+
+  '@fontsource/monaspace-xenon@5.3.0':
+    resolution: {integrity: sha512-f65HlIRnq072ZMGJL2AMCPE1198EMog1i5vko3BrmEn06+Z+Ttvyv6lgXkKlo04oa/E1ObZit1xHHNVFg8mA/Q==}
 
   '@graphql-hive/logger@1.1.1':
     resolution: {integrity: sha512-fVUlEQCpnJnR/KJeEDHZbEDwEq4fMNTjKvicauCFMfxPLlcpIWdrscXpI/azwQkpsARyWPV0RnwdgjZIrFBmwQ==}
@@ -3860,11 +3884,15 @@ snapshots:
 
   '@fastify/busboy@3.2.3': {}
 
-  '@fontsource-variable/fraunces@5.3.0': {}
+  '@fontsource/monaspace-argon@5.3.0': {}
 
-  '@fontsource-variable/jetbrains-mono@5.3.0': {}
+  '@fontsource/monaspace-krypton@5.3.0': {}
 
-  '@fontsource-variable/space-grotesk@5.3.0': {}
+  '@fontsource/monaspace-neon@5.3.0': {}
+
+  '@fontsource/monaspace-radon@5.3.0': {}
+
+  '@fontsource/monaspace-xenon@5.3.0': {}
 
   '@graphql-hive/logger@1.1.1': {}
 
