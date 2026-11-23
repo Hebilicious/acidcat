@@ -114,9 +114,9 @@ On cancellation, the core drops the future of the work and cancels `call.cancel_
 
 `App::new()` takes the targets, then the capabilities and the events. `build()` checks the application and returns the rules that it breaks, if any.
 
-`render_catalog()` returns the catalog in canonical form. Write it to a file at build time, and run `acid-cat check` on it. The air conditioner prints it with `aircon catalog`:
+`render_catalog()` returns the catalog in canonical form. Write it to a file at build time, and run `acid-cat check` on it. The air conditioner prints it with `aircon catalog`. This excerpt of `examples/aircon/core-rust/src/main.rs` shows how:
 
-```rust title="examples/aircon/core-rust/src/main.rs (part)"
+```rust title="main.rs"
 Some("catalog") => print!("{}", app.render_catalog()),
 ```
 
@@ -129,9 +129,9 @@ Some("catalog") => print!("{}", app.render_catalog()),
 | HTTP | `http::HttpBinding::new(app, context, HttpOptions::default())` |
 | CLI | `cli::cli_main(app, context, CliOptions::new(name, version))` |
 
-`McpBinding` and `HttpBinding` are handlers. `remote::serve(address, routes)` serves them by path prefix. The air conditioner serves the HTTP binding of its `cli` target this way:
+`McpBinding` and `HttpBinding` are handlers. `remote::serve(address, routes)` serves them by path prefix. The air conditioner serves the HTTP binding of its `cli` target this way, in this excerpt of `examples/aircon/core-rust/src/main.rs`:
 
-```rust title="examples/aircon/core-rust/src/main.rs (part)"
+```rust title="main.rs"
 use acid_cat_core::http::{HttpBinding, HttpOptions};
 let cli = HttpBinding::new(
     app,

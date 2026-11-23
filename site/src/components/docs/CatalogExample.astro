@@ -2,18 +2,18 @@
 import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
 import { catalogExamples } from "../../lib/catalog-examples.ts";
 import type { CatalogSelection } from "../../lib/catalog-examples.ts";
+import { syncKeys } from "../../lib/ecosystem.ts";
 
-type Props = CatalogSelection & { readonly title?: string };
+type Props = CatalogSelection;
 
-const { title, ...selection } = Astro.props;
-const examples = await catalogExamples(selection);
+const examples = await catalogExamples(Astro.props);
 ---
 
-<Tabs syncKey="catalog-language">
+<Tabs syncKey={syncKeys.catalogLanguage}>
   {
     examples.map((example) => (
       <TabItem label={example.label}>
-        <Code code={example.code} lang={example.lang} title={title === undefined ? example.title : `${example.title}: ${title}`} />
+        <Code code={example.code} lang={example.lang} title={example.title} />
       </TabItem>
     ))
   }

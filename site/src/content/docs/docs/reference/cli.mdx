@@ -94,7 +94,7 @@ Tests a running implementation of the [conformance fixture](/spec/conformance/#t
 
 A failed check of a SHOULD rule gives a warning, marked `!`, and passes. The exit code is 1 if a check fails.
 
-`conform()`, `serve()` and `createTestHost()` also come from `@acid-cat/cli`, for use in code. This `serve()` is for tests only: it listens on `127.0.0.1`, on a free port, with plain HTTP.
+`conform()` and `serve()` also come from `@acid-cat/cli`, for use in code. This `serve()` is for tests only: it listens on `127.0.0.1`, on a free port, with plain HTTP.
 
 ## Output
 
@@ -105,7 +105,9 @@ A failed check of a SHOULD rule gives a warning, marked `!`, and passes. The exi
 <Tabs syncKey="cli-or-code">
 <TabItem label="Command line">
 
-```json title="acid-cat check --output json aircon.acidcat.json"
+`acid-cat check --output json aircon.acidcat.json` writes:
+
+```json
 { "conforms": false, "catalogs": [{ "file": "aircon.acidcat.json", "errors": ["…"], "warnings": [] }] }
 ```
 
@@ -131,7 +133,9 @@ console.log(report.errors, report.warnings);
 <Tabs syncKey="cli-or-code">
 <TabItem label="Command line">
 
-```json title="acid-cat conform --output json --http http://127.0.0.1:3000/api"
+`acid-cat conform --output json --http http://127.0.0.1:3000/api` writes:
+
+```json
 { "passed": 0, "failed": 0, "warnings": 0, "checks": [{ "binding": "…", "name": "…", "rule": "…", "passed": true }] }
 ```
 

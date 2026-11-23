@@ -1,0 +1,14 @@
+---
+import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
+import { catalogLanguages, syncKeys } from "../../lib/ecosystem.ts";
+---
+
+<Tabs syncKey={syncKeys.catalogLanguage}>
+  {
+    catalogLanguages.map((language) => (
+      <TabItem label={language.label}>
+        <Code code={language.write.join("\n")} lang="sh" />
+      </TabItem>
+    ))
+  }
+</Tabs>

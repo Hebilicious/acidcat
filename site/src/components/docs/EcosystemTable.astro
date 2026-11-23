@@ -1,0 +1,44 @@
+---
+import { catalogLanguages, cores, githubBlob } from "../../lib/ecosystem.ts";
+
+interface Props {
+  readonly of: "catalog-languages" | "cores";
+}
+
+const { of } = Astro.props;
+
+const rows =
+  of === "catalog-languages"
+    ? catalogLanguages.map((language) => ({ name: language.label, packageName: language.packageName, registry: language.registry, note: undefined, example: language.example }))
+    : cores.map((core) => ({ name: core.label, packageName: core.packageName, registry: core.registry, note: core.note, example: core.example }));
+const tree = (path: string): string => `${githubBlob.replace("/blob/", "/tree/")}/${path}`;
+---
+
+<table>
+  <thead>
+    <tr>
+      <th>{of === "catalog-languages" ? "Language" : "Core"}</th>
+      <th>Package</th>
+      {of === "cores" && <th>Style</th>}
+      <th>Example</th>
+    </tr>
+  </thead>
+  <tbody>
+    {
+      rows.map((row) => (
+        <tr>
+          <td>{row.name}</td>
+          <td>
+            {row.registry} <code>{row.packageName}</code>
+          </td>
+          {row.note !== undefined && <td>{row.note}</td>}
+          <td>
+            <a href={tree(row.example)}>
+              <code>{row.example}</code>
+            </a>
+          </td>
+        </tr>
+      ))
+    }
+  </tbody>
+</table>

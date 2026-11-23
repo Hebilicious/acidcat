@@ -1,13 +1,15 @@
 ---
 title: Write a catalog
-description: Write the catalog from a source in Pkl, TypeScript, Python, Go or Rust, and let the tool write the canonical JSON.
+description: Write the catalog from a source in any supported language, and let the tool write the canonical JSON.
 sidebar:
   order: 21
 ---
 
-import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+import { Aside } from "@astrojs/starlight/components";
 import CatalogExample from "../../../../components/docs/CatalogExample.astro";
-import PackageInstall from "../../../../components/docs/PackageInstall.astro";
+import CatalogSteps from "../../../../components/docs/CatalogSteps.astro";
+import EcosystemInstall from "../../../../components/docs/EcosystemInstall.astro";
+import EcosystemTabs from "../../../../components/docs/EcosystemTabs.astro";
 
 The catalog is a JSON document, but you seldom write the JSON yourself. Write a **source**, and let a tool write the JSON. A source finds errors before it writes the file, shares types, and gives the same bytes each time.
 
@@ -24,26 +26,20 @@ When no code writes the catalog, use Pkl. Pkl checks the catalog rules while you
 
 Each catalog library gives the same steps. Every library writes the catalog in [canonical form](/spec/catalog/#canonical-form), so the same catalog gives the same bytes in every language.
 
-| Step | Pkl | TypeScript | Python | Go | Rust |
-| --- | --- | --- | --- | --- | --- |
-| Start | `amends "Catalog.pkl"` | `new Catalog({ title })` | `Catalog(title=…)` | `catalog.New(title, description)` | `Catalog::new(title, description)` |
-| Declare a target | `targets { … }` | `.target(name, {…})` | `.target(name, …)` | `.Target(name, …)` | `.target(name, …)` |
-| Share a type | `types { … }`, then `module.ref("Name")` | `c.type(name, {…})` | `c.type(name, {…})` | `c.Type(name, …)` | `c.r#type(name, json!({…}))` |
-| Declare a capability | `capabilities { … }` | `.capability(id, {…})` | `.capability(id, …)` | `.Capability(id, …)` | `.capability(id, …)` |
-| Declare an event | `events { … }` | `.event(id, {…})` | `.event(id, …)` | `.Event(id, …)` | `.event(id, …)` |
-| Check the rules | While you write | `.validate()` | `.validate()` | `.Validate()` | `.validate()` |
-| Render canonical JSON | `pkl eval`, then `acid-cat format` | `.render()` | `.render()` | `.Render()` | `.render()` |
+<CatalogSteps />
 
 A schema is a plain JSON Schema object in every language. Declaring a shared type returns the schema that refers to it, so a reference always points at a type that exists.
 
 ## A first catalog
 
+Install the catalog library of your language:
+
+<EcosystemInstall of="catalog-languages" />
+
 Each example declares one target, one shared type, one capability and one event, then writes the catalog.
 
-<Tabs syncKey="catalog-language">
-<TabItem label="TypeScript">
-
-<PackageInstall packages={["@acid-cat/catalog"]} dev />
+<EcosystemTabs of="catalog-languages">
+<Fragment slot="typescript">
 
 ```ts title="library.ts"
 import { writeFile } from "node:fs/promises";
@@ -72,12 +68,8 @@ await writeFile("acidcat.catalog.json", catalog.render());
 
 `render()` refuses to render a catalog that breaks a rule. `validate()` lists the rules that the catalog breaks.
 
-</TabItem>
-<TabItem label="Python">
-
-```sh
-pip install acid-cat-catalog
-```
+</Fragment>
+<Fragment slot="python">
 
 ```python title="weather.py"
 from pathlib import Path
@@ -106,16 +98,12 @@ Path("acidcat.catalog.json").write_text(catalog.render())
 
 `render()` raises `CatalogError` for a catalog that breaks a rule. The hints are `read_only`, `destructive` and `idempotent`.
 
-</TabItem>
-<TabItem label="Go">
+</Fragment>
+<Fragment slot="go">
 
-```sh
-go get github.com/Hebilicious/acidcat/packages/catalog/go
-```
+The Go package is named `catalog`. Import it with `import "github.com/Hebilicious/acidcat/packages/catalog/go"`. This excerpt is the body of a function:
 
-The Go package is named `catalog`. Import it with `import "github.com/Hebilicious/acidcat/packages/catalog/go"`.
-
-```go title="garage.go (part)"
+```go title="garage.go"
 c := catalog.New("Garage door", "")
 c.Target("phone", catalog.Target{Bindings: []string{"typescript"}})
 obstructed := c.Type("Obstructed", catalog.Schema{"type": "object"})
@@ -137,16 +125,12 @@ text, err := c.Render()
 
 `Destructive` and `Idempotent` are `*bool`: write `new(true)` or `new(false)`, or leave them nil. The full example is [`examples/garage/garage.go`](https://github.com/Hebilicious/acidcat/blob/main/packages/catalog/go/examples/garage/garage.go).
 
-</TabItem>
-<TabItem label="Rust">
+</Fragment>
+<Fragment slot="rust">
 
-```sh
-cargo add acid-cat-catalog
-```
+Write schemas with `serde_json::json!`. Use the library at build time, for example in `build.rs`. This excerpt is the body of a function that returns a `Result`:
 
-Write schemas with `serde_json::json!`. Use the library at build time, for example in `build.rs`.
-
-```rust title="player.rs (part)"
+```rust title="player.rs"
 use acid_cat_catalog::{Capability, Catalog, Event, Target};
 use serde_json::json;
 
@@ -172,10 +156,10 @@ std::fs::write("acidcat.catalog.json", catalog.render().expect("the catalog conf
 
 `destructive` and `idempotent` are `Option<bool>`. The full example is [`examples/player.rs`](https://github.com/Hebilicious/acidcat/blob/main/packages/catalog/rust/examples/player.rs).
 
-</TabItem>
-<TabItem label="Pkl">
+</Fragment>
+<Fragment slot="pkl">
 
-The Pkl package is `package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog`. Replace `<version>` with the version of a release of `acid-cat-catalog`.
+The first line amends the published package. Replace `<version>` with the version of a release of `acid-cat-catalog`, as the install step shows.
 
 ```pkl title="greenhouse.pkl"
 amends "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@<version>#/Catalog.pkl"
@@ -210,12 +194,12 @@ pkl eval greenhouse.pkl --output-path greenhouse.acidcat.json
 acid-cat format --write greenhouse.acidcat.json
 ```
 
-</TabItem>
-</Tabs>
+</Fragment>
+</EcosystemTabs>
 
-## One catalog, five languages
+## One catalog in every language
 
-The air conditioner writes one catalog in all five languages, and its test checks that each language gives the same bytes. Here is the capability `aircon.power.set` in each source, with the helper `setting` that it calls, and the JSON that each source writes. Each source first declares the shared type `Offline` and the list of targets `everywhere`.
+The air conditioner writes one catalog in each supported language, and its test checks that each language gives the same bytes. Here is the capability `aircon.power.set` in each source, with the helper `setting` that it calls, and the JSON that each source writes. Each source first declares the shared type `Offline` and the list of targets `everywhere`.
 
 <CatalogExample capability="aircon.power.set" />
 

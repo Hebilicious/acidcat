@@ -1,40 +1,23 @@
 ---
+import { cores as registry, githubBlob as repository, ownCore } from "../lib/ecosystem.ts";
 import { coreSnippets, highlight } from "../lib/snippets.ts";
 
-const repository = "https://github.com/Hebilicious/acidcat/blob/main";
-const notes: Record<string, string> = {
-  "core-ts": "Plain TypeScript. Capabilities return promises, and inputs use any Standard Schema library.",
-  "core-effect": "Effect. Capabilities are Effect programs, sessions are scopes, and services are layers.",
-  "core-rust": "Rust on Tokio. It serves the MCP, HTTP and CLI bindings.",
-};
-const packages: Record<string, string> = {
-  "core-ts": "@acid-cat/core-ts",
-  "core-effect": "@acid-cat/core-effect",
-  "core-rust": "acid-cat-core",
-};
-const yourLanguage = {
-  id: "core-yours",
-  label: "Your language",
+const snippets = await coreSnippets();
+const official = registry.map((core) => {
+  const snippet = snippets.find((candidate) => candidate.id === core.id);
+  if (snippet === undefined) throw new Error(`No README example for "${core.id}".`);
+  return { ...snippet, note: core.note, packageName: core.packageName };
+});
+const yours = {
+  id: ownCore.id,
+  label: ownCore.label,
   language: "shellscript",
-  source: "spec/conformance.md",
-  code: [
-    "# 1. Follow the specification: spec/README.md",
-    "# 2. Serve the conformance fixture: packages/cli/conformance/fixture.pkl",
-    "# 3. Test each binding from outside:",
-    "npx @acid-cat/cli conform \\",
-    "  --http http://localhost:8080 \\",
-    "  --mcp http://localhost:8080/mcp \\",
-    '  --cli "./your-program"',
-  ].join("\n"),
+  source: ownCore.source,
+  code: [...ownCore.steps.map((step, index) => `# ${index + 1}. ${step}`), ownCore.conform].join("\n"),
+  note: ownCore.note,
+  packageName: "acid-cat conform",
 };
-notes["core-yours"] = "Any language. A core that follows the specification and passes acid-cat conform is an implementation.";
-packages["core-yours"] = "acid-cat conform";
-const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
-  ...snippet,
-  note: notes[snippet.id] ?? "",
-  packageName: packages[snippet.id] ?? snippet.label,
-  html: highlight(snippet.code, snippet.language),
-}));
+const cores = [...official, yours].map((core) => ({ ...core, html: highlight(core.code, core.language) }));
 ---
 
 <section class="cores" aria-labelledby="cores-title">

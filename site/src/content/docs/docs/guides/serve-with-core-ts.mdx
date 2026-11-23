@@ -49,9 +49,9 @@ export const aircon = defineApp<{ unit: Unit }>({
 
 ## Write events
 
-`subscribe` returns an async iterable, with one value for each occurrence:
+`subscribe` returns an async iterable, with one value for each occurrence. This excerpt of `aircon.ts` declares an event:
 
-```ts title="aircon.ts (part)"
+```ts title="aircon.ts"
 import { eventsFor } from "@acid-cat/core-ts";
 
 const Status = z.object({ on: z.boolean(), celsius: z.number() }).meta({ id: "Status" });
@@ -144,7 +144,9 @@ await power.execute({ on: true });
 
 ### WebMCP
 
-```ts title="page.ts (part)"
+This excerpt of `page.ts` registers the tools of a session:
+
+```ts title="page.ts"
 const session = createSession(app, { target: "app", context, toJsonSchema });
 const webmcp = installWebMcp(session);
 webmcp?.status.subscribe(({ phase, message }) => console.log(phase, message));

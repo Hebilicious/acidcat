@@ -105,7 +105,7 @@ A failed check of a SHOULD rule gives a warning, marked `!`, and passes. The exi
 
 ### Use it in code
 
-`conform()` and `serve()` come from `@acid-cat/cli`, and `createTestHost()` gives the WebMCP host that the checks use. This `serve()` is for tests only: it listens on `127.0.0.1`, on a free port, with plain HTTP. To serve an application, use its core's server: `serve` from `@acid-cat/core-ts/node`, `NodeServer` from `@acid-cat/core-effect`, or `remote::serve` from the crate `acid-cat-core`.
+`conform()` and `serve()` come from `@acid-cat/cli`. This `serve()` is for tests only: it listens on `127.0.0.1`, on a free port, with plain HTTP. To serve an application, use its core's server: `serve` from `@acid-cat/core-ts/node`, `NodeServer` from `@acid-cat/core-effect`, or `remote::serve` from the crate `acid-cat-core`.
 
 ## Implementation
 

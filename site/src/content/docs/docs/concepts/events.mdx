@@ -5,8 +5,9 @@ sidebar:
   order: 14
 ---
 
-import { TabItem, Tabs } from "@astrojs/starlight/components";
+import { TabItem } from "@astrojs/starlight/components";
 import CatalogExample from "../../../../components/docs/CatalogExample.astro";
+import EcosystemTabs from "../../../../components/docs/EcosystemTabs.astro";
 
 An **event** is a kind of thing that happens in the application, and that clients can follow, for example `aircon.status.changed`. A client **subscribes** to an event with an input. Then it gets an **occurrence** each time that the thing happens, until the subscription ends.
 
@@ -29,20 +30,20 @@ The payload is always an object. An object can get new members, and old clients 
 
 Each occurrence has the same members in every core and on every surface. The JSON tab shows the form on the network. The other tabs show how a client reads occurrences in the same process.
 
-<Tabs syncKey="core">
-<TabItem label="TypeScript">
+<EcosystemTabs of="cores">
+<Fragment slot="core-ts">
 
-```ts title="@acid-cat/core-ts"
+```ts
 const status = session.eventHandle(statusChanged);
 for await (const occurrence of await status.subscribe({})) {
   console.log(occurrence.eventId, occurrence.timestamp, occurrence.data, occurrence.cursor);
 }
 ```
 
-</TabItem>
-<TabItem label="Effect">
+</Fragment>
+<Fragment slot="core-effect">
 
-```ts title="@acid-cat/core-effect"
+```ts
 const program = Effect.scoped(
   Effect.gen(function* () {
     const session = yield* Session.make(aircon, { target: "app" });
@@ -52,10 +53,10 @@ const program = Effect.scoped(
 );
 ```
 
-</TabItem>
-<TabItem label="Rust">
+</Fragment>
+<Fragment slot="core-rust">
 
-```rust title="acid-cat-core"
+```rust
 let session = Session::open(&app, "app", unit);
 let mut occurrences = session
     .subscribe("aircon.status.changed", json!({}), SubscribeOptions::default())
@@ -65,10 +66,10 @@ while let Some(Ok(occurrence)) = occurrences.next().await {
 }
 ```
 
-</TabItem>
+</Fragment>
 <TabItem label="JSON">
 
-```json title="An occurrence"
+```json
 {
   "eventId": "41",
   "name": "aircon.status.changed",
@@ -79,7 +80,7 @@ while let Some(Ok(occurrence)) = occurrences.next().await {
 ```
 
 </TabItem>
-</Tabs>
+</EcosystemTabs>
 
 - `data` matches the payload schema.
 - `eventId` identifies the occurrence, and `timestamp` gives its time. The Rust core names the field `event_id`.

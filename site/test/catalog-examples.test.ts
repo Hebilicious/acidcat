@@ -31,7 +31,16 @@ test("a catalog example finds targets, types and events", async () => {
 
 test("a catalog example fails when an entry is not in a source", async () => {
   await assert.rejects(catalogExamples({ capability: "aircon.lights.set" }, repository), /has no capability "aircon\.lights\.set"/);
-  await assert.rejects(catalogExamples({}, repository), /needs a target, a type, a capability or an event/);
+  await assert.rejects(catalogExamples({}, repository), /needs the header, a target, a type, a capability or an event/);
+});
+
+test("a catalog example gives the top of each source, and acidcat, title and description in JSON", async () => {
+  const examples = await catalogExamples({ header: true }, repository);
+  for (const example of examples) assert.match(example.code, /Living-room air conditioner/, example.label);
+  const json: unknown = JSON.parse(examples.at(-1)?.code ?? "");
+  assert.ok(typeof json === "object" && json !== null);
+  assert.deepEqual(Object.keys(json), ["acidcat", "title", "description"]);
+  assert.match(examples.find((example) => example.label === "Pkl")?.code ?? "", /^amends .*\n\ntitle = .*\ndescription = /);
 });
 
 test("a statement ends where its brackets close, and not at a bracket in a string", () => {

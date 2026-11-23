@@ -15,13 +15,23 @@ The **catalog** is the contract of an application. It is one JSON document that 
 
 Each application has one catalog. Every surface comes from it.
 
-## A part of a catalog
+## The top of a catalog
 
-This is one target and one capability of the air conditioner, in each source and in the JSON that each source writes:
+A catalog starts with the members that describe the catalog itself. This is the start of the catalog of the air conditioner, in each source and in the JSON that each source writes:
+
+<CatalogExample header />
+
+- `acidcat` is the version of the AcidCat specification that the catalog follows: `"0.1"`. It is not the version of your application, and not the version of the catalog. It is required. The catalog library writes it, so a source does not set it.
+- `title` is a name for people. It is optional.
+- `description` tells what the application does. It is optional.
+
+The Pkl tab shows the example in the repository, which amends the module `Catalog.pkl` by its path. A project amends the published package. [Document](/spec/catalog/#document) in the specification lists these members.
+
+## One target and one capability
+
+The members after the top list the targets, the shared types, the capabilities and the events. This excerpt shows one target and one capability of the air conditioner:
 
 <CatalogExample target="mcp" capability="aircon.temperature.set" />
-
-The JSON of a catalog also has the member `"acidcat": "0.1"`, and can have a `title` and a `description`. Each source sets them when it starts the catalog.
 
 The full catalog of the air conditioner is [`examples/aircon/catalog/aircon.acidcat.json`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/catalog/aircon.acidcat.json).
 
@@ -29,7 +39,7 @@ The full catalog of the air conditioner is [`examples/aircon/catalog/aircon.acid
 
 | Member | Required | Value |
 | --- | --- | --- |
-| `acidcat` | Yes | The version of the specification: `"0.1"` |
+| `acidcat` | Yes | The version of the specification that the catalog follows: `"0.1"` |
 | `title` | No | A name for people |
 | `description` | No | What the application does |
 | `targets` | Yes | The targets, by name |
@@ -60,7 +70,7 @@ The catalog is a build-time file. Keep it with the source code, and check it in 
 The JSON document is long, and a text editor does not check its rules. Write a source, and let a tool write the JSON:
 
 - a [Pkl](https://pkl-lang.org) module;
-- a program that uses a catalog library for TypeScript, Python, Go or Rust;
+- a program that uses the catalog library of your language;
 - the code of the application, when a core writes the catalog from it.
 
 Every tool writes the same bytes for the same catalog: the **canonical form**. [Write a catalog](/docs/guides/write-a-catalog/) shows each source.
