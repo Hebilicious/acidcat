@@ -21,7 +21,9 @@ const hasElementTextures = (gl: WebGL2RenderingContext): gl is ElementTextureCon
 const softwareRenderer = /swiftshader|llvmpipe|softpipe|software/i;
 
 export function mountCatalogEngine(host: HTMLElement) {
-  const eligible = matchMedia("(min-width: 901px) and (prefers-reduced-motion: no-preference)");
+  const eligible = matchMedia("(prefers-reduced-motion: no-preference)");
+  const wide = matchMedia("(min-width: 901px)");
+  const layout = () => (wide.matches ? "wide" : "tall");
   if (typeof WebGL2RenderingContext === "undefined" ||
       typeof Reflect.get(WebGL2RenderingContext.prototype, "texElementSubImage2D") !== "function") return;
   const stage = host.parentElement ?? host;
@@ -53,6 +55,7 @@ export function mountCatalogEngine(host: HTMLElement) {
   };
   if (prepared) {
     stage.dataset["engine"] = "pending";
+    stage.dataset["layout"] = layout();
     engine = import("./catalog-engine.js");
     engine.catch(fallBack);
   }
@@ -70,7 +73,8 @@ export function mountCatalogEngine(host: HTMLElement) {
       engine ??= import("./catalog-engine.js");
       const { buildMachine } = await engine;
       if (!eligible.matches || !near) return;
-      stop = buildMachine(host, canvas, gl);
+      stage.dataset["layout"] = layout();
+      stop = buildMachine(host, canvas, gl, layout());
       stage.dataset["engine"] = "live";
     } catch {
       gl.getExtension("WEBGL_lose_context")?.loseContext();
@@ -85,13 +89,18 @@ export function mountCatalogEngine(host: HTMLElement) {
     near = entry?.isIntersecting ?? false;
     if (near) void activate();
   }, { rootMargin: "900px" }).observe(stage);
+  const reset = () => {
+    stop?.();
+    stop = undefined;
+    prepared = undefined;
+    fallBack();
+  };
   eligible.addEventListener("change", () => {
     if (eligible.matches) void activate();
-    else {
-      stop?.();
-      stop = undefined;
-      prepared = undefined;
-      fallBack();
-    }
+    else reset();
+  });
+  wide.addEventListener("change", () => {
+    reset();
+    void activate();
   });
 }

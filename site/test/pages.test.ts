@@ -31,3 +31,19 @@ test("every link to another website opens in a new tab", async () => {
   }
   assert.deepEqual(offenders, []);
 });
+
+test("every page has an absolute social image of 1200 by 630 that exists in the build", async () => {
+  const offenders: string[] = [];
+  for (const file of await pages(dist)) {
+    const html = await readFile(file, "utf8");
+    const image = /<meta property="og:image" content="([^"]+)"/.exec(html)?.[1];
+    const card = /<meta name="twitter:card" content="summary_large_image"/.test(html);
+    const size = /<meta property="og:image:width" content="1200"/.test(html) && /<meta property="og:image:height" content="630"/.test(html);
+    if (image === undefined || !image.startsWith(`${site}/og/`) || !card || !size) {
+      offenders.push(file.slice(dist.length));
+      continue;
+    }
+    await readFile(join(dist, image.slice(site.length))).catch(() => offenders.push(`${file.slice(dist.length)}: ${image} is missing`));
+  }
+  assert.deepEqual(offenders, []);
+});

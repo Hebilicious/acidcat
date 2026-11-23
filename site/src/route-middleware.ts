@@ -1,10 +1,12 @@
 import { defineRouteMiddleware } from "@astrojs/starlight/route-data";
+import { sectionOf, socialImage } from "./lib/social.ts";
 
 const sections: Record<string, string> = { "/docs/": "Docs", "/spec/": "Specification" };
 
 export const onRequest = defineRouteMiddleware((context) => {
   const route = context.locals.starlightRoute;
   const path = context.url.pathname;
+  for (const attrs of socialImage(sectionOf(path))) route.head.push({ tag: "meta", attrs, content: "" });
   const section = Object.entries(sections).find(([prefix]) => path.startsWith(prefix));
   if (section === undefined) {
     route.hasSidebar = false;

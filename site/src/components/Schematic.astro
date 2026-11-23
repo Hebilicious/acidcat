@@ -112,6 +112,17 @@ const snippets = await catalogSnippets();
   :global(.holo-canvas) {
     aspect-ratio: 1200 / 624;
   }
+  .engine-stage[data-layout="tall"] :global(.holo-canvas),
+  .engine-stage[data-layout="tall"][data-engine="pending"] {
+    aspect-ratio: 500 / 1170;
+    max-width: 30rem;
+    margin-inline: auto;
+  }
+  .engine-stage[data-layout="tall"] :global(.holo-canvas pre) {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    tab-size: 2;
+  }
   :global(.holo-canvas) > [drawable] {
     position: absolute;
     inset: 0 auto auto 0;

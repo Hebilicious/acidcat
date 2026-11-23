@@ -57,10 +57,11 @@ export function hardware(scene: Three.Scene) {
     return new ExtrudeGeometry(outline, { depth: 3, bevelSize: 1.6, bevelThickness: 1.6, bevelSegments: 2 });
   }
   const casting = cornerCasting();
-  function device(w: number, h: number, x: number, y: number, catalog: boolean) {
+  function device(w: number, h: number, x: number, y: number, catalog: boolean, tilt?: readonly [number, number, number]) {
     const group = new Group();
     group.position.set(x, y, 0);
-    group.rotation.set(catalog ? 0.17 : 0.13, catalog ? -0.24 : 0.20, catalog ? 0.018 : -0.008);
+    const [tx, ty, tz] = tilt ?? (catalog ? [0.17, -0.24, 0.018] : [0.13, 0.20, -0.008]);
+    group.rotation.set(tx, ty, tz);
     scene.add(group);
     const margin = catalog ? 40 : 29;
     const width = w + margin, height = h + margin;
@@ -189,8 +190,8 @@ export function hardware(scene: Three.Scene) {
     }
     return group;
   }
-  function pipe(start: Three.Vector3, end: Three.Vector3, time: Three.IUniform<number>, excitation: Three.IUniform<number>) {
-    const curve = new CubicBezierCurve3(start, start.clone().add(new Vector3(78, -20, 14)), end.clone().sub(new Vector3(83, 25, 6)), end);
+  function pipe(start: Three.Vector3, end: Three.Vector3, time: Three.IUniform<number>, excitation: Three.IUniform<number>, bend?: { readonly out: Three.Vector3; readonly in: Three.Vector3 }) {
+    const curve = new CubicBezierCurve3(start, start.clone().add(bend?.out ?? new Vector3(78, -20, 14)), end.clone().sub(bend?.in ?? new Vector3(83, 25, 6)), end);
     const fluid = new ShaderMaterial({
       uniforms: { time, excitation },
       vertexShader: 'varying vec2 v; void main(){ v=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',

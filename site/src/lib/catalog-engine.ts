@@ -33,10 +33,14 @@ void main() {
   gl_FragColor = vec4((glass*(1.+beam*.09+excitation*.75)+phosphor*ink.a*(1.28+excitation*.24))*scan*(.994+.006*sin(time*35.)),1.);
 }`;
 
-export function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gl: ElementTextureContext) {
+export type MachineLayout = "wide" | "tall";
+
+
+export function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gl: ElementTextureContext, layout: MachineLayout = "wide") {
+  const tall = layout === "tall";
   const renderer = new WebGLRenderer({ canvas, context: gl, alpha: true, antialias: true });
   const scene = new Scene();
-  const camera = new OrthographicCamera(-600, 600, 312, -312, 1, 2500);
+  const camera = tall ? new OrthographicCamera(-250, 250, 780, -390, 1, 2500) : new OrthographicCamera(-600, 600, 312, -312, 1, 2500);
   scene.fog = new FogExp2(0x111a19, .00015);
   const studio = new RoomEnvironment();
   const pmrem = new PMREMGenerator(renderer);
@@ -51,9 +55,10 @@ export function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gl: Elem
   const { device, pipe, finish } = hardware(scene);
   const time = { value: 0 };
   const inputs = Array.from(host.querySelectorAll<HTMLElement>("[data-catalog-screen], [data-surface]"));
-  const catalogWidth = 600;
-  const catalogHeight = 436;
-  const inlet = device(catalogWidth, catalogHeight, -274, -40, true);
+  const catalogWidth = tall ? 420 : 600;
+  const catalogHeight = tall ? 420 : 436;
+  const inlet = tall ? device(catalogWidth, catalogHeight, -14, 420, true, [0.08, 0, 0]) : device(catalogWidth, catalogHeight, -274, -40, true);
+  const surfaceWidth = tall ? 380 : 384;
   const rail = host.querySelector<HTMLElement>(".language-rail");
   const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-language]"));
   const railMarker = document.createTextNode("");
@@ -63,15 +68,17 @@ export function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gl: Elem
   for (const { tube } of bulbs) inlet.add(tube);
   const screens = inputs.map((element, index) => {
     const catalog = index === 0;
-    const w = catalog ? catalogWidth : 384;
+    const w = catalog ? catalogWidth : surfaceWidth;
     const h = catalog ? catalogHeight : 68;
     const y = catalog ? 0 : (3 - index) * 108;
-    const chassis = catalog ? inlet : device(w, h, 383, y, false);
+    const chassis = catalog ? inlet : tall ? device(w, h, 30, 80 - (index - 1) * 100, false, [0.06, 0.08, 0]) : device(w, h, 383, y, false);
     const excitation = { value: 0 };
     if (!catalog) {
-      const outlet = inlet.localToWorld(new Vector3(catalogWidth / 2 + 30, (3 - index) * 48, -18));
+      const outlet = tall
+        ? inlet.localToWorld(new Vector3(-catalogWidth / 2 + 30 + (index - 1) * 20, -catalogHeight / 2 - 24, -18))
+        : inlet.localToWorld(new Vector3(catalogWidth / 2 + 30, (3 - index) * 48, -18));
       const port = chassis.localToWorld(new Vector3(-w / 2 - 19, 0, -18));
-      pipe(outlet, port, time, excitation);
+      pipe(outlet, port, time, excitation, tall ? { out: new Vector3(-6, -70, 14), in: new Vector3(70, 0, 6) } : undefined);
     }
     const texture = gl.createTexture();
     const external = new ExternalTexture(texture);
