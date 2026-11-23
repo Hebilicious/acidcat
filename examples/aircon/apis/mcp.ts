@@ -95,8 +95,8 @@ export function mcpApi(options: McpApiOptions = {}) {
     Layer.provide(unit),
   );
   const application = HttpRouter.toWebHandler(server, { disableLogger: true });
-  const withEvents = Mcp.withEvents(aircon, unit, application.handler, { allowedOrigins });
   const serverCard = { name: "dev.acid-cat/aircon" };
+  const withEvents = Mcp.withEvents(aircon, unit, application.handler, { allowedOrigins, serverCard });
   const binding = Mcp.toWebHandler(aircon, unit, { name: "aircon", version: "0.1.0", allowedOrigins, path: "/capabilities/mcp", serverCard });
   // For clients that still open the session with the `initialize` handshake of revision 2025-11-25 or 2025-06-18.
   const legacy = Mcp.withHandshake(

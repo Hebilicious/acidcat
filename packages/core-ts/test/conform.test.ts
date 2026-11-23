@@ -37,7 +37,7 @@ describe("the TypeScript core passes acid-cat conform", { concurrency: true }, (
       signingKeys: [testSigningKey("fixture-1"), testSigningKey("fixture-2")],
       egressIpRanges: ["203.0.113.0/24", "2001:db8::/32"],
     });
-    mcp = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...options(), poll: POLL, principal: principalOf, webhooks, serverCard: { name: "dev.acid-cat/fixture" } });
+    mcp = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...options(), poll: POLL, principal: principalOf, webhooks });
     mcpLease = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...options(), poll: { leaseMs: POLL_LEASE_MS } });
     const cli = httpHandler(fixture, { allowedOrigins: [], target: "cli", base: "/cli", ...options(new Holds(fileMarker), new Watchers(fileMarker, { keepAlive: false })) });
     served = await serve({ "/mcp": mcpHandshake(mcp), "/mcp-lease": mcpLease, "/api": httpHandler(fixture, { allowedOrigins: [], base: "/api", ...options() }), "/cli": cli }, { port: 0 });
@@ -51,7 +51,9 @@ describe("the TypeScript core passes acid-cat conform", { concurrency: true }, (
   });
 
   test("through MCP over HTTP, with the handshake, poll and webhook delivery", { timeout }, async () => {
-    assertConforms(await conform({ mcp: `${url}/mcp`, mcpHandshake: true, poll: POLL, pollLease: { mcp: `${url}/mcp-lease`, leaseMs: POLL_LEASE_MS }, webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS } }), 60);
+    const results = await conform({ mcp: `${url}/mcp`, mcpHandshake: true, poll: POLL, pollLease: { mcp: `${url}/mcp-lease`, leaseMs: POLL_LEASE_MS }, webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS } });
+    assertConforms(results, 60);
+    assert.ok(results.some((result) => result.rule === "spec/bindings/mcp.md#server-card"), "the default Server Card is checked");
   });
 
   test("through MCP over stdio", { timeout }, async () => {

@@ -9,7 +9,9 @@ import {
   mcpHeaderMismatch,
   mcpServerCard,
   mcpServerCardIdentity,
+  mcpServerCardPreflight,
   mcpServerCardResponse,
+  mcpServerCardSettings,
   mcpServerUrlOfCardRequest,
   mcpToolAnnotations,
   mcpToolResult,
@@ -96,11 +98,13 @@ export interface Options {
    */
   readonly webhooks?: WebhookOptions | undefined;
   /**
-   * Serve a Server Card at the URL of the server and `/server-card` (spec/bindings/mcp.md#server-card). With no card,
-   * a `GET` request to that URL gets 404. A card whose name, description or version breaks the rules makes the server
-   * fail when it starts. So do webhook signing keys or egress ranges with no card.
+   * The Server Card at the URL of the server and `/server-card` (spec/bindings/mcp.md#server-card). The server serves
+   * it with the default settings when this member is absent. With `false`, the server serves no card, and a `GET`
+   * request to that URL gets 404. A given name, description or URL that breaks the rules makes the server fail when it
+   * starts, and so does a version that is a range while the card is on. So do webhook signing keys or egress ranges
+   * with the card off.
    */
-  readonly serverCard?: McpServerCardSettings | undefined;
+  readonly serverCard?: McpServerCardSettings | false | undefined;
 }
 
 export interface WebHandler {
@@ -196,8 +200,11 @@ export const makeHandle = <R>(app: App.App<R>, options: Options) =>
     ),
   );
 
-const cardIdentity = <R>(app: App.App<R>, options: Options): McpServerCardIdentity | undefined =>
-  mcpServerCardIdentity(options.serverCard, options.version, app.description, publishesOnServerCard(options.webhooks));
+const cardIdentity = <R>(app: App.App<R>, options: Options): McpServerCardIdentity | undefined => {
+  const settings = mcpServerCardSettings(options.serverCard, publishesOnServerCard(options.webhooks));
+  if (settings === undefined) return undefined;
+  return mcpServerCardIdentity(settings, { name: options.name, version: options.version, descriptions: [app.description, options.instructions, options.name] });
+};
 
 const answerCard = (request: Request, identity: McpServerCardIdentity | undefined, webhooks: Webhooks | undefined): Effect.Effect<Response | undefined> =>
   Effect.gen(function* () {
@@ -290,7 +297,7 @@ const answerEvents = <R>(
 
 export type EventsOptions = Pick<
   Options,
-  "allowedOrigins" | "target" | "maximumBytes" | "services" | "heartbeatMs" | "eventBuffer" | "principal" | "poll" | "webhooks"
+  "allowedOrigins" | "target" | "maximumBytes" | "services" | "heartbeatMs" | "eventBuffer" | "principal" | "poll" | "webhooks" | "serverCard"
 >;
 
 /**
@@ -312,8 +319,11 @@ export const eventsExtensions: { readonly [name: string]: JsonObject } = McpEven
  * read `Remote.IncomingRequest` and refuse a request of the events extension with a `Remote.Refusal`, as in
  * `toWebHandler`.
  *
- * The result serves no Server Card: a `GET` request to the URL and `/server-card` gets 404. Webhook signing keys or
- * egress ranges need a card, so they make `withEvents` throw.
+ * The result serves a Server Card for `server`, unless `options.serverCard` is `false`. For each request of the card, it
+ * sends `server/discover` of revision 2026-07-28 to `server`, and takes from its answer the version, the revisions,
+ * the name of the server for the default name, and the `instructions` for the default description, before the
+ * description of the application. If `server` does not answer `server/discover` with a result from which a card can
+ * come, the request of the card gets 502.
  */
 export function withEvents<R, E>(
   app: App.App<R>,
@@ -328,17 +338,16 @@ export function withEvents<R, E>(
   server: (request: Request) => Promise<Response>,
   options: EventsOptions,
 ): WebHandler {
-  if (publishesOnServerCard(options.webhooks)) {
-    throw new TypeError("withEvents serves no Server Card, and webhook signing keys and egress ranges need one, because a receiver gets them only from the card. Remove the signing keys and the egress ranges.");
-  }
+  const cardSettings = mcpServerCardSettings(options.serverCard, publishesOnServerCard(options.webhooks));
   const target = options.target ?? "mcp";
   const hasEvents = viewOf(App.document(app), target).events !== undefined;
   const { answer, dispose: release } = answerWith(layer, options.services);
   const scope = Effect.runSync(Scope.make());
   const deliveries = Effect.runSync(makeDeliveries(options).pipe(Scope.provide(scope)));
   const handler = async (request: Request): Promise<Response> => {
-    const card = await Effect.runPromise(answerCard(request, undefined, undefined));
-    if (card !== undefined) return card;
+    const serverUrl = mcpServerUrlOfCardRequest(request);
+    if (serverUrl !== undefined && cardSettings !== undefined) return cardOfServer(app, server, request, serverUrl, cardSettings, deliveries.webhooks);
+    if (serverUrl !== undefined && request.method === "GET") return new Response(null, { status: 404 });
     const admitted = await admit(request, options);
     if (admitted instanceof Response) return admitted;
     const events = hasEvents ? eventsRequestOf(admitted) : undefined;
@@ -355,6 +364,72 @@ export function withEvents<R, E>(
     await release();
   };
   return Object.assign(handler, { dispose });
+}
+
+async function cardOfServer<R>(
+  app: App.App<R>,
+  server: (request: Request) => Promise<Response>,
+  request: Request,
+  serverUrl: string,
+  settings: McpServerCardSettings,
+  webhooks: Webhooks | undefined,
+): Promise<Response> {
+  const preflight = mcpServerCardPreflight(request);
+  if (preflight !== undefined) return preflight;
+  const discovered = await discover(server, serverUrl, request.signal);
+  if (discovered === undefined) return new Response(null, { status: 502 });
+  let identity: McpServerCardIdentity;
+  try {
+    identity = mcpServerCardIdentity(settings, { name: discovered.name, version: discovered.version, descriptions: [discovered.instructions, app.description, discovered.name] });
+  } catch {
+    return new Response(null, { status: 502 });
+  }
+  const info = webhooks === undefined ? undefined : await Effect.runPromise(webhooks.cardInfo);
+  return mcpServerCardResponse(request, mcpServerCard(identity, serverUrl, info, discovered.supportedVersions));
+}
+
+interface Discovered {
+  readonly name: string;
+  readonly version: string;
+  readonly instructions: string | undefined;
+  readonly supportedVersions: readonly string[];
+}
+
+const SERVER_INFO = "io.modelcontextprotocol/serverInfo";
+
+async function discover(server: (request: Request) => Promise<Response>, url: string, signal: AbortSignal): Promise<Discovered | undefined> {
+  const body = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 0,
+    method: "server/discover",
+    params: { _meta: { "io.modelcontextprotocol/protocolVersion": MCP_PROTOCOL_VERSION, "io.modelcontextprotocol/clientCapabilities": {} } },
+  });
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: `application/json, ${SSE_MEDIA_TYPE}`,
+    "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
+    "Mcp-Method": "server/discover",
+  };
+  let message: unknown;
+  try {
+    const response = await server(new Request(url, { method: "POST", headers, body, signal }));
+    if (!response.ok) return undefined;
+    message = JSON.parse(await response.text());
+  } catch {
+    return undefined;
+  }
+  const result = isJsonObject(message) ? message["result"] : undefined;
+  if (!isJsonObject(result)) return undefined;
+  const meta = result["_meta"];
+  const info = isJsonObject(meta) ? meta[SERVER_INFO] : undefined;
+  if (!isJsonObject(info) || typeof info["name"] !== "string" || typeof info["version"] !== "string") return undefined;
+  const { instructions, supportedVersions } = result;
+  return {
+    name: info["name"],
+    version: info["version"],
+    instructions: typeof instructions === "string" ? instructions : undefined,
+    supportedVersions: Array.isArray(supportedVersions) && supportedVersions.every((each) => typeof each === "string") ? supportedVersions : [MCP_PROTOCOL_VERSION],
+  };
 }
 
 const respondToEvents = <R>(

@@ -10,7 +10,7 @@ use http::{HeaderMap, HeaderValue, Method, Request, Response, header};
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
-use super::card::{Card, ServerCard};
+use super::card::{Card, CardServer, ServerCard};
 use super::headers::header_mismatch;
 use super::poll::{PollLeases, PollOptions};
 use super::webhook::{WebhookOptions, Webhooks};
@@ -55,7 +55,9 @@ pub struct McpOptions {
     pub principal: Option<Principal>,
     /// Webhook delivery. It is off when this member is `None`.
     pub webhooks: Option<WebhookOptions>,
-    /// The Server Card at the URL of the server and `/server-card`. With `None`, the server serves no card.
+    /// The Server Card at the URL of the server and `/server-card`. The default is `Some(ServerCard::default())`, a
+    /// card with the default name and description. With `None`, the server serves no card, and a `GET` request to that
+    /// URL gets 404.
     pub server_card: Option<ServerCard>,
 }
 
@@ -74,7 +76,7 @@ impl McpOptions {
             poll: PollOptions::default(),
             principal: None,
             webhooks: None,
-            server_card: None,
+            server_card: Some(ServerCard::default()),
         }
     }
 }
@@ -145,10 +147,11 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
     ///
     /// # Panics
     ///
-    /// If the options are not valid: a Server Card name that does not have the reverse-DNS form, a Server Card with
-    /// no description from 1 to 100 characters, a version that is a range or is longer than 255 characters with a
-    /// Server Card, a webhook signing key that is not a private Ed25519 JWK, two signing keys with the same `kid`, an
-    /// egress range that is not CIDR text, or signing keys or egress ranges with no Server Card.
+    /// If the options are not valid: a given Server Card name that does not have the reverse-DNS form, a given
+    /// description that does not have 1 to 100 characters, a given URL that is not an `http` or `https` URL, a
+    /// version that is a range or is longer than 255 characters with the Server Card on, a webhook signing key that is
+    /// not a private Ed25519 JWK, two signing keys with the same `kid`, an egress range that is not CIDR text, or
+    /// signing keys or egress ranges with the Server Card off.
     pub fn new(app: Arc<Application<C>>, context: Arc<C>, options: McpOptions) -> Self {
         Self::with_contexts(app, Contexts::Shared(context), options)
     }
@@ -183,17 +186,21 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
         });
         assert!(
             options.server_card.is_some() || !publishes,
-            "webhook signing keys and egress ranges need a Server Card, because a receiver gets them only from the card: give the server a Server Card, or remove the signing keys and the egress ranges"
+            "webhook signing keys and egress ranges need a Server Card, because a receiver gets them only from the card: turn the Server Card on, or remove the signing keys and the egress ranges"
         );
         let webhooks = options.webhooks.clone().map(Webhooks::new);
         let card = options.server_card.as_ref().map(|card| {
-            Card::new(
-                card,
-                &options.version,
-                app.description(),
-                options.handshake,
-                webhooks.as_deref(),
-            )
+            let server = CardServer {
+                name: &options.name,
+                version: &options.version,
+                descriptions: [
+                    app.description(),
+                    options.instructions.as_deref(),
+                    Some(&options.name),
+                ],
+                handshake: options.handshake,
+            };
+            Card::new(card, &server, webhooks.as_deref())
         });
         McpBinding {
             inner: Arc::new(Inner {

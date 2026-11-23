@@ -62,7 +62,7 @@ impl Drop for Server {
     }
 }
 
-fn assert_conforms(args: &[&str], minimum: usize) {
+fn assert_conforms(args: &[&str], minimum: usize) -> Value {
     let output = Command::new("pnpm")
         .args(["exec", "acid-cat", "conform", "--output", "json"])
         .args(args)
@@ -98,6 +98,7 @@ fn assert_conforms(args: &[&str], minimum: usize) {
         passed >= minimum as u64,
         "{passed} checks passed, expected {minimum} or more"
     );
+    report
 }
 
 struct Certificate {
@@ -173,7 +174,14 @@ fn through_mcp_over_http_with_the_handshake_poll_and_webhook_delivery() {
         &key,
     ]);
     args.extend(webhook_limits.iter().map(String::as_str));
-    assert_conforms(&args, 60);
+    let report = assert_conforms(&args, 60);
+    let checks = report["checks"].as_array().expect("the report has checks");
+    assert!(
+        checks
+            .iter()
+            .any(|check| check["rule"] == "spec/bindings/mcp.md#server-card"),
+        "the default Server Card is checked"
+    );
 }
 
 #[test]

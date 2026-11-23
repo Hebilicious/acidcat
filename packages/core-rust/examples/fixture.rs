@@ -510,9 +510,7 @@ async fn main() {
         Some("catalog") => print!("{}", app.render_catalog()),
         Some("serve") => {
             use acid_cat_core::http::{HttpBinding, HttpOptions};
-            use acid_cat_core::mcp::{
-                McpBinding, McpOptions, Principal, ServerCard, WebhookOptions,
-            };
+            use acid_cat_core::mcp::{McpBinding, McpOptions, Principal, WebhookOptions};
             let http = HttpBinding::new(
                 app.clone(),
                 context.clone(),
@@ -552,7 +550,6 @@ async fn main() {
                     poll: poll(),
                     principal: Some(principal),
                     webhooks,
-                    server_card: Some(ServerCard::new("dev.acid-cat/fixture")),
                     ..McpOptions::new("fixture", "0.0.0")
                 },
             );

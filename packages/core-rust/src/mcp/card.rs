@@ -12,12 +12,15 @@ use crate::facts_generated::{
 };
 use crate::remote::{ResponseBody, empty_response, header_text};
 
-#[derive(Clone, Debug)]
+/// [`ServerCard::default`] gives the default name and description.
+#[derive(Clone, Debug, Default)]
 pub struct ServerCard {
     /// The name of the card, in reverse-DNS form: 3 to 200 characters, and one `/`, for example
-    /// `com.example/aircon`.
-    pub name: String,
-    /// The description of the card, from 1 to 100 characters. The default is the description of the application.
+    /// `com.example/aircon`. The default comes from the host of the URL of the server and the name of the server:
+    /// `com.example.aircon/<name>` for `aircon.example.com`.
+    pub name: Option<String>,
+    /// The description of the card, from 1 to 100 characters. The default is the description of the application,
+    /// shortened to 100 characters.
     pub description: Option<String>,
     /// The `http` or `https` URL of the server in the card. The default is the URL of the request of the card, without
     /// `/server-card`. Give it when a platform in front of the server ends TLS, because the server then gets `http`
@@ -26,17 +29,18 @@ pub struct ServerCard {
 }
 
 impl ServerCard {
-    pub fn new(name: impl Into<String>) -> Self {
+    /// A card with this name and the other defaults.
+    pub fn named(name: impl Into<String>) -> Self {
         ServerCard {
-            name: name.into(),
-            description: None,
-            url: None,
+            name: Some(name.into()),
+            ..ServerCard::default()
         }
     }
 }
 
 pub(crate) struct Card {
-    name: String,
+    name: Option<String>,
+    server_name: String,
     version: String,
     description: String,
     url: Option<String>,
@@ -73,28 +77,105 @@ fn is_version_range(version: &str) -> bool {
             .any(|part| matches!(part, "x" | "X" | "*"))
 }
 
+const FALLBACK_NAMESPACE: &str = "local";
+
+fn default_name(host: &str, server_name: &str) -> String {
+    let server: String = server_name
+        .chars()
+        .map(|character| match character {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '_' | '-' => character,
+            _ => '-',
+        })
+        .take(100)
+        .collect();
+    let server = if server.is_empty() {
+        "mcp".to_owned()
+    } else {
+        server
+    };
+    format!("{}/{server}", namespace(host))
+}
+
+fn namespace(host: &str) -> String {
+    if host.starts_with('[') {
+        return FALLBACK_NAMESPACE.to_owned();
+    }
+    let without_port = match host.rsplit_once(':') {
+        Some((name, port)) if port.bytes().all(|byte| byte.is_ascii_digit()) => name,
+        _ => host,
+    };
+    let hostname = without_port
+        .strip_suffix('.')
+        .unwrap_or(without_port)
+        .to_ascii_lowercase();
+    let last = hostname.rsplit('.').next().unwrap_or_default();
+    if hostname.is_empty() || (!last.is_empty() && last.bytes().all(|byte| byte.is_ascii_digit())) {
+        return FALLBACK_NAMESPACE.to_owned();
+    }
+    let namespace: String = hostname
+        .rsplit('.')
+        .collect::<Vec<_>>()
+        .join(".")
+        .chars()
+        .map(|character| match character {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' => character,
+            _ => '-',
+        })
+        .collect();
+    if namespace.len() > 99 {
+        FALLBACK_NAMESPACE.to_owned()
+    } else {
+        namespace
+    }
+}
+
+fn default_description(texts: &[Option<&str>]) -> String {
+    let text = texts
+        .iter()
+        .flatten()
+        .find(|text| !text.is_empty())
+        .copied()
+        .unwrap_or("MCP server");
+    if text.chars().count() <= 100 {
+        text.to_owned()
+    } else {
+        text.chars().take(99).chain(['…']).collect()
+    }
+}
+
+fn authority_of(url: &str) -> &str {
+    let after_scheme = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let authority = after_scheme
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default();
+    authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host)
+}
+
+pub(crate) struct CardServer<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) version: &'a str,
+    pub(crate) descriptions: [Option<&'a str>; 3],
+    pub(crate) handshake: bool,
+}
+
 impl Card {
-    pub(crate) fn new(
-        card: &ServerCard,
-        version: &str,
-        app_description: Option<&str>,
-        handshake: bool,
-        webhooks: Option<&Webhooks>,
-    ) -> Self {
-        assert!(
-            is_card_name(&card.name),
-            "the name of the Server Card {:?} must have 3 to 200 characters and the form namespace/name, with the characters a-z, A-Z, 0-9, . and - in the namespace, and a-z, A-Z, 0-9, ., _ and - in the name",
-            card.name
-        );
-        let description = card
-            .description
-            .as_deref()
-            .or(app_description)
-            .unwrap_or_default();
-        assert!(
-            (1..=100).contains(&description.chars().count()),
-            "the Server Card needs a description from 1 to 100 characters: give one in the card or in the application"
-        );
+    pub(crate) fn new(card: &ServerCard, server: &CardServer, webhooks: Option<&Webhooks>) -> Self {
+        if let Some(name) = &card.name {
+            assert!(
+                is_card_name(name),
+                "the name of the Server Card {name:?} must have 3 to 200 characters and the form namespace/name, with the characters a-z, A-Z, 0-9, . and - in the namespace, and a-z, A-Z, 0-9, ., _ and - in the name"
+            );
+        }
+        if let Some(description) = &card.description {
+            assert!(
+                (1..=100).contains(&description.chars().count()),
+                "the description of the Server Card must have 1 to 100 characters"
+            );
+        }
+        let version = server.version;
         assert!(
             version.chars().count() <= 255,
             "the version of a server with a Server Card must have 255 characters or fewer"
@@ -113,13 +194,17 @@ impl Card {
             );
         }
         let mut versions = vec![PROTOCOL_VERSION];
-        if handshake {
+        if server.handshake {
             versions.extend(HANDSHAKE_VERSIONS);
         }
         Card {
             name: card.name.clone(),
+            server_name: server.name.to_owned(),
             version: version.to_owned(),
-            description: description.to_owned(),
+            description: card
+                .description
+                .clone()
+                .unwrap_or_else(|| default_description(&server.descriptions)),
             url: card.url.clone(),
             versions,
             webhooks: webhooks.and_then(Webhooks::card_info),
@@ -151,9 +236,14 @@ impl Card {
     }
 
     fn body<B>(&self, request: &Request<B>) -> String {
+        let url = self.url(request);
+        let name = self
+            .name
+            .clone()
+            .unwrap_or_else(|| default_name(authority_of(&url), &self.server_name));
         let mut remote = json!({
             "type": "streamable-http",
-            "url": self.url(request),
+            "url": url,
             "supportedProtocolVersions": self.versions,
         });
         if let Some(webhooks) = &self.webhooks {
@@ -161,7 +251,7 @@ impl Card {
         }
         json!({
             "$schema": MCP_SERVER_CARD_SCHEMA,
-            "name": self.name,
+            "name": name,
             "version": self.version,
             "description": self.description,
             "remotes": [remote],
@@ -239,7 +329,77 @@ fn cors(headers: &mut http::HeaderMap) {
 
 #[cfg(test)]
 mod tests {
-    use super::is_version_range;
+    use super::{default_description, default_name, is_version_range};
+
+    #[test]
+    fn the_default_name_reverses_the_labels_of_the_host_and_falls_back_to_local_for_an_ip_address()
+    {
+        let long_host = format!("{}.com", "a".repeat(100));
+        let long_name = "n".repeat(150);
+        let cases = [
+            (
+                "aircon.example.com",
+                "aircon",
+                "com.example.aircon/aircon".to_owned(),
+            ),
+            (
+                "Aircon.Example.COM.",
+                "aircon",
+                "com.example.aircon/aircon".to_owned(),
+            ),
+            (
+                "aircon.example.com:8443",
+                "aircon",
+                "com.example.aircon/aircon".to_owned(),
+            ),
+            ("localhost", "aircon", "localhost/aircon".to_owned()),
+            ("localhost:3000", "aircon", "localhost/aircon".to_owned()),
+            ("127.0.0.1:3000", "aircon", "local/aircon".to_owned()),
+            ("[::1]:3000", "aircon", "local/aircon".to_owned()),
+            ("[2001:db8::1]", "aircon", "local/aircon".to_owned()),
+            ("", "aircon", "local/aircon".to_owned()),
+            (
+                "my_host.example.com",
+                "air con/é🙂",
+                "com.example.my-host/air-con---".to_owned(),
+            ),
+            ("example.com", "", "com.example/mcp".to_owned()),
+            (long_host.as_str(), "aircon", "local/aircon".to_owned()),
+            (
+                "example.com",
+                long_name.as_str(),
+                format!("com.example/{}", "n".repeat(100)),
+            ),
+        ];
+        for (host, name, expected) in cases {
+            assert_eq!(default_name(host, name), expected, "{host} {name}");
+        }
+    }
+
+    #[test]
+    fn the_default_description_is_the_first_text_that_is_not_empty_shortened_to_100_characters() {
+        assert_eq!(
+            default_description(&[
+                Some("The catalog."),
+                Some("The instructions."),
+                Some("aircon")
+            ]),
+            "The catalog."
+        );
+        assert_eq!(
+            default_description(&[None, Some(""), Some("The instructions."), Some("aircon")]),
+            "The instructions."
+        );
+        assert_eq!(default_description(&[None, None, Some("aircon")]), "aircon");
+        assert_eq!(default_description(&[None, Some("")]), "MCP server");
+        let hundred = "é".repeat(100);
+        assert_eq!(default_description(&[Some(hundred.as_str())]), hundred);
+        let long = "🙂".repeat(101);
+        assert_eq!(
+            default_description(&[Some(long.as_str())]),
+            format!("{}…", "🙂".repeat(99))
+        );
+    }
 
     #[test]
     fn a_version_range_is_not_a_version() {

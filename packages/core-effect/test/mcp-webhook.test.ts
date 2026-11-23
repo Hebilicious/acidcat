@@ -259,18 +259,27 @@ test("after the grace time of a renewal, only the new secret signs", async () =>
   }
 });
 
-test("with signing keys, the verification and each delivery have a v1a signature for each key after the v1 signature, which the keys of the Server Card verify", async () => {
+const discoveringServer = (version: string) => async (request: Request) => {
+  const message: unknown = await request.json();
+  const id = isJsonObject(message) ? message.id : null;
+  return Response.json({ jsonrpc: "2.0", id, result: { supportedVersions: ["2026-07-28"], capabilities: {}, _meta: { "io.modelcontextprotocol/serverInfo": { name: "feed", version } } } });
+};
+
+const signingServers = {
+  toWebHandler: (feed: ReturnType<typeof feedForPromises>, webhooks: Partial<Mcp.WebhookOptions>) => Mcp.toWebHandler(events, feed.layer, webhookOptions(webhooks)),
+  withEvents: (feed: ReturnType<typeof feedForPromises>, webhooks: Partial<Mcp.WebhookOptions>) => Mcp.withEvents(events, feed.layer, discoveringServer("0.0.0"), webhookOptions(webhooks)),
+};
+
+for (const [kind, start] of Object.entries(signingServers)) test(`${kind}: with signing keys, the verification and each delivery have a v1a signature for each key after the v1 signature, which the keys of the Server Card verify`, async () => {
   const feed = feedForPromises();
   const egressIpRanges = ["203.0.113.0/24", "2001:db8::/32"];
-  const handler = Mcp.toWebHandler(events, feed.layer, {
-    ...webhookOptions({ signingKeys: [testSigningKey("first"), testSigningKey("second")], egressIpRanges }),
-    serverCard: { name: "dev.acid-cat/feed" },
-  });
+  const path = `/signed-${kind}`;
+  const handler = start(feed, { signingKeys: [testSigningKey("first"), testSigningKey("second")], egressIpRanges });
   try {
-    await statusOf(handler, "/signed");
+    await statusOf(handler, path);
     await feed.following(1);
-    await feed.publish({ room: "/signed", count: 1 });
-    const requests = await waitAt("/signed", 2);
+    await feed.publish({ room: path, count: 1 });
+    const requests = await waitAt(path, 2);
     const card: unknown = await (await handler(new Request(`${ORIGIN}/mcp/server-card`))).json();
     const remotes = isJsonObject(card) ? card.remotes : undefined;
     const extensions = Array.isArray(remotes) && isJsonObject(remotes[0]) ? remotes[0].extensionsInfo : undefined;
@@ -303,7 +312,7 @@ test("with signing keys, the verification and each delivery have a v1a signature
 test("a signing key of another form, two keys with the same kid, or an egress range that is not CIDR text, make the server fail when it starts", () => {
   const feed = feedForPromises();
   const key = testSigningKey("same");
-  const starts = (webhooks: Partial<Mcp.WebhookOptions>) => () => Mcp.toWebHandler(events, feed.layer, { ...webhookOptions(webhooks), serverCard: { name: "dev.acid-cat/feed" } });
+  const starts = (webhooks: Partial<Mcp.WebhookOptions>) => () => Mcp.toWebHandler(events, feed.layer, webhookOptions(webhooks));
   assert.throws(starts({ signingKeys: [{ ...key, d: "short" }] }), /Signing key 0/);
   assert.throws(starts({ signingKeys: [key, { ...testSigningKey("other"), kid: "same" }] }), /same/);
   for (const range of ["10.0.0.0/33", "10.0.0.0", "bad/8", "2001:db8::/129"]) assert.throws(starts({ egressIpRanges: [range] }), /CIDR/, range);

@@ -3,10 +3,10 @@ import { test } from "node:test";
 
 import { isJsonObject } from "@acid-cat/spec-ts";
 
-import { mcpHandler, mcpHandshake } from "../src/index.ts";
+import { defineApp, defineCapability, mcpHandler, mcpHandshake, ok } from "../src/index.ts";
 import type { McpSettings } from "../src/index.ts";
 import { webhookDelivery } from "../src/node.ts";
-import { fixture, options } from "./fixture.ts";
+import { fixture, options, toJsonSchema } from "./fixture.ts";
 
 const CARD_URL = "https://fixture.example/mcp/server-card";
 
@@ -64,8 +64,31 @@ test("a Server Card with a URL gives that URL, for a server behind a platform th
   await handler.close();
 });
 
-test("with no Server Card, a GET request to its URL gets 404", async () => {
+const cardOf = async (response: Response) => {
+  assert.equal(response.status, 200);
+  const card: unknown = await response.json();
+  assert.ok(isJsonObject(card));
+  return card;
+};
+
+test("with no settings, the server serves a Server Card with the default name, and the catalog description or a fallback", async () => {
   const handler = cardHandler({ serverCard: undefined });
+  const card = await cardOf(await handler(new Request(CARD_URL)));
+  assert.deepEqual([card["name"], card["version"], card["description"]], ["example.fixture/fixture", "1.2.3", fixture.description]);
+  assert.equal((await cardOf(await handler(new Request("http://127.0.0.1:3000/mcp/server-card"))))["name"], "local/fixture");
+  await handler.close();
+  const app = defineApp({
+    targets: { mcp: { bindings: ["mcp"] } },
+    capabilities: [defineCapability({ id: "probe.run", description: "Run the probe.", audience: ["mcp"], run: () => ok(null) })],
+  });
+  const noDescription = mcpHandler(app, { name: "probe server", version: "0.0.0", allowedOrigins: [], context: undefined, toJsonSchema });
+  const fallback = await cardOf(await noDescription(new Request("http://localhost:3000/mcp/server-card")));
+  assert.deepEqual([fallback["name"], fallback["description"]], ["localhost/probe-server", "probe server"]);
+  await noDescription.close();
+});
+
+test("with the Server Card off, a GET request to its URL gets 404, and a version range starts", async () => {
+  const handler = cardHandler({ serverCard: false, version: "^1.2.3" });
   assert.equal((await handler(new Request(CARD_URL))).status, 404);
   await handler.close();
 });
@@ -78,15 +101,15 @@ test("with webhook delivery and no signing keys or egress ranges, the Server Car
 });
 
 test("a card name that is not in reverse-DNS form, a description longer than 100 characters, a URL that is not http or https, or a version range, makes mcpHandler throw", () => {
-  assert.throws(() => cardHandler({ serverCard: { name: "dev.acid-cat/fixture", url: "ftp://mcp.example.com/mcp" } }), TypeError);
+  assert.throws(() => cardHandler({ serverCard: { url: "ftp://mcp.example.com/mcp" } }), TypeError);
   assert.throws(() => cardHandler({ serverCard: { name: "fixture" } }), TypeError);
-  assert.throws(() => cardHandler({ serverCard: { name: "dev.acid-cat/fixture", description: "x".repeat(101) } }), TypeError);
-  assert.throws(() => cardHandler({ version: "^1.2.3" }), /not a range/);
+  assert.throws(() => cardHandler({ serverCard: { description: "x".repeat(101) } }), TypeError);
+  assert.throws(() => cardHandler({ serverCard: undefined, version: "^1.2.3" }), /not a range/);
 });
 
-test("webhook signing keys or egress ranges with no Server Card make mcpHandler throw", () => {
+test("webhook signing keys or egress ranges with the Server Card off make mcpHandler throw", () => {
   const signingKey = { kty: "OKP", crv: "Ed25519", kid: "one", d: "A".repeat(43) } as const;
   for (const webhooks of [webhookDelivery({ signingKeys: [signingKey] }), webhookDelivery({ egressIpRanges: ["203.0.113.0/24"] })]) {
-    assert.throws(() => cardHandler({ serverCard: undefined, webhooks }), /need a Server Card/);
+    assert.throws(() => cardHandler({ serverCard: false, webhooks }), /need a Server Card/);
   }
 });

@@ -153,8 +153,31 @@ test("the Server Card gives the name, the version, the description of the catalo
   }
 });
 
-test("with no Server Card, a GET request to its URL gets 404, and a card that breaks the rules makes the server fail when it starts", async () => {
-  const handler = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [] });
+const cardOf = async (response: Response) => {
+  assert.equal(response.status, 200);
+  const card: unknown = await response.json();
+  assert.ok(isJsonObject(card));
+  return card;
+};
+
+test("with no settings, the server serves a Server Card with the default name, and the catalog description or a fallback", async () => {
+  const handler = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "1.2.3", allowedOrigins: [] });
+  const held = heldApp();
+  const noDescription = Mcp.toWebHandler(held.app, Layer.empty, { name: "held server", version: "0.0.0", allowedOrigins: [] });
+  try {
+    const card = await cardOf(await handler(new Request(CARD_URL)));
+    assert.deepEqual([card.name, card.version, card.description], ["example.fixture/fixture", "1.2.3", fixture.description]);
+    assert.equal((await cardOf(await handler(new Request("http://127.0.0.1:3000/mcp/server-card")))).name, "local/fixture");
+    const fallback = await cardOf(await noDescription(new Request("http://localhost:3000/mcp/server-card")));
+    assert.deepEqual([fallback.name, fallback.description], ["localhost/held-server", "held server"]);
+  } finally {
+    await handler.dispose();
+    await noDescription.dispose();
+  }
+});
+
+test("with the Server Card off, a GET request to its URL gets 404, and a card that breaks the rules makes the server fail when it starts", async () => {
+  const handler = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [], serverCard: false });
   try {
     assert.equal((await handler(new Request(CARD_URL))).status, 404);
   } finally {
@@ -162,16 +185,45 @@ test("with no Server Card, a GET request to its URL gets 404, and a card that br
   }
   const starts = (serverCard: Mcp.ServerCardSettings) => () => Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [], serverCard });
   assert.throws(starts({ name: "fixture" }), TypeError);
-  assert.throws(starts({ name: "dev.acid-cat/fixture", description: "x".repeat(101) }), TypeError);
-  assert.throws(starts({ name: "dev.acid-cat/fixture", url: "ftp://mcp.example.com/mcp" }), TypeError);
-  assert.throws(() => Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "^1.2.3", allowedOrigins: [], serverCard: { name: "dev.acid-cat/fixture" } }), /not a range/);
+  assert.throws(starts({ description: "x".repeat(101) }), TypeError);
+  assert.throws(starts({ url: "ftp://mcp.example.com/mcp" }), TypeError);
+  assert.throws(() => Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "^1.2.3", allowedOrigins: [] }), /not a range/);
+  await Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "^1.2.3", allowedOrigins: [], serverCard: false }).dispose();
 });
 
-test("webhook signing keys or egress ranges with no Server Card make the server fail when it starts", () => {
+test("webhook signing keys or egress ranges with the Server Card off make the server fail when it starts", () => {
   const signingKey = { kty: "OKP", crv: "Ed25519", kid: "one", d: "A".repeat(43) } as const;
   const sender: Mcp.WebhookSender = () => Effect.die("The test sends no webhook.");
   for (const webhooks of [{ sender, signingKeys: [signingKey] }, { sender, egressIpRanges: ["203.0.113.0/24"] }]) {
-    assert.throws(() => Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [], webhooks }), /need a Server Card/);
-    assert.throws(() => Mcp.withEvents(fixture, Layer.fresh(fixtureLayer), () => Promise.resolve(new Response()), { allowedOrigins: [], webhooks }), /need one/);
+    assert.throws(() => Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [], webhooks, serverCard: false }), /need a Server Card/);
+    assert.throws(() => Mcp.withEvents(fixture, Layer.fresh(fixtureLayer), () => Promise.resolve(new Response()), { allowedOrigins: [], webhooks, serverCard: false }), /need a Server Card/);
+  }
+});
+
+test("withEvents serves a Server Card with the version, the name and the instructions of server/discover of the wrapped server, and 502 when server/discover fails", async () => {
+  const discovered = { version: "1.0.0", fails: false };
+  const server = async (request: Request) => {
+    assert.equal(request.headers.get("Mcp-Method"), "server/discover");
+    if (discovered.fails) return new Response(null, { status: 500 });
+    const serverInfo = { name: "own server", version: discovered.version };
+    return Response.json({ jsonrpc: "2.0", id: 0, result: { supportedVersions: ["2026-07-28"], capabilities: {}, instructions: "Use the tools of the server.", _meta: { "io.modelcontextprotocol/serverInfo": serverInfo } } });
+  };
+  const handler = Mcp.withEvents(fixture, Layer.fresh(fixtureLayer), server, { allowedOrigins: [] });
+  const off = Mcp.withEvents(fixture, Layer.fresh(fixtureLayer), server, { allowedOrigins: [], serverCard: false });
+  try {
+    const card = await cardOf(await handler(new Request(CARD_URL)));
+    assert.deepEqual([card.name, card.version, card.description], ["example.fixture/own-server", "1.0.0", "Use the tools of the server."]);
+    assert.deepEqual(card.remotes, [{ type: "streamable-http", url: `${ORIGIN}/mcp`, supportedProtocolVersions: ["2026-07-28"] }]);
+    discovered.version = "2.0.0";
+    assert.equal((await cardOf(await handler(new Request(CARD_URL)))).version, "2.0.0");
+    discovered.version = "^2.0.0";
+    assert.equal((await handler(new Request(CARD_URL))).status, 502);
+    discovered.fails = true;
+    assert.equal((await handler(new Request(CARD_URL))).status, 502);
+    assert.equal((await handler(new Request(CARD_URL, { method: "OPTIONS" }))).status, 204);
+    assert.equal((await off(new Request(CARD_URL))).status, 404);
+  } finally {
+    await handler.dispose();
+    await off.dispose();
   }
 });

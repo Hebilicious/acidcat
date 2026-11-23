@@ -29,7 +29,7 @@ fn binding(options: McpOptions) -> McpBinding<Services> {
 
 fn carded(webhooks: Option<WebhookOptions>) -> McpOptions {
     McpOptions {
-        server_card: Some(ServerCard::new("dev.acid-cat/test")),
+        server_card: Some(ServerCard::named("dev.acid-cat/test")),
         webhooks,
         ..McpOptions::new("test", "1.2.3")
     }
@@ -131,7 +131,7 @@ async fn the_server_card_tells_how_to_connect_and_honors_its_entity_tag() {
     let behind_tls = binding(McpOptions {
         server_card: Some(ServerCard {
             url: Some("https://mcp.example.com/mcp".into()),
-            ..ServerCard::new("dev.acid-cat/test")
+            ..ServerCard::named("dev.acid-cat/test")
         }),
         ..McpOptions::new("test", "1.2.3")
     });
@@ -142,8 +142,43 @@ async fn the_server_card_tells_how_to_connect_and_honors_its_entity_tag() {
 }
 
 #[tokio::test]
-async fn a_server_with_no_card_answers_404() {
+async fn with_no_settings_the_server_serves_a_card_with_the_default_name_and_description() {
     let served = binding(McpOptions::new("test", "1.2.3"));
+    let card = read_card(&served).await;
+    assert_eq!(card["name"], "test.example/test");
+    assert_eq!(card["version"], "1.2.3");
+    assert_eq!(card["description"], "Serve nothing but a card.");
+    let local = send(
+        &served,
+        Request::get("/mcp/server-card").header("host", "127.0.0.1:3000"),
+    )
+    .await;
+    let local: Value = serde_json::from_slice(&local.1).expect("a JSON card");
+    assert_eq!(local["name"], "local/test");
+
+    let no_description = App::new()
+        .target("mcp", ["mcp"])
+        .build()
+        .expect("the application conforms");
+    let served = McpBinding::new(
+        no_description,
+        Arc::new(Services),
+        McpOptions::new("test server", "0.0.0"),
+    );
+    let request = Request::get("/mcp/server-card").header("host", "localhost:3000");
+    let (head, body) = send(&served, request).await;
+    assert_eq!(head.status, 200);
+    let card: Value = serde_json::from_slice(&body).expect("a JSON card");
+    assert_eq!(card["name"], "localhost/test-server");
+    assert_eq!(card["description"], "test server");
+}
+
+#[tokio::test]
+async fn a_server_with_the_card_off_answers_404_and_starts_with_a_version_range() {
+    let served = binding(McpOptions {
+        server_card: None,
+        ..McpOptions::new("test", "^1.2.3")
+    });
     let (head, body) = send(&served, Request::get("/mcp/server-card")).await;
     assert_eq!(head.status, 404);
     assert!(body.is_empty());
@@ -215,14 +250,14 @@ fn invalid_card_or_webhook_options_panic_when_the_binding_starts() {
     }));
     assert!(message.contains("more than one time"), "{message}");
     let message = panic_message(McpOptions {
-        server_card: Some(ServerCard::new("no-slash")),
+        server_card: Some(ServerCard::named("no-slash")),
         ..McpOptions::new("test", "1.2.3")
     });
     assert!(message.contains("namespace/name"), "{message}");
     let message = panic_message(McpOptions {
         server_card: Some(ServerCard {
             description: Some("x".repeat(101)),
-            ..ServerCard::new("dev.acid-cat/test")
+            ..ServerCard::default()
         }),
         ..McpOptions::new("test", "1.2.3")
     });
@@ -230,20 +265,17 @@ fn invalid_card_or_webhook_options_panic_when_the_binding_starts() {
     let message = panic_message(McpOptions {
         server_card: Some(ServerCard {
             url: Some("ftp://mcp.example.com/mcp".into()),
-            ..ServerCard::new("dev.acid-cat/test")
+            ..ServerCard::default()
         }),
         ..McpOptions::new("test", "1.2.3")
     });
     assert!(message.contains("http or https URL"), "{message}");
-    let message = panic_message(McpOptions {
-        server_card: Some(ServerCard::new("dev.acid-cat/test")),
-        ..McpOptions::new("test", "^1.2.3")
-    });
+    let message = panic_message(McpOptions::new("test", "^1.2.3"));
     assert!(message.contains("not a range"), "{message}");
 }
 
 #[test]
-fn signing_keys_or_egress_ranges_with_no_card_panic_when_the_binding_starts() {
+fn signing_keys_or_egress_ranges_with_the_card_off_panic_when_the_binding_starts() {
     for webhooks in [
         WebhookOptions {
             signing_keys: vec![private_jwk("one", 1)],
@@ -256,6 +288,7 @@ fn signing_keys_or_egress_ranges_with_no_card_panic_when_the_binding_starts() {
     ] {
         let message = panic_message(McpOptions {
             webhooks: Some(webhooks),
+            server_card: None,
             ..McpOptions::new("test", "1.2.3")
         });
         assert!(message.contains("need a Server Card"), "{message}");

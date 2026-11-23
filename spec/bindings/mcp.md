@@ -179,23 +179,37 @@ A translation layer in front of a server of revision `2026-07-28` can serve the 
 
 ## Server Card
 
-A server through HTTP MAY serve an MCP Server Card: a JSON document that tells a client how to connect to the server before it connects. The [Server Card extension](https://github.com/modelcontextprotocol/ext-server-card), `io.modelcontextprotocol/server-card`, gives the form of the card, at commit `28db12c` of its repository. The server serves a card only if the deployment gives the card a name.
+A server through HTTP serves an MCP Server Card: a JSON document that tells a client how to connect to the server before it connects. The [Server Card extension](https://github.com/modelcontextprotocol/ext-server-card), `io.modelcontextprotocol/server-card`, gives the form of the card, at commit `28db12c` of its repository. An implementation SHOULD serve the card unless the deployment turns it off, and SHOULD let the deployment turn it off. So a client cannot expect a card from each server.
 
 - **Location.** The URL of the card is the URL of the server and `/server-card`, for example `/mcp/server-card`. A `GET` request to it gets the card, with the HTTP status 200 and `Content-Type: application/mcp-server-card+json`. If the server serves no card, a `GET` request to it gets 404.
 - **Members.** The card has these members, and no other members:
   - `$schema`: `https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json`.
-  - `name`: the name that the deployment gives. It has the reverse-DNS form of the extension: 3 to 200 characters, and one `/`, for example `com.example/aircon`. It is the name of the server in a registry. The `name` of `serverInfo` in `server/discover` is the name at run time, and can be different.
+  - `name`: the name that the deployment gives, or else the [default name](#default-name). It has the reverse-DNS form of the extension: 3 to 200 characters, and one `/`, for example `com.example/aircon`. It is the name of the server in a registry. The `name` of `serverInfo` in `server/discover` is the name at run time, and can be different.
   - `version`: the version of the server, the same as the `version` of `serverInfo` in `server/discover`. It is one version, not a range, as the [schema of the extension](https://github.com/modelcontextprotocol/ext-server-card/blob/28db12c/schema.ts) tells: it does not start with `^`, `~`, `<`, `>` or `=`, it has no `||` and no white space before a `-`, and no part of it before the first `-` or `+` is `x`, `X` or `*`. For example, `1.2.3` is a version, and `^1.2.3` and `1.x` are ranges.
-  - `description`: the description that the deployment gives for the card, or else the `description` of the catalog. It has 1 to 100 characters.
+  - `description`: the description that the deployment gives for the card, or else the [default description](#default-description). It has 1 to 100 characters.
   - `remotes`: one entry. Its `type` is `streamable-http`. Its `url` is the URL that the deployment gives, or else the URL of the server with the origin of the request of the card. A deployment behind a platform that ends TLS gives the `https` URL, because the server gets the request as `http`. Its `supportedProtocolVersions` are `2026-07-28` and each revision of the [`initialize` handshake](#earlier-revisions-through-http) that the server serves at that URL.
 - **Webhook information.** If webhook delivery is on and the deployment gives [signing keys or egress ranges](#webhook), the entry of `remotes` has `extensionsInfo: { "io.modelcontextprotocol/events": { "webhooks": … } }`. `webhooks` has the members of what the deployment gives:
   - `signingKeys`: a JWK set, `{ "keys": [...] }`, with the public key of each signing key, in the order of the keys. Each public key has only `kty: "OKP"`, `crv: "Ed25519"`, the `kid` and `x`, the base64url of the public key with no padding.
   - `egressIpRanges`: the egress ranges, as the deployment gives them, in the same order.
-- **Startup.** A server whose card has a name that does not have the reverse-DNS form, no description, a description that is longer than 100 characters, a version that is a range or is longer than 255 characters, or a URL that is not an `http` or `https` URL, fails when it starts. A server with signing keys or egress ranges and no card also fails when it starts, because a receiver gets them only from the card.
+- **Startup.** A server whose deployment gives the card a name that does not have the reverse-DNS form, a description that does not have 1 to 100 characters, or a URL that is not an `http` or `https` URL, fails when it starts. A server with the card on and a version that is a range or is longer than 255 characters also fails when it starts. A default never makes a server fail. A server with signing keys or egress ranges and the card off also fails when it starts, because a receiver gets them only from the card.
 - **Content.** The card is public. It has no sensitive information: no secret, such as a private key, a credential or a token, no private endpoint, and no internal detail of the network ([Information Disclosure](https://github.com/modelcontextprotocol/ext-server-card/blob/28db12c/docs/discovery.md#information-disclosure)).
 - **Transport.** In production, the deployment serves the card through HTTPS, with TLS 1.2 or later. HTTP is only for local development ([Transport Security](https://github.com/modelcontextprotocol/ext-server-card/blob/28db12c/docs/discovery.md#transport-security)).
 - **Trust.** A client uses information of `extensionsInfo` for a security decision, for example the signing keys to verify `v1a,` signatures or the egress ranges to allow addresses, only if it got the card through HTTPS from the origin of the `url` of the remote, with no redirect to another origin. It does not use such information from a card on another origin, or from a card inline in an entry of an AI Catalog. For other values, the live connection is the source of truth. See [Consistency with runtime behavior](https://github.com/modelcontextprotocol/ext-server-card/blob/28db12c/docs/discovery.md#consistency-with-runtime-behavior).
 - **Headers.** The response of the card has the headers `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Content-Type, If-None-Match`, `Access-Control-Expose-Headers: ETag`, `Cache-Control: public, max-age=3600` and an `ETag`. A `GET` request whose `If-None-Match` header has the entity tag of the card gets 304, with no body. An `OPTIONS` request gets 204, with the same headers and no `ETag`. A request with another method gets 405, with `Allow: GET, OPTIONS`.
+
+### Default name
+
+The default name is `<namespace>/<server>`. It always has the reverse-DNS form.
+
+- **Host.** The host is the host of the `url` of the remote, without the port. It is in lower case, with no `.` at its end.
+- **Namespace.** The namespace is the labels of the host in reverse order, joined by `.`, with `-` in place of each character that is not a letter from `a` to `z` or `A` to `Z`, a digit, `.` or `-`. For example, `aircon.example.com` gives `com.example.aircon`, and `localhost` gives `localhost`. The namespace is `local` if the host is an IP address (an IPv6 address in `[` and `]`, or a host whose last label has only digits), if the host is empty, or if the namespace has more than 99 characters. An IP address is not a name of the server in DNS, so it gives no namespace.
+- **Server.** The server part is the `name` of `serverInfo` in `server/discover`, with `-` in place of each character that is not a letter from `a` to `z` or `A` to `Z`, a digit, `.`, `_` or `-`, and only its first 100 characters. It is `mcp` if it is empty.
+
+For example, the server `aircon` at `https://aircon.example.com/mcp` has the default name `com.example.aircon/aircon`, and at `http://127.0.0.1:3000/mcp` it has `local/aircon`.
+
+### Default description
+
+The default description is the first of these texts that is not empty: the `description` of the catalog, the `instructions` of `server/discover`, and the `name` of `serverInfo` in `server/discover`. If none of them has text, it is `MCP server`. A text of more than 100 characters becomes its first 99 characters and `…` (U+2026). The characters are Unicode code points.
 
 ## Stdio
 

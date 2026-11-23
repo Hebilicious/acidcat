@@ -10,6 +10,7 @@ import {
   mcpServerCard,
   mcpServerCardIdentity,
   mcpServerCardResponse,
+  mcpServerCardSettings,
   mcpServerUrlOfCardRequest,
   mcpToolAnnotations,
   mcpToolResult,
@@ -68,11 +69,13 @@ export interface McpSettings {
   /** The clock of the poll leases. The default is the clock of the system. */
   readonly clock?: Clock | undefined;
   /**
-   * Serve a Server Card at the URL of the server and `/server-card` (spec/bindings/mcp.md#server-card). With no card,
-   * a `GET` request to that URL gets 404. A card whose name, description or version breaks the rules makes
-   * `mcpHandler` throw. So does webhook delivery with signing keys or egress ranges and no card.
+   * The Server Card at the URL of the server and `/server-card` (spec/bindings/mcp.md#server-card). The server serves
+   * it with the default settings when this member is absent. With `false`, the server serves no card, and a `GET`
+   * request to that URL gets 404. A given name, description or URL that breaks the rules makes `mcpHandler` throw, and
+   * so does a version that is a range while the card is on. So does webhook delivery with signing keys or egress ranges
+   * and the card off.
    */
-  readonly serverCard?: McpServerCardSettings | undefined;
+  readonly serverCard?: McpServerCardSettings | false | undefined;
 }
 
 /**
@@ -122,7 +125,9 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
   const closeAll = async () => {
     await Promise.allSettled([leases.close(), options.webhooks?.close()]);
   };
-  const identity = mcpServerCardIdentity(options.serverCard, options.version, app.description, options.webhooks?.publishesOnServerCard === true);
+  const cardSettings = mcpServerCardSettings(options.serverCard, options.webhooks?.publishesOnServerCard === true);
+  const identity =
+    cardSettings === undefined ? undefined : mcpServerCardIdentity(cardSettings, { name: options.name, version: options.version, descriptions: [app.description, options.instructions, options.name] });
   const handle = async (request: Request): Promise<Response> => {
     const serverUrl = mcpServerUrlOfCardRequest(request);
     if (serverUrl !== undefined && identity !== undefined) return mcpServerCardResponse(request, mcpServerCard(identity, serverUrl, await options.webhooks?.cardInfo?.()));

@@ -132,11 +132,11 @@ MCP through HTTP also accepts the [`initialize` handshake of earlier revisions](
 
 ### Server Card
 
-`McpOptions::server_card` serves an [MCP Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. The default is `None`: a `GET` request to that URL gets 404.
+`McpBinding` serves an [MCP Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. It is on by default: `McpOptions::new` sets `server_card: Some(ServerCard::default())`. `server_card: None` turns it off: a `GET` request to that URL then gets 404.
 
 ```rust,ignore
 let options = McpOptions {
-    server_card: Some(ServerCard::new("com.example/aircon")),
+    server_card: Some(ServerCard::named("com.example/aircon")),
     webhooks: Some(WebhookOptions {
         signing_keys: vec![private_jwk],
         egress_ip_ranges: vec!["203.0.113.0/24".into()],
@@ -146,14 +146,15 @@ let options = McpOptions {
 };
 ```
 
-- `ServerCard::new(name)` gives the name of the card, in reverse-DNS form: 3 to 200 characters, and one `/`. `ServerCard::description` gives the description of the card. The default is the description of the application.
-- The card gives `McpOptions::version`, and the URL of the server with the scheme and the host of the request. Behind a platform that ends TLS, the server gets `http` requests: give the `https` URL in `ServerCard::url`. It gives `2026-07-28` and, if `McpOptions::handshake` is `true`, the revisions of the `initialize` handshake.
+- `ServerCard::named(name)` gives the name of the card, in reverse-DNS form: 3 to 200 characters, and one `/`. The default name comes from the host of the URL and `McpOptions::name`: `com.example.aircon/aircon` for `aircon` at `aircon.example.com`, `localhost/aircon` at `localhost`, and `local/aircon` at an IP address such as `127.0.0.1` ([Default name](../../spec/bindings/mcp.md#default-name)).
+- `ServerCard::description` gives the description of the card, from 1 to 100 characters. The default is the description of the application, else `McpOptions::instructions`, else `McpOptions::name`, shortened to 100 characters ([Default description](../../spec/bindings/mcp.md#default-description)).
+- The card gives `McpOptions::version`, and the URL of the server with the scheme and the host of the request. Behind a platform that ends TLS, the server gets `http` requests: give the `https` URL in `ServerCard::url`. The default name then takes the host of that URL. It gives `2026-07-28` and, if `McpOptions::handshake` is `true`, the revisions of the `initialize` handshake.
 - `WebhookOptions::signing_keys` is a list of private Ed25519 JSON Web Keys: `kty: "OKP"`, `crv: "Ed25519"`, a `kid` that is not empty, and `d`, the base64url of 32 bytes with no padding. The `webhook-signature` header of each webhook request gets one `v1a,` signature for each key, after the `v1,` signatures. The card gives the public key of each key, and never `d`. The core takes the public key from `d`, and does not read `x`. To change keys, give the new key beside the old one.
 - `WebhookOptions::egress_ip_ranges` is a list of CIDR ranges, for example `203.0.113.0/24` or `2001:db8::/32`. The card gives them as they are.
-- The card gives the keys and the ranges only if webhook delivery is on. Signing keys or egress ranges with no card make the binding panic, because a receiver gets them only from the card.
-- The card name is the name of the server in a registry. `McpOptions::new(name, version)` gives the name that `server/discover` gives at run time. The card gives `McpOptions::version`, the same version as `server/discover`, so it must be one version, not a range such as `^1.2.3` or `1.x`.
+- The card gives the keys and the ranges only if webhook delivery is on. Signing keys or egress ranges with `server_card: None` make the binding panic, because a receiver gets them only from the card.
+- The card name is the name of the server in a registry. `McpOptions::new(name, version)` gives the name that `server/discover` gives at run time. The card gives `McpOptions::version`, the same version as `server/discover`, so with the card on, it must be one version, not a range such as `^1.2.3` or `1.x`.
 
-`McpBinding::new` and `McpBinding::with_request_context` panic when an option is not valid: a card name that does not have the reverse-DNS form, a card with no description or a description that is longer than 100 characters, a version that is a range or is longer than 255 characters with a card, a card URL that is not an `http` or `https` URL, a signing key of another form, two signing keys with the same `kid`, an egress range that is not CIDR text, or signing keys or egress ranges with no card.
+`McpBinding::new` and `McpBinding::with_request_context` panic when an option is not valid: a given card name that does not have the reverse-DNS form, a given description that does not have 1 to 100 characters, a given card URL that is not an `http` or `https` URL, a version that is a range or is longer than 255 characters with the card on, a signing key of another form, two signing keys with the same `kid`, an egress range that is not CIDR text, or signing keys or egress ranges with the card off. The defaults never make the binding panic.
 
 ### Serving the remote bindings
 

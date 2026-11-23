@@ -13,6 +13,8 @@ import {
   encodePollCursor,
   isGloballyRoutable,
   isVersionRange,
+  mcpServerCardDescription,
+  mcpServerCardName,
   webhookGrantMs,
   webhookSecretBytes,
   webhookSignature,
@@ -245,4 +247,32 @@ test("cliAliases reads the input schema of a capability through $defs, and ignor
 test("a version range is not a version of a Server Card", () => {
   for (const range of ["^1.2.3", "~1.2.3", ">=1.2.3", "<2", "=1.0.0", "1.x", "1.2.*", "*", "1 - 2", "1.2 || 1.3"]) assert.equal(isVersionRange(range), true, range);
   for (const version of ["1.2.3", "2.1.0-alpha", "1.0.0-next.1", "1.0.0+x", "0.0.0", "v1.2"]) assert.equal(isVersionRange(version), false, version);
+});
+
+test("the default name of a Server Card reverses the labels of the host, and falls back to local for an IP address", () => {
+  const cases = [
+    ["aircon.example.com", "aircon", "com.example.aircon/aircon"],
+    ["Aircon.Example.COM.", "aircon", "com.example.aircon/aircon"],
+    ["aircon.example.com:8443", "aircon", "com.example.aircon/aircon"],
+    ["localhost", "aircon", "localhost/aircon"],
+    ["localhost:3000", "aircon", "localhost/aircon"],
+    ["127.0.0.1:3000", "aircon", "local/aircon"],
+    ["[::1]:3000", "aircon", "local/aircon"],
+    ["[2001:db8::1]", "aircon", "local/aircon"],
+    ["", "aircon", "local/aircon"],
+    ["my_host.example.com", "air con/é🙂", "com.example.my-host/air-con---"],
+    ["example.com", "", "com.example/mcp"],
+    [`${"a".repeat(100)}.com`, "aircon", "local/aircon"],
+    ["example.com", "n".repeat(150), `com.example/${"n".repeat(100)}`],
+  ] as const;
+  for (const [host, name, expected] of cases) assert.equal(mcpServerCardName(host, name), expected, `${host} ${name}`);
+});
+
+test("the default description of a Server Card is the first text that is not empty, shortened to 100 characters", () => {
+  assert.equal(mcpServerCardDescription(["The catalog.", "The instructions.", "aircon"]), "The catalog.");
+  assert.equal(mcpServerCardDescription([undefined, "", "The instructions.", "aircon"]), "The instructions.");
+  assert.equal(mcpServerCardDescription([undefined, undefined, "aircon"]), "aircon");
+  assert.equal(mcpServerCardDescription([undefined, ""]), "MCP server");
+  assert.equal(mcpServerCardDescription(["é".repeat(100)]), "é".repeat(100));
+  assert.equal(mcpServerCardDescription(["🙂".repeat(101)]), `${"🙂".repeat(99)}…`);
 });
