@@ -69,6 +69,21 @@ module facts {
 
   pure val MCP_SERVER_CARD_CACHE_CONTROL: str = "public, max-age=3600"
 
+  pure val MCP_SERVER_CARD_CORS_HEADERS: List[(str, str)] = [
+    ("Access-Control-Allow-Origin", "*"),
+    ("Access-Control-Allow-Methods", "GET"),
+    ("Access-Control-Allow-Headers", "Content-Type, If-None-Match"),
+    ("Access-Control-Expose-Headers", "ETag"),
+  ]
+
+  pure val MCP_SERVER_CARD_NAME_MIN_LENGTH: int = 3
+
+  pure val MCP_SERVER_CARD_NAME_MAX_LENGTH: int = 200
+
+  pure val MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH: int = 100
+
+  pure val MCP_SERVER_CARD_VERSION_MAX_LENGTH: int = 255
+
   pure val MCP_EVENT_ERRORS: List[(str, int)] = [
     ("notFound", -32023),
     ("forbidden", -32024),
@@ -139,6 +154,11 @@ module factsData {
     mcpServerCardMediaType: str,
     mcpServerCardSchema: str,
     mcpServerCardCacheControl: str,
+    mcpServerCardCorsHeaders: List[(str, str)],
+    mcpServerCardNameMinLength: int,
+    mcpServerCardNameMaxLength: int,
+    mcpServerCardDescriptionMaxLength: int,
+    mcpServerCardVersionMaxLength: int,
     mcpEventErrors: List[(str, int)],
     mcpRejections: List[{ rejection: str, status: int, code: RpcCode }],
     startMessages: { genericCommand: str, sharedPrefix: str, resumeProperty: str },
@@ -168,6 +188,11 @@ module factsData {
     mcpServerCardMediaType: MCP_SERVER_CARD_MEDIA_TYPE,
     mcpServerCardSchema: MCP_SERVER_CARD_SCHEMA,
     mcpServerCardCacheControl: MCP_SERVER_CARD_CACHE_CONTROL,
+    mcpServerCardCorsHeaders: MCP_SERVER_CARD_CORS_HEADERS,
+    mcpServerCardNameMinLength: MCP_SERVER_CARD_NAME_MIN_LENGTH,
+    mcpServerCardNameMaxLength: MCP_SERVER_CARD_NAME_MAX_LENGTH,
+    mcpServerCardDescriptionMaxLength: MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH,
+    mcpServerCardVersionMaxLength: MCP_SERVER_CARD_VERSION_MAX_LENGTH,
     mcpEventErrors: MCP_EVENT_ERRORS,
     mcpRejections: MCP_REJECTIONS,
     startMessages: START_MESSAGES,

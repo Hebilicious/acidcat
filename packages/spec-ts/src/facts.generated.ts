@@ -62,6 +62,21 @@ export const MCP_SERVER_CARD_SCHEMA = "https://static.modelcontextprotocol.io/sc
 
 export const MCP_SERVER_CARD_CACHE_CONTROL = "public, max-age=3600";
 
+export const MCP_SERVER_CARD_CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET",
+  "Access-Control-Allow-Headers": "Content-Type, If-None-Match",
+  "Access-Control-Expose-Headers": "ETag",
+} as const;
+
+export const MCP_SERVER_CARD_NAME_MIN_LENGTH = 3;
+
+export const MCP_SERVER_CARD_NAME_MAX_LENGTH = 200;
+
+export const MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH = 100;
+
+export const MCP_SERVER_CARD_VERSION_MAX_LENGTH = 255;
+
 export const MCP_EVENT_ERRORS = {
   notFound: -32023,
   forbidden: -32024,

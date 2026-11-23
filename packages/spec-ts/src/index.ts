@@ -14,9 +14,14 @@ import {
   MCP_PROTOCOL_VERSION,
   MCP_REJECTIONS as REJECTIONS,
   MCP_SERVER_CARD_CACHE_CONTROL,
+  MCP_SERVER_CARD_CORS_HEADERS,
+  MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH,
   MCP_SERVER_CARD_MEDIA_TYPE,
+  MCP_SERVER_CARD_NAME_MAX_LENGTH,
+  MCP_SERVER_CARD_NAME_MIN_LENGTH,
   MCP_SERVER_CARD_PATH,
   MCP_SERVER_CARD_SCHEMA,
+  MCP_SERVER_CARD_VERSION_MAX_LENGTH,
   MCP_SUBSCRIPTION_ID,
 } from "./facts.generated.ts";
 
@@ -983,7 +988,7 @@ export function isVersionRange(version: string): boolean {
 /**
  * Check the settings of the Server Card when the server starts (spec/bindings/mcp.md#server-card), and give
  * `undefined` when the deployment turns the card off with `false`. Throws a `TypeError` for a given name that is not
- * in reverse-DNS form, a given description that does not have 1 to 100 characters, or a given URL that is not an
+ * in reverse-DNS form, a given description that is empty or too long, or a given URL that is not an
  * absolute `http` or `https` URL with a host. With the card off, throws a `TypeError` if `publishesWebhookInfo` is
  * true: no receiver can then get the signing keys and the egress ranges.
  */
@@ -996,11 +1001,11 @@ export function mcpServerCardSettings(settings: McpServerCardSettings | false | 
   }
   const card = settings ?? {};
   const { name, description, url } = card;
-  if (name !== undefined && (!SERVER_CARD_NAME.test(name) || characterCount(name) < 3 || characterCount(name) > 200)) {
-    throw new TypeError(`The name of the Server Card ${JSON.stringify(name)} must have the reverse-DNS form with one /, for example com.example/aircon, and 3 to 200 characters.`);
+  if (name !== undefined && (!SERVER_CARD_NAME.test(name) || characterCount(name) < MCP_SERVER_CARD_NAME_MIN_LENGTH || characterCount(name) > MCP_SERVER_CARD_NAME_MAX_LENGTH)) {
+    throw new TypeError(`The name of the Server Card ${JSON.stringify(name)} must have the reverse-DNS form with one /, for example com.example/aircon, and ${MCP_SERVER_CARD_NAME_MIN_LENGTH} to ${MCP_SERVER_CARD_NAME_MAX_LENGTH} characters.`);
   }
-  if (description !== undefined && (characterCount(description) < 1 || characterCount(description) > 100)) {
-    throw new TypeError("The description of the Server Card must have 1 to 100 characters.");
+  if (description !== undefined && (description === "" || characterCount(description) > MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH)) {
+    throw new TypeError(`The description of the Server Card must have 1 to ${MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH} characters.`);
   }
   if (url !== undefined && httpHost(url) === undefined) {
     throw new TypeError(`The URL of the Server Card ${JSON.stringify(url)} must be an absolute http or https URL with a host.`);
@@ -1010,11 +1015,13 @@ export function mcpServerCardSettings(settings: McpServerCardSettings | false | 
 
 /**
  * The identity of a Server Card, from its checked settings and from what the server tells about itself. Throws a
- * `TypeError` for a version that is a range or is longer than 255 characters.
+ * `TypeError` for a version that is a range or is too long.
  */
 export function mcpServerCardIdentity(settings: McpServerCardSettings, server: McpServerCardServer): McpServerCardIdentity {
   const { version } = server;
-  if (characterCount(version) > 255) throw new TypeError("The version of a server with a Server Card must have 255 characters or less.");
+  if (characterCount(version) > MCP_SERVER_CARD_VERSION_MAX_LENGTH) {
+    throw new TypeError(`The version of a server with a Server Card must have ${MCP_SERVER_CARD_VERSION_MAX_LENGTH} characters or less.`);
+  }
   if (isVersionRange(version)) throw new TypeError(`The version of a server with a Server Card ${JSON.stringify(version)} must be one version, not a range such as ^1.2.3, >=1.2.3 or 1.x.`);
   return {
     name: settings.name,
@@ -1029,22 +1036,23 @@ const DEFAULT_SERVER_CARD_DESCRIPTION = "MCP server";
 
 /**
  * The default description of a Server Card: the first text that is not empty, or else `MCP server`. A text longer than
- * 100 characters becomes its first 99 characters and `…`.
+ * the longest description of a card is cut, and ends with `…`.
  */
 export function mcpServerCardDescription(texts: readonly (string | undefined)[]): string {
   const text = texts.find((each) => each !== undefined && each !== "") ?? DEFAULT_SERVER_CARD_DESCRIPTION;
   const characters = Array.from(text);
-  return characters.length <= 100 ? text : `${characters.slice(0, 99).join("")}…`;
+  return characters.length <= MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH ? text : `${characters.slice(0, MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH - 1).join("")}…`;
 }
 
 const FALLBACK_SERVER_CARD_NAMESPACE = "local";
+const SERVER_CARD_NAME_PART_MAX_LENGTH = MCP_SERVER_CARD_NAME_MAX_LENGTH / 2;
 
 /**
  * The default name of a Server Card (spec/bindings/mcp.md#server-card), from the host of the URL of the server, with or
  * without a port, and the name of the server.
  */
 export function mcpServerCardName(host: string, serverName: string): string {
-  const server = serverName.replace(/[^a-zA-Z0-9._-]/gu, "-").slice(0, 100) || "mcp";
+  const server = serverName.replace(/[^a-zA-Z0-9._-]/gu, "-").slice(0, SERVER_CARD_NAME_PART_MAX_LENGTH) || "mcp";
   return `${serverCardNamespace(host)}/${server}`;
 }
 
@@ -1057,7 +1065,7 @@ function serverCardNamespace(host: string): string {
   const labels = hostname.split(".");
   if (hostname === "" || /^[0-9]+$/.test(labels.at(-1) ?? "")) return FALLBACK_SERVER_CARD_NAMESPACE;
   const namespace = labels.reverse().join(".").replace(/[^a-zA-Z0-9.-]/gu, "-");
-  return namespace.length > 99 ? FALLBACK_SERVER_CARD_NAMESPACE : namespace;
+  return namespace.length >= SERVER_CARD_NAME_PART_MAX_LENGTH ? FALLBACK_SERVER_CARD_NAMESPACE : namespace;
 }
 
 /**
@@ -1088,13 +1096,7 @@ export function mcpServerUrlOfCardRequest(request: Request): string | undefined 
   return `${url.origin}${url.pathname.slice(0, -MCP_SERVER_CARD_PATH.length)}`;
 }
 
-const SERVER_CARD_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET",
-  "Access-Control-Allow-Headers": "Content-Type, If-None-Match",
-  "Access-Control-Expose-Headers": "ETag",
-  "Cache-Control": MCP_SERVER_CARD_CACHE_CONTROL,
-} as const;
+const SERVER_CARD_HEADERS = { ...MCP_SERVER_CARD_CORS_HEADERS, "Cache-Control": MCP_SERVER_CARD_CACHE_CONTROL } as const;
 
 /**
  * The answer to a request to the URL of a Server Card that is not a `GET` request: the CORS headers for `OPTIONS`, and

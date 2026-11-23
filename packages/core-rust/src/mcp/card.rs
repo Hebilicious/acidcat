@@ -8,8 +8,10 @@ use url::Url;
 use super::webhook::Webhooks;
 use super::{EVENTS_EXTENSION, HANDSHAKE_VERSIONS, PROTOCOL_VERSION};
 use crate::facts_generated::{
-    MCP_SERVER_CARD_CACHE_CONTROL, MCP_SERVER_CARD_MEDIA_TYPE, MCP_SERVER_CARD_PATH,
-    MCP_SERVER_CARD_SCHEMA,
+    MCP_SERVER_CARD_CACHE_CONTROL, MCP_SERVER_CARD_CORS_HEADERS,
+    MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH, MCP_SERVER_CARD_MEDIA_TYPE,
+    MCP_SERVER_CARD_NAME_MAX_LENGTH, MCP_SERVER_CARD_NAME_MIN_LENGTH, MCP_SERVER_CARD_PATH,
+    MCP_SERVER_CARD_SCHEMA, MCP_SERVER_CARD_VERSION_MAX_LENGTH,
 };
 use crate::remote::{ResponseBody, empty_response};
 
@@ -58,7 +60,8 @@ fn is_card_name(name: &str) -> bool {
     let Some((namespace, short)) = name.split_once('/') else {
         return false;
     };
-    (3..=200).contains(&name.chars().count())
+    (MCP_SERVER_CARD_NAME_MIN_LENGTH..=MCP_SERVER_CARD_NAME_MAX_LENGTH)
+        .contains(&name.chars().count())
         && !namespace.is_empty()
         && namespace
             .bytes()
@@ -84,6 +87,7 @@ fn is_version_range(version: &str) -> bool {
 }
 
 const FALLBACK_NAMESPACE: &str = "local";
+const NAME_PART_MAX_LENGTH: usize = MCP_SERVER_CARD_NAME_MAX_LENGTH / 2;
 
 fn default_name(host: &str, server_name: &str) -> String {
     let server: String = server_name
@@ -92,7 +96,7 @@ fn default_name(host: &str, server_name: &str) -> String {
             'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '_' | '-' => character,
             _ => '-',
         })
-        .take(100)
+        .take(NAME_PART_MAX_LENGTH)
         .collect();
     let server = if server.is_empty() {
         "mcp".to_owned()
@@ -128,7 +132,7 @@ fn namespace(host: &str) -> String {
             _ => '-',
         })
         .collect();
-    if namespace.len() > 99 {
+    if namespace.len() >= NAME_PART_MAX_LENGTH {
         FALLBACK_NAMESPACE.to_owned()
     } else {
         namespace
@@ -142,10 +146,13 @@ fn default_description(texts: &[Option<&str>]) -> String {
         .find(|text| !text.is_empty())
         .copied()
         .unwrap_or("MCP server");
-    if text.chars().count() <= 100 {
+    if text.chars().count() <= MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH {
         text.to_owned()
     } else {
-        text.chars().take(99).chain(['…']).collect()
+        text.chars()
+            .take(MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH - 1)
+            .chain(['…'])
+            .collect()
     }
 }
 
@@ -170,19 +177,20 @@ impl Card {
         if let Some(name) = &card.name {
             assert!(
                 is_card_name(name),
-                "the name of the Server Card {name:?} must have 3 to 200 characters and the form namespace/name, with the characters a-z, A-Z, 0-9, . and - in the namespace, and a-z, A-Z, 0-9, ., _ and - in the name"
+                "the name of the Server Card {name:?} must have {MCP_SERVER_CARD_NAME_MIN_LENGTH} to {MCP_SERVER_CARD_NAME_MAX_LENGTH} characters and the form namespace/name, with the characters a-z, A-Z, 0-9, . and - in the namespace, and a-z, A-Z, 0-9, ., _ and - in the name"
             );
         }
         if let Some(description) = &card.description {
             assert!(
-                (1..=100).contains(&description.chars().count()),
-                "the description of the Server Card must have 1 to 100 characters"
+                !description.is_empty()
+                    && description.chars().count() <= MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH,
+                "the description of the Server Card must have 1 to {MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH} characters"
             );
         }
         let version = server.version;
         assert!(
-            version.chars().count() <= 255,
-            "the version of a server with a Server Card must have 255 characters or fewer"
+            version.chars().count() <= MCP_SERVER_CARD_VERSION_MAX_LENGTH,
+            "the version of a server with a Server Card must have {MCP_SERVER_CARD_VERSION_MAX_LENGTH} characters or fewer"
         );
         assert!(
             !is_version_range(version),
@@ -330,18 +338,13 @@ impl Card {
 }
 
 fn cors(headers: &mut http::HeaderMap) {
-    for (name, value) in [
-        (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
-        (header::ACCESS_CONTROL_ALLOW_METHODS, "GET"),
-        (
-            header::ACCESS_CONTROL_ALLOW_HEADERS,
-            "Content-Type, If-None-Match",
-        ),
-        (header::ACCESS_CONTROL_EXPOSE_HEADERS, "ETag"),
-        (header::CACHE_CONTROL, MCP_SERVER_CARD_CACHE_CONTROL),
-    ] {
+    for (name, value) in MCP_SERVER_CARD_CORS_HEADERS {
         headers.insert(name, HeaderValue::from_static(value));
     }
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static(MCP_SERVER_CARD_CACHE_CONTROL),
+    );
 }
 
 #[cfg(test)]

@@ -169,6 +169,13 @@ const mcpServerCardPath = string(field(facts, "mcpServerCardPath"));
 const mcpServerCardMediaType = string(field(facts, "mcpServerCardMediaType"));
 const mcpServerCardSchema = string(field(facts, "mcpServerCardSchema"));
 const mcpServerCardCacheControl = string(field(facts, "mcpServerCardCacheControl"));
+const mcpServerCardCorsHeaders = list(field(facts, "mcpServerCardCorsHeaders")).map(pair).map(([name, value]) => [string(name), string(value)] as const);
+const mcpServerCardLengths = [
+  ["MCP_SERVER_CARD_NAME_MIN_LENGTH", integer(field(facts, "mcpServerCardNameMinLength"))],
+  ["MCP_SERVER_CARD_NAME_MAX_LENGTH", integer(field(facts, "mcpServerCardNameMaxLength"))],
+  ["MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH", integer(field(facts, "mcpServerCardDescriptionMaxLength"))],
+  ["MCP_SERVER_CARD_VERSION_MAX_LENGTH", integer(field(facts, "mcpServerCardVersionMaxLength"))],
+] as const;
 const mcpEventErrors = numbered(field(facts, "mcpEventErrors"));
 const mcpRejections = list(field(facts, "mcpRejections")).map((each) => {
   const code = variant(field(each, "code"), ["NoCode", "Code"]);
@@ -436,6 +443,9 @@ const specFacts = [
   "",
   `export const MCP_SERVER_CARD_CACHE_CONTROL = ${JSON.stringify(mcpServerCardCacheControl)};`,
   "",
+  typescriptRecord("MCP_SERVER_CARD_CORS_HEADERS", mcpServerCardCorsHeaders.map(([name, value]) => [name, JSON.stringify(value)] as const)),
+  ...mcpServerCardLengths.flatMap(([name, length]) => ["", `export const ${name} = ${length};`]),
+  "",
   typescriptRecord("MCP_EVENT_ERRORS", numbers(mcpEventErrors)),
   "",
   typescriptRecord(
@@ -564,6 +574,10 @@ const rustFacts = [
   rustConst("MCP_SERVER_CARD_MEDIA_TYPE", "&str", rustString(mcpServerCardMediaType)),
   rustConst("MCP_SERVER_CARD_SCHEMA", "&str", rustString(mcpServerCardSchema)),
   rustConst("MCP_SERVER_CARD_CACHE_CONTROL", "&str", rustString(mcpServerCardCacheControl)),
+  `pub(crate) const MCP_SERVER_CARD_CORS_HEADERS: [(&str, &str); ${mcpServerCardCorsHeaders.length}] = [`,
+  ...mcpServerCardCorsHeaders.map(([name, value]) => `    (${rustString(name)}, ${rustString(value)}),`),
+  "];",
+  ...mcpServerCardLengths.map(([name, length]) => rustConst(name, "usize", String(length))),
   "",
   "pub(crate) mod event_errors {",
   ...mcpEventErrors.map(([name, code]) => `    pub const ${screaming(name)}: i64 = ${code};`),
