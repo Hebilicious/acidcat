@@ -12,6 +12,7 @@
     "app": {
       "bindings": [
         "typescript",
+        "rust",
         "webmcp",
         "acme:swift",
         "acme:kotlin"
