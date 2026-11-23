@@ -1,15 +1,23 @@
-# Surface renders
+# Surface icons
 
-Each PNG is a source image from the built-in image generator. Each prompt starts with this direction.
+Each PNG is a transparent source render from the built-in image generator. Each prompt starts with this direction.
 
-> Square photoreal editorial studio product photograph for a brass-punk 2140 instrument catalogue. One complete object, centered occupying 78% width, front three-quarter perspective slightly above eye level. Worn machined brass, black enamel housings, polished chamfers and copper fittings. Warm grazing studio light, subtle cool rim light. Seamless midnight charcoal backdrop and dark bench with subtle grounding shadow. Rich metal detail. No typography, logos, border or captions.
+> One isolated floating precision instrument part for a brass-punk product catalog, on true transparent background. Photoreal macro studio product photography, 85mm lens viewing from slightly above in three-quarter view, near orthographic. Machined aged warm brass, polished chamfers, tiny slotted screws, graphite metal recesses. Warm softbox highlights from upper left. Simple bold silhouette readable at 120 pixels. Whole object centered, tight square composition. No floor, scenery, shadows outside object, cables, lettering, diagrams, borders or accessories.
 
 Append the subject for the corresponding source.
 
-- `cli.png` — Compact brass teletype computer with a convex green phosphor CRT prompt and a stepped mechanical keyboard.
-- `mcp.png` — Compact rackmount relay server with three amber Nixie indicators, patch sockets and copper relay coils.
-- `webmcp.png` — Freestanding brass browser porthole with a rectangular cyan glass window showing faint browser chrome and a few geometric interface elements.
-- `http.png` — Pneumatic message-tube station with a clear upright glass cylinder, brass capsule and copper delivery bends.
-- `ts.png` — Precision control lever with a knurled brass grip plugged into a machined socket, green indicator and indexed arc.
+- `cli.png` — A compact wedge-shaped brass terminal block. Its dominant feature is a black glass face with a single acid-green glowing >_ prompt. Three small physical keys on its lower lip.
+- `mcp.png` — A squat horizontal dark steel server relay with brass corner caps, two cyan glass indicator lamps on top and three round brass connector ports on front.
+- `webmcp.png` — A single slim brass browser-window bezel standing upright in landscape orientation, with a narrow top rail with three rivets, and one luminous cyan glass pane with subtle internal reflections. No stand or keyboard.
+- `http.png` — A closed pneumatic mail capsule lying diagonally, with ribbed brass end caps, a clear glass central sleeve and a single rolled cream paper message inside.
+- `ts.png` — An unplugged compact brass cylindrical electrical connector with three visible gold pins, dark insulating core, knurled brass finger grip. Floating diagonally, pins facing the viewer, no cable.
 
-Resize each source to 720 × 720 pixels and encode it as WebP with ImageMagick, quality 82 and a target size of 66,000 bytes.
+From the repository root, use ImageMagick to write the transparent web icons.
+
+```sh
+for id in cli mcp webmcp http ts; do
+  magick "site/art/surfaces/$id.png" -trim +repage -resize 364x364 \
+    -background none -gravity center -extent 384x384 -quality 83 \
+    "site/public/surfaces/$id.webp"
+done
+```
