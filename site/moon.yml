@@ -9,17 +9,26 @@ toolchains:
   default: ["javascript", "node", "pnpm"]
 
 tasks:
+  colors:
+    description: "Write the color variables from cssforge.config.ts into .cssforge/output.css."
+    command: "cssforge"
+    args: ["--mode", "css"]
+    inputs: ["cssforge.config.ts"]
+    outputs: [".cssforge/output.css"]
+
   dev:
+    deps: ["colors"]
     description: "Serve the site with live reload at http://localhost:4321."
     command: "astro"
     args: ["dev"]
     preset: "server"
 
   build:
+    deps: ["colors"]
     description: "Build the static site into dist/."
     command: "astro"
     args: ["build"]
-    inputs: ["src/**/*", "public/**/*", "astro.config.ts", "package.json"]
+    inputs: ["src/**/*", "public/**/*", "astro.config.ts", "cssforge.config.ts", "package.json"]
     outputs: ["dist/**/*"]
 
   test:
@@ -33,4 +42,4 @@ tasks:
     description: "Type-check the art geometry, the tests and the configuration."
     command: "tsc"
     args: ["-p", "."]
-    inputs: ["src/lib/**/*.ts", "test/**/*.ts", "astro.config.ts", "tsconfig.json", "/tsconfig.base.json"]
+    inputs: ["src/lib/**/*.ts", "test/**/*.ts", "astro.config.ts", "cssforge.config.ts", "tsconfig.json", "/tsconfig.base.json"]

@@ -1,29 +1,9 @@
+@import "../../.cssforge/output.css";
 @import "@fontsource-variable/fraunces";
 @import "@fontsource-variable/space-grotesk";
 @import "@fontsource-variable/jetbrains-mono";
 
 :root {
-  --ink-950: #05070b;
-  --ink-900: #0b0e14;
-  --ink-800: #121722;
-  --ink-700: #1b2230;
-  --ink-600: #2a3344;
-  --brass-200: #f6e2a4;
-  --brass-300: #ecc965;
-  --brass-400: #c9a227;
-  --brass-600: #8a6b14;
-  --brass-800: #4a380a;
-  --copper-300: #e0a274;
-  --copper-400: #b87333;
-  --copper-700: #6b3a16;
-  --acid: #b6ff3b;
-  --acid-soft: rgb(182 255 59 / 0.16);
-  --cyan: #3be8ff;
-  --cyan-soft: rgb(59 232 255 / 0.14);
-  --nixie: #ff8a3d;
-  --cream: #f2e6c9;
-  --cream-dim: #b9b09a;
-
   --font-display: "Fraunces Variable", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
   --font-sans: "Space Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;

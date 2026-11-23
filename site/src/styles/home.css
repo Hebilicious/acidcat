@@ -7,7 +7,7 @@
 html {
   color-scheme: dark;
   scroll-behavior: smooth;
-  background: var(--ink-900);
+  background: var(--palette-ink-900);
 }
 
 body {
@@ -16,11 +16,11 @@ body {
   font-family: var(--font-sans);
   font-size: 1.0625rem;
   line-height: 1.6;
-  color: var(--cream);
+  color: var(--palette-cream-100);
   background:
-    radial-gradient(ellipse 80% 60% at 75% 10%, rgb(182 255 59 / 0.07), transparent 60%),
-    radial-gradient(ellipse 60% 50% at 10% 30%, rgb(59 232 255 / 0.06), transparent 60%),
-    var(--ink-900);
+    radial-gradient(ellipse 80% 60% at 75% 10%, color-mix(in oklch, var(--palette-acid-400) 7%, transparent), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 10% 30%, color-mix(in oklch, var(--palette-cyan-400) 6%, transparent), transparent 60%),
+    var(--palette-ink-900);
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
 }
@@ -35,7 +35,7 @@ code {
 }
 
 :focus-visible {
-  outline: 2px solid var(--cyan);
+  outline: 2px solid var(--palette-cyan-400);
   outline-offset: 3px;
 }
 
@@ -45,8 +45,8 @@ code {
   top: -3rem;
   z-index: 10;
   padding: 0.5rem 1rem;
-  background: var(--acid);
-  color: var(--ink-900);
+  background: var(--palette-acid-400);
+  color: var(--palette-ink-900);
 }
 .skip:focus {
   top: 1rem;
@@ -66,7 +66,7 @@ h1 em,
 h2 em {
   font-style: italic;
   font-variation-settings: "SOFT" 100, "WONK" 1;
-  background: linear-gradient(100deg, var(--brass-200), var(--brass-400) 45%, var(--copper-300));
+  background: linear-gradient(100deg, var(--palette-brass-200), var(--palette-brass-400) 45%, var(--palette-copper-300));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -78,17 +78,17 @@ h2 em {
   font-size: 0.78rem;
   letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: var(--brass-300);
+  color: var(--palette-brass-300);
 }
 
 .lede {
   max-width: 62ch;
   margin: 1.4rem 0 0;
   font-size: 1.12rem;
-  color: var(--cream-dim);
+  color: var(--palette-cream-400);
 }
 .lede code {
-  color: var(--acid);
+  color: var(--palette-acid-400);
 }
 
 .section-head h2 {
@@ -106,9 +106,9 @@ h2 em {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.85rem clamp(1rem, 4vw, 2.5rem);
-  background: linear-gradient(rgb(11 14 20 / 0.92), rgb(11 14 20 / 0.7));
+  background: linear-gradient(color-mix(in oklch, var(--palette-ink-900) 92%, transparent), color-mix(in oklch, var(--palette-ink-900) 70%, transparent));
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgb(201 162 39 / 0.28);
+  border-bottom: 1px solid color-mix(in oklch, var(--palette-brass-400) 28%, transparent);
 }
 .nav::after {
   content: "";
@@ -118,7 +118,7 @@ h2 em {
   width: 7px;
   height: 7px;
   transform: translateX(-50%) rotate(45deg);
-  background: var(--brass-400);
+  background: var(--palette-brass-400);
 }
 .brand {
   display: inline-flex;
@@ -137,11 +137,11 @@ h2 em {
 }
 .nav nav a {
   text-decoration: none;
-  color: var(--cream-dim);
+  color: var(--palette-cream-400);
   transition: color 0.2s;
 }
 .nav nav a:hover {
-  color: var(--acid);
+  color: var(--palette-acid-400);
 }
 
 
@@ -165,8 +165,8 @@ h2 em {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(90deg, rgb(5 7 11 / 0.92) 0, rgb(5 7 11 / 0.82) calc(var(--copy-end) - 10rem), rgb(5 7 11 / 0.4) var(--copy-end), transparent calc(var(--copy-end) + 7rem)),
-    linear-gradient(180deg, transparent 72%, var(--ink-900) 100%);
+    linear-gradient(90deg, color-mix(in oklch, var(--palette-ink-950) 92%, transparent) 0, color-mix(in oklch, var(--palette-ink-950) 82%, transparent) calc(var(--copy-end) - 10rem), color-mix(in oklch, var(--palette-ink-950) 40%, transparent) var(--copy-end), transparent calc(var(--copy-end) + 7rem)),
+    linear-gradient(180deg, transparent 72%, var(--palette-ink-900) 100%);
 }
 .hero-copy {
   width: min(1320px, 100%);
@@ -178,7 +178,7 @@ h2 em {
 }
 .hero h1 {
   font-size: clamp(3rem, 5.6vw, 5.6rem);
-  text-shadow: 0 2px 30px rgb(5 7 11 / 0.8);
+  text-shadow: 0 2px 30px color-mix(in oklch, var(--palette-ink-950) 80%, transparent);
   font-weight: 450;
 }
 .hero h1 em {
@@ -191,15 +191,15 @@ h2 em {
   gap: 0.7rem;
   margin-top: 1.8rem;
   max-width: 340px;
-  color: var(--brass-400);
+  color: var(--palette-brass-400);
 }
 .ornament span {
   flex: 1;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--brass-400));
+  background: linear-gradient(90deg, transparent, var(--palette-brass-400));
 }
 .ornament span:last-child {
-  background: linear-gradient(90deg, var(--brass-400), transparent);
+  background: linear-gradient(90deg, var(--palette-brass-400), transparent);
 }
 .ornament svg {
   animation: ornament 12s linear infinite;
@@ -214,10 +214,10 @@ h2 em {
   max-width: 34rem;
   margin: 1.6rem 0 0;
   font-size: clamp(1.05rem, 1.4vw, 1.22rem);
-  color: var(--cream-dim);
+  color: var(--palette-cream-400);
 }
 .hero-lede strong {
-  color: var(--cream);
+  color: var(--palette-cream-100);
   font-weight: 500;
 }
 
@@ -248,15 +248,15 @@ h2 em {
   transform: translateY(-2px);
 }
 .button-acid {
-  color: var(--ink-900);
-  background: linear-gradient(180deg, #e2ff9e, var(--acid) 45%, #7fc419);
-  filter: drop-shadow(0 0 18px rgb(182 255 59 / 0.45));
+  color: var(--palette-ink-900);
+  background: linear-gradient(180deg, var(--palette-acid-200), var(--palette-acid-400) 45%, var(--palette-acid-600));
+  filter: drop-shadow(0 0 18px color-mix(in oklch, var(--palette-acid-400) 45%, transparent));
 }
 .button-acid:hover {
-  filter: drop-shadow(0 0 28px rgb(182 255 59 / 0.75));
+  filter: drop-shadow(0 0 28px color-mix(in oklch, var(--palette-acid-400) 75%, transparent));
 }
 .button-brass {
-  color: var(--brass-200);
+  color: var(--palette-brass-200);
   isolation: isolate;
 }
 .button-brass::before {
@@ -264,7 +264,7 @@ h2 em {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(135deg, var(--brass-200), var(--brass-600), var(--brass-300));
+  background: linear-gradient(135deg, var(--palette-brass-200), var(--palette-brass-600), var(--palette-brass-300));
   clip-path: inherit;
 }
 .button-brass::after {
@@ -272,11 +272,11 @@ h2 em {
   position: absolute;
   inset: 2px;
   z-index: -1;
-  background: var(--ink-900);
+  background: var(--palette-ink-900);
   clip-path: inherit;
 }
 .button-brass:hover {
-  color: var(--cream);
+  color: var(--palette-cream-100);
 }
 
 .install {
@@ -286,9 +286,9 @@ h2 em {
   margin-top: 2rem;
   max-width: 34rem;
   padding: 0.55rem 0.55rem 0.55rem 1rem;
-  border: 1px solid rgb(242 230 201 / 0.14);
+  border: 1px solid color-mix(in oklch, var(--palette-cream-100) 14%, transparent);
   border-radius: 10px;
-  background: rgb(5 7 11 / 0.6);
+  background: color-mix(in oklch, var(--palette-ink-950) 60%, transparent);
   font-size: 0.88rem;
 }
 .install code {
@@ -296,25 +296,25 @@ h2 em {
   min-width: 0;
   overflow-x: auto;
   white-space: nowrap;
-  color: var(--cream);
+  color: var(--palette-cream-100);
 }
 .prompt {
   font-family: var(--font-mono);
-  color: var(--acid);
+  color: var(--palette-acid-400);
 }
 .copy {
   flex: none;
   padding: 0.35rem 0.8rem;
-  border: 1px solid rgb(201 162 39 / 0.5);
+  border: 1px solid color-mix(in oklch, var(--palette-brass-400) 50%, transparent);
   border-radius: 6px;
   background: transparent;
-  color: var(--brass-300);
+  color: var(--palette-brass-300);
   font: 500 0.78rem var(--font-mono);
   letter-spacing: 0.08em;
   cursor: pointer;
 }
 .copy:hover {
-  background: rgb(201 162 39 / 0.12);
+  background: color-mix(in oklch, var(--palette-brass-400) 12%, transparent);
 }
 
 
@@ -374,17 +374,17 @@ h2 em {
 .part {
   position: relative;
   padding: 1.6rem 1.5rem 1.8rem;
-  border: 1px solid rgb(201 162 39 / 0.28);
+  border: 1px solid color-mix(in oklch, var(--palette-brass-400) 28%, transparent);
   border-radius: 18px;
   background:
-    radial-gradient(circle at 50% 0%, rgb(201 162 39 / 0.1), transparent 60%),
-    linear-gradient(180deg, var(--ink-800), var(--ink-900));
+    radial-gradient(circle at 50% 0%, color-mix(in oklch, var(--palette-brass-400) 10%, transparent), transparent 60%),
+    linear-gradient(180deg, var(--palette-ink-800), var(--palette-ink-900));
   transition:
     border-color 0.3s,
     transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .part:hover {
-  border-color: rgb(182 255 59 / 0.5);
+  border-color: color-mix(in oklch, var(--palette-acid-400) 50%, transparent);
   transform: translateY(-4px);
 }
 .part-icon {
@@ -404,7 +404,7 @@ h2 em {
   font-family: var(--font-display);
   font-style: italic;
   font-size: 1.5rem;
-  color: var(--brass-600);
+  color: var(--palette-brass-600);
 }
 .part h3 {
   font-size: 1.6rem;
@@ -417,26 +417,26 @@ h2 em {
 }
 .part p {
   margin: 0.75rem 0 0;
-  color: var(--cream-dim);
+  color: var(--palette-cream-400);
   font-size: 0.98rem;
 }
 
 .i-brass {
-  fill: rgb(201 162 39 / 0.14);
-  stroke: var(--brass-400);
+  fill: color-mix(in oklch, var(--palette-brass-400) 14%, transparent);
+  stroke: var(--palette-brass-400);
   stroke-width: 3;
 }
 .i-line {
   fill: none;
-  stroke: var(--cream-dim);
+  stroke: var(--palette-cream-400);
   stroke-width: 3;
   stroke-linecap: round;
 }
 .i-acid {
-  stroke: var(--acid);
+  stroke: var(--palette-acid-400);
   stroke-width: 4;
   stroke-linecap: round;
-  filter: drop-shadow(0 0 4px var(--acid));
+  filter: drop-shadow(0 0 4px var(--palette-acid-400));
 }
 .i-blink {
   animation: i-blink 1.2s steps(2, jump-none) infinite;
@@ -448,19 +448,19 @@ h2 em {
 }
 .i-pipe {
   fill: none;
-  stroke: var(--brass-600);
+  stroke: var(--palette-brass-600);
   stroke-width: 10;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 .i-flow {
   fill: none;
-  stroke: var(--acid);
+  stroke: var(--palette-acid-400);
   stroke-width: 3;
   stroke-dasharray: 6 12;
   stroke-linecap: round;
   animation: i-flow 1.2s linear infinite;
-  filter: drop-shadow(0 0 4px var(--acid));
+  filter: drop-shadow(0 0 4px var(--palette-acid-400));
 }
 @keyframes i-flow {
   to {
@@ -468,8 +468,8 @@ h2 em {
   }
 }
 .i-core {
-  fill: var(--acid);
-  filter: drop-shadow(0 0 10px var(--acid));
+  fill: var(--palette-acid-400);
+  filter: drop-shadow(0 0 10px var(--palette-acid-400));
   transform-box: fill-box;
   transform-origin: center;
   animation: i-pulse 2s ease-in-out infinite;
@@ -482,7 +482,7 @@ h2 em {
 }
 .i-orbit {
   fill: none;
-  stroke: var(--cyan);
+  stroke: var(--palette-cyan-400);
   stroke-width: 2;
   stroke-dasharray: 40 20 4 20;
   transform-box: fill-box;
@@ -490,13 +490,13 @@ h2 em {
   animation: ornament 8s linear infinite;
 }
 .i-dial {
-  fill: var(--cream);
+  fill: var(--palette-cream-100);
   fill-opacity: 0.08;
-  stroke: var(--brass-400);
+  stroke: var(--palette-brass-400);
   stroke-width: 3;
 }
 .i-needle path {
-  stroke: var(--acid);
+  stroke: var(--palette-acid-400);
   stroke-width: 3;
   stroke-linecap: round;
 }
@@ -515,7 +515,7 @@ h2 em {
   }
 }
 .i-hub {
-  fill: var(--copper-400);
+  fill: var(--palette-copper-400);
 }
 
 
@@ -525,12 +525,12 @@ h2 em {
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  border-top: 1px solid rgb(242 230 201 / 0.12);
+  border-top: 1px solid color-mix(in oklch, var(--palette-cream-100) 12%, transparent);
 }
 .feature {
   position: relative;
   padding: 2rem 1.75rem 2.2rem 4rem;
-  border-bottom: 1px solid rgb(242 230 201 / 0.12);
+  border-bottom: 1px solid color-mix(in oklch, var(--palette-cream-100) 12%, transparent);
 }
 .feature-tube {
   position: absolute;
@@ -538,7 +538,7 @@ h2 em {
   top: 2.2rem;
   width: 12px;
   height: calc(100% - 4.4rem);
-  border: 1px solid rgb(242 230 201 / 0.3);
+  border: 1px solid color-mix(in oklch, var(--palette-cream-100) 30%, transparent);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -547,8 +547,8 @@ h2 em {
   inset: auto 2px 2px;
   height: 40%;
   border-radius: 4px;
-  background: linear-gradient(var(--acid), #5d9a10);
-  box-shadow: 0 0 10px var(--acid);
+  background: linear-gradient(var(--palette-acid-400), var(--palette-acid-700));
+  box-shadow: 0 0 10px var(--palette-acid-400);
   animation: tube 4s ease-in-out infinite;
   animation-delay: calc(var(--i) * -0.7s);
 }
@@ -563,7 +563,7 @@ h2 em {
 }
 .feature p {
   margin: 0.7rem 0 0;
-  color: var(--cream-dim);
+  color: var(--palette-cream-400);
   font-size: 0.98rem;
 }
 
@@ -572,9 +572,9 @@ h2 em {
   margin-top: clamp(5rem, 10vw, 8rem);
   padding-block: clamp(4rem, 8vw, 6rem);
   background:
-    radial-gradient(ellipse at 80% 50%, rgb(255 138 61 / 0.1), transparent 60%),
-    linear-gradient(180deg, var(--ink-800), var(--ink-950));
-  border-block: 1px solid rgb(201 162 39 / 0.22);
+    radial-gradient(ellipse at 80% 50%, color-mix(in oklch, var(--palette-nixie-400) 10%, transparent), transparent 60%),
+    linear-gradient(180deg, var(--palette-ink-800), var(--palette-ink-950));
+  border-block: 1px solid color-mix(in oklch, var(--palette-brass-400) 22%, transparent);
 }
 .languages-inner {
   display: grid;
@@ -588,134 +588,15 @@ h2 em {
 .languages h2 {
   font-size: clamp(2.2rem, 4.6vw, 3.6rem);
 }
-.tubes {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: clamp(0.8rem, 2vw, 1.4rem);
-}
-.tube {
-  display: grid;
-  justify-items: center;
-  gap: 0;
-}
-.tube-glass {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: clamp(64px, 8vw, 84px);
-  height: clamp(110px, 13vw, 140px);
-  border-radius: 40px 40px 10px 10px;
-  border: 1px solid rgb(242 230 201 / 0.35);
-  background:
-    linear-gradient(90deg, rgb(255 255 255 / 0.08), transparent 30%, transparent 70%, rgb(255 255 255 / 0.05)),
-    radial-gradient(ellipse at 50% 55%, rgb(255 138 61 / 0.22), rgb(10 8 6 / 0.6) 70%);
-  box-shadow: inset 0 0 20px rgb(0 0 0 / 0.6);
-}
-.tube-glass::before {
-  content: "";
-  position: absolute;
-  inset: 18% 22%;
-  background: repeating-linear-gradient(0deg, rgb(255 138 61 / 0.12) 0 1px, transparent 1px 6px);
-  border-radius: 6px;
-}
-.tube-glyph {
-  position: relative;
-  font-family: var(--font-display);
-  font-size: clamp(1.4rem, 2.4vw, 1.9rem);
-  font-weight: 500;
-  color: #ffd1a8;
-  text-shadow:
-    0 0 4px var(--nixie),
-    0 0 14px var(--nixie),
-    0 0 30px rgb(255 138 61 / 0.7);
-  animation: flicker 6s infinite;
-  animation-delay: calc(var(--i) * 1.3s);
-}
-@keyframes flicker {
-  0%,
-  92%,
-  100% {
-    opacity: 1;
-  }
-  93% {
-    opacity: 0.4;
-  }
-  94% {
-    opacity: 1;
-  }
-  96% {
-    opacity: 0.6;
-  }
-}
-.tube-base {
-  width: calc(100% + 12px);
-  height: 18px;
-  margin-top: -2px;
-  border-radius: 4px;
-  background: linear-gradient(90deg, #4a380a, #f6e2a4 40%, #a7801a 70%, #4a380a);
-  border: 2px solid #0b0e14;
-}
-.tube-name {
-  margin-top: 0.6rem;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--cream-dim);
-}
-
-
-.final {
-  padding: clamp(6rem, 12vw, 10rem) clamp(1rem, 4vw, 2.5rem);
-  text-align: center;
-  background: radial-gradient(ellipse 50% 60% at 50% 40%, rgb(182 255 59 / 0.08), transparent 70%);
-}
-.final-inner {
-  display: grid;
-  justify-items: center;
-  width: min(760px, 100%);
-  margin-inline: auto;
-}
-.final-engine {
-  width: min(520px, 100%);
-  margin-bottom: 1rem;
-}
-.final h2 {
-  font-size: clamp(2.6rem, 6vw, 4.8rem);
-}
-.final .lede {
-  margin-inline: auto;
-}
-.final .actions {
-  justify-content: center;
-}
-.warning {
-  margin: 3rem 0 0;
-  max-width: 52ch;
-  padding: 0.9rem 1.2rem;
-  border: 1px dashed rgb(255 138 61 / 0.5);
-  border-radius: 10px;
-  font-size: 0.9rem;
-  color: var(--cream-dim);
-}
-.warning strong {
-  color: var(--nixie);
-  font-weight: 600;
-}
-
 .footer {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 1rem;
   padding: 1.6rem clamp(1rem, 4vw, 2.5rem);
-  border-top: 1px solid rgb(201 162 39 / 0.22);
+  border-top: 1px solid color-mix(in oklch, var(--palette-brass-400) 22%, transparent);
   font-size: 0.88rem;
-  color: var(--cream-dim);
+  color: var(--palette-cream-400);
 }
 .footer-links {
   display: flex;
@@ -725,7 +606,7 @@ h2 em {
   text-decoration: none;
 }
 .footer a:hover {
-  color: var(--acid);
+  color: var(--palette-acid-400);
 }
 
 @media (max-width: 960px) {
@@ -739,7 +620,7 @@ h2 em {
     aspect-ratio: 1 / 1.02;
   }
   .hero-stage::after {
-    background: linear-gradient(180deg, transparent 60%, var(--ink-900) 100%);
+    background: linear-gradient(180deg, transparent 60%, var(--palette-ink-900) 100%);
   }
   .hero-copy {
     margin-top: -3rem;

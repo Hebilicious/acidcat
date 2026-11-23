@@ -51,7 +51,7 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
       </p>
     </header>
 
-    <div class="machine">
+    <div class="machine" data-machine>
       <div class="engine-card">
         <div class="engine-plate">
           <span class="rivet" /><span class="rivet" /><span class="rivet" /><span class="rivet" />
@@ -114,12 +114,12 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     position: relative;
     padding-block: clamp(5rem, 10vw, 9rem);
     background:
-      linear-gradient(rgb(59 232 255 / 0.06) 1px, transparent 1px) 0 0 / 32px 32px,
-      linear-gradient(90deg, rgb(59 232 255 / 0.06) 1px, transparent 1px) 0 0 / 32px 32px,
-      linear-gradient(rgb(59 232 255 / 0.1) 1px, transparent 1px) 0 0 / 160px 160px,
-      linear-gradient(90deg, rgb(59 232 255 / 0.1) 1px, transparent 1px) 0 0 / 160px 160px,
-      radial-gradient(ellipse at 30% 40%, #0f1d2a, var(--ink-900) 70%);
-    border-block: 1px solid rgb(59 232 255 / 0.2);
+      linear-gradient(color-mix(in oklch, var(--palette-cyan-400) 6%, transparent) 1px, transparent 1px) 0 0 / 32px 32px,
+      linear-gradient(90deg, color-mix(in oklch, var(--palette-cyan-400) 6%, transparent) 1px, transparent 1px) 0 0 / 32px 32px,
+      linear-gradient(color-mix(in oklch, var(--palette-cyan-400) 10%, transparent) 1px, transparent 1px) 0 0 / 160px 160px,
+      linear-gradient(90deg, color-mix(in oklch, var(--palette-cyan-400) 10%, transparent) 1px, transparent 1px) 0 0 / 160px 160px,
+      radial-gradient(ellipse at 30% 40%, var(--palette-blueprint-900), var(--palette-ink-900) 70%);
+    border-block: 1px solid color-mix(in oklch, var(--palette-cyan-400) 20%, transparent);
   }
   .schematic-inner {
     width: min(1240px, 100%);
@@ -134,29 +134,39 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     margin-top: 3.5rem;
   }
 
+  :global(.holo-canvas) {
+    display: block;
+    width: 100%;
+    margin-top: 3.5rem;
+  }
+  :global(.holo-canvas) > .machine {
+    margin-top: 0;
+    padding-block: 1.5rem 2.5rem;
+  }
+
   .engine-card {
     position: relative;
     padding: 0.6rem;
     border-radius: 22px;
-    background: linear-gradient(135deg, #f6e2a4, #a7801a 40%, #5e4609 70%, #c9a227);
+    background: linear-gradient(135deg, var(--palette-brass-200), var(--palette-brass-500) 40%, var(--palette-brass-700) 70%, var(--palette-brass-400));
     box-shadow:
-      0 0 0 2px #0b0e14,
-      0 30px 80px -30px rgb(182 255 59 / 0.35),
-      0 0 120px -40px rgb(59 232 255 / 0.4);
+      0 0 0 2px var(--palette-ink-900),
+      0 30px 80px -30px color-mix(in oklch, var(--palette-acid-400) 35%, transparent),
+      0 0 120px -40px color-mix(in oklch, var(--palette-cyan-400) 40%, transparent);
   }
   .engine-plate {
     position: relative;
     padding: 1.6rem 1.5rem 1.4rem;
     border-radius: 16px;
-    background: radial-gradient(circle at 20% 0%, #172131, #07090d 70%);
-    box-shadow: inset 0 0 0 1px rgb(242 230 201 / 0.15);
+    background: radial-gradient(circle at 20% 0%, var(--palette-blueprint-800), var(--palette-ink-925) 70%);
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--palette-cream-100) 15%, transparent);
   }
   .rivet {
     position: absolute;
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: radial-gradient(circle at 35% 35%, #f6e2a4, #8a6b14);
+    background: radial-gradient(circle at 35% 35%, var(--palette-brass-200), var(--palette-brass-600));
   }
   .rivet:nth-child(1) {
     top: 10px;
@@ -180,7 +190,7 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     font-size: 0.75rem;
     letter-spacing: 0.24em;
     text-transform: uppercase;
-    color: var(--brass-300);
+    color: var(--palette-brass-300);
   }
   pre {
     margin: 0;
@@ -188,16 +198,16 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     font-family: var(--font-mono);
     font-size: clamp(0.7rem, 0.92vw, 0.82rem);
     line-height: 1.65;
-    color: var(--cream-dim);
+    color: var(--palette-cream-400);
   }
   pre :global(.k) {
-    color: var(--cream);
+    color: var(--palette-cream-100);
   }
   pre :global(.s) {
-    color: var(--acid);
+    color: var(--palette-acid-400);
   }
   pre :global(.n) {
-    color: var(--nixie);
+    color: var(--palette-nixie-400);
   }
 
   .engine-gauge {
@@ -209,8 +219,8 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     gap: 0.3rem;
     padding: 0.5rem 0.7rem;
     border-radius: 12px;
-    background: #0b0e14;
-    border: 2px solid var(--brass-400);
+    background: var(--palette-ink-900);
+    border: 2px solid var(--palette-brass-400);
   }
   .nixie {
     display: grid;
@@ -218,14 +228,14 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     width: 2rem;
     height: 2.8rem;
     border-radius: 1rem 1rem 0.4rem 0.4rem;
-    background: radial-gradient(ellipse at 50% 30%, rgb(255 138 61 / 0.18), rgb(255 255 255 / 0.03));
-    border: 1px solid rgb(242 230 201 / 0.3);
+    background: radial-gradient(ellipse at 50% 30%, color-mix(in oklch, var(--palette-nixie-400) 18%, transparent), color-mix(in oklch, var(--palette-neutral-white) 3%, transparent));
+    border: 1px solid color-mix(in oklch, var(--palette-cream-100) 30%, transparent);
     font-family: var(--font-display);
     font-size: 1.6rem;
-    color: var(--nixie);
+    color: var(--palette-nixie-400);
     text-shadow:
-      0 0 6px var(--nixie),
-      0 0 18px rgb(255 138 61 / 0.8);
+      0 0 6px var(--palette-nixie-400),
+      0 0 18px color-mix(in oklch, var(--palette-nixie-400) 80%, transparent);
   }
   .gauge-label {
     margin-left: 0.4rem;
@@ -233,7 +243,7 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     font-size: 0.7rem;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: var(--cream-dim);
+    color: var(--palette-cream-400);
   }
 
   .manifold {
@@ -243,30 +253,30 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
   }
   .m-shell {
     fill: none;
-    stroke: #8a6b14;
+    stroke: var(--palette-brass-600);
     stroke-width: 16;
     vector-effect: non-scaling-stroke;
   }
   .m-glass {
     fill: none;
-    stroke: #0b0e14;
+    stroke: var(--palette-ink-900);
     stroke-width: 9;
     vector-effect: non-scaling-stroke;
   }
   .m-flow {
     fill: none;
-    stroke: var(--acid);
+    stroke: var(--palette-acid-400);
     stroke-width: 4;
     stroke-linecap: round;
     stroke-dasharray: 10 22;
     vector-effect: non-scaling-stroke;
-    filter: drop-shadow(0 0 5px rgb(182 255 59 / 0.9));
+    filter: drop-shadow(0 0 5px color-mix(in oklch, var(--palette-acid-400) 90%, transparent));
     animation: m-flow 1.4s linear infinite;
   }
   .manifold-pipe.is-active .m-flow {
-    stroke: var(--cyan);
+    stroke: var(--palette-cyan-400);
     animation-duration: 0.5s;
-    filter: drop-shadow(0 0 8px rgb(59 232 255 / 1));
+    filter: drop-shadow(0 0 8px color-mix(in oklch, var(--palette-cyan-400) 100%, transparent));
   }
   @keyframes m-flow {
     to {
@@ -291,8 +301,8 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .capsule-cap {
-    background: linear-gradient(180deg, #f6e2a4, #a7801a 45%, #4a380a);
-    border: 2px solid #0b0e14;
+    background: linear-gradient(180deg, var(--palette-brass-200), var(--palette-brass-500) 45%, var(--palette-brass-800));
+    border: 2px solid var(--palette-ink-900);
   }
   .capsule-cap:first-child {
     border-radius: 14px 4px 4px 14px;
@@ -307,28 +317,28 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     column-gap: 0.9rem;
     align-items: center;
     padding: 0.55rem 1rem;
-    background: linear-gradient(180deg, rgb(182 255 59 / 0.1), rgb(11 14 20 / 0.95) 40%, rgb(182 255 59 / 0.08));
-    border-block: 2px solid #0b0e14;
-    box-shadow: inset 0 1px 0 rgb(242 230 201 / 0.15);
+    background: linear-gradient(180deg, color-mix(in oklch, var(--palette-acid-400) 10%, transparent), color-mix(in oklch, var(--palette-ink-900) 95%, transparent) 40%, color-mix(in oklch, var(--palette-acid-400) 8%, transparent));
+    border-block: 2px solid var(--palette-ink-900);
+    box-shadow: inset 0 1px 0 color-mix(in oklch, var(--palette-cream-100) 15%, transparent);
   }
   .capsule-label {
     grid-row: span 2;
     font-family: var(--font-display);
     font-size: 1.35rem;
     font-weight: 600;
-    color: var(--cream);
+    color: var(--palette-cream-100);
   }
   .capsule-kind {
     font-family: var(--font-mono);
     font-size: 0.68rem;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: var(--cream-dim);
+    color: var(--palette-cream-400);
   }
   .capsule-output {
     font-family: var(--font-mono);
     font-size: 0.82rem;
-    color: var(--acid);
+    color: var(--palette-acid-400);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -337,10 +347,10 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     transform: translateX(8px);
   }
   .capsule:is(:hover, :focus-visible, .is-active) .capsule-output {
-    color: var(--cyan);
+    color: var(--palette-cyan-400);
   }
   .capsule:focus-visible .capsule-body {
-    outline: 2px solid var(--cyan);
+    outline: 2px solid var(--palette-cyan-400);
     outline-offset: 2px;
   }
 
@@ -354,8 +364,8 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
   .blueprint {
     position: relative;
     padding: 1.4rem;
-    border: 1px solid rgb(59 232 255 / 0.25);
-    background: rgb(5 7 11 / 0.45);
+    border: 1px solid color-mix(in oklch, var(--palette-cyan-400) 25%, transparent);
+    background: color-mix(in oklch, var(--palette-ink-950) 45%, transparent);
   }
   .blueprint::before,
   .blueprint::after {
@@ -363,7 +373,7 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     position: absolute;
     width: 22px;
     height: 22px;
-    border: 2px solid var(--cyan);
+    border: 2px solid var(--palette-cyan-400);
   }
   .blueprint::before {
     top: -2px;
@@ -383,13 +393,13 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     font-size: 0.72rem;
     letter-spacing: 0.24em;
     text-transform: uppercase;
-    color: var(--cyan);
+    color: var(--palette-cyan-400);
   }
   .spec-sheet {
     width: 100%;
     padding: 1.2rem 1.4rem;
-    border: 1px solid rgb(59 232 255 / 0.45);
-    background: rgb(5 7 11 / 0.7);
+    border: 1px solid color-mix(in oklch, var(--palette-cyan-400) 45%, transparent);
+    background: color-mix(in oklch, var(--palette-ink-950) 70%, transparent);
     clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
   }
   .spec-title {
@@ -398,7 +408,7 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     font-size: 0.78rem;
     letter-spacing: 0.28em;
     text-transform: uppercase;
-    color: var(--cyan);
+    color: var(--palette-cyan-400);
   }
   dl {
     margin: 0;
@@ -411,15 +421,15 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     display: grid;
     grid-template-columns: 11rem 1fr;
     gap: 1rem;
-    border-bottom: 1px dashed rgb(59 232 255 / 0.18);
+    border-bottom: 1px dashed color-mix(in oklch, var(--palette-cyan-400) 18%, transparent);
     padding-bottom: 0.35rem;
   }
   dt {
-    color: var(--cream-dim);
+    color: var(--palette-cream-400);
   }
   dd {
     margin: 0;
-    color: var(--cream);
+    color: var(--palette-cream-100);
   }
 
   @media (max-width: 900px) {
@@ -436,7 +446,7 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     .capsules {
       margin-top: 3.2rem;
       padding-left: 1.2rem;
-      border-left: 4px solid #8a6b14;
+      border-left: 4px solid var(--palette-brass-600);
     }
     .capsule {
       height: auto;
@@ -462,6 +472,12 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
 </style>
 
 <script>
+  import { createHologram, supportsHtmlInCanvas } from "../lib/holo.ts";
+
+  const machine = document.querySelector<HTMLElement>("[data-machine]");
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (machine !== null && !reduced && supportsHtmlInCanvas()) createHologram(machine);
+
   const announce = (id: string | null) => {
     document.dispatchEvent(new CustomEvent("acidcat:surface", { detail: id }));
     for (const pipe of document.querySelectorAll<SVGGElement>("[data-surface-pipe]")) {

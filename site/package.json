@@ -16,10 +16,13 @@
     "@fontsource-variable/jetbrains-mono": "catalog:",
     "@fontsource-variable/space-grotesk": "catalog:",
     "astro": "catalog:",
-    "sharp": "catalog:"
+    "sharp": "catalog:",
+    "three": "catalog:"
   },
   "devDependencies": {
+    "@hebilicious/cssforge": "catalog:",
     "@types/node": "catalog:",
+    "@types/three": "catalog:",
     "playwright": "catalog:",
     "typescript": "catalog:"
   }

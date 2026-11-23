@@ -58,7 +58,7 @@ after(async () => {
 
 test("the build writes the homepage and the docs", async () => {
   const home = await readFile(join(dist, "index.html"), "utf8");
-  assert.match(home, /<figure[^>]*data-engine/);
+  assert.match(home, /data-plate/);
   for (const surface of ["CLI", "MCP", "WebMCP", "HTTP", "TypeScript"]) assert.ok(home.includes(`>${surface}<`), surface);
   await stat(join(dist, "docs/index.html"));
 });
@@ -82,8 +82,6 @@ for (const viewport of [
     await page.locator("[data-plate].is-live").waitFor({ timeout: 10000 });
     const plate = await page.locator("[data-plate] canvas").boundingBox();
     assert.ok(plate !== null && plate.width >= viewport.width - 1, "the living plate fills the hero");
-    const engine = await page.locator("[data-engine] svg").boundingBox();
-    assert.ok(engine !== null && engine.width > 300, "the engine art is visible");
 
     const docs = page.locator('a.button-acid[href="/docs/"]').first();
     await docs.click();
@@ -93,13 +91,13 @@ for (const viewport of [
   });
 }
 
-test("reduced motion keeps the hero still and stops the engine", async () => {
+test("reduced motion keeps the hero still and stops the animations", async () => {
   if (browser === undefined) throw new Error("No browser.");
   const page = await browser.newPage({ reducedMotion: "reduce" });
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
   assert.equal(await page.locator("[data-plate].is-live").count(), 0);
   assert.ok(await page.locator("[data-plate] img").isVisible());
-  const animation = await page.locator("[data-engine] .ring").first().evaluate((element) => getComputedStyle(element).animationName);
+  const animation = await page.locator(".ornament svg").first().evaluate((element) => getComputedStyle(element).animationName);
   assert.equal(animation, "none");
   await page.close();
 });

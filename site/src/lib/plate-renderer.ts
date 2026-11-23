@@ -28,7 +28,7 @@ export interface PlateHandle {
   readonly setActive: (active: boolean) => void;
 }
 
-const FOCUS_DEPTH = 0.64;
+const FOCUS_DEPTH = 0.62;
 
 const loadImage = async (source: string): Promise<HTMLImageElement> => {
   const image = new Image();

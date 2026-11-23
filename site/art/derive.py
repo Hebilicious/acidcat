@@ -17,7 +17,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 print("device", device, flush=True)
 image = Image.open(source).convert("RGB")
 
-depth = pipeline("depth-estimation", model="depth-anything/Depth-Anything-V2-Large-hf", device=device)
+depth = pipeline("depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf", device=device)
 result = depth(image)
 d = np.array(result["predicted_depth"].squeeze().cpu(), dtype=np.float32)
 d = (d - d.min()) / (d.max() - d.min())

@@ -1,8 +1,8 @@
 ---
 import "../styles/tokens.css";
 import "../styles/home.css";
-import CatEngine from "../components/CatEngine.astro";
 import LivingPlate from "../components/LivingPlate.astro";
+import NixieTubes from "../components/NixieTubes.astro";
 import Mark from "../components/Mark.astro";
 import Schematic from "../components/Schematic.astro";
 
@@ -189,38 +189,14 @@ const languages = [
               Use a catalog library for TypeScript, Python, Go or Rust, or a Pkl module. Every library writes the same catalog, in one canonical form, and <code>acid-cat check</code> tests it.
             </p>
           </div>
-          <ul class="tubes">
-            {languages.map((language, index) => (
-              <li class="tube" style={`--i:${index}`}>
-                <span class="tube-glass"><span class="tube-glyph">{language.code}</span></span>
-                <span class="tube-base" aria-hidden="true"></span>
-                <span class="tube-name">{language.name}</span>
-              </li>
-            ))}
-          </ul>
+          <NixieTubes languages={languages} />
         </div>
       </section>
 
-      <section class="final" aria-labelledby="final-title">
-        <div class="final-inner">
-          <div class="final-engine">
-            <CatEngine />
-          </div>
-          <h2 id="final-title">Fire up <em>the engine.</em></h2>
-          <p class="lede">Read the specification, pick a core, and let <code>acid-cat conform</code> tell you when every surface is right.</p>
-          <div class="actions">
-            <a class="button button-acid" href="/docs/">Get started</a>
-            <a class="button button-brass" href={repository}>Star on GitHub</a>
-          </div>
-          <p class="warning">
-            <strong>Experimental.</strong> The specification is a draft, and the packages are 0.x: any minor release can break their APIs. Pin exact versions.
-          </p>
-        </div>
-      </section>
     </main>
 
     <footer class="footer">
-      <span>AcidCat · MIT license</span>
+      <span>AcidCat · MIT license · Experimental: the specification is a draft, and the packages are 0.x.</span>
       <span class="footer-links">
         <a href="/docs/">Docs</a>
         <a href={`${repository}/blob/main/spec/README.md`}>Specification</a>
@@ -254,7 +230,7 @@ const languages = [
         },
         { threshold: 0.15 },
       );
-      for (const element of document.querySelectorAll(".section-head, .part, .feature, .tube, .machine, .blueprint, .spec-sheet")) {
+      for (const element of document.querySelectorAll(".section-head, .part, .feature, .machine:not([drawable]), .blueprint, .spec-sheet")) {
         element.classList.add("will-reveal");
         reveal.observe(element);
       }
