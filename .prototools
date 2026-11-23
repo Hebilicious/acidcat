@@ -8,6 +8,9 @@ rust = "1.99.0"
 uv = "0.13.1"
 java = "temurin-25.0.5+8"
 
+[tools.rust]
+components = ["rustfmt"]
+
 [plugins.tools]
 pkl = "https://raw.githubusercontent.com/milesj/proto-plugins/refs/heads/master/pkl.toml"
 

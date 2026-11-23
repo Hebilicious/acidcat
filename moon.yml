@@ -34,13 +34,21 @@ tasks:
       - "packages/cli/src/**/*.ts"
 
   lint:
-    description: "Lint every TypeScript file with type information, and check that no code turns the type checks off."
-    script: "oxlint --deny-warnings . && node scripts/check-escapes.ts"
+    description: "Lint every TypeScript file with type information, check that no code turns the type checks off, and check that rustfmt formats every Rust crate."
+    script: >-
+      oxlint --deny-warnings . && node scripts/check-escapes.ts
+      && cargo fmt --check --manifest-path packages/catalog/rust/Cargo.toml
+      && cargo fmt --check --manifest-path packages/core-rust/Cargo.toml
+      && cargo fmt --check --manifest-path examples/aircon/catalog/rust/Cargo.toml
+      && cargo fmt --check --manifest-path examples/aircon/core-rust/Cargo.toml
     inputs:
       - "**/*.ts"
       - "**/tsconfig*.json"
       - ".oxlintrc.json"
       - "scripts/check-escapes.ts"
+      - "**/*.rs"
+      - "!**/target/**"
+      - "**/Cargo.toml"
 
   commit-message:
     description: "Test the check that release-please can parse a squash commit."
