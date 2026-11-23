@@ -60,6 +60,7 @@ const description = "Describe what your application can do once. Serve it as a C
         </div>
       </section>
 
+      <div class="blueprint-zone">
       <Schematic />
 
       <section class="flow" aria-labelledby="flow-title">
@@ -72,6 +73,7 @@ const description = "Describe what your application can do once. Serve it as a C
           <Blueprint />
         </div>
       </section>
+      </div>
 
       <Surfaces />
 
@@ -80,12 +82,45 @@ const description = "Describe what your application can do once. Serve it as a C
     </main>
 
     <footer class="footer">
-      <span>AcidCat · MIT license · Experimental: the specification is a draft, and the packages are 0.x.</span>
-      <span class="footer-links">
-        <a href="/docs/">Docs</a>
-        <a href={`${repository}/blob/main/spec/README.md`}>Specification</a>
-        <a href={repository}>GitHub</a>
-      </span>
+      <div class="footer-rail" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <Mark size={56} />
+          <p class="footer-name">AcidCat</p>
+          <p class="footer-expansion"><b>A</b>pplication <b>C</b>apability <b>Id</b>entification <b>Cat</b>alog</p>
+          <p class="footer-status"><span class="footer-lamp" aria-hidden="true"></span>Specification 0.1, draft. The packages are 0.x: pin exact versions.</p>
+        </div>
+        <nav class="footer-columns" aria-label="Footer">
+          <div>
+            <p class="footer-heading">Specification</p>
+            <ul>
+              <li><a href={`${repository}/blob/main/spec/catalog.md`}>Catalog</a></li>
+              <li><a href={`${repository}/blob/main/spec/invocation.md`}>Invocation</a></li>
+              <li><a href={`${repository}/blob/main/spec/events.md`}>Events</a></li>
+              <li><a href={`${repository}/blob/main/spec/bindings/README.md`}>Bindings</a></li>
+              <li><a href={`${repository}/blob/main/spec/extensions/README.md`}>Extensions</a></li>
+              <li><a href={`${repository}/blob/main/spec/conformance.md`}>Conformance</a></li>
+            </ul>
+          </div>
+          <div>
+            <p class="footer-heading">Build</p>
+            <ul>
+              <li><a href="https://www.npmjs.com/package/@acid-cat/cli">The acid-cat command</a></li>
+              <li><a href={`${repository}/tree/main/examples/aircon`}>Air conditioner example</a></li>
+              <li><a href={`${repository}/blob/main/skills/acid-cat/SKILL.md`}>Agent skill</a></li>
+            </ul>
+          </div>
+          <div>
+            <p class="footer-heading">Project</p>
+            <ul>
+              <li><a href={`${repository}/releases`}>Releases</a></li>
+              <li><a href={`${repository}/issues`}>Issues</a></li>
+              <li><a href={`${repository}/blob/main/LICENSE`}>MIT license</a></li>
+            </ul>
+          </div>
+        </nav>
+      </div>
+      <p class="footer-watermark" aria-hidden="true">AcidCat</p>
     </footer>
 
     <script>

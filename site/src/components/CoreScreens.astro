@@ -39,13 +39,12 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
 
 <section class="cores" aria-labelledby="cores-title">
   <div class="cores-inner">
+    <header class="section-head">
+      <p class="eyebrow">Fig. 4 — Cores</p>
+      <h2 id="cores-title">Run it <em>with a core</em></h2>
+      <p class="lede">A core runs the capabilities and serves the bindings. Each core has the same features in its own style, and each one passes <code>acid-cat conform</code>.</p>
+    </header>
     <div class="console">
-      <div class="console-side">
-      <header class="section-head">
-        <p class="eyebrow">Fig. 4 — Cores</p>
-        <h2 id="cores-title">Run it <em>with a core</em></h2>
-        <p class="lede">A core runs the capabilities and serves the bindings. Each core has the same features in its own style, and each one passes <code>acid-cat conform</code>.</p>
-      </header>
       <div class="console-tabs" role="tablist" aria-label="Core" aria-orientation="vertical">
         {cores.map((core, index) => (
           <button type="button" role="tab" id={`tab-${core.id}`} aria-controls={`panel-${core.id}`} aria-selected={index === 0 ? "true" : "false"} tabindex={index === 0 ? 0 : -1} data-core-tab={core.id}>
@@ -54,14 +53,13 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
           </button>
         ))}
       </div>
-      </div>
       <div class="console-frame">
         <div class="console-screen" data-console-screen>
           {cores.map((core, index) => (
             <div class="console-panel" role="tabpanel" id={`panel-${core.id}`} aria-labelledby={`tab-${core.id}`} hidden={index !== 0}>
               <p class="console-note">{core.note}</p>
               <div class="console-code" set:html={core.html} />
-              <a class="console-source" href={`${repository}/${core.source}`}>{core.source}</a>
+              <a class="console-source" href={`${repository}/${core.source}`} target="_blank" rel="noopener">Open GitHub example <span aria-hidden="true">↗</span></a>
             </div>
           ))}
         </div>
@@ -72,12 +70,11 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
 
 <style>
   .cores {
-    margin-top: var(--spacing_fluid-space-3xl-4xl);
-    padding-block: var(--spacing_fluid-space-xl-2xl);
+    margin-top: var(--spacing_fluid-space-2xl-3xl);
+    padding-block: var(--spacing_fluid-space-2xl-3xl) var(--spacing_fluid-space-3xl-4xl);
     background:
-      radial-gradient(ellipse at 70% 30%, color-mix(in oklch, var(--palette-cyan-400) 8%, transparent), transparent 60%),
-      linear-gradient(180deg, var(--palette-ink-800), var(--palette-ink-950));
-    border-block: 1px solid color-mix(in oklch, var(--palette-brass-400) 22%, transparent);
+      radial-gradient(ellipse 55% 45% at 65% 55%, color-mix(in oklch, var(--palette-cyan-400) 7%, transparent), transparent 70%),
+      linear-gradient(180deg, transparent, color-mix(in oklch, var(--palette-ink-800) 60%, transparent) 30%, color-mix(in oklch, var(--palette-ink-800) 60%, transparent) 70%, var(--palette-ink-950));
   }
   .cores-inner {
     width: min(var(--layout-width-content), 100%);
@@ -86,33 +83,24 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
   }
   .console {
     display: grid;
-    grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr);
+    grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr);
     align-items: start;
-  }
-  .console-side {
-    display: grid;
-    gap: var(--spacing_fluid-space-m);
-    padding-right: var(--spacing_fluid-space-m);
-  }
-  .console-side .section-head h2 {
-    font-size: var(--typography_fluid-display-xl);
-  }
-  .console-side .lede {
-    font-size: var(--typography_fluid-text-s);
+    margin-top: var(--spacing_fluid-space-l);
   }
   .console-tabs {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing_fluid-space-2xs);
-    padding-block: 0;
+    gap: var(--spacing_fluid-space-3xs);
   }
   .console-tabs button {
     position: relative;
     display: grid;
     gap: var(--spacing_fluid-space-3xs);
     padding: var(--spacing_fluid-space-xs) var(--spacing_fluid-space-s);
+    margin-right: -1px;
     border: 1px solid color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
-    border-radius: var(--radius-size-m);
+    border-right: 0;
+    border-radius: var(--radius-size-m) 0 0 var(--radius-size-m);
     background: var(--palette-ink-900);
     color: var(--palette-cream-400);
     text-align: left;
@@ -159,7 +147,7 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
   }
   .console-frame {
     padding: var(--spacing_fluid-space-2xs);
-    border-radius: var(--radius-size-l);
+    border-radius: 0 var(--radius-size-l) var(--radius-size-l) var(--radius-size-l);
     background: linear-gradient(135deg, var(--palette-brass-200), var(--palette-brass-500) 40%, var(--palette-brass-700) 70%, var(--palette-brass-400));
     box-shadow:
       0 0 0 2px var(--palette-ink-900),
@@ -201,16 +189,17 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
     .console {
       grid-template-columns: minmax(0, 1fr);
     }
-    .console-side {
-      padding-right: 0;
-    }
+
     .console-tabs {
       flex-direction: row;
       overflow-x: auto;
-      padding-block: 0;
+      margin-top: 0;
+      padding-inline: var(--spacing_fluid-space-m);
     }
     .console-tabs button {
       flex: none;
+      margin-right: 0;
+      margin-bottom: -1px;
       border-right: 1px solid color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
       border-bottom: 0;
       border-radius: var(--radius-size-m) var(--radius-size-m) 0 0;

@@ -185,15 +185,15 @@ export function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gl: Elem
       const hover = button?.matches(":hover") ?? false;
       const focus = button?.matches(":focus-visible") ?? false;
       const selected = button?.getAttribute("aria-pressed") === "true";
-      const target = selected ? 1.25 : hover || focus ? 0.7 : 0;
+      const target = selected ? 1.25 : hover || focus ? 0.7 : 0.16;
       light.strength += (target - light.strength) * .12;
       light.ring += ((focus ? 1 : 0) - light.ring) * .18;
       const uniforms = light.material.uniforms;
       if (uniforms["strength"]) uniforms["strength"].value = light.strength;
       if (uniforms["ring"]) uniforms["ring"].value = light.ring;
       if (uniforms["time"]) uniforms["time"].value = time.value + i;
-      emission.opacity = selected ? 1 : hover || focus ? .9 : .42;
-      emission.color.setScalar(selected ? 1.8 : hover || focus ? 1.25 : .6);
+      emission.opacity = selected ? 1 : hover || focus ? .95 : .78;
+      emission.color.setScalar(selected ? 1.8 : hover || focus ? 1.3 : 1.0);
       tube.rotation.y += ((hover ? .17 : 0) - tube.rotation.y) * .12;
     }
     renderer.render(scene, camera);

@@ -82,14 +82,7 @@ const snippets = await catalogSnippets();
 <style>
   .schematic {
     position: relative;
-    padding-block: var(--spacing_fluid-space-3xl-4xl);
-    background:
-      linear-gradient(color-mix(in oklch, var(--palette-cyan-400) 6%, transparent) 1px, transparent 1px) 0 0 / 32px 32px,
-      linear-gradient(90deg, color-mix(in oklch, var(--palette-cyan-400) 6%, transparent) 1px, transparent 1px) 0 0 / 32px 32px,
-      linear-gradient(color-mix(in oklch, var(--palette-cyan-400) 10%, transparent) 1px, transparent 1px) 0 0 / 160px 160px,
-      linear-gradient(90deg, color-mix(in oklch, var(--palette-cyan-400) 10%, transparent) 1px, transparent 1px) 0 0 / 160px 160px,
-      radial-gradient(ellipse at 30% 40%, var(--palette-blueprint-900), var(--palette-ink-900) 70%);
-    border-block: 1px solid color-mix(in oklch, var(--palette-cyan-400) 20%, transparent);
+    padding-block: var(--spacing_fluid-space-3xl-4xl) var(--spacing_fluid-space-xl);
   }
   .schematic-inner {
     width: min(var(--layout-width-content), 100%);
