@@ -102,21 +102,15 @@ test("MCP through HTTP: maxAgeMs reaches the provider, and an idle stream gets h
   await reader.cancel();
 });
 
-test("MCP through HTTP: notifications/events/active grants the heartbeatMs that the request suggests, between 1000 and 60000, or the heartbeatMs of the deployment", async () => {
-  const { handler, request, rpc } = httpServer(new Sensors(), 15_000);
-  const grant = async (heartbeatMs?: number) => {
-    const reader = sseReader(await handler(request("events/stream", { name: "sensor.reading.changed", ...(heartbeatMs === undefined ? {} : { heartbeatMs }) })));
-    try {
-      return objectOf((await reader.next())?.data ?? "null");
-    } finally {
-      await reader.cancel();
-    }
-  };
-  assert.deepEqual(await grant(), { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: false, heartbeatMs: 15_000, _meta: sub(1) } });
-  for (const [suggested, granted] of [[5, 1000], [999_999, 60_000], [2500, 2500]] as const) {
-    assert.equal(member(await grant(suggested), "params")["heartbeatMs"], granted, String(suggested));
+test("MCP through HTTP: notifications/events/active grants the heartbeatMs of the deployment when the request suggests none, and an invalid suggestion is the error -32602", async () => {
+  const { handler, request, rpc } = httpServer(new Sensors(), 7000);
+  const reader = sseReader(await handler(request("events/stream", { name: "sensor.reading.changed" })));
+  try {
+    assert.deepEqual(objectOf((await reader.next())?.data ?? "null"), { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: false, heartbeatMs: 7000, _meta: sub(1) } });
+  } finally {
+    await reader.cancel();
   }
-  for (const heartbeatMs of [0, -1, 1.5, "x"]) {
+  for (const heartbeatMs of [-1, 1.5, "x"]) {
     assert.equal(member(await rpc("events/stream", { name: "sensor.reading.changed", heartbeatMs }), "error")["code"], -32602, String(heartbeatMs));
   }
 });

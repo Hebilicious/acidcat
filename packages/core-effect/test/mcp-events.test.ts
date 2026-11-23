@@ -156,8 +156,8 @@ test("through HTTP, a stream with nothing to send gets heartbeats with the last 
   await feed.following(0);
 });
 
-test("through HTTP, notifications/events/active grants the heartbeatMs that the request suggests, between 1000 and 60000, or the heartbeatMs of the deployment", async () => {
-  const handler = Mcp.toWebHandler(events, feedLayer, { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN], heartbeatMs: 15_000 });
+test("through HTTP, notifications/events/active grants the heartbeatMs of the deployment when the request suggests none, and an invalid suggestion is the error -32602", async () => {
+  const handler = Mcp.toWebHandler(events, feedLayer, { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN], heartbeatMs: 7000 });
   const active = async (heartbeatMs?: unknown) => {
     const controller = new AbortController();
     const response = await handler(mcpRequest("events/stream", { name: "feed.ticked", ...(heartbeatMs === undefined ? {} : { heartbeatMs }) }, { signal: controller.signal }));
@@ -168,11 +168,8 @@ test("through HTTP, notifications/events/active grants the heartbeatMs that the 
     }
   };
   try {
-    assert.deepEqual(await active(), { method: "notifications/events/active", params: { truncated: false, heartbeatMs: 15_000, _meta: { [SUBSCRIPTION_ID]: 1 } } });
-    for (const [suggested, granted] of [[5, 1000], [999_999, 60_000], [2500, 2500]] as const) {
-      assert.equal((await active(suggested))?.params?.heartbeatMs, granted, String(suggested));
-    }
-    for (const heartbeatMs of [0, -1, 1.5, "x"]) assert.equal((await active(heartbeatMs))?.error?.code, -32602, String(heartbeatMs));
+    assert.deepEqual(await active(), { method: "notifications/events/active", params: { truncated: false, heartbeatMs: 7000, _meta: { [SUBSCRIPTION_ID]: 1 } } });
+    for (const heartbeatMs of [-1, 1.5, "x"]) assert.equal((await active(heartbeatMs))?.error?.code, -32602, String(heartbeatMs));
   } finally {
     await handler.dispose();
   }

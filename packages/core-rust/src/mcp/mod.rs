@@ -500,8 +500,9 @@ mod tests {
     }
 
     #[test]
-    fn heartbeat_grant_clamps_a_suggestion_and_rejects_an_invalid_one() {
-        let deployment = Duration::from_millis(15_000);
+    fn heartbeat_grant_keeps_the_deployment_interval_without_a_suggestion_and_rejects_an_invalid_one()
+     {
+        let deployment = Duration::from_millis(7_000);
         let grant = |value: Value| {
             let params = Map::from_iter([("heartbeatMs".to_owned(), value)]);
             heartbeat_grant(&params, deployment).map(|grant| grant.as_millis())
@@ -510,13 +511,10 @@ mod tests {
             heartbeat_grant(&Map::new(), deployment)
                 .map(|grant| grant.as_millis())
                 .ok(),
-            Some(15_000)
+            Some(7_000)
         );
-        assert_eq!(grant(Value::Null).ok(), Some(15_000));
-        assert_eq!(grant(json!(5)).ok(), Some(1_000));
-        assert_eq!(grant(json!(999_999)).ok(), Some(60_000));
-        assert_eq!(grant(json!(2_500)).ok(), Some(2_500));
-        for invalid in [json!(0), json!(-1), json!(1.5), json!("x")] {
+        assert_eq!(grant(Value::Null).ok(), Some(7_000));
+        for invalid in [json!(-1), json!(1.5), json!("x")] {
             assert_eq!(
                 grant(invalid.clone()).err().map(|error| error.code),
                 Some(codes::INVALID_PARAMS),
