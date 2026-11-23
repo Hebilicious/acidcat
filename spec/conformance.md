@@ -25,7 +25,7 @@ A catalog that is not in [canonical form](catalog.md#canonical-form) gets a warn
 
 ## Provider and bindings
 
-A provider and its bindings conform for a target if, through each protocol binding of the target:
+A provider and its bindings conform for a target if, through each binding of the target, protocol or language:
 
 - a list of capabilities shows only capabilities in the view of the target;
 - a call to an id that is not in the view fails as a call to an unknown id;
@@ -37,6 +37,8 @@ A provider and its bindings conform for a target if, through each protocol bindi
 - each end of a subscription has the form that the binding defines;
 - each outcome and each kind of call failure has the form that the binding defines;
 - a remote binding rejects requests as [Remote bindings](bindings/README.md#remote-bindings) tells.
+
+For a language binding, "the form that the binding defines" is the form of its mapping of the [programmatic binding](bindings/programmatic.md). `acid-cat conform` checks these conditions through each protocol binding. The tests of a core check them through its language bindings.
 
 ## The conformance fixture
 

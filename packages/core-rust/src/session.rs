@@ -76,6 +76,13 @@ struct Inner<C> {
     buffer_limit: usize,
 }
 
+const CAPABILITY_FAILED: &str = "The capability failed.";
+
+fn internal<C>(inner: &Inner<C>, id: &str, defect: &Defect, message: &str) -> CallFailure {
+    inner.app.defect(id, defect);
+    CallFailure::new(Kind::Internal, message)
+}
+
 /// Clones share the session.
 pub struct Session<C> {
     inner: Arc<Inner<C>>,
@@ -274,10 +281,11 @@ impl<C: Send + Sync + 'static> Session<C> {
                 return Outcome::CallFailure(CallFailure::new(Kind::InvalidInput, message));
             }
             Err(panic) => {
-                inner.app.defect(id, &Defect::from_panic(panic));
-                return Outcome::CallFailure(CallFailure::new(
-                    Kind::Internal,
-                    "The capability failed.",
+                return Outcome::CallFailure(internal(
+                    inner,
+                    id,
+                    &Defect::from_panic(panic),
+                    CAPABILITY_FAILED,
                 ));
             }
         };
@@ -319,8 +327,7 @@ impl<C: Send + Sync + 'static> Session<C> {
             }
         };
         checked.unwrap_or_else(|defect| {
-            inner.app.defect(id, &defect);
-            Outcome::CallFailure(CallFailure::new(Kind::Internal, "The capability failed."))
+            Outcome::CallFailure(internal(inner, id, &defect, CAPABILITY_FAILED))
         })
     }
 
@@ -377,8 +384,12 @@ impl<C: Send + Sync + 'static> Session<C> {
             Ok(Ok(source)) => source,
             Ok(Err(message)) => return Err(CallFailure::new(Kind::InvalidInput, message)),
             Err(panic) => {
-                inner.app.defect(id, &Defect::from_panic(panic));
-                return Err(CallFailure::new(Kind::Internal, INTERNAL_MESSAGE));
+                return Err(internal(
+                    inner,
+                    id,
+                    &Defect::from_panic(panic),
+                    INTERNAL_MESSAGE,
+                ));
             }
         };
         let checked = event.clone();
