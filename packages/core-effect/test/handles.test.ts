@@ -121,6 +121,47 @@ test("a handle gives the state as copies, and follows it only while it has liste
   }
 });
 
+test("an abort during input validation cancels the call, and the capability does not run", async () => {
+  let runs = 0;
+  let validationStarted = () => {};
+  const started = new Promise<void>((resolve) => (validationStarted = resolve));
+  let finishValidation = () => {};
+  const finished = new Promise<void>((resolve) => (finishValidation = resolve));
+  const decodeLater = SchemaGetter.transformOptionalEffect((value: Option.Option<string>) =>
+    Effect.promise(async () => {
+      validationStarted();
+      await finished;
+      return value;
+    }),
+  );
+  const Slow = Schema.String.pipe(Schema.decodeTo(Schema.String, SchemaTransformation.makeTransformation({ decode: decodeLater, encode: SchemaGetter.passthrough() })));
+  const app = App.make({
+    targets: { app: { bindings: ["typescript"] } },
+    capabilities: [
+      Capability.make({
+        id: "probe.slow",
+        description: "Validate the input slowly.",
+        audience: ["app"],
+        input: Schema.Struct({ text: Slow }),
+        run: () => Effect.sync(() => (runs += 1)).pipe(Effect.as(null)),
+      }),
+    ],
+  });
+  const session = await Handles.open(app, Layer.empty, { target: "app" });
+  try {
+    const controller = new AbortController();
+    const call = callFailure(handleOf(session.handles, "probe.slow").invokeExternal({ text: "x" }, { signal: controller.signal }));
+    await started;
+    controller.abort();
+    finishValidation();
+    assert.equal((await call).kind, "cancelled");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(runs, 0);
+  } finally {
+    await session.dispose();
+  }
+});
+
 test("handles need a state schema that encodes synchronously, a failed open releases the services, and a session does not need it", async () => {
   const encodeLater = SchemaGetter.transformOptionalEffect((value: Option.Option<string>) => Effect.promise(async () => value));
   const Suspending = Schema.String.pipe(

@@ -124,7 +124,8 @@ test("an input schema that throws is internal, with no internal data, and the ca
   assert.deepEqual(defects, ["probe.throws"]);
 });
 
-test("an abort during input validation cancels the call", async () => {
+test("an abort during input validation cancels the call, and the provider does not run", async () => {
+  let runs = 0;
   let validationStarted = () => {};
   const started = new Promise<void>((resolve) => (validationStarted = resolve));
   let finishValidation = () => {};
@@ -141,7 +142,10 @@ test("an abort during input validation cancels the call", async () => {
           await finished;
           return true;
         }),
-        run: () => ok(null),
+        run: () => {
+          runs += 1;
+          return ok(null);
+        },
       }),
     ],
   });
@@ -152,6 +156,8 @@ test("an abort during input validation cancels the call", async () => {
   controller.abort();
   finishValidation();
   assert.deepEqual(await call, { kind: "cancelled", message: "The call was cancelled." });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(runs, 0);
 });
 
 test("an abort while the session reads the availability cancels the call", async () => {

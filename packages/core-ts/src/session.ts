@@ -250,6 +250,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
         onDefect(id, cause);
         return callFailure("internal", "The capability failed.");
       }
+      if (controller.signal.aborted) return callFailure("cancelled", "The call was cancelled.");
       if ("issues" in prepared) return callFailure("invalid-input", issueMessage(prepared.issues));
 
       const { start } = prepared;
