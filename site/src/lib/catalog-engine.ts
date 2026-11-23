@@ -180,12 +180,20 @@ export function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gl: Elem
       projectionDirty = false;
     }
     for (const screen of screens) screen.excitation.value = Number(screen.element.dataset["surface"] === hovered);
-    for (const [i, { tube, emission }] of bulbs.entries()) {
+    for (const [i, { tube, emission, light }] of bulbs.entries()) {
       const button = buttons[i];
-      const hover = button?.matches(":hover, :focus-visible");
+      const hover = button?.matches(":hover") ?? false;
+      const focus = button?.matches(":focus-visible") ?? false;
       const selected = button?.getAttribute("aria-pressed") === "true";
-      emission.opacity = selected || hover ? 1 : .69;
-      emission.color.setScalar(selected || hover ? 1.45 : .78);
+      const target = selected ? 1.25 : hover || focus ? 0.7 : 0;
+      light.strength += (target - light.strength) * .12;
+      light.ring += ((focus ? 1 : 0) - light.ring) * .18;
+      const uniforms = light.material.uniforms;
+      if (uniforms["strength"]) uniforms["strength"].value = light.strength;
+      if (uniforms["ring"]) uniforms["ring"].value = light.ring;
+      if (uniforms["time"]) uniforms["time"].value = time.value + i;
+      emission.opacity = selected ? 1 : hover || focus ? .9 : .42;
+      emission.color.setScalar(selected ? 1.8 : hover || focus ? 1.25 : .6);
       tube.rotation.y += ((hover ? .17 : 0) - tube.rotation.y) * .12;
     }
     renderer.render(scene, camera);
@@ -218,7 +226,10 @@ export function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gl: Elem
     }
     if (rail) railMarker.replaceWith(rail);
     for (const button of buttons) button.removeAttribute("style");
-    for (const { emission } of bulbs) emission.map?.dispose();
+    for (const { emission, light } of bulbs) {
+      emission.map?.dispose();
+      light.material.dispose();
+    }
     finish.color.dispose();
     finish.relief.dispose();
     host.hidden = false;

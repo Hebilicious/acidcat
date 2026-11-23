@@ -1,4 +1,4 @@
-import { BoxGeometry, BufferGeometry, CanvasTexture, CylinderGeometry, Float32BufferAttribute, Group, InstancedMesh, LatheGeometry, LineBasicMaterial, LineSegments, type Material, Mesh, MeshBasicMaterial, MeshPhongMaterial, Object3D, PlaneGeometry, SRGBColorSpace, ShaderMaterial, Vector2 } from "three";
+import { AdditiveBlending, BoxGeometry, Color, BufferGeometry, CanvasTexture, CylinderGeometry, Float32BufferAttribute, Group, InstancedMesh, LatheGeometry, LineBasicMaterial, LineSegments, type Material, Mesh, MeshBasicMaterial, MeshPhongMaterial, Object3D, PlaneGeometry, SRGBColorSpace, ShaderMaterial, Vector2 } from "three";
 
 
 
@@ -184,6 +184,51 @@ function buildTube() {
   return group;
 }
 
+const haloVertex = `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const haloFragment = `
+uniform vec3 tint;
+uniform float strength;
+uniform float ring;
+uniform float time;
+varying vec2 vUv;
+void main() {
+  vec2 p = vUv - 0.5;
+  float d = length(p * vec2(1.0, 0.72));
+  float glow = exp(-d * d * 18.0) * strength;
+  float beam = smoothstep(0.16, 0.0, abs(p.x)) * smoothstep(-0.05, 0.2, p.y) * smoothstep(0.45, 0.25, p.y) * strength * 0.3;
+  float pulse = 0.85 + 0.15 * sin(time * 3.0);
+  float halo = smoothstep(0.025, 0.0, abs(d - 0.27 - 0.012 * sin(time * 4.0))) * ring;
+  vec3 color = tint * (glow * pulse + beam) + vec3(0.25, 0.9, 1.0) * halo * 1.6;
+  float a = clamp(max(color.r, max(color.g, color.b)), 0.0, 1.0);
+  gl_FragColor = vec4(a > 0.001 ? color / a : vec3(0.0), a);
+}
+`;
+
+export interface BulbLight {
+  readonly material: ShaderMaterial;
+  strength: number;
+  ring: number;
+}
+
+function halo(): BulbLight {
+  const material = new ShaderMaterial({
+    vertexShader: haloVertex,
+    fragmentShader: haloFragment,
+    uniforms: { tint: { value: new Color(1.0, 0.45, 0.12) }, strength: { value: 0 }, ring: { value: 0 }, time: { value: 0 } },
+    blending: AdditiveBlending,
+    transparent: true,
+    depthWrite: false,
+  });
+  return { material, strength: 0, ring: 0 };
+}
+
 export function tubeBank(labels: string[], socketY: number) {
   const template = buildTube();
   return labels.map((label, index) => {
@@ -195,6 +240,11 @@ export function tubeBank(labels: string[], socketY: number) {
     tube.add(filament);
     tube.scale.set(52, 35, 44);
     tube.position.set((index - (labels.length - 1) / 2) * 86, socketY, 16);
-    return { tube, emission };
+    const light = halo();
+    const glow = new Mesh(new PlaneGeometry(3.2, 2.9), light.material);
+    glow.position.set(0, 1.05, -.4);
+    glow.renderOrder = 4;
+    tube.add(glow);
+    return { tube, emission, light };
   });
 }

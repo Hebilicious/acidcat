@@ -19,11 +19,15 @@ const block = async (file: string, start: RegExp, end: RegExp, before = 0): Prom
   return dedent(lines.slice(first, last + 1));
 };
 
-const fence = async (file: string, language: string): Promise<string> => {
+const fence = async (file: string, language: string, from?: RegExp): Promise<string> => {
   const text = await readFile(join(repository, file), "utf8");
   const match = new RegExp("```" + language + "[^\\n]*\\n([\\s\\S]*?)\\n```").exec(text);
   if (match?.[1] === undefined) throw new Error(`No ${language} block in ${file}.`);
-  return match[1];
+  if (from === undefined) return match[1];
+  const lines = match[1].split("\n");
+  const first = lines.findIndex((line) => from.test(line));
+  if (first < 0) throw new Error(`No match for ${from} in ${file}.`);
+  return lines.slice(first).join("\n");
 };
 
 export interface Snippet {
@@ -111,7 +115,7 @@ export const canonicalSnippet = async (): Promise<Snippet> => ({
 export const coreSnippets = async (): Promise<Snippet[]> => [
   { id: "core-ts", label: "TypeScript", language: "typescript", source: "packages/core-ts/README.md", code: await fence("packages/core-ts/README.md", "ts") },
   { id: "core-effect", label: "Effect", language: "typescript", source: "packages/core-effect/README.md", code: await fence("packages/core-effect/README.md", "ts") },
-  { id: "core-rust", label: "Rust", language: "rust", source: "packages/core-rust/README.md", code: await fence("packages/core-rust/README.md", "rust") },
+  { id: "core-rust", label: "Rust", language: "rust", source: "packages/core-rust/README.md", code: await fence("packages/core-rust/README.md", "rust", /^#\[tokio::main\]/) },
 ];
 
 const theme = createCssVariablesTheme({ name: "acidcat", variablePrefix: "--code-", fontStyle: true });

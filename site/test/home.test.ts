@@ -97,7 +97,7 @@ test("reduced motion keeps the hero still and stops the animations", async () =>
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
   assert.equal(await page.locator("[data-plate].is-live").count(), 0);
   assert.ok(await page.locator("[data-plate] img").isVisible());
-  const animation = await page.locator(".ornament svg").first().evaluate((element) => getComputedStyle(element).animationName);
+  const animation = await page.locator(".hero-expansion").first().evaluate((element) => getComputedStyle(element).animationName);
   assert.equal(animation, "none");
   await page.close();
 });

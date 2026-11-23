@@ -39,20 +39,21 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
 
 <section class="cores" aria-labelledby="cores-title">
   <div class="cores-inner">
-    <header class="section-head">
-      <p class="eyebrow">Fig. 4 — Cores</p>
-      <h2 id="cores-title">Run the capabilities <em>with a core</em></h2>
-      <p class="lede">A core runs the capabilities and serves the bindings. Each core has the same features in its own style, and each one passes <code>acid-cat conform</code>.</p>
-    </header>
-
     <div class="console">
-      <div class="console-tabs" role="tablist" aria-label="Core">
+      <div class="console-side">
+      <header class="section-head">
+        <p class="eyebrow">Fig. 4 — Cores</p>
+        <h2 id="cores-title">Run it <em>with a core</em></h2>
+        <p class="lede">A core runs the capabilities and serves the bindings. Each core has the same features in its own style, and each one passes <code>acid-cat conform</code>.</p>
+      </header>
+      <div class="console-tabs" role="tablist" aria-label="Core" aria-orientation="vertical">
         {cores.map((core, index) => (
           <button type="button" role="tab" id={`tab-${core.id}`} aria-controls={`panel-${core.id}`} aria-selected={index === 0 ? "true" : "false"} tabindex={index === 0 ? 0 : -1} data-core-tab={core.id}>
             <span class="tab-label">{core.label}</span>
             <span class="tab-package">{core.packageName}</span>
           </button>
         ))}
+      </div>
       </div>
       <div class="console-frame">
         <div class="console-screen" data-console-screen>
@@ -72,7 +73,7 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
 <style>
   .cores {
     margin-top: var(--spacing_fluid-space-3xl-4xl);
-    padding-block: var(--spacing_fluid-space-2xl-3xl);
+    padding-block: var(--spacing_fluid-space-xl-2xl);
     background:
       radial-gradient(ellipse at 70% 30%, color-mix(in oklch, var(--palette-cyan-400) 8%, transparent), transparent 60%),
       linear-gradient(180deg, var(--palette-ink-800), var(--palette-ink-950));
@@ -84,34 +85,67 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
     padding-inline: var(--layout-gutter-inline);
   }
   .console {
-    margin-top: var(--spacing_fluid-space-xl);
+    display: grid;
+    grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr);
+    align-items: start;
+  }
+  .console-side {
+    display: grid;
+    gap: var(--spacing_fluid-space-m);
+    padding-right: var(--spacing_fluid-space-m);
+  }
+  .console-side .section-head h2 {
+    font-size: var(--typography_fluid-display-xl);
+  }
+  .console-side .lede {
+    font-size: var(--typography_fluid-text-s);
   }
   .console-tabs {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     gap: var(--spacing_fluid-space-2xs);
-    overflow-x: auto;
+    padding-block: 0;
   }
   .console-tabs button {
+    position: relative;
     display: grid;
     gap: var(--spacing_fluid-space-3xs);
-    padding: var(--spacing_fluid-space-xs) var(--spacing_fluid-space-m);
-    border: 1px solid color-mix(in oklch, var(--palette-brass-400) 35%, transparent);
-    border-bottom: 0;
-    border-radius: var(--radius-size-m) var(--radius-size-m) 0 0;
+    padding: var(--spacing_fluid-space-xs) var(--spacing_fluid-space-s);
+    border: 1px solid color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
+    border-radius: var(--radius-size-m);
     background: var(--palette-ink-900);
     color: var(--palette-cream-400);
     text-align: left;
     cursor: pointer;
     transition:
       color 0.2s,
-      background-color 0.2s;
+      background-color 0.2s,
+      box-shadow 0.3s;
+  }
+  .console-tabs button:hover {
+    color: var(--palette-cream-100);
+    background: var(--palette-ink-800);
   }
   .console-tabs button[aria-selected="true"] {
-    background: linear-gradient(180deg, color-mix(in oklch, var(--palette-cyan-400) 14%, var(--palette-ink-900)), var(--palette-ink-900));
+    background: linear-gradient(90deg, var(--palette-ink-900), color-mix(in oklch, var(--palette-cyan-400) 16%, var(--palette-ink-900)));
     color: var(--palette-cream-100);
     border-color: color-mix(in oklch, var(--palette-cyan-400) 55%, transparent);
+    box-shadow: -6px 0 18px -8px var(--palette-cyan-400);
+  }
+  .console-tabs button[aria-selected="true"]::after {
+    content: "";
+    position: absolute;
+    right: -1px;
+    top: 15%;
+    bottom: 15%;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--palette-cyan-400);
+    box-shadow: 0 0 12px var(--palette-cyan-400);
+  }
+  .console-tabs button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--palette-cyan-400), 0 0 18px var(--palette-cyan-400);
   }
   .tab-label {
     font-family: var(--font-family-display);
@@ -125,7 +159,7 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
   }
   .console-frame {
     padding: var(--spacing_fluid-space-2xs);
-    border-radius: 0 0 var(--radius-size-l) var(--radius-size-l);
+    border-radius: var(--radius-size-l);
     background: linear-gradient(135deg, var(--palette-brass-200), var(--palette-brass-500) 40%, var(--palette-brass-700) 70%, var(--palette-brass-400));
     box-shadow:
       0 0 0 2px var(--palette-ink-900),
@@ -142,7 +176,8 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
     padding: var(--spacing_fluid-space-m) var(--spacing_fluid-space-l);
   }
   .console-note {
-    margin: 0 0 var(--spacing_fluid-space-s);
+    min-height: 2lh;
+    margin: 0 0 var(--spacing_fluid-space-xs);
     font-family: var(--font-family-label);
     font-size: var(--typography_fluid-text-xs);
     letter-spacing: var(--font-tracking-label);
@@ -151,9 +186,9 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
   }
   .console-code {
     overflow-x: auto;
-    font-size: var(--typography_fluid-text-m);
-    line-height: 1.65;
-    max-height: 34rem;
+    font-size: var(--typography_fluid-text-xs);
+    line-height: 1.5;
+    min-height: 31lh;
   }
   .console-source {
     display: inline-block;
@@ -162,9 +197,31 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
     font-size: var(--typography_fluid-text-xs);
     color: var(--palette-brass-300);
   }
-  @media (max-width: 680px) {
+  @media (max-width: 760px) {
+    .console {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .console-side {
+      padding-right: 0;
+    }
     .console-tabs {
-      grid-auto-columns: max-content;
+      flex-direction: row;
+      overflow-x: auto;
+      padding-block: 0;
+    }
+    .console-tabs button {
+      flex: none;
+      border-right: 1px solid color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
+      border-bottom: 0;
+      border-radius: var(--radius-size-m) var(--radius-size-m) 0 0;
+    }
+    .console-tabs button[aria-selected="true"]::after {
+      inset: auto 15% -1px;
+      width: auto;
+      height: 3px;
+    }
+    .console-note {
+      min-height: 4lh;
     }
   }
 </style>
@@ -191,8 +248,11 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
   for (const [index, tab] of tabs.entries()) {
     tab.addEventListener("click", () => select(tab));
     tab.addEventListener("keydown", (event) => {
-      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
-      const next = tabs[(index + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+      const forward = event.key === "ArrowDown" || event.key === "ArrowRight";
+      const backward = event.key === "ArrowUp" || event.key === "ArrowLeft";
+      if (!forward && !backward) return;
+      event.preventDefault();
+      const next = tabs[(index + (forward ? 1 : tabs.length - 1)) % tabs.length];
       if (next === undefined) return;
       next.focus();
       select(next);

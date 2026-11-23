@@ -244,13 +244,25 @@ const snippets = await catalogSnippets();
     border-bottom: 4px double var(--palette-brass-400);
     background: radial-gradient(ellipse at 29% 16%, var(--palette-brass-700), var(--palette-ink-925) 54%);
   }
-  .language-rail button:is(:hover, [aria-pressed="true"]) {
+  .language-rail button {
+    transition: color 0.25s, box-shadow 0.35s, text-shadow 0.35s;
+  }
+  .language-rail button:hover {
     color: var(--palette-nixie-400);
-    text-shadow: 0 0 5px currentColor;
+    text-shadow: 0 0 8px currentColor;
+  }
+  .language-rail button[aria-pressed="true"] {
+    color: var(--palette-nixie-200);
+    text-shadow: 0 0 6px var(--palette-nixie-400), 0 0 16px var(--palette-nixie-400);
+    box-shadow: 0 0 22px color-mix(in oklch, var(--palette-nixie-400) 70%, transparent), inset 0 0 18px color-mix(in oklch, var(--palette-nixie-400) 45%, transparent);
+  }
+  .language-rail button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--palette-cyan-400) 80%, transparent), 0 0 24px var(--palette-cyan-400);
   }
   .engine-stage > .language-rail { position: absolute; inset: 0; padding: 0; background: none; pointer-events: none; }
   .engine-stage > .language-rail button { position: absolute; pointer-events: auto; opacity: 0; min-height: 0; }
-  .engine-stage > .language-rail button:focus-visible { opacity: 1; background: transparent; color: transparent; outline: 2px solid var(--palette-brass-200); }
+  .engine-stage > .language-rail button:focus-visible { outline: none; }
   :global(.holo-canvas) .plate-title { color: var(--palette-brass-300); }
   :global(.holo-canvas) .engine-plate { align-content: start; grid-template-columns: minmax(0, 1fr); }
   :global(.holo-canvas) .catalog-code { height: auto; overflow: visible; }

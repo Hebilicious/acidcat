@@ -136,9 +136,26 @@ h2 em {
   font-size: var(--typography_fluid-text-s);
 }
 .nav nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing_fluid-space-2xs);
   text-decoration: none;
   color: var(--palette-cream-400);
   transition: color 0.2s;
+}
+.nav-icon {
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.nav nav a:hover .nav-icon {
+  opacity: 1;
 }
 .nav nav a:hover {
   color: var(--palette-acid-400);
@@ -185,33 +202,22 @@ h2 em {
   font-weight: var(--typography-weight-display-regular);
 }
 
-.ornament {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing_fluid-space-xs);
-  margin-top: var(--spacing_fluid-space-l);
-  max-width: 340px;
-  color: var(--palette-brass-400);
-}
-.ornament span {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--palette-brass-400));
-}
-.ornament span:last-child {
-  background: linear-gradient(90deg, var(--palette-brass-400), transparent);
-}
-.ornament svg {
-  animation: ornament 12s linear infinite;
-}
-@keyframes ornament {
-  to {
-    transform: rotate(360deg);
-  }
-}
 
+.hero-expansion {
+  margin: var(--spacing_fluid-space-xs) 0 0;
+  font-family: var(--font-family-label);
+  font-size: var(--typography_fluid-text-s);
+  letter-spacing: var(--font-tracking-label);
+  text-transform: uppercase;
+  color: var(--palette-cream-400);
+}
+.hero-expansion b {
+  color: var(--palette-acid-400);
+  font-weight: var(--typography-weight-display-bold);
+  text-shadow: 0 0 12px color-mix(in oklch, var(--palette-acid-400) 60%, transparent);
+}
 .hero-lede {
-  max-width: 34rem;
+  max-width: 30rem;
   margin: var(--spacing_fluid-space-m) 0 0;
   font-size: var(--typography_fluid-text-l);
   color: var(--palette-cream-400);
@@ -235,48 +241,74 @@ h2 em {
   justify-content: center;
   min-width: 11rem;
   padding: var(--spacing_fluid-space-s) var(--spacing_fluid-space-l);
+  overflow: hidden;
+  isolation: isolate;
   font-family: var(--font-family-display);
   font-size: var(--typography_fluid-text-l);
   font-weight: var(--typography-weight-display-bold);
   text-decoration: none;
   clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% 50%, calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 50%);
+  background-size: 220% 100%;
+  background-position: 0% 50%;
   transition:
-    transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
-    filter 0.25s;
+    transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 0.35s,
+    background-position 0.8s cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 0.35s;
 }
-.button:hover {
-  transform: translateY(-2px);
+.button > span {
+  position: relative;
+  z-index: 2;
+}
+.button .shine {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(105deg, transparent 35%, color-mix(in oklch, var(--palette-neutral-white) 55%, transparent) 50%, transparent 65%);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.button:hover,
+.button:focus-visible {
+  transform: translateY(-3px) scale(1.03);
+  background-position: 100% 50%;
+}
+.button:hover .shine,
+.button:focus-visible .shine {
+  animation: shine 1.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes shine {
+  to {
+    transform: translateX(120%);
+  }
 }
 .button-acid {
   color: var(--palette-ink-900);
-  background: linear-gradient(180deg, var(--palette-acid-200), var(--palette-acid-400) 45%, var(--palette-acid-600));
+  background-image: linear-gradient(100deg, var(--palette-acid-600), var(--palette-acid-400) 30%, var(--palette-acid-200) 50%, var(--palette-cyan-400) 75%, var(--palette-acid-400));
   filter: drop-shadow(0 0 18px color-mix(in oklch, var(--palette-acid-400) 45%, transparent));
 }
-.button-acid:hover {
-  filter: drop-shadow(0 0 28px color-mix(in oklch, var(--palette-acid-400) 75%, transparent));
+.button-acid:hover,
+.button-acid:focus-visible {
+  filter: drop-shadow(0 0 30px color-mix(in oklch, var(--palette-cyan-400) 60%, transparent));
 }
 .button-brass {
   color: var(--palette-brass-200);
-  isolation: isolate;
+  background-image: linear-gradient(100deg, var(--palette-ink-900) 0 45%, var(--palette-brass-700) 70%, var(--palette-copper-400) 85%, var(--palette-brass-400));
 }
 .button-brass::before {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
+  padding: 2px;
   background: linear-gradient(135deg, var(--palette-brass-200), var(--palette-brass-600), var(--palette-brass-300));
   clip-path: inherit;
+  mask: linear-gradient(var(--palette-neutral-black) 0 0) content-box exclude, linear-gradient(var(--palette-neutral-black) 0 0);
 }
-.button-brass::after {
-  content: "";
-  position: absolute;
-  inset: 2px;
-  z-index: -1;
-  background: var(--palette-ink-900);
-  clip-path: inherit;
-}
-.button-brass:hover {
-  color: var(--palette-cream-100);
+.button-brass:hover,
+.button-brass:focus-visible {
+  color: var(--palette-ink-900);
+  filter: drop-shadow(0 0 22px color-mix(in oklch, var(--palette-brass-400) 55%, transparent));
 }
 
 .reveal {
