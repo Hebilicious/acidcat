@@ -16,7 +16,8 @@ A catalog conforms if:
 - no schema in a capability or in an event has its own `$defs`;
 - each input, output, failure, state and payload schema, and each type in `$defs`, is a JSON object, not `true` or `false`;
 - each schema is a valid JSON Schema 2020-12 schema;
-- each [alias](bindings/cli.md#aliases) in `options.cli.aliases` follows the rules of the CLI binding.
+- each [alias](bindings/cli.md#aliases) in `options.cli.aliases` follows the rules of the CLI binding;
+- each `x-mcp-header` member in an input schema follows the [header annotation](bindings/mcp.md#header-annotations) rules of the MCP binding.
 
 A catalog that is not in [canonical form](catalog.md#canonical-form) gets a warning. A member that this specification does not define and that does not start with `x-` gets a warning.
 

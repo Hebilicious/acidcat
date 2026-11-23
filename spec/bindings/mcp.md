@@ -14,7 +14,7 @@ A server serves one transport or both. The rules for the [server](#server) and t
 
 ## Tools
 
-- **Names and listing.** `tools/list` gives one tool for each available capability in the view. An unavailable capability is not listed. A call to it gets the same answer as a call to an unknown tool. The `name` of the tool is the id. Its `description` is the description of the capability. Its `inputSchema` is the [bundled](../catalog.md#bundling) input schema. A property of the input schema can have the member `x-mcp-header`. The tool gives it unchanged, and the server checks the header that it names through [HTTP](#headers).
+- **Names and listing.** `tools/list` gives one tool for each available capability in the view. An unavailable capability is not listed. A call to it gets the same answer as a call to an unknown tool. The `name` of the tool is the id. Its `description` is the description of the capability. Its `inputSchema` is the [bundled](../catalog.md#bundling) input schema. A property of the input schema can have the member `x-mcp-header` (see [Header annotations](#header-annotations)). The tool gives it unchanged, and the server checks the header that it names through [HTTP](#headers).
 - **Output schema.** If the bundled output schema has `"type": "object"`, the tool gives it as `outputSchema`. If not, the tool has no `outputSchema`.
 - **Hints.** For a `readOnly` capability, `annotations.readOnlyHint` is `true`. If the capability has `destructive`, `annotations.destructiveHint` has the same value. If the capability has `idempotent`, `annotations.idempotentHint` has the same value. If the capability does not have one of these two members, the tool has no annotation for it, or the default value of MCP: `destructiveHint: true` and `idempotentHint: false`. A client cannot see a difference between the two forms. MCP gives these two annotations a meaning only when `readOnlyHint` is `false`.
 - **Cancellation.** When the client cancels the request of a call, the call is cancelled. Each transport tells how the client cancels a request. The server does not have to answer a cancelled call.
@@ -28,6 +28,15 @@ A server serves one transport or both. The rules for the [server](#server) and t
   | Other call failures | A tool result with `isError: true`. Its text content is the JSON of `{ "kind", "message" }` |
 
   The `ok` member identifies a failure. A call failure has no `ok` member.
+
+### Header annotations
+
+The member `x-mcp-header` of a property of an input schema names the header `Mcp-Param-{Name}` that mirrors the property through HTTP. The [Streamable HTTP transport](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#custom-headers-from-tool-parameters) of MCP gives the rules, and a client of this transport removes a tool with an annotation that breaks them from its list. A catalog MUST follow these rules in the input schema of each capability and each event. `acid-cat check` checks them on the [bundled](../catalog.md#bundling) input schema, which is the schema that clients get:
+
+- **Location.** The annotation is on a property that a chain of `properties` members reaches from the root of the schema. The chain does not go through `items` or another array keyword, `anyOf`, `oneOf`, `allOf`, `not`, `if`, `then`, `else` or `$ref`. The root of the schema is not a property, and a type in the `$defs` of the bundled schema is not on the chain. Bundling replaces an input schema that is only a `$ref` by its type, so the properties of that type are on the chain. A property that is a `$ref` to a type is not on the chain, and neither are the properties of that type.
+- **Type.** The property has the member `type` with the value `string`, `integer` or `boolean`.
+- **Value.** The value is an HTTP token (`1*tchar`, [RFC 9110, section 5.6.2](https://www.rfc-editor.org/rfc/rfc9110#section-5.6.2)). It is not empty, and has no spaces and no control characters.
+- **Unique.** No two annotations in one input schema have the same value without regard to case.
 
 ## Events
 
@@ -146,7 +155,7 @@ The client mirrors parts of the body of each request of revision `2026-07-28` in
 
 - **`Mcp-Method`.** The header MUST be equal to the method of the request.
 - **`Mcp-Name`.** For `tools/call`, `events/stream`, `events/poll`, `events/subscribe` and `events/unsubscribe`, `params.name` MUST be a string, and the header MUST be equal to it after decoding.
-- **`Mcp-Param-{Name}`.** For `tools/call`, the server takes the bundled input schema of the tool. For the four requests of the events extension that name an event, it takes the bundled input schema of the event. Each property that a chain of `properties` members reaches from the root of the schema, and that has a string `x-mcp-header`, names the header `Mcp-Param-` and that string. Header names are case-insensitive. The server ignores an `x-mcp-header` member at other locations. For each such property:
+- **`Mcp-Param-{Name}`.** For `tools/call`, the server takes the bundled input schema of the tool. For the four requests of the events extension that name an event, it takes the bundled input schema of the event. Each property that a chain of `properties` members reaches from the root of the schema, and that has a string `x-mcp-header`, names the header `Mcp-Param-` and that string. Header names are case-insensitive. A catalog has no `x-mcp-header` member at other locations ([Header annotations](#header-annotations)). For each such property:
   - If the argument at the path of the property is absent or `null`, the request MUST NOT have the header.
   - If not, the request MUST have the header, and its decoded value MUST agree with the argument. A string agrees with the same text. A boolean agrees with `true` or `false`. An integer agrees with a decimal text of the same number. A value of another type agrees with no header.
 - **Unknown names.** For an unknown or unavailable tool, and for an unknown event, the server checks no `Mcp-Param-{Name}` header. The request gets the answer to an unknown tool or event.

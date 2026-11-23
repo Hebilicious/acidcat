@@ -1,5 +1,5 @@
 import { canonicalText } from "@acid-cat/catalog";
-import { bundle, cliAliases, eventSchemasOf, REFERENCE, resolveType, schemasOf, viewOf, visitObjects } from "@acid-cat/spec-ts";
+import { bundle, cliAliases, eventSchemasOf, mcpHeaderErrors, REFERENCE, resolveType, schemasOf, viewOf, visitObjects } from "@acid-cat/spec-ts";
 import type { CatalogCapability, CatalogDocument as Catalog, CatalogEvent } from "@acid-cat/spec-ts";
 import { Result, Schema, SchemaIssue, SchemaRepresentation } from "effect";
 import type { JsonSchema } from "effect";
@@ -118,6 +118,9 @@ function ruleErrors(catalog: Catalog): string[] {
       errors.push(...references.map((error) => `${id} ${member} ${error}`));
       if ((member === "input" || member === "payload") && references.length === 0 && resolveType(schema, types).type !== "object") {
         errors.push(`${id}: the ${member} is not an object`);
+      }
+      if (member === "input" && references.length === 0) {
+        errors.push(...mcpHeaderErrors(bundle(schema, types)).map((error) => `${id} input: ${error}`));
       }
     }
   }

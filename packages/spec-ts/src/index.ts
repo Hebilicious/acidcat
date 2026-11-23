@@ -596,6 +596,49 @@ export function mcpHeaderProperties(inputSchema: unknown): readonly McpHeaderPro
   return found;
 }
 
+const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const MCP_HEADER_TYPES: ReadonlySet<unknown> = new Set(["string", "integer", "boolean"]);
+const SCHEMA_MAPS: ReadonlySet<string> = new Set(["$defs", "patternProperties", "dependentSchemas"]);
+
+const pointerOf = (path: readonly string[]): string => path.map((key) => `/${key.replaceAll("~", "~0").replaceAll("/", "~1")}`).join("");
+
+/**
+ * The errors of the `x-mcp-header` members of a bundled input schema (spec/bindings/mcp.md#header-annotations). Each
+ * error names the location of the member as a JSON pointer into the bundled schema.
+ */
+export function mcpHeaderErrors(inputSchema: unknown): string[] {
+  const errors: string[] = [];
+  const seen = new Map<string, string>();
+  const visit = (node: unknown, path: readonly string[], onChain: boolean) => {
+    if (Array.isArray(node)) {
+      node.forEach((item, index) => visit(item, [...path, String(index)], false));
+      return;
+    }
+    if (!isJsonObject(node)) return;
+    if (Object.hasOwn(node, "x-mcp-header")) {
+      const header = node["x-mcp-header"];
+      const where = `the x-mcp-header at ${pointerOf(path) || "the root"}`;
+      if (!onChain || path.length === 0) errors.push(`${where} is not on a property that a chain of properties members reaches from the root`);
+      else if (typeof header !== "string" || !HTTP_TOKEN.test(header)) errors.push(`${where} is ${JSON.stringify(header)}, which is not an HTTP token`);
+      else if (!MCP_HEADER_TYPES.has(node["type"])) errors.push(`${where} is on a property whose type is not string, integer or boolean`);
+      else {
+        const earlier = seen.get(header.toLowerCase());
+        if (earlier === undefined) seen.set(header.toLowerCase(), pointerOf(path));
+        else errors.push(`${where} is ${JSON.stringify(header)}, which the x-mcp-header at ${earlier} already names without regard to case`);
+      }
+    }
+    for (const [key, value] of Object.entries(node)) {
+      if ((key === "properties" || SCHEMA_MAPS.has(key)) && isJsonObject(value)) {
+        for (const [name, schema] of Object.entries(value)) visit(schema, [...path, key, name], onChain && key === "properties");
+      } else {
+        visit(value, [...path, key], false);
+      }
+    }
+  };
+  visit(inputSchema, [], true);
+  return errors;
+}
+
 function argumentAt(args: unknown, path: readonly string[]): unknown {
   let value = args;
   for (const key of path) value = isJsonObject(value) && Object.hasOwn(value, key) ? value[key] : undefined;

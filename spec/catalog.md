@@ -205,7 +205,7 @@ The **canonical form** is the one correct text for a catalog. All tools and cata
 
 ## Extensions
 
-A tool ignores members that it does not know. A member that this specification does not define SHOULD start with `x-`, as in `x-icon`. [Extensions](extensions/README.md) give optional conventions.
+A tool ignores members that it does not know. A member that this specification does not define SHOULD start with `x-`, as in `x-icon`. A binding can give rules for an extension member, as the MCP binding does for [`x-mcp-header`](bindings/mcp.md#header-annotations). [Extensions](extensions/README.md) give optional conventions.
 
 ## Design notes
 

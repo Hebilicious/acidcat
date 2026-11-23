@@ -1,0 +1,42 @@
+{
+  "acidcat": "0.1",
+  "targets": { "shop": { "bindings": ["mcp"] } },
+  "$defs": {
+    "Order": {
+      "type": "object",
+      "properties": { "shop": { "type": "string", "x-mcp-header": "Shop" } }
+    },
+    "Till": { "type": "string", "x-mcp-header": "Till" }
+  },
+  "capabilities": {
+    "shop.order.get": {
+      "description": "Get an order.",
+      "audience": ["shop"],
+      "input": { "$ref": "#/$defs/Order" }
+    },
+    "shop.order.place": {
+      "description": "Place an order.",
+      "audience": ["shop"],
+      "input": {
+        "type": "object",
+        "x-mcp-header": "Order",
+        "properties": {
+          "item": { "anyOf": [{ "type": "string", "x-mcp-header": "Item" }, { "type": "integer" }] },
+          "count": { "allOf": [{ "minimum": 1, "x-mcp-header": "Count" }], "type": "integer" },
+          "till": { "$ref": "#/$defs/Till" },
+          "lines": { "type": "array", "items": { "type": "object", "properties": { "sku": { "type": "string", "x-mcp-header": "Sku" } } } }
+        }
+      }
+    }
+  },
+  "events": {
+    "shop.order.ready": {
+      "description": "An order is ready.",
+      "audience": ["shop"],
+      "input": {
+        "type": "object",
+        "properties": { "shops": { "type": "array", "items": { "type": "string", "x-mcp-header": "Shop" } } }
+      }
+    }
+  }
+}
