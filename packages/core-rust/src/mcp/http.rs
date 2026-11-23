@@ -148,10 +148,10 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
     /// # Panics
     ///
     /// If the options are not valid: a given Server Card name that does not have the reverse-DNS form, a given
-    /// description that does not have 1 to 100 characters, a given URL that is not an `http` or `https` URL, a
-    /// version that is a range or is longer than 255 characters with the Server Card on, a webhook signing key that is
-    /// not a private Ed25519 JWK, two signing keys with the same `kid`, an egress range that is not CIDR text, or
-    /// signing keys or egress ranges with the Server Card off.
+    /// description that does not have 1 to 100 characters, a given URL that is not an absolute `http` or `https` URL
+    /// with a host, a version that is a range or is longer than 255 characters with the Server Card on, a webhook
+    /// signing key that is not a private Ed25519 JWK, two signing keys with the same `kid`, an egress range that is not
+    /// CIDR text, or signing keys or egress ranges with the Server Card off.
     pub fn new(app: Arc<Application<C>>, context: Arc<C>, options: McpOptions) -> Self {
         Self::with_contexts(app, Contexts::Shared(context), options)
     }

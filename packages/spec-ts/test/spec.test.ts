@@ -13,8 +13,11 @@ import {
   encodePollCursor,
   isGloballyRoutable,
   isVersionRange,
+  mcpServerCard,
   mcpServerCardDescription,
+  mcpServerCardIdentity,
   mcpServerCardName,
+  mcpServerCardSettings,
   webhookGrantMs,
   webhookSecretBytes,
   webhookSignature,
@@ -266,6 +269,32 @@ test("the default name of a Server Card reverses the labels of the host, and fal
     ["example.com", "n".repeat(150), `com.example/${"n".repeat(100)}`],
   ] as const;
   for (const [host, name, expected] of cases) assert.equal(mcpServerCardName(host, name), expected, `${host} ${name}`);
+});
+
+test("a given URL of a Server Card is an absolute http or https URL with a host, and gives the default name with the host in ASCII", () => {
+  const cases = [
+    ["https://bücher.example/mcp", "example.xn--bcher-kva/aircon"],
+    ["https://BÜCHER.Example:8443/mcp", "example.xn--bcher-kva/aircon"],
+    ["http://0x7f.1/mcp", "local/aircon"],
+    ["http://[::1]:3000/mcp", "local/aircon"],
+    ["http://user:pw@host.example/x", "example.host/aircon"],
+    ["http://%", undefined],
+    ["https://a b/mcp", undefined],
+    ["https://example.com/a b", undefined],
+    ["ftp://example.com/mcp", undefined],
+    ["mailto:a@b.c", undefined],
+    ["file:///x", undefined],
+    ["http://", undefined],
+  ] as const;
+  for (const [url, name] of cases) {
+    if (name === undefined) {
+      assert.throws(() => mcpServerCardSettings({ url }, false), /absolute http or https URL with a host/u, url);
+      continue;
+    }
+    const identity = mcpServerCardIdentity({ url }, { name: "aircon", version: "1.0.0", descriptions: [] });
+    const card = mcpServerCard(identity, "http://request.example/mcp", undefined);
+    assert.equal(card["name"], name, url);
+  }
 });
 
 test("the default description of a Server Card is the first text that is not empty, shortened to 100 characters", () => {

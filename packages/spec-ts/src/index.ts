@@ -928,8 +928,9 @@ export interface McpServerCardSettings {
    */
   readonly description?: string | undefined;
   /**
-   * The `http` or `https` URL of the server in the card. The default is the URL of the request of the card, without
-   * `/server-card`. Give it when a platform in front of the server ends TLS, because the server then gets `http` URLs.
+   * The absolute `http` or `https` URL of the server in the card, with a host. The default is the URL of the request of
+   * the card, without `/server-card`. Give it when a platform in front of the server ends TLS, because the server then
+   * gets `http` URLs.
    */
   readonly url?: string | undefined;
 }
@@ -957,6 +958,13 @@ const SERVER_CARD_NAME = /^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/;
 
 const characterCount = (text: string): number => Array.from(text).length;
 
+function httpHost(url: string): string | undefined {
+  if (/\s/.test(url) || !URL.canParse(url)) return undefined;
+  const parsed = new URL(url);
+  if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.hostname === "") return undefined;
+  return parsed.hostname;
+}
+
 /** Tell if the deployment gives signing keys or egress ranges, which only a Server Card publishes. */
 export const publishesOnServerCard = (publication: WebhookPublication | undefined): boolean =>
   (publication?.signingKeys?.length ?? 0) > 0 || (publication?.egressIpRanges?.length ?? 0) > 0;
@@ -975,9 +983,9 @@ export function isVersionRange(version: string): boolean {
 /**
  * Check the settings of the Server Card when the server starts (spec/bindings/mcp.md#server-card), and give
  * `undefined` when the deployment turns the card off with `false`. Throws a `TypeError` for a given name that is not
- * in reverse-DNS form, a given description that does not have 1 to 100 characters, or a given URL that is not an `http`
- * or `https` URL. With the card off, throws a `TypeError` if `publishesWebhookInfo` is true: no receiver can then get
- * the signing keys and the egress ranges.
+ * in reverse-DNS form, a given description that does not have 1 to 100 characters, or a given URL that is not an
+ * absolute `http` or `https` URL with a host. With the card off, throws a `TypeError` if `publishesWebhookInfo` is
+ * true: no receiver can then get the signing keys and the egress ranges.
  */
 export function mcpServerCardSettings(settings: McpServerCardSettings | false | undefined, publishesWebhookInfo: boolean): McpServerCardSettings | undefined {
   if (settings === false) {
@@ -994,7 +1002,9 @@ export function mcpServerCardSettings(settings: McpServerCardSettings | false | 
   if (description !== undefined && (characterCount(description) < 1 || characterCount(description) > 100)) {
     throw new TypeError("The description of the Server Card must have 1 to 100 characters.");
   }
-  if (url !== undefined && !/^https?:\/\/\S+$/.test(url)) throw new TypeError(`The URL of the Server Card ${JSON.stringify(url)} must be an http or https URL.`);
+  if (url !== undefined && httpHost(url) === undefined) {
+    throw new TypeError(`The URL of the Server Card ${JSON.stringify(url)} must be an absolute http or https URL with a host.`);
+  }
   return card;
 }
 
@@ -1058,7 +1068,7 @@ export function mcpServerCard(identity: McpServerCardIdentity, url: string, webh
   const remoteUrl = identity.url ?? url;
   return {
     $schema: MCP_SERVER_CARD_SCHEMA,
-    name: identity.name ?? mcpServerCardName(new URL(remoteUrl).host, identity.serverName),
+    name: identity.name ?? mcpServerCardName(httpHost(remoteUrl) ?? "", identity.serverName),
     version: identity.version,
     description: identity.description,
     remotes: [

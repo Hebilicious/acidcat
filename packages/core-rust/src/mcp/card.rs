@@ -3,6 +3,7 @@ use http::{HeaderValue, Method, Request, Response, header};
 use http_body_util::{BodyExt, Full};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use url::Url;
 
 use super::webhook::Webhooks;
 use super::{EVENTS_EXTENSION, HANDSHAKE_VERSIONS, PROTOCOL_VERSION};
@@ -10,21 +11,21 @@ use crate::facts_generated::{
     MCP_SERVER_CARD_CACHE_CONTROL, MCP_SERVER_CARD_MEDIA_TYPE, MCP_SERVER_CARD_PATH,
     MCP_SERVER_CARD_SCHEMA,
 };
-use crate::remote::{ResponseBody, empty_response, header_text};
+use crate::remote::{ResponseBody, empty_response};
 
 /// [`ServerCard::default`] gives the default name and description.
 #[derive(Clone, Debug, Default)]
 pub struct ServerCard {
     /// The name of the card, in reverse-DNS form: 3 to 200 characters, and one `/`, for example
     /// `com.example/aircon`. The default comes from the host of the URL of the server and the name of the server:
-    /// `com.example.aircon/<name>` for `aircon.example.com`.
+    /// `com.example.aircon/<name>` for `aircon.example.com`, with the host in ASCII (punycode).
     pub name: Option<String>,
     /// The description of the card, from 1 to 100 characters. The default is the description of the application,
     /// shortened to 100 characters.
     pub description: Option<String>,
-    /// The `http` or `https` URL of the server in the card. The default is the URL of the request of the card, without
-    /// `/server-card`. Give it when a platform in front of the server ends TLS, because the server then gets `http`
-    /// requests.
+    /// The absolute `http` or `https` URL of the server in the card, with a host. The default is the URL of the request
+    /// of the card, without `/server-card`. Give it when a platform in front of the server ends TLS, because the server
+    /// then gets `http` requests.
     pub url: Option<String>,
 }
 
@@ -38,12 +39,17 @@ impl ServerCard {
     }
 }
 
+struct GivenUrl {
+    text: String,
+    host: String,
+}
+
 pub(crate) struct Card {
     name: Option<String>,
     server_name: String,
     version: String,
     description: String,
-    url: Option<String>,
+    url: Option<GivenUrl>,
     versions: Vec<&'static str>,
     webhooks: Option<Value>,
 }
@@ -143,15 +149,13 @@ fn default_description(texts: &[Option<&str>]) -> String {
     }
 }
 
-fn authority_of(url: &str) -> &str {
-    let after_scheme = url.split_once("://").map_or(url, |(_, rest)| rest);
-    let authority = after_scheme
-        .split(['/', '?', '#'])
-        .next()
-        .unwrap_or_default();
-    authority
-        .rsplit_once('@')
-        .map_or(authority, |(_, host)| host)
+fn http_host(url: &str) -> Option<String> {
+    if url.chars().any(char::is_whitespace) {
+        return None;
+    }
+    let parsed = Url::parse(url).ok()?;
+    let host = parsed.host_str().filter(|host| !host.is_empty())?;
+    matches!(parsed.scheme(), "http" | "https").then(|| host.to_owned())
 }
 
 pub(crate) struct CardServer<'a> {
@@ -184,15 +188,12 @@ impl Card {
             !is_version_range(version),
             "the version of a server with a Server Card {version:?} must be one version, not a range such as ^1.2.3, >=1.2.3 or 1.x"
         );
-        if let Some(url) = &card.url {
-            assert!(
-                ["http://", "https://"]
-                    .iter()
-                    .any(|scheme| url.len() > scheme.len() && url.starts_with(scheme))
-                    && !url.chars().any(char::is_whitespace),
-                "the URL of the Server Card {url:?} must be an http or https URL"
-            );
-        }
+        let url = card.url.as_ref().map(|url| GivenUrl {
+            host: http_host(url).unwrap_or_else(|| {
+                panic!("the URL of the Server Card {url:?} must be an absolute http or https URL with a host")
+            }),
+            text: url.clone(),
+        });
         let mut versions = vec![PROTOCOL_VERSION];
         if server.handshake {
             versions.extend(HANDSHAKE_VERSIONS);
@@ -205,7 +206,7 @@ impl Card {
                 .description
                 .clone()
                 .unwrap_or_else(|| default_description(&server.descriptions)),
-            url: card.url.clone(),
+            url,
             versions,
             webhooks: webhooks.and_then(Webhooks::card_info),
         }
@@ -215,32 +216,48 @@ impl Card {
         request.uri().path().ends_with(MCP_SERVER_CARD_PATH)
     }
 
-    fn url<B>(&self, request: &Request<B>) -> String {
-        if let Some(url) = &self.url {
-            return url.clone();
-        }
+    fn origin_of<B>(request: &Request<B>) -> Option<Url> {
         let uri = request.uri();
-        let (scheme, authority) = match (uri.scheme_str(), uri.authority()) {
-            (Some(scheme), Some(authority)) => (scheme, authority.as_str()),
-            _ => (
-                "http",
-                header_text(request.headers(), header::HOST.as_str()).unwrap_or_default(),
-            ),
+        let origin = match (uri.scheme_str(), uri.authority()) {
+            (Some(scheme), Some(authority)) => format!("{scheme}://{authority}/"),
+            _ => {
+                let host = request.headers().get(header::HOST)?.as_bytes();
+                format!(
+                    "http://{}/",
+                    host.iter().copied().map(char::from).collect::<String>()
+                )
+            }
         };
-        let path = uri
+        Url::parse(&origin)
+            .ok()
+            .filter(|origin| origin.host_str().is_some_and(|host| !host.is_empty()))
+    }
+
+    fn url_and_host<B>(&self, request: &Request<B>) -> (String, String) {
+        if let Some(given) = &self.url {
+            return (given.text.clone(), given.host.clone());
+        }
+        let path = request
+            .uri()
             .path()
             .strip_suffix(MCP_SERVER_CARD_PATH)
             .filter(|path| !path.is_empty())
             .unwrap_or("/");
-        format!("{scheme}://{authority}{path}")
+        match Self::origin_of(request) {
+            Some(origin) => (
+                format!("{}{path}", origin.origin().ascii_serialization()),
+                origin.host_str().unwrap_or_default().to_owned(),
+            ),
+            None => (format!("http://{path}"), String::new()),
+        }
     }
 
     fn body<B>(&self, request: &Request<B>) -> String {
-        let url = self.url(request);
+        let (url, host) = self.url_and_host(request);
         let name = self
             .name
             .clone()
-            .unwrap_or_else(|| default_name(authority_of(&url), &self.server_name));
+            .unwrap_or_else(|| default_name(&host, &self.server_name));
         let mut remote = json!({
             "type": "streamable-http",
             "url": url,
@@ -329,7 +346,72 @@ fn cors(headers: &mut http::HeaderMap) {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_description, default_name, is_version_range};
+    use http::{HeaderValue, Request, header};
+    use serde_json::Value;
+
+    use super::{
+        Card, CardServer, ServerCard, default_description, default_name, http_host,
+        is_version_range,
+    };
+
+    fn card_of(card: &ServerCard, request: &Request<()>) -> Value {
+        let server = CardServer {
+            name: "aircon",
+            version: "1.0.0",
+            descriptions: [None, None, None],
+            handshake: false,
+        };
+        serde_json::from_str(&Card::new(card, &server, None).body(request)).expect("a JSON card")
+    }
+
+    #[test]
+    fn a_given_url_is_an_absolute_http_or_https_url_with_a_host_in_ascii() {
+        let cases = [
+            ("https://bücher.example/mcp", Some("xn--bcher-kva.example")),
+            (
+                "https://BÜCHER.Example:8443/mcp",
+                Some("xn--bcher-kva.example"),
+            ),
+            ("http://0x7f.1/mcp", Some("127.0.0.1")),
+            ("http://[::1]:3000/mcp", Some("[::1]")),
+            ("http://user:pw@host.example/x", Some("host.example")),
+            ("http://%", None),
+            ("https://a b/mcp", None),
+            ("https://example.com/a b", None),
+            ("ftp://example.com/mcp", None),
+            ("mailto:a@b.c", None),
+            ("file:///x", None),
+            ("http://", None),
+        ];
+        for (url, host) in cases {
+            assert_eq!(http_host(url).as_deref(), host, "{url}");
+        }
+    }
+
+    #[test]
+    fn the_default_name_takes_the_host_in_ascii_from_the_given_url_or_from_the_request() {
+        let given = ServerCard {
+            url: Some("https://bücher.example/mcp".into()),
+            ..ServerCard::default()
+        };
+        let card = card_of(&given, &Request::new(()));
+        assert_eq!(card["name"], "example.xn--bcher-kva/aircon");
+        assert_eq!(card["remotes"][0]["url"], "https://bücher.example/mcp");
+
+        let mut request = Request::get("/mcp/server-card")
+            .body(())
+            .expect("a request");
+        request.headers_mut().insert(
+            header::HOST,
+            HeaderValue::from_bytes("bücher.example".as_bytes()).expect("a header"),
+        );
+        let card = card_of(&ServerCard::default(), &request);
+        assert_eq!(card["name"], "example.xn--b14cher-xwa2143e/aircon");
+        assert_eq!(
+            card["remotes"][0]["url"],
+            "http://xn--b14cher-xwa2143e.example/mcp"
+        );
+    }
 
     #[test]
     fn the_default_name_reverses_the_labels_of_the_host_and_falls_back_to_local_for_an_ip_address()

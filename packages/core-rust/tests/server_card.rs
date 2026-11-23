@@ -262,14 +262,16 @@ fn invalid_card_or_webhook_options_panic_when_the_binding_starts() {
         ..McpOptions::new("test", "1.2.3")
     });
     assert!(message.contains("description"), "{message}");
-    let message = panic_message(McpOptions {
-        server_card: Some(ServerCard {
-            url: Some("ftp://mcp.example.com/mcp".into()),
-            ..ServerCard::default()
-        }),
-        ..McpOptions::new("test", "1.2.3")
-    });
-    assert!(message.contains("http or https URL"), "{message}");
+    for url in ["ftp://mcp.example.com/mcp", "http://%"] {
+        let message = panic_message(McpOptions {
+            server_card: Some(ServerCard {
+                url: Some(url.into()),
+                ..ServerCard::default()
+            }),
+            ..McpOptions::new("test", "1.2.3")
+        });
+        assert!(message.contains("http or https URL"), "{url}: {message}");
+    }
     let message = panic_message(McpOptions::new("test", "^1.2.3"));
     assert!(message.contains("not a range"), "{message}");
 }

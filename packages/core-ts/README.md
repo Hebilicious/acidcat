@@ -214,7 +214,7 @@ Verifications are kept in memory while the process runs. The server checks the e
 
 - **Name.** `serverCard.name`, in reverse-DNS form with one `/`. The default comes from the host of the URL and the `name` option: `com.example.aircon/aircon` for `aircon` at `aircon.example.com`, `localhost/aircon` at `localhost`, and `local/aircon` at an IP address such as `127.0.0.1` ([Default name](../../spec/bindings/mcp.md#default-name)). The card name is the name of the server in a registry, and `name` is the name that `server/discover` gives at run time.
 - **Description.** `serverCard.description`, from 1 to 100 characters. The default is the description of the catalog, else `instructions`, else `name`, shortened to 100 characters ([Default description](../../spec/bindings/mcp.md#default-description)).
-- **URL.** The URL of the server with the origin of the request. Behind a platform that ends TLS, the server gets `http` URLs: give the `https` URL in `serverCard.url`. The default name then takes the host of that URL.
+- **URL.** The URL of the server with the origin of the request. Behind a platform that ends TLS, the server gets `http` URLs: give the `https` URL in `serverCard.url`. It must be an absolute `http` or `https` URL with a host. The default name then takes the host of that URL, in punycode: `example.xn--bcher-kva/aircon` for `https://bücher.example/mcp`.
 - **Version.** The card gives `version`, the same version as `server/discover`, so with the card on, `version` must be one version, not a range such as `^1.2.3` or `1.x`.
 - **Webhooks.** With webhook delivery, the card also gives the public keys of `signingKeys` and the `egressIpRanges`. `mcpHandshake` adds its revisions to the card.
 

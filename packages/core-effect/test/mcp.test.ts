@@ -186,7 +186,7 @@ test("with the Server Card off, a GET request to its URL gets 404, and a card th
   const starts = (serverCard: Mcp.ServerCardSettings) => () => Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [], serverCard });
   assert.throws(starts({ name: "fixture" }), TypeError);
   assert.throws(starts({ description: "x".repeat(101) }), TypeError);
-  assert.throws(starts({ url: "ftp://mcp.example.com/mcp" }), TypeError);
+  for (const url of ["ftp://mcp.example.com/mcp", "http://%"]) assert.throws(starts({ url }), TypeError, url);
   assert.throws(() => Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "^1.2.3", allowedOrigins: [] }), /not a range/);
   await Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "^1.2.3", allowedOrigins: [], serverCard: false }).dispose();
 });

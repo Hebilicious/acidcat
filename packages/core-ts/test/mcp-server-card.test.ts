@@ -101,7 +101,7 @@ test("with webhook delivery and no signing keys or egress ranges, the Server Car
 });
 
 test("a card name that is not in reverse-DNS form, a description longer than 100 characters, a URL that is not http or https, or a version range, makes mcpHandler throw", () => {
-  assert.throws(() => cardHandler({ serverCard: { url: "ftp://mcp.example.com/mcp" } }), TypeError);
+  for (const url of ["ftp://mcp.example.com/mcp", "http://%"]) assert.throws(() => cardHandler({ serverCard: { url } }), TypeError, url);
   assert.throws(() => cardHandler({ serverCard: { name: "fixture" } }), TypeError);
   assert.throws(() => cardHandler({ serverCard: { description: "x".repeat(101) } }), TypeError);
   assert.throws(() => cardHandler({ serverCard: undefined, version: "^1.2.3" }), /not a range/);
