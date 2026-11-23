@@ -53,7 +53,7 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
 
     <div class="machine" data-machine>
       <div class="engine-card">
-        <div class="engine-plate">
+        <div class="engine-plate" data-catalog-screen>
           <span class="rivet" /><span class="rivet" /><span class="rivet" /><span class="rivet" />
           <p class="plate-title">aircon.acidcat.json</p>
           <pre><code set:html={catalogHtml} /></pre>
@@ -127,6 +127,10 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     padding-inline: var(--layout-gutter-inline);
   }
 
+  .section-head h2 {
+    max-width: 100%;
+  }
+
   .machine {
     display: grid;
     grid-template-columns: minmax(0, 1.05fr) minmax(80px, 0.5fr) minmax(0, 1fr);
@@ -139,11 +143,61 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     width: 100%;
     margin-top: var(--spacing_fluid-space-2xl);
   }
-  :global(.holo-canvas) > .machine {
-    margin-top: 0;
-    padding-block: var(--spacing_fluid-space-m) var(--spacing_fluid-space-xl);
+  .machine[hidden] {
+    display: none;
   }
-
+  :global(.holo-canvas) {
+    aspect-ratio: 1200 / 560;
+  }
+  :global(.holo-canvas) > [drawable] {
+    position: absolute;
+    inset: 0 auto auto 0;
+    box-sizing: border-box;
+    margin: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+    border-radius: 0;
+  }
+  :global(.holo-canvas) .engine-plate {
+    padding: var(--spacing_fluid-space-m);
+    display: grid;
+    align-content: center;
+  }
+  :global(.holo-canvas) .rivet,
+  :global(.holo-canvas) .capsule-cap {
+    display: none;
+  }
+  :global(.holo-canvas) .capsule {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  :global(.holo-canvas) .capsule-body {
+    background: none;
+    box-shadow: none;
+    border: none;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    gap: 0 var(--spacing_fluid-space-s);
+    padding: var(--spacing_fluid-space-2xs) var(--spacing_fluid-space-s);
+    align-content: center;
+  }
+  :global(.holo-canvas) .capsule-label {
+    grid-row: auto;
+    font-size: var(--typography_fluid-display-s);
+  }
+  :global(.holo-canvas) .capsule-output {
+    grid-column: span 2;
+  }
+  :global(.holo-canvas) .plate-title,
+  :global(.holo-canvas) .capsule-kind {
+    color: var(--palette-cyan-400);
+  }
+  :global(.holo-canvas) pre {
+    white-space: pre-wrap;
+    overflow: visible;
+  }
   .engine-card {
     position: relative;
     padding: var(--spacing_fluid-space-2xs);
@@ -358,7 +412,7 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
     align-items: center;
-    gap: var(--spacing_fluid-space-l-2xl);
+    gap: var(--spacing_fluid-space-l-xl);
     margin-top: var(--spacing_fluid-space-2xl-3xl);
   }
   .blueprint {
@@ -433,6 +487,10 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
   }
 
   @media (max-width: 900px) {
+    .engine-plate pre, .capsule-output {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
     .blueprint-row {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -472,11 +530,10 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
 </style>
 
 <script>
-  import { createHologram, supportsHtmlInCanvas } from "../lib/holo.ts";
+  import { mountCatalogEngine } from "../lib/holo.ts";
 
   const machine = document.querySelector<HTMLElement>("[data-machine]");
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (machine !== null && !reduced && supportsHtmlInCanvas()) createHologram(machine);
+  if (machine) mountCatalogEngine(machine);
 
   const announce = (id: string | null) => {
     document.dispatchEvent(new CustomEvent("acidcat:surface", { detail: id }));

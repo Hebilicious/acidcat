@@ -231,11 +231,19 @@ function createScene(
     scene.add(tube);
     return { tube, emission };
   });
-  function draw(seconds: number, pointer: number) {
+  const hover = codes.map(() => 0);
+  function draw(seconds: number, target: number, local: number) {
     for (const [i, { tube, emission }] of tubes.entries()) {
-      tube.rotation.y = .055 * Math.sin(seconds * .56 + i * .22) + pointer * .20;
-      emission.opacity = Math.min(1, Math.max(.025, (seconds - i * .08) * 6)) *
-        (.97 + .03 * Math.sin(seconds * 19 + i) * Math.sin(seconds * 7 - i));
+      const goal = i === target ? 1 : 0;
+      hover[i] = (hover[i] ?? 0) + (goal - (hover[i] ?? 0)) * .14;
+      const lift = hover[i] ?? 0;
+      tube.rotation.y = .055 * Math.sin(seconds * .56 + i * .9) * (1 - lift) + local * .38 * lift;
+      tube.rotation.z = .02 * Math.sin(seconds * .41 + i * 1.7) * (1 - lift);
+      tube.position.y = .08 * lift + .012 * Math.sin(seconds * .8 + i * 1.3);
+      const flicker = .97 + .03 * Math.sin(seconds * 19 + i * 2.1) * Math.sin(seconds * 7 - i * 1.3);
+      const surge = 1 + lift * (.35 + .15 * Math.sin(seconds * 31 + i));
+      emission.opacity = Math.min(1, Math.max(.025, (seconds - i * .08) * 6)) * flicker * Math.min(1.35, surge);
+      emission.color.setScalar(1 + lift * .6);
     }
     renderer.render(scene, camera);
   }
@@ -278,7 +286,8 @@ export function observeTubes(host: HTMLElement) {
   let frame = 0;
   let elapsed = 0;
   let previous = 0;
-  let pointer = 0;
+  let target = -1;
+  let local = 0;
 
   function render(time: number) {
     frame = 0;
@@ -290,7 +299,7 @@ export function observeTubes(host: HTMLElement) {
     }
     if (previous) elapsed += Math.min(.1, (time - previous) / 1000);
     previous = time;
-    scene.draw(software ? 2 : elapsed, pointer);
+    scene.draw(software ? 2 : elapsed, target, local);
     host.dataset.lit = "";
     if (!software) frame = requestAnimationFrame(render);
   }
@@ -331,12 +340,23 @@ export function observeTubes(host: HTMLElement) {
     void load();
   }
   function tilt(event: PointerEvent) {
-    if (!fine.matches || software) return;
-    const rect = host.getBoundingClientRect();
-    pointer = (event.clientX - rect.left) / rect.width * 2 - 1;
+    if (!fine.matches || software || !canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const u = (event.clientX - rect.left) / rect.width;
+    const v = (event.clientY - rect.top) / rect.height;
+    if (u < 0 || u >= 1 || v < 0 || v > 1) {
+      reset();
+      return;
+    }
+    const column = u * codes.length;
+    target = Math.floor(column);
+    local = (column - target) * 2 - 1;
+    for (const [index, item] of host.querySelectorAll("li").entries()) item.toggleAttribute("data-active", index === target);
   }
   function reset() {
-    pointer = 0;
+    target = -1;
+    local = 0;
+    for (const item of host.querySelectorAll("li")) item.removeAttribute("data-active");
   }
   const preload = new IntersectionObserver((entries) => {
     near = entries.some((entry) => entry.isIntersecting);

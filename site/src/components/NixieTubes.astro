@@ -29,6 +29,13 @@ const { languages } = Astro.props;
   });
 </script>
 <style>
+  li[data-active] .label {
+    color: var(--palette-nixie-200);
+    text-shadow: 0 0 var(--spacing_fluid-space-xs) color-mix(in oklch, var(--palette-nixie-400) 70%, transparent);
+  }
+  .label {
+    transition: color 0.25s, text-shadow 0.25s;
+  }
   nixie-tubes {
     position: relative;
     display: block;

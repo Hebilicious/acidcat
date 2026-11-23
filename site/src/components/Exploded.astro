@@ -1,114 +1,193 @@
 ---
 const parts = [
-  { id: "catalog", numeral: "I", name: "Catalog", note: "the contract, in JSON", height: 258 },
-  { id: "bindings", numeral: "II", name: "Bindings", note: "rules for each surface", height: 263 },
-  { id: "core", numeral: "III", name: "Core", note: "runs the capabilities", height: 316 },
-  { id: "conform", numeral: "IV", name: "acid-cat conform", note: "tests from the outside", height: 325 },
+  ["I", "Catalog", "the contract, in JSON"],
+  ["II", "Bindings", "rules for each surface"],
+  ["III", "Core", "runs the capabilities"],
+  ["IV", "acid-cat conform", "tests from the outside"],
 ];
+
+const steps = (count: number) => Array.from({ length: count }, (_, i) => i);
+const turn = Math.PI * 2;
+const point = (x: number, y: number) => `${x.toFixed(2)},${y.toFixed(2)}`;
+const radial = (radius: number, angle: number, height = 0) =>
+  point(radius * Math.cos(angle), radius * Math.sin(angle) * 0.33 + height);
+
+function flange(radius: number, y: number, depth: number) {
+  const arc = `a${radius},${radius * 0.33} 0 0 0 ${2 * radius},0`;
+  return `M${-radius},${y}v${depth}${arc}v${-depth}a${radius},${radius * 0.33} 0 0 1 ${-2 * radius},0Z`;
+}
+
+function port(angle: number) {
+  const ring = (length: number, radius: number, phase: number) => {
+    const side = radius * Math.cos(phase);
+    return point(length * Math.cos(angle) - side * Math.sin(angle),
+      (length * Math.sin(angle) + side * Math.cos(angle)) * 0.33 + radius * Math.sin(phase));
+  };
+  const sections = [[34, 9], [54, 9], [54, 13], [60, 13], [60, 7]] as const;
+  const tangent = Math.atan2(Math.cos(angle), 0.33);
+  return sections.map(([length, radius], i) => {
+    const rim = steps(32).map(k => ring(length, radius, turn * k / 32));
+    const previous = sections[i - 1];
+    const face = `M${rim.join("L")}Z`;
+    if (!previous || previous[0] === length) return face;
+    const [start, width] = previous;
+    const side = [
+      ring(start, width, tangent), ring(length, radius, tangent),
+      ring(length, radius, tangent + Math.PI), ring(start, width, tangent + Math.PI),
+    ];
+    return `M${side.join("L")}Z${face}`;
+  });
+}
+
+const nozzles = steps(5).map(i => turn * (i / 5 + 0.04)).sort((a,b) => Math.sin(a)-Math.sin(b));
+const teeth = steps(24).flatMap(i => [0, 0.18, 0.56, 0.74].map((offset, k) =>
+  radial(k === 1 || k === 2 ? 45 : 40, turn * (i + offset) / 24, -8))).join(" ");
+const coil = steps(180).map(i => {
+  const angle = i / 179 * turn * 3.4;
+  return point(25 * Math.cos(angle), 8 * Math.sin(angle) - 22 + i / 179 * 40);
+}).join(" ");
 ---
 
-<figure class="engine-study" aria-label="Exploded view of the catalog, bindings, core and acid-cat conform">
+<figure class="assembly" aria-label="Exploded view of the catalog, bindings, core and acid-cat conform">
+  <svg viewBox="0 0 210 420" aria-hidden="true">
+    <defs>
+      <pattern id="engine-hatch" width="4" height="4" patternUnits="userSpaceOnUse">
+        <path class="fine" d="M-1 1l2 -2M0 4l4 -4M3 5l2 -2"/>
+      </pattern>
+      <g id="engine-plate">
+        <path d="m-64 -3 70 -24 55 22v6L-9 26l-55 -22Z"/>
+        <path class="fine" d="m-64 -3 55 22L61 -5M-9 19v7"/>
+      </g>
+      <g id="engine-cap">
+        <path d={flange(43, 0, 5)}/>
+        <ellipse rx="43" ry="14.19"/>
+        <ellipse class="fine" rx="36" ry="11.88"/>
+        {steps(8).map(i => <ellipse cx={39*Math.cos(i*turn/8)} cy={12.87*Math.sin(i*turn/8)} rx="1.8" ry=".8"/>)}
+      </g>
+      <g id="engine-pin">
+        <path d="M-2 -8l4 -1v14l-2 3 -2 -2Z"/>
+        <ellipse cy="-8" rx="3" ry="1.4"/>
+        <path class="fine" d="m-2 0 4 -1m-4 4 4 -1m-4 4 4 -1"/>
+      </g>
+      <g id="engine-post">
+        <path d="M-3 -24h6v47q-3 2 -6 0Z"/>
+        <path class="fine" d="M1 -23v45M-4 -22h8M-4 20h8"/>
+      </g>
+    </defs>
+    <g class="guides">
+      <path stroke-dasharray="9 3 1 3" d="M103 0v420"/>
+      <path d="M12 12v396m-3 -396h8m-8 396h8"/>
+      {steps(41).map(i => <path d={`M12 ${12 + i*9.9}h${i%5===0 ? 6 : 2.5}`}/>)}
+      {[[155,47],[161,148],[140,253],[137,356]].map(([x,y]) => <path d={`M${x} ${y}l12 -12H210`}/>)}
+    </g>
+    <g transform="translate(103 48)">
+      <g class="part catalog">
+        <use href="#engine-pin" x="-24" y="35"/><use href="#engine-pin" x="31" y="21"/>
+        {[14,7,0].map(y => <use href="#engine-plate" y={y}/>)}
+        <g transform="matrix(1 -.34 .86 .34 -1 -4)">
+          <rect x="-30" y="-23" width="60" height="46" rx="4"/>
+          <path class="fine" d="M-26 -18h52v36h-52ZM-11 -13h-4v8q0 5 -4 5 4 0 4 5v8h4M11 -13h4v8q0 5 4 5 -4 0 -4 5v8h-4M-7 -6H7M-7 0H3M-7 6H6"/>
+          {[-31,31].map(x => [-25,25].map(y => <g><circle cx={x} cy={y} r="3.6"/><path d={`M${x-2} ${y}h4`}/></g>))}
+        </g>
+      </g>
+    </g>
+    <g transform="translate(103 149)">
+      <g class="part bindings">
+        {nozzles.filter(a => Math.sin(a)<0).map(a => port(a).map(d => <path d={d}/>))}
+        <path d={flange(41,-8,20)}/>
+        <polygon points={teeth} />
+        {steps(11).map(i => <path class="fine" d={`M${radial(41, Math.PI*i/10, -6)}v15`}/>)}
+        <ellipse cy="-8" rx="32" ry="10.56"/>
+        {nozzles.filter(a => Math.sin(a)>=0).map(a => port(a).map(d => <path d={d}/>))}
+        <path d={flange(23,-15,7)}/>
+        <ellipse cy="-15" rx="23" ry="7.6"/><ellipse cy="-15" rx="13" ry="4.3"/>
+      </g>
+    </g>
+    <g transform="translate(103 249)">
+      <g class="part core">
+        <use href="#engine-cap" y="25"/>
+        <path d="M-34 -21q34 -18 68 0v43q-34 19 -68 0Z"/>
+        <path fill="url(#engine-hatch)" d="M-34 -21l9 -3v50l-9 -4Z"/>
+        <path class="fine" d="M-3 -25v55M3 -25v55"/>
+        <polyline class="spring" points={coil}/>
+        {[-38,37].map(x => <use href="#engine-post" x={x}/>)}
+        <use href="#engine-cap" y="-27"/>
+        <path d={flange(17,-33,6)}/>
+        <ellipse cy="-33" rx="17" ry="5.6"/>
+        <ellipse cy="-33" rx="10" ry="3.3"/>
+      </g>
+    </g>
+    <g transform="translate(103 357)">
+      <g class="part conform">
+        <use href="#engine-cap" y="23"/>
+        <path d="M-14 5h27v16q-12 8 -27 1Z"/>
+        <path class="fine" d="M-13 13q15 7 26 0m-26 4q13 7 26 0"/>
+        <g transform="rotate(-9) skewY(-7)">
+          <ellipse cx="7" cy="-7" rx="32" ry="30"/>
+          <ellipse cy="-5" rx="32" ry="30"/>
+          <ellipse cy="-5" rx="27" ry="25"/>
+          {steps(23).map(i => {
+            const a = turn*(0.4 + i/22 * 0.72);
+            const r = i%2===0 ? 19 : 22;
+            return <path d={`M${point(24*Math.cos(a),-5+22*Math.sin(a))}L${point(r*Math.cos(a),-5+(r-2)*Math.sin(a))}`}/>;
+          })}
+          <g transform="translate(0 -5)"><path class="needle" d="m-4 5 17 -21 -11 23Z"/><circle r="3"/></g>
+          <path class="fine" d="M-7 8H7M-4 11h8"/>
+        </g>
+      </g>
+    </g>
+  </svg>
   <ol role="list">
-    {parts.map((part) => (
-      <li>
-        <div class="specimen">
-          <img src={`/parts/${part.id}.webp`} alt="" width="560" height={part.height} loading="lazy" />
-        </div>
-        <div class="annotation">
-          <span class="numeral">{part.numeral}</span>
-          <strong>{part.name}</strong>
-          <span class="note">{part.note}</span>
-        </div>
-      </li>
-    ))}
+    {parts.map(([number, name, note]) => <li><span class="number">{number}</span><strong>{name}</strong><span class="note">{note}</span></li>)}
   </ol>
 </figure>
 
 <style>
-  .engine-study {
+  .assembly {
     margin: 0;
-    container-type: inline-size;
-  }
-  ol {
-    position: relative;
-    list-style: none;
-    margin: 0;
-    padding: 1.25rem 0;
     display: grid;
-    gap: clamp(1rem, 3cqw, 1.4rem);
-    background: radial-gradient(ellipse at 30% 53%, color-mix(in oklch, var(--palette-brass-500) 6%, transparent), transparent 62%);
-  }
-  ol::before {
-    position: absolute;
-    content: "";
-    inset: 0 auto 0 30%;
-    border-left: 1px dashed color-mix(in oklch, var(--palette-cyan-400) 38%, transparent);
-  }
-  li {
-    position: relative;
-    display: grid;
-    grid-template-columns: 60% minmax(0, 1fr);
-    align-items: center;
-    --anchor: 79%;
-  }
-  li:nth-child(2) { --anchor: 94%; }
-  li:nth-child(4) { --anchor: 86%; }
-  .specimen {
-    position: relative;
-    display: grid;
-    justify-items: center;
-  }
-  img {
-    width: 84%;
-    height: auto;
-    display: block;
-    position: relative;
-  }
-  .specimen::after {
-    position: absolute;
-    content: "";
-    top: 50%;
-    left: var(--anchor);
-    right: 0;
-    border-top: 1px solid color-mix(in oklch, var(--palette-brass-300) 60%, transparent);
-  }
-  .specimen::before {
-    position: absolute;
-    z-index: 1;
-    content: "";
-    left: var(--anchor);
-    top: 50%;
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    background: var(--palette-brass-200);
-  }
-  .annotation {
-    padding-left: clamp(0.6rem, 2.5cqw, 1rem);
-    display: grid;
-    gap: 0.25rem;
-  }
-  .numeral {
-    font: 500 0.76rem/1.2 var(--font-family-mono);
-    letter-spacing: 0.12em;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    align-items: stretch;
     color: var(--palette-cyan-400);
   }
-  strong {
-    font: 500 clamp(1.12rem, 4cqw, 1.65rem)/1.08 var(--font-family-display);
-    color: var(--palette-cream-100);
+  svg { width: 100%; display: block; max-height: 32rem; align-self: center; }
+  .part, defs g {
+    fill: var(--palette-blueprint-900);
+    stroke: color-mix(in oklch, var(--palette-cyan-400) 40%, var(--palette-neutral-white));
+    stroke-width: 1.05;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
-  .note {
-    font: 400 clamp(0.78rem, 2.5cqw, 0.95rem)/1.3 var(--font-family-sans);
-    color: var(--palette-cream-400);
-  }
+  .guides, .fine { fill: none; stroke: var(--palette-cyan-400); stroke-width: .65; }
+  .guides { opacity: .59; }
+  .spring { fill: none; stroke: var(--palette-cyan-400); stroke-width: 2; }
+  .needle { fill: var(--palette-cyan-400); stroke: var(--palette-cyan-400); }
+  ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-rows: repeat(4,1fr); }
+  li { display: grid; align-content: center; justify-items: start; padding-inline-start: var(--spacing_fluid-space-2xs); }
+  .number, .note { font-family: var(--font-family-mono); font-size: var(--typography_fluid-text-xs); }
+  .number { border-bottom: 1px solid currentColor; letter-spacing: var(--font-tracking-wide); }
+  strong { font-family: var(--font-family-display); font-size: var(--typography_fluid-text-l); color: var(--palette-cream-100); line-height: 1.18; margin-block: var(--spacing_fluid-space-3xs); }
+  .note { color: var(--palette-cream-400); line-height: 1.4; }
   @media (prefers-reduced-motion: no-preference) {
-    img { animation: suspend 7s ease-in-out infinite alternate; }
-    li:nth-child(even) img { animation-direction: alternate-reverse; }
-    li:nth-child(3) img { animation-delay: -3s; }
-    @keyframes suspend {
-      from { transform: translateY(-2px); }
-      to { transform: translateY(2px); }
-    }
+    .catalog { --travel: 112px; }
+    .bindings { --travel: 39px; }
+    .core { --travel: -33px; }
+    .conform { --travel: -99px; }
+    .unfold .part { animation: explode 1.85s cubic-bezier(.29,.05,.2,1) both; }
+    .unfold .needle { animation: measure 1.25s .8s ease-out both; }
+    @keyframes explode { from { transform: translateY(var(--travel)); } }
+    @keyframes measure { from { transform: rotate(-114deg); } 82% { transform: rotate(6deg); } }
   }
 </style>
+
+<script>
+  const observer = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("unfold");
+        observer.unobserve(entry.target);
+      }
+    }
+  }, { threshold: 0.32 });
+  for (const figure of document.querySelectorAll(".assembly")) observer.observe(figure);
+</script>
