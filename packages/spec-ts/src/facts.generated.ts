@@ -46,6 +46,10 @@ export const MCP_SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId";
 
 export const MCP_UNKNOWN_TOOL = -32602;
 
+export const MCP_HEARTBEAT_MIN_MS = 1000;
+
+export const MCP_HEARTBEAT_MAX_MS = 60000;
+
 export const MCP_EVENT_ERRORS = {
   notFound: -32023,
   forbidden: -32024,

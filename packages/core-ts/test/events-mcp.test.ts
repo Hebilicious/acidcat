@@ -96,10 +96,23 @@ test("MCP through HTTP: maxAgeMs reaches the provider, and an idle stream gets h
   const reader = sseReader(await handler(request("events/stream", { name: "sensor.reading.changed", cursor: "0", maxAgeMs: 1000 })));
   const read = async () => objectOf((await reader.next())?.data ?? "null");
   assert.equal(member(await read(), "params")["truncated"], false);
-  assert.deepEqual(await read(), { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: true, cursor: "2", _meta: sub(1) } });
+  assert.deepEqual(await read(), { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: true, cursor: "2", heartbeatMs: 20, _meta: sub(1) } });
   await read();
   assert.deepEqual(await read(), { jsonrpc: "2.0", method: "notifications/events/heartbeat", params: { cursor: "2", _meta: sub(1) } });
   await reader.cancel();
+});
+
+test("MCP through HTTP: notifications/events/active grants the heartbeatMs of the deployment when the request suggests none, and an invalid suggestion is the error -32602", async () => {
+  const { handler, request, rpc } = httpServer(new Sensors(), 7000);
+  const reader = sseReader(await handler(request("events/stream", { name: "sensor.reading.changed" })));
+  try {
+    assert.deepEqual(objectOf((await reader.next())?.data ?? "null"), { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: false, heartbeatMs: 7000, _meta: sub(1) } });
+  } finally {
+    await reader.cancel();
+  }
+  for (const heartbeatMs of [-1, 1.5, "x"]) {
+    assert.equal(member(await rpc("events/stream", { name: "sensor.reading.changed", heartbeatMs }), "error")["code"], -32602, String(heartbeatMs));
+  }
 });
 
 test("MCP through HTTP: a client with the initialize handshake gets no events", async () => {
@@ -164,6 +177,7 @@ test("MCP through stdio: an idle stream gets heartbeats", async () => {
   const heartbeat = () => io.of(1).find((message) => message["method"] === "notifications/events/heartbeat");
   try {
     await until(() => heartbeat() !== undefined);
+    assert.deepEqual(io.of(1)[0], { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: false, heartbeatMs: 20, _meta: sub(1) } });
     assert.deepEqual(heartbeat(), { jsonrpc: "2.0", method: "notifications/events/heartbeat", params: { cursor: null, _meta: sub(1) } });
   } finally {
     io.end();

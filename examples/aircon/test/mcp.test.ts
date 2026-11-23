@@ -154,12 +154,14 @@ test("the server of the application declares the events extension, and lists air
   assert.deepEqual(events.map((each) => [each.name, each.delivery]), [["aircon.status.changed", ["push", "poll"]]]);
 });
 
-test("events/stream on the server of the application follows aircon.status.changed, and cancelling it stops listening to the unit", async () => {
+test("events/stream on the server of the application grants the suggested heartbeatMs, follows aircon.status.changed, and cancelling it stops listening to the unit", async () => {
   const client = await connect("/mcp");
   const before = api.statusListeners();
   const controller = new AbortController();
-  const next = sseMessages(await eventsRequest("s", "events/stream", { name: "aircon.status.changed", arguments: {} }, controller.signal));
-  assert.equal((await next())?.method, "notifications/events/active");
+  const next = sseMessages(await eventsRequest("s", "events/stream", { name: "aircon.status.changed", arguments: {}, heartbeatMs: 30_000 }, controller.signal));
+  const active = await next();
+  assert.equal(active?.method, "notifications/events/active");
+  assert.equal(active?.params?.heartbeatMs, 30_000);
   await until("the subscription listens to the unit", () => api.statusListeners() === before + 1);
   await client.callTool({ name: "set_controls", arguments: { power: true, fan: "low" } });
   const event = await next();

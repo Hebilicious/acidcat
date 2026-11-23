@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { MCP_EVENTS_EXTENSION, MCP_SUBSCRIPTION_ID } from "@acid-cat/spec-ts";
+import { MCP_EVENTS_EXTENSION, MCP_HEARTBEAT_MAX_MS, MCP_HEARTBEAT_MIN_MS, MCP_SUBSCRIPTION_ID } from "@acid-cat/spec-ts";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 import { isArrayOf, isObject, isStringArray, memberOf, parseJson, readJson } from "../json.ts";
@@ -270,6 +270,11 @@ export function httpChannel(url: string, headers: Readonly<Record<string, string
   };
 }
 
+function expectHeartbeatGrant(granted: unknown, expected?: number): void {
+  if (expected !== undefined) expectEqual(granted, expected, "the heartbeatMs of notifications/events/active");
+  else expect(typeof granted === "number" && Number.isSafeInteger(granted) && granted >= 1, `notifications/events/active must grant a heartbeatMs that is a positive integer, got ${JSON.stringify(granted)}`);
+}
+
 export const subscriptionOf = (message: Message): unknown => memberOf(memberOf(memberOf(message, "params") ?? memberOf(message, "result"), "_meta"), MCP_SUBSCRIPTION_ID);
 
 const paramsOf = (message: Message): JsonObject => {
@@ -322,9 +327,10 @@ export async function checkEvents(checks: Checks, channel: Channel, options: Eve
   };
   const occurrence = async (stream: EventStream, id: string, name: string) =>
     expectOccurrence(paramsOf(await notification(stream, id, "notifications/events/event")), name);
-  const active = async (stream: EventStream, id: string) => {
-    const message = await notification(stream, id, "notifications/events/active");
-    expectEqual(paramsOf(message), { truncated: false }, "the params of notifications/events/active");
+  const active = async (stream: EventStream, id: string, heartbeatMs?: number) => {
+    const { heartbeatMs: granted, ...rest } = paramsOf(await notification(stream, id, "notifications/events/active"));
+    expectEqual(rest, { truncated: false }, "the params of notifications/events/active, without heartbeatMs");
+    expectHeartbeatGrant(granted, heartbeatMs);
   };
   const complete = async (stream: EventStream, id: string) => {
     const message = await stream.next();
@@ -368,6 +374,7 @@ export async function checkEvents(checks: Checks, channel: Channel, options: Eve
     ["events/stream of the id of a capability is NotFound", { name: "fixture.echo", arguments: { text: "x" } }, -32023, "event"],
     ["events/stream with invalid input is the error -32602", { name: "fixture.ticks", arguments: { count: 101 } }, -32602, undefined],
     ["events/stream with a maxAgeMs that is not valid is the error -32602", { name: "fixture.ticks", arguments: { count: 1 }, maxAgeMs: -1 }, -32602, undefined],
+    ["events/stream with a heartbeatMs that is not a positive integer is the error -32602", { name: "fixture.ticks", arguments: { count: 1 }, heartbeatMs: 0 }, -32602, undefined],
   ] as const) {
     await checks.run(name, RULE_EVENTS, async (signal) => {
       const stream = await channel.stream(streamId(), params, signal);
@@ -401,7 +408,9 @@ export async function checkEvents(checks: Checks, channel: Channel, options: Eve
     try {
       await active(stream, id);
       expectEqual((await occurrence(stream, id, "fixture.ticks")).data, { n: 1 }, "data");
-      expectEqual(paramsOf(await notification(stream, id, "notifications/events/active")), { truncated: true, cursor: "2" }, "the params of notifications/events/active before the gap");
+      const { heartbeatMs, ...gap } = paramsOf(await notification(stream, id, "notifications/events/active"));
+      expectEqual(gap, { truncated: true, cursor: "2" }, "the params of notifications/events/active before the gap, without heartbeatMs");
+      expectHeartbeatGrant(heartbeatMs);
       const after = paramsOf(await notification(stream, id, "notifications/events/event"));
       expect(!("truncated" in after), `the params of notifications/events/event must have no truncated, got ${JSON.stringify(after)}`);
       expectEqual(expectOccurrence(after, "fixture.ticks").data, { n: 2 }, "data");
@@ -411,6 +420,27 @@ export async function checkEvents(checks: Checks, channel: Channel, options: Eve
       await stream.cancel();
     }
   });
+  for (const [suggested, granted] of [
+    [5, MCP_HEARTBEAT_MIN_MS],
+    [999_999, MCP_HEARTBEAT_MAX_MS],
+    [2500, 2500],
+  ] as const) {
+    const name = `events/stream with heartbeatMs: ${suggested} grants heartbeatMs: ${granted} on notifications/events/active${granted === MCP_HEARTBEAT_MIN_MS ? ", then sends heartbeats at that interval" : ""}`;
+    await checks.run(name, `${RULE}#push`, async (signal) => {
+      const id = streamId();
+      const stream = await channel.stream(id, { name: "fixture.watch", arguments: { key: randomUUID() }, heartbeatMs: suggested }, signal);
+      try {
+        await active(stream, id, granted);
+        if (granted !== MCP_HEARTBEAT_MIN_MS) return;
+        const started = Date.now();
+        expectEqual(paramsOf(await notification(stream, id, "notifications/events/heartbeat")), { cursor: null }, "the params of notifications/events/heartbeat");
+        const waited = Date.now() - started;
+        expect(waited >= granted / 2 && waited < granted * 3, `the heartbeat must come about ${granted} ms after notifications/events/active, came after ${waited} ms`);
+      } finally {
+        await stream.cancel();
+      }
+    });
+  }
   await checks.run("events/stream with a cursor starts after it", RULE_EVENTS, async (signal) => {
     const id = streamId();
     const stream = await channel.stream(id, { name: "fixture.ticks", arguments: { count: 3 }, cursor: "1" }, signal);

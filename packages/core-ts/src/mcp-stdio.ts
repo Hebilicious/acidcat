@@ -256,7 +256,7 @@ class StdioServer {
     const controller = new AbortController();
     this.#streamsOnlyTheClientCancels.set(id, controller);
     try {
-      const started = await startEventStream(this.#session, id, params, { heartbeatMs: this.#options.heartbeatMs, resultMeta: this.#serverInfo(), signal: controller.signal });
+      const started = await startEventStream(this.#session, id, params, { defaultHeartbeatMs: this.#options.heartbeatMs, resultMeta: this.#serverInfo(), signal: controller.signal });
       if (controller.signal.aborted) return;
       if ("error" in started) return this.#error(id, started.error.code, started.error.message, started.error.data);
       for (let messages = await started.messages(); messages !== undefined; messages = await started.messages()) {

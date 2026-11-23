@@ -69,6 +69,8 @@ pub(crate) const MCP_PROTOCOL_VERSION: &str = "2026-07-28";
 pub(crate) const MCP_EVENTS_EXTENSION: &str = "io.modelcontextprotocol/events";
 pub(crate) const MCP_SUBSCRIPTION_ID: &str = "io.modelcontextprotocol/subscriptionId";
 pub(crate) const MCP_UNKNOWN_TOOL: i64 = -32602;
+pub(crate) const MCP_HEARTBEAT_MIN_MS: u64 = 1000;
+pub(crate) const MCP_HEARTBEAT_MAX_MS: u64 = 60000;
 
 pub(crate) mod event_errors {
     pub const NOT_FOUND: i64 = -32023;

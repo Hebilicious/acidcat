@@ -34,7 +34,6 @@ pub(crate) const SUBSCRIPTION_ID_KEY: &str = crate::facts_generated::MCP_SUBSCRI
 pub(crate) const SERVER_INFO_KEY: &str = "io.modelcontextprotocol/serverInfo";
 pub(crate) const EVENTS_EXTENSION: &str = crate::facts_generated::MCP_EVENTS_EXTENSION;
 
-/// The JSON-RPC errors of the MCP events extension. Their numbers are not final in SEP-3415.
 pub(crate) mod codes {
     pub use crate::facts_generated::event_errors::*;
     pub const METHOD_NOT_FOUND: i64 = -32601;
@@ -337,6 +336,30 @@ pub(crate) fn subscription_params(
     })
 }
 
+pub(crate) fn heartbeat_grant(
+    params: &Map<String, Value>,
+    deployment: Duration,
+) -> Result<Duration, RpcError> {
+    use crate::facts_generated::{MCP_HEARTBEAT_MAX_MS, MCP_HEARTBEAT_MIN_MS};
+    const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
+    match params.get("heartbeatMs") {
+        None | Some(Value::Null) => Ok(deployment),
+        Some(Value::Number(number)) => match number.as_f64() {
+            Some(ms) if ms >= 1.0 && ms.fract() == 0.0 && ms <= MAX_SAFE_INTEGER => {
+                Ok(Duration::from_millis(
+                    (ms as u64).clamp(MCP_HEARTBEAT_MIN_MS, MCP_HEARTBEAT_MAX_MS),
+                ))
+            }
+            _ => Err(RpcError::invalid_params(
+                "heartbeatMs must be a positive integer or null.",
+            )),
+        },
+        Some(_) => Err(RpcError::invalid_params(
+            "heartbeatMs must be a positive integer or null.",
+        )),
+    }
+}
+
 pub(crate) fn subscribe_error(failure: &CallFailure) -> RpcError {
     match failure.kind {
         Kind::UnknownCapability => RpcError::new(codes::NOT_FOUND, failure.message.clone())
@@ -367,9 +390,10 @@ impl EventStream {
         id: Value,
         params: &Map<String, Value>,
         result_meta: Value,
-        heartbeat: Duration,
+        default_heartbeat: Duration,
     ) -> Result<Self, RpcError> {
         let read = subscription_params(params)?;
+        let heartbeat = heartbeat_grant(params, default_heartbeat)?;
         let occurrences = session
             .subscribe(
                 &read.name,
@@ -391,6 +415,10 @@ impl EventStream {
         })
     }
 
+    fn heartbeat_ms(&self) -> u64 {
+        u64::try_from(self.heartbeat.as_millis()).unwrap_or(u64::MAX)
+    }
+
     fn notification(&self, method: &str, mut members: Value) -> Value {
         members["_meta"] = json!({ SUBSCRIPTION_ID_KEY: self.id });
         json!({ "jsonrpc": "2.0", "method": format!("notifications/events/{method}"), "params": members })
@@ -407,9 +435,8 @@ impl EventStream {
             StreamState::Ended => return None,
             StreamState::Start => {
                 self.state = StreamState::Open;
-                return Some(vec![
-                    self.notification("active", json!({ "truncated": false })),
-                ]);
+                let active = json!({ "truncated": false, "heartbeatMs": self.heartbeat_ms() });
+                return Some(vec![self.notification("active", active)]);
             }
             StreamState::Open => {}
         }
@@ -444,7 +471,7 @@ impl EventStream {
                 if !occurrence.truncated {
                     return Some(vec![event]);
                 }
-                let mut active = json!({ "truncated": true });
+                let mut active = json!({ "truncated": true, "heartbeatMs": self.heartbeat_ms() });
                 if let Some(cursor) = &occurrence.cursor {
                     active["cursor"] = json!(cursor);
                 }
@@ -467,6 +494,29 @@ mod tests {
         for invalid in [json!(-1), json!(1.5), json!(1e300), json!("5000")] {
             assert!(
                 MaxAge::read(Some(&invalid)).is_invalid(),
+                "{invalid} is invalid"
+            );
+        }
+    }
+
+    #[test]
+    fn heartbeat_grant_defaults_to_the_deployment_and_rejects_an_invalid_suggestion() {
+        let deployment = Duration::from_millis(7_000);
+        let grant = |value: Value| {
+            let params = Map::from_iter([("heartbeatMs".to_owned(), value)]);
+            heartbeat_grant(&params, deployment).map(|grant| grant.as_millis())
+        };
+        assert_eq!(
+            heartbeat_grant(&Map::new(), deployment)
+                .map(|grant| grant.as_millis())
+                .ok(),
+            Some(7_000)
+        );
+        assert_eq!(grant(Value::Null).ok(), Some(7_000));
+        for invalid in [json!(-1), json!(1.5), json!("x")] {
+            assert_eq!(
+                grant(invalid.clone()).err().map(|error| error.code),
+                Some(codes::INVALID_PARAMS),
                 "{invalid} is invalid"
             );
         }

@@ -152,7 +152,7 @@ Options that tune event delivery:
 | --- | --- | --- | --- |
 | `bufferLimit` | `createSession`, `httpHandler`, `mcpHandler`, `runMcpStdio` | 256 | Occurrences kept per subscription for a [slow client](../../spec/events.md#slow-clients) |
 | `keepaliveMs` | `httpHandler` | 15 seconds | Idle time before a comment line on an event stream |
-| `heartbeatMs` | `mcpHandler`, `runMcpStdio` | 15 seconds | Idle time before `notifications/events/heartbeat` |
+| `heartbeatMs` | `mcpHandler`, `runMcpStdio` | 15 seconds | Heartbeat interval of `events/stream` when the request suggests none. A suggestion in `params.heartbeatMs` gets a grant from 1 to 60 seconds ([Push](../../spec/bindings/mcp.md#push)) |
 | `clock` | `mcpHandler`, `runMcpStdio`, `webhookDelivery` | System clock | Time and timers for leases, lifetimes and retries. Tests pass their own |
 
 ### MCP poll and webhook delivery

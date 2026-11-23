@@ -148,7 +148,7 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
     try {
       if (message.method === "events/stream" && message.id !== null && message.id !== undefined && servesEvents(session)) {
         const started = await startEventStream(session, message.id, message.params, {
-          heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
+          defaultHeartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
           resultMeta: serverInfoOf(options),
           signal: request.signal,
         });

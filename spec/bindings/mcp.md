@@ -31,7 +31,7 @@ A server serves one transport or both. The rules for the [server](#server) and t
 
 ## Events
 
-The server serves events through the MCP events extension, `io.modelcontextprotocol/events`. It serves the extension only in revision `2026-07-28`, and only if the view has events. The extension is a draft: SEP-3415 at commit `b08e4f9`. The rules of the extension apply, with the choices below. The server serves [push](#push) delivery. It SHOULD serve [poll](#poll) delivery. It serves [webhook](#webhook) delivery if the deployment turns it on. A server that keeps no state between requests serves push only.
+The server serves events through the MCP events extension, `io.modelcontextprotocol/events`. It serves the extension only in revision `2026-07-28`, and only if the view has events. The extension is the Final text of SEP-3415, at commit `6a4bf07`. The rules of the extension apply, with the choices below. The server serves [push](#push) delivery. It SHOULD serve [poll](#poll) delivery. It serves [webhook](#webhook) delivery if the deployment turns it on. A server that keeps no state between requests serves push only.
 
 - **Capabilities.** The result of `server/discover` has `"extensions": { "io.modelcontextprotocol/events": {} }` in its capabilities. The server sends no `notifications/events/list_changed`.
 - **Listing.** `events/list` gives one entry for each event in the view. Its `name` is the id. Its `description` is the description of the event. Its `delivery` lists the modes that the server serves, in the order `push`, `poll`, `webhook`. Its `inputSchema` is the [bundled](../catalog.md#bundling) input schema, and its `payloadSchema` is the bundled payload schema, or `{ "type": "object" }` if the event has no payload schema. The result has `resultType: "complete"`, and no `nextCursor`.
@@ -54,9 +54,10 @@ A poll lease and a webhook subscription continue after the request that started 
 
 `events/stream` subscribes, and its answer carries the occurrences.
 
-- **Start.** When the subscription starts, the server sends `notifications/events/active` with `truncated: false` and no `cursor`.
-- **Occurrences.** Each occurrence is a `notifications/events/event`. Its params are the occurrence without `truncated`. Before an occurrence with `"truncated": true`, the server sends `notifications/events/active` with `truncated: true`, and with the cursor of the occurrence if it has one.
-- **Heartbeat.** The server sends `notifications/events/heartbeat` when it has sent nothing on the stream for 15 seconds. Its `cursor` is the cursor of the last occurrence, or `null`.
+- **Heartbeat interval.** `params.heartbeatMs` suggests the heartbeat interval, in milliseconds. It is an integer that is 1 or more. Another value gets the error `-32602`, and the server opens no stream. An absent `heartbeatMs` and `heartbeatMs: null` are the same: no suggestion. The server grants the suggestion, but not less than 1000 and not more than 60 000. With no suggestion, the grant is the heartbeat interval of the deployment. The default is 15 000.
+- **Start.** When the subscription starts, the server sends `notifications/events/active` with `truncated: false`, the granted `heartbeatMs`, and no `cursor`.
+- **Occurrences.** Each occurrence is a `notifications/events/event`. Its params are the occurrence without `truncated`. Before an occurrence with `"truncated": true`, the server sends `notifications/events/active` with `truncated: true`, the granted `heartbeatMs`, and the cursor of the occurrence if it has one.
+- **Heartbeat.** The server sends `notifications/events/heartbeat` when it has sent nothing on the stream for the granted `heartbeatMs`. Its `cursor` is the cursor of the last occurrence, or `null`.
 - **Ending.**
 
   | End | Messages |
@@ -176,7 +177,5 @@ MCP gives an unknown tool as a protocol error. All other problems come back as t
 Many MCP clients start a local server as a process and open the session with `initialize`. A server through stdio serves these clients, and also clients of revision `2026-07-28`. Through HTTP, each request of revision `2026-07-28` is complete in itself. The handshake of earlier revisions keeps no state either, because a server through HTTP does not have to give a session. So a server can serve both without state.
 
 ## Roadmap
-
-- Follow SEP-3415 until MCP accepts it, and then follow the accepted text. The numbers of its errors are not final.
 
 - Remove [Earlier revisions through HTTP](#earlier-revisions-through-http) when the official MCP SDKs use revision `2026-07-28` by default. The default of the official TypeScript client is the `initialize` handshake of revision `2025-11-25`. The test of the MCP binding in the aircon example uses this default. It fails when the default changes.

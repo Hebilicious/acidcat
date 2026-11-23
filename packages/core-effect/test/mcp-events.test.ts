@@ -156,6 +156,25 @@ test("through HTTP, a stream with nothing to send gets heartbeats with the last 
   await feed.following(0);
 });
 
+test("through HTTP, notifications/events/active grants the heartbeatMs of the deployment when the request suggests none, and an invalid suggestion is the error -32602", async () => {
+  const handler = Mcp.toWebHandler(events, feedLayer, { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN], heartbeatMs: 7000 });
+  const active = async (heartbeatMs?: unknown) => {
+    const controller = new AbortController();
+    const response = await handler(mcpRequest("events/stream", { name: "feed.ticked", ...(heartbeatMs === undefined ? {} : { heartbeatMs }) }, { signal: controller.signal }));
+    try {
+      return response.headers.get("Content-Type")?.startsWith("text/event-stream") === true ? await sseMessages(response)() : await json(response);
+    } finally {
+      controller.abort();
+    }
+  };
+  try {
+    assert.deepEqual(await active(), { method: "notifications/events/active", params: { truncated: false, heartbeatMs: 7000, _meta: { [SUBSCRIPTION_ID]: 1 } } });
+    for (const heartbeatMs of [-1, 1.5, "x"]) assert.equal((await active(heartbeatMs))?.error?.code, -32602, String(heartbeatMs));
+  } finally {
+    await handler.dispose();
+  }
+});
+
 test("through stdio, a client of the initialize handshake gets no events", async () => {
   const program = Effect.gen(function* () {
     const stdin = yield* Queue.unbounded<string, Cause.Done>();

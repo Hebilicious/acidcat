@@ -7,6 +7,7 @@ import {
   MCP_SUBSCRIPTION_ID,
   mcpEventEntry,
   mcpEventParams,
+  mcpHeartbeatGrant,
   mcpSubscribeError,
 } from "@acid-cat/spec-ts";
 import type { CallFailure, JsonObject, Occurrence } from "@acid-cat/spec-ts";
@@ -55,7 +56,7 @@ export type Answer =
   | { readonly _tag: "Stream"; readonly messages: Stream.Stream<JsonObject> };
 
 export interface AnswerOptions<R> {
-  readonly heartbeatMs: number;
+  readonly defaultHeartbeatMs: number;
   readonly principal: Option.Option<string>;
   readonly polls: Polls | undefined;
   readonly webhooks: Webhooks | undefined;
@@ -77,7 +78,9 @@ const StreamParams = Schema.Struct({
   // Any value: an unknown name comes before an invalid `maxAgeMs` (spec/events.md#subscribing).
   maxAgeMs: Schema.optionalKey(Schema.Unknown),
 });
-const decodeStreamParams = Schema.decodeUnknownEffect(StreamParams);
+const decodeStreamParams = Schema.decodeUnknownEffect(
+  Schema.Struct({ ...StreamParams.fields, heartbeatMs: Schema.optionalKey(Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)))) }),
+);
 
 const PollParams = Schema.Struct({
   ...StreamParams.fields,
@@ -150,7 +153,8 @@ export const answer = <R>(session: Session.Session<R>, request: EventsRequest, o
       const failure: CallFailure = { kind: started.failure.kind, message: started.failure.message };
       return message(errorMessage(request.id, mcpSubscribeError(failure)));
     }
-    return { _tag: "Stream", messages: streamMessages(request.id, started.success, options) };
+    const heartbeatMs = mcpHeartbeatGrant(params.success.heartbeatMs, options.defaultHeartbeatMs);
+    return { _tag: "Stream", messages: streamMessages(request.id, started.success, heartbeatMs) };
   });
 
 function unsupported(id: RequestId, mode: "poll" | "webhook"): JsonObject {
@@ -161,7 +165,7 @@ function unsupported(id: RequestId, mode: "poll" | "webhook"): JsonObject {
   });
 }
 
-function streamMessages(id: RequestId, occurrences: Session.Subscription<unknown>, options: { readonly heartbeatMs: number }): Stream.Stream<JsonObject> {
+function streamMessages(id: RequestId, occurrences: Session.Subscription<unknown>, heartbeatMs: number): Stream.Stream<JsonObject> {
   const meta = { [MCP_SUBSCRIPTION_ID]: id };
   const notification = (method: string, params: JsonObject): JsonObject => ({ jsonrpc: "2.0", method, params: { ...params, _meta: meta } });
   let cursor: string | null = null;
@@ -169,7 +173,7 @@ function streamMessages(id: RequestId, occurrences: Session.Subscription<unknown
     if (occurrence.cursor !== undefined) cursor = occurrence.cursor;
     const event: JsonObject = { jsonrpc: "2.0", method: "notifications/events/event", params: mcpEventParams(occurrence, id) };
     if (occurrence.truncated !== true) return [event];
-    const active = notification("notifications/events/active", { truncated: true, ...(occurrence.cursor === undefined ? {} : { cursor: occurrence.cursor }) });
+    const active = notification("notifications/events/active", { truncated: true, ...(occurrence.cursor === undefined ? {} : { cursor: occurrence.cursor }), heartbeatMs });
     return [active, event];
   };
   const result: JsonObject = { jsonrpc: "2.0", id, result: { resultType: "complete", _meta: meta } };
@@ -178,6 +182,6 @@ function streamMessages(id: RequestId, occurrences: Session.Subscription<unknown
       Stream.make(notification("notifications/events/terminated", { error: { code: MCP_EVENT_ERRORS.internal, message: failure.message } })),
     ),
   );
-  const beating = withHeartbeat(events, options.heartbeatMs, () => notification("notifications/events/heartbeat", { cursor }));
-  return Stream.concat(Stream.make(notification("notifications/events/active", { truncated: false })), Stream.concat(beating, Stream.make(result)));
+  const beating = withHeartbeat(events, heartbeatMs, () => notification("notifications/events/heartbeat", { cursor }));
+  return Stream.concat(Stream.make(notification("notifications/events/active", { truncated: false, heartbeatMs })), Stream.concat(beating, Stream.make(result)));
 }
