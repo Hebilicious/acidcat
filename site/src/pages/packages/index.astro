@@ -39,7 +39,13 @@ const headings = groups
               <h3><a href={entry.url}>{entry.title}</a></h3>
               {entry.title !== entry.name && <p class="package-name" title={entry.name}>{entry.name}</p>}
               <p class="package-description">{entry.description}</p>
-              <pre class="package-install"><code>{entry.install}</code></pre>
+              <div class="package-install">
+                <pre><code>{entry.install}</code></pre>
+                <button type="button" class="package-copy" data-copy={entry.install} aria-label={`Copy ${entry.install}`}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>
+                  <span data-copy-label>Copy</span>
+                </button>
+              </div>
               <p class="package-meta">
                 <a href={`${repository}/tree/main/${entry.directory}`}>Source</a>
                 <span data-live-status aria-live="polite"></span>
@@ -124,15 +130,57 @@ const headings = groups
     font-size: var(--typography_fluid-text-s);
   }
   .package-install {
-    margin: auto 0 0;
-    padding: var(--spacing_fluid-space-2xs) var(--spacing_fluid-space-xs);
-    overflow-x: auto;
+    display: flex;
+    align-items: stretch;
+    margin-top: auto;
     border-left: 2px solid var(--palette-brass-600);
-    border-radius: 0;
     background: var(--palette-ink-950);
+  }
+  .package-install pre {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: var(--spacing_fluid-space-2xs) var(--spacing_fluid-space-xs);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
     font-size: var(--typography_fluid-text-xs);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+  .package-copy {
+    flex: none;
+    align-self: center;
+    margin: var(--spacing_fluid-space-3xs);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing_fluid-space-3xs);
+    padding: var(--spacing_fluid-space-3xs) var(--spacing_fluid-space-xs);
+    border: 1px solid color-mix(in oklch, var(--palette-brass-400) 40%, transparent);
+    border-radius: var(--radius-size-s);
+    background: var(--palette-ink-800);
+    color: var(--palette-brass-200);
+    font-family: var(--font-family-label);
+    font-size: var(--typography_fluid-text-xs);
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .package-copy:hover,
+  .package-copy:focus-visible {
+    color: var(--palette-acid-200);
+    border-color: var(--palette-acid-400);
+  }
+  .package-copy[data-copied] {
+    color: var(--palette-acid-400);
+  }
+  .package-copy svg {
+    width: 1em;
+    height: 1em;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
   .package-meta {
     display: flex;
@@ -171,6 +219,20 @@ const headings = groups
     }
     return undefined;
   };
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
+    const label = button.querySelector<HTMLElement>("[data-copy-label]");
+    button.addEventListener("click", () => {
+      navigator.clipboard.writeText(button.dataset["copy"] ?? "").then(() => {
+        button.dataset["copied"] = "";
+        if (label !== null) label.textContent = "Copied";
+        window.setTimeout(() => {
+          delete button.dataset["copied"];
+          if (label !== null) label.textContent = "Copy";
+        }, 1600);
+      }, () => undefined);
+    });
+  }
 
   for (const card of document.querySelectorAll<HTMLElement>(".package-card")) {
     const url = card.dataset["latest"];

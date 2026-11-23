@@ -70,9 +70,9 @@ function diagram(narrow: boolean): string {
   const note = narrow
     ? '<tspan x="0">what the application can do,</tspan> <tspan x="0" dy="17">and for whom</tspan>'
     : "what the application can do, and for whom";
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="cf-sheet cf-${layout}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="cf-title-${layout}" aria-describedby="cf-desc-${layout}">
-    <title id="cf-title-${layout}">catalog (JSON)</title>
-    <desc id="cf-desc-${layout}">What the application can do, and for whom. The provider runs the operations. The bindings give rules for each surface. Clients include web, mobile, desktop, CLI, MCP, API, …</desc>
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="cf-sheet cf-${layout}" viewBox="0 0 ${width} ${height}" role="img" aria-label="The catalog (JSON): what the application can do, and for whom. The provider runs the operations. The bindings give rules for each surface. Clients include web, mobile, desktop, CLI, MCP, API.">
+    
+    
     ${narrow ? "" : diagramStyle}
     <defs><pattern id="${grid}" width="16" height="16" patternUnits="userSpaceOnUse"><path class="cf-grid" d="M16 0H0V16"/></pattern></defs>
     <rect width="100%" height="100%" fill="url(#${grid})"/>

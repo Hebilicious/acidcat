@@ -18,6 +18,7 @@ export default defineConfig({
         Head: "./src/components/starlight/Head.astro",
         Header: "./src/components/starlight/Header.astro",
         PageSidebar: "./src/components/starlight/PageSidebar.astro",
+        Sidebar: "./src/components/starlight/Sidebar.astro",
         ThemeSelect: "./src/components/starlight/ThemeSelect.astro",
         ThemeProvider: "./src/components/starlight/ThemeProvider.astro",
       },
@@ -26,10 +27,12 @@ export default defineConfig({
       pagination: true,
       expressiveCode: {
         themes: [codeTheme],
+        defaultProps: { wrap: true, preserveIndent: true },
         useStarlightDarkModeSwitch: false,
         useStarlightUiThemeColors: false,
         styleOverrides: {
           borderColor: "color-mix(in oklch, var(--palette-brass-400) 35%, transparent)",
+          focusBorder: "var(--palette-brass-400)",
           borderRadius: "var(--radius-size-m)",
           codeFontFamily: "var(--font-family-mono)",
           uiFontFamily: "var(--font-family-label)",

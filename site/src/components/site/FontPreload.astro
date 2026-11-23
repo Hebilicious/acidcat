@@ -1,11 +1,20 @@
 ---
+import argonMedium from "@fontsource/monaspace-argon/files/monaspace-argon-latin-500-normal.woff2?url";
 import argon from "@fontsource/monaspace-argon/files/monaspace-argon-latin-400-normal.woff2?url";
+import kryptonMedium from "@fontsource/monaspace-krypton/files/monaspace-krypton-latin-500-normal.woff2?url";
 import krypton from "@fontsource/monaspace-krypton/files/monaspace-krypton-latin-400-normal.woff2?url";
+import neonMedium from "@fontsource/monaspace-neon/files/monaspace-neon-latin-500-normal.woff2?url";
 import neon from "@fontsource/monaspace-neon/files/monaspace-neon-latin-400-normal.woff2?url";
+import radonMedium from "@fontsource/monaspace-radon/files/monaspace-radon-latin-500-normal.woff2?url";
 import xenonBold from "@fontsource/monaspace-xenon/files/monaspace-xenon-latin-700-normal.woff2?url";
 import xenon from "@fontsource/monaspace-xenon/files/monaspace-xenon-latin-400-normal.woff2?url";
 
-const fonts = [xenon, xenonBold, argon, krypton, neon];
+interface Props {
+  readonly accent?: boolean;
+}
+
+const { accent = false } = Astro.props;
+const fonts = [xenon, xenonBold, argon, argonMedium, krypton, kryptonMedium, neon, neonMedium, ...(accent ? [radonMedium] : [])];
 ---
 
 {fonts.map((href) => <link rel="preload" as="font" type="font/woff2" href={href} crossorigin />)}
