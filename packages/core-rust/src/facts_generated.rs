@@ -87,7 +87,10 @@ pub(crate) const MCP_SERVER_CARD_CACHE_CONTROL: &str = "public, max-age=3600";
 pub(crate) const MCP_SERVER_CARD_CORS_HEADERS: [(&str, &str); 4] = [
     ("Access-Control-Allow-Origin", "*"),
     ("Access-Control-Allow-Methods", "GET"),
-    ("Access-Control-Allow-Headers", "Content-Type, If-None-Match"),
+    (
+        "Access-Control-Allow-Headers",
+        "Content-Type, If-None-Match",
+    ),
     ("Access-Control-Expose-Headers", "ETag"),
 ];
 pub(crate) const MCP_SERVER_CARD_NAME_MIN_LENGTH: usize = 3;
