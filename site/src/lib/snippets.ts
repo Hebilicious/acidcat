@@ -61,6 +61,6 @@ export const coreSnippets = async (): Promise<Snippet[]> => [
 ];
 
 const theme = createCssVariablesTheme({ name: "acidcat", variablePrefix: "--code-", fontStyle: true });
-const highlighter = await createHighlighter({ themes: [theme], langs: ["typescript", "python", "go", "rust", "pkl", "json"] });
+const highlighter = await createHighlighter({ themes: [theme], langs: ["typescript", "python", "go", "rust", "pkl", "json", "shellscript", "http"] });
 
 export const highlight = (code: string, language: string): string => highlighter.codeToHtml(code, { lang: language, theme: "acidcat" });

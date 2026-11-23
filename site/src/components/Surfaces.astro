@@ -1,0 +1,220 @@
+---
+import { highlight } from "../lib/snippets.ts";
+
+const repository = "https://github.com/Hebilicious/acidcat/blob/main";
+
+const surfaces = [
+  {
+    id: "cli",
+    name: "Command line",
+    who: "People and scripts",
+    text: "The words of the id become the command, and each input property becomes a flag. The catalog can give short aliases. In a pipe, the program writes each result as one line of JSON.",
+    language: "shellscript",
+    code: "$ home aircon power set --on\n$ home --on\n$ home list",
+    spec: "spec/bindings/cli.md",
+  },
+  {
+    id: "mcp",
+    name: "MCP server",
+    who: "AI agents",
+    text: "tools/list gives one tool for each available capability. The name of the tool is the id. destructive and idempotent become hints, so an agent knows when to ask first.",
+    language: "json",
+    code: '{\n  "name": "aircon.power.set",\n  "description": "Turn the unit on or off.",\n  "annotations": { "destructiveHint": true, "idempotentHint": true }\n}',
+    spec: "spec/bindings/mcp.md",
+  },
+  {
+    id: "webmcp",
+    name: "WebMCP",
+    who: "Agents in the browser",
+    text: "The page registers a tool for each available capability with registerTool. A browser agent calls it with the session of the signed-in user.",
+    language: "json",
+    code: '{\n  "name": "aircon.power.set",\n  "inputSchema": {\n    "type": "object",\n    "properties": { "on": { "type": "boolean" } },\n    "required": ["on"]\n  }\n}',
+    spec: "spec/bindings/webmcp.md",
+  },
+  {
+    id: "http",
+    name: "HTTP API",
+    who: "Other programs",
+    text: "A POST to /capabilities/{id} with the input as the body gives the outcome. A POST to /events/{id} streams the occurrences as server-sent events.",
+    language: "http",
+    code: 'POST /capabilities/aircon.power.set\nContent-Type: application/json\n\n{ "on": true }',
+    spec: "spec/bindings/http.md",
+  },
+  {
+    id: "ts",
+    name: "TypeScript",
+    who: "Your own code",
+    text: "A session gives a handle for each capability. execute returns a result: the value, or a failure with its tag. An AbortSignal cancels the call.",
+    language: "typescript",
+    code: 'const result = await handle.execute({ on: true });\nif (!result.ok && result.error._tag === "Offline") {\n  showOffline();\n}',
+    spec: "spec/bindings/typescript.md",
+  },
+].map((surface) => ({ ...surface, html: highlight(surface.code, surface.language) }));
+---
+
+<section class="surfaces" aria-labelledby="surfaces-title">
+  <header class="section-head">
+    <p class="eyebrow">Fig. 3 — The five surfaces</p>
+    <h2 id="surfaces-title">One capability. <em>Five ways in.</em></h2>
+    <p class="lede">Each binding has its own rules in the specification. The same capability, <code>aircon.power.set</code>, appears on each surface with the same input and the same failures.</p>
+  </header>
+  <ol class="surface-grid">
+    {surfaces.map((surface, index) => (
+      <li class="surface" data-surface-card={surface.id} tabindex="0" style={`--i:${index}`}>
+        <div class="surface-head">
+          <span class="surface-index">{String(index + 1).padStart(2, "0")}</span>
+          <h3>{surface.name}</h3>
+          <span class="surface-who">{surface.who}</span>
+        </div>
+        <p class="surface-text">{surface.text}</p>
+        <div class="surface-screen" set:html={surface.html} />
+        <a class="surface-spec" href={`${repository}/${surface.spec}`}>Read the binding</a>
+      </li>
+    ))}
+  </ol>
+</section>
+
+<style>
+  .surfaces {
+    width: min(var(--layout-width-content), 100%);
+    margin-inline: auto;
+    padding: var(--spacing_fluid-space-3xl-4xl) var(--layout-gutter-inline) 0;
+  }
+  .surface-grid {
+    list-style: none;
+    margin: var(--spacing_fluid-space-2xl) 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: var(--spacing_fluid-space-m);
+  }
+  .surface {
+    grid-column: span 2;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing_fluid-space-s);
+    padding: var(--spacing_fluid-space-l);
+    border: 1px solid color-mix(in oklch, var(--palette-brass-400) 28%, transparent);
+    border-radius: var(--radius-size-l);
+    background:
+      radial-gradient(28rem circle at var(--mx, 30%) var(--my, 0%), color-mix(in oklch, var(--palette-acid-400) 7%, transparent), transparent 60%),
+      linear-gradient(180deg, var(--palette-ink-800), var(--palette-ink-925));
+    outline: none;
+    transition:
+      border-color 0.35s,
+      transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .surface:nth-child(-n + 2) {
+    grid-column: span 3;
+  }
+  .surface:is(:hover, :focus-visible) {
+    border-color: color-mix(in oklch, var(--palette-acid-400) 55%, transparent);
+    transform: translateY(-4px);
+  }
+  .surface-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--spacing_fluid-space-xs) var(--spacing_fluid-space-s);
+  }
+  .surface-index {
+    font-family: var(--font-family-label);
+    font-size: var(--typography_fluid-text-xs);
+    color: var(--palette-brass-600);
+  }
+  .surface h3 {
+    font-family: var(--font-family-display);
+    font-size: var(--typography_fluid-display-l);
+    font-weight: var(--typography-weight-display-bold);
+    line-height: 1.1;
+  }
+  .surface-who {
+    margin-left: auto;
+    padding: var(--spacing_fluid-space-3xs) var(--spacing_fluid-space-xs);
+    border: 1px solid color-mix(in oklch, var(--palette-cyan-400) 35%, transparent);
+    border-radius: 999px;
+    font-family: var(--font-family-label);
+    font-size: var(--typography_fluid-text-xs);
+    letter-spacing: var(--font-tracking-label);
+    text-transform: uppercase;
+    color: var(--palette-cyan-400);
+  }
+  .surface-text {
+    margin: 0;
+    max-width: 58ch;
+    color: var(--palette-cream-400);
+    font-size: var(--typography_fluid-text-m);
+  }
+  .surface-screen {
+    margin-top: auto;
+    padding: var(--spacing_fluid-space-s) var(--spacing_fluid-space-m);
+    border: 1px solid color-mix(in oklch, var(--palette-brass-400) 35%, transparent);
+    border-radius: var(--radius-size-m);
+    background:
+      repeating-linear-gradient(0deg, color-mix(in oklch, var(--palette-cyan-400) 4%, transparent) 0 1px, transparent 1px 3px),
+      radial-gradient(circle at 30% 0%, var(--palette-blueprint-800), var(--palette-ink-950) 75%);
+    box-shadow: inset 0 0 24px color-mix(in oklch, var(--palette-neutral-black) 70%, transparent);
+    overflow-x: auto;
+    font-size: var(--typography_fluid-text-s);
+    line-height: 1.6;
+    transition: box-shadow 0.35s;
+  }
+  .surface:is(:hover, :focus-visible) .surface-screen {
+    box-shadow:
+      inset 0 0 24px color-mix(in oklch, var(--palette-neutral-black) 70%, transparent),
+      0 0 28px color-mix(in oklch, var(--palette-acid-400) 14%, transparent);
+  }
+  .surface-screen :global(pre) {
+    white-space: pre;
+  }
+  .surface-spec {
+    align-self: flex-start;
+    font-family: var(--font-family-label);
+    font-size: var(--typography_fluid-text-xs);
+    letter-spacing: var(--font-tracking-label);
+    text-transform: uppercase;
+    color: var(--palette-brass-300);
+    text-decoration: none;
+  }
+  .surface-spec::after {
+    content: " →";
+  }
+  .surface-spec:hover {
+    color: var(--palette-acid-400);
+  }
+
+  @media (max-width: 1000px) {
+    .surface,
+    .surface:nth-child(-n + 2) {
+      grid-column: span 3;
+    }
+    .surface:last-child {
+      grid-column: span 6;
+    }
+  }
+  @media (max-width: 680px) {
+    .surface,
+    .surface:nth-child(-n + 2),
+    .surface:last-child {
+      grid-column: span 6;
+    }
+    .surface-who {
+      margin-left: 0;
+    }
+  }
+</style>
+
+<script>
+  for (const card of document.querySelectorAll<HTMLElement>("[data-surface-card]")) {
+    card.addEventListener("pointermove", (event) => {
+      const box = card.getBoundingClientRect();
+      card.style.setProperty("--mx", `${event.clientX - box.left}px`);
+      card.style.setProperty("--my", `${event.clientY - box.top}px`);
+    });
+    const id = card.dataset["surfaceCard"] ?? null;
+    const announce = (detail: string | null) => document.dispatchEvent(new CustomEvent("acidcat:surface", { detail }));
+    card.addEventListener("pointerenter", () => announce(id));
+    card.addEventListener("pointerleave", () => announce(null));
+  }
+</script>

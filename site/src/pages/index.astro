@@ -2,7 +2,8 @@
 import "../styles/tokens.css";
 import "../styles/home.css";
 import LivingPlate from "../components/LivingPlate.astro";
-import NixieTubes from "../components/NixieTubes.astro";
+import CoreScreens from "../components/CoreScreens.astro";
+import Surfaces from "../components/Surfaces.astro";
 import Mark from "../components/Mark.astro";
 import Schematic from "../components/Schematic.astro";
 
@@ -37,22 +38,7 @@ const parts = [
   },
 ];
 
-const features = [
-  { title: "Each target sees only its own capabilities", text: "A capability that writes a local file can belong to the cli target alone.", example: 'aircon.status.export   audience: ["cli"]' },
-  { title: "Failures are typed data", text: "Each failure has a tag. An unexpected error becomes the call failure internal, and its details stay on the server.", example: "failures: { Offline }   else: internal" },
-  { title: "Events stream to subscribers", text: "Occurrences such as aircon.status.changed reach the CLI, MCP, HTTP through server-sent events, and TypeScript.", example: "$ home follow   # aircon.status.changed" },
-  { title: "Agents know what is dangerous", text: "MCP clients get destructiveHint and idempotentHint, so an agent knows to ask before it turns the unit off.", example: "destructiveHint: true   idempotentHint: true" },
-  { title: "WebMCP in the browser", text: "A browser agent calls the capabilities of your page directly, with the session of the signed-in user.", example: "document.modelContext.registerTool(tool)" },
-  { title: "Built for pipes", text: "In a pipe, the command line writes each result as one line of JSON, so an agent or a script reads less text.", example: "$ home status | jq .on" },
-];
 
-const languages = [
-  { code: "TS", name: "TypeScript" },
-  { code: "PY", name: "Python" },
-  { code: "GO", name: "Go" },
-  { code: "RS", name: "Rust" },
-  { code: "PKL", name: "Pkl" },
-];
 ---
 
 <!doctype html>
@@ -135,35 +121,9 @@ const languages = [
         </ol>
       </section>
 
-      <section class="features" aria-labelledby="features-title">
-        <header class="section-head">
-          <p class="eyebrow">Fig. 3 — Pressure-tested</p>
-          <h2 id="features-title">What every surface <em>gets for free.</em></h2>
-        </header>
-        <ul class="feature-grid">
-          {features.map((feature, index) => (
-            <li class="feature" style={`--i:${index}`} tabindex="0" data-feature>
-              <span class="feature-tube" aria-hidden="true"><span></span><i></i><i></i><i></i></span>
-              <h3>{feature.title}</h3>
-              <p>{feature.text}</p>
-              <code class="feature-readout">{feature.example}</code>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <Surfaces />
 
-      <section class="languages" aria-labelledby="languages-title">
-        <div class="languages-inner">
-          <div>
-            <p class="eyebrow">Fig. 4 — Language-neutral</p>
-            <h2 id="languages-title">Write the catalog in <em>your</em> language.</h2>
-            <p class="lede">
-              Use a catalog library for TypeScript, Python, Go or Rust, or a Pkl module. Every library writes the same catalog, in one canonical form, and <code>acid-cat check</code> tests it.
-            </p>
-          </div>
-          <NixieTubes languages={languages} />
-        </div>
-      </section>
+      <CoreScreens />
 
     </main>
 
@@ -192,20 +152,6 @@ const languages = [
         });
       }
 
-      for (const card of document.querySelectorAll<HTMLElement>("[data-feature]")) {
-        card.addEventListener("pointermove", (event) => {
-          const box = card.getBoundingClientRect();
-          card.style.setProperty("--mx", `${event.clientX - box.left}px`);
-          card.style.setProperty("--my", `${event.clientY - box.top}px`);
-        });
-        card.addEventListener("click", () => card.classList.toggle("is-open"));
-        card.addEventListener("keydown", (event) => {
-          if (event.key !== "Enter" && event.key !== " ") return;
-          event.preventDefault();
-          card.classList.toggle("is-open");
-        });
-      }
-
       const reveal = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
@@ -216,7 +162,7 @@ const languages = [
         },
         { threshold: 0.15 },
       );
-      for (const element of document.querySelectorAll(".section-head, .part, .feature, .machine:not([drawable]), .blueprint, .spec-sheet")) {
+      for (const element of document.querySelectorAll(".section-head, .part, .surface, .machine:not([drawable]), .blueprint, .spec-sheet")) {
         element.classList.add("will-reveal");
         reveal.observe(element);
       }
