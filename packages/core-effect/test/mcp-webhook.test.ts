@@ -303,7 +303,7 @@ test("with signing keys, the verification and each delivery have a v1a signature
 test("a signing key of another form, two keys with the same kid, or an egress range that is not CIDR text, make the server fail when it starts", () => {
   const feed = feedForPromises();
   const key = testSigningKey("same");
-  const starts = (webhooks: Partial<Mcp.WebhookOptions>) => () => webhookHandler(feed, webhooks);
+  const starts = (webhooks: Partial<Mcp.WebhookOptions>) => () => Mcp.toWebHandler(events, feed.layer, { ...webhookOptions(webhooks), serverCard: { name: "dev.acid-cat/feed" } });
   assert.throws(starts({ signingKeys: [{ ...key, d: "short" }] }), /Signing key 0/);
   assert.throws(starts({ signingKeys: [key, { ...testSigningKey("other"), kid: "same" }] }), /same/);
   for (const range of ["10.0.0.0/33", "10.0.0.0", "bad/8", "2001:db8::/129"]) assert.throws(starts({ egressIpRanges: [range] }), /CIDR/, range);

@@ -164,4 +164,14 @@ test("with no Server Card, a GET request to its URL gets 404, and a card that br
   assert.throws(starts({ name: "fixture" }), TypeError);
   assert.throws(starts({ name: "dev.acid-cat/fixture", description: "x".repeat(101) }), TypeError);
   assert.throws(starts({ name: "dev.acid-cat/fixture", url: "ftp://mcp.example.com/mcp" }), TypeError);
+  assert.throws(() => Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "^1.2.3", allowedOrigins: [], serverCard: { name: "dev.acid-cat/fixture" } }), /not a range/);
+});
+
+test("webhook signing keys or egress ranges with no Server Card make the server fail when it starts", () => {
+  const signingKey = { kty: "OKP", crv: "Ed25519", kid: "one", d: "A".repeat(43) } as const;
+  const sender: Mcp.WebhookSender = () => Effect.die("The test sends no webhook.");
+  for (const webhooks of [{ sender, signingKeys: [signingKey] }, { sender, egressIpRanges: ["203.0.113.0/24"] }]) {
+    assert.throws(() => Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "0.0.0", allowedOrigins: [], webhooks }), /need a Server Card/);
+    assert.throws(() => Mcp.withEvents(fixture, Layer.fresh(fixtureLayer), () => Promise.resolve(new Response()), { allowedOrigins: [], webhooks }), /need one/);
+  }
 });

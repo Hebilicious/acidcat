@@ -150,9 +150,10 @@ let options = McpOptions {
 - The card gives `McpOptions::version`, and the URL of the server with the scheme and the host of the request. Behind a platform that ends TLS, the server gets `http` requests: give the `https` URL in `ServerCard::url`. It gives `2026-07-28` and, if `McpOptions::handshake` is `true`, the revisions of the `initialize` handshake.
 - `WebhookOptions::signing_keys` is a list of private Ed25519 JSON Web Keys: `kty: "OKP"`, `crv: "Ed25519"`, a `kid` that is not empty, and `d`, the base64url of 32 bytes with no padding. The `webhook-signature` header of each webhook request gets one `v1a,` signature for each key, after the `v1,` signatures. The card gives the public key of each key, and never `d`. The core takes the public key from `d`, and does not read `x`. To change keys, give the new key beside the old one.
 - `WebhookOptions::egress_ip_ranges` is a list of CIDR ranges, for example `203.0.113.0/24` or `2001:db8::/32`. The card gives them as they are.
-- The card gives the keys and the ranges only if webhook delivery is on.
+- The card gives the keys and the ranges only if webhook delivery is on. Signing keys or egress ranges with no card make the binding panic, because a receiver gets them only from the card.
+- The card name is the name of the server in a registry. `McpOptions::new(name, version)` gives the name that `server/discover` gives at run time. The card gives `McpOptions::version`, the same version as `server/discover`, so it must be one version, not a range such as `^1.2.3` or `1.x`.
 
-`McpBinding::new` and `McpBinding::with_request_context` panic when an option is not valid: a card name that does not have the reverse-DNS form, a card with no description or a description that is longer than 100 characters, a version that is longer than 255 characters with a card, a card URL that is not an `http` or `https` URL, a signing key of another form, two signing keys with the same `kid`, or an egress range that is not CIDR text.
+`McpBinding::new` and `McpBinding::with_request_context` panic when an option is not valid: a card name that does not have the reverse-DNS form, a card with no description or a description that is longer than 100 characters, a version that is a range or is longer than 255 characters with a card, a card URL that is not an `http` or `https` URL, a signing key of another form, two signing keys with the same `kid`, an egress range that is not CIDR text, or signing keys or egress ranges with no card.
 
 ### Serving the remote bindings
 

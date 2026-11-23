@@ -400,7 +400,7 @@ Subscriptions, verifications and limit counts live in process memory and are los
 
 #### Server Card
 
-With the `serverCard` option, `Mcp.toWebHandler`, `Mcp.makeHandle` and `Mcp.handle` serve an MCP [Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. The name has the reverse-DNS form with one `/`. The description is `serverCard.description`, or else the description of the catalog, from 1 to 100 characters. The card gives the version of the server, and the URL of the server with the origin of the request. Behind a platform that ends TLS, the server gets `http` URLs: give the `https` URL in `serverCard.url`. With webhook delivery, it also gives the public keys of `signingKeys` and the `egressIpRanges`. `Mcp.withHandshake` adds its revisions to the card. With no `serverCard`, a `GET` request to that URL gets 404. A name, a description or a version that breaks the rules makes the server fail when it starts.
+With the `serverCard` option, `Mcp.toWebHandler`, `Mcp.makeHandle` and `Mcp.handle` serve an MCP [Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. The name has the reverse-DNS form with one `/`. The description is `serverCard.description`, or else the description of the catalog, from 1 to 100 characters. The card gives the version of the server, and the URL of the server with the origin of the request. Behind a platform that ends TLS, the server gets `http` URLs: give the `https` URL in `serverCard.url`. With webhook delivery, it also gives the public keys of `signingKeys` and the `egressIpRanges`. `Mcp.withHandshake` adds its revisions to the card. With no `serverCard`, a `GET` request to that URL gets 404. The card name is the name of the server in a registry, and `name` is the name that `server/discover` gives at run time. The card gives `version`, the same version as `server/discover`, so `version` must be one version, not a range such as `^1.2.3` or `1.x`. A name, a description or a version that breaks the rules makes the server fail when it starts. So do `signingKeys` or `egressIpRanges` with no `serverCard`, because a receiver gets them only from the card.
 
 ```ts
 const mcp = Mcp.withHandshake(
@@ -412,7 +412,7 @@ const mcp = Mcp.withHandshake(
 );
 ```
 
-`Mcp.withEvents` serves no card: the card describes your own server.
+`Mcp.withEvents` serves no card: a `GET` request to `<URL>/server-card` gets 404. So `signingKeys` and `egressIpRanges` make `Mcp.withEvents` throw.
 
 #### Events beside your own MCP server
 

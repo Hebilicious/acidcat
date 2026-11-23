@@ -77,8 +77,16 @@ test("with webhook delivery and no signing keys or egress ranges, the Server Car
   await handler.close();
 });
 
-test("a card name that is not in reverse-DNS form, a description longer than 100 characters, or a URL that is not http or https, makes mcpHandler throw", () => {
+test("a card name that is not in reverse-DNS form, a description longer than 100 characters, a URL that is not http or https, or a version range, makes mcpHandler throw", () => {
   assert.throws(() => cardHandler({ serverCard: { name: "dev.acid-cat/fixture", url: "ftp://mcp.example.com/mcp" } }), TypeError);
   assert.throws(() => cardHandler({ serverCard: { name: "fixture" } }), TypeError);
   assert.throws(() => cardHandler({ serverCard: { name: "dev.acid-cat/fixture", description: "x".repeat(101) } }), TypeError);
+  assert.throws(() => cardHandler({ version: "^1.2.3" }), /not a range/);
+});
+
+test("webhook signing keys or egress ranges with no Server Card make mcpHandler throw", () => {
+  const signingKey = { kty: "OKP", crv: "Ed25519", kid: "one", d: "A".repeat(43) } as const;
+  for (const webhooks of [webhookDelivery({ signingKeys: [signingKey] }), webhookDelivery({ egressIpRanges: ["203.0.113.0/24"] })]) {
+    assert.throws(() => cardHandler({ serverCard: undefined, webhooks }), /need a Server Card/);
+  }
 });

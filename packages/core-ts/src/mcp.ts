@@ -70,7 +70,7 @@ export interface McpSettings {
   /**
    * Serve a Server Card at the URL of the server and `/server-card` (spec/bindings/mcp.md#server-card). With no card,
    * a `GET` request to that URL gets 404. A card whose name, description or version breaks the rules makes
-   * `mcpHandler` throw.
+   * `mcpHandler` throw. So does webhook delivery with signing keys or egress ranges and no card.
    */
   readonly serverCard?: McpServerCardSettings | undefined;
 }
@@ -122,7 +122,7 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
   const closeAll = async () => {
     await Promise.allSettled([leases.close(), options.webhooks?.close()]);
   };
-  const identity = options.serverCard === undefined ? undefined : mcpServerCardIdentity(options.serverCard, options.version, app.description);
+  const identity = mcpServerCardIdentity(options.serverCard, options.version, app.description, options.webhooks?.publishesOnServerCard === true);
   const handle = async (request: Request): Promise<Response> => {
     const serverUrl = mcpServerUrlOfCardRequest(request);
     if (serverUrl !== undefined && identity !== undefined) return mcpServerCardResponse(request, mcpServerCard(identity, serverUrl, await options.webhooks?.cardInfo?.()));

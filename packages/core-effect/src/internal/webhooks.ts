@@ -72,10 +72,10 @@ export interface WebhookOptions {
   /**
    * Ed25519 keys that sign each request with a `v1a,` signature beside the `v1,` signatures, as private JWKs with a
    * `kid`. The Server Card gives their public keys. Give the new key beside the old one to change keys. A key of another
-   * form, or two keys with the same `kid`, make the server fail when it starts.
+   * form, or two keys with the same `kid`, make the server fail when it starts. So do signing keys with no Server Card.
    */
   readonly signingKeys?: readonly WebhookSigningJwk[] | undefined;
-  /** The IP ranges from which the server sends its requests, as CIDR text. The Server Card gives them. A value that is not CIDR text makes the server fail when it starts. */
+  /** The IP ranges from which the server sends its requests, as CIDR text. The Server Card gives them. A value that is not CIDR text, or ranges with no Server Card, make the server fail when it starts. */
   readonly egressIpRanges?: readonly string[] | undefined;
 }
 

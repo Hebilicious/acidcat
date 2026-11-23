@@ -13,6 +13,7 @@ import {
   MCP_EVENT_ERRORS,
   MCP_WEBHOOK_DEFAULTS,
   mcpSubscribeError,
+  publishesOnServerCard,
   readWebhookPublication,
   webhookCardInfo,
   webhookGrantMs,
@@ -67,10 +68,11 @@ export interface WebhookOptions {
   /**
    * Ed25519 keys that sign each request with a `v1a,` signature beside the `v1,` signatures, as private JWKs with a
    * `kid`. The Server Card gives their public keys. Give the new key beside the old one to change keys. A key of another
-   * form, or two keys with the same `kid`, make `webhookDelivery` throw.
+   * form, or two keys with the same `kid`, make `webhookDelivery` throw. `mcpHandler` throws for signing keys with no
+   * Server Card.
    */
   readonly signingKeys?: readonly WebhookSigningJwk[] | undefined;
-  /** The IP ranges from which the server sends its requests, as CIDR text. The Server Card gives them. A value that is not CIDR text makes `webhookDelivery` throw. */
+  /** The IP ranges from which the server sends its requests, as CIDR text. The Server Card gives them. A value that is not CIDR text makes `webhookDelivery` throw, and `mcpHandler` throws for egress ranges with no Server Card. */
   readonly egressIpRanges?: readonly string[] | undefined;
 }
 
@@ -319,6 +321,8 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       if (subscription === undefined) return Promise.resolve({ error: { code: MCP_EVENT_ERRORS.notFound, message: "There is no such subscription.", data: { kind: "subscription" } } });
       return end(subscription).then(() => ({ result: {} }));
     },
+
+    publishesOnServerCard: publishesOnServerCard(options),
 
     async cardInfo() {
       return webhookCardInfo((await signingKeys()).map((key) => key.publicJwk), egressIpRanges);

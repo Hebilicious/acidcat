@@ -12,6 +12,7 @@ import {
   decodePollCursor,
   encodePollCursor,
   isGloballyRoutable,
+  isVersionRange,
   webhookGrantMs,
   webhookSecretBytes,
   webhookSignature,
@@ -239,4 +240,9 @@ test("cliAliases reads the input schema of a capability through $defs, and ignor
     errors: ["target cli: the alias loud has the fixed input volume, which is not a property of the input of aircon.power.set"],
   });
   assert.deepEqual(cliAliases(catalog, "api"), { aliases: [], default: undefined, errors: [] });
+});
+
+test("a version range is not a version of a Server Card", () => {
+  for (const range of ["^1.2.3", "~1.2.3", ">=1.2.3", "<2", "=1.0.0", "1.x", "1.2.*", "*", "1 - 2", "1.2 || 1.3"]) assert.equal(isVersionRange(range), true, range);
+  for (const version of ["1.2.3", "2.1.0-alpha", "1.0.0-next.1", "1.0.0+x", "0.0.0", "v1.2"]) assert.equal(isVersionRange(version), false, version);
 });

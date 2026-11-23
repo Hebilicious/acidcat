@@ -146,9 +146,9 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
     /// # Panics
     ///
     /// If the options are not valid: a Server Card name that does not have the reverse-DNS form, a Server Card with
-    /// no description from 1 to 100 characters, a version longer than 255 characters with a Server Card, a webhook
-    /// signing key that is not a private Ed25519 JWK, two signing keys with the same `kid`, or an egress range that is
-    /// not CIDR text.
+    /// no description from 1 to 100 characters, a version that is a range or is longer than 255 characters with a
+    /// Server Card, a webhook signing key that is not a private Ed25519 JWK, two signing keys with the same `kid`, an
+    /// egress range that is not CIDR text, or signing keys or egress ranges with no Server Card.
     pub fn new(app: Arc<Application<C>>, context: Arc<C>, options: McpOptions) -> Self {
         Self::with_contexts(app, Contexts::Shared(context), options)
     }
@@ -178,6 +178,13 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
             .clone()
             .or_else(|| app.description().map(str::to_owned));
         let leases = PollLeases::new(options.poll.clone());
+        let publishes = options.webhooks.as_ref().is_some_and(|webhooks| {
+            !webhooks.signing_keys.is_empty() || !webhooks.egress_ip_ranges.is_empty()
+        });
+        assert!(
+            options.server_card.is_some() || !publishes,
+            "webhook signing keys and egress ranges need a Server Card, because a receiver gets them only from the card: give the server a Server Card, or remove the signing keys and the egress ranges"
+        );
         let webhooks = options.webhooks.clone().map(Webhooks::new);
         let card = options.server_card.as_ref().map(|card| {
             Card::new(

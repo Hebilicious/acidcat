@@ -939,12 +939,35 @@ const SERVER_CARD_NAME = /^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/;
 
 const characterCount = (text: string): number => Array.from(text).length;
 
+/** Tell if the deployment gives signing keys or egress ranges, which only a Server Card publishes. */
+export const publishesOnServerCard = (publication: WebhookPublication | undefined): boolean =>
+  (publication?.signingKeys?.length ?? 0) > 0 || (publication?.egressIpRanges?.length ?? 0) > 0;
+
 /**
- * Check the settings of a Server Card when the server starts (spec/bindings/mcp.md#server-card). Throws a `TypeError`
- * for a name that is not in reverse-DNS form, no description, a description longer than 100 characters, a version
- * longer than 255 characters, or a URL that is not an `http` or `https` URL.
+ * Tell if a version is a range, as the Server Card extension refuses: it starts with `^`, `~`, `<`, `>` or `=`, has
+ * `||`, has a white space before a `-`, or a part of it before the first `-` or `+` is `x`, `X` or `*`.
  */
-export function mcpServerCardIdentity(settings: McpServerCardSettings, version: string, catalogDescription: string | undefined): McpServerCardIdentity {
+export function isVersionRange(version: string): boolean {
+  const text = version.trim();
+  if (/^[\^~<>=]/.test(text) || text.includes("||") || /\s-/.test(text)) return true;
+  const release = text.split(/[-+]/, 1)[0] ?? "";
+  return release.split(".").some((part) => part === "x" || part === "X" || part === "*");
+}
+
+/**
+ * Check the settings of a Server Card when the server starts (spec/bindings/mcp.md#server-card), and give `undefined`
+ * when the deployment gives no card. Throws a `TypeError` for a name that is not in reverse-DNS form, no description, a
+ * description longer than 100 characters, a version that is a range or is longer than 255 characters, or a URL that is
+ * not an `http` or `https` URL. With no card, throws a `TypeError` if `publishesWebhookInfo` is true: no receiver can
+ * then get the signing keys and the egress ranges.
+ */
+export function mcpServerCardIdentity(settings: McpServerCardSettings | undefined, version: string, catalogDescription: string | undefined, publishesWebhookInfo: boolean): McpServerCardIdentity | undefined {
+  if (settings === undefined) {
+    if (publishesWebhookInfo) {
+      throw new TypeError("Webhook signing keys and egress ranges need a Server Card, because a receiver gets them only from the card. Give the server a Server Card, or remove the signing keys and the egress ranges.");
+    }
+    return undefined;
+  }
   const { name } = settings;
   if (!SERVER_CARD_NAME.test(name) || characterCount(name) < 3 || characterCount(name) > 200) {
     throw new TypeError(`The name of the Server Card ${JSON.stringify(name)} must have the reverse-DNS form with one /, for example com.example/aircon, and 3 to 200 characters.`);
@@ -954,6 +977,7 @@ export function mcpServerCardIdentity(settings: McpServerCardSettings, version: 
     throw new TypeError("The Server Card needs a description of 1 to 100 characters. Give one in its settings, or in the description of the catalog.");
   }
   if (characterCount(version) > 255) throw new TypeError("The version of a server with a Server Card must have 255 characters or less.");
+  if (isVersionRange(version)) throw new TypeError(`The version of a server with a Server Card ${JSON.stringify(version)} must be one version, not a range such as ^1.2.3, >=1.2.3 or 1.x.`);
   const { url } = settings;
   if (url !== undefined && !/^https?:\/\/\S+$/.test(url)) throw new TypeError(`The URL of the Server Card ${JSON.stringify(url)} must be an http or https URL.`);
   return { name, version, description, url };

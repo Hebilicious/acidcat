@@ -235,4 +235,29 @@ fn invalid_card_or_webhook_options_panic_when_the_binding_starts() {
         ..McpOptions::new("test", "1.2.3")
     });
     assert!(message.contains("http or https URL"), "{message}");
+    let message = panic_message(McpOptions {
+        server_card: Some(ServerCard::new("dev.acid-cat/test")),
+        ..McpOptions::new("test", "^1.2.3")
+    });
+    assert!(message.contains("not a range"), "{message}");
+}
+
+#[test]
+fn signing_keys_or_egress_ranges_with_no_card_panic_when_the_binding_starts() {
+    for webhooks in [
+        WebhookOptions {
+            signing_keys: vec![private_jwk("one", 1)],
+            ..WebhookOptions::default()
+        },
+        WebhookOptions {
+            egress_ip_ranges: vec!["203.0.113.0/24".into()],
+            ..WebhookOptions::default()
+        },
+    ] {
+        let message = panic_message(McpOptions {
+            webhooks: Some(webhooks),
+            ..McpOptions::new("test", "1.2.3")
+        });
+        assert!(message.contains("need a Server Card"), "{message}");
+    }
 }

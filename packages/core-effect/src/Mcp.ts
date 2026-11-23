@@ -13,6 +13,7 @@ import {
   mcpServerUrlOfCardRequest,
   mcpToolAnnotations,
   mcpToolResult,
+  publishesOnServerCard,
   readBounded,
   screenRequest,
   SSE_MEDIA_TYPE,
@@ -97,7 +98,7 @@ export interface Options {
   /**
    * Serve a Server Card at the URL of the server and `/server-card` (spec/bindings/mcp.md#server-card). With no card,
    * a `GET` request to that URL gets 404. A card whose name, description or version breaks the rules makes the server
-   * fail when it starts.
+   * fail when it starts. So do webhook signing keys or egress ranges with no card.
    */
   readonly serverCard?: McpServerCardSettings | undefined;
 }
@@ -196,7 +197,7 @@ export const makeHandle = <R>(app: App.App<R>, options: Options) =>
   );
 
 const cardIdentity = <R>(app: App.App<R>, options: Options): McpServerCardIdentity | undefined =>
-  options.serverCard === undefined ? undefined : mcpServerCardIdentity(options.serverCard, options.version, app.description);
+  mcpServerCardIdentity(options.serverCard, options.version, app.description, publishesOnServerCard(options.webhooks));
 
 const answerCard = (request: Request, identity: McpServerCardIdentity | undefined, webhooks: Webhooks | undefined): Effect.Effect<Response | undefined> =>
   Effect.gen(function* () {
@@ -310,6 +311,9 @@ export const eventsExtensions: { readonly [name: string]: JsonObject } = McpEven
  * subscriptions, and releases the shared services. It does not dispose `server`. With `"per-request"`, the layer can
  * read `Remote.IncomingRequest` and refuse a request of the events extension with a `Remote.Refusal`, as in
  * `toWebHandler`.
+ *
+ * The result serves no Server Card: a `GET` request to the URL and `/server-card` gets 404. Webhook signing keys or
+ * egress ranges need a card, so they make `withEvents` throw.
  */
 export function withEvents<R, E>(
   app: App.App<R>,
@@ -324,12 +328,17 @@ export function withEvents<R, E>(
   server: (request: Request) => Promise<Response>,
   options: EventsOptions,
 ): WebHandler {
+  if (publishesOnServerCard(options.webhooks)) {
+    throw new TypeError("withEvents serves no Server Card, and webhook signing keys and egress ranges need one, because a receiver gets them only from the card. Remove the signing keys and the egress ranges.");
+  }
   const target = options.target ?? "mcp";
   const hasEvents = viewOf(App.document(app), target).events !== undefined;
   const { answer, dispose: release } = answerWith(layer, options.services);
   const scope = Effect.runSync(Scope.make());
   const deliveries = Effect.runSync(makeDeliveries(options).pipe(Scope.provide(scope)));
   const handler = async (request: Request): Promise<Response> => {
+    const card = await Effect.runPromise(answerCard(request, undefined, undefined));
+    if (card !== undefined) return card;
     const admitted = await admit(request, options);
     if (admitted instanceof Response) return admitted;
     const events = hasEvents ? eventsRequestOf(admitted) : undefined;

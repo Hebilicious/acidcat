@@ -59,6 +59,20 @@ fn is_card_name(name: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
+fn is_version_range(version: &str) -> bool {
+    let text = version.trim();
+    let release = text.split(['-', '+']).next().unwrap_or_default();
+    text.starts_with(['^', '~', '<', '>', '='])
+        || text.contains("||")
+        || text
+            .chars()
+            .zip(text.chars().skip(1))
+            .any(|(before, after)| before.is_whitespace() && after == '-')
+        || release
+            .split('.')
+            .any(|part| matches!(part, "x" | "X" | "*"))
+}
+
 impl Card {
     pub(crate) fn new(
         card: &ServerCard,
@@ -84,6 +98,10 @@ impl Card {
         assert!(
             version.chars().count() <= 255,
             "the version of a server with a Server Card must have 255 characters or fewer"
+        );
+        assert!(
+            !is_version_range(version),
+            "the version of a server with a Server Card {version:?} must be one version, not a range such as ^1.2.3, >=1.2.3 or 1.x"
         );
         if let Some(url) = &card.url {
             assert!(
@@ -216,5 +234,38 @@ fn cors(headers: &mut http::HeaderMap) {
         (header::CACHE_CONTROL, MCP_SERVER_CARD_CACHE_CONTROL),
     ] {
         headers.insert(name, HeaderValue::from_static(value));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_version_range;
+
+    #[test]
+    fn a_version_range_is_not_a_version() {
+        for range in [
+            "^1.2.3",
+            "~1.2.3",
+            ">=1.2.3",
+            "<2",
+            "=1.0.0",
+            "1.x",
+            "1.2.*",
+            "*",
+            "1 - 2",
+            "1.2 || 1.3",
+        ] {
+            assert!(is_version_range(range), "{range}");
+        }
+        for version in [
+            "1.2.3",
+            "2.1.0-alpha",
+            "1.0.0-next.1",
+            "1.0.0+x",
+            "0.0.0",
+            "v1.2",
+        ] {
+            assert!(!is_version_range(version), "{version}");
+        }
     }
 }

@@ -226,3 +226,8 @@ test("the MCP binding serves a Server Card, and the wrapped binding adds the rev
   const legacy = Card.parse(await (await fetch(`${served.url}/capabilities/mcp-legacy/server-card`)).json());
   assert.deepEqual(legacy.remotes, [{ url: `${served.url}/capabilities/mcp-legacy`, supportedProtocolVersions: ["2026-07-28", "2025-11-25", "2025-06-18"] }]);
 });
+
+test("the server of the application, behind Mcp.withEvents, serves no Server Card", async () => {
+  const response = await fetch(`${served.url}/mcp/server-card`);
+  assert.equal(response.status, 404);
+});
