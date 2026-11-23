@@ -136,7 +136,7 @@ Standard Schema has no JSON Schema conversion, so pass your schema library's con
 
 | Function | Binding | Result |
 | --- | --- | --- |
-| `createSession(app, options)` | [TypeScript](../../spec/bindings/typescript.md) | A session with a handle per capability and an event handle per event |
+| `createSession(app, options)` | [TypeScript](../../spec/bindings/typescript.md), which maps the [programmatic binding](../../spec/bindings/programmatic.md) | A session with a handle per capability and an event handle per event |
 | `mcpHandler(app, options)` | [MCP](../../spec/bindings/mcp.md#http) over HTTP | `(request: Request) => Promise<Response>` |
 | `mcpHandshake(handler)` | [MCP](../../spec/bindings/mcp.md#earlier-revisions-through-http), earlier revisions | The handler, plus the `initialize` handshake. From [`@acid-cat/mcp-handshake`](../mcp-handshake) |
 | `mcpStdioMain(app, options)`, `runMcpStdio(…)` | [MCP](../../spec/bindings/mcp.md#stdio) over stdio | The process's MCP server, or a promise that resolves when the input ends |

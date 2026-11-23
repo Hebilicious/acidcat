@@ -22,6 +22,7 @@ The specification does not depend on a language or a library. Bindings depend on
 | [Invocation](invocation.md) | Outcomes, availability, sessions, cancellation, concurrency, state |
 | [Events](events.md) | Subscriptions, occurrences, ending, resuming |
 | [Bindings](bindings/README.md) | Rules for all bindings, and the bindings this specification defines |
+| [Programmatic binding](bindings/programmatic.md) | The contract of every language binding: handles, calls, outcomes, observable values, cancellation, event handles |
 | [Extensions](extensions/README.md) | Optional conventions: attachments, pagination |
 | [Conformance](conformance.md) | What makes a catalog, a provider and a binding conform |
 
@@ -42,7 +43,7 @@ Every document uses these terms with these meanings.
 | **Target** | A group of clients that can use a set of capabilities, for example `app`, `cli` or `mcp` |
 | **Audience** | The targets that can use a capability or an event. A capability or an event with no audience is available to no target |
 | **View** | The part of the catalog that one target can see. A view is itself a catalog |
-| **Binding** | The rules that make one kind of surface from a view. A **protocol binding** makes a surface on the network or in a terminal, for example MCP or a command line. A **language binding** makes a surface in code, for example TypeScript. See [Bindings](bindings/README.md) |
+| **Binding** | The rules that make one kind of surface from a view. A **protocol binding** makes a surface on the network or in a terminal, for example MCP or a command line. A **language binding** makes a surface in code, for example TypeScript or Rust. The **programmatic binding** is the contract that every language binding follows, with no language. See [Bindings](bindings/README.md) and [Programmatic binding](bindings/programmatic.md) |
 | **Alias** | A short command-line name for a capability or an event. A **command alias** is one or two words; a **flag alias** is `--` and one word. Command aliases with the same first word form a **group**. A command alias whose name is a shared prefix of commands is the **prefix default** of that prefix. The **fixed input** of an alias is the part of the input that the alias always gives. The **default alias** runs when the command line gets no command. See [CLI binding](bindings/cli.md#aliases) |
 | **Transport** | How a protocol binding carries messages between a client and a server, for example HTTP, or a process's standard input and output (stdio) |
 | **Provider** | The code that does the operations |
@@ -55,6 +56,9 @@ Every document uses these terms with these meanings.
 | **Occurrence** | One thing that happened, which a subscription delivers to its client. Its `data` matches the event's payload schema |
 | **Cursor** | A string that marks a position in an event's occurrences. A client gives it to resume a subscription |
 | **State** | A value of a capability that clients can observe, for example the temperature of a room |
+| **Handle** | The surface of one capability in a language binding. Through it, a client reads the availability and the state of the capability, and calls it. An **event handle** is the surface of one event in a language binding. Through it, a client subscribes to the event. See [Programmatic binding](bindings/programmatic.md) |
+| **Observable value** | A value that changes, in a language binding. A client reads its value now, the **snapshot**, and follows each new value. Availability and state are observable values |
+| **External call** | A call through a handle with an input that is not trusted. The handle validates the input. A **typed call** takes an input that is already decoded into the types of the language. An **external subscription** and a **typed subscription** are the same for an event handle |
 
 ## Conventions
 

@@ -1,6 +1,6 @@
 # acid-cat-core
 
-`acid-cat-core` is the AcidCat core for Rust, published on crates.io. It serves your application's capabilities and events through the [MCP](../../spec/bindings/mcp.md), [HTTP](../../spec/bindings/http.md) and [CLI](../../spec/bindings/cli.md) bindings. You declare everything in code, and the core writes the catalog from it. The core passes every `acid-cat conform` check for these three bindings.
+`acid-cat-core` is the AcidCat core for Rust, published on crates.io. It serves your application's capabilities and events through the [MCP](../../spec/bindings/mcp.md), [HTTP](../../spec/bindings/http.md) and [CLI](../../spec/bindings/cli.md) bindings, and to Rust code in the same process through the [Rust binding](../../spec/bindings/rust.md). You declare everything in code, and the core writes the catalog from it. The core passes every `acid-cat conform` check for these three bindings.
 
 ```sh
 cargo add acid-cat-core
@@ -117,7 +117,16 @@ An optional `Option` field takes the value of its type, not `null`, so add `#[se
 
 `render_catalog()` returns the catalog in canonical form. Write it to a file at build time and run `acid-cat check` on it.
 
-`Session::open(&app, target, context)` opens a session in the same process, with `invoke` and `subscribe`.
+`Session::open(&app, target, context)` opens a session in the same process. It serves the [Rust binding](../../spec/bindings/rust.md), which maps the [programmatic binding](../../spec/bindings/programmatic.md):
+
+| Method | Use |
+| --- | --- |
+| `capability_ids()`, `event_ids()`, `view()` | The capabilities and the events of the view |
+| `invoke(id, input, &cancel)` | A call with an input that is not trusted. It gives an `Outcome`: `Value`, `Failure` or `CallFailure`. `cancel`, or dropping the future, cancels the call |
+| `availability(id)`, `availability_changes()` | The availability of a capability now, and a message each time that an availability changes |
+| `state(id)` | A `StateWatch`: `snapshot()` and `changed()` |
+| `subscribe(id, input, options)` | The `Occurrences` of a subscription, or the call failure before the first occurrence. `next()` gives each occurrence, then the end. `cancel()`, or dropping it, cancels the subscription |
+| `closing()`, `close()` | The token that is cancelled when the session starts to close, and the close itself |
 
 ## Bindings
 

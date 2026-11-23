@@ -68,12 +68,15 @@ Each target of the catalog lists its bindings. Each binding serves the **view** 
 
 | Binding | Surface | core-ts | core-effect | core-rust |
 | --- | --- | --- | --- | --- |
-| `typescript` | Handles in code, for a user interface | `createSession` | `Session.make`, `Handles.make`, `Handles.makeEvents` | None. Rust code in the same process uses `Session::open` |
+| `typescript` | Handles in TypeScript code, for a user interface | `createSession` | `Session.make`, `Handles.make`, `Handles.makeEvents` | None |
+| `rust` | The functions of a session in Rust code | None | None | `Session::open`, then `invoke`, `subscribe`, `availability`, `state` |
 | `mcp` through HTTP | An MCP server at `/mcp` | `mcpHandler` | `Mcp.toWebHandler` | `mcp::McpBinding` |
 | `mcp` through stdio | A local MCP server that a client starts | `mcpStdioMain` | `NodeMcp.main` | `mcp::serve_stdio` |
 | `http` | JSON at `POST /capabilities/<id>` | `httpHandler` | `Http.toWebHandler` | `http::HttpBinding` |
 | `cli` | A command for each capability, and the aliases of the target | `cliMain` | `NodeCli.main` | `cli::cli_main` |
 | `webmcp` | Tools of a web page for the agents of the browser | `installWebMcp` | `WebMcp.install` | None |
+
+The `typescript` and `rust` bindings are language bindings. Each one maps the [programmatic binding](https://github.com/Hebilicious/acidcat/blob/main/spec/bindings/programmatic.md): a session gives a handle for each capability and an event handle for each event of its view. A handle gives an external call, which validates an input that is not trusted, and can give a typed call. A result is data. A call failure has a `kind`. Availability and state are observable values with a snapshot. The client can cancel each call and each subscription.
 
 The MCP and HTTP bindings give web handlers. On Node.js, the server of the core serves them: `serve` from `@acid-cat/core-ts/node`, or `NodeServer` from `@acid-cat/core-effect`. In Rust, `remote::serve` of `acid-cat-core` serves them. It is plain HTTP. TLS ends in the platform, before it. See [references/bindings.md](references/bindings.md) for the options and the traps of each binding.
 

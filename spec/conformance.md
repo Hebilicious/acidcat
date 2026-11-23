@@ -2,6 +2,8 @@
 
 Conformance is a test from outside. It uses the catalog and the behavior of each binding. It does not look at the code. Thus an implementation that you write by hand, that you generate, or that uses a library is tested in the same way.
 
+`acid-cat conform` tests protocol bindings, through the network, a terminal or a web page. A language binding serves code in the same process, so no outside test can reach it. The tests of each core test its language binding against the [programmatic binding](bindings/programmatic.md).
+
 `acid-cat check` tests a catalog. `acid-cat conform` tests a provider and its bindings. Both come from [`@acid-cat/cli`](../packages/cli/README.md).
 
 ## Catalog
