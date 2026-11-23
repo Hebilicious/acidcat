@@ -1,0 +1,352 @@
+---
+title: Write a catalog
+description: Write the catalog from a source in Pkl, TypeScript, Python, Go or Rust, and let the tool write the canonical JSON.
+sidebar:
+  order: 21
+---
+
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+
+The catalog is a JSON document, but you seldom write the JSON yourself. Write a **source**, and let a tool write the JSON. A source finds errors before it writes the file, shares types, and gives the same bytes each time.
+
+## Choose a source
+
+| Situation | Source | What writes the JSON |
+| --- | --- | --- |
+| One application with one core | The code of the application | The core: `renderCatalog(app, { toJsonSchema })` in core-ts, `App.render(app)` in core-effect, `app.render_catalog()` in core-rust |
+| A catalog that several implementations share | A Pkl module, or a program with a catalog library | `pkl eval`, then `acid-cat format --write`; or the program |
+
+When no code writes the catalog, use Pkl. Pkl checks the catalog rules while you write.
+
+## The same steps in every language
+
+Each catalog library gives the same steps. Every library writes the catalog in [canonical form](/spec/catalog/#canonical-form), so the same catalog gives the same bytes in every language.
+
+| Step | Pkl | TypeScript | Python | Go | Rust |
+| --- | --- | --- | --- | --- | --- |
+| Start | `amends "Catalog.pkl"` | `new Catalog({ title })` | `Catalog(title=…)` | `catalog.New(title, description)` | `Catalog::new(title, description)` |
+| Declare a target | `targets { … }` | `.target(name, {…})` | `.target(name, …)` | `.Target(name, …)` | `.target(name, …)` |
+| Share a type | `types { … }`, then `module.ref("Name")` | `c.type(name, {…})` | `c.type(name, {…})` | `c.Type(name, …)` | `c.r#type(name, json!({…}))` |
+| Declare a capability | `capabilities { … }` | `.capability(id, {…})` | `.capability(id, …)` | `.Capability(id, …)` | `.capability(id, …)` |
+| Declare an event | `events { … }` | `.event(id, {…})` | `.event(id, …)` | `.Event(id, …)` | `.event(id, …)` |
+| Check the rules | While you write | `.validate()` | `.validate()` | `.Validate()` | `.validate()` |
+| Render canonical JSON | `pkl eval`, then `acid-cat format` | `.render()` | `.render()` | `.Render()` | `.render()` |
+
+A schema is a plain JSON Schema object in every language. Declaring a shared type returns the schema that refers to it, so a reference always points at a type that exists.
+
+## A first catalog
+
+Each example declares one target, one shared type, one capability and one event, then writes the catalog.
+
+<Tabs syncKey="catalog-language">
+<TabItem label="Pkl">
+
+The Pkl package is `package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog`. Replace `<version>` with the version of a release of `acid-cat-catalog`.
+
+```pkl title="greenhouse.pkl"
+amends "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@<version>#/Catalog.pkl"
+
+targets {
+  ["panel"] { bindings { "typescript" } }
+}
+
+capabilities {
+  ["greenhouse.vents.set"] {
+    description = "Open the roof vents to a percentage."
+    audience { "panel" }
+  }
+}
+
+events {
+  ["greenhouse.tank.low"] {
+    description = "The rain-water tank fell below a level. The occurrence gives the litres that are left."
+    audience { "panel" }
+    payload {
+      type = "object"
+      properties { litres { type = "number" } }
+    }
+  }
+}
+```
+
+Pkl writes JSON in its own key order. Render the module, then put it in canonical form:
+
+```sh
+pkl eval greenhouse.pkl --output-path greenhouse.acidcat.json
+acid-cat format --write greenhouse.acidcat.json
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```sh
+pnpm add -D @acid-cat/catalog
+```
+
+```ts title="library.ts"
+import { writeFile } from "node:fs/promises";
+
+import { Catalog } from "@acid-cat/catalog";
+
+const catalog = new Catalog({ title: "Neighbourhood lending library" });
+catalog.target("desk", { bindings: ["cli"] });
+const notFound = catalog.type("NotFound", { type: "object" });
+catalog.capability("library.loan.return", {
+  description: "Take a book back from a member.",
+  audience: ["desk"],
+  input: { type: "object", required: ["loan"], properties: { loan: { type: "string" } } },
+  failures: { NotFound: notFound },
+});
+const book = catalog.type("Book", { type: "object", properties: { isbn: { type: "string" } } });
+catalog.event("library.book.returned", {
+  description: "A member returned a book. The occurrence gives the book.",
+  audience: ["desk"],
+  input: { type: "object", properties: {} },
+  payload: book,
+});
+
+await writeFile("acidcat.catalog.json", catalog.render());
+```
+
+`render()` refuses to render a catalog that breaks a rule. `validate()` lists the rules that the catalog breaks.
+
+</TabItem>
+<TabItem label="Python">
+
+```sh
+pip install acid-cat-catalog
+```
+
+```python title="weather.py"
+from pathlib import Path
+from acid_cat_catalog import Catalog
+
+catalog = Catalog(title="Hilltop weather station")
+catalog.target("logger", bindings=["http"])
+fault = catalog.type("SensorFault", {"type": "object"})
+catalog.capability(
+    "weather.sensor.calibrate",
+    description="Correct one sensor by a fixed offset.",
+    audience=["logger"],
+    input={"type": "object", "required": ["offset"], "properties": {"offset": {"type": "number"}}},
+    failures={"SensorFault": fault},
+)
+catalog.event(
+    "weather.alert.raised",
+    description="A reading passed a limit. The occurrence gives the reading.",
+    audience=["logger"],
+    input={"type": "object", "properties": {}},
+    payload={"type": "object", "properties": {"celsius": {"type": "number"}}},
+)
+
+Path("acidcat.catalog.json").write_text(catalog.render())
+```
+
+`render()` raises `CatalogError` for a catalog that breaks a rule. The hints are `read_only`, `destructive` and `idempotent`.
+
+</TabItem>
+<TabItem label="Go">
+
+```sh
+go get github.com/Hebilicious/acidcat/packages/catalog/go
+```
+
+The Go package is named `catalog`. Import it with `import "github.com/Hebilicious/acidcat/packages/catalog/go"`.
+
+```go title="garage.go (part)"
+c := catalog.New("Garage door", "")
+c.Target("phone", catalog.Target{Bindings: []string{"typescript"}})
+obstructed := c.Type("Obstructed", catalog.Schema{"type": "object"})
+c.Capability("garage.door.open", catalog.Capability{
+	Description: "Open the door.",
+	Audience:    []string{"phone"},
+	Input:       catalog.Schema{"type": "object", "properties": catalog.Schema{"light": catalog.Schema{"type": "boolean"}}},
+	Failures:    map[string]catalog.Schema{"Obstructed": obstructed},
+})
+c.Event("garage.door.moved", catalog.Event{
+	Description: "The door started or stopped. The occurrence gives the position of the door.",
+	Audience:    []string{"phone"},
+	Input:       catalog.Schema{"type": "object", "properties": catalog.Schema{}},
+	Payload:     catalog.Schema{"type": "object", "properties": catalog.Schema{"position": catalog.Schema{"type": "string"}}},
+})
+
+text, err := c.Render()
+```
+
+`Destructive` and `Idempotent` are `*bool`: write `new(true)` or `new(false)`, or leave them nil. The full example is [`examples/garage/garage.go`](https://github.com/Hebilicious/acidcat/blob/main/packages/catalog/go/examples/garage/garage.go).
+
+</TabItem>
+<TabItem label="Rust">
+
+```sh
+cargo add acid-cat-catalog
+```
+
+Write schemas with `serde_json::json!`. Use the library at build time, for example in `build.rs`.
+
+```rust title="player.rs (part)"
+use acid_cat_catalog::{Capability, Catalog, Event, Target};
+use serde_json::json;
+
+let mut catalog = Catalog::new(Some("Music player"), None);
+catalog.target("remote", Target { bindings: vec!["cli".into()], ..Target::default() });
+let unknown = catalog.r#type("UnknownTrack", json!({ "type": "object" }));
+catalog.capability("player.track.play", Capability {
+    description: "Play a track now.".into(),
+    audience: vec!["remote".into()],
+    input: Some(json!({ "type": "object", "required": ["id"], "properties": { "id": { "type": "string" } } })),
+    failures: vec![("UnknownTrack".into(), unknown)],
+    ..Capability::default()
+});
+catalog.event("player.track.started", Event {
+    description: "The speaker started to play a track. The occurrence gives the track.".into(),
+    audience: vec!["remote".into()],
+    input: Some(json!({ "type": "object", "properties": {} })),
+    payload: Some(json!({ "type": "object", "properties": { "id": { "type": "string" } } })),
+});
+
+std::fs::write("acidcat.catalog.json", catalog.render().expect("the catalog conforms"))?;
+```
+
+`destructive` and `idempotent` are `Option<bool>`. The full example is [`examples/player.rs`](https://github.com/Hebilicious/acidcat/blob/main/packages/catalog/rust/examples/player.rs).
+
+</TabItem>
+</Tabs>
+
+## One catalog, five languages
+
+The air conditioner writes one catalog in all five languages, and its test checks that each language gives the same bytes. Here is the capability `aircon.power.set` in each source. Each source first declares the shared type `Offline` and the list of targets `everywhere`.
+
+<Tabs syncKey="catalog-language">
+<TabItem label="Pkl">
+
+```pkl title="aircon.pkl (part)"
+local function setting(text: String, name: String, property: Dynamic) = new Capability {
+  description = text
+  audience = controls
+  input {
+    type = "object"
+    required { name }
+    properties { [name] = property }
+  }
+  failures { ["Offline"] = module.ref("Offline") }
+  destructive = true
+  idempotent = true
+}
+
+capabilities {
+  ["aircon.power.set"] = (setting("Turn the unit on or off.", "on", new Dynamic { type = "boolean" })) {
+    audience = everywhere
+  }
+}
+```
+
+[`aircon.pkl`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/catalog/aircon.pkl)
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```ts title="typescript.ts (part)"
+const setting = (name: string, property: Schema) => ({
+  input: { type: "object", required: [name], properties: { [name]: property } },
+  failures: { Offline: offline },
+  destructive: true,
+  idempotent: true,
+});
+
+catalog.capability("aircon.power.set", {
+  description: "Turn the unit on or off.",
+  audience: everywhere,
+  ...setting("on", { type: "boolean" }),
+});
+```
+
+[`typescript.ts`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/catalog/typescript.ts)
+
+</TabItem>
+<TabItem label="Python">
+
+```python title="python.py (part)"
+def setting(name: str, prop: Schema) -> Schema:
+    return {"type": "object", "required": [name], "properties": {name: prop}}
+
+catalog.capability(
+    "aircon.power.set",
+    description="Turn the unit on or off.",
+    audience=everywhere,
+    input=setting("on", {"type": "boolean"}),
+    failures={"Offline": offline},
+    destructive=True,
+    idempotent=True,
+)
+```
+
+[`python.py`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/catalog/python.py)
+
+</TabItem>
+<TabItem label="Go">
+
+```go title="main.go (part)"
+setting := func(name string, property schema) schema {
+	return schema{"type": "object", "required": []any{name}, "properties": schema{name: property}}
+}
+offlineOnly := map[string]schema{"Offline": offline}
+
+c.Capability("aircon.power.set", catalog.Capability{
+	Description: "Turn the unit on or off.",
+	Audience:    everywhere,
+	Input:       setting("on", schema{"type": "boolean"}),
+	Failures:    offlineOnly,
+	Destructive: new(true),
+	Idempotent:  new(true),
+})
+```
+
+[`go/main.go`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/catalog/go/main.go)
+
+</TabItem>
+<TabItem label="Rust">
+
+```rust title="main.rs (part)"
+let setting = |name: &str, property: Schema| json!({ "type": "object", "required": [name], "properties": { name: property } });
+let offline_only = || vec![("Offline".to_owned(), offline.clone())];
+
+catalog.capability("aircon.power.set", Capability {
+    description: "Turn the unit on or off.".into(),
+    audience: everywhere.clone(),
+    input: Some(setting("on", json!({ "type": "boolean" }))),
+    failures: offline_only(),
+    destructive: Some(true),
+    idempotent: Some(true),
+    ..Capability::default()
+});
+```
+
+[`rust/src/main.rs`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/catalog/rust/src/main.rs)
+
+</TabItem>
+</Tabs>
+
+## Check the result
+
+Run `acid-cat check` on the JSON after each change:
+
+```sh
+acid-cat check --strict aircon.acidcat.json
+```
+
+The catalog libraries check the rules that need no schema validator. `acid-cat check` does the full check, and `--strict` also fails on warnings, such as a file that is not in canonical form.
+
+<Aside type="tip">
+Commit the source and the JSON together. Never change the JSON of a catalog that has a source: change the source, and write the JSON again. Add a step to your build that writes the JSON again and fails when it differs.
+</Aside>
+
+## JSON by hand
+
+A JSON document is a catalog when it conforms, however it was written. If you write the JSON by hand, run `acid-cat check --strict` and `acid-cat format --write` after each change.
+
+## Read more
+
+- [Catalog](/docs/concepts/catalog/) and [Capabilities](/docs/concepts/capabilities/)
+- [Catalog](/spec/catalog/) in the specification
+- [Packages](/packages/), with the registry name of each catalog library

@@ -1,0 +1,181 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import { join } from "node:path";
+import { readPublishedPackages } from "../../lib/packages.ts";
+import type { PublishedPackage } from "../../lib/packages.ts";
+
+const packages = await readPublishedPackages(join(process.cwd(), ".."));
+const groups: { kind: PublishedPackage["kind"]; title: string; text: string }[] = [
+  { kind: "tool", title: "Tools", text: "Check, format and view catalogs, and test any implementation from outside." },
+  { kind: "catalog", title: "Catalog libraries", text: "Write a catalog in the language of your choice. Every library writes the same canonical JSON." },
+  { kind: "core", title: "Cores", text: "Run the capabilities and serve the bindings. Each core passes acid-cat conform." },
+  { kind: "library", title: "Libraries", text: "Shared pieces of the TypeScript reference implementation." },
+];
+const repository = "https://github.com/Hebilicious/acidcat";
+const headings = groups
+  .filter((group) => packages.some((entry) => entry.kind === group.kind))
+  .map((group) => ({ depth: 2, slug: `group-${group.kind}`, text: group.title }));
+---
+
+<StarlightPage headings={headings} frontmatter={{ title: "Packages", description: "Every package that AcidCat publishes, with its registry, its latest version and how to install it." }}>
+  <p class="packages-lede">
+    This list comes from the release configuration of the repository, so a new package appears here when it is released. The version on each card is the released version in the repository; the page also asks each registry for its latest version.
+  </p>
+
+  {groups.map((group) => {
+    const members = packages.filter((entry) => entry.kind === group.kind);
+    if (members.length === 0) return null;
+    return (
+      <section class="package-group" aria-labelledby={`group-${group.kind}`}>
+        <h2 id={`group-${group.kind}`}>{group.title}</h2>
+        <p>{group.text}</p>
+        <ul class="package-list">
+          {members.map((entry) => (
+            <li class="package-card" data-registry={entry.registry} data-latest={entry.latest} data-version={entry.version}>
+              <div class="package-head">
+                <span class="package-registry">{entry.registry}</span>
+                <span class="package-version" data-live-version>v{entry.version}</span>
+              </div>
+              <h3><a href={entry.url}>{entry.name}</a></h3>
+              <p class="package-description">{entry.description}</p>
+              <pre class="package-install"><code>{entry.install}</code></pre>
+              <p class="package-meta">
+                <a href={`${repository}/tree/main/${entry.directory}`}>Source</a>
+                <span data-live-status aria-live="polite"></span>
+              </p>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  })}
+</StarlightPage>
+
+<style>
+  .packages-lede {
+    max-width: 62ch;
+  }
+  .package-group {
+    margin-top: var(--spacing_fluid-space-xl);
+  }
+  .package-list {
+    list-style: none;
+    margin: var(--spacing_fluid-space-m) 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+    gap: var(--spacing_fluid-space-s);
+  }
+  .package-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing_fluid-space-2xs);
+    margin: 0;
+    padding: var(--spacing_fluid-space-s) var(--spacing_fluid-space-m);
+    border: 1px solid color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
+    border-radius: var(--radius-size-m);
+    background: linear-gradient(180deg, var(--palette-ink-800), var(--palette-ink-925));
+    min-width: 0;
+  }
+  .package-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--spacing_fluid-space-xs);
+    margin: 0;
+  }
+  .package-registry {
+    font-family: var(--font-family-label);
+    font-size: var(--typography_fluid-text-xs);
+    letter-spacing: var(--font-tracking-label);
+    text-transform: uppercase;
+    color: var(--palette-cyan-400);
+  }
+  .package-version {
+    font-family: var(--font-family-mono);
+    font-size: var(--typography_fluid-text-xs);
+    color: var(--palette-acid-400);
+  }
+  .package-card h3 {
+    margin: 0;
+    font-size: var(--typography_fluid-text-l);
+    overflow-wrap: anywhere;
+  }
+  .package-card h3 a {
+    color: var(--palette-cream-100);
+    text-decoration: none;
+  }
+  .package-card h3 a:hover {
+    color: var(--palette-acid-400);
+  }
+  .package-description {
+    margin: 0;
+    color: var(--palette-cream-400);
+    font-size: var(--typography_fluid-text-s);
+  }
+  .package-install {
+    margin: auto 0 0;
+    padding: var(--spacing_fluid-space-2xs) var(--spacing_fluid-space-xs);
+    overflow-x: auto;
+    border-left: 2px solid var(--palette-brass-600);
+    border-radius: 0;
+    background: var(--palette-ink-950);
+    font-size: var(--typography_fluid-text-xs);
+  }
+  .package-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--spacing_fluid-space-xs);
+    margin: 0;
+    font-size: var(--typography_fluid-text-xs);
+    color: var(--palette-cream-400);
+  }
+</style>
+
+<script>
+  const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+  const field = (value: unknown, ...path: string[]): unknown => path.reduce<unknown>((current, key) => (isRecord(current) ? current[key] : undefined), value);
+  const asText = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
+
+  const parts = (version: string) => version.split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
+  const newer = (a: string, b: string) => {
+    const left = parts(a);
+    const right = parts(b);
+    for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+      const difference = (left[index] ?? 0) - (right[index] ?? 0);
+      if (difference !== 0) return difference > 0;
+    }
+    return false;
+  };
+
+  const latestVersion = (registry: string, body: unknown): string | undefined => {
+    if (registry === "npm") return asText(field(body, "version"));
+    if (registry === "crates.io") return asText(field(body, "crate", "max_stable_version")) ?? asText(field(body, "crate", "newest_version"));
+    if (registry === "PyPI") return asText(field(body, "info", "version"));
+    if (registry === "Go") return asText(field(body, "Version"))?.replace(/^v/, "");
+    if (registry === "Pkl" && Array.isArray(body)) {
+      const versions = body.map((entry) => asText(field(entry, "ref"))?.split("@").pop()).filter((entry): entry is string => entry !== undefined);
+      return versions.reduce<string | undefined>((best, entry) => (best === undefined || newer(entry, best) ? entry : best), undefined);
+    }
+    return undefined;
+  };
+
+  for (const card of document.querySelectorAll<HTMLElement>(".package-card")) {
+    const url = card.dataset["latest"];
+    const registry = card.dataset["registry"] ?? "";
+    const version = card.dataset["version"] ?? "";
+    const label = card.querySelector<HTMLElement>("[data-live-version]");
+    const status = card.querySelector<HTMLElement>("[data-live-status]");
+    if (url === undefined || label === null || status === null) continue;
+    fetch(url, { headers: { Accept: "application/json" } })
+      .then(async (response) => (response.ok ? latestVersion(registry, await response.json()) : undefined))
+      .then((latest) => {
+        if (latest === undefined) return;
+        label.textContent = `v${latest}`;
+        status.textContent = newer(latest, version) ? `Newer on ${registry}` : `Live on ${registry}`;
+      })
+      .catch(() => {
+        status.textContent = "";
+      });
+  }
+</script>

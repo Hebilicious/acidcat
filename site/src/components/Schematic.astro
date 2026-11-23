@@ -209,6 +209,24 @@ const snippets = await catalogSnippets();
     color: var(--palette-brass-300);
   }
   .engine-stage { position: relative; }
+  .engine-stage[data-engine="pending"] {
+    aspect-ratio: 1200 / 624;
+    margin-top: var(--spacing_fluid-space-2xl);
+  }
+  .engine-stage[data-engine="pending"] > :global(*) {
+    visibility: hidden;
+  }
+  .engine-stage[data-engine="pending"]::before {
+    content: "";
+    position: absolute;
+    inset: 20% 30%;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, color-mix(in oklch, var(--palette-acid-400) 10%, transparent), transparent);
+    animation: engine-warm 2.4s ease-in-out infinite;
+  }
+  @keyframes engine-warm {
+    50% { opacity: 0.35; }
+  }
   .engine-plate { min-width: 0; }
   .catalog-code { height: 17rem; overflow: auto; scrollbar-color: var(--palette-brass-600) transparent; }
   .catalog-code :global(pre) {

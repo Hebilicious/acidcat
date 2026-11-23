@@ -517,12 +517,26 @@ h2 em {
   .footer-columns {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
-  .nav nav a:not(.nav-github, [href="/docs/"]) {
-    display: none;
+  .nav nav {
+    gap: var(--spacing_fluid-space-s);
+  }
+  .nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .nav-icon {
+    width: 1.35em;
+    height: 1.35em;
+    opacity: 0.9;
   }
   .button {
-    flex: 1;
+    flex: 1 1 100%;
     min-width: 0;
+    white-space: nowrap;
   }
 }
 

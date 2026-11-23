@@ -1,0 +1,65 @@
+---
+title: Introduction
+description: AcidCat lists the operations of an application once, in a catalog, and serves them through every surface.
+sidebar:
+  order: 0
+  label: Introduction
+---
+
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+AcidCat lists the operations of an application once, in a **catalog**. Each surface of the application comes from that catalog: a command line, an MCP server for AI agents, an HTTP API, tools in a web page, and typed code.
+
+The name stands for **A**pplication **C**apability **Id**entification **Cat**alog.
+
+<Aside type="caution" title="Experimental">
+The specification is a draft, and the packages are `0.x`. A minor release can break their APIs. Pin exact versions.
+</Aside>
+
+## The problem
+
+An application has many front doors: its user interface, a command line, an MCP server, an HTTP API. Usually each one implements the same operations again, with its own names, its own validation and its own errors. Over time, they drift apart.
+
+AcidCat removes the copies. You describe each operation one time. Every surface takes the same input, returns the same failures, and shows each client only the operations that it can use.
+
+## One capability, five surfaces
+
+An operation in the catalog is a **capability**. This table shows one capability, `aircon.power.set`, on each surface:
+
+| Surface | The capability `aircon.power.set` becomes |
+| --- | --- |
+| Command line | `home aircon power set --on` |
+| MCP server | The tool `aircon.power.set` |
+| WebMCP | A tool that a browser agent calls in your web page, as the signed-in user |
+| HTTP | `POST /capabilities/aircon.power.set` |
+| TypeScript | A typed function, for example `execute({ on: true })` |
+
+## How the parts fit
+
+```
+                 catalog (JSON)
+     what the application can do, and for whom
+                       │
+        ┌──────────────┼───────────────┐
+     provider       bindings         clients
+  runs the         rules for each   web, mobile, desktop,
+  operations       surface          CLI, MCP, API, …
+```
+
+- The **catalog** is the contract. It is a JSON document that you check at build time. A program does not read it at run time.
+- A **binding** is the set of rules for one kind of surface, for example MCP or a command line.
+- A **core** is a library that runs your capabilities and serves the bindings.
+- `acid-cat conform` tests a running program from the outside, through each binding.
+
+AcidCat is a specification first. The TypeScript and Rust packages are one implementation of it. A program in any language that follows the [specification](/spec/) and passes `acid-cat conform` is also an implementation.
+
+## Where to go next
+
+<CardGrid>
+  <LinkCard title="Quick start" description="Declare a capability, check the catalog, and serve it as a CLI, an MCP server and an HTTP API." href="/docs/quick-start/" />
+  <LinkCard title="Concepts" description="Catalogs, capabilities, targets, events, bindings, cores and conformance, one page each." href="/docs/concepts/catalog/" />
+  <LinkCard title="Guides" description="Write a catalog in your language, serve it with a core, and test an implementation." href="/docs/guides/write-a-catalog/" />
+  <LinkCard title="The acid-cat command" description="Every command and flag of the command-line tool." href="/docs/reference/cli/" />
+  <LinkCard title="Specification" description="The normative rules: catalog, invocation, events, bindings and conformance." href="/spec/" />
+  <LinkCard title="Packages" description="The published packages: the command line, the cores and the catalog libraries." href="/packages/" />
+</CardGrid>

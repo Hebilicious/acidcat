@@ -38,7 +38,21 @@ tasks:
     description: "Build the static site into dist/."
     command: "astro"
     args: ["build"]
-    inputs: ["src/**/*", "public/**/*", "astro.config.ts", "cssforge.config.ts", "package.json"]
+    inputs:
+      - "src/**/*"
+      - "public/**/*"
+      - "astro.config.ts"
+      - "cssforge.config.ts"
+      - "package.json"
+      - "/spec/**/*.md"
+      - "/release-please-config.json"
+      - "/.release-please-manifest.json"
+      - "/packages/README.md"
+      - "/packages/**/package.json"
+      - "/packages/**/Cargo.toml"
+      - "/packages/**/pyproject.toml"
+      - "/packages/core-*/README.md"
+      - "/examples/aircon/catalog/**/*"
     outputs: ["dist/**/*"]
 
   deploy:

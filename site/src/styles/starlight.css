@@ -1,22 +1,123 @@
 @import "./tokens.css";
 
-:root {
+:root,
+:root[data-theme="dark"],
+:root[data-theme="light"] {
+  color-scheme: dark;
   --sl-font: var(--font-family-sans);
   --sl-font-mono: var(--font-family-mono);
+  --sl-color-white: var(--palette-cream-100);
+  --sl-color-gray-1: var(--palette-cream-100);
+  --sl-color-gray-2: var(--palette-cream-400);
+  --sl-color-gray-3: color-mix(in srgb, var(--palette-cream-400) 75%, var(--palette-ink-600));
+  --sl-color-gray-4: var(--palette-ink-600);
+  --sl-color-gray-5: var(--palette-ink-700);
+  --sl-color-gray-6: var(--palette-ink-800);
+  --sl-color-black: var(--palette-ink-900);
   --sl-color-accent-low: var(--palette-brass-950);
   --sl-color-accent: var(--palette-brass-400);
   --sl-color-accent-high: var(--palette-brass-200);
-  --sl-color-black: var(--palette-ink-950);
-  --sl-color-gray-6: var(--palette-ink-800);
-  --sl-color-gray-5: var(--palette-ink-700);
+  --sl-color-text-accent: var(--palette-acid-400);
+  --sl-color-bg-nav: color-mix(in oklch, var(--palette-ink-950) 92%, transparent);
+  --sl-color-bg-sidebar: var(--palette-ink-950);
+  --sl-color-hairline: color-mix(in oklch, var(--palette-brass-400) 22%, transparent);
+  --sl-color-hairline-light: color-mix(in oklch, var(--palette-brass-400) 14%, transparent);
+  --sl-color-hairline-shade: var(--palette-ink-950);
+  --sl-color-orange: var(--palette-nixie-400);
+  --sl-color-orange-low: color-mix(in srgb, var(--palette-nixie-400) 14%, var(--palette-ink-900));
+  --sl-color-orange-high: var(--palette-nixie-200);
+  --sl-color-green: var(--palette-acid-400);
+  --sl-color-green-low: color-mix(in srgb, var(--palette-acid-400) 12%, var(--palette-ink-900));
+  --sl-color-green-high: var(--palette-acid-200);
+  --sl-color-blue: var(--palette-cyan-400);
+  --sl-color-blue-low: color-mix(in srgb, var(--palette-cyan-400) 12%, var(--palette-ink-900));
+  --sl-color-blue-high: var(--palette-cyan-400);
+  --sl-color-purple: var(--palette-brass-300);
+  --sl-color-purple-low: color-mix(in srgb, var(--palette-brass-400) 14%, var(--palette-ink-900));
+  --sl-color-purple-high: var(--palette-brass-200);
+  --sl-color-red: var(--palette-nixie-400);
+  --sl-color-red-low: color-mix(in srgb, var(--palette-nixie-400) 16%, var(--palette-ink-900));
+  --sl-color-red-high: var(--palette-nixie-200);
+  --sl-text-body: var(--typography_fluid-text-m);
+  --sl-line-height: 1.7;
+  --sl-content-width: 46rem;
 }
 
-:root[data-theme="light"] {
-  --sl-color-accent-low: var(--palette-brass-100);
-  --sl-color-accent: var(--palette-brass-650);
-  --sl-color-accent-high: var(--palette-brass-900);
+body {
+  background:
+    radial-gradient(ellipse 70% 40% at 80% 0%, color-mix(in oklch, var(--palette-acid-400) 4%, transparent), transparent 60%),
+    var(--palette-ink-900);
 }
 
-.sl-markdown-content :is(h1, h2, h3) {
+.site-title {
   font-family: var(--font-family-display);
+  color: var(--palette-cream-100);
+}
+
+.sl-markdown-content :is(h1, h2, h3, h4) {
+  font-family: var(--font-family-display);
+  color: var(--palette-cream-100);
+  letter-spacing: var(--font-tracking-tight);
+}
+
+.content-panel h1 {
+  font-family: var(--font-family-display);
+  color: var(--palette-cream-100);
+}
+
+.sl-markdown-content .sl-heading-wrapper.level-h2 {
+  padding-bottom: var(--spacing_fluid-space-2xs);
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+
+.sl-markdown-content a {
+  color: var(--palette-brass-300);
+  text-decoration-color: color-mix(in oklch, var(--palette-brass-300) 45%, transparent);
+  text-underline-offset: 0.2em;
+}
+
+.sl-markdown-content a:hover {
+  color: var(--palette-acid-400);
+}
+
+.sl-markdown-content :not(pre) > code {
+  padding: 0.1em 0.35em;
+  border: 1px solid color-mix(in oklch, var(--palette-brass-400) 25%, transparent);
+  border-radius: var(--radius-size-s);
+  background: var(--palette-ink-950);
+  color: var(--palette-acid-200);
+}
+
+.sl-markdown-content table {
+  display: block;
+  overflow-x: auto;
+  font-size: var(--typography_fluid-text-s);
+}
+
+.sl-markdown-content th {
+  font-family: var(--font-family-label);
+  color: var(--palette-brass-300);
+}
+
+.sl-markdown-content :is(th, td) {
+  border-color: var(--sl-color-hairline);
+}
+
+nav.sidebar .large {
+  font-family: var(--font-family-label);
+  letter-spacing: var(--font-tracking-label);
+  text-transform: uppercase;
+  font-size: var(--typography_fluid-text-xs);
+  color: var(--palette-brass-300);
+}
+
+nav.sidebar a[aria-current="page"] {
+  background: color-mix(in srgb, var(--palette-acid-400) 14%, var(--palette-ink-900));
+  color: var(--palette-acid-200);
+  box-shadow: inset 2px 0 var(--palette-acid-400);
+}
+
+.card {
+  border-color: color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
+  background: linear-gradient(180deg, var(--palette-ink-800), var(--palette-ink-925));
 }

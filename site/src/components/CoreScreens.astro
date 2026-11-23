@@ -189,20 +189,23 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
     .console {
       grid-template-columns: minmax(0, 1fr);
     }
-
+    .console-frame {
+      border-radius: var(--radius-size-l);
+    }
     .console-tabs {
-      flex-direction: row;
-      overflow-x: auto;
-      margin-top: 0;
-      padding-inline: var(--spacing_fluid-space-m);
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--spacing_fluid-space-3xs);
+      margin-bottom: var(--spacing_fluid-space-2xs);
+    }
+    .console-code {
+      font-size: var(--typography_fluid-text-s);
     }
     .console-tabs button {
       flex: none;
       margin-right: 0;
-      margin-bottom: -1px;
       border-right: 1px solid color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
-      border-bottom: 0;
-      border-radius: var(--radius-size-m) var(--radius-size-m) 0 0;
+      border-radius: var(--radius-size-m);
     }
     .console-tabs button[aria-selected="true"]::after {
       inset: auto 15% -1px;
@@ -221,7 +224,8 @@ const cores = [...(await coreSnippets()), yourLanguage].map((snippet) => ({
   const screen = document.querySelector<HTMLElement>("[data-console-screen]");
   const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-core-tab]"));
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const bluescreen = screen !== null && !reduced && supportsHtmlInCanvas() ? createBluescreen(screen, { intensity: 0.45, revealMs: 900, replayMs: 380 }) : undefined;
+  const wide = window.matchMedia("(min-width: 761px)").matches;
+  const bluescreen = screen !== null && !reduced && wide && supportsHtmlInCanvas() ? createBluescreen(screen, { intensity: 0.45, revealMs: 900, replayMs: 380 }) : undefined;
 
   const select = (tab: HTMLButtonElement) => {
     for (const other of tabs) {

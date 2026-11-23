@@ -1,8 +1,6 @@
 ---
 import { highlight } from "../lib/snippets.ts";
 
-const repository = "https://github.com/Hebilicious/acidcat/blob/main";
-
 const surfaces = [
   {
     id: "cli",
@@ -77,7 +75,7 @@ const surfaces = [
           </header>
           <p class="description">{surface.text}</p>
           <div class="sample" set:html={surface.html} />
-          <a href={`${repository}/${surface.spec}`}>Read the binding <span aria-hidden="true">↗</span></a>
+          <a href={`/${surface.spec.replace(/\.md$/, "")}/`}>Read the binding <span aria-hidden="true">→</span></a>
         </div>
       </article>
     ))}

@@ -1,0 +1,123 @@
+---
+title: Test an implementation with acid-cat conform
+description: Serve the conformance fixture with your core, then run acid-cat conform against each binding, from the shell or from your tests.
+sidebar:
+  order: 25
+  label: Test with acid-cat conform
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+`acid-cat conform` tests a running implementation from the outside, through each binding. It does not read your code. It works for any core in any language, and for a binding that you write yourself. Each core in the repository runs it in its tests.
+
+<Aside>
+`acid-cat conform` tests an implementation of the **conformance fixture**, not of your own catalog. Use it when you write a new core or a new binding. To test your application, test its capabilities through a session, and its surfaces through the bindings.
+</Aside>
+
+## Run the checks
+
+<Steps>
+
+1. **Install the command line.**
+
+   ```sh
+   pnpm add -D @acid-cat/cli
+   ```
+
+   It needs Node.js 24 or later. To test WebMCP, also install Playwright and Chromium:
+
+   ```sh
+   pnpm add -D playwright
+   pnpm exec playwright install chromium
+   ```
+
+2. **Serve the conformance fixture.**
+
+   The fixture is a catalog in which each capability and each event shows one behavior. Its source is [`packages/cli/conformance/fixture.pkl`](https://github.com/Hebilicious/acidcat/blob/main/packages/cli/conformance/fixture.pkl), and the package exports its JSON as `@acid-cat/cli/conformance/fixture.acidcat.json`.
+
+   Implement each capability and each event with your core, as [The conformance fixture](/spec/conformance/#the-conformance-fixture) tells. For example:
+
+   | Capability | Behavior |
+   | --- | --- |
+   | `fixture.echo` | Returns its input |
+   | `fixture.refuse` | Returns the failure `Refused` |
+   | `fixture.crash` | Fails with a defect |
+   | `fixture.hold` | Holds until `fixture.release` releases its `key` |
+   | `fixture.toggle` | Available only while the switch is on |
+
+   Then serve each binding that your core has. The fixture of each core in the repository is a working example, for example [`packages/core-ts/test/fixture.ts`](https://github.com/Hebilicious/acidcat/blob/main/packages/core-ts/test/fixture.ts) and [`packages/core-rust/examples/fixture.rs`](https://github.com/Hebilicious/acidcat/blob/main/packages/core-rust/examples/fixture.rs).
+
+3. **Run conform against each binding.**
+
+   Give one or more bindings:
+
+   ```sh
+   acid-cat conform --mcp http://127.0.0.1:3000/mcp --http http://127.0.0.1:3000/api \
+     --cli "node cli.ts" --mcp-stdio "node mcp.ts" \
+     --webmcp http://127.0.0.1:3000/page
+   ```
+
+   - `--mcp` and `--http` take the URL of a running server. For HTTP, give the base URL, before `/capabilities`.
+   - `--cli` and `--mcp-stdio` take a command. `conform` starts the program as a process.
+   - `--webmcp` takes a page that serves the `app` target. `conform` opens it in Chromium with a test host.
+
+4. **Read the result.**
+
+   The exit code is 1 if a check fails. A failed check of a SHOULD rule gives a warning, marked `!`, and passes. For a script or an agent, add `--output json`: the result is one JSON document on standard output, with the same exit code.
+
+</Steps>
+
+## What the checks test
+
+- **Outcomes.** Each outcome and each kind of call failure has the form of its binding.
+- **Views.** Each binding lists only the capabilities and events of its view, and an id outside the view fails as unknown.
+- **Validation.** An input that does not match its schema fails as `invalid-input`, and the operation does not start.
+- **Cancellation.** A cancelled call ends with the cancellation of its binding, and its work stops. Through the CLI, the process exits with the code 130.
+- **Events.** The list of events, the form and the order of occurrences, the cursor, each end of a subscription, and cancellation.
+- **Rejections.** Remote bindings reject the requests that the specification lists.
+- **Properties.** Through MCP and HTTP, concurrent calls each get their own outcome, and the cancellation of one call does not change other calls.
+
+The checks wait for states that they can observe, never for a fixed time. Each check has one deadline, 30 seconds by default (`--deadline`). A check that does not settle in time fails with "did not settle". The deadline never makes a check pass.
+
+## Poll and webhook delivery
+
+Through MCP, `conform` also tests poll delivery, and webhook delivery when you give the webhook options. Some rules depend on the settings of your deployment, so give those settings to `conform`:
+
+| Flag | Gives |
+| --- | --- |
+| `--poll-buffer <n>` | The size of the poll buffer, from 1 to 97 |
+| `--poll-lease-mcp <url>`, `--poll-lease-ms <ms>` | A second MCP server with a lease time shorter than the deadline, and that lease time |
+| `--webhook-principal <name>`, `--webhook-cert <file>`, `--webhook-key <file>` | Turn on the webhook checks. Give all three together |
+| `--webhook-min-ttl-ms <ms>`, `--webhook-max-ttl-ms <ms>` | The webhook lifetimes of the deployment |
+| `--webhook-max-subscriptions <n>` | The limit of webhook subscriptions for one principal |
+| `--webhook-other-principal <name>` | A second principal, for the limit check |
+
+Keep the lease time and the maximum webhook lifetime of the deployment longer than the deadline, because a check uses a lease or a subscription for its whole time. [The acid-cat command](/docs/reference/cli/#conform) lists every flag.
+
+## Run conform in your tests
+
+`conform()` from `@acid-cat/cli` runs the same checks in code. Each flag has an equivalent option. It returns the list of checks:
+
+```ts title="conform.test.ts"
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { conform } from "@acid-cat/cli";
+
+test("the fixture passes acid-cat conform through HTTP", async () => {
+  const checks = await conform({ http: "http://127.0.0.1:3000/api" });
+  const failed = checks.filter((check) => !check.passed);
+  assert.deepEqual(failed, [], failed.map((check) => `${check.binding}: ${check.name}: ${check.detail}`).join("\n"));
+});
+```
+
+In code, `cli` and `mcpStdio` take the command as an array, for example `[process.execPath, "cli.js"]`. `webmcp` can also be a function that installs the implementation on a host in the same process.
+
+<Aside type="caution">
+`serve()` from `@acid-cat/cli` is for tests only. It listens on `127.0.0.1`, on a free port, with plain HTTP. To serve an application, use the server of its core.
+</Aside>
+
+## Read more
+
+- [Conformance](/docs/concepts/conformance/)
+- [Conformance](/spec/conformance/) in the specification: the fixture, its aliases and every check.

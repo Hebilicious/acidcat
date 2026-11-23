@@ -1,0 +1,187 @@
+---
+title: Quick start
+description: Declare one capability with the TypeScript core and Zod, check its catalog, and serve it as a command line, an MCP server and an HTTP API.
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+This page builds a small air conditioner with one capability, `aircon.power.set`. You write it one time, in TypeScript. Then you serve it through three surfaces: a command line, an MCP server and an HTTP API.
+
+The page uses `@acid-cat/core-ts`, the core in plain TypeScript, with [Zod](https://zod.dev) for the schemas. It is one implementation among others. The [Effect core](/docs/guides/serve-with-core-effect/) and the [Rust core](/docs/guides/serve-with-core-rust/) do the same work in their own style.
+
+<Aside type="caution">
+AcidCat is experimental. The packages are `0.x`, and a minor release can break their APIs. Pin exact versions in `package.json`.
+</Aside>
+
+## Before you start
+
+- Node.js 24 or later. Node.js runs the `.ts` files directly.
+- pnpm.
+- A project with `"type": "module"` in its `package.json`.
+
+## Build it
+
+<Steps>
+
+1. **Install the packages.**
+
+   ```sh
+   pnpm add @acid-cat/core-ts zod
+   pnpm add -D @acid-cat/cli
+   ```
+
+   `@acid-cat/core-ts` runs the capabilities. `@acid-cat/cli` gives the `acid-cat` command, which you use at build time only.
+
+2. **Declare the capability.**
+
+   A capability has an id, a description, an audience, schemas and a `run` function. These declarations are the source of the catalog.
+
+   ```ts title="aircon.ts"
+   import { defineApp, defineCapability, fail, ok } from "@acid-cat/core-ts";
+   import type { ToJsonSchema } from "@acid-cat/core-ts";
+   import { z } from "zod";
+
+   const unit = { online: true, on: false };
+
+   const powerSet = defineCapability({
+     id: "aircon.power.set",
+     description: "Turn the unit on or off.",
+     audience: ["cli", "mcp", "api"],
+     destructive: true,
+     idempotent: true,
+     input: z.object({ on: z.boolean() }),
+     failures: { Offline: z.object({ _tag: z.literal("Offline") }) },
+     run: ({ on }) => {
+       if (!unit.online) return fail({ _tag: "Offline" });
+       unit.on = on;
+       return ok(null);
+     },
+   });
+
+   export const aircon = defineApp({
+     title: "Air conditioner",
+     targets: {
+       cli: { bindings: ["cli"] },
+       mcp: { bindings: ["mcp"] },
+       api: { bindings: ["http"] },
+     },
+     capabilities: [powerSet],
+   });
+
+   export const toJsonSchema: ToJsonSchema = (schema) => {
+     if (!(schema instanceof z.ZodType)) throw new Error("Only Zod schemas.");
+     return z.toJSONSchema(schema, { target: "draft-2020-12" });
+   };
+   ```
+
+   - `targets` names three groups of clients. Each target lists the bindings that serve it.
+   - `audience` gives the targets that can use the capability. A target that is not in the audience does not see the capability.
+   - `destructive` and `idempotent` are hints. MCP clients get them as `destructiveHint` and `idempotentHint`, so an agent knows to ask before it turns the unit off.
+   - `run` returns `ok(value)` or `fail(failure)`. A failure is data, with its tag in `_tag`.
+   - Standard Schema has no conversion to JSON Schema, so `toJsonSchema` gives the converter of Zod to the core.
+
+3. **Write the catalog and check it.**
+
+   At build time, write the catalog as JSON:
+
+   ```ts title="catalog.ts"
+   import { writeFile } from "node:fs/promises";
+   import { renderCatalog } from "@acid-cat/core-ts";
+   import { aircon, toJsonSchema } from "./aircon.ts";
+
+   await writeFile("aircon.acidcat.json", renderCatalog(aircon, { toJsonSchema }));
+   ```
+
+   Then run the program, and check its output:
+
+   ```sh
+   node catalog.ts
+   pnpm exec acid-cat check aircon.acidcat.json
+   ```
+
+   ```txt title="Output"
+   The catalog conforms.
+   ```
+
+   `renderCatalog` writes the catalog in [canonical form](/spec/catalog/#canonical-form). Commit `aircon.acidcat.json` with the source, and run `acid-cat check` in your build.
+
+4. **Serve it as a command line.**
+
+   ```ts title="cli.ts"
+   import { cliMain } from "@acid-cat/core-ts";
+   import { aircon, toJsonSchema } from "./aircon.ts";
+
+   cliMain(aircon, { name: "home", version: "0.1.0", context: {}, toJsonSchema });
+   ```
+
+   The command line has one command for each capability in the view of the `cli` target. The segments of the id give the path of the command:
+
+   ```sh
+   $ node cli.ts aircon power set --on
+   null
+   $ node cli.ts aircon power set --help
+   Usage: home aircon power set --on
+
+   Turn the unit on or off.
+   ```
+
+   The capability has no output schema, so its value is `null`. `node cli.ts list` lists every command.
+
+5. **Serve it as an MCP server through stdio.**
+
+   ```ts title="mcp.ts"
+   import { mcpStdioMain } from "@acid-cat/core-ts";
+   import { aircon, toJsonSchema } from "./aircon.ts";
+
+   mcpStdioMain(aircon, { name: "home", version: "0.1.0", context: {}, toJsonSchema });
+   ```
+
+   Give the command `node mcp.ts` to your MCP client. The client starts the server as a process. The server has one tool, `aircon.power.set`, with the annotations `destructiveHint: true` and `idempotentHint: true`.
+
+   <Aside type="caution">
+   Standard output carries only MCP messages. Never write to standard output from a capability that this server serves.
+   </Aside>
+
+6. **Serve it through HTTP.**
+
+   `httpHandler` and `mcpHandler` give web handlers: functions from a `Request` to a `Response`. `serve` from `@acid-cat/core-ts/node` serves them on Node.js.
+
+   ```ts title="serve.ts"
+   import { httpHandler, mcpHandler } from "@acid-cat/core-ts";
+   import { serve } from "@acid-cat/core-ts/node";
+   import { aircon, toJsonSchema } from "./aircon.ts";
+
+   const mcp = mcpHandler(aircon, { name: "home", version: "0.1.0", allowedOrigins: [], toJsonSchema, context: {} });
+   const http = httpHandler(aircon, { allowedOrigins: [], toJsonSchema, context: {} });
+
+   const server = await serve({ "/mcp": mcp, "/": http }, { port: 3000 });
+   console.log(server.url);
+   ```
+
+   The HTTP handler serves the `api` target, and the MCP handler serves the `mcp` target. Start the server, then call the capability from another terminal:
+
+   ```sh
+   $ curl -X POST http://127.0.0.1:3000/capabilities/aircon.power.set \
+       -H 'Content-Type: application/json' -d '{"on":true}'
+   {"ok":true,"value":null}
+   ```
+
+   An input that does not match the schema gets the status 422 and the call failure `invalid-input`. The capability does not run.
+
+</Steps>
+
+## What you have
+
+- One declaration of `aircon.power.set`.
+- A catalog, `aircon.acidcat.json`, that `acid-cat check` accepts.
+- Three surfaces that take the same input and return the same failure, `Offline`.
+
+`serve` listens on `127.0.0.1` with plain HTTP. For clients on the network, end TLS on the platform in front of it, and set `hostname` to `0.0.0.0`.
+
+## Next steps
+
+- Learn the parts: [Catalog](/docs/concepts/catalog/), [Capabilities](/docs/concepts/capabilities/) and [Targets and views](/docs/concepts/targets-and-views/).
+- Add events, aliases, state and per-request context: [Serve with the TypeScript core](/docs/guides/serve-with-core-ts/).
+- See the complete air conditioner, with every surface, on all three cores: [`examples/aircon`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/README.md).

@@ -1,6 +1,6 @@
 # AcidCat site
 
-The homepage and the documentation of AcidCat. The site uses [Astro](https://astro.build) and [Starlight](https://starlight.astro.build). It is a Moon project, and it is not published to a registry.
+The homepage, the documentation, the specification and the list of packages of AcidCat. The site uses [Astro](https://astro.build) and [Starlight](https://starlight.astro.build). It is a Moon project, and it is not published to a registry.
 
 ## Commands
 
@@ -30,7 +30,10 @@ The homepage and the documentation of AcidCat. The site uses [Astro](https://ast
 | `src/styles/code.css` | Maps the colors of the code to the palette |
 | `src/components/Mark.astro`, `src/assets/mark.svg`, `public/favicon.svg`, `art/logo/` | The logo (a brass cat in profile), the favicon, and the explorations behind them |
 | `src/lib/geometry.ts` | Pure functions that compute gears |
-| `src/content/docs/docs/` | The Starlight documentation, served under `/docs/` |
+| `src/content/docs/docs/` | The documentation, served under `/docs/` |
+| `src/lib/spec-pages.ts`, `src/content.config.ts` | Load each file of `spec/` into the docs collection at build time, served under `/spec/` |
+| `src/pages/packages/index.astro`, `src/lib/packages.ts` | The list of published packages, served under `/packages/` |
+| `src/lib/code-theme.ts`, `src/styles/starlight.css`, `src/components/starlight/` | The palette of the site in the docs: colors, fonts, code blocks, and the dark theme only |
 | `cloudflare.config.ts` | The Worker that serves the site: its name, and the 404 page for unknown paths |
 | `cssforge.config.ts` | The design tokens: colors, fluid type and spacing scales, font families, tracking, radii and layout widths. [cssforge](https://github.com/Hebilicious/cssforge) writes them as CSS variables into `.cssforge/output.css`, which is committed |
 | `src/styles/tokens.css` | Imports the design tokens and the fonts that the homepage and the documentation share |
@@ -75,12 +78,20 @@ The shader shifts the cat against the background with the depth map, as the poin
 
 The renderer lowers its resolution when frames are slow, and shows a still frame when the device cannot keep up or renders WebGL in software. The still image shows when WebGL 2 is not available, and when the reader asks for reduced motion.
 
+## The specification
+
+The site does not copy the specification. At build time, `spec-pages.ts` reads each Markdown file of `spec/`, takes the first heading as the title, and rewrites the links: a link to another file of `spec/` goes to its page under `/spec/`, and a link to any other file of the repository goes to GitHub. `content.config.ts` adds these pages to the Starlight docs collection, so they have the sidebar, the search and the table of contents. In `site:dev`, a change to `spec/` loads the pages again.
+
+## The packages
+
+`/packages/` lists every package of `release-please-config.json`, so a package appears when its release is set up. The version on each card is the version in `.release-please-manifest.json`, and the description comes from the manifest of the package (`package.json`, `Cargo.toml`, `pyproject.toml`) or from `packages/README.md`. In the browser, the page asks each registry (npm, crates.io, PyPI, the Go module proxy, and the tags of the Pkl package on GitHub) for its latest version, and shows it.
+
 ## The sections
 
-- **Fig. 1.** In browsers that support [HTML-in-Canvas](https://github.com/WICG/html-in-canvas), `holo.ts` loads three.js and builds a machine of worn brass: the catalog screen, five surface screens, glass pipes with flowing acid, and a rail of five Nixie bulbs above the catalog screen. The text of each screen is live HTML in a `<canvas content="drawable">`. On each `paint` event, `texElementSubImage2D` copies the HTML of each screen into its texture, and a CRT shader draws it with its syntax colors. A click on a bulb shows the definition of `aircon.power.set` in that language (TypeScript, Python, Go, Rust or Pkl), with the helper that it uses, so that each language visibly sets the same input, failures and hints, highlighted by Shiki. The bulbs are buttons in a tab list, so the keyboard and the plain HTML fallback can change the language too. `updateElementGeometry` keeps hit testing on the HTML, so the reader can hover a surface screen to light its pipe. Other browsers, software renderers, narrow screens and reduced motion show the plain HTML.
+- **Fig. 1.** In browsers that support [HTML-in-Canvas](https://github.com/WICG/html-in-canvas), `holo.ts` loads three.js and builds a machine of worn brass: the catalog screen, five surface screens, glass pipes with flowing acid, and a rail of five Nixie bulbs above the catalog screen. The text of each screen is live HTML in a `<canvas content="drawable">`. On each `paint` event, `texElementSubImage2D` copies the HTML of each screen into its texture, and a CRT shader draws it with its syntax colors. A click on a bulb shows the definition of `aircon.power.set` in that language (TypeScript, Python, Go, Rust or Pkl), with the helper that it uses, so that each language visibly sets the same input, failures and hints, highlighted by Shiki. The bulbs are buttons in a tab list, so the keyboard and the plain HTML fallback can change the language too. `updateElementGeometry` keeps hit testing on the HTML, so the reader can hover a surface screen to light its pipe. While three.js loads, the stage keeps its size and shows a soft glow, so the plain HTML does not flash before the machine appears. Other browsers, software renderers, narrow screens and reduced motion show the plain HTML.
 - **Fig. 2.** An SVG blueprint of the flow: Spec, Catalog, Runtime and Verify. It draws itself, and the parts move apart along their axis when it comes into view. Beside it, `bluescreen.ts` draws the key specifications as a blue screen.
 - **Fig. 3.** A tab for each surface: the command line, the MCP server, WebMCP, the HTTP API and programmatic access. The selected tab shows a render of the surface, who uses it, what it does, an example from its binding and a link to the binding. Glass gauges fill and bubble when a tab is selected or under the pointer. Without JavaScript, all five panels show.
-- **Fig. 4.** A console with a vertical tab for each core: TypeScript, Effect, Rust, and "Your language", which shows how `acid-cat conform` tests a core in any other language. The code comes from the README of each core. With HTML-in-Canvas, `bluescreen.ts` draws the console as a calm blue screen that builds up from noise, and builds up again quickly when the reader changes the tab. Other browsers show the plain console.
+- **Fig. 4.** A console with a vertical tab for each core: TypeScript, Effect, Rust, and "Your language", which shows how `acid-cat conform` tests a core in any other language. The code comes from the README of each core. On wide screens with HTML-in-Canvas, `bluescreen.ts` draws the console as a calm blue screen that builds up from noise, and builds up again quickly when the reader changes the tab. Other browsers show the plain console.
 
 ## Roadmap
 
