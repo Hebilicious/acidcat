@@ -13,9 +13,14 @@ const CARD_URL = "https://fixture.example/mcp/server-card";
 const cardHandler = (settings: Partial<McpSettings> = {}) =>
   mcpHandler(fixture, { name: "fixture", version: "1.2.3", allowedOrigins: [], ...options(), serverCard: { name: "dev.acid-cat/fixture" }, ...settings });
 
-test("the Server Card gives the configured name, the version, the description of the catalog and the URL of the server, and other methods than GET and OPTIONS get 405", async () => {
+test("the Server Card gives the configured name, the version, the description of the catalog and the URL of the server, with CORS and cache headers, and other methods than GET and OPTIONS get 405", async () => {
   const handler = cardHandler();
   const response = await handler(new Request(CARD_URL));
+  assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*");
+  assert.equal(response.headers.get("Cache-Control"), "public, max-age=3600");
+  const etag = response.headers.get("ETag") ?? "";
+  const unchanged = await handler(new Request(CARD_URL, { headers: { "If-None-Match": etag } }));
+  assert.deepEqual([unchanged.status, unchanged.headers.get("ETag")], [304, etag]);
   assert.deepEqual(await response.json(), {
     $schema: "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
     name: "dev.acid-cat/fixture",

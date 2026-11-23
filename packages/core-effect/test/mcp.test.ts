@@ -119,10 +119,15 @@ for (const services of ["shared", "per-request"] as const) {
 
 const CARD_URL = `${ORIGIN}/mcp/server-card`;
 
-test("the Server Card gives the configured name, the version, the description of the catalog, the URL of the server or the configured URL, and the revisions of the handshake behind withHandshake", async () => {
+test("the Server Card gives the configured name, the version, the description of the catalog, the URL of the server or the configured URL, with CORS and cache headers, and the revisions of the handshake behind withHandshake", async () => {
   const handler = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "1.2.3", allowedOrigins: [], serverCard: { name: "dev.acid-cat/fixture" } });
   try {
     const response = await handler(new Request(CARD_URL));
+    assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*");
+    assert.equal(response.headers.get("Cache-Control"), "public, max-age=3600");
+    const etag = response.headers.get("ETag") ?? "";
+    const unchanged = await handler(new Request(CARD_URL, { headers: { "If-None-Match": etag } }));
+    assert.deepEqual([unchanged.status, unchanged.headers.get("ETag")], [304, etag]);
     assert.deepEqual(await response.json(), {
       $schema: "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
       name: "dev.acid-cat/fixture",
