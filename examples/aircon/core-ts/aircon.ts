@@ -130,7 +130,7 @@ export const powerSet = capability({
   audience: everywhere,
   destructive: true,
   idempotent: true,
-  input: z.object({ on: z.boolean() }),
+  input: z.object({ on: z.boolean().meta({ "x-mcp-header": "On" }) }),
   failures: { Offline },
   run: ({ on }, { context }) => change(context.unit, { power: on }),
 });

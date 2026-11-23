@@ -86,7 +86,7 @@ export const powerSet = Capability.make({
   audience: everywhere,
   destructive: true,
   idempotent: true,
-  input: Schema.Struct({ on: Schema.Boolean }),
+  input: Schema.Struct({ on: Schema.Boolean.annotate({ "x-mcp-header": "On" }) }),
   failures: [Offline],
   run: ({ on }) => change((state) => ({ ...state, power: on })),
 });

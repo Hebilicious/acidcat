@@ -138,7 +138,7 @@ function write(app: App<unknown>): CatalogDocument {
   const types: Record<string, JsonObject> = {};
 
   const toJson = (schema: Schema.Top, where: string): JsonObject => {
-    const { schema: json, definitions } = Schema.toJsonSchemaDocument(schema);
+    const { schema: json, definitions } = Schema.toJsonSchemaDocument(schema, { includeAnnotationKey: isExtensionMember });
     for (const [name, definition] of Object.entries(definitions)) {
       const existing = types[name];
       if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(definition)) {
@@ -228,6 +228,8 @@ function isObjectSchema(schema: JsonObject, types: { readonly [name: string]: Js
   const resolved = name === undefined ? schema : types[name];
   return resolved?.type === "object";
 }
+
+const isExtensionMember = (key: string): boolean => key.startsWith("x-");
 
 /** The catalog of an application, as text in canonical form. */
 export const render = (app: App<unknown>): string => canonicalText(document(app));

@@ -96,7 +96,7 @@ def aircon_catalog() -> Catalog:
         "aircon.power.set",
         description="Turn the unit on or off.",
         audience=everywhere,
-        input=setting("on", {"type": "boolean"}),
+        input=setting("on", {"type": "boolean", "x-mcp-header": "On"}),
         failures={"Offline": offline},
         destructive=True,
         idempotent=True,

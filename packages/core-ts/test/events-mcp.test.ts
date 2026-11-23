@@ -6,6 +6,7 @@ import type { JsonObject } from "@acid-cat/spec-ts";
 
 import { defineApp, mcpHandler, mcpHandshake, ok, defineCapability, runMcpStdio } from "../src/index.ts";
 import { sensorOptions, Sensors, sensorsApp, toJsonSchema } from "./sensors.ts";
+import { mcpHeaders } from "./mcp-headers.ts";
 import { sseReader } from "./sse.ts";
 import { until } from "./until.ts";
 
@@ -31,7 +32,7 @@ function httpServer(sensors = new Sensors(), heartbeatMs?: number) {
   const request = (method: string, params: object = {}, signal?: AbortSignal, id: number | string = 1) =>
     new Request("https://sensors.example/mcp", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Mcp-Method": method, "MCP-Protocol-Version": VERSION },
+      headers: { "Content-Type": "application/json", ...mcpHeaders(method, params), "MCP-Protocol-Version": VERSION },
       body: JSON.stringify({ jsonrpc: "2.0", id, method, params: { ...params, _meta: META } }),
       ...(signal === undefined ? {} : { signal }),
     });
@@ -66,7 +67,7 @@ test("MCP through HTTP: a server whose view has no events serves no events metho
         await handler(
           new Request("https://probe.example/mcp", {
             method: "POST",
-            headers: { "Content-Type": "application/json", "MCP-Protocol-Version": VERSION },
+            headers: { "Content-Type": "application/json", ...mcpHeaders(method, { name: "probe.x" }), "MCP-Protocol-Version": VERSION },
             body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { name: "probe.x", _meta: META } }),
           }),
         )

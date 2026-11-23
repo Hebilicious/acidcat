@@ -155,6 +155,10 @@ Options that tune event delivery:
 | `heartbeatMs` | `mcpHandler`, `runMcpStdio` | 15 seconds | Heartbeat interval of `events/stream` when the request suggests none. A suggestion in `params.heartbeatMs` gets a grant from 1 to 60 seconds ([Push](../../spec/bindings/mcp.md#push)) |
 | `clock` | `mcpHandler`, `runMcpStdio`, `webhookDelivery` | System clock | Time and timers for leases, lifetimes and retries. Tests pass their own |
 
+### MCP headers
+
+`mcpHandler` checks the [headers](../../spec/bindings/mcp.md#headers) of each request of revision `2026-07-28` against its body: `Mcp-Method`, `Mcp-Name`, and an `Mcp-Param-*` header for each property of the input schema of the tool or the event that has `x-mcp-header`. A mismatch gets 400 and `-32020`. To annotate a property with Zod, use `.meta({ "x-mcp-header": "Region" })`.
+
 ### MCP poll and webhook delivery
 
 `mcpHandler` and `runMcpStdio` serve [poll](../../spec/bindings/mcp.md#poll) delivery. Over HTTP, a lease's session gets the context of the request that started it; over stdio, the process's context. Leases live in memory. `handler.close()` (or `await using`) ends every lease and webhook subscription; over stdio, the end of standard input does.

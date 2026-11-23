@@ -131,10 +131,11 @@ test("withEvents answers the requests of the events extension beside an MCP serv
   }
 });
 
-test("through HTTP, events/stream with no name is -32602, and the Mcp-Name header must agree with the body", async () => {
+test("through HTTP, the Mcp-Name header of events/stream must agree with the body, which must have a name", async () => {
   const handler = Mcp.toWebHandler(events, feedLayer, { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN] });
-  const noName = await json(await handler(mcpRequest("events/stream", {})));
-  assert.equal(noName.error?.code, -32602);
+  const noName = await handler(mcpRequest("events/stream", {}));
+  assert.equal(noName.status, 400);
+  assert.equal((await json(noName)).error?.code, -32020);
   const mismatch = await handler(mcpRequest("events/stream", { name: "feed.ticked" }, { name: "feed.other" }));
   assert.equal(mismatch.status, 400);
   assert.equal((await json(mismatch)).error?.code, -32020);

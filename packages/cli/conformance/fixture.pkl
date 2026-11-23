@@ -153,7 +153,7 @@ capabilities {
     input {
       type = "object"
       required { "on" }
-      properties { on { type = "boolean" } }
+      properties { on { type = "boolean"; `x-mcp-header` = "On" } }
     }
   }
   ["fixture.flags"] {
@@ -211,7 +211,7 @@ events {
       properties {
         count { type = "integer"; minimum = 0; maximum = 100 }
         gap { type = "integer"; minimum = 1; maximum = 100 }
-        key { type = "string" }
+        key { type = "string"; `x-mcp-header` = "Key" }
       }
     }
     payload = tick

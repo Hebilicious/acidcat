@@ -10,11 +10,13 @@ use http::{HeaderMap, HeaderValue, Method, Request, Response, header};
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
+use super::headers::header_mismatch;
 use super::poll::{PollLeases, PollOptions};
 use super::webhook::{WebhookOptions, Webhooks};
 use super::{
     EventStream, HANDSHAKE_VERSIONS, OpenSession, PROTOCOL_VERSION, PROTOCOL_VERSION_KEY, RpcError,
-    call_tool, capabilities, codes, list_events, list_tools, response, server_info, serves_events,
+    call_tool, capabilities, codes, input_schema, list_events, list_tools, response, server_info,
+    serves_events,
 };
 use crate::app::Application;
 use crate::http::async_stream;
@@ -233,7 +235,7 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
                 400,
                 &id,
                 Err(RpcError::new(
-                    -32020,
+                    codes::HEADER_MISMATCH,
                     "MCP-Protocol-Version header is required",
                 )),
             );
@@ -271,7 +273,7 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
                     400,
                     &id,
                     Err(RpcError::new(
-                        -32020,
+                        codes::HEADER_MISMATCH,
                         "MCP-Protocol-Version header does not match request metadata",
                     )),
                 );
@@ -283,6 +285,12 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
         let close = session.clone();
         let guard = OnDrop(move || close.close());
         let method = message.method.as_deref().unwrap_or_default();
+        let schema = input_schema(&session, method, &message.params);
+        if let Some(reason) =
+            header_mismatch(&parts.headers, method, &message.params, schema.as_ref())
+        {
+            return rpc(400, &id, Err(RpcError::new(codes::HEADER_MISMATCH, reason)));
+        }
         let complete = |result: Map<String, Value>, list: bool| {
             let mut answer = json!({ "_meta": self.meta(), "resultType": "complete" });
             if list {

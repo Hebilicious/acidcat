@@ -1,8 +1,8 @@
-import { bundle, isJsonObject, KEEPALIVE_MS, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, mcpToolAnnotations, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage, viewOf } from "@acid-cat/spec-ts";
+import { bundle, isJsonObject, KEEPALIVE_MS, MCP_EVENTS_EXTENSION, MCP_HEADER_MISMATCH, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, mcpHeaderMismatch, mcpToolAnnotations, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage, viewOf } from "@acid-cat/spec-ts";
 import type { JsonObject, Outcome, Rejection } from "@acid-cat/spec-ts";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberMap, Layer, Logger, Option, Queue, Schema, Scope, Semaphore, Sink, Stdio, Stream, SubscriptionRef } from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
 import * as App from "./App.ts";
 import { cancelOnAbort } from "./internal/cancel.ts";
@@ -204,8 +204,13 @@ const respond = <R>(app: App.App<R>, admitted: Admitted, options: Options, scope
     });
     const routes = Layer.effectDiscard(registerTools(session, request.signal)).pipe(Layer.provideMerge(server));
     const answer = yield* HttpRouter.toHttpEffect(routes).pipe(Scope.provide(scope));
-    const response = yield* answer.pipe(Effect.provideService(HttpServerRequest.HttpServerRequest, HttpServerRequest.fromWeb(request)), Scope.provide(scope));
-    return HttpServerResponse.toWeb(response);
+    // `toHandled` applies the pre-response handlers of `effect/ai`, which set the status 400 of a HeaderMismatch.
+    let sent: HttpServerResponse.HttpServerResponse | undefined;
+    yield* HttpEffect.toHandled(answer, (_, response) => Effect.sync(() => void (sent = response))).pipe(
+      Effect.provideService(HttpServerRequest.HttpServerRequest, HttpServerRequest.fromWeb(request)),
+      Scope.provide(scope),
+    );
+    return sent === undefined ? new Response(null, { status: 500 }) : HttpServerResponse.toWeb(sent);
   }).pipe(closeUnlessStreaming(scope));
 
 const eventsRequestOf = (admitted: Admitted): McpEvents.EventsRequest | undefined =>
@@ -306,15 +311,8 @@ const respondToEvents = <R>(
   Effect.gen(function* () {
     const accepted = (http.headers.get("Accept") ?? "").split(",").map((each) => each.split(";")[0]?.trim().toLowerCase());
     if (!accepted.includes("application/json") || !accepted.includes(SSE_MEDIA_TYPE)) return new Response(null, { status: 406 });
-    const name = request.params.name;
-    const nameHeader = http.headers.get("Mcp-Name");
-    const mismatch =
-      http.headers.get("Mcp-Method") !== request.method ||
-      (McpEvents.NAMED_METHODS.has(request.method) && typeof name === "string" && (nameHeader === null || McpServer.decodeNameHeader(nameHeader) !== name));
-    if (mismatch) {
-      const body = McpEvents.errorMessage(request.id, { code: McpSchema.HEADER_MISMATCH_ERROR_CODE, message: "The Mcp-Method or Mcp-Name header does not agree with the body." });
-      return jsonResponse(400, body);
-    }
+    const mismatch = mcpHeaderMismatch((name) => http.headers.get(name), request.method, request.params, McpEvents.inputSchemaOf(session.view, request.params.name));
+    if (mismatch !== undefined) return jsonResponse(400, McpEvents.errorMessage(request.id, { code: MCP_HEADER_MISMATCH, message: mismatch }));
     const answer = yield* McpEvents.answer(session, request, options).pipe(Scope.provide(scope));
     if (answer._tag === "Message") return jsonResponse(200, answer.message);
     const body = answer.messages.pipe(

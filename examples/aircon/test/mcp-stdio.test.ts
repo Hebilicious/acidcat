@@ -27,6 +27,7 @@ for (const core of ["core-ts", "core-effect", "core-rust"] as const) {
       assert.deepEqual(tools.map((tool) => tool.name).sort(), ["aircon.fan.set", "aircon.mode.set", "aircon.power.set", "aircon.schedule.set", "aircon.status.get", "aircon.temperature.set"]);
       const powerSet = tools.find((tool) => tool.name === "aircon.power.set");
       assert.equal(powerSet?.annotations?.destructiveHint, true);
+      assert.deepEqual(powerSet?.inputSchema.properties?.["on"], { type: "boolean", "x-mcp-header": "On" });
       assert.equal(powerSet?.annotations?.idempotentHint, true);
       const poweredOff = await client.callTool({ name: "aircon.mode.set", arguments: { mode: "heat" } });
       assert.equal(poweredOff.isError, true);

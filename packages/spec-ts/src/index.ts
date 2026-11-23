@@ -25,6 +25,7 @@ export {
   KEEPALIVE_MS,
   MCP_EVENT_ERRORS,
   MCP_EVENTS_EXTENSION,
+  MCP_HEADER_MISMATCH,
   MCP_HEARTBEAT_MAX_MS,
   MCP_HEARTBEAT_MIN_MS,
   MCP_PROTOCOL_VERSION,
@@ -543,6 +544,105 @@ export const isMcpHeartbeatSuggestion = (value: unknown): value is number | null
 export function mcpHeartbeatGrant(suggestion: number | null | undefined, deploymentMs: number): number {
   if (suggestion === null || suggestion === undefined) return deploymentMs;
   return Math.min(MCP_HEARTBEAT_MAX_MS, Math.max(MCP_HEARTBEAT_MIN_MS, suggestion));
+}
+
+/** The requests whose `Mcp-Name` header carries `params.name` (spec/bindings/mcp.md#http). */
+export const MCP_NAMED_METHODS: ReadonlySet<string> = new Set(["tools/call", "events/stream", "events/poll", "events/subscribe", "events/unsubscribe"]);
+
+const BASE64_PREFIX = "=?base64?";
+const BASE64_SUFFIX = "?=";
+
+const isSentinel = (value: string): boolean => value.length >= BASE64_PREFIX.length + BASE64_SUFFIX.length && value.startsWith(BASE64_PREFIX) && value.endsWith(BASE64_SUFFIX);
+
+/** The value of an `Mcp-Name` or `Mcp-Param-{Name}` header for a text: the text, or the base64 sentinel form when the text is not a safe header value. */
+export function encodeMcpHeaderValue(text: string): string {
+  const safe = /^(?:[\x21-\x7e](?:[\t\x20-\x7e]*[\x21-\x7e])?)?$/.test(text) && !isSentinel(text);
+  if (safe) return text;
+  let binary = "";
+  for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
+  return `${BASE64_PREFIX}${btoa(binary)}${BASE64_SUFFIX}`;
+}
+
+export function decodeMcpHeaderValue(value: string): string | undefined {
+  if (!isSentinel(value)) return /^[\t\x20-\x7e]*$/.test(value) ? value : undefined;
+  const encoded = value.slice(BASE64_PREFIX.length, -BASE64_SUFFIX.length);
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 !== 0) return undefined;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0)));
+  } catch {
+    return undefined;
+  }
+}
+
+/** A property of an input schema with an `x-mcp-header` annotation: the name after `Mcp-Param-`, and the path of the property in the arguments. */
+export interface McpHeaderProperty {
+  readonly header: string;
+  readonly path: readonly string[];
+}
+
+/** The properties with an `x-mcp-header` annotation that a chain of `properties` keys reaches from the root of a bundled input schema. */
+export function mcpHeaderProperties(inputSchema: unknown): readonly McpHeaderProperty[] {
+  const found: McpHeaderProperty[] = [];
+  const visit = (schema: unknown, path: readonly string[]) => {
+    const properties = isJsonObject(schema) ? schema["properties"] : undefined;
+    if (!isJsonObject(properties)) return;
+    for (const [name, property] of Object.entries(properties)) {
+      const header = isJsonObject(property) ? property["x-mcp-header"] : undefined;
+      if (typeof header === "string") found.push({ header, path: [...path, name] });
+      visit(property, [...path, name]);
+    }
+  };
+  visit(inputSchema, []);
+  return found;
+}
+
+function argumentAt(args: unknown, path: readonly string[]): unknown {
+  let value = args;
+  for (const key of path) value = isJsonObject(value) && Object.hasOwn(value, key) ? value[key] : undefined;
+  return value;
+}
+
+function headerTextOf(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (typeof value === "boolean") return String(value);
+  if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
+  return undefined;
+}
+
+/** The `Mcp-Param-{Name}` headers that a client sends through HTTP for the arguments of a request, encoded. */
+export function mcpParamHeaders(inputSchema: unknown, args: unknown): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const { header, path } of mcpHeaderProperties(inputSchema)) {
+    const text = headerTextOf(argumentAt(args, path));
+    if (text !== undefined) headers[`Mcp-Param-${header}`] = encodeMcpHeaderValue(text);
+  }
+  return headers;
+}
+
+function paramAgrees(header: string | null, value: unknown): boolean {
+  if (value === undefined || value === null) return header === null;
+  const decoded = header === null ? undefined : decodeMcpHeaderValue(header);
+  if (decoded === undefined) return false;
+  if (typeof value === "number") return Number.isSafeInteger(value) && decoded.trim() !== "" && Number(decoded) === value;
+  return headerTextOf(value) === decoded;
+}
+
+/**
+ * Why the headers of a request of revision 2026-07-28 through HTTP do not agree with its body, or `undefined` when they
+ * agree (spec/bindings/mcp.md#http). `inputSchema` is the bundled input schema of the tool or the event that the
+ * request names, or `undefined` when the server does not know it. The server answers a mismatch with the status 400 and
+ * `MCP_HEADER_MISMATCH`.
+ */
+export function mcpHeaderMismatch(header: (name: string) => string | null, method: string, params: JsonObject, inputSchema: unknown): string | undefined {
+  if (header("Mcp-Method") !== method) return "The Mcp-Method header does not agree with the method of the request.";
+  if (MCP_NAMED_METHODS.has(method)) {
+    const name = header("Mcp-Name");
+    if (typeof params["name"] !== "string" || name === null || decodeMcpHeaderValue(name) !== params["name"]) return "The Mcp-Name header does not agree with params.name.";
+  }
+  for (const { header: name, path } of mcpHeaderProperties(inputSchema)) {
+    if (!paramAgrees(header(`Mcp-Param-${name}`), argumentAt(params["arguments"], path))) return `The Mcp-Param-${name} header does not agree with params.arguments.${path.join(".")}.`;
+  }
+  return undefined;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { MCP_EVENTS_EXTENSION, MCP_HEARTBEAT_MAX_MS, MCP_HEARTBEAT_MIN_MS, MCP_SUBSCRIPTION_ID } from "@acid-cat/spec-ts";
+import { bundle, encodeMcpHeaderValue, MCP_EVENTS_EXTENSION, MCP_HEADER_MISMATCH, MCP_HEARTBEAT_MAX_MS, MCP_HEARTBEAT_MIN_MS, MCP_SUBSCRIPTION_ID, mcpParamHeaders, viewOf } from "@acid-cat/spec-ts";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 import { isArrayOf, isObject, isStringArray, memberOf, parseJson, readJson } from "../json.ts";
@@ -76,10 +76,89 @@ export async function checkMcp(url: string, options: McpCheckOptions): Promise<C
     await rejection(await post(signal, { body: new Uint8Array([0x7b, 0xff, 0x7d]) }), 400);
   });
 
+  await checkHeaders(checks, url);
   await checkEvents(checks, httpChannel(url), { transport: "http", poll: options.poll, webhook: options.webhook !== undefined });
   if (options.webhook !== undefined) await checkWebhook(checks, url, options.webhook);
   if (options.handshake) await checkHandshake(checks, url, options.deadline);
   return checks;
+}
+
+const mcpView = viewOf(fixture, "mcp");
+
+function inputSchemaOf(method: string, name: unknown): JsonObject | undefined {
+  if (typeof name !== "string") return undefined;
+  const entries = method === "tools/call" ? mcpView.capabilities : method.startsWith("events/") ? (mcpView.events ?? {}) : {};
+  const input = Object.hasOwn(entries, name) ? entries[name]?.input : undefined;
+  return input === undefined ? undefined : bundle(input, mcpView.$defs ?? {});
+}
+
+export function mcpRequestHeaders(method: string, params: JsonObject): Record<string, string> {
+  return {
+    "Mcp-Method": method,
+    ...(typeof params.name === "string" ? { "Mcp-Name": encodeMcpHeaderValue(params.name) } : {}),
+    ...mcpParamHeaders(inputSchemaOf(method, params.name), params.arguments),
+  };
+}
+
+async function checkHeaders(checks: Checks, url: string): Promise<void> {
+  const send = (signal: AbortSignal, method: string, params: JsonObject, headers: Record<string, string>) =>
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": EVENTS_REVISION, ...headers },
+      body: JSON.stringify({ jsonrpc: "2.0", id: `conform-${randomUUID()}`, method, params: { ...params, _meta: META } }),
+      signal,
+    });
+  const rejected = async (response: Response, what: string) => {
+    expectEqual(response.status, 400, `the status of ${what}`);
+    expectEqual(memberOf(memberOf(await readJson(response), "error"), "code"), MCP_HEADER_MISMATCH, `the JSON-RPC error code of ${what}`);
+  };
+  const accepted = async (response: Response, what: string) => {
+    expectEqual(response.status, 200, `the status of ${what}`);
+    if (response.headers.get("Content-Type")?.startsWith("text/event-stream") === true) {
+      const reader = sseReader(response);
+      try {
+        const first = await reader.next();
+        expectEqual(memberOf(parseJson(first?.data ?? "null"), "method"), "notifications/events/active", `the first message of ${what}`);
+      } finally {
+        await reader.cancel();
+      }
+      return;
+    }
+    const code = memberOf(memberOf(await readJson(response), "error"), "code");
+    expect(code !== MCP_HEADER_MISMATCH, `${what} must not be a header mismatch`);
+  };
+  const named = (method: string, name: string, headers: Record<string, string> = {}) => ({ "Mcp-Method": method, "Mcp-Name": name, ...headers });
+  const echo = { name: "fixture.echo", arguments: { text: "x" } };
+  const ticks = { name: "fixture.ticks", arguments: { count: 1, key: "k" } };
+
+  await checks.run("a request whose Mcp-Method header is not its method gets 400 and HeaderMismatch", `${RULE}#http`, async (signal) => {
+    await rejected(await send(signal, "tools/call", echo, named("tools/list", "fixture.echo")), "tools/call with Mcp-Method: tools/list");
+    await rejected(await send(signal, "events/stream", ticks, named("events/poll", "fixture.ticks", { "Mcp-Param-Key": "k" })), "events/stream with Mcp-Method: events/poll");
+  });
+  await checks.run("tools/call and events/stream with no Mcp-Name header, or another name, get 400 and HeaderMismatch", `${RULE}#http`, async (signal) => {
+    await rejected(await send(signal, "tools/call", echo, { "Mcp-Method": "tools/call" }), "tools/call with no Mcp-Name");
+    await rejected(await send(signal, "tools/call", echo, named("tools/call", "fixture.refuse")), "tools/call with another Mcp-Name");
+    await rejected(await send(signal, "events/stream", ticks, { "Mcp-Method": "events/stream", "Mcp-Param-Key": "k" }), "events/stream with no Mcp-Name");
+    await rejected(await send(signal, "events/stream", ticks, named("events/stream", "fixture.watch", { "Mcp-Param-Key": "k" })), "events/stream with another Mcp-Name");
+  });
+  await checks.run("an Mcp-Name header in the base64 form is decoded before the comparison", `${RULE}#http`, async (signal) => {
+    const base64 = (text: string) => `=?base64?${Buffer.from(text).toString("base64")}?=`;
+    await accepted(await send(signal, "tools/call", echo, named("tools/call", base64("fixture.echo"))), "tools/call with Mcp-Name in the base64 form");
+    await accepted(await send(signal, "events/stream", ticks, named("events/stream", base64("fixture.ticks"), { "Mcp-Param-Key": "k" })), "events/stream with Mcp-Name in the base64 form");
+  });
+  for (const { kind, method, name, args, absent, header, value, other, base64 } of [
+    { kind: "a tool", method: "tools/call", name: "fixture.switch.set", args: { on: true }, absent: {}, header: "Mcp-Param-On", value: "true", other: "false", base64: "=?base64?dHJ1ZQ==?=" },
+    { kind: "an event", method: "events/stream", name: "fixture.ticks", args: { count: 1, key: "k" }, absent: { count: 1 }, header: "Mcp-Param-Key", value: "k", other: "j", base64: "=?base64?aw==?=" },
+  ]) {
+    await checks.run(`the Mcp-Param header of an annotated argument of ${kind} must agree with the argument, and is not expected for an absent argument`, `${RULE}#http`, async (signal) => {
+      const params = { name, arguments: args };
+      await rejected(await send(signal, method, params, named(method, name)), `${method} with no ${header}`);
+      await rejected(await send(signal, method, params, named(method, name, { [header]: other })), `${method} with another ${header}`);
+      await accepted(await send(signal, method, params, named(method, name, { [header]: value })), `${method} with ${header}: ${value}`);
+      await accepted(await send(signal, method, params, named(method, name, { [header]: base64 })), `${method} with ${header} in the base64 form`);
+      await accepted(await send(signal, method, { name, arguments: absent }, named(method, name)), `${method} with no argument and no ${header}`);
+    });
+  }
 }
 
 const ANCHOR = `${RULE}#earlier-revisions-through-http`;
@@ -221,9 +300,8 @@ export function httpChannel(url: string, headers: Readonly<Record<string, string
         ...headers,
         "Content-Type": "application/json",
         Accept: "application/json, text/event-stream",
-        "Mcp-Method": method,
         "MCP-Protocol-Version": EVENTS_REVISION,
-        ...(typeof params.name === "string" ? { "Mcp-Name": params.name } : {}),
+        ...mcpRequestHeaders(method, params),
       },
       body: JSON.stringify({ jsonrpc: "2.0", id, method, params: { ...params, _meta: META } }),
       signal,

@@ -97,7 +97,7 @@ capabilities {
     failures { ["Offline"] = module.ref("Offline") }
   }
 
-  ["aircon.power.set"] = (setting("Turn the unit on or off.", "on", new Dynamic { type = "boolean" })) {
+  ["aircon.power.set"] = (setting("Turn the unit on or off.", "on", new Dynamic { type = "boolean"; `x-mcp-header` = "On" })) {
     audience = everywhere
   }
 

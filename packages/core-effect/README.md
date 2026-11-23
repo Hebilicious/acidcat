@@ -332,6 +332,10 @@ const Subscription = new GraphQLObjectType({
 
 When the view has events, the MCP binding serves the [events extension](../../spec/bindings/mcp.md#events) to `2026-07-28` clients: push (`events/stream`) through HTTP and stdio, [poll](#poll-delivery) through HTTP and stdio, and [webhook](#webhook-delivery) through HTTP when the `webhooks` option is set. The `heartbeatMs` option (default 15 000) sets the push heartbeat interval when the client suggests none. A client that suggests `heartbeatMs` in `events/stream` gets a grant from 1 000 to 60 000 ([Push](../../spec/bindings/mcp.md#push)).
 
+#### MCP headers
+
+Through HTTP, the MCP binding checks the [headers](../../spec/bindings/mcp.md#headers) of each request of revision `2026-07-28` against its body: `Mcp-Method`, `Mcp-Name`, and an `Mcp-Param-*` header for each property of the input schema of the tool or the event that has `x-mcp-header`. A mismatch gets 400 and `-32020`. `effect/ai` checks the tools, and the binding checks the events. To annotate a property, give its schema the annotation: `Schema.String.annotate({ "x-mcp-header": "Region" })`. The catalog keeps each annotation whose key starts with `x-`. Annotate the schema before a check such as `Schema.isBetween`: Effect writes the annotation of a checked schema in an `allOf`, where MCP clients do not look for it.
+
 #### Poll delivery
 
 [Poll](../../spec/bindings/mcp.md#poll) defines leases and cursors. The `poll` option sets the lease limits:
