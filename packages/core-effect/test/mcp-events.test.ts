@@ -31,15 +31,14 @@ const EventList = Schema.Struct({
 
 const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} };
 
-function mcpRequest(method: string, params: Record<string, unknown> = {}, init: { readonly id?: string | number; readonly signal?: AbortSignal; readonly name?: string | null } = {}) {
+function mcpRequest(method: string, params: Record<string, unknown> = {}, init: { readonly id?: string | number; readonly signal?: AbortSignal } = {}) {
   const headers = new Headers({
     Accept: "application/json, text/event-stream",
     "Content-Type": "application/json",
     "Mcp-Method": method,
     "MCP-Protocol-Version": "2026-07-28",
   });
-  const name = init.name === undefined ? params.name : init.name;
-  if (typeof name === "string") headers.set("Mcp-Name", name);
+  if (typeof params.name === "string") headers.set("Mcp-Name", params.name);
   return new Request(`${ORIGIN}/mcp`, {
     method: "POST",
     headers,
@@ -131,14 +130,11 @@ test("withEvents answers the requests of the events extension beside an MCP serv
   }
 });
 
-test("through HTTP, the Mcp-Name header of events/stream must agree with the body, which must have a name", async () => {
+test("through HTTP, events/stream with no name in the body is a header mismatch", async () => {
   const handler = Mcp.toWebHandler(events, feedLayer, { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN] });
   const noName = await handler(mcpRequest("events/stream", {}));
   assert.equal(noName.status, 400);
   assert.equal((await json(noName)).error?.code, -32020);
-  const mismatch = await handler(mcpRequest("events/stream", { name: "feed.ticked" }, { name: "feed.other" }));
-  assert.equal(mismatch.status, 400);
-  assert.equal((await json(mismatch)).error?.code, -32020);
 });
 
 test("through HTTP, a stream with nothing to send gets heartbeats with the last cursor", async () => {

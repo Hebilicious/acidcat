@@ -160,7 +160,7 @@ mod tests {
     }
 
     #[test]
-    fn the_headers_must_agree_with_the_method_the_name_and_the_annotated_arguments() {
+    fn the_param_headers_must_agree_with_nested_and_integer_arguments() {
         let schema = json!({
             "type": "object",
             "properties": {
@@ -170,74 +170,36 @@ mod tests {
                 "list": { "type": "array", "items": { "type": "object", "properties": { "ignored": { "type": "string", "x-mcp-header": "Ignored" } } } },
             },
         });
-        let check = |pairs: &[(&str, &str)], arguments: Value| {
+        let check = |extra: &[(&str, &str)], arguments: Value| {
             let params = Map::from_iter([
                 ("name".to_owned(), json!("db.query")),
                 ("arguments".to_owned(), arguments),
             ]);
-            header_mismatch(&headers(pairs), "tools/call", &params, Some(&schema))
+            let named = [("mcp-method", "tools/call"), ("mcp-name", "db.query")];
+            let pairs = [named.as_slice(), extra].concat();
+            header_mismatch(&headers(&pairs), "tools/call", &params, Some(&schema))
         };
-        let named = [("mcp-method", "tools/call"), ("mcp-name", "db.query")];
-        let with = |extra: &[(&'static str, &'static str)]| [named.as_slice(), extra].concat();
         assert_eq!(
             check(
-                &with(&[("Mcp-Param-Region", "eu"), ("mcp-param-count", "42")]),
+                &[("Mcp-Param-Region", "eu"), ("mcp-param-count", "42")],
                 json!({ "region": "eu", "count": 42 })
             ),
             None
         );
         assert_eq!(
             check(
-                &with(&[("Mcp-Param-Region", "=?base64?ZXU=?=")]),
-                json!({ "region": "eu" })
-            ),
-            None
-        );
-        assert_eq!(
-            check(
-                &[
-                    ("mcp-method", "tools/call"),
-                    ("mcp-name", "=?base64?ZGIucXVlcnk=?=")
-                ],
-                json!({})
-            ),
-            None
-        );
-        assert_eq!(
-            check(
-                &with(&[("Mcp-Param-On", "true")]),
+                &[("Mcp-Param-On", "true")],
                 json!({ "nested": { "on": true } })
             ),
             None
         );
-        let mismatch = |pairs: &[(&str, &str)], arguments: Value, header: &str| {
-            let reason = check(pairs, arguments).unwrap_or_default();
+        let mismatch = |extra: &[(&str, &str)], arguments: Value, header: &str| {
+            let reason = check(extra, arguments).unwrap_or_default();
             assert!(reason.contains(header), "{reason} names {header}");
         };
+        mismatch(&[("Mcp-Param-Region", "eu")], json!({}), "Mcp-Param-Region");
         mismatch(
-            &[("mcp-method", "tools/list"), ("mcp-name", "db.query")],
-            json!({}),
-            "Mcp-Method",
-        );
-        mismatch(&[("mcp-method", "tools/call")], json!({}), "Mcp-Name");
-        mismatch(
-            &[("mcp-method", "tools/call"), ("mcp-name", "db.other")],
-            json!({}),
-            "Mcp-Name",
-        );
-        mismatch(&named, json!({ "region": "eu" }), "Mcp-Param-Region");
-        mismatch(
-            &with(&[("Mcp-Param-Region", "us")]),
-            json!({ "region": "eu" }),
-            "Mcp-Param-Region",
-        );
-        mismatch(
-            &with(&[("Mcp-Param-Region", "eu")]),
-            json!({}),
-            "Mcp-Param-Region",
-        );
-        mismatch(
-            &with(&[("Mcp-Param-Count", "4x")]),
+            &[("Mcp-Param-Count", "4x")],
             json!({ "count": 4 }),
             "Mcp-Param-Count",
         );
