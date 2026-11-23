@@ -12,7 +12,7 @@ const parts = [
     {parts.map((part) => (
       <li>
         <div class="specimen">
-          <img src={`/exploded/${part.id}.webp`} alt="" width="560" height={part.height} loading="lazy" />
+          <img src={`/parts/${part.id}.webp`} alt="" width="560" height={part.height} loading="lazy" />
         </div>
         <div class="annotation">
           <span class="numeral">{part.numeral}</span>
@@ -90,16 +90,16 @@ const parts = [
     gap: 0.25rem;
   }
   .numeral {
-    font: 500 0.76rem/1.2 var(--font-mono);
+    font: 500 0.76rem/1.2 var(--font-family-mono);
     letter-spacing: 0.12em;
     color: var(--palette-cyan-400);
   }
   strong {
-    font: 500 clamp(1.12rem, 4cqw, 1.65rem)/1.08 var(--font-display);
+    font: 500 clamp(1.12rem, 4cqw, 1.65rem)/1.08 var(--font-family-display);
     color: var(--palette-cream-100);
   }
   .note {
-    font: 400 clamp(0.78rem, 2.5cqw, 0.95rem)/1.3 var(--font-sans);
+    font: 400 clamp(0.78rem, 2.5cqw, 0.95rem)/1.3 var(--font-family-sans);
     color: var(--palette-cream-400);
   }
   @media (prefers-reduced-motion: no-preference) {

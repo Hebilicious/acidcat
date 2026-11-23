@@ -1,8 +1,8 @@
 @import "./tokens.css";
 
 :root {
-  --sl-font: var(--font-sans);
-  --sl-font-mono: var(--font-mono);
+  --sl-font: var(--font-family-sans);
+  --sl-font-mono: var(--font-family-mono);
   --sl-color-accent-low: var(--palette-brass-950);
   --sl-color-accent: var(--palette-brass-400);
   --sl-color-accent-high: var(--palette-brass-200);
@@ -18,5 +18,5 @@
 }
 
 .sl-markdown-content :is(h1, h2, h3) {
-  font-family: var(--font-display);
+  font-family: var(--font-family-display);
 }

@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-master=site/art/exploded/master.webp
-output=site/public/exploded
+master=site/art/parts/master.webp
+output=site/public/parts
 mkdir -p "$output"
 layer() {
   name=$1 height=$2 top=$3 outline=$4

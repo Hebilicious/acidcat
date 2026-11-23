@@ -1,0 +1,133 @@
+/*____ CSSForge ____*/
+:root {
+/*____ Colors ____*/
+/* Palette */
+/* ink */
+--palette-ink-600: oklch(32.033% 0.03292 262.90559);
+--palette-ink-700: oklch(25.185% 0.02858 263.85427);
+--palette-ink-800: oklch(20.502% 0.02338 265.46821);
+--palette-ink-900: oklch(16.346% 0.01363 264.09054);
+--palette-ink-925: oklch(13.921% 0.0097 261.76047);
+--palette-ink-950: oklch(12.773% 0.01081 259.63561);
+/* blueprint */
+--palette-blueprint-800: oklch(24.637% 0.03392 259.57526);
+--palette-blueprint-900: oklch(22.488% 0.03211 247.6675);
+/* brass */
+--palette-brass-100: oklch(92.785% 0.05648 92.87362);
+--palette-brass-200: oklch(91.459% 0.08205 92.309);
+--palette-brass-300: oklch(84.634% 0.12542 90.26784);
+--palette-brass-400: oklch(72.801% 0.13798 89.72629);
+--palette-brass-500: oklch(62.125% 0.11964 85.4299);
+--palette-brass-600: oklch(54.405% 0.10457 87.00253);
+--palette-brass-650: oklch(48.841% 0.09429 82.59162);
+--palette-brass-700: oklch(40.934% 0.07928 84.62351);
+--palette-brass-800: oklch(35.156% 0.06508 85.92486);
+--palette-brass-900: oklch(30.511% 0.05805 83.44479);
+--palette-brass-950: oklch(26.022% 0.04391 97.15179);
+/* copper */
+--palette-copper-300: oklch(76.107% 0.09578 57.28525);
+--palette-copper-400: oklch(61.795% 0.1171 60.39913);
+--palette-copper-700: oklch(40.29% 0.08451 53.58961);
+/* acid */
+--palette-acid-200: oklch(95.745% 0.12568 122.35687);
+--palette-acid-400: oklch(91.869% 0.22416 128.64599);
+--palette-acid-600: oklch(74.584% 0.197 130.88162);
+--palette-acid-700: oklch(62.06% 0.16825 132.3702);
+/* cyan */
+--palette-cyan-400: oklch(85.646% 0.13641 208.55913);
+/* nixie */
+--palette-nixie-200: oklch(89.059% 0.07471 63.34823);
+--palette-nixie-400: oklch(74.998% 0.1668 50.53553);
+/* cream */
+--palette-cream-100: oklch(92.696% 0.04038 88.19969);
+--palette-cream-400: oklch(75.871% 0.03218 88.3999);
+/* neutral */
+--palette-neutral-white: oklch(100% 0 none);
+--palette-neutral-black: oklch(0% 0 none);
+/*____ Spacing ____*/
+--spacing_fluid-space-3xs: clamp(0.25rem, 0.2292rem + 0.0926vw, 0.3125rem);
+--spacing_fluid-space-2xs: clamp(0.4375rem, 0.3958rem + 0.1852vw, 0.5625rem);
+--spacing_fluid-space-xs: clamp(0.6875rem, 0.625rem + 0.2778vw, 0.875rem);
+--spacing_fluid-space-s: clamp(0.875rem, 0.7917rem + 0.3704vw, 1.125rem);
+--spacing_fluid-space-m: clamp(1.3125rem, 1.1875rem + 0.5556vw, 1.6875rem);
+--spacing_fluid-space-l: clamp(1.75rem, 1.5833rem + 0.7407vw, 2.25rem);
+--spacing_fluid-space-xl: clamp(2.625rem, 2.375rem + 1.1111vw, 3.375rem);
+--spacing_fluid-space-2xl: clamp(3.5rem, 3.1667rem + 1.4815vw, 4.5rem);
+--spacing_fluid-space-3xl: clamp(5.25rem, 4.75rem + 2.2222vw, 6.75rem);
+--spacing_fluid-space-4xl: clamp(7rem, 6.3333rem + 2.963vw, 9rem);
+--spacing_fluid-space-3xs-2xs: clamp(0.25rem, 0.1458rem + 0.463vw, 0.5625rem);
+--spacing_fluid-space-2xs-xs: clamp(0.4375rem, 0.2917rem + 0.6481vw, 0.875rem);
+--spacing_fluid-space-xs-s: clamp(0.6875rem, 0.5417rem + 0.6481vw, 1.125rem);
+--spacing_fluid-space-s-m: clamp(0.875rem, 0.6042rem + 1.2037vw, 1.6875rem);
+--spacing_fluid-space-m-l: clamp(1.3125rem, 1rem + 1.3889vw, 2.25rem);
+--spacing_fluid-space-l-xl: clamp(1.75rem, 1.2083rem + 2.4074vw, 3.375rem);
+--spacing_fluid-space-xl-2xl: clamp(2.625rem, 2rem + 2.7778vw, 4.5rem);
+--spacing_fluid-space-2xl-3xl: clamp(3.5rem, 2.4167rem + 4.8148vw, 6.75rem);
+--spacing_fluid-space-3xl-4xl: clamp(5.25rem, 4rem + 5.5556vw, 9rem);
+/*____ Typography ____*/
+--typography_fluid-text-2xl: clamp(1.4238rem, 1.2864rem + 0.6106vw, 1.836rem);
+--typography_fluid-text-xl: clamp(1.2656rem, 1.1775rem + 0.3917vw, 1.53rem);
+--typography_fluid-text-l: clamp(1.125rem, 1.075rem + 0.2222vw, 1.275rem);
+--typography_fluid-text-m: clamp(1rem, 0.9792rem + 0.0926vw, 1.0625rem);
+--typography_fluid-text-s: clamp(0.8889rem, 0.8704rem + 0.0823vw, 0.9444rem);
+--typography_fluid-text-xs: clamp(0.7901rem, 0.7737rem + 0.0732vw, 0.8395rem);
+--typography_fluid-text-pow-min-width: 22.5;
+--typography_fluid-text-pow-max-width: 90;
+--typography_fluid-text-pow-min-font-size: 1;
+--typography_fluid-text-pow-max-font-size: 1.0625;
+--typography_fluid-text-pow-min-type-scale: 1.125;
+--typography_fluid-text-pow-max-type-scale: 1.2;
+--typography_fluid-text-pow-progress: clamp(0rem, (100vw - var(--typography_fluid-text-pow-min-width) * 1rem) / (var(--typography_fluid-text-pow-max-width) - var(--typography_fluid-text-pow-min-width)), 1rem);
+--typography_fluid-text-pow-at-min: calc(var(--typography_fluid-text-pow-min-font-size) * (1rem - var(--typography_fluid-text-pow-progress)));
+--typography_fluid-text-pow-at-max: calc(var(--typography_fluid-text-pow-max-font-size) * var(--typography_fluid-text-pow-progress));
+--typography_fluid-text-pow-2xl: calc(var(--typography_fluid-text-pow-at-min) * pow(var(--typography_fluid-text-pow-min-type-scale), 3) + var(--typography_fluid-text-pow-at-max) * pow(var(--typography_fluid-text-pow-max-type-scale), 3));
+--typography_fluid-text-pow-xl: calc(var(--typography_fluid-text-pow-at-min) * pow(var(--typography_fluid-text-pow-min-type-scale), 2) + var(--typography_fluid-text-pow-at-max) * pow(var(--typography_fluid-text-pow-max-type-scale), 2));
+--typography_fluid-text-pow-l: calc(var(--typography_fluid-text-pow-at-min) * var(--typography_fluid-text-pow-min-type-scale) + var(--typography_fluid-text-pow-at-max) * var(--typography_fluid-text-pow-max-type-scale));
+--typography_fluid-text-pow-m: calc(var(--typography_fluid-text-pow-at-min) + var(--typography_fluid-text-pow-at-max));
+--typography_fluid-text-pow-s: calc(var(--typography_fluid-text-pow-m) / var(--typography_fluid-text-pow-min-type-scale));
+--typography_fluid-text-pow-xs: calc(var(--typography_fluid-text-pow-m) / pow(var(--typography_fluid-text-pow-min-type-scale), 2));
+--typography_fluid-display-4xl: clamp(3.1104rem, 1.6822rem + 6.3477vw, 7.3951rem);
+--typography_fluid-display-3xl: clamp(2.592rem, 1.6953rem + 3.9855vw, 5.2822rem);
+--typography_fluid-display-2xl: clamp(2.16rem, 1.6223rem + 2.3896vw, 3.773rem);
+--typography_fluid-display-xl: clamp(1.8rem, 1.5017rem + 1.3259vw, 2.695rem);
+--typography_fluid-display-l: clamp(1.5rem, 1.3583rem + 0.6296vw, 1.925rem);
+--typography_fluid-display-m: clamp(1.25rem, 1.2083rem + 0.1852vw, 1.375rem);
+--typography_fluid-display-s: clamp(1.0417rem, 1.0069rem + 0.1543vw, 1.1458rem);
+--typography_fluid-display-pow-min-width: 22.5;
+--typography_fluid-display-pow-max-width: 90;
+--typography_fluid-display-pow-min-font-size: 1.25;
+--typography_fluid-display-pow-max-font-size: 1.375;
+--typography_fluid-display-pow-min-type-scale: 1.2;
+--typography_fluid-display-pow-max-type-scale: 1.4;
+--typography_fluid-display-pow-progress: clamp(0rem, (100vw - var(--typography_fluid-display-pow-min-width) * 1rem) / (var(--typography_fluid-display-pow-max-width) - var(--typography_fluid-display-pow-min-width)), 1rem);
+--typography_fluid-display-pow-at-min: calc(var(--typography_fluid-display-pow-min-font-size) * (1rem - var(--typography_fluid-display-pow-progress)));
+--typography_fluid-display-pow-at-max: calc(var(--typography_fluid-display-pow-max-font-size) * var(--typography_fluid-display-pow-progress));
+--typography_fluid-display-pow-4xl: calc(var(--typography_fluid-display-pow-at-min) * pow(var(--typography_fluid-display-pow-min-type-scale), 5) + var(--typography_fluid-display-pow-at-max) * pow(var(--typography_fluid-display-pow-max-type-scale), 5));
+--typography_fluid-display-pow-3xl: calc(var(--typography_fluid-display-pow-at-min) * pow(var(--typography_fluid-display-pow-min-type-scale), 4) + var(--typography_fluid-display-pow-at-max) * pow(var(--typography_fluid-display-pow-max-type-scale), 4));
+--typography_fluid-display-pow-2xl: calc(var(--typography_fluid-display-pow-at-min) * pow(var(--typography_fluid-display-pow-min-type-scale), 3) + var(--typography_fluid-display-pow-at-max) * pow(var(--typography_fluid-display-pow-max-type-scale), 3));
+--typography_fluid-display-pow-xl: calc(var(--typography_fluid-display-pow-at-min) * pow(var(--typography_fluid-display-pow-min-type-scale), 2) + var(--typography_fluid-display-pow-at-max) * pow(var(--typography_fluid-display-pow-max-type-scale), 2));
+--typography_fluid-display-pow-l: calc(var(--typography_fluid-display-pow-at-min) * var(--typography_fluid-display-pow-min-type-scale) + var(--typography_fluid-display-pow-at-max) * var(--typography_fluid-display-pow-max-type-scale));
+--typography_fluid-display-pow-m: calc(var(--typography_fluid-display-pow-at-min) + var(--typography_fluid-display-pow-at-max));
+--typography_fluid-display-pow-s: calc(var(--typography_fluid-display-pow-m) / var(--typography_fluid-display-pow-min-type-scale));
+--typography-weight-display-regular: 450;
+--typography-weight-display-medium: 500;
+--typography-weight-display-bold: 600;
+/*____ Primitives ____*/
+/* font */
+--font-family-display: "Fraunces Variable", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+--font-family-sans: "Space Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+--font-family-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
+--font-tracking-tight: -0.02em;
+--font-tracking-normal: 0;
+--font-tracking-label: 0.24em;
+--font-tracking-wide: 0.3em;
+/* radius */
+--radius-size-s: 0.375rem;
+--radius-size-m: 0.625rem;
+--radius-size-l: 1.125rem;
+--radius-size-xl: 1.375rem;
+/* layout */
+--layout-width-content: 77.5rem;
+--layout-width-wide: 82.5rem;
+--layout-gutter-inline: clamp(1rem, 4vw, 2.5rem);
+}

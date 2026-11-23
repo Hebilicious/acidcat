@@ -1,6 +1,78 @@
 import { defineConfig } from "@hebilicious/cssforge";
 
 export default defineConfig({
+  typography: {
+    fluid: {
+      text: {
+        value: {
+          minWidth: 360,
+          minFontSize: 16,
+          minTypeScale: 1.125,
+          maxWidth: 1440,
+          maxFontSize: 17,
+          maxTypeScale: 1.2,
+          positiveSteps: 3,
+          negativeSteps: 2,
+        },
+      },
+      display: {
+        value: {
+          minWidth: 360,
+          minFontSize: 20,
+          minTypeScale: 1.2,
+          maxWidth: 1440,
+          maxFontSize: 22,
+          maxTypeScale: 1.4,
+          positiveSteps: 5,
+          negativeSteps: 1,
+        },
+      },
+    },
+    weight: {
+      display: { value: { regular: "450", medium: "500", bold: "600" } },
+    },
+  },
+  spacing: {
+    fluid: {
+      space: {
+        value: {
+          minSize: 14,
+          maxSize: 18,
+          minWidth: 360,
+          maxWidth: 1440,
+          negativeSteps: [0.25, 0.5, 0.75],
+          positiveSteps: [1.5, 2, 3, 4, 6, 8],
+        },
+      },
+    },
+  },
+  primitives: {
+    font: {
+      value: {
+        family: {
+          value: {
+            display: '"Fraunces Variable", "Iowan Old Style", "Palatino Linotype", Georgia, serif',
+            sans: '"Space Grotesk Variable", ui-sans-serif, system-ui, sans-serif',
+            mono: '"JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace',
+          },
+        },
+        tracking: {
+          value: { tight: "-0.02em", normal: "0", label: "0.24em", wide: "0.3em" },
+        },
+      },
+    },
+    radius: {
+      value: {
+        size: { value: { s: "6px", m: "10px", l: "18px", xl: "22px" } },
+      },
+    },
+    layout: {
+      value: {
+        width: { value: { content: "1240px", wide: "1320px" } },
+        gutter: { value: { inline: "clamp(1rem, 4vw, 2.5rem)" } },
+      },
+    },
+  },
   colors: {
     palette: {
       value: {

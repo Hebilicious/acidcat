@@ -13,8 +13,8 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: var(--font-sans);
-  font-size: 1.0625rem;
+  font-family: var(--font-family-sans);
+  font-size: var(--typography_fluid-text-m);
   line-height: 1.6;
   color: var(--palette-cream-100);
   background:
@@ -30,7 +30,7 @@ a {
 }
 
 code {
-  font-family: var(--font-mono);
+  font-family: var(--font-family-mono);
   font-size: 0.9em;
 }
 
@@ -44,7 +44,7 @@ code {
   left: 1rem;
   top: -3rem;
   z-index: 10;
-  padding: 0.5rem 1rem;
+  padding: var(--spacing_fluid-space-2xs) var(--spacing_fluid-space-s);
   background: var(--palette-acid-400);
   color: var(--palette-ink-900);
 }
@@ -55,10 +55,10 @@ code {
 h1,
 h2,
 h3 {
-  font-family: var(--font-display);
-  font-weight: 500;
+  font-family: var(--font-family-display);
+  font-weight: var(--typography-weight-display-medium);
   line-height: 1.02;
-  letter-spacing: -0.02em;
+  letter-spacing: var(--font-tracking-tight);
   margin: 0;
   font-variation-settings: "SOFT" 30, "WONK" 0;
 }
@@ -73,18 +73,18 @@ h2 em {
 }
 
 .eyebrow {
-  margin: 0 0 1.2rem;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.3em;
+  margin: 0 0 var(--spacing_fluid-space-s);
+  font-family: var(--font-family-mono);
+  font-size: var(--typography_fluid-text-xs);
+  letter-spacing: var(--font-tracking-wide);
   text-transform: uppercase;
   color: var(--palette-brass-300);
 }
 
 .lede {
   max-width: 62ch;
-  margin: 1.4rem 0 0;
-  font-size: 1.12rem;
+  margin: var(--spacing_fluid-space-m) 0 0;
+  font-size: var(--typography_fluid-text-l);
   color: var(--palette-cream-400);
 }
 .lede code {
@@ -92,7 +92,7 @@ h2 em {
 }
 
 .section-head h2 {
-  font-size: clamp(2.3rem, 5vw, 4rem);
+  font-size: var(--typography_fluid-display-2xl);
   max-width: 18ch;
 }
 
@@ -104,8 +104,8 @@ h2 em {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.85rem clamp(1rem, 4vw, 2.5rem);
+  gap: var(--spacing_fluid-space-s);
+  padding: var(--spacing_fluid-space-xs) var(--layout-gutter-inline);
   background: linear-gradient(color-mix(in oklch, var(--palette-ink-900) 92%, transparent), color-mix(in oklch, var(--palette-ink-900) 70%, transparent));
   backdrop-filter: blur(12px);
   border-bottom: 1px solid color-mix(in oklch, var(--palette-brass-400) 28%, transparent);
@@ -123,17 +123,17 @@ h2 em {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: var(--spacing_fluid-space-xs);
   text-decoration: none;
-  font-family: var(--font-display);
-  font-size: 1.45rem;
-  font-weight: 600;
+  font-family: var(--font-family-display);
+  font-size: var(--typography_fluid-display-m);
+  font-weight: var(--typography-weight-display-bold);
   letter-spacing: -0.01em;
 }
 .nav nav {
   display: flex;
-  gap: clamp(0.9rem, 3vw, 2.2rem);
-  font-size: 0.95rem;
+  gap: var(--spacing_fluid-space-s-l);
+  font-size: var(--typography_fluid-text-s);
 }
 .nav nav a {
   text-decoration: none;
@@ -159,7 +159,7 @@ h2 em {
   z-index: -1;
 }
 .hero-stage::after {
-  --copy-end: calc(max(clamp(1rem, 4vw, 2.5rem), (100vw - 1320px) / 2 + 2.5rem) + 38rem);
+  --copy-end: calc(max(clamp(1rem, 4vw, 2.5rem), (100vw - var(--layout-width-wide)) / 2 + 2.5rem) + 38rem);
   content: "";
   position: absolute;
   inset: 0;
@@ -169,17 +169,17 @@ h2 em {
     linear-gradient(180deg, transparent 72%, var(--palette-ink-900) 100%);
 }
 .hero-copy {
-  width: min(1320px, 100%);
+  width: min(var(--layout-width-wide), 100%);
   margin-inline: auto;
-  padding: clamp(2rem, 5vw, 4rem) clamp(1rem, 4vw, 2.5rem) clamp(3rem, 6vw, 5rem);
+  padding: var(--spacing_fluid-space-l-2xl) var(--layout-gutter-inline) var(--spacing_fluid-space-xl-2xl);
 }
 .hero-copy > * {
   max-width: 38rem;
 }
 .hero h1 {
-  font-size: clamp(3rem, 5.6vw, 5.6rem);
+  font-size: var(--typography_fluid-display-3xl);
   text-shadow: 0 2px 30px color-mix(in oklch, var(--palette-ink-950) 80%, transparent);
-  font-weight: 450;
+  font-weight: var(--typography-weight-display-regular);
 }
 .hero h1 em {
   display: block;
@@ -188,8 +188,8 @@ h2 em {
 .ornament {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  margin-top: 1.8rem;
+  gap: var(--spacing_fluid-space-xs);
+  margin-top: var(--spacing_fluid-space-l);
   max-width: 340px;
   color: var(--palette-brass-400);
 }
@@ -212,20 +212,20 @@ h2 em {
 
 .hero-lede {
   max-width: 34rem;
-  margin: 1.6rem 0 0;
-  font-size: clamp(1.05rem, 1.4vw, 1.22rem);
+  margin: var(--spacing_fluid-space-m) 0 0;
+  font-size: var(--typography_fluid-text-l);
   color: var(--palette-cream-400);
 }
 .hero-lede strong {
   color: var(--palette-cream-100);
-  font-weight: 500;
+  font-weight: var(--typography-weight-display-medium);
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
-  margin-top: 2.2rem;
+  gap: var(--spacing_fluid-space-s);
+  margin-top: var(--spacing_fluid-space-l);
 }
 .button {
   --cut: 12px;
@@ -234,10 +234,10 @@ h2 em {
   align-items: center;
   justify-content: center;
   min-width: 11rem;
-  padding: 0.95rem 1.8rem;
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  font-weight: 600;
+  padding: var(--spacing_fluid-space-s) var(--spacing_fluid-space-l);
+  font-family: var(--font-family-display);
+  font-size: var(--typography_fluid-text-l);
+  font-weight: var(--typography-weight-display-bold);
   text-decoration: none;
   clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% 50%, calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 50%);
   transition:
@@ -282,14 +282,14 @@ h2 em {
 .install {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-top: 2rem;
+  gap: var(--spacing_fluid-space-xs);
+  margin-top: var(--spacing_fluid-space-l);
   max-width: 34rem;
-  padding: 0.55rem 0.55rem 0.55rem 1rem;
+  padding: var(--spacing_fluid-space-2xs) var(--spacing_fluid-space-2xs) var(--spacing_fluid-space-2xs) var(--spacing_fluid-space-s);
   border: 1px solid color-mix(in oklch, var(--palette-cream-100) 14%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-size-m);
   background: color-mix(in oklch, var(--palette-ink-950) 60%, transparent);
-  font-size: 0.88rem;
+  font-size: var(--typography_fluid-text-s);
 }
 .install code {
   flex: 1;
@@ -299,17 +299,17 @@ h2 em {
   color: var(--palette-cream-100);
 }
 .prompt {
-  font-family: var(--font-mono);
+  font-family: var(--font-family-mono);
   color: var(--palette-acid-400);
 }
 .copy {
   flex: none;
-  padding: 0.35rem 0.8rem;
+  padding: var(--spacing_fluid-space-3xs) var(--spacing_fluid-space-xs);
   border: 1px solid color-mix(in oklch, var(--palette-brass-400) 50%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius-size-s);
   background: transparent;
   color: var(--palette-brass-300);
-  font: 500 0.78rem var(--font-mono);
+  font: 500 0.78rem var(--font-family-mono);
   letter-spacing: 0.08em;
   cursor: pointer;
 }
@@ -359,23 +359,23 @@ h2 em {
 
 .parts,
 .features {
-  width: min(1240px, 100%);
+  width: min(var(--layout-width-content), 100%);
   margin-inline: auto;
-  padding: clamp(5rem, 10vw, 8rem) clamp(1rem, 4vw, 2.5rem) 0;
+  padding: var(--spacing_fluid-space-3xl-4xl) var(--layout-gutter-inline) 0;
 }
 .parts-grid {
   list-style: none;
-  margin: 3.5rem 0 0;
+  margin: var(--spacing_fluid-space-2xl) 0 0;
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.25rem;
+  gap: var(--spacing_fluid-space-m);
 }
 .part {
   position: relative;
-  padding: 1.6rem 1.5rem 1.8rem;
+  padding: var(--spacing_fluid-space-m) var(--spacing_fluid-space-m) var(--spacing_fluid-space-l);
   border: 1px solid color-mix(in oklch, var(--palette-brass-400) 28%, transparent);
-  border-radius: 18px;
+  border-radius: var(--radius-size-l);
   background:
     radial-gradient(circle at 50% 0%, color-mix(in oklch, var(--palette-brass-400) 10%, transparent), transparent 60%),
     linear-gradient(180deg, var(--palette-ink-800), var(--palette-ink-900));
@@ -390,7 +390,7 @@ h2 em {
 .part-icon {
   width: 92px;
   height: 92px;
-  margin-bottom: 1rem;
+  margin-bottom: var(--spacing_fluid-space-s);
 }
 .part-icon svg {
   width: 100%;
@@ -401,24 +401,24 @@ h2 em {
   position: absolute;
   top: 1.2rem;
   right: 1.4rem;
-  font-family: var(--font-display);
+  font-family: var(--font-family-display);
   font-style: italic;
-  font-size: 1.5rem;
+  font-size: var(--typography_fluid-display-l);
   color: var(--palette-brass-600);
 }
 .part h3 {
-  font-size: 1.6rem;
+  font-size: var(--typography_fluid-display-l);
 }
 .part:last-child h3 {
-  font-family: var(--font-mono);
-  font-size: 1.15rem;
+  font-family: var(--font-family-mono);
+  font-size: var(--typography_fluid-text-l);
   letter-spacing: 0;
-  padding-top: 0.3rem;
+  padding-top: var(--spacing_fluid-space-3xs);
 }
 .part p {
-  margin: 0.75rem 0 0;
+  margin: var(--spacing_fluid-space-xs) 0 0;
   color: var(--palette-cream-400);
-  font-size: 0.98rem;
+  font-size: var(--typography_fluid-text-m);
 }
 
 .i-brass {
@@ -521,7 +521,7 @@ h2 em {
 
 .feature-grid {
   list-style: none;
-  margin: 3.5rem 0 0;
+  margin: var(--spacing_fluid-space-2xl) 0 0;
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -529,7 +529,7 @@ h2 em {
 }
 .feature {
   position: relative;
-  padding: 2rem 1.75rem 2.2rem 4rem;
+  padding: var(--spacing_fluid-space-l) var(--spacing_fluid-space-l) var(--spacing_fluid-space-l) var(--spacing_fluid-space-2xl);
   border-bottom: 1px solid color-mix(in oklch, var(--palette-cream-100) 12%, transparent);
 }
 .feature-tube {
@@ -539,7 +539,7 @@ h2 em {
   width: 12px;
   height: calc(100% - 4.4rem);
   border: 1px solid color-mix(in oklch, var(--palette-cream-100) 30%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius-size-s);
   overflow: hidden;
 }
 .feature-tube span {
@@ -558,19 +558,19 @@ h2 em {
   }
 }
 .feature h3 {
-  font-size: 1.35rem;
+  font-size: var(--typography_fluid-display-m);
   line-height: 1.15;
 }
 .feature p {
-  margin: 0.7rem 0 0;
+  margin: var(--spacing_fluid-space-xs) 0 0;
   color: var(--palette-cream-400);
-  font-size: 0.98rem;
+  font-size: var(--typography_fluid-text-m);
 }
 
 
 .languages {
-  margin-top: clamp(5rem, 10vw, 8rem);
-  padding-block: clamp(4rem, 8vw, 6rem);
+  margin-top: var(--spacing_fluid-space-3xl-4xl);
+  padding-block: var(--spacing_fluid-space-2xl-3xl);
   background:
     radial-gradient(ellipse at 80% 50%, color-mix(in oklch, var(--palette-nixie-400) 10%, transparent), transparent 60%),
     linear-gradient(180deg, var(--palette-ink-800), var(--palette-ink-950));
@@ -580,27 +580,27 @@ h2 em {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
-  gap: 3rem;
-  width: min(1240px, 100%);
+  gap: var(--spacing_fluid-space-xl);
+  width: min(var(--layout-width-content), 100%);
   margin-inline: auto;
-  padding-inline: clamp(1rem, 4vw, 2.5rem);
+  padding-inline: var(--layout-gutter-inline);
 }
 .languages h2 {
-  font-size: clamp(2.2rem, 4.6vw, 3.6rem);
+  font-size: var(--typography_fluid-display-2xl);
 }
 .footer {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1.6rem clamp(1rem, 4vw, 2.5rem);
+  gap: var(--spacing_fluid-space-s);
+  padding: var(--spacing_fluid-space-m) var(--layout-gutter-inline);
   border-top: 1px solid color-mix(in oklch, var(--palette-brass-400) 22%, transparent);
-  font-size: 0.88rem;
+  font-size: var(--typography_fluid-text-s);
   color: var(--palette-cream-400);
 }
 .footer-links {
   display: flex;
-  gap: 1.4rem;
+  gap: var(--spacing_fluid-space-m);
 }
 .footer a {
   text-decoration: none;
@@ -623,7 +623,7 @@ h2 em {
     background: linear-gradient(180deg, transparent 60%, var(--palette-ink-900) 100%);
   }
   .hero-copy {
-    margin-top: -3rem;
+    margin-top: calc(-1 * var(--spacing_fluid-space-xl));
     position: relative;
   }
   .languages-inner {
