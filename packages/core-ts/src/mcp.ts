@@ -264,14 +264,15 @@ async function answer(session: Session, message: JsonRpcRequest, options: McpSet
 
 function inputSchemaOf(session: Session, message: JsonRpcRequest): JsonObject | undefined {
   const name = message.name ?? "";
-  const types = session.view.$defs ?? {};
   if (message.method === "tools/call") {
     const capability = session.handles.get(name)?.availability.getSnapshot().available === true ? session.view.capabilities[name] : undefined;
-    return capability === undefined ? undefined : bundle(capability.input ?? { type: "object" }, types);
+    return capability === undefined ? undefined : toolInputSchema(session, capability.input);
   }
   const event = message.method?.startsWith("events/") === true && servesEvents(session) && Object.hasOwn(session.view.events ?? {}, name) ? session.view.events?.[name] : undefined;
-  return event?.input === undefined ? undefined : bundle(event.input, types);
+  return event?.input === undefined ? undefined : bundle(event.input, session.view.$defs ?? {});
 }
+
+const toolInputSchema = (session: Session, input: JsonObject | undefined): JsonObject => bundle(input ?? { type: "object" }, session.view.$defs ?? {});
 
 export function listTools(session: Session) {
   const types = session.view.$defs ?? {};
@@ -284,7 +285,7 @@ export function listTools(session: Session) {
       return {
         name: handle.id,
         description: capability.description,
-        inputSchema: bundle(capability.input ?? { type: "object" }, types),
+        inputSchema: toolInputSchema(session, capability.input),
         ...(output?.type === "object" ? { outputSchema: output } : {}),
         annotations: mcpToolAnnotations(capability),
       };

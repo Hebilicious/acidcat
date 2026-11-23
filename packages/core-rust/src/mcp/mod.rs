@@ -153,21 +153,29 @@ pub(crate) fn list_tools<C: Send + Sync + 'static>(session: &Session<C>) -> Vec<
     session
         .capability_ids()
         .iter()
-        .filter(|id| session.availability(id).is_some_and(|availability| availability.is_available()))
+        .filter(|id| {
+            session
+                .availability(id)
+                .is_some_and(|availability| availability.is_available())
+        })
         .filter_map(|id| {
             let capability = view.get("capabilities")?.get(id.as_str())?;
             let mut tool = json!({
                 "name": id,
                 "description": capability.get("description").cloned().unwrap_or(Value::Null),
-                "inputSchema": bundle(capability.get("input").unwrap_or(&json!({ "type": "object" })), types),
+                "inputSchema": tool_input_schema(capability, types),
             });
             if let Some(output) = capability.get("output").map(|output| bundle(output, types))
                 && output.get("type") == Some(&json!("object"))
             {
                 tool["outputSchema"] = output;
             }
-            let mut annotations = json!({ "readOnlyHint": capability.get("readOnly") == Some(&json!(true)) });
-            for (member, hint) in [("destructive", "destructiveHint"), ("idempotent", "idempotentHint")] {
+            let mut annotations =
+                json!({ "readOnlyHint": capability.get("readOnly") == Some(&json!(true)) });
+            for (member, hint) in [
+                ("destructive", "destructiveHint"),
+                ("idempotent", "idempotentHint"),
+            ] {
                 if let Some(value) = capability.get(member) {
                     annotations[hint] = value.clone();
                 }
@@ -176,6 +184,11 @@ pub(crate) fn list_tools<C: Send + Sync + 'static>(session: &Session<C>) -> Vec<
             Some(tool)
         })
         .collect()
+}
+
+fn tool_input_schema(capability: &Value, types: &Map<String, Value>) -> Value {
+    let object = json!({ "type": "object" });
+    bundle(capability.get("input").unwrap_or(&object), types)
 }
 
 pub(crate) fn input_schema<C: Send + Sync + 'static>(
@@ -190,7 +203,6 @@ pub(crate) fn input_schema<C: Send + Sync + 'static>(
         .get("$defs")
         .and_then(Value::as_object)
         .unwrap_or(&empty);
-    let object = json!({ "type": "object" });
     if method == "tools/call" {
         if !session
             .availability(name)
@@ -199,7 +211,7 @@ pub(crate) fn input_schema<C: Send + Sync + 'static>(
             return None;
         }
         let capability = view.get("capabilities")?.get(name)?;
-        return Some(bundle(capability.get("input").unwrap_or(&object), types));
+        return Some(tool_input_schema(capability, types));
     }
     if !method.starts_with("events/") || !serves_events(session) {
         return None;
