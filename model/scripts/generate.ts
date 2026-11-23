@@ -162,6 +162,7 @@ const mcpEventsExtension = string(field(facts, "mcpEventsExtension"));
 const mcpSubscriptionId = string(field(facts, "mcpSubscriptionId"));
 const mcpUnknownTool = integer(field(facts, "mcpUnknownTool"));
 const mcpHeaderMismatch = integer(field(facts, "mcpHeaderMismatch"));
+const mcpNamedMethods = list(field(facts, "mcpNamedMethods")).map(string);
 const mcpHeartbeatMinMs = integer(field(facts, "mcpHeartbeatMinMs"));
 const mcpHeartbeatMaxMs = integer(field(facts, "mcpHeartbeatMaxMs"));
 const mcpEventErrors = numbered(field(facts, "mcpEventErrors"));
@@ -417,6 +418,8 @@ const specFacts = [
   "",
   `export const MCP_HEADER_MISMATCH = ${mcpHeaderMismatch};`,
   "",
+  typescriptTuple("MCP_NAMED_METHODS", mcpNamedMethods),
+  "",
   `export const MCP_HEARTBEAT_MIN_MS = ${mcpHeartbeatMinMs};`,
   "",
   `export const MCP_HEARTBEAT_MAX_MS = ${mcpHeartbeatMaxMs};`,
@@ -536,6 +539,7 @@ const rustFacts = [
   rustConst("MCP_SUBSCRIPTION_ID", "&str", rustString(mcpSubscriptionId)),
   rustConst("MCP_UNKNOWN_TOOL", "i64", String(mcpUnknownTool)),
   rustConst("MCP_HEADER_MISMATCH", "i64", String(mcpHeaderMismatch)),
+  rustList("MCP_NAMED_METHODS", mcpNamedMethods),
   rustConst("MCP_HEARTBEAT_MIN_MS", "u64", String(mcpHeartbeatMinMs)),
   rustConst("MCP_HEARTBEAT_MAX_MS", "u64", String(mcpHeartbeatMaxMs)),
   "",

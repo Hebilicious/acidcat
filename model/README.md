@@ -98,6 +98,7 @@ A message template has a named placeholder for each part, such as `The option {n
 | `MCP_SUBSCRIPTION_ID` | Key of the subscription id in `_meta` | same | same |
 | `MCP_UNKNOWN_TOOL` | JSON-RPC error for an unknown tool | same | same |
 | `MCP_HEADER_MISMATCH` | JSON-RPC error `HeaderMismatch`, for a header that does not agree with the body | same | same |
+| `MCP_NAMED_METHODS` | Methods whose requests have an `Mcp-Name` header | same | same |
 | `MCP_HEARTBEAT_MIN_MS`, `MCP_HEARTBEAT_MAX_MS` | Bounds of the heartbeat interval that a server grants for a suggestion | same | same |
 | `MCP_EVENT_ERRORS` | JSON-RPC errors of the events extension | same | `event_errors` |
 | `MCP_REJECTIONS` | HTTP status and JSON-RPC error of each request rejection | same | `Rejection::status`, `Rejection::rpc_code` |

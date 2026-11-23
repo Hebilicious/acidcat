@@ -3,13 +3,7 @@ use base64::engine::general_purpose::STANDARD;
 use http::HeaderMap;
 use serde_json::{Map, Value};
 
-const NAMED_METHODS: [&str; 5] = [
-    "tools/call",
-    "events/stream",
-    "events/poll",
-    "events/subscribe",
-    "events/unsubscribe",
-];
+use crate::facts_generated::MCP_NAMED_METHODS;
 
 const BASE64_PREFIX: &str = "=?base64?";
 const BASE64_SUFFIX: &str = "?=";
@@ -106,7 +100,7 @@ pub(crate) fn header_mismatch(
     if Header::read(headers, "mcp-method") != Header::Text(method) {
         return Some("The Mcp-Method header does not agree with the method of the request.".into());
     }
-    if NAMED_METHODS.contains(&method) {
+    if MCP_NAMED_METHODS.contains(&method) {
         let name = params.get("name").and_then(Value::as_str);
         let decoded = Header::read(headers, "mcp-name").decoded();
         if name.is_none() || decoded.as_deref() != name {

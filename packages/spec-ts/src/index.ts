@@ -9,6 +9,7 @@ import {
   MCP_EVENT_ERRORS,
   MCP_HEARTBEAT_MAX_MS,
   MCP_HEARTBEAT_MIN_MS,
+  MCP_NAMED_METHODS,
   MCP_REJECTIONS as REJECTIONS,
   MCP_SUBSCRIPTION_ID,
 } from "./facts.generated.ts";
@@ -547,7 +548,7 @@ export function mcpHeartbeatGrant(suggestion: number | null | undefined, deploym
 }
 
 /** The requests whose `Mcp-Name` header carries `params.name` (spec/bindings/mcp.md#http). */
-export const MCP_NAMED_METHODS: ReadonlySet<string> = new Set(["tools/call", "events/stream", "events/poll", "events/subscribe", "events/unsubscribe"]);
+const NAMED_METHODS: ReadonlySet<string> = new Set(MCP_NAMED_METHODS);
 
 const BASE64_PREFIX = "=?base64?";
 const BASE64_SUFFIX = "?=";
@@ -682,7 +683,7 @@ function paramAgrees(header: string | null, value: unknown): boolean {
  */
 export function mcpHeaderMismatch(header: (name: string) => string | null, method: string, params: JsonObject, inputSchema: unknown): string | undefined {
   if (header("Mcp-Method") !== method) return "The Mcp-Method header does not agree with the method of the request.";
-  if (MCP_NAMED_METHODS.has(method)) {
+  if (NAMED_METHODS.has(method)) {
     const name = header("Mcp-Name");
     if (typeof params["name"] !== "string" || name === null || decodeMcpHeaderValue(name) !== params["name"]) return "The Mcp-Name header does not agree with params.name.";
   }

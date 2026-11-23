@@ -48,6 +48,8 @@ export const MCP_UNKNOWN_TOOL = -32602;
 
 export const MCP_HEADER_MISMATCH = -32020;
 
+export const MCP_NAMED_METHODS = ["tools/call", "events/stream", "events/poll", "events/subscribe", "events/unsubscribe"] as const;
+
 export const MCP_HEARTBEAT_MIN_MS = 1000;
 
 export const MCP_HEARTBEAT_MAX_MS = 60000;
