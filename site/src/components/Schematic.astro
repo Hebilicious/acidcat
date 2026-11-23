@@ -1,0 +1,479 @@
+---
+import Exploded from "./Exploded.astro";
+
+const surfaces = [
+  { id: "cli", label: "CLI", kind: "Command line", output: "home aircon power set --on" },
+  { id: "mcp", label: "MCP", kind: "Tool for agents", output: "aircon.power.set  destructiveHint" },
+  { id: "webmcp", label: "WebMCP", kind: "Tool in your web page", output: "modelContext.registerTool" },
+  { id: "http", label: "HTTP", kind: "API endpoint", output: "POST /capabilities/aircon.power.set" },
+  { id: "ts", label: "TypeScript", kind: "Typed function", output: "execute({ on: true })" },
+];
+
+const outletY = (index: number) => 50 + index * 90;
+const pipePath = (index: number) => {
+  const y = outletY(index);
+  return `M0 230C120 230 120 ${y} 240 ${y}H400`;
+};
+
+const specs = [
+  ["Specification", "0.1 draft"],
+  ["Schemas", "JSON Schema 2020-12"],
+  ["MCP revision", "2026-07-28"],
+  ["Bindings", "TypeScript · WebMCP · MCP · CLI · HTTP"],
+  ["Catalog in", "TypeScript · Python · Go · Rust · Pkl"],
+  ["Cores", "Effect · TypeScript · Rust"],
+];
+const catalogEntry = `"aircon.power.set": {
+  "description": "Turn the unit on or off.",
+  "audience": ["app", "taskbar", "cli", "mcp", "api"],
+  "input": {
+    "properties": { "on": { "type": "boolean" } },
+    "required": ["on"],
+    "type": "object"
+  },
+  "failures": { "Offline": { "$ref": "#/$defs/Offline" } },
+  "destructive": true,
+  "idempotent": true
+}`;
+const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|false|null)\b/g, (_match, text, colon, literal) => {
+  if (typeof literal === "string") return `<span class="n">${literal}</span>`;
+  return typeof colon === "string" ? `<span class="k">${text}</span>${colon}` : `<span class="s">${text}</span>`;
+});
+---
+
+<section class="schematic" aria-labelledby="schematic-title">
+  <div class="schematic-inner">
+    <header class="section-head">
+      <p class="eyebrow">Fig. 1 — The catalog engine</p>
+      <h2 id="schematic-title">Declare it once. <em>Every door opens.</em></h2>
+      <p class="lede">
+        A capability is one entry in the catalog: its input, its failures and the targets that may call it. Each binding turns that entry into a surface. No surface has its own copy of the rules.
+      </p>
+    </header>
+
+    <div class="machine">
+      <div class="engine-card">
+        <div class="engine-plate">
+          <span class="rivet" /><span class="rivet" /><span class="rivet" /><span class="rivet" />
+          <p class="plate-title">aircon.acidcat.json</p>
+          <pre><code set:html={catalogHtml} /></pre>
+        </div>
+        <div class="engine-gauge" aria-hidden="true">
+          <span class="nixie">0</span><span class="nixie">5</span>
+          <span class="gauge-label">surfaces</span>
+        </div>
+      </div>
+
+      <svg class="manifold" viewBox="0 0 400 460" preserveAspectRatio="none" aria-hidden="true">
+        {surfaces.map((surface, index) => (
+          <g class="manifold-pipe" data-surface-pipe={surface.id}>
+            <path class="m-shell" d={pipePath(index)} />
+            <path class="m-glass" d={pipePath(index)} />
+            <path class="m-flow" d={pipePath(index)} style={`animation-delay:${index * -0.35}s`} />
+          </g>
+        ))}
+      </svg>
+
+      <ol class="capsules">
+        {surfaces.map((surface) => (
+          <li class="capsule" data-surface={surface.id} tabindex="0">
+            <span class="capsule-cap" aria-hidden="true" />
+            <div class="capsule-body">
+              <span class="capsule-label">{surface.label}</span>
+              <span class="capsule-kind">{surface.kind}</span>
+              <code class="capsule-output">{surface.output}</code>
+            </div>
+            <span class="capsule-cap" aria-hidden="true" />
+          </li>
+        ))}
+      </ol>
+    </div>
+
+    <div class="blueprint-row">
+      <div class="blueprint">
+        <p class="blueprint-label">Fig. 1a — Exploded view</p>
+        <Exploded />
+      </div>
+      <div class="spec-sheet">
+      <p class="spec-title">Key specifications</p>
+      <dl>
+        {specs.map(([term, value]) => (
+          <div>
+            <dt>{term}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .schematic {
+    position: relative;
+    padding-block: clamp(5rem, 10vw, 9rem);
+    background:
+      linear-gradient(rgb(59 232 255 / 0.06) 1px, transparent 1px) 0 0 / 32px 32px,
+      linear-gradient(90deg, rgb(59 232 255 / 0.06) 1px, transparent 1px) 0 0 / 32px 32px,
+      linear-gradient(rgb(59 232 255 / 0.1) 1px, transparent 1px) 0 0 / 160px 160px,
+      linear-gradient(90deg, rgb(59 232 255 / 0.1) 1px, transparent 1px) 0 0 / 160px 160px,
+      radial-gradient(ellipse at 30% 40%, #0f1d2a, var(--ink-900) 70%);
+    border-block: 1px solid rgb(59 232 255 / 0.2);
+  }
+  .schematic-inner {
+    width: min(1240px, 100%);
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 4vw, 2.5rem);
+  }
+
+  .machine {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(80px, 0.5fr) minmax(0, 1fr);
+    align-items: center;
+    margin-top: 3.5rem;
+  }
+
+  .engine-card {
+    position: relative;
+    padding: 0.6rem;
+    border-radius: 22px;
+    background: linear-gradient(135deg, #f6e2a4, #a7801a 40%, #5e4609 70%, #c9a227);
+    box-shadow:
+      0 0 0 2px #0b0e14,
+      0 30px 80px -30px rgb(182 255 59 / 0.35),
+      0 0 120px -40px rgb(59 232 255 / 0.4);
+  }
+  .engine-plate {
+    position: relative;
+    padding: 1.6rem 1.5rem 1.4rem;
+    border-radius: 16px;
+    background: radial-gradient(circle at 20% 0%, #172131, #07090d 70%);
+    box-shadow: inset 0 0 0 1px rgb(242 230 201 / 0.15);
+  }
+  .rivet {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #f6e2a4, #8a6b14);
+  }
+  .rivet:nth-child(1) {
+    top: 10px;
+    left: 10px;
+  }
+  .rivet:nth-child(2) {
+    top: 10px;
+    right: 10px;
+  }
+  .rivet:nth-child(3) {
+    bottom: 10px;
+    left: 10px;
+  }
+  .rivet:nth-child(4) {
+    bottom: 10px;
+    right: 10px;
+  }
+  .plate-title {
+    margin: 0 0 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--brass-300);
+  }
+  pre {
+    margin: 0;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: clamp(0.7rem, 0.92vw, 0.82rem);
+    line-height: 1.65;
+    color: var(--cream-dim);
+  }
+  pre :global(.k) {
+    color: var(--cream);
+  }
+  pre :global(.s) {
+    color: var(--acid);
+  }
+  pre :global(.n) {
+    color: var(--nixie);
+  }
+
+  .engine-gauge {
+    position: absolute;
+    right: 1.6rem;
+    bottom: -1.6rem;
+    display: flex;
+    align-items: end;
+    gap: 0.3rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 12px;
+    background: #0b0e14;
+    border: 2px solid var(--brass-400);
+  }
+  .nixie {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2.8rem;
+    border-radius: 1rem 1rem 0.4rem 0.4rem;
+    background: radial-gradient(ellipse at 50% 30%, rgb(255 138 61 / 0.18), rgb(255 255 255 / 0.03));
+    border: 1px solid rgb(242 230 201 / 0.3);
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    color: var(--nixie);
+    text-shadow:
+      0 0 6px var(--nixie),
+      0 0 18px rgb(255 138 61 / 0.8);
+  }
+  .gauge-label {
+    margin-left: 0.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--cream-dim);
+  }
+
+  .manifold {
+    width: 100%;
+    height: 460px;
+    overflow: visible;
+  }
+  .m-shell {
+    fill: none;
+    stroke: #8a6b14;
+    stroke-width: 16;
+    vector-effect: non-scaling-stroke;
+  }
+  .m-glass {
+    fill: none;
+    stroke: #0b0e14;
+    stroke-width: 9;
+    vector-effect: non-scaling-stroke;
+  }
+  .m-flow {
+    fill: none;
+    stroke: var(--acid);
+    stroke-width: 4;
+    stroke-linecap: round;
+    stroke-dasharray: 10 22;
+    vector-effect: non-scaling-stroke;
+    filter: drop-shadow(0 0 5px rgb(182 255 59 / 0.9));
+    animation: m-flow 1.4s linear infinite;
+  }
+  .manifold-pipe.is-active .m-flow {
+    stroke: var(--cyan);
+    animation-duration: 0.5s;
+    filter: drop-shadow(0 0 8px rgb(59 232 255 / 1));
+  }
+  @keyframes m-flow {
+    to {
+      stroke-dashoffset: -32;
+    }
+  }
+
+  .capsules {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 18px;
+  }
+  .capsule {
+    display: grid;
+    grid-template-columns: 18px 1fr 18px;
+    align-items: stretch;
+    height: 72px;
+    outline: none;
+    cursor: default;
+    transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .capsule-cap {
+    background: linear-gradient(180deg, #f6e2a4, #a7801a 45%, #4a380a);
+    border: 2px solid #0b0e14;
+  }
+  .capsule-cap:first-child {
+    border-radius: 14px 4px 4px 14px;
+  }
+  .capsule-cap:last-child {
+    border-radius: 4px 14px 14px 4px;
+  }
+  .capsule-body {
+    display: grid;
+    grid-template-columns: 7.4rem minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 0.9rem;
+    align-items: center;
+    padding: 0.55rem 1rem;
+    background: linear-gradient(180deg, rgb(182 255 59 / 0.1), rgb(11 14 20 / 0.95) 40%, rgb(182 255 59 / 0.08));
+    border-block: 2px solid #0b0e14;
+    box-shadow: inset 0 1px 0 rgb(242 230 201 / 0.15);
+  }
+  .capsule-label {
+    grid-row: span 2;
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--cream);
+  }
+  .capsule-kind {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--cream-dim);
+  }
+  .capsule-output {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--acid);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .capsule:is(:hover, :focus-visible, .is-active) {
+    transform: translateX(8px);
+  }
+  .capsule:is(:hover, :focus-visible, .is-active) .capsule-output {
+    color: var(--cyan);
+  }
+  .capsule:focus-visible .capsule-body {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+  }
+
+  .blueprint-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(2rem, 5vw, 4rem);
+    margin-top: clamp(4rem, 8vw, 6rem);
+  }
+  .blueprint {
+    position: relative;
+    padding: 1.4rem;
+    border: 1px solid rgb(59 232 255 / 0.25);
+    background: rgb(5 7 11 / 0.45);
+  }
+  .blueprint::before,
+  .blueprint::after {
+    content: "";
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--cyan);
+  }
+  .blueprint::before {
+    top: -2px;
+    left: -2px;
+    border-right: 0;
+    border-bottom: 0;
+  }
+  .blueprint::after {
+    right: -2px;
+    bottom: -2px;
+    border-left: 0;
+    border-top: 0;
+  }
+  .blueprint-label {
+    margin: 0 0 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+  .spec-sheet {
+    width: 100%;
+    padding: 1.2rem 1.4rem;
+    border: 1px solid rgb(59 232 255 / 0.45);
+    background: rgb(5 7 11 / 0.7);
+    clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+  }
+  .spec-title {
+    margin: 0 0 0.8rem;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+  dl {
+    margin: 0;
+    display: grid;
+    gap: 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+  }
+  dl div {
+    display: grid;
+    grid-template-columns: 11rem 1fr;
+    gap: 1rem;
+    border-bottom: 1px dashed rgb(59 232 255 / 0.18);
+    padding-bottom: 0.35rem;
+  }
+  dt {
+    color: var(--cream-dim);
+  }
+  dd {
+    margin: 0;
+    color: var(--cream);
+  }
+
+  @media (max-width: 900px) {
+    .blueprint-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .machine {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+    .manifold {
+      display: none;
+    }
+    .capsules {
+      margin-top: 3.2rem;
+      padding-left: 1.2rem;
+      border-left: 4px solid #8a6b14;
+    }
+    .capsule {
+      height: auto;
+      min-height: 72px;
+    }
+    .capsule-body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .capsule-label {
+      grid-row: auto;
+    }
+    dl div {
+      grid-template-columns: 1fr;
+      gap: 0.1rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .m-flow {
+      animation: none;
+    }
+  }
+</style>
+
+<script>
+  const announce = (id: string | null) => {
+    document.dispatchEvent(new CustomEvent("acidcat:surface", { detail: id }));
+    for (const pipe of document.querySelectorAll<SVGGElement>("[data-surface-pipe]")) {
+      pipe.classList.toggle("is-active", pipe.dataset["surfacePipe"] === id);
+    }
+  };
+
+  for (const capsule of document.querySelectorAll<HTMLElement>("[data-surface]")) {
+    const id = capsule.dataset["surface"] ?? null;
+    capsule.addEventListener("pointerenter", () => announce(id));
+    capsule.addEventListener("focus", () => announce(id));
+    capsule.addEventListener("pointerleave", () => announce(null));
+    capsule.addEventListener("blur", () => announce(null));
+  }
+</script>

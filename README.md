@@ -169,6 +169,7 @@ gh skill install Hebilicious/acidcat acid-cat
 - [x] Cores in TypeScript: `@acid-cat/core-ts` and `@acid-cat/core-effect`
 - [x] A core in Rust: `acid-cat-core`
 - [ ] Cores in more languages
+- [x] A homepage, in [`site/`](site/README.md)
 - [ ] A site that publishes the specification
 
 ## 🛠️ Development
@@ -187,5 +188,6 @@ moon run verify   # every check and test, as in CI
 | `moon run lint` | Lint all TypeScript, and check that all Rust has the format of `cargo fmt` |
 | `moon run examples` | Write every catalog in canonical form |
 | `moon run model:generate` | Write the cases of the [formal model](model/README.md) into each core |
+| `moon run site:dev` | Serve the [site](site/README.md): the homepage and the documentation |
 
 Pull requests are squash-merged, with titles like `fix(catalog): reject duplicate ids`. Releases: see [Publishing](packages/README.md#publishing).

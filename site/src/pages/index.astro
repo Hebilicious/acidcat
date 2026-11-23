@@ -1,0 +1,263 @@
+---
+import "../styles/tokens.css";
+import "../styles/home.css";
+import CatEngine from "../components/CatEngine.astro";
+import LivingPlate from "../components/LivingPlate.astro";
+import Mark from "../components/Mark.astro";
+import Schematic from "../components/Schematic.astro";
+
+const repository = "https://github.com/Hebilicious/acidcat";
+const title = "AcidCat — One catalog. Every surface.";
+const description = "Describe what your application can do once. Serve it as a CLI, an MCP server, an HTTP API and typed client code.";
+
+const parts = [
+  {
+    number: "I",
+    name: "Catalog",
+    text: "The contract, stored as JSON. Write it in the typed language of your choice. It is checked at build time; programs do not read it at run time.",
+    icon: "catalog",
+  },
+  {
+    number: "II",
+    name: "Binding",
+    text: "The rules for one surface: CLI, MCP, HTTP, WebMCP or a language such as TypeScript. The specification defines each one.",
+    icon: "binding",
+  },
+  {
+    number: "III",
+    name: "Core",
+    text: "A library that runs your capabilities and serves the bindings. One core for Effect, one for plain TypeScript, one for Rust.",
+    icon: "core",
+  },
+  {
+    number: "IV",
+    name: "acid-cat conform",
+    text: "Tests a running program from the outside, through each binding. Any program that passes it is an implementation.",
+    icon: "conform",
+  },
+];
+
+const features = [
+  { title: "Each target sees only its own capabilities", text: "A capability that writes a local file can belong to the cli target alone." },
+  { title: "Failures are typed data", text: "Each failure has a tag. An unexpected error becomes the call failure internal, and its details stay on the server." },
+  { title: "Events stream to subscribers", text: "Occurrences such as aircon.status.changed reach the CLI, MCP, HTTP through server-sent events, and TypeScript." },
+  { title: "Agents know what is dangerous", text: "MCP clients get destructiveHint and idempotentHint, so an agent knows to ask before it turns the unit off." },
+  { title: "WebMCP in the browser", text: "A browser agent calls the capabilities of your page directly, with the session of the signed-in user." },
+  { title: "Built for pipes", text: "In a pipe, the command line writes each result as one line of JSON, so an agent or a script reads less text." },
+];
+
+const languages = [
+  { code: "TS", name: "TypeScript" },
+  { code: "PY", name: "Python" },
+  { code: "GO", name: "Go" },
+  { code: "RS", name: "Rust" },
+  { code: "PKL", name: "Pkl" },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#0b0e14" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="nav">
+      <a class="brand" href="/" aria-label="AcidCat home">
+        <Mark size={34} />
+        <span>AcidCat</span>
+      </a>
+      <nav aria-label="Main">
+        <a href="/docs/">Docs</a>
+        <a href={`${repository}/blob/main/spec/README.md`}>Spec</a>
+        <a href={`${repository}/blob/main/packages/README.md`}>Packages</a>
+        <a class="nav-github" href={repository}>GitHub</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-stage">
+          <LivingPlate />
+        </div>
+        <div class="hero-copy">
+          <p class="eyebrow reveal">An open specification · 0.1 draft</p>
+          <h1 id="hero-title" class="reveal">
+            One catalog.
+            <em>Every surface.</em>
+          </h1>
+          <div class="ornament reveal" aria-hidden="true">
+            <span></span>
+            <svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="2" /><path d="M12 1v5M12 18v5M1 12h5M18 12h5M4.2 4.2l3.5 3.5M16.3 16.3l3.5 3.5M4.2 19.8l3.5-3.5M16.3 7.7l3.5-3.5" stroke="currentColor" stroke-width="2" /></svg>
+            <span></span>
+          </div>
+          <p class="hero-lede reveal">
+            Describe what your application can do once. Serve it as a <strong>CLI</strong>, an <strong>MCP server</strong>, an <strong>HTTP API</strong> and <strong>typed client code</strong>. Every surface takes the same input and returns the same failures.
+          </p>
+          <div class="actions reveal">
+            <a class="button button-acid" href="/docs/">Get started</a>
+            <a class="button button-brass" href={`${repository}/blob/main/spec/README.md`}>Read the spec</a>
+          </div>
+          <div class="install reveal">
+            <span class="prompt" aria-hidden="true">$</span>
+            <code>npx @acid-cat/cli check aircon.acidcat.json</code>
+            <button class="copy" type="button" data-copy="npx @acid-cat/cli check aircon.acidcat.json" aria-label="Copy the command">Copy</button>
+          </div>
+        </div>
+      </section>
+
+      <Schematic />
+
+      <section class="parts" aria-labelledby="parts-title">
+        <header class="section-head">
+          <p class="eyebrow">Fig. 2 — Parts list</p>
+          <h2 id="parts-title">Four parts. <em>No magic.</em></h2>
+          <p class="lede">The specification comes first. The packages in the repository are one implementation of it, and an implementation in any language can replace them.</p>
+        </header>
+        <ol class="parts-grid">
+          {parts.map((part) => (
+            <li class="part">
+              <div class="part-icon" aria-hidden="true">
+                <svg viewBox="0 0 120 120">
+                  {part.icon === "catalog" && (
+                    <g>
+                      <rect class="i-brass" x="30" y="22" width="60" height="76" rx="6" />
+                      <path class="i-line" d="M42 42H78M42 54H78M42 66H66" />
+                      <path class="i-acid i-blink" d="M42 78H58" />
+                    </g>
+                  )}
+                  {part.icon === "binding" && (
+                    <g>
+                      <path class="i-pipe" d="M14 60H50C60 60 60 30 72 30H106M50 60C60 60 60 90 72 90H106M50 60H106" />
+                      <path class="i-flow" d="M14 60H50C60 60 60 30 72 30H106M50 60C60 60 60 90 72 90H106M50 60H106" />
+                    </g>
+                  )}
+                  {part.icon === "core" && (
+                    <g>
+                      <circle class="i-brass" cx="60" cy="60" r="34" />
+                      <circle class="i-core" cx="60" cy="60" r="16" />
+                      <circle class="i-orbit" cx="60" cy="60" r="46" />
+                    </g>
+                  )}
+                  {part.icon === "conform" && (
+                    <g>
+                      <circle class="i-dial" cx="60" cy="64" r="40" />
+                      <path class="i-line" d="M32 64A28 28 0 0 1 88 64" />
+                      <g class="i-needle"><path d="M60 64L60 32" /></g>
+                      <circle class="i-hub" cx="60" cy="64" r="5" />
+                    </g>
+                  )}
+                </svg>
+              </div>
+              <span class="part-number">{part.number}</span>
+              <h3>{part.name}</h3>
+              <p>{part.text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section class="features" aria-labelledby="features-title">
+        <header class="section-head">
+          <p class="eyebrow">Fig. 3 — Pressure-tested</p>
+          <h2 id="features-title">What every surface <em>gets for free.</em></h2>
+        </header>
+        <ul class="feature-grid">
+          {features.map((feature, index) => (
+            <li class="feature" style={`--i:${index}`}>
+              <span class="feature-tube" aria-hidden="true"><span></span></span>
+              <h3>{feature.title}</h3>
+              <p>{feature.text}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section class="languages" aria-labelledby="languages-title">
+        <div class="languages-inner">
+          <div>
+            <p class="eyebrow">Fig. 4 — Language-neutral</p>
+            <h2 id="languages-title">Write the catalog in <em>your</em> language.</h2>
+            <p class="lede">
+              Use a catalog library for TypeScript, Python, Go or Rust, or a Pkl module. Every library writes the same catalog, in one canonical form, and <code>acid-cat check</code> tests it.
+            </p>
+          </div>
+          <ul class="tubes">
+            {languages.map((language, index) => (
+              <li class="tube" style={`--i:${index}`}>
+                <span class="tube-glass"><span class="tube-glyph">{language.code}</span></span>
+                <span class="tube-base" aria-hidden="true"></span>
+                <span class="tube-name">{language.name}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section class="final" aria-labelledby="final-title">
+        <div class="final-inner">
+          <div class="final-engine">
+            <CatEngine />
+          </div>
+          <h2 id="final-title">Fire up <em>the engine.</em></h2>
+          <p class="lede">Read the specification, pick a core, and let <code>acid-cat conform</code> tell you when every surface is right.</p>
+          <div class="actions">
+            <a class="button button-acid" href="/docs/">Get started</a>
+            <a class="button button-brass" href={repository}>Star on GitHub</a>
+          </div>
+          <p class="warning">
+            <strong>Experimental.</strong> The specification is a draft, and the packages are 0.x: any minor release can break their APIs. Pin exact versions.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>AcidCat · MIT license</span>
+      <span class="footer-links">
+        <a href="/docs/">Docs</a>
+        <a href={`${repository}/blob/main/spec/README.md`}>Specification</a>
+        <a href={repository}>GitHub</a>
+      </span>
+    </footer>
+
+    <script>
+      for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
+        button.addEventListener("click", () => {
+          const text = button.dataset["copy"] ?? "";
+          navigator.clipboard.writeText(text).then(
+            () => {
+              button.textContent = "Copied";
+              window.setTimeout(() => (button.textContent = "Copy"), 1600);
+            },
+            () => {
+              button.textContent = "Select";
+            },
+          );
+        });
+      }
+
+      const reveal = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            entry.target.classList.add("is-visible");
+            reveal.unobserve(entry.target);
+          }
+        },
+        { threshold: 0.15 },
+      );
+      for (const element of document.querySelectorAll(".section-head, .part, .feature, .tube, .machine, .blueprint, .spec-sheet")) {
+        element.classList.add("will-reveal");
+        reveal.observe(element);
+      }
+    </script>
+  </body>
+</html>

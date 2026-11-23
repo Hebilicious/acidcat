@@ -1,0 +1,243 @@
+---
+import { polar } from "../lib/geometry.ts";
+
+const axis = 190;
+const layers = [
+  { y: 78, numeral: "I", name: "Catalog", note: "the contract, in JSON" },
+  { y: 178, numeral: "II", name: "Bindings", note: "rules for each surface" },
+  { y: 278, numeral: "III", name: "Core", note: "runs the capabilities" },
+  { y: 378, numeral: "IV", name: "conform", note: "tests from the outside" },
+];
+
+const disc = (y: number, rx: number, ry: number, depth: number) =>
+  `M${axis - rx} ${y}A${rx} ${ry} 0 0 0 ${axis + rx} ${y}V${y + depth}A${rx} ${ry} 0 0 1 ${axis - rx} ${y + depth}Z`;
+
+const nozzles = [200, 240, 280, 320, 160].map((degrees) => {
+  const radians = (degrees * Math.PI) / 180;
+  return { x: Math.round(axis + Math.cos(radians) * 112), y: Math.round(178 + Math.sin(radians) * 28) };
+});
+
+const dialTicks = Array.from({ length: 9 }, (_, index) => {
+  const degrees = -80 + index * 20;
+  return { from: polar(axis, 378, 72, degrees), to: polar(axis, 378, 62, degrees) };
+});
+---
+
+<svg class="exploded" viewBox="0 0 560 470" role="img" aria-labelledby="exploded-title">
+  <title id="exploded-title">Exploded view of an AcidCat implementation: the catalog, the bindings, the core and the conformance test.</title>
+  <line class="bp-axis" x1={axis} y1="24" x2={axis} y2="450" />
+
+  <g class="bp-layer" style="--n:0">
+    <path class="bp-solid" d={disc(78, 120, 30, 14)} />
+    <ellipse class="bp-face" cx={axis} cy="78" rx="120" ry="30" />
+    <path class="bp-thin" d={`M${axis - 70} 70H${axis + 40}M${axis - 80} 80H${axis + 60}M${axis - 62} 90H${axis + 10}`} />
+    <path class="bp-acid" d={`M${axis + 22} 90H${axis + 58}`} />
+  </g>
+
+  <g class="bp-layer" style="--n:1">
+    <path class="bp-solid" d={disc(178, 112, 28, 18)} />
+    <ellipse class="bp-face" cx={axis} cy="178" rx="112" ry="28" />
+    <ellipse class="bp-thin" cx={axis} cy="178" rx="74" ry="18" />
+    {nozzles.map((nozzle) => (
+      <g>
+        <rect class="bp-solid" x={nozzle.x - 7} y={nozzle.y - 26} width="14" height="26" rx="3" />
+        <circle class="bp-acid-dot" cx={nozzle.x} cy={nozzle.y - 26} r="3.5" />
+      </g>
+    ))}
+  </g>
+
+  <g class="bp-layer" style="--n:2">
+    <path class="bp-solid" d={disc(278, 100, 26, 22)} />
+    <ellipse class="bp-face" cx={axis} cy="278" rx="100" ry="26" />
+    <ellipse class="bp-core" cx={axis} cy="278" rx="30" ry="9" />
+    <ellipse class="bp-thin bp-spin" cx={axis} cy="278" rx="58" ry="15" />
+  </g>
+
+  <g class="bp-layer" style="--n:3">
+    <path class="bp-solid" d={disc(378, 88, 22, 14)} />
+    <ellipse class="bp-face" cx={axis} cy="378" rx="88" ry="22" />
+    <g transform="translate(0 -14)">
+      <path class="bp-dial" d={`M${axis - 76} 378A76 76 0 0 1 ${axis + 76} 378`} />
+      {dialTicks.map((tick) => (
+        <line class="bp-thin" x1={tick.from.x} y1={tick.from.y} x2={tick.to.x} y2={tick.to.y} />
+      ))}
+      <g class="bp-needle" style={`transform-origin:${axis}px 378px`}>
+        <line x1={axis} y1="378" x2={axis} y2="318" />
+      </g>
+    </g>
+  </g>
+
+  {layers.map((layer) => (
+    <g class="bp-callout">
+      <path class="bp-leader" d={`M${axis + 128} ${layer.y + 6}L${axis + 168} ${layer.y - 18}H${axis + 196}`} />
+      <circle class="bp-node" cx={axis + 128} cy={layer.y + 6} r="3" />
+      <text class="bp-numeral" x={axis + 202} y={layer.y - 13}>{layer.numeral}</text>
+      <text class="bp-name" x={axis + 236} y={layer.y - 13}>{layer.name}</text>
+      <text class="bp-note" x={axis + 202} y={layer.y + 6}>{layer.note}</text>
+    </g>
+  ))}
+
+  <g class="bp-dimension">
+    <path d="M40 78V378M34 78H46M34 378H46" />
+    <text x="30" y="232" transform="rotate(-90 30 232)">one specification</text>
+  </g>
+</svg>
+
+<style>
+  .exploded {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  .bp-axis {
+    stroke: var(--cyan);
+    stroke-opacity: 0.5;
+    stroke-dasharray: 14 6 3 6;
+  }
+  .bp-solid {
+    fill: rgb(59 232 255 / 0.06);
+    stroke: var(--cyan);
+    stroke-width: 1.5;
+  }
+  .bp-face {
+    fill: rgb(11 14 20 / 0.92);
+    stroke: var(--cyan);
+    stroke-width: 1.5;
+  }
+  .bp-thin {
+    fill: none;
+    stroke: var(--cyan);
+    stroke-opacity: 0.6;
+    stroke-width: 1;
+  }
+  .bp-acid {
+    stroke: var(--acid);
+    stroke-width: 3;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 4px var(--acid));
+  }
+  .bp-acid-dot {
+    fill: var(--acid);
+    filter: drop-shadow(0 0 4px var(--acid));
+  }
+  .bp-core {
+    fill: var(--acid);
+    filter: drop-shadow(0 0 10px var(--acid));
+    animation: bp-pulse 2s ease-in-out infinite;
+  }
+  .bp-spin {
+    stroke-dasharray: 20 8;
+    animation: bp-dash 4s linear infinite;
+  }
+  .bp-dial {
+    fill: none;
+    stroke: var(--cyan);
+    stroke-width: 1.5;
+  }
+  .bp-needle line {
+    stroke: var(--acid);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+  }
+  .bp-needle {
+    animation: bp-needle 4.5s ease-in-out infinite;
+  }
+  .bp-leader {
+    fill: none;
+    stroke: var(--cream);
+    stroke-opacity: 0.55;
+  }
+  .bp-node {
+    fill: var(--ink-900);
+    stroke: var(--cream);
+  }
+  .bp-numeral {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 20px;
+    fill: var(--brass-300);
+  }
+  .bp-name {
+    font-family: var(--font-display);
+    font-size: 20px;
+    fill: var(--cream);
+  }
+  .bp-note {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    fill: var(--cream-dim);
+  }
+  .bp-dimension path {
+    fill: none;
+    stroke: var(--cyan);
+    stroke-opacity: 0.45;
+  }
+  .bp-dimension text {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    fill: var(--cyan);
+    fill-opacity: 0.7;
+    text-anchor: middle;
+  }
+
+  .bp-layer {
+    animation: bp-float 6s ease-in-out infinite;
+    animation-delay: calc(var(--n) * -0.4s);
+  }
+  @keyframes bp-float {
+    0%,
+    100% {
+      transform: translateY(calc(var(--n) * 3px - 4px));
+    }
+    50% {
+      transform: translateY(calc(var(--n) * -3px + 4px));
+    }
+  }
+  @keyframes bp-pulse {
+    50% {
+      opacity: 0.6;
+    }
+  }
+  @keyframes bp-dash {
+    to {
+      stroke-dashoffset: -56;
+    }
+  }
+  @keyframes bp-needle {
+    0%,
+    100% {
+      transform: rotate(-70deg);
+    }
+    45%,
+    80% {
+      transform: rotate(60deg);
+    }
+  }
+
+  :global(.will-reveal) .bp-solid,
+  :global(.will-reveal) .bp-face,
+  :global(.will-reveal) .bp-leader,
+  :global(.will-reveal) .bp-axis {
+    stroke-dasharray: 900;
+    stroke-dashoffset: 900;
+    transition: stroke-dashoffset 2.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  :global(.will-reveal.is-visible) .bp-solid,
+  :global(.will-reveal.is-visible) .bp-face,
+  :global(.will-reveal.is-visible) .bp-leader {
+    stroke-dashoffset: 0;
+  }
+  :global(.will-reveal.is-visible) .bp-axis {
+    stroke-dasharray: 14 6 3 6;
+    stroke-dashoffset: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .exploded * {
+      animation: none !important;
+    }
+  }
+</style>

@@ -1,0 +1,973 @@
+---
+import { circlePath, gearPath, polar, seeded, segmentsAlong, ticks } from "../lib/geometry.ts";
+import type { Cubic } from "../lib/geometry.ts";
+
+const dial = { cx: 500, cy: 450 };
+const dialTicks = ticks(dial.cx, dial.cy, 430, 144, 7, 6);
+const dialCross = [0, 90, 180, 270].map((degrees) => ({
+  outer: polar(dial.cx, dial.cy, 470, degrees),
+  inner: polar(dial.cx, dial.cy, 400, degrees),
+  node: polar(dial.cx, dial.cy, 445, degrees),
+}));
+
+const bigGear = gearPath({ cx: dial.cx, cy: dial.cy, teeth: 90, outer: 372, root: 360, hole: 344 });
+const satellites = [
+  { cx: 150, cy: 210, teeth: 16, outer: 62, root: 52, hole: 18, speed: "18s", reverse: false },
+  { cx: 232, cy: 300, teeth: 10, outer: 34, root: 27, hole: 9, speed: "11.25s", reverse: true },
+  { cx: 860, cy: 300, teeth: 14, outer: 52, root: 43, hole: 14, speed: "16s", reverse: true },
+];
+
+const shoulderGear = gearPath({ cx: 420, cy: 425, teeth: 14, outer: 50, root: 41, hole: 9 });
+const haunchGear = gearPath({ cx: 238, cy: 712, teeth: 18, outer: 64, root: 54, hole: 12 });
+const haunchPinion = gearPath({ cx: 318, cy: 612, teeth: 9, outer: 27, root: 20, hole: 6 });
+const reactorGear = gearPath({ cx: 0, cy: 0, teeth: 10, outer: 15, root: 11, hole: 4 });
+
+const point = (x: number, y: number) => ({ x, y });
+const tailCurves: Cubic[] = [
+  [point(128, 838), point(52, 836), point(22, 902), point(108, 920)],
+  [point(108, 920), point(200, 938), point(320, 936), point(428, 932)],
+];
+const tailSegments = segmentsAlong(tailCurves, 27);
+const tailCoil = new Set([9, 10, 11]);
+const tailPivot = tailSegments[7] ?? { x: 200, y: 930, angle: 0 };
+
+const random = seeded(2140);
+const sparks = Array.from({ length: 22 }, () => ({
+  x: Math.round(200 + random() * 600),
+  y: Math.round(560 + random() * 260),
+  r: Math.round((1 + random() * 2.2) * 10) / 10,
+  delay: `${Math.round(random() * 90) / 10}s`,
+  duration: `${Math.round((5 + random() * 6) * 10) / 10}s`,
+  drift: `${Math.round((random() - 0.5) * 80)}px`,
+  cyan: random() > 0.6,
+}));
+
+const orbitText = "ONE CATALOG ✦ EVERY SURFACE ✦ CLI ✦ MCP ✦ HTTP ✦ WEBMCP ✦ TYPESCRIPT ✦ CONFORM ✦ ";
+
+const terminals = [
+  { id: "cli", label: "CLI", detail: "home --on", x: 96, y: 640, pipe: "M226 830H166Q96 830 96 760V676" },
+  { id: "mcp", label: "MCP", detail: "tools/call", x: 904, y: 640, pipe: "M774 830H834Q904 830 904 760V676" },
+  { id: "http", label: "HTTP", detail: "POST /capabilities", x: 96, y: 950, pipe: "M230 880H136Q96 880 96 914" },
+  { id: "ts", label: "TypeScript", detail: "execute({ on })", x: 904, y: 950, pipe: "M770 880H864Q904 880 904 914" },
+];
+
+const rings = [
+  { id: "a", cx: 520, cy: 470, rx: 350, ry: 92, tilt: -10, kind: "cyan" },
+  { id: "b", cx: 520, cy: 650, rx: 318, ry: 72, tilt: 7, kind: "acid" },
+  { id: "c", cx: 520, cy: 372, rx: 384, ry: 104, tilt: 4, kind: "brass" },
+];
+const ellipsePath = (rx: number, ry: number) => `M${-rx} 0A${rx} ${ry} 0 1 1 ${rx} 0A${rx} ${ry} 0 1 1 ${-rx} 0`;
+---
+
+<figure class="engine" data-engine aria-labelledby="engine-caption">
+  <figcaption id="engine-caption" class="sr-only">
+    A mechanical brass cat sits on a brass pedestal. Four glass pipes carry glowing acid from the pedestal to four terminals: CLI, MCP, HTTP and TypeScript.
+  </figcaption>
+  <svg viewBox="0 0 1000 1000" role="img" aria-labelledby="engine-caption" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="brass" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#f6e2a4" />
+        <stop offset="0.35" stop-color="#d9b23c" />
+        <stop offset="0.75" stop-color="#a7801a" />
+        <stop offset="1" stop-color="#5e4609" />
+      </linearGradient>
+      <linearGradient id="brass-side" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#3d2e07" />
+        <stop offset="0.2" stop-color="#a7801a" />
+        <stop offset="0.42" stop-color="#f6e2a4" />
+        <stop offset="0.58" stop-color="#d9b23c" />
+        <stop offset="0.85" stop-color="#7a5c10" />
+        <stop offset="1" stop-color="#2c2105" />
+      </linearGradient>
+      <linearGradient id="brass-dim" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#b8922a" />
+        <stop offset="1" stop-color="#4a380a" />
+      </linearGradient>
+      <linearGradient id="copper" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#f0b98c" />
+        <stop offset="0.5" stop-color="#b87333" />
+        <stop offset="1" stop-color="#5a2e10" />
+      </linearGradient>
+      <linearGradient id="steel" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#0e0c09" />
+        <stop offset="0.5" stop-color="#2b261d" />
+        <stop offset="1" stop-color="#0e0c09" />
+      </linearGradient>
+      <linearGradient id="glass-dome" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#3a4a8c" />
+        <stop offset="0.45" stop-color="#121a3a" />
+        <stop offset="1" stop-color="#05070b" />
+      </linearGradient>
+      <linearGradient id="acid-panel" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#b6ff3b" stop-opacity="0.85" />
+        <stop offset="0.5" stop-color="#4f8f12" stop-opacity="0.55" />
+        <stop offset="1" stop-color="#0b1a05" stop-opacity="0.9" />
+      </linearGradient>
+      <radialGradient id="iris" cx="0.45" cy="0.5" r="0.6">
+        <stop offset="0" stop-color="#f4ffd6" />
+        <stop offset="0.35" stop-color="#b6ff3b" />
+        <stop offset="1" stop-color="#3f7a07" />
+      </radialGradient>
+      <radialGradient id="core" cx="0.5" cy="0.5" r="0.5">
+        <stop offset="0" stop-color="#fbffe8" />
+        <stop offset="0.3" stop-color="#b6ff3b" />
+        <stop offset="1" stop-color="#b6ff3b" stop-opacity="0" />
+      </radialGradient>
+      <radialGradient id="floor-glow" cx="0.5" cy="0.5" r="0.5">
+        <stop offset="0" stop-color="#b6ff3b" stop-opacity="0.45" />
+        <stop offset="0.6" stop-color="#3be8ff" stop-opacity="0.08" />
+        <stop offset="1" stop-color="#3be8ff" stop-opacity="0" />
+      </radialGradient>
+      <radialGradient id="halo" cx="0.5" cy="0.45" r="0.5">
+        <stop offset="0" stop-color="#3be8ff" stop-opacity="0.16" />
+        <stop offset="0.55" stop-color="#b6ff3b" stop-opacity="0.05" />
+        <stop offset="1" stop-color="#0b0e14" stop-opacity="0" />
+      </radialGradient>
+      <linearGradient id="scan" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#3be8ff" stop-opacity="0" />
+        <stop offset="0.85" stop-color="#3be8ff" stop-opacity="0.35" />
+        <stop offset="1" stop-color="#e8fdff" stop-opacity="0.9" />
+      </linearGradient>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="6" result="blur" />
+        <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+      <filter id="glow-soft" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="3" result="blur" />
+        <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+      <filter id="steam-blur" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur stdDeviation="9" />
+      </filter>
+      <path id="orbit-text-path" d={circlePath(dial.cx, dial.cy, 398)} />
+      <clipPath id="ring-back"><rect x="-500" y="-300" width="1000" height="300" /></clipPath>
+      <clipPath id="ring-front"><rect x="-500" y="0" width="1000" height="300" /></clipPath>
+
+      <g id="cat-silhouette">
+        <path d="M362 215C352 280 345 330 315 400C270 470 190 520 145 620C105 710 110 800 160 852L505 862L500 828L470 640L475 520C500 480 512 440 506 405C502 350 490 300 470 255Z" />
+        <path d="M372 140C400 118 460 112 500 135C525 150 540 175 552 200L566 212C563 222 553 228 541 232C535 245 520 255 500 258C470 262 445 258 430 245C400 235 372 215 365 190C360 170 362 152 372 140Z" />
+        <path d="M360 168L380 22L442 130Z" />
+        <path d="M428 136L458 78L474 146Z" />
+      </g>
+      <clipPath id="cat-clip"><use href="#cat-silhouette" /></clipPath>
+    </defs>
+
+    <circle class="halo" cx={dial.cx} cy={dial.cy} r="480" fill="url(#halo)" />
+
+    <g class="dial">
+      <g class="spin spin-slow" style={`transform-origin:${dial.cx}px ${dial.cy}px`}>
+        <circle cx={dial.cx} cy={dial.cy} r="430" fill="none" stroke="#f2e6c9" stroke-opacity="0.18" stroke-width="1" />
+        {dialTicks.map((tick) => (
+          <line x1={tick.from.x} y1={tick.from.y} x2={tick.to.x} y2={tick.to.y} stroke="#f2e6c9" stroke-opacity={tick.major ? 0.45 : 0.16} stroke-width={tick.major ? 1.6 : 1} />
+        ))}
+      </g>
+      <circle cx={dial.cx} cy={dial.cy} r="452" fill="none" stroke="#f2e6c9" stroke-opacity="0.22" stroke-dasharray="2 10 60 10" />
+      {dialCross.map((cross) => (
+        <g stroke="#f2e6c9" stroke-opacity="0.5" fill="none">
+          <line x1={cross.outer.x} y1={cross.outer.y} x2={cross.inner.x} y2={cross.inner.y} />
+          <circle cx={cross.node.x} cy={cross.node.y} r="6" fill="#0b0e14" />
+        </g>
+      ))}
+      <g class="spin spin-rev-slower" style={`transform-origin:${dial.cx}px ${dial.cy}px`}>
+        <text class="orbit-text">
+          <textPath href="#orbit-text-path">{orbitText}{orbitText}</textPath>
+        </text>
+      </g>
+      <g class="spin spin-gear" style={`transform-origin:${dial.cx}px ${dial.cy}px`}>
+        <path d={bigGear} fill="url(#brass-dim)" fill-opacity="0.32" fill-rule="evenodd" stroke="#c9a227" stroke-opacity="0.35" />
+      </g>
+    </g>
+
+    <g class="satellites">
+      {satellites.map((gear) => (
+        <g>
+          <g class:list={["spin", gear.reverse ? "spin-rev" : "spin-fwd"]} style={`transform-origin:${gear.cx}px ${gear.cy}px;animation-duration:${gear.speed}`}>
+            <path d={gearPath(gear)} fill="none" stroke="#f2e6c9" stroke-opacity="0.55" stroke-width="2" fill-rule="evenodd" />
+            <line x1={gear.cx} y1={gear.cy} x2={gear.cx} y2={gear.cy - gear.root + 6} stroke="#f2e6c9" stroke-opacity="0.55" stroke-width="2" />
+          </g>
+          <line x1={gear.cx - gear.outer - 24} y1={gear.cy} x2={gear.cx + gear.outer + 24} y2={gear.cy} stroke="#f2e6c9" stroke-opacity="0.2" />
+          <line x1={gear.cx} y1={gear.cy - gear.outer - 24} x2={gear.cx} y2={gear.cy + gear.outer + 24} stroke="#f2e6c9" stroke-opacity="0.2" />
+        </g>
+      ))}
+    </g>
+
+    {rings.map((ring) => (
+      <g transform={`translate(${ring.cx} ${ring.cy}) rotate(${ring.tilt})`} clip-path="url(#ring-back)">
+        <path class="ring-track" d={ellipsePath(ring.rx, ring.ry)} />
+        <path class:list={["ring", `ring-${ring.kind}`]} d={ellipsePath(ring.rx, ring.ry)} />
+        {ring.kind === "brass" && <path class="ring ring-brass-hi" d={ellipsePath(ring.rx, ring.ry)} />}
+      </g>
+    ))}
+
+    <g class="pipes">
+      {terminals.map((terminal) => (
+        <g class="pipe" data-pipe={terminal.id}>
+          <path class="pipe-shell" d={terminal.pipe} />
+          <path class="pipe-glass" d={terminal.pipe} />
+          <path class="pipe-flow" d={terminal.pipe} />
+        </g>
+      ))}
+    </g>
+
+    <ellipse cx="500" cy="950" rx="340" ry="64" fill="url(#floor-glow)" class="floor-glow" />
+
+    <g class="pedestal">
+      <path d="M220 800V880C220 916 345 940 500 940C655 940 780 916 780 880V800Z" fill="url(#brass-side)" stroke="#0b0e14" stroke-width="3" />
+      <path d="M220 852C220 886 345 910 500 910C655 910 780 886 780 852" fill="none" stroke="#0b0e14" stroke-width="2" stroke-opacity="0.7" />
+      <path d="M220 824C220 858 345 882 500 882C655 882 780 858 780 824" fill="none" stroke="#f6e2a4" stroke-width="1.2" stroke-opacity="0.5" />
+      {Array.from({ length: 15 }, (_, index) => {
+        const angle = Math.PI * (0.06 + (0.88 * index) / 14);
+        const x = 500 - Math.cos(angle) * 272;
+        const y = 893 + Math.sin(angle) * 36;
+        return <circle cx={Math.round(x)} cy={Math.round(y)} r="3" fill="#f6e2a4" stroke="#3d2e07" />;
+      })}
+      <ellipse cx="500" cy="800" rx="280" ry="56" fill="url(#brass)" stroke="#0b0e14" stroke-width="3" />
+      <ellipse cx="500" cy="800" rx="246" ry="45" fill="#0b0e14" fill-opacity="0.55" stroke="#c9a227" stroke-opacity="0.6" />
+      <ellipse class="plate-glow" cx="500" cy="800" rx="206" ry="35" fill="none" stroke="#b6ff3b" stroke-width="2" stroke-dasharray="6 10" filter="url(#glow-soft)" />
+      <g class="gauge" transform="translate(500 884)">
+        <circle r="30" fill="#f2e6c9" stroke="#0b0e14" stroke-width="3" />
+        <circle r="30" fill="none" stroke="url(#brass-side)" stroke-width="7" />
+        {Array.from({ length: 11 }, (_, index) => {
+          const from = polar(0, 0, 21, -120 + index * 24);
+          const to = polar(0, 0, index % 5 === 0 ? 14 : 17, -120 + index * 24);
+          return <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="#0b0e14" stroke-width={index % 5 === 0 ? 2 : 1} />;
+        })}
+        <path d="M-7 -4A9 9 0 0 1 7 -4" fill="none" stroke="#ff4d2e" stroke-width="2" transform="rotate(64)" />
+        <g class="needle"><line x1="0" y1="4" x2="0" y2="-20" stroke="#0b0e14" stroke-width="2.2" stroke-linecap="round" /></g>
+        <circle r="3.5" fill="#b87333" stroke="#0b0e14" />
+      </g>
+      {[-1, 1].map((side) => (
+        <g transform={`translate(${500 + side * 124} 868)`}>
+          <rect x="-13" y="-30" width="26" height="54" rx="12" fill="#0b0e14" fill-opacity="0.7" stroke="#f2e6c9" stroke-opacity="0.6" stroke-width="1.5" />
+          <rect class="vial" x="-8" y="-24" width="16" height="44" rx="8" fill="#b6ff3b" filter="url(#glow-soft)" style={`animation-delay:${side > 0 ? "-1.6s" : "0s"}`} />
+          <rect x="-16" y="20" width="32" height="8" rx="2" fill="url(#brass-side)" stroke="#0b0e14" stroke-width="1.5" />
+          <rect x="-16" y="-36" width="32" height="8" rx="2" fill="url(#brass-side)" stroke="#0b0e14" stroke-width="1.5" />
+        </g>
+      ))}
+      {[-1, 1].map((side) => (
+        <g transform={`translate(${500 + side * 216} 852)`}>
+          {[0, 1, 2].map((slot) => (
+            <rect x="-14" y={-12 + slot * 9} width="28" height="4" rx="2" fill="#0b0e14" fill-opacity="0.85" />
+          ))}
+        </g>
+      ))}
+    </g>
+
+    <g class="steam" filter="url(#steam-blur)">
+      {[0, 1, 2, 3, 4, 5].map((index) => (
+        <circle class="puff" cx={index % 2 === 0 ? 284 : 716} cy="840" r="24" style={`animation-delay:${index * 1.1}s`} />
+      ))}
+    </g>
+
+    <g class="cat" transform="translate(272 96) scale(0.8)">
+      <use class="aura" href="#cat-silhouette" />
+      <g class="cat-body">
+        <path d="M428 136L458 78L474 146Z" fill="url(#brass-dim)" stroke="#0b0e14" stroke-width="4" stroke-linejoin="round" />
+
+        <g class="leg-far">
+          <path d="M352 560L398 560L404 828L352 828Z" fill="url(#brass-dim)" stroke="#0b0e14" stroke-width="4" />
+          <path d="M340 862C338 838 356 826 380 826C404 826 418 840 414 862Z" fill="url(#brass-dim)" stroke="#0b0e14" stroke-width="4" />
+        </g>
+
+        <path d="M362 215C352 280 345 330 315 400C270 470 190 520 145 620C105 710 110 800 160 852L505 862L500 828L470 640L475 520C500 480 512 440 506 405C502 350 490 300 470 255Z" fill="url(#steel)" stroke="#0b0e14" stroke-width="5" stroke-linejoin="round" />
+
+        <g class="spine" stroke="#c9a227" stroke-opacity="0.75" stroke-width="3" stroke-linecap="round">
+          {[0, 1, 2, 3, 4, 5, 6].map((index) => (
+            <line x1={372 + index * 2} y1={232 + index * 15} x2={428 + index * 4} y2={238 + index * 15} />
+          ))}
+          <path d="M404 230C400 270 400 300 404 330" fill="none" stroke="#3be8ff" stroke-opacity="0.6" stroke-width="2" />
+        </g>
+
+        <path d="M300 520C340 498 400 496 434 516L474 640C420 652 360 644 320 622Z" fill="url(#brass)" stroke="#0b0e14" stroke-width="4" stroke-linejoin="round" />
+        <path class="filigree" d="M330 560C340 546 358 544 364 556C368 566 356 570 350 562M380 590C392 580 408 582 410 594M352 610C364 604 378 606 384 616" fill="none" stroke="#7a3c14" stroke-width="2.5" stroke-linecap="round" />
+        <path d="M432 252C452 262 466 258 474 254C486 280 492 305 494 332L436 342C434 310 432 280 432 252Z" fill="url(#brass)" stroke="#0b0e14" stroke-width="4" stroke-linejoin="round" />
+        {[276, 298, 320].map((y) => (
+          <path d={`M${434} ${y}L${486 + (y - 276) * 0.25} ${y - 6}`} stroke="#0b0e14" stroke-width="2" stroke-opacity="0.7" />
+        ))}
+
+        <path class="acid-panel" d="M330 345C290 440 180 515 132 640C112 705 118 750 136 790C160 712 200 610 268 525C318 468 345 420 354 370Z" fill="url(#acid-panel)" stroke="#0b0e14" stroke-width="4" filter="url(#glow-soft)" />
+        <path d="M318 400C280 460 210 520 170 600" fill="none" stroke="#f4ffd6" stroke-opacity="0.55" stroke-width="3" stroke-linecap="round" class="acid-glint" />
+
+        <path d="M346 372C330 420 300 470 262 520C230 562 200 600 182 650L236 600C280 560 330 520 372 470Z" fill="url(#brass)" stroke="#0b0e14" stroke-width="4" stroke-linejoin="round" />
+        <path d="M262 556C236 590 214 620 198 650" fill="none" stroke="#b87333" stroke-width="3" stroke-linecap="round" />
+
+        <g class="shoulder">
+          <circle cx="420" cy="425" r="84" fill="url(#brass)" stroke="#0b0e14" stroke-width="5" />
+          <path d="M346 400A78 78 0 0 1 470 362" fill="none" stroke="url(#copper)" stroke-width="12" stroke-linecap="round" />
+          <path class="filigree" d="M360 392C366 378 380 372 390 380C398 388 388 398 380 392M402 372C412 364 428 364 436 374C442 384 430 390 424 382" fill="none" stroke="#5a2e10" stroke-width="2.5" stroke-linecap="round" />
+          <circle cx="420" cy="425" r="56" fill="#0b0e14" stroke="#0b0e14" stroke-width="3" />
+          <g class="spin spin-fwd" style="transform-origin:420px 425px;animation-duration:12s">
+            <path d={shoulderGear} fill="url(#brass-dim)" fill-rule="evenodd" stroke="#0b0e14" stroke-width="2" />
+            {[0, 60, 120, 180, 240, 300].map((degrees) => {
+              const spoke = polar(420, 425, 30, degrees);
+              return <line x1="420" y1="425" x2={spoke.x} y2={spoke.y} stroke="#0b0e14" stroke-width="3" />;
+            })}
+          </g>
+          <circle cx="420" cy="425" r="56" fill="none" stroke="#f6e2a4" stroke-opacity="0.4" stroke-width="2" />
+        </g>
+
+        <g class="piston">
+          <rect class="piston-rod" x="376" y="740" width="12" height="86" rx="3" fill="#d8dde6" stroke="#0b0e14" stroke-width="3" />
+          <rect x="370" y="640" width="24" height="120" rx="5" fill="url(#brass-dim)" stroke="#0b0e14" stroke-width="3.5" />
+          <circle cx="382" cy="650" r="5" fill="#b87333" stroke="#0b0e14" stroke-width="2" />
+          <path d="M398 660C410 700 404 760 416 820" fill="none" stroke="#3be8ff" stroke-opacity="0.7" stroke-width="2" />
+        </g>
+
+        <g class="haunch">
+          <circle cx="240" cy="715" r="120" fill="url(#brass)" stroke="#0b0e14" stroke-width="5" />
+          <path d="M132 690A110 110 0 0 1 320 628" fill="none" stroke="url(#copper)" stroke-width="16" stroke-linecap="round" />
+          <path class="filigree" d="M150 668C158 650 176 644 186 654C194 664 182 674 174 666M200 636C214 628 232 630 240 642C246 654 232 660 226 650M262 630C276 626 290 632 294 644" fill="none" stroke="#5a2e10" stroke-width="2.5" stroke-linecap="round" />
+          <circle cx="240" cy="715" r="84" fill="#0b0e14" stroke="#0b0e14" stroke-width="3" />
+          <g class="spin spin-rev" style="transform-origin:238px 712px;animation-duration:16s">
+            <path d={haunchGear} fill="url(#brass-dim)" fill-rule="evenodd" stroke="#0b0e14" stroke-width="2" />
+            {[0, 72, 144, 216, 288].map((degrees) => {
+              const spoke = polar(238, 712, 42, degrees);
+              return <line x1="238" y1="712" x2={spoke.x} y2={spoke.y} stroke="#0b0e14" stroke-width="4" />;
+            })}
+          </g>
+          <g class="spin spin-fwd" style="transform-origin:318px 612px;animation-duration:8s">
+            <path d={haunchPinion} fill="url(#copper)" fill-rule="evenodd" stroke="#0b0e14" stroke-width="2" />
+          </g>
+          <path d="M244 846C300 846 350 806 352 744C354 700 330 664 300 650C320 690 322 730 300 770C280 806 250 830 196 840C210 846 226 848 244 846Z" fill="url(#brass)" stroke="#0b0e14" stroke-width="4" stroke-linejoin="round" />
+          <circle cx="240" cy="715" r="84" fill="none" stroke="#f6e2a4" stroke-opacity="0.35" stroke-width="2" />
+        </g>
+
+        <path d="M196 840C240 846 300 840 340 830C372 826 404 834 412 862L170 862C164 852 176 842 196 840Z" fill="url(#brass)" stroke="#0b0e14" stroke-width="4" stroke-linejoin="round" />
+        {[352, 374, 396].map((x) => (
+          <path d={`M${x - 10} 862C${x - 10} 848 ${x + 10} 848 ${x + 10} 862`} fill="none" stroke="#0b0e14" stroke-width="2.5" />
+        ))}
+
+        <path d="M330 340C370 362 440 360 492 330L498 352C444 384 366 386 322 362Z" fill="url(#copper)" stroke="#0b0e14" stroke-width="4" stroke-linejoin="round" />
+        {[350, 380, 410, 440, 470].map((x, index) => (
+          <circle cx={x} cy={358 - Math.abs(index - 2) * 2 + (index > 2 ? -6 : 0)} r="3.5" fill="#f6e2a4" stroke="#3d2e07" />
+        ))}
+
+        <g class="leg-near">
+          <path d="M418 500C440 490 474 492 482 520L476 640L428 640Z" fill="url(#brass)" stroke="#0b0e14" stroke-width="4" stroke-linejoin="round" />
+          <path d="M434 640L472 640L468 830L440 830Z" fill="url(#brass)" stroke="#0b0e14" stroke-width="4" stroke-linejoin="round" />
+          <line x1="452" y1="652" x2="452" y2="820" stroke="#0b0e14" stroke-width="3" />
+          <line x1="458" y1="660" x2="458" y2="760" stroke="#3be8ff" stroke-opacity="0.65" stroke-width="2" />
+          <circle cx="452" cy="640" r="16" fill="url(#copper)" stroke="#0b0e14" stroke-width="4" />
+          <circle cx="452" cy="640" r="5" fill="#0b0e14" />
+          <path d="M426 862C424 836 440 824 466 824C494 824 512 840 508 862Z" fill="url(#brass)" stroke="#0b0e14" stroke-width="4" />
+          {[448, 470, 492].map((x) => (
+            <path d={`M${x - 10} 862C${x - 10} 849 ${x + 10} 849 ${x + 10} 862`} fill="none" stroke="#0b0e14" stroke-width="2.5" />
+          ))}
+        </g>
+
+        <g class="reactor" transform="translate(500 428)">
+          <circle class="reactor-halo" r="44" fill="url(#core)" />
+          <ellipse rx="17" ry="34" fill="#0b0e14" stroke="url(#brass-side)" stroke-width="7" />
+          <ellipse rx="17" ry="34" fill="none" stroke="#0b0e14" stroke-width="2" />
+          <g transform="scale(0.5 1)">
+            <g class="spin spin-fwd" style="transform-origin:0px 0px;animation-duration:4s">
+              <path d={reactorGear} fill="#b6ff3b" fill-rule="evenodd" filter="url(#glow-soft)" />
+            </g>
+          </g>
+          <ellipse class="reactor-core" rx="6" ry="12" fill="#fbffe8" filter="url(#glow)" />
+        </g>
+      </g>
+
+      <g class="tail">
+        <g class="tail-tip" style={`transform-origin:${tailPivot.x}px ${tailPivot.y}px`}>
+          {tailSegments.map((segment, index) => (
+            <g transform={`translate(${segment.x} ${segment.y}) rotate(${segment.angle})`}>
+              <rect x="-14" y={-17 + index * 0.3} width="28" height={34 - index * 0.6} rx="8" fill={tailCoil.has(index) ? "url(#copper)" : "url(#brass)"} stroke="#0b0e14" stroke-width="3.5" />
+              {tailCoil.has(index) ? (
+                [-7, -2.5, 2, 6.5].map((offset) => <line x1={offset} y1="-12" x2={offset} y2="12" stroke="#5a2e10" stroke-width="2" />)
+              ) : (
+                <g>
+                  <line x1="-12" y1="-6" x2="12" y2="-6" stroke="#fff4cf" stroke-opacity="0.55" stroke-width="3" stroke-linecap="round" />
+                  <line x1="10" y1="-12" x2="10" y2="12" stroke="#0b0e14" stroke-opacity="0.45" stroke-width="2" />
+                </g>
+              )}
+            </g>
+          ))}
+          <g transform="translate(428 932)">
+            <path d="M0 -14C34 -22 72 -12 100 10C70 2 34 8 0 14Z" fill="url(#copper)" stroke="#0b0e14" stroke-width="3.5" stroke-linejoin="round" />
+            <path d="M8 0C30 -6 54 -2 76 6" fill="none" stroke="#b6ff3b" stroke-width="2.5" filter="url(#glow-soft)" class="blade-glow" />
+            <path class="filigree" d="M14 -6C20 -12 30 -10 30 -4M38 -8C44 -12 52 -10 52 -4" fill="none" stroke="#5a2e10" stroke-width="2" stroke-linecap="round" />
+          </g>
+        </g>
+      </g>
+
+      <g class="head" style="transform-origin:420px 250px">
+        <g class="ear" style="transform-origin:400px 150px">
+          <path d="M360 168L380 22L442 130Z" fill="url(#brass)" stroke="#0b0e14" stroke-width="5" stroke-linejoin="round" />
+          <path d="M372 148L382 54L426 128Z" fill="#2a1408" />
+          <path class="filigree-bright" d="M384 70C392 80 388 92 380 94M388 100C400 104 404 116 396 124M380 118C372 124 376 134 384 136" fill="none" stroke="url(#copper)" stroke-width="3" stroke-linecap="round" />
+          <circle class="ear-node" cx="380" cy="22" r="5" fill="#b6ff3b" filter="url(#glow)" />
+        </g>
+
+        <path d="M372 140C400 118 460 112 500 135C525 150 540 175 552 200L566 212C563 222 553 228 541 232C535 245 520 255 500 258C470 262 445 258 430 245C400 235 372 215 365 190C360 170 362 152 372 140Z" fill="url(#brass)" stroke="#0b0e14" stroke-width="5" stroke-linejoin="round" />
+        <path d="M394 136C428 112 482 112 514 142C494 140 466 138 438 144C418 148 404 150 394 136Z" fill="url(#glass-dome)" stroke="#0b0e14" stroke-width="4" />
+        <path d="M414 128C438 120 466 120 486 128" fill="none" stroke="#9fb6ff" stroke-opacity="0.7" stroke-width="3" stroke-linecap="round" />
+        <path d="M440 150C470 150 500 160 520 176" fill="none" stroke="#0b0e14" stroke-width="2.5" stroke-opacity="0.8" />
+        <path d="M440 214C462 230 492 236 520 236" fill="none" stroke="#0b0e14" stroke-width="2.5" stroke-opacity="0.7" />
+        <path d="M430 245C444 222 448 196 440 170" fill="none" stroke="#0b0e14" stroke-width="2.5" stroke-opacity="0.7" />
+        <path class="filigree" d="M452 196C460 188 472 190 472 200C472 208 462 208 460 202M486 216C494 210 506 212 506 220" fill="none" stroke="#7a3c14" stroke-width="2.2" stroke-linecap="round" />
+
+        <g class="cheek-disk">
+          <circle cx="398" cy="196" r="26" fill="url(#brass-side)" stroke="#0b0e14" stroke-width="4" />
+          <circle cx="398" cy="196" r="18" fill="url(#brass)" stroke="#0b0e14" stroke-width="2.5" />
+          <g class="spin spin-fwd" style="transform-origin:398px 196px;animation-duration:6s">
+            <circle cx="398" cy="196" r="10" fill="none" stroke="#0b0e14" stroke-width="2.5" stroke-dasharray="4 3" />
+          </g>
+          <circle cx="398" cy="196" r="4" fill="#b87333" stroke="#0b0e14" stroke-width="2" />
+        </g>
+
+        <g class="eye">
+          <path d="M470 188C480 168 506 162 526 176C516 194 490 200 470 188Z" fill="#0b0e14" stroke="#0b0e14" stroke-width="4" stroke-linejoin="round" />
+          <path class="iris" d="M474 186C484 172 504 168 520 178C512 191 492 196 474 186Z" fill="url(#iris)" filter="url(#glow-soft)" />
+          <g class="spin spin-rev" style="transform-origin:498px 182px;animation-duration:9s">
+            <circle cx="498" cy="182" r="9" fill="none" stroke="#2f5a05" stroke-width="1.2" stroke-dasharray="2 2" />
+          </g>
+          <ellipse class="pupil" cx="499" cy="182" rx="2.6" ry="9" fill="#0b0e14" />
+          <path class="lid" d="M466 186C478 160 510 154 530 174L526 176C506 162 480 168 470 188Z" fill="url(#brass)" stroke="#0b0e14" stroke-width="3" stroke-linejoin="round" />
+        </g>
+
+        <path d="M556 205L568 211L560 220Z" fill="url(#copper)" stroke="#0b0e14" stroke-width="2.5" stroke-linejoin="round" />
+        <path d="M558 222C552 232 540 236 528 236" fill="none" stroke="#0b0e14" stroke-width="2.5" stroke-linecap="round" />
+        {[[532, 216], [540, 220], [528, 224], [536, 228]].map(([x, y]) => (
+          <circle cx={x} cy={y} r="1.6" fill="#3d2e07" />
+        ))}
+        <g class="whiskers">
+          {[
+            "M540 218C580 208 610 204 640 206",
+            "M542 224C584 222 616 226 648 236",
+            "M538 230C574 238 600 250 626 266",
+          ].map((path, index) => (
+            <g>
+              <path d={path} fill="none" stroke="#f2e6c9" stroke-opacity="0.75" stroke-width="1.6" stroke-linecap="round" />
+              <circle class="whisker-tip" cx={[640, 648, 626][index]} cy={[206, 236, 266][index]} r="3" fill={index === 1 ? "#3be8ff" : "#b6ff3b"} filter="url(#glow-soft)" style={`animation-delay:${index * 0.4}s`} />
+            </g>
+          ))}
+        </g>
+      </g>
+
+      <g clip-path="url(#cat-clip)" class="scan-layer">
+        <rect class="scan" x="0" y="-120" width="700" height="120" fill="url(#scan)" />
+      </g>
+    </g>
+
+    {rings.map((ring) => (
+      <g transform={`translate(${ring.cx} ${ring.cy}) rotate(${ring.tilt})`} clip-path="url(#ring-front)">
+        <path class="ring-track" d={ellipsePath(ring.rx, ring.ry)} />
+        <path class:list={["ring", `ring-${ring.kind}`]} d={ellipsePath(ring.rx, ring.ry)} />
+        {ring.kind === "brass" && <path class="ring ring-brass-hi" d={ellipsePath(ring.rx, ring.ry)} />}
+      </g>
+    ))}
+
+    <g class="sparks">
+      {sparks.map((spark) => (
+        <circle
+          class="spark"
+          cx={spark.x}
+          cy={spark.y}
+          r={spark.r}
+          fill={spark.cyan ? "#3be8ff" : "#b6ff3b"}
+          style={`animation-delay:${spark.delay};animation-duration:${spark.duration};--drift:${spark.drift}`}
+        />
+      ))}
+    </g>
+
+    <g class="terminals">
+      {terminals.map((terminal) => (
+        <g class="terminal" data-terminal={terminal.id} transform={`translate(${terminal.x} ${terminal.y})`}>
+          <rect x="-84" y="-36" width="168" height="72" rx="10" fill="#0b0e14" fill-opacity="0.85" stroke="url(#brass-side)" stroke-width="4" />
+          <rect x="-76" y="-28" width="152" height="56" rx="6" fill="none" stroke="#3be8ff" stroke-opacity="0.25" />
+          {[-72, 72].map((x) => [-28, 28].map((y) => <circle cx={x} cy={y} r="2.5" fill="#c9a227" />))}
+          <text class="terminal-label" y="-2" text-anchor="middle">{terminal.label}</text>
+          <text class="terminal-detail" y="18" text-anchor="middle">{terminal.detail}</text>
+          <circle class="terminal-led" cx="-62" cy="-14" r="3.5" fill="#b6ff3b" filter="url(#glow-soft)" />
+        </g>
+      ))}
+    </g>
+  </svg>
+</figure>
+
+<style>
+  .engine {
+    margin: 0;
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+  }
+  .engine svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .spin {
+    transform-box: view-box;
+    animation: spin 60s linear infinite;
+  }
+  .spin-slow {
+    animation-duration: 240s;
+  }
+  .spin-rev-slower {
+    animation-duration: 180s;
+    animation-direction: reverse;
+  }
+  .spin-gear {
+    animation-duration: 120s;
+  }
+  .spin-rev {
+    animation-direction: reverse;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .orbit-text {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    letter-spacing: 0.32em;
+    fill: var(--brass-300);
+    fill-opacity: 0.7;
+  }
+
+  .ring-track {
+    fill: none;
+    stroke: var(--cream);
+    stroke-opacity: 0.14;
+    stroke-width: 1;
+  }
+  .ring {
+    fill: none;
+    stroke-linecap: round;
+    animation: orbit 14s linear infinite;
+  }
+  .ring-cyan {
+    stroke: var(--cyan);
+    stroke-width: 2.5;
+    stroke-dasharray: 220 60 14 60;
+    filter: drop-shadow(0 0 6px rgb(59 232 255 / 0.7));
+  }
+  .ring-acid {
+    stroke: var(--acid);
+    stroke-width: 2;
+    stroke-dasharray: 4 18;
+    animation-duration: 9s;
+    animation-direction: reverse;
+    filter: drop-shadow(0 0 5px rgb(182 255 59 / 0.8));
+  }
+  .ring-brass {
+    stroke: var(--brass-400);
+    stroke-width: 9;
+    stroke-linecap: butt;
+    stroke-dasharray: 150 420 90 400;
+    animation-duration: 22s;
+    filter: drop-shadow(0 2px 0 #4a380a) drop-shadow(0 0 10px rgb(201 162 39 / 0.35));
+  }
+  .ring-brass-hi {
+    stroke: #fff1c2;
+    stroke-width: 2.5;
+    stroke-linecap: butt;
+    stroke-dasharray: 150 420 90 400;
+    animation-duration: 22s;
+    transform: translateY(-2.5px);
+    opacity: 0.8;
+  }
+  .piston-rod {
+    animation: piston 3.4s ease-in-out infinite;
+  }
+  @keyframes piston {
+    50% {
+      transform: translateY(-14px);
+    }
+  }
+  @keyframes orbit {
+    to {
+      stroke-dashoffset: -1060;
+    }
+  }
+
+  .aura {
+    fill: none;
+    stroke: var(--acid);
+    stroke-width: 10;
+    stroke-linejoin: round;
+    filter: blur(10px);
+    opacity: 0.45;
+    animation: aura 4.4s ease-in-out infinite;
+  }
+  @keyframes aura {
+    50% {
+      opacity: 0.75;
+    }
+  }
+
+  .pipe-shell {
+    fill: none;
+    stroke: #8a6b14;
+    stroke-width: 18;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .pipe-glass {
+    fill: none;
+    stroke: #0b0e14;
+    stroke-width: 11;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .pipe-flow {
+    fill: none;
+    stroke: var(--acid);
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-dasharray: 14 26;
+    animation: flow 1.6s linear infinite;
+    filter: drop-shadow(0 0 6px rgb(182 255 59 / 0.9));
+    opacity: 0.85;
+    transition: opacity 0.3s, stroke 0.3s;
+  }
+  .pipe.is-active .pipe-flow {
+    stroke: var(--cyan);
+    opacity: 1;
+    animation-duration: 0.6s;
+    filter: drop-shadow(0 0 8px rgb(59 232 255 / 1));
+  }
+  @keyframes flow {
+    to {
+      stroke-dashoffset: -40;
+    }
+  }
+
+  .terminal {
+    cursor: pointer;
+    transition: transform 0.3s;
+  }
+  .terminal-label {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    fill: var(--cream);
+    letter-spacing: 0.04em;
+  }
+  .terminal-detail {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    fill: var(--acid);
+  }
+  .terminal-led {
+    animation: blink 2.4s steps(2, jump-none) infinite;
+  }
+  .terminal.is-active .terminal-detail {
+    fill: var(--cyan);
+  }
+
+  .vial {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: vial 3.2s ease-in-out infinite;
+  }
+  @keyframes vial {
+    0%,
+    100% {
+      transform: scaleY(0.45);
+    }
+    50% {
+      transform: scaleY(0.95);
+    }
+  }
+
+  .needle {
+    animation: needle 5s ease-in-out infinite;
+  }
+  @keyframes needle {
+    0%,
+    100% {
+      transform: rotate(-70deg);
+    }
+    40% {
+      transform: rotate(48deg);
+    }
+    55% {
+      transform: rotate(38deg);
+    }
+    70% {
+      transform: rotate(56deg);
+    }
+  }
+
+  .plate-glow {
+    animation: orbit 30s linear infinite;
+  }
+  .floor-glow {
+    animation: breathe 4s ease-in-out infinite;
+  }
+
+  .puff {
+    fill: var(--cream);
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: puff 6.6s ease-out infinite;
+  }
+  @keyframes puff {
+    0% {
+      opacity: 0;
+      transform: translateY(0) scale(0.4);
+    }
+    15% {
+      opacity: 0.5;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-220px) scale(3.2);
+    }
+  }
+
+  .spark {
+    opacity: 0;
+    animation: spark 8s ease-in infinite;
+  }
+  @keyframes spark {
+    0% {
+      opacity: 0;
+      transform: translate(0, 0);
+    }
+    20% {
+      opacity: 0.9;
+    }
+    100% {
+      opacity: 0;
+      transform: translate(var(--drift), -420px);
+    }
+  }
+
+  .acid-panel {
+    animation: acid 5s ease-in-out infinite;
+  }
+  @keyframes acid {
+    0%,
+    100% {
+      fill-opacity: 0.75;
+    }
+    50% {
+      fill-opacity: 1;
+    }
+  }
+  .acid-glint {
+    stroke-dasharray: 60 400;
+    animation: glint 4.5s ease-in-out infinite;
+  }
+  @keyframes glint {
+    from {
+      stroke-dashoffset: 120;
+    }
+    to {
+      stroke-dashoffset: -340;
+    }
+  }
+
+  .reactor-halo {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: pulse 2.2s ease-in-out infinite;
+  }
+  .reactor-core {
+    animation: breathe 2.2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,
+    100% {
+      transform: scale(0.8);
+      opacity: 0.55;
+    }
+    50% {
+      transform: scale(1.15);
+      opacity: 1;
+    }
+  }
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 0.7;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  .tail-tip {
+    transform-box: view-box;
+    animation: tail 7s ease-in-out infinite;
+  }
+  @keyframes tail {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    35% {
+      transform: rotate(-4deg);
+    }
+    45% {
+      transform: rotate(1.5deg);
+    }
+    55% {
+      transform: rotate(-2.5deg);
+    }
+  }
+  .blade-glow {
+    animation: breathe 1.8s ease-in-out infinite;
+  }
+
+  .head {
+    transform-box: view-box;
+    transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transform: rotate(var(--head-tilt, 0deg));
+  }
+  .ear {
+    transform-box: view-box;
+    animation: twitch 9s ease-in-out infinite;
+  }
+  @keyframes twitch {
+    0%,
+    88%,
+    100% {
+      transform: rotate(0deg);
+    }
+    91% {
+      transform: rotate(-9deg);
+    }
+    94% {
+      transform: rotate(3deg);
+    }
+  }
+  .ear-node {
+    animation: blink 3s steps(2, jump-none) infinite;
+  }
+
+  .lid {
+    transform-box: fill-box;
+    transform-origin: 50% 0%;
+    transform: scaleY(0.25);
+    animation: lid 6s ease-in-out infinite;
+  }
+  @keyframes lid {
+    0%,
+    92%,
+    100% {
+      transform: scaleY(0.25);
+    }
+    95% {
+      transform: scaleY(1.25);
+    }
+  }
+  .pupil {
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: transform 0.4s;
+    transform: translateX(var(--pupil-x, 0px)) scaleX(var(--pupil-dilate, 1));
+  }
+  .whisker-tip {
+    animation: breathe 2.6s ease-in-out infinite;
+  }
+
+  .scan {
+    animation: scan 6s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+    mix-blend-mode: screen;
+  }
+  @keyframes scan {
+    0% {
+      transform: translateY(0);
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    55% {
+      transform: translateY(1080px);
+      opacity: 1;
+    }
+    56%,
+    100% {
+      transform: translateY(1080px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0.25;
+    }
+  }
+
+  .engine.is-paused * {
+    animation-play-state: paused !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .engine * {
+      animation: none !important;
+      transition: none !important;
+    }
+    .spark,
+    .puff,
+    .scan {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  const engines = document.querySelectorAll<HTMLElement>("[data-engine]");
+
+  for (const engine of engines) {
+    const head = engine.querySelector<SVGGElement>(".head");
+    const svg = engine.querySelector("svg");
+
+    const visibility = new IntersectionObserver(([entry]) => {
+      engine.classList.toggle("is-paused", entry !== undefined && !entry.isIntersecting);
+    });
+    visibility.observe(engine);
+
+    const fine = window.matchMedia("(pointer: fine)");
+    if (head !== null && svg !== null && fine.matches) {
+      window.addEventListener(
+        "pointermove",
+        (event) => {
+          const box = svg.getBoundingClientRect();
+          const dx = (event.clientX - (box.left + box.width * 0.56)) / window.innerWidth;
+          const dy = (event.clientY - (box.top + box.height * 0.3)) / window.innerHeight;
+          const tilt = Math.max(-7, Math.min(7, dy * 18 - dx * 4));
+          engine.style.setProperty("--head-tilt", `${tilt.toFixed(2)}deg`);
+          engine.style.setProperty("--pupil-x", `${Math.max(-2.5, Math.min(2.5, dx * 8)).toFixed(2)}px`);
+        },
+        { passive: true },
+      );
+    }
+
+    const setActive = (id: string | null) => {
+      for (const element of engine.querySelectorAll<SVGGElement>("[data-pipe], [data-terminal]")) {
+        const own = element.dataset["pipe"] ?? element.dataset["terminal"];
+        element.classList.toggle("is-active", own === id);
+      }
+      engine.style.setProperty("--pupil-dilate", id === null ? "1" : "2.2");
+    };
+
+    for (const terminal of engine.querySelectorAll<SVGGElement>("[data-terminal]")) {
+      terminal.addEventListener("pointerenter", () => setActive(terminal.dataset["terminal"] ?? null));
+      terminal.addEventListener("pointerleave", () => setActive(null));
+    }
+
+    document.addEventListener("acidcat:surface", (event) => {
+      setActive(event instanceof CustomEvent && typeof event.detail === "string" ? event.detail : null);
+    });
+  }
+</script>

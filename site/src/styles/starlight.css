@@ -1,0 +1,22 @@
+@import "./tokens.css";
+
+:root {
+  --sl-font: var(--font-sans);
+  --sl-font-mono: var(--font-mono);
+  --sl-color-accent-low: #2a2408;
+  --sl-color-accent: var(--brass-400);
+  --sl-color-accent-high: var(--brass-200);
+  --sl-color-black: var(--ink-950);
+  --sl-color-gray-6: var(--ink-800);
+  --sl-color-gray-5: var(--ink-700);
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #f4e7bd;
+  --sl-color-accent: #7a5a10;
+  --sl-color-accent-high: #3d2c05;
+}
+
+.sl-markdown-content :is(h1, h2, h3) {
+  font-family: var(--font-display);
+}

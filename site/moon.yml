@@ -1,0 +1,36 @@
+language: "typescript"
+layer: "application"
+
+project:
+  title: "AcidCat site"
+  description: "The homepage and the documentation of AcidCat, built with Astro Starlight."
+
+toolchains:
+  default: ["javascript", "node", "pnpm"]
+
+tasks:
+  dev:
+    description: "Serve the site with live reload at http://localhost:4321."
+    command: "astro"
+    args: ["dev"]
+    preset: "server"
+
+  build:
+    description: "Build the static site into dist/."
+    command: "astro"
+    args: ["build"]
+    inputs: ["src/**/*", "public/**/*", "astro.config.ts", "package.json"]
+    outputs: ["dist/**/*"]
+
+  test:
+    deps: ["build"]
+    description: "Test the geometry of the art, and render the homepage in Chromium at desktop and phone widths."
+    command: "node"
+    args: ["--test", "test/"]
+    inputs: ["src/**/*", "test/**/*.ts"]
+
+  typecheck:
+    description: "Type-check the art geometry, the tests and the configuration."
+    command: "tsc"
+    args: ["-p", "."]
+    inputs: ["src/lib/**/*.ts", "test/**/*.ts", "astro.config.ts", "tsconfig.json", "/tsconfig.base.json"]
