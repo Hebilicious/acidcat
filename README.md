@@ -184,7 +184,7 @@ moon run verify   # every check and test, as in CI
 | Command | Use |
 | --- | --- |
 | `moon run :test` | Test all packages |
-| `moon run lint` | Lint all TypeScript |
+| `moon run lint` | Lint all TypeScript, and check that all Rust has the format of `cargo fmt` |
 | `moon run examples` | Write every catalog in canonical form |
 | `moon run model:generate` | Write the cases of the [formal model](model/README.md) into each core |
 
