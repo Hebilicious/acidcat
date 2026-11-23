@@ -87,7 +87,7 @@ export async function checkServerCard(checks: Checks, url: string, channel: Chan
     }
   });
 
-  await checks.run("the card has the CORS and cache headers and an ETag, If-None-Match with the ETag gets 304, and OPTIONS gets 204", RULE, async (signal) => {
+  await checks.run("the card has the CORS and cache headers and an ETag, If-None-Match with the ETag gets 304 with the same headers and ETag, and OPTIONS gets 204 with no ETag", RULE, async (signal) => {
     const response = await fetch(cardUrl, { signal });
     await response.body?.cancel();
     expectHeaders(response, CORS_HEADERS);
@@ -96,9 +96,11 @@ export async function checkServerCard(checks: Checks, url: string, channel: Chan
     const unchanged = await fetch(cardUrl, { headers: { "If-None-Match": etag }, signal });
     expectEqual(unchanged.status, 304, "the status of a GET with If-None-Match");
     expectEqual(await unchanged.text(), "", "the body of a 304");
+    expectHeaders(unchanged, { ...CORS_HEADERS, ETag: etag });
     const preflight = await fetch(cardUrl, { method: "OPTIONS", signal });
     expectEqual(preflight.status, 204, "the status of OPTIONS");
     expectHeaders(preflight, CORS_HEADERS);
+    expectEqual(preflight.headers.get("ETag"), null, "the ETag of OPTIONS");
   });
 
   await checks.run("the signing keys of the card are public Ed25519 keys with a kid, and its egress ranges are CIDR text", RULE, () => {
