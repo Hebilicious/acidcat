@@ -558,9 +558,13 @@ const isSentinel = (value: string): boolean => value.length >= BASE64_PREFIX.len
 export function encodeMcpHeaderValue(text: string): string {
   const safe = /^(?:[\x21-\x7e](?:[\t\x20-\x7e]*[\x21-\x7e])?)?$/.test(text) && !isSentinel(text);
   if (safe) return text;
+  return `${BASE64_PREFIX}${base64OfBytes(new TextEncoder().encode(text))}${BASE64_SUFFIX}`;
+}
+
+function base64OfBytes(bytes: Uint8Array): string {
   let binary = "";
-  for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
-  return `${BASE64_PREFIX}${btoa(binary)}${BASE64_SUFFIX}`;
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
 }
 
 export function decodeMcpHeaderValue(value: string): string | undefined {
@@ -745,9 +749,7 @@ export function decodePollCursor(cursor: string): PollPosition | undefined {
 }
 
 function base64UrlOfText(text: string): string {
-  let binary = "";
-  for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  return base64OfBytes(new TextEncoder().encode(text)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
 function textOfBase64Url(text: string): string {
@@ -802,10 +804,7 @@ export async function webhookSignature(secrets: readonly string[], webhookId: st
     const bytes = webhookSecretBytes(secret);
     if (bytes === undefined) throw new TypeError("A webhook secret is not valid.");
     const key = await crypto.subtle.importKey("raw", bytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, content));
-    let binary = "";
-    for (const byte of mac) binary += String.fromCharCode(byte);
-    signatures.push(`v1,${btoa(binary)}`);
+    signatures.push(`v1,${base64OfBytes(new Uint8Array(await crypto.subtle.sign("HMAC", key, content)))}`);
   }
   return signatures.join(" ");
 }
