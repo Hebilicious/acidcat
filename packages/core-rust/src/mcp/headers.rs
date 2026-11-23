@@ -150,6 +150,7 @@ mod tests {
             ("=?base64?IHBhZGRlZCA=?=", " padded "),
             ("=?base64?bGluZTEKbGluZTI=?=", "line1\nline2"),
             ("=?base64?PT9iYXNlNjQ/bGl0ZXJhbD89?=", "=?base64?literal?="),
+            ("=?base64?77u/aw==?=", "\u{feff}k"),
         ] {
             assert_eq!(decode(encoded).as_deref(), Some(text), "{encoded}");
         }

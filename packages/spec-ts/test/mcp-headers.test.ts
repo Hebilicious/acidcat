@@ -10,6 +10,7 @@ test("a header value is the text, or the base64 sentinel form, as the examples o
     [" padded ", "=?base64?IHBhZGRlZCA=?="],
     ["line1\nline2", "=?base64?bGluZTEKbGluZTI=?="],
     ["=?base64?literal?=", "=?base64?PT9iYXNlNjQ/bGl0ZXJhbD89?="],
+    ["\uFEFFk", "=?base64?77u/aw==?="],
   ] as const) {
     assert.equal(encodeMcpHeaderValue(text), encoded, text);
     assert.equal(decodeMcpHeaderValue(encoded), text, encoded);

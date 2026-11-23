@@ -568,7 +568,7 @@ export function decodeMcpHeaderValue(value: string): string | undefined {
   const encoded = value.slice(BASE64_PREFIX.length, -BASE64_SUFFIX.length);
   if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 !== 0) return undefined;
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0)));
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0)));
   } catch {
     return undefined;
   }

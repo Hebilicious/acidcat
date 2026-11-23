@@ -159,6 +159,11 @@ async function checkHeaders(checks: Checks, url: string): Promise<void> {
       await accepted(await send(signal, method, { name, arguments: absent }, named(method, name)), `${method} with no argument and no ${header}`);
     });
   }
+  await checks.run("a header value in the base64 form keeps a leading U+FEFF", `${RULE}#headers`, async (signal) => {
+    const header = { "Mcp-Param-Key": "=?base64?77u/aw==?=" };
+    await accepted(await send(signal, "events/stream", { name: "fixture.ticks", arguments: { count: 1, key: "\uFEFFk" } }, named("events/stream", "fixture.ticks", header)), "events/stream with key U+FEFF k");
+    await rejected(await send(signal, "events/stream", ticks, named("events/stream", "fixture.ticks", header)), "events/stream with key k and the base64 of U+FEFF k");
+  });
 }
 
 const ANCHOR = `${RULE}#earlier-revisions-through-http`;

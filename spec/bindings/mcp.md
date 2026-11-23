@@ -150,7 +150,7 @@ The client mirrors parts of the body of each request of revision `2026-07-28` in
   - If the argument at the path of the property is absent or `null`, the request MUST NOT have the header.
   - If not, the request MUST have the header, and its decoded value MUST agree with the argument. A string agrees with the same text. A boolean agrees with `true` or `false`. An integer agrees with a decimal text of the same number. A value of another type agrees with no header.
 - **Unknown names.** For an unknown or unavailable tool, and for an unknown event, the server checks no `Mcp-Param-{Name}` header. The request gets the answer to an unknown tool or event.
-- **Decoding.** A value that starts with `=?base64?` and ends with `?=` is the base64 of the UTF-8 text between them. Another value is the text itself, and has only visible ASCII characters, spaces and tabs. A value that does not decode does not agree.
+- **Decoding.** A value that starts with `=?base64?` and ends with `?=` is the base64 of the UTF-8 text between them. A leading U+FEFF is part of the text. Another value is the text itself, and has only visible ASCII characters, spaces and tabs. A value that does not decode does not agree.
 
 ## Earlier revisions through HTTP
 
