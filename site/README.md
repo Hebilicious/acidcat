@@ -21,15 +21,15 @@ The homepage and the documentation of AcidCat. The site uses [Astro](https://ast
 | `src/components/LivingPlate.astro` | The hero: the key art as a still image, and a WebGL canvas that brings it to life |
 | `src/lib/plate-renderer.ts`, `src/lib/plate-shader.ts` | The WebGL 2 renderer and its shader |
 | `src/components/Schematic.astro` | Fig. 1: one capability of the catalog, and the surface that each binding makes from it |
-| `src/lib/holo.ts`, `src/lib/catalog-engine.ts`, `src/lib/engine-hardware.ts` | Fig. 1 in 3D: brass screens and glass pipes in three.js, with the HTML of each screen drawn by HTML-in-Canvas |
-| `src/components/Exploded.astro` | Fig. 1a: an animated blueprint of the four parts: catalog, bindings, core and `acid-cat conform` |
+| `src/lib/holo.ts`, `src/lib/catalog-engine.ts`, `src/lib/engine-hardware.ts`, `src/lib/engine-finish.ts`, `src/lib/nixie-scene.ts` | Fig. 1 in 3D: worn brass screens, glass pipes and a rail of Nixie bulbs in three.js, with the HTML of each screen drawn by HTML-in-Canvas |
+| `src/components/Blueprint.astro`, `src/components/Exploded.astro` | Fig. 1a: an animated blueprint of the flow Spec, Catalog, Runtime and Verify, and the key specifications on a blue screen |
 | `public/parts/`, `art/parts/` | Fig. 2: renders of the four parts, and their source |
-| `src/components/NixieTubes.astro`, `src/lib/nixie-scene.ts` | The languages as 3D Nixie tubes in three.js |
 | `src/components/Surfaces.astro` | Fig. 3: the five surfaces, each with an example from its binding |
 | `src/components/CoreScreens.astro`, `src/lib/bluescreen.ts` | Fig. 4: how to use each core, on a console drawn with HTML-in-Canvas |
 | `src/lib/snippets.ts` | Reads the code examples from `examples/aircon` and the READMEs of the cores at build time, and highlights them with Shiki |
 | `src/styles/code.css` | Maps the colors of the code to the palette |
-| `src/lib/geometry.ts` | Pure functions that compute the gear of the logo |
+| `src/components/Mark.astro`, `src/assets/mark.svg`, `public/favicon.svg`, `art/logo/` | The logo (a brass cat in profile), the favicon, and the explorations behind them |
+| `src/lib/geometry.ts` | Pure functions that compute gears |
 | `src/content/docs/docs/` | The Starlight documentation, served under `/docs/` |
 | `cssforge.config.ts` | The design tokens: colors, fluid type and spacing scales, font families, tracking, radii and layout widths. [cssforge](https://github.com/Hebilicious/cssforge) writes them as CSS variables into `.cssforge/output.css`, which is committed |
 | `src/styles/tokens.css` | Imports the design tokens and the fonts that the homepage and the documentation share |
@@ -76,8 +76,8 @@ The renderer lowers its resolution when frames are slow, and shows a still frame
 
 ## The sections
 
-- **Fig. 1.** In browsers that support [HTML-in-Canvas](https://github.com/WICG/html-in-canvas), `holo.ts` loads three.js and builds six brass screens joined by glass pipes with flowing acid. The text of each screen is live HTML in a `<canvas content="drawable">`. On each `paint` event, `texElementSubImage2D` copies the HTML of each screen into its texture, and a shader draws it as a blue CRT screen. `updateElementGeometry` keeps hit testing on the HTML, so the reader can hover a screen to light its pipe. Other browsers, software renderers, narrow screens and reduced motion show the plain HTML.
-- **Fig. 1a.** An SVG blueprint that draws itself and moves the four parts apart along their axis when it comes into view.
+- **Fig. 1.** In browsers that support [HTML-in-Canvas](https://github.com/WICG/html-in-canvas), `holo.ts` loads three.js and builds a machine of worn brass: the catalog screen, five surface screens, glass pipes with flowing acid, and a rail of six Nixie bulbs under the catalog screen. The text of each screen is live HTML in a `<canvas content="drawable">`. On each `paint` event, `texElementSubImage2D` copies the HTML of each screen into its texture, and a CRT shader draws it with its syntax colors. A click on a bulb shows the definition of `aircon.power.set` in that language (`{}` for the canonical JSON, then TypeScript, Python, Go, Rust and Pkl), highlighted by Shiki. The bulbs are buttons in a tab list, so the keyboard and the plain HTML fallback can change the language too. `updateElementGeometry` keeps hit testing on the HTML, so the reader can hover a surface screen to light its pipe. Other browsers, software renderers, narrow screens and reduced motion show the plain HTML.
+- **Fig. 1a.** An SVG blueprint of the flow: Spec, Catalog, Runtime and Verify. It draws itself, and the parts move apart along their axis when it comes into view. Beside it, `bluescreen.ts` draws the key specifications as a blue screen.
 - **Fig. 2.** The four parts as renders. They float, and the card under the pointer lifts them.
 - **Fig. 3.** One card for each surface: the command line, the MCP server, WebMCP, the HTTP API and TypeScript. Each card tells what the surface is and who uses it, and shows an example from its binding.
 - **Fig. 4.** A console with a tab for each core: TypeScript, Effect and Rust. The code comes from the README of the core. With HTML-in-Canvas, `bluescreen.ts` draws the console as a blue screen that builds up from noise, and builds up again when the reader changes the tab. Other browsers show the plain console.

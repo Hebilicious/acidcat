@@ -1,8 +1,10 @@
-import { BoxGeometry, CubicBezierCurve3, CylinderGeometry, ExtrudeGeometry, Group, Mesh, MeshPhongMaterial, MeshStandardMaterial, ShaderMaterial, Shape, TubeGeometry, Vector3 } from "three";
+import { AdditiveBlending, PlaneGeometry, TorusGeometry, BoxGeometry, CubicBezierCurve3, CylinderGeometry, ExtrudeGeometry, Group, Mesh, MeshPhongMaterial, MeshStandardMaterial, ShaderMaterial, Shape, TubeGeometry, Vector3 } from "three";
+import { machinedFinish } from "./engine-finish.js";
 import type * as Three from "three";
 
 export function hardware(scene: Three.Scene) {
-  const metal = (color: number, roughness: number) => new MeshStandardMaterial({ color, metalness: 0.86, roughness });
+  const finish = machinedFinish();
+  const metal = (color: number, roughness: number) => new MeshStandardMaterial({ color, metalness: 0.93, map: finish.color, bumpMap: finish.relief, bumpScale: .72, roughnessMap: finish.relief, roughness });
   const brass = metal(0xc9944e, 0.31);
   const copper = metal(0xb1653b, 0.28);
   const steel = metal(0x384043, 0.39);
@@ -31,7 +33,10 @@ export function hardware(scene: Three.Scene) {
     shape.lineTo(-x, y - cut);
     shape.lineTo(-x, -y + cut);
     shape.closePath();
-    mesh(group, new ExtrudeGeometry(shape, { depth, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3 }), material, 0, 0, z);
+    const geometry = new ExtrudeGeometry(shape, { depth, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3 });
+    const uv = geometry.getAttribute("uv");
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 137, uv.getY(i) / 137);
+    mesh(group, geometry, material, 0, 0, z);
   }
   function device(w: number, h: number, x: number, y: number, catalog: boolean) {
     const group = new Group();
@@ -39,6 +44,20 @@ export function hardware(scene: Three.Scene) {
     group.rotation.set(catalog ? 0.17 : 0.13, catalog ? -0.24 : 0.20, catalog ? 0.018 : -0.008);
     scene.add(group);
     const margin = catalog ? 40 : 29;
+    const width = w + margin, height = h + margin;
+    const shade = new ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      uniforms: { bounds: { value: [width, height] } },
+      vertexShader: "varying vec2 v; void main(){v=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}",
+      fragmentShader: `varying vec2 v; uniform vec2 bounds;
+        void main(){
+          vec2 d = abs(v-.5)*(bounds+60.)-.5*bounds+6.;
+          float distanceToEdge = length(max(d,0.))+min(max(d.x,d.y),0.)-6.;
+          gl_FragColor = vec4(.005,.008,.012,.65*exp(-max(distanceToEdge,0.)*.12));
+        }`,
+    });
+    mesh(group, new PlaneGeometry(width+60,height+60), shade, 4,-8,-53);
     slab(group, w + margin - 6, h + margin - 4, -48, 33, 5, steel);
     for (const z of [-42, -33, -24]) {
       slab(group, w + margin, h + margin, z, 3, 1, copper);
@@ -63,7 +82,25 @@ export function hardware(scene: Three.Scene) {
     }
     const indicator = mesh(group, bolt, phosphor, -w / 2 + 10, h / 2 + margin / 3.7, 5.5);
     indicator.scale.set(1.5, 0.46, 0.7);
+    for (const dy of [-1, 1]) {
+      const lip = mesh(group, unitBox, nickel, 0, dy*(h/2 + margin/2 - 2), 3);
+      lip.scale.set(w - 12, 1.3, 2);
+      for (const dx of [-1, 1]) {
+        const clamp = mesh(group, unitBox, copper, dx*(w/2 - 24), dy*(h/2 + margin/4), 4.5);
+        clamp.scale.set(32, margin/2, 4);
+        for (const k of [-1, 1]) mesh(group, bolt, brass, clamp.position.x + k*10, clamp.position.y, 8);
+      }
+    }
     if (catalog) {
+      const rail = new Group();
+      rail.position.set(0,-275,8);
+      group.add(rail);
+      slab(rail, 464, 14, -16, 28, 3, brass);
+      for (const side of [-1,1]) {
+        const support = mesh(group, cylinder, copper, side*211,-225,-10);
+        support.scale.set(7,98,7);
+        for (const y of [-262,-250,-202,-193]) mesh(group,cylinder,brass,side*211,y,-10).scale.set(9,5,9);
+      }
       const columnX = w / 2 + 29;
       const column = mesh(group, cylinder, copper, columnX, 0, -16);
       column.scale.set(11, 224, 11);
@@ -73,6 +110,17 @@ export function hardware(scene: Three.Scene) {
           collar.scale.set(13, 4, 13);
         }
       }
+      const wheel = new Group();
+      wheel.position.set(columnX,-113,6);
+      wheel.rotation.y = .31;
+      group.add(wheel);
+      mesh(wheel,new TorusGeometry(16,2.7,10,42),copper,0,0,0);
+      for (let spoke = 0; spoke < 3; spoke++) {
+        const bar = mesh(wheel,unitBox,brass,0,0,0);
+        bar.scale.set(30,2.6,2.6);
+        bar.rotation.z = spoke*Math.PI/3;
+      }
+      mesh(wheel,bolt,nickel,0,0,2);
       const gauge = new Group();
       gauge.position.set(columnX, 119, -10);
       group.add(gauge);
@@ -117,6 +165,18 @@ export function hardware(scene: Three.Scene) {
     });
     mesh(scene, new TubeGeometry(curve, 54, 4.2, 14, false), fluid, 0, 0, 0);
     mesh(scene, new TubeGeometry(curve, 54, 7, 18, false), glass, 0, 0, 0);
+    const halo = new ShaderMaterial({
+      transparent: true,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      uniforms: { excitation },
+      vertexShader: `varying vec3 eyeNormal; void main(){eyeNormal=normalMatrix*normal;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+      fragmentShader: `varying vec3 eyeNormal; uniform float excitation; void main(){
+        float falloff=pow(max(normalize(eyeNormal).z,0.),3.);
+        gl_FragColor=vec4(.48,.95,.06,falloff*(.17+.22*excitation));
+      }`,
+    });
+    mesh(scene, new TubeGeometry(curve, 54, 14, 20, false), halo, 0, 0, 0);
     const axis = new Vector3(0, 1, 0);
     for (const t of [0.035, 0.09, 0.14, 0.51, 0.88, 0.93, 0.975]) {
       const joint = mesh(scene, cylinder, t === 0.09 || t === 0.93 ? copper : brass, 0, 0, 0);
@@ -126,5 +186,5 @@ export function hardware(scene: Three.Scene) {
       joint.scale.set(small ? 8 : 11, small ? 4 : 10, small ? 8 : 11);
     }
   }
-  return { device, pipe };
+  return { device, pipe, finish };
 }

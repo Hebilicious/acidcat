@@ -176,6 +176,9 @@ h2 em {
 .hero-copy > * {
   max-width: 38rem;
 }
+.hero-copy > h1 {
+  max-width: 48rem;
+}
 .hero h1 {
   font-size: var(--typography_fluid-display-3xl);
   text-shadow: 0 2px 30px color-mix(in oklch, var(--palette-ink-950) 80%, transparent);

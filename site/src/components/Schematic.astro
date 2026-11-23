@@ -1,4 +1,5 @@
 ---
+import { catalogSnippets, highlight } from "../lib/snippets";
 import Blueprint from "./Blueprint.astro";
 
 const surfaces = [
@@ -15,22 +16,7 @@ const pipePath = (index: number) => {
   return `M0 230C120 230 120 ${y} 240 ${y}H400`;
 };
 
-const catalogEntry = `"aircon.power.set": {
-  "description": "Turn the unit on or off.",
-  "audience": ["app", "taskbar", "cli", "mcp", "api"],
-  "input": {
-    "properties": { "on": { "type": "boolean" } },
-    "required": ["on"],
-    "type": "object"
-  },
-  "failures": { "Offline": { "$ref": "#/$defs/Offline" } },
-  "destructive": true,
-  "idempotent": true
-}`;
-const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|false|null)\b/g, (_match, text, colon, literal) => {
-  if (typeof literal === "string") return `<span class="n">${literal}</span>`;
-  return typeof colon === "string" ? `<span class="k">${text}</span>${colon}` : `<span class="s">${text}</span>`;
-});
+const snippets = await catalogSnippets();
 ---
 
 <section class="schematic" aria-labelledby="schematic-title">
@@ -43,16 +29,24 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
       </p>
     </header>
 
+    <div class="engine-stage">
     <div class="machine" data-machine>
       <div class="engine-card">
         <div class="engine-plate" data-catalog-screen>
           <span class="rivet" /><span class="rivet" /><span class="rivet" /><span class="rivet" />
-          <p class="plate-title">aircon.acidcat.json</p>
-          <pre><code set:html={catalogHtml} /></pre>
+          {snippets.map(snippet => (
+            <div data-fig1-panel id={`fig1-${snippet.id}`} hidden={snippet.id !== "json"}>
+              <p class="plate-title">{snippet.source.split("/").pop()}</p>
+              <div class="catalog-code" tabindex="0" role="region" aria-label={`${snippet.label} capability definition`} set:html={highlight(snippet.code, snippet.language)} />
+            </div>
+          ))}
         </div>
-        <div class="engine-gauge" aria-hidden="true">
-          <span class="nixie">0</span><span class="nixie">5</span>
-          <span class="gauge-label">surfaces</span>
+        <div class="language-rail" role="group" aria-label="Catalog language">
+          {snippets.map(snippet => (
+            <button type="button" data-language={snippet.id} aria-label={snippet.label} aria-controls={`fig1-${snippet.id}`} aria-pressed={snippet.id === "json"}>
+              {snippet.id === "json" ? "{}" : snippet.id.toUpperCase()}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -79,6 +73,8 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
           </li>
         ))}
       </ol>
+    </div>
+
     </div>
 
     <Blueprint />
@@ -166,9 +162,8 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
   :global(.holo-canvas) .capsule-output {
     grid-column: span 2;
   }
-  :global(.holo-canvas) .plate-title,
   :global(.holo-canvas) .capsule-kind {
-    color: var(--palette-cyan-400);
+    color: var(--palette-brass-300);
   }
   :global(.holo-canvas) pre {
     white-space: pre-wrap;
@@ -222,60 +217,47 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
     text-transform: uppercase;
     color: var(--palette-brass-300);
   }
-  pre {
-    margin: 0;
-    overflow-x: auto;
+  .engine-stage { position: relative; }
+  .engine-plate { min-width: 0; }
+  .catalog-code { height: 17rem; overflow: auto; scrollbar-color: var(--palette-brass-600) transparent; }
+  #fig1-json { --code-token-keyword: var(--code-foreground); }
+  #fig1-json :global(.line:first-child span:first-child) { color: var(--code-foreground) !important; }
+  .catalog-code :global(pre) {
     font-family: var(--font-family-mono);
     font-size: var(--typography_fluid-text-xs);
-    line-height: 1.65;
-    color: var(--palette-cream-400);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
-  pre :global(.k) {
-    color: var(--palette-cream-100);
-  }
-  pre :global(.s) {
-    color: var(--palette-acid-400);
-  }
-  pre :global(.n) {
-    color: var(--palette-nixie-400);
-  }
-
-  .engine-gauge {
-    position: absolute;
-    right: 1.6rem;
-    bottom: -1.6rem;
+  .language-rail {
     display: flex;
-    align-items: end;
-    gap: var(--spacing_fluid-space-3xs);
-    padding: var(--spacing_fluid-space-2xs) var(--spacing_fluid-space-xs);
-    border-radius: 12px;
-    background: var(--palette-ink-900);
-    border: 2px solid var(--palette-brass-400);
+    justify-content: center;
+    gap: var(--spacing_fluid-space-2xs);
+    padding: var(--spacing_fluid-space-2xs);
+    background: linear-gradient(var(--palette-ink-900), var(--palette-brass-800));
   }
-  .nixie {
-    display: grid;
-    place-items: center;
-    width: 2rem;
-    height: 2.8rem;
-    border-radius: 1rem 1rem 0.4rem 0.4rem;
-    background: radial-gradient(ellipse at 50% 30%, color-mix(in oklch, var(--palette-nixie-400) 18%, transparent), color-mix(in oklch, var(--palette-neutral-white) 3%, transparent));
-    border: 1px solid color-mix(in oklch, var(--palette-cream-100) 30%, transparent);
-    font-family: var(--font-family-display);
-    font-size: var(--typography_fluid-display-l);
+  .language-rail button {
+    flex: 1;
+    min-height: 44px;
+    cursor: pointer;
+    font: inherit;
+    font-family: var(--font-family-label);
+    color: var(--palette-brass-200);
+    border-radius: 45% 45% 18% 18%;
+    border: 1px solid var(--palette-brass-600);
+    border-bottom: 4px double var(--palette-brass-400);
+    background: radial-gradient(ellipse at 29% 16%, var(--palette-brass-700), var(--palette-ink-925) 54%);
+  }
+  .language-rail button:is(:hover, [aria-pressed="true"]) {
     color: var(--palette-nixie-400);
-    text-shadow:
-      0 0 6px var(--palette-nixie-400),
-      0 0 18px color-mix(in oklch, var(--palette-nixie-400) 80%, transparent);
+    text-shadow: 0 0 5px currentColor;
   }
-  .gauge-label {
-    margin-left: var(--spacing_fluid-space-2xs);
-    font-family: var(--font-family-mono);
-    font-size: var(--typography_fluid-text-xs);
-    letter-spacing: var(--font-tracking-label);
-    text-transform: uppercase;
-    color: var(--palette-cream-400);
-  }
-
+  .engine-stage > .language-rail { position: absolute; inset: 0; padding: 0; background: none; pointer-events: none; }
+  .engine-stage > .language-rail button { position: absolute; pointer-events: auto; opacity: 0; min-height: 0; }
+  .engine-stage > .language-rail button:focus-visible { opacity: 1; background: transparent; color: transparent; outline: 2px solid var(--palette-brass-200); }
+  :global(.holo-canvas) .plate-title { color: var(--palette-brass-300); }
+  :global(.holo-canvas) .engine-plate { align-content: start; grid-template-columns: minmax(0, 1fr); }
+  :global(.holo-canvas) .catalog-code { height: 260px; }
   .manifold {
     width: 100%;
     height: 460px;
@@ -424,7 +406,16 @@ const catalogHtml = catalogEntry.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|fal
   import { mountCatalogEngine } from "../lib/holo.ts";
 
   const machine = document.querySelector<HTMLElement>("[data-machine]");
-  if (machine) mountCatalogEngine(machine);
+  if (machine) {
+    const buttons = machine.querySelectorAll<HTMLButtonElement>("button[data-language]");
+    const panels = machine.querySelectorAll<HTMLElement>("[data-fig1-panel]");
+    for (const button of buttons) button.addEventListener("click", () => {
+      for (const other of buttons) other.setAttribute("aria-pressed", String(other === button));
+      for (const panel of panels) panel.hidden = panel.id !== button.getAttribute("aria-controls");
+      machine.dispatchEvent(new Event("languagechange"));
+    });
+    mountCatalogEngine(machine);
+  }
 
   const announce = (id: string | null) => {
     document.dispatchEvent(new CustomEvent("acidcat:surface", { detail: id }));

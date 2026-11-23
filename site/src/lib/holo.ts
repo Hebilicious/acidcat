@@ -43,8 +43,8 @@ export function mountCatalogEngine(host: HTMLElement) {
     }
     loading = true;
     try {
-      const [{ WebGLRenderer }, { buildMachine }] = await Promise.all([import("three"), import("./catalog-engine.js")]);
-      if (eligible.matches && near) stop = buildMachine(new WebGLRenderer({ canvas, context: gl, alpha: true, antialias: true }), host, canvas, gl);
+      const { buildMachine } = await import("./catalog-engine.js");
+      if (eligible.matches && near) stop = buildMachine(host, canvas, gl);
     } finally {
       loading = false;
       if (!stop) gl.getExtension("WEBGL_lose_context")?.loseContext();

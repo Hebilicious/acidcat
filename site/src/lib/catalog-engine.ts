@@ -1,7 +1,8 @@
-import { BufferGeometry, DirectionalLight, ExternalTexture, Material, Mesh, OrthographicCamera, PMREMGenerator, PlaneGeometry, Raycaster, Scene, ShaderMaterial, Vector2, Vector3 } from "three";
+import { BufferGeometry, DirectionalLight, ExternalTexture, FogExp2, InstancedMesh, LineSegments, Material, Mesh, OrthographicCamera, PMREMGenerator, PlaneGeometry, Raycaster, Scene, ShaderMaterial, Vector2, Vector3, WebGLRenderer } from "three";
 import type * as Three from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import type { DrawableCanvas, ElementTextureContext } from "./holo.js";
+import { tubeBank } from "./nixie-scene.js";
 import { hardware } from "./engine-hardware.js";
 
 const crt = `
@@ -16,22 +17,24 @@ void main() {
   vec2 fringe = vec2(.55 / size.x, 0.);
   vec4 ink = texture2D(content, uv);
   vec3 type = vec3(texture2D(content, uv+fringe).r, ink.g, texture2D(content, uv-fringe).b);
-  float light = dot(type, vec3(.25,.55,.20));
+
   float vignette = max(.12, 1.-2.0*dot(p,p));
   float scan = .95 + .05*cos(gl_FragCoord.y*2.1);
   float beam = exp(-18.*abs(fract(time*.095)-uv.y));
-  vec3 glass = mix(vec3(.011,.039,.082), vec3(.032,.18,.29), vignette);
-  glass += vec3(.045,.087,.12)*smoothstep(.62,1.2, v.y-.24*v.x);
+  vec3 glass = mix(vec3(.012,.016,.019), vec3(.045,.084,.074), vignette);
+  glass += vec3(.075,.085,.064)*smoothstep(.62,1.2, v.y-.24*v.x);
   vec2 spread = 1.6 / size;
   float glow = texture2D(content, uv+spread).a + texture2D(content, uv-spread).a;
-  glass += vec3(.018,.075,.115)*glow;
-  vec3 phosphor = vec3(light*.71, max(type.g, light), max(light,type.b)*1.13);
+  glass += (.025 + type*.085)*glow;
+  vec3 phosphor = type;
   gl_FragColor = vec4((glass*(1.+beam*.09+excitation*.75)+phosphor*ink.a*(1.28+excitation*.24))*scan*(.994+.006*sin(time*35.)),1.);
 }`;
 
-export function buildMachine(renderer: Three.WebGLRenderer, host: HTMLElement, canvas: DrawableCanvas, gl: ElementTextureContext) {
+export function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gl: ElementTextureContext) {
+  const renderer = new WebGLRenderer({ canvas, context: gl, alpha: true, antialias: true });
   const scene = new Scene();
   const camera = new OrthographicCamera(-600, 600, 280, -280, 1, 2500);
+  scene.fog = new FogExp2(0x111a19, .00015);
   const studio = new RoomEnvironment();
   const pmrem = new PMREMGenerator(renderer);
   const reflections = pmrem.fromScene(studio, 0.035);
@@ -42,10 +45,17 @@ export function buildMachine(renderer: Three.WebGLRenderer, host: HTMLElement, c
   const key = new DirectionalLight(0xffdfad, 2.1);
   key.position.set(-220, 500, 660);
   scene.add(key);
-  const { device, pipe } = hardware(scene);
+  const { device, pipe, finish } = hardware(scene);
   const time = { value: 0 };
   const inputs = Array.from(host.querySelectorAll<HTMLElement>("[data-catalog-screen], [data-surface]"));
-  const inlet = device(490, 340, -322, 0, true);
+  const inlet = device(490, 340, -322, 27, true);
+  const rail = host.querySelector<HTMLElement>(".language-rail");
+  const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-language]"));
+  const railMarker = document.createTextNode("");
+  rail?.before(railMarker);
+  if (rail) host.after(rail);
+  const bulbs = tubeBank(buttons.map(button => button.textContent.trim()));
+  for (const { tube } of bulbs) inlet.add(tube);
   const screens = inputs.map((element, index) => {
     const catalog = index === 0;
     const w = catalog ? 490 : 403;
@@ -80,6 +90,7 @@ export function buildMachine(renderer: Three.WebGLRenderer, host: HTMLElement, c
   host.hidden = true;
   const events = new AbortController();
   const options = { signal: events.signal };
+  host.addEventListener("languagechange", () => canvas.requestPaint(), options);
   let hovered: string | null = null;
   document.addEventListener("acidcat:surface", event => {
     hovered = event instanceof CustomEvent && typeof event.detail === "string" ? event.detail : null;
@@ -132,7 +143,7 @@ export function buildMachine(renderer: Three.WebGLRenderer, host: HTMLElement, c
     canvas.requestPaint();
   });
   resize.observe(canvas);
-  const project = (face: Three.Mesh, x: number, y: number) => {
+  const project = (face: Three.Object3D, x: number, y: number) => {
     const point = face.localToWorld(new Vector3(x, y, 0)).project(camera);
     return new Vector2((point.x + 1) * canvas.clientWidth / 2, (1 - point.y) * canvas.clientHeight / 2);
   };
@@ -154,9 +165,27 @@ export function buildMachine(renderer: Three.WebGLRenderer, host: HTMLElement, c
         const down = project(face, -w/2, -h/2).sub(top).divideScalar(h);
         canvas.updateElementGeometry(element, { canvasTransform: new DOMMatrix([right.x, right.y, down.x, down.y, top.x, top.y]) });
       }
+      for (const [index, { tube }] of bulbs.entries()) {
+        const button = buttons[index];
+        if (!button) continue;
+        const top = project(tube, -.56, 2.28);
+        const bottom = project(tube, .56, 0);
+        button.style.left = top.x + "px";
+        button.style.top = top.y + "px";
+        button.style.width = bottom.x - top.x + "px";
+        button.style.height = bottom.y - top.y + "px";
+      }
       projectionDirty = false;
     }
     for (const screen of screens) screen.excitation.value = Number(screen.element.dataset["surface"] === hovered);
+    for (const [i, { tube, emission }] of bulbs.entries()) {
+      const button = buttons[i];
+      const hover = button?.matches(":hover, :focus-visible");
+      const selected = button?.getAttribute("aria-pressed") === "true";
+      emission.opacity = selected || hover ? 1 : .81;
+      emission.color.setScalar(selected || hover ? 1.45 : .9);
+      tube.rotation.y += ((hover ? .17 : 0) - tube.rotation.y) * .12;
+    }
     renderer.render(scene, camera);
     frame = requestAnimationFrame(draw);
   }
@@ -185,11 +214,17 @@ export function buildMachine(renderer: Three.WebGLRenderer, host: HTMLElement, c
       gl.deleteTexture(texture);
       external.dispose();
     }
+    if (rail) railMarker.replaceWith(rail);
+    for (const button of buttons) button.removeAttribute("style");
+    for (const { emission } of bulbs) emission.map?.dispose();
+    finish.color.dispose();
+    finish.relief.dispose();
     host.hidden = false;
     canvas.remove();
     reflections.dispose();
     scene.traverse(object => {
-      if (object instanceof Mesh) {
+      if (object instanceof InstancedMesh) object.dispose();
+      if (object instanceof Mesh || object instanceof LineSegments) {
         if (object.geometry instanceof BufferGeometry) object.geometry.dispose();
         if (object.material instanceof Material) object.material.dispose();
       }
