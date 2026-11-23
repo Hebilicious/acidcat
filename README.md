@@ -18,6 +18,8 @@
 
 </div>
 
+AcidCat stands for **A**pplication **C**apability **Id**entification **Cat**alog.
+
 > [!WARNING]
 > AcidCat is experimental. The specification is a draft, and the packages are `0.x`: any minor release can break their APIs. Pin exact versions.
 
