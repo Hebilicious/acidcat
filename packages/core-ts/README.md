@@ -201,24 +201,24 @@ await serve({ "/mcp": mcp });
 | `retryDelayMs(attempt)` | 10 s, 30 s, 90 s, 270 s | The wait before the next attempt |
 | `timeoutMs` | 5 seconds | Wait for each response |
 | `rotationGraceMs` | 5 minutes | How long the old secret still signs after a new one |
-| `signingKeys` | None | Ed25519 keys, as private JWKs with `kid` and `d`. Each request gets one `v1a,` signature for each key after its `v1,` signatures. To change keys, give the new key beside the old one |
+| `signingKeys` | None | Ed25519 keys, as private JWKs, that also [sign each request](../../spec/bindings/mcp.md#webhook). To change keys, give the new key beside the old one |
 | `egressIpRanges` | None | The IP ranges from which the server sends, as CIDR text, for the Server Card |
 
-`webhookDelivery` throws for a signing key of another form, two keys with the same `kid`, or a range that is not CIDR text.
+`webhookDelivery` throws a `TypeError` for a signing key or an egress range that breaks the rules of [webhook delivery](../../spec/bindings/mcp.md#webhook).
 
 Verifications are kept in memory while the process runs. The server checks the endpoint's TLS certificate, never logs or returns a secret, and never passes on the endpoint's response text: `lastError` and `CallbackEndpointError` carry only a category such as `http_4xx`.
 
 ### MCP Server Card
 
-`mcpHandler` serves an MCP [Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. It is on by default. `serverCard: false` turns it off: a `GET` request to that URL then gets 404.
+`mcpHandler` serves an MCP [Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. It is on by default. `serverCard: false` turns it off.
 
-- **Name.** `serverCard.name`, in reverse-DNS form with one `/`. The default comes from the host of the URL and the `name` option: `com.example.aircon/aircon` for `aircon` at `aircon.example.com`, `localhost/aircon` at `localhost`, and `local/aircon` at an IP address such as `127.0.0.1` ([Default name](../../spec/bindings/mcp.md#default-name)). The card name is the name of the server in a registry, and `name` is the name that `server/discover` gives at run time.
-- **Description.** `serverCard.description`, from 1 to 100 characters. The default is the description of the catalog, else `instructions`, else `name`, shortened to 100 characters ([Default description](../../spec/bindings/mcp.md#default-description)).
-- **URL.** The URL of the server with the origin of the request. Behind a platform that ends TLS, the server gets `http` URLs: give the `https` URL in `serverCard.url`. It must be an absolute `http` or `https` URL with a host. The default name then takes the host of that URL, in punycode: `example.xn--bcher-kva/aircon` for `https://bücher.example/mcp`.
-- **Version.** The card gives `version`, the same version as `server/discover`, so with the card on, `version` must be one version, not a range such as `^1.2.3` or `1.x`.
-- **Webhooks.** With webhook delivery, the card also gives the public keys of `signingKeys` and the `egressIpRanges`. `mcpHandshake` adds its revisions to the card.
+| Option | Default | Use |
+| --- | --- | --- |
+| `serverCard.name` | From the host of the URL and `name` ([Default name](../../spec/bindings/mcp.md#default-name)) | The name of the server in a registry. `name` stays the name that `server/discover` gives |
+| `serverCard.description` | The description of the catalog, else `instructions`, else `name` ([Default description](../../spec/bindings/mcp.md#default-description)) | |
+| `serverCard.url` | The URL of the request, without `/server-card` | Give the `https` URL when a platform in front of the server ends TLS |
 
-A given name, description or URL that breaks the rules makes `mcpHandler` throw. So does a version range with the card on, and `signingKeys` or `egressIpRanges` with `serverCard: false`, because a receiver gets them only from the card. The defaults never make `mcpHandler` throw.
+With webhook delivery, the card also gives the public keys of `signingKeys` and the `egressIpRanges`. `mcpHandshake` adds its revisions to the card. A setting that breaks the [startup rules of the card](../../spec/bindings/mcp.md#server-card), such as a `version` range with the card on, makes `mcpHandler` throw a `TypeError`. The defaults never make it throw.
 
 ```ts
 const mcp = mcpHandler(aircon, {

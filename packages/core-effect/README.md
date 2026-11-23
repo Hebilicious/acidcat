@@ -383,10 +383,10 @@ The specification defines subscription, verification, signing, retries and netwo
 | `retryDelays` | 5 s, then 4 times longer each time | A `Schedule` of the waits between attempts |
 | `timeoutMs` | `5000` | How long the server waits for each answer |
 | `rotationGraceMs` | `300000` | How long after a secret change the server signs with both secrets |
-| `signingKeys` | None | Ed25519 keys, as private JWKs with `kid` and `d`. Each request gets one `v1a,` signature for each key after its `v1,` signatures. To change keys, give the new key beside the old one |
+| `signingKeys` | None | Ed25519 keys, as private JWKs, that also [sign each request](../../spec/bindings/mcp.md#webhook). To change keys, give the new key beside the old one |
 | `egressIpRanges` | None | The IP ranges from which the server sends, as CIDR text, for the Server Card |
 
-A signing key of another form, two keys with the same `kid`, or a range that is not CIDR text make the server fail when it starts.
+A signing key or an egress range that breaks the rules of [webhook delivery](../../spec/bindings/mcp.md#webhook) makes the server fail when it starts.
 
 `NodeWebhook.sender` follows the spec's network safety rules: it resolves the host for each request, connects only to globally routable addresses (pinned, with the host name in `Host` and TLS), follows no redirects, and reads at most `maxResponseBytes`.
 
@@ -400,15 +400,15 @@ Subscriptions, verifications and limit counts live in process memory and are los
 
 #### Server Card
 
-`Mcp.toWebHandler`, `Mcp.makeHandle` and `Mcp.handle` serve an MCP [Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. It is on by default. `serverCard: false` turns it off: a `GET` request to that URL then gets 404.
+`Mcp.toWebHandler`, `Mcp.makeHandle` and `Mcp.handle` serve an MCP [Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. It is on by default. `serverCard: false` turns it off.
 
-- **Name.** `serverCard.name`, in reverse-DNS form with one `/`. The default comes from the host of the URL and the `name` option: `com.example.aircon/aircon` for `aircon` at `aircon.example.com`, `localhost/aircon` at `localhost`, and `local/aircon` at an IP address such as `127.0.0.1` ([Default name](../../spec/bindings/mcp.md#default-name)). The card name is the name of the server in a registry, and `name` is the name that `server/discover` gives at run time.
-- **Description.** `serverCard.description`, from 1 to 100 characters. The default is the description of the catalog, else `instructions`, else `name`, shortened to 100 characters ([Default description](../../spec/bindings/mcp.md#default-description)).
-- **URL.** The URL of the server with the origin of the request. Behind a platform that ends TLS, the server gets `http` URLs: give the `https` URL in `serverCard.url`. It must be an absolute `http` or `https` URL with a host. The default name then takes the host of that URL, in punycode: `example.xn--bcher-kva/aircon` for `https://bücher.example/mcp`.
-- **Version.** The card gives `version`, the same version as `server/discover`, so with the card on, `version` must be one version, not a range such as `^1.2.3` or `1.x`.
-- **Webhooks.** With webhook delivery, the card also gives the public keys of `signingKeys` and the `egressIpRanges`. `Mcp.withHandshake` adds its revisions to the card.
+| Option | Default | Use |
+| --- | --- | --- |
+| `serverCard.name` | From the host of the URL and `name` ([Default name](../../spec/bindings/mcp.md#default-name)) | The name of the server in a registry. `name` stays the name that `server/discover` gives |
+| `serverCard.description` | The description of the catalog, else `instructions`, else `name` ([Default description](../../spec/bindings/mcp.md#default-description)) | |
+| `serverCard.url` | The URL of the request, without `/server-card` | Give the `https` URL when a platform in front of the server ends TLS |
 
-A given name, description or URL that breaks the rules makes the server fail when it starts. So do a version range with the card on, and `signingKeys` or `egressIpRanges` with `serverCard: false`, because a receiver gets them only from the card. The defaults never make the server fail.
+With webhook delivery, the card also gives the public keys of `signingKeys` and the `egressIpRanges`. `Mcp.withHandshake` adds its revisions to the card. A setting that breaks the [startup rules of the card](../../spec/bindings/mcp.md#server-card), such as a `version` range with the card on, makes the server fail when it starts. The defaults never make it fail.
 
 ```ts
 const mcp = Mcp.withHandshake(
@@ -420,14 +420,7 @@ const mcp = Mcp.withHandshake(
 );
 ```
 
-`Mcp.withEvents` also serves a card, for your own server, with the same `serverCard` option. It does not know the name and the version of your server, so for each `GET` request of the card it sends `server/discover` of revision `2026-07-28` to your server, with no `Origin` and no credentials, and takes from its answer:
-
-- the `version` of `serverInfo`, for the version of the card;
-- the `supportedVersions`, for the `supportedProtocolVersions` of the card;
-- the `name` of `serverInfo`, for the default name;
-- the `instructions`, for the default description. Without `instructions`, the default description is the description of the catalog, else the `name` of `serverInfo`.
-
-The card thus always agrees with your server. If your server does not answer `server/discover` with a result that has `serverInfo` with a `name` and a `version`, or gives a version that is a range, the request of the card gets 502 Bad Gateway, because the card would not agree with your server. The request of `server/discover` has no credentials, so a server that requires credentials answers it with an error, and the card gets 502. Give `serverCard: false` to turn the card off for such a server. `signingKeys` and `egressIpRanges` work with `Mcp.withEvents` too.
+`Mcp.withEvents` also serves a card, for your own server, with the same `serverCard` option. For each `GET` request of the card, it sends `server/discover` of revision `2026-07-28` to your server, with no `Origin` and no credentials. The card takes the version, the revisions, the default name and the default description from that result, so it always agrees with your server. When the result cannot give a card, the request of the card gets 502 Bad Gateway, as the [binding](../../spec/bindings/mcp.md#server-card) tells. A server that requires credentials answers `server/discover` with an error, so give it `serverCard: false`. `signingKeys` and `egressIpRanges` work with `Mcp.withEvents` too.
 
 #### Events beside your own MCP server
 
