@@ -7,17 +7,21 @@ import { rootCertificates } from "node:tls";
 
 import {
   canonicalJson,
+  importWebhookSigningKey,
   isGloballyRoutable,
   isJsonObject,
   MCP_EVENT_ERRORS,
   MCP_WEBHOOK_DEFAULTS,
   mcpSubscribeError,
+  publishesOnServerCard,
+  readWebhookPublication,
+  webhookCardInfo,
   webhookGrantMs,
   webhookSecretBytes,
   webhookSignature,
   webhookSubscriptionId,
 } from "@acid-cat/spec-ts";
-import type { JsonObject, Occurrence, WebhookError } from "@acid-cat/spec-ts";
+import type { JsonObject, Occurrence, WebhookError, WebhookSigningJwk, WebhookSigningKey } from "@acid-cat/spec-ts";
 
 import { sleep, systemClock } from "./clock.ts";
 import type { Clock } from "./clock.ts";
@@ -61,6 +65,15 @@ export interface WebhookOptions {
   readonly retryDelayMs?: ((attempt: number) => number) | undefined;
   /** The clock of lifetimes and retries. The default is the clock of the system. */
   readonly clock?: Clock | undefined;
+  /**
+   * Ed25519 keys that sign each request with a `v1a,` signature beside the `v1,` signatures, as private JWKs with a
+   * `kid`. The Server Card gives their public keys. Give the new key beside the old one to change keys. A key of another
+   * form, or two keys with the same `kid`, make `webhookDelivery` throw. `mcpHandler` throws for signing keys with no
+   * Server Card.
+   */
+  readonly signingKeys?: readonly WebhookSigningJwk[] | undefined;
+  /** The IP ranges from which the server sends its requests, as CIDR text. The Server Card gives them. A value that is not CIDR text makes `webhookDelivery` throw, and `mcpHandler` throws for egress ranges with no Server Card. */
+  readonly egressIpRanges?: readonly string[] | undefined;
 }
 
 type Posted = { readonly status: number; readonly text: string } | { readonly failure: WebhookError };
@@ -95,6 +108,10 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     retryDelayMs: options.retryDelayMs ?? ((attempt: number) => 10_000 * 3 ** (attempt - 1)),
   };
   const clock = options.clock ?? systemClock;
+  const seeds = readWebhookPublication(options);
+  const egressIpRanges = [...(options.egressIpRanges ?? [])];
+  let imported: Promise<WebhookSigningKey[]> | undefined;
+  const signingKeys = () => (imported ??= Promise.all(seeds.map(importWebhookSigningKey)));
   const network: Network = {
     allowPrivateNetworks: options.allowPrivateNetworks === true,
     ca: options.ca === undefined ? undefined : [...rootCertificates, ...(typeof options.ca === "string" || Buffer.isBuffer(options.ca) ? [options.ca] : options.ca)],
@@ -113,7 +130,7 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       "Content-Type": "application/json",
       "webhook-id": webhookId,
       "webhook-timestamp": String(timestamp),
-      "webhook-signature": await webhookSignature(subscription.secrets, webhookId, timestamp, body),
+      "webhook-signature": await webhookSignature(subscription.secrets, webhookId, timestamp, body, (await signingKeys()).map((key) => key.privateKey)),
       "X-MCP-Subscription-Id": subscription.id,
     };
   }
@@ -303,6 +320,12 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       const subscription = subscriptions.get(subscriptionKey(principal, url, name, input));
       if (subscription === undefined) return Promise.resolve({ error: { code: MCP_EVENT_ERRORS.notFound, message: "There is no such subscription.", data: { kind: "subscription" } } });
       return end(subscription).then(() => ({ result: {} }));
+    },
+
+    publishesOnServerCard: publishesOnServerCard(options),
+
+    async cardInfo() {
+      return webhookCardInfo((await signingKeys()).map((key) => key.publicJwk), egressIpRanges);
     },
 
     async close() {

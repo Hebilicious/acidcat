@@ -66,6 +66,7 @@ pub(crate) const INTERRUPT_GRACE_MS: u64 = 1000;
 pub(crate) const SSE_MEDIA_TYPE: &str = "text/event-stream";
 
 pub(crate) const MCP_PROTOCOL_VERSION: &str = "2026-07-28";
+pub(crate) const MCP_PROTOCOL_VERSION_KEY: &str = "io.modelcontextprotocol/protocolVersion";
 pub(crate) const MCP_EVENTS_EXTENSION: &str = "io.modelcontextprotocol/events";
 pub(crate) const MCP_SUBSCRIPTION_ID: &str = "io.modelcontextprotocol/subscriptionId";
 pub(crate) const MCP_UNKNOWN_TOOL: i64 = -32602;
@@ -79,6 +80,25 @@ pub(crate) const MCP_NAMED_METHODS: [&str; 5] = [
 ];
 pub(crate) const MCP_HEARTBEAT_MIN_MS: u64 = 1000;
 pub(crate) const MCP_HEARTBEAT_MAX_MS: u64 = 60000;
+pub(crate) const MCP_SERVER_CARD_PATH: &str = "/server-card";
+pub(crate) const MCP_SERVER_CARD_MEDIA_TYPE: &str = "application/mcp-server-card+json";
+pub(crate) const MCP_SERVER_CARD_SCHEMA: &str =
+    "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json";
+pub(crate) const MCP_SERVER_CARD_CACHE_CONTROL: &str = "public, max-age=3600";
+pub(crate) const MCP_SERVER_CARD_CORS_HEADERS: [(&str, &str); 4] = [
+    ("Access-Control-Allow-Origin", "*"),
+    ("Access-Control-Allow-Methods", "GET"),
+    (
+        "Access-Control-Allow-Headers",
+        "Content-Type, If-None-Match",
+    ),
+    ("Access-Control-Expose-Headers", "ETag"),
+];
+pub(crate) const MCP_SERVER_CARD_NAME_MIN_LENGTH: usize = 3;
+pub(crate) const MCP_SERVER_CARD_NAME_MAX_LENGTH: usize = 200;
+pub(crate) const MCP_SERVER_CARD_NAME_PART_MAX_LENGTH: usize = 100;
+pub(crate) const MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH: usize = 100;
+pub(crate) const MCP_SERVER_CARD_VERSION_MAX_LENGTH: usize = 255;
 
 pub(crate) mod event_errors {
     pub const NOT_FOUND: i64 = -32023;

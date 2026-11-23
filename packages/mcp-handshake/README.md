@@ -34,10 +34,11 @@ const mcp = Mcp.withHandshake(Mcp.toWebHandler(app, layer, options));
 
 ## How it works
 
-- A request of revision `2026-07-28`, and any request that is not `POST`, goes to the handler unchanged.
+- A request of revision `2026-07-28`, and any other request that is not `POST`, goes to the handler unchanged.
 - The wrapper turns each handshake request into a revision `2026-07-28` request for the handler: `tools/list` and `tools/call` pass as they are, and every other method becomes `server/discover`. The handler therefore still screens each request's origin, media type and size.
 - Each request gets the [headers](../../spec/bindings/mcp.md#headers) that the handler checks: `Mcp-Method`, and for `tools/call` `Mcp-Name` and one `Mcp-Param-*` header for each argument whose property has `x-mcp-header`. To find these properties, the wrapper first asks the handler for `tools/list`, because it keeps no state.
 - A response that is not 2xx comes back unchanged.
+- A `GET` request of the [Server Card](../../spec/bindings/mcp.md#server-card) (`<MCP URL>/server-card`) goes to the handler. The wrapper adds `2025-11-25` and `2025-06-18` to the `supportedProtocolVersions` of each remote of the card, gives the card a new `ETag`, and answers `If-None-Match` itself.
 - `initialize` returns the result of `server/discover` in the handshake's shape. `ping` returns an empty result. A notification gets 202. Any other method gets the JSON-RPC error `-32601`.
 - Results carry no `_meta`, `resultType`, `ttlMs` or `cacheScope` member. A JSON-RPC error has HTTP status 200.
 

@@ -4,6 +4,7 @@ import {
   MCP_EVENT_ERRORS,
   MCP_EVENTS_EXTENSION,
   MCP_PROTOCOL_VERSION,
+  MCP_PROTOCOL_VERSION_KEY,
   MCP_SUBSCRIPTION_ID,
   mcpEventEntry,
   mcpEventParams,
@@ -45,7 +46,7 @@ export function eventsRequestOf(message: unknown): EventsRequest | undefined {
   const params = message.params === undefined ? {} : message.params;
   if (!isJsonObject(params)) return undefined;
   const meta = params._meta;
-  if (!isJsonObject(meta) || meta["io.modelcontextprotocol/protocolVersion"] !== MCP_PROTOCOL_VERSION) return undefined;
+  if (!isJsonObject(meta) || meta[MCP_PROTOCOL_VERSION_KEY] !== MCP_PROTOCOL_VERSION) return undefined;
   return { id, method: message.method, params };
 }
 

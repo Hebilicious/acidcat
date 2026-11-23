@@ -47,6 +47,8 @@ module facts {
 
   pure val MCP_PROTOCOL_VERSION: str = "2026-07-28"
 
+  pure val MCP_PROTOCOL_VERSION_KEY: str = "io.modelcontextprotocol/protocolVersion"
+
   pure val MCP_EVENTS_EXTENSION: str = "io.modelcontextprotocol/events"
 
   pure val MCP_SUBSCRIPTION_ID: str = "io.modelcontextprotocol/subscriptionId"
@@ -60,6 +62,31 @@ module facts {
   pure val MCP_HEARTBEAT_MIN_MS: int = 1000
 
   pure val MCP_HEARTBEAT_MAX_MS: int = 60000
+
+  pure val MCP_SERVER_CARD_PATH: str = "/server-card"
+
+  pure val MCP_SERVER_CARD_MEDIA_TYPE: str = "application/mcp-server-card+json"
+
+  pure val MCP_SERVER_CARD_SCHEMA: str = "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json"
+
+  pure val MCP_SERVER_CARD_CACHE_CONTROL: str = "public, max-age=3600"
+
+  pure val MCP_SERVER_CARD_CORS_HEADERS: List[(str, str)] = [
+    ("Access-Control-Allow-Origin", "*"),
+    ("Access-Control-Allow-Methods", "GET"),
+    ("Access-Control-Allow-Headers", "Content-Type, If-None-Match"),
+    ("Access-Control-Expose-Headers", "ETag"),
+  ]
+
+  pure val MCP_SERVER_CARD_NAME_MIN_LENGTH: int = 3
+
+  pure val MCP_SERVER_CARD_NAME_MAX_LENGTH: int = 200
+
+  pure val MCP_SERVER_CARD_NAME_PART_MAX_LENGTH: int = MCP_SERVER_CARD_NAME_MAX_LENGTH / 2
+
+  pure val MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH: int = 100
+
+  pure val MCP_SERVER_CARD_VERSION_MAX_LENGTH: int = 255
 
   pure val MCP_EVENT_ERRORS: List[(str, int)] = [
     ("notFound", -32023),
@@ -120,6 +147,7 @@ module factsData {
     interruptGraceMs: int,
     sseMediaType: str,
     mcpProtocolVersion: str,
+    mcpProtocolVersionKey: str,
     mcpEventsExtension: str,
     mcpSubscriptionId: str,
     mcpUnknownTool: int,
@@ -127,6 +155,16 @@ module factsData {
     mcpNamedMethods: List[str],
     mcpHeartbeatMinMs: int,
     mcpHeartbeatMaxMs: int,
+    mcpServerCardPath: str,
+    mcpServerCardMediaType: str,
+    mcpServerCardSchema: str,
+    mcpServerCardCacheControl: str,
+    mcpServerCardCorsHeaders: List[(str, str)],
+    mcpServerCardNameMinLength: int,
+    mcpServerCardNameMaxLength: int,
+    mcpServerCardNamePartMaxLength: int,
+    mcpServerCardDescriptionMaxLength: int,
+    mcpServerCardVersionMaxLength: int,
     mcpEventErrors: List[(str, int)],
     mcpRejections: List[{ rejection: str, status: int, code: RpcCode }],
     startMessages: { genericCommand: str, sharedPrefix: str, resumeProperty: str },
@@ -145,6 +183,7 @@ module factsData {
     interruptGraceMs: INTERRUPT_GRACE_MS,
     sseMediaType: SSE_MEDIA_TYPE,
     mcpProtocolVersion: MCP_PROTOCOL_VERSION,
+    mcpProtocolVersionKey: MCP_PROTOCOL_VERSION_KEY,
     mcpEventsExtension: MCP_EVENTS_EXTENSION,
     mcpSubscriptionId: MCP_SUBSCRIPTION_ID,
     mcpUnknownTool: MCP_UNKNOWN_TOOL,
@@ -152,6 +191,16 @@ module factsData {
     mcpNamedMethods: MCP_NAMED_METHODS,
     mcpHeartbeatMinMs: MCP_HEARTBEAT_MIN_MS,
     mcpHeartbeatMaxMs: MCP_HEARTBEAT_MAX_MS,
+    mcpServerCardPath: MCP_SERVER_CARD_PATH,
+    mcpServerCardMediaType: MCP_SERVER_CARD_MEDIA_TYPE,
+    mcpServerCardSchema: MCP_SERVER_CARD_SCHEMA,
+    mcpServerCardCacheControl: MCP_SERVER_CARD_CACHE_CONTROL,
+    mcpServerCardCorsHeaders: MCP_SERVER_CARD_CORS_HEADERS,
+    mcpServerCardNameMinLength: MCP_SERVER_CARD_NAME_MIN_LENGTH,
+    mcpServerCardNameMaxLength: MCP_SERVER_CARD_NAME_MAX_LENGTH,
+    mcpServerCardNamePartMaxLength: MCP_SERVER_CARD_NAME_PART_MAX_LENGTH,
+    mcpServerCardDescriptionMaxLength: MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH,
+    mcpServerCardVersionMaxLength: MCP_SERVER_CARD_VERSION_MAX_LENGTH,
     mcpEventErrors: MCP_EVENT_ERRORS,
     mcpRejections: MCP_REJECTIONS,
     startMessages: START_MESSAGES,

@@ -1,4 +1,4 @@
-import { isJsonObject, KEEPALIVE_MS, MCP_PROTOCOL_VERSION, MCP_SUBSCRIPTION_ID, MCP_UNKNOWN_TOOL, mcpToolResult } from "@acid-cat/spec-ts";
+import { isJsonObject, KEEPALIVE_MS, MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION_KEY, MCP_SUBSCRIPTION_ID, MCP_UNKNOWN_TOOL, mcpToolResult } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
@@ -46,8 +46,6 @@ const HANDSHAKE_VERSIONS = [LATEST_HANDSHAKE_VERSION, "2025-06-18"] as const;
 
 const SUPPORTED_VERSIONS = [MCP_PROTOCOL_VERSION, ...HANDSHAKE_VERSIONS];
 
-const PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
-
 type Id = string | number;
 
 interface Message {
@@ -66,7 +64,7 @@ function readMessage(body: JsonObject): Message {
     id: typeof id === "string" || typeof id === "number" ? id : "id" in body ? null : undefined,
     method: typeof method === "string" ? method : undefined,
     params: members,
-    protocolVersion: isJsonObject(meta) ? meta[PROTOCOL_VERSION_KEY] : undefined,
+    protocolVersion: isJsonObject(meta) ? meta[MCP_PROTOCOL_VERSION_KEY] : undefined,
   };
 }
 

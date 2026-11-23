@@ -11,7 +11,7 @@ import * as NodeServer from "../src/NodeServer.ts";
 import * as NodeWebhook from "../src/NodeWebhook.ts";
 import { fileMarker } from "./file-marker.ts";
 import { fixture, fixtureLayer, holdsLayer, POLL, POLL_LEASE_MS, switchLayer, watchersLayer, WEBHOOK_LIMITS } from "./fixture.ts";
-import { testCertificate } from "./webhook-receiver.ts";
+import { testCertificate, testSigningKey } from "./webhook-receiver.ts";
 import { bundledProgram } from "./bundled-program.ts";
 
 const principalOf = (request: Request) => Effect.succeed(Option.fromNullishOr(/^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")?.[1]));
@@ -33,7 +33,13 @@ const mcp = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), {
   allowedOrigins: [],
   poll: POLL,
   principal: principalOf,
-  webhooks: { sender: NodeWebhook.sender({ allowPrivateNetworks: true, ca: certificate.cert }), retryDelays: Schedule.spaced("50 millis"), ...WEBHOOK_LIMITS },
+  webhooks: {
+    sender: NodeWebhook.sender({ allowPrivateNetworks: true, ca: certificate.cert }),
+    retryDelays: Schedule.spaced("50 millis"),
+    ...WEBHOOK_LIMITS,
+    signingKeys: [testSigningKey("fixture-1"), testSigningKey("fixture-2")],
+    egressIpRanges: ["203.0.113.0/24", "2001:db8::/32"],
+  },
 });
 const mcpLease = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "0.0.0", path: "/mcp-lease", allowedOrigins: [], poll: { leaseMs: POLL_LEASE_MS } });
 const server = Effect.runSync(Scope.make());
@@ -66,7 +72,9 @@ after(async () => {
 
 describe("the Effect core passes acid-cat conform", { concurrency: true }, () => {
   test("through MCP over HTTP, with the handshake, poll and webhook delivery", { timeout: CONFORM_TIMEOUT }, async () => {
-    assertConforms(await conform({ mcp: `${url}/mcp`, mcpHandshake: true, poll: POLL, pollLease: { mcp: `${url}/mcp-lease`, leaseMs: POLL_LEASE_MS }, webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS } }), 60);
+    const results = await conform({ mcp: `${url}/mcp`, mcpHandshake: true, poll: POLL, pollLease: { mcp: `${url}/mcp-lease`, leaseMs: POLL_LEASE_MS }, webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS } });
+    assertConforms(results, 60);
+    assert.ok(results.some((result) => result.rule === "spec/bindings/mcp.md#server-card"), "the default Server Card is checked");
   });
 
   test("through MCP over stdio", { timeout: CONFORM_TIMEOUT }, async () => {

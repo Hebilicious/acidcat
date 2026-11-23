@@ -1,6 +1,7 @@
 //! The MCP binding (spec/bindings/mcp.md): tools, and events through the MCP events extension. The HTTP and the
 //! stdio transports share this module.
 
+mod card;
 mod headers;
 mod http;
 mod poll;
@@ -19,6 +20,7 @@ use crate::schema::bundle;
 use crate::session::{Session, SubscribeOptions, is_max_age_ms};
 use crate::subscription::Occurrences;
 
+pub use card::ServerCard;
 pub use http::{McpBinding, McpOptions, Principal};
 pub use poll::PollOptions;
 pub use stdio::{McpStdioOptions, run_stdio, serve_stdio};
@@ -30,7 +32,7 @@ pub const PROTOCOL_VERSION: &str = crate::facts_generated::MCP_PROTOCOL_VERSION;
 /// The revisions with an `initialize` handshake that the binding serves, the latest first.
 pub const HANDSHAKE_VERSIONS: [&str; 2] = ["2025-11-25", "2025-06-18"];
 
-pub(crate) const PROTOCOL_VERSION_KEY: &str = "io.modelcontextprotocol/protocolVersion";
+pub(crate) const PROTOCOL_VERSION_KEY: &str = crate::facts_generated::MCP_PROTOCOL_VERSION_KEY;
 pub(crate) const SUBSCRIPTION_ID_KEY: &str = crate::facts_generated::MCP_SUBSCRIPTION_ID;
 pub(crate) const SERVER_INFO_KEY: &str = "io.modelcontextprotocol/serverInfo";
 pub(crate) const EVENTS_EXTENSION: &str = crate::facts_generated::MCP_EVENTS_EXTENSION;

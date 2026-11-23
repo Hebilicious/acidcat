@@ -158,6 +158,7 @@ const keepaliveMs = integer(field(facts, "keepaliveMs"));
 const interruptGraceMs = integer(field(facts, "interruptGraceMs"));
 const sseMediaType = string(field(facts, "sseMediaType"));
 const mcpProtocolVersion = string(field(facts, "mcpProtocolVersion"));
+const mcpProtocolVersionKey = string(field(facts, "mcpProtocolVersionKey"));
 const mcpEventsExtension = string(field(facts, "mcpEventsExtension"));
 const mcpSubscriptionId = string(field(facts, "mcpSubscriptionId"));
 const mcpUnknownTool = integer(field(facts, "mcpUnknownTool"));
@@ -165,6 +166,18 @@ const mcpHeaderMismatch = integer(field(facts, "mcpHeaderMismatch"));
 const mcpNamedMethods = list(field(facts, "mcpNamedMethods")).map(string);
 const mcpHeartbeatMinMs = integer(field(facts, "mcpHeartbeatMinMs"));
 const mcpHeartbeatMaxMs = integer(field(facts, "mcpHeartbeatMaxMs"));
+const mcpServerCardPath = string(field(facts, "mcpServerCardPath"));
+const mcpServerCardMediaType = string(field(facts, "mcpServerCardMediaType"));
+const mcpServerCardSchema = string(field(facts, "mcpServerCardSchema"));
+const mcpServerCardCacheControl = string(field(facts, "mcpServerCardCacheControl"));
+const mcpServerCardCorsHeaders = list(field(facts, "mcpServerCardCorsHeaders")).map(pair).map(([name, value]) => [string(name), string(value)] as const);
+const mcpServerCardLengths = [
+  ["MCP_SERVER_CARD_NAME_MIN_LENGTH", integer(field(facts, "mcpServerCardNameMinLength"))],
+  ["MCP_SERVER_CARD_NAME_MAX_LENGTH", integer(field(facts, "mcpServerCardNameMaxLength"))],
+  ["MCP_SERVER_CARD_NAME_PART_MAX_LENGTH", integer(field(facts, "mcpServerCardNamePartMaxLength"))],
+  ["MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH", integer(field(facts, "mcpServerCardDescriptionMaxLength"))],
+  ["MCP_SERVER_CARD_VERSION_MAX_LENGTH", integer(field(facts, "mcpServerCardVersionMaxLength"))],
+] as const;
 const mcpEventErrors = numbered(field(facts, "mcpEventErrors"));
 const mcpRejections = list(field(facts, "mcpRejections")).map((each) => {
   const code = variant(field(each, "code"), ["NoCode", "Code"]);
@@ -410,6 +423,8 @@ const specFacts = [
   "",
   `export const MCP_PROTOCOL_VERSION = ${JSON.stringify(mcpProtocolVersion)};`,
   "",
+  `export const MCP_PROTOCOL_VERSION_KEY = ${JSON.stringify(mcpProtocolVersionKey)};`,
+  "",
   `export const MCP_EVENTS_EXTENSION = ${JSON.stringify(mcpEventsExtension)};`,
   "",
   `export const MCP_SUBSCRIPTION_ID = ${JSON.stringify(mcpSubscriptionId)};`,
@@ -423,6 +438,17 @@ const specFacts = [
   `export const MCP_HEARTBEAT_MIN_MS = ${mcpHeartbeatMinMs};`,
   "",
   `export const MCP_HEARTBEAT_MAX_MS = ${mcpHeartbeatMaxMs};`,
+  "",
+  `export const MCP_SERVER_CARD_PATH = ${JSON.stringify(mcpServerCardPath)};`,
+  "",
+  `export const MCP_SERVER_CARD_MEDIA_TYPE = ${JSON.stringify(mcpServerCardMediaType)};`,
+  "",
+  `export const MCP_SERVER_CARD_SCHEMA = ${JSON.stringify(mcpServerCardSchema)};`,
+  "",
+  `export const MCP_SERVER_CARD_CACHE_CONTROL = ${JSON.stringify(mcpServerCardCacheControl)};`,
+  "",
+  typescriptRecord("MCP_SERVER_CARD_CORS_HEADERS", mcpServerCardCorsHeaders.map(([name, value]) => [name, JSON.stringify(value)] as const)),
+  ...mcpServerCardLengths.flatMap(([name, length]) => ["", `export const ${name} = ${length};`]),
   "",
   typescriptRecord("MCP_EVENT_ERRORS", numbers(mcpEventErrors)),
   "",
@@ -541,6 +567,7 @@ const rustFacts = [
   rustConst("SSE_MEDIA_TYPE", "&str", rustString(sseMediaType)),
   "",
   rustConst("MCP_PROTOCOL_VERSION", "&str", rustString(mcpProtocolVersion)),
+  rustConst("MCP_PROTOCOL_VERSION_KEY", "&str", rustString(mcpProtocolVersionKey)),
   rustConst("MCP_EVENTS_EXTENSION", "&str", rustString(mcpEventsExtension)),
   rustConst("MCP_SUBSCRIPTION_ID", "&str", rustString(mcpSubscriptionId)),
   rustConst("MCP_UNKNOWN_TOOL", "i64", String(mcpUnknownTool)),
@@ -548,6 +575,12 @@ const rustFacts = [
   rustList("MCP_NAMED_METHODS", mcpNamedMethods),
   rustConst("MCP_HEARTBEAT_MIN_MS", "u64", String(mcpHeartbeatMinMs)),
   rustConst("MCP_HEARTBEAT_MAX_MS", "u64", String(mcpHeartbeatMaxMs)),
+  rustConst("MCP_SERVER_CARD_PATH", "&str", rustString(mcpServerCardPath)),
+  rustConst("MCP_SERVER_CARD_MEDIA_TYPE", "&str", rustString(mcpServerCardMediaType)),
+  rustConst("MCP_SERVER_CARD_SCHEMA", "&str", rustString(mcpServerCardSchema)),
+  rustConst("MCP_SERVER_CARD_CACHE_CONTROL", "&str", rustString(mcpServerCardCacheControl)),
+  rustArray("MCP_SERVER_CARD_CORS_HEADERS", "(&str, &str)", mcpServerCardCorsHeaders.map((header) => rustTuple(header.map(rustString)))),
+  ...mcpServerCardLengths.map(([name, length]) => rustConst(name, "usize", String(length))),
   "",
   "pub(crate) mod event_errors {",
   ...mcpEventErrors.map(([name, code]) => `    pub const ${screaming(name)}: i64 = ${code};`),

@@ -9,7 +9,7 @@ import { mcpHandler } from "../src/index.ts";
 import { webhookDelivery } from "../src/node.ts";
 import type { WebhookOptions } from "../src/node.ts";
 import { sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
-import { startReceiver, testCertificate } from "./webhook-receiver.ts";
+import { startReceiver, testCertificate, testSigningKey } from "./webhook-receiver.ts";
 import type { Received } from "./webhook-receiver.ts";
 import { until as untilWithin } from "./until.ts";
 import { mcpHeaders } from "./mcp-headers.ts";
@@ -57,7 +57,7 @@ async function assertSigned(request: Received | undefined, secrets: readonly str
   assert.equal(header(request, "content-type"), "application/json");
 }
 
-function server(options: WebhookOptions = {}) {
+function server(options: WebhookOptions = {}, serverCard?: { readonly name: string }) {
   const sensors = new Sensors();
   receiver.received.length = 0;
   receiver.answer(() => undefined);
@@ -69,6 +69,7 @@ function server(options: WebhookOptions = {}) {
     ...sensorOptions(sensors),
     principal: (request) => request.headers.get("X-Principal") ?? undefined,
     webhooks,
+    serverCard,
   });
   handlers.push(handler);
   const rpc = async (method: string, params: object, principal: string | null = "alice") => {
@@ -236,6 +237,30 @@ test("webhook: after the grace time, the server signs only with the new secret",
   await until(() => receiver.deliveries().length === 1);
   await assertSigned(receiver.deliveries()[0], [newer]);
   await handler.close();
+});
+
+test("webhook: the Server Card gives the egress ranges and the public signing keys, by kid", async () => {
+  const egressIpRanges = ["203.0.113.0/24", "2001:db8::/32"];
+  const { handler } = server({ signingKeys: [testSigningKey("first"), testSigningKey("second")], egressIpRanges }, { name: "dev.acid-cat/sensors" });
+  const card = objectOf(await (await handler(new Request("https://sensors.example/mcp/server-card"))).text());
+  const remotes: unknown = card["remotes"];
+  const remote: unknown = Array.isArray(remotes) ? remotes[0] : undefined;
+  const webhooks = isJsonObject(remote) ? member(member(member(remote, "extensionsInfo"), "io.modelcontextprotocol/events"), "webhooks") : {};
+  assert.deepEqual(webhooks["egressIpRanges"], egressIpRanges);
+  const keys = member(webhooks, "signingKeys")["keys"];
+  assert.ok(Array.isArray(keys));
+  assert.deepEqual(
+    keys.map((key: unknown) => (isJsonObject(key) ? [key["kid"], Object.keys(key).sort()] : undefined)),
+    [["first", ["crv", "kid", "kty", "x"]], ["second", ["crv", "kid", "kty", "x"]]],
+  );
+  await handler.close();
+});
+
+test("webhook: a signing key of another form, two keys with the same kid, or an egress range that is not CIDR text, make webhookDelivery throw", () => {
+  const key = testSigningKey("same");
+  assert.throws(() => webhookDelivery({ signingKeys: [{ ...key, d: "short" }] }), TypeError);
+  assert.throws(() => webhookDelivery({ signingKeys: [key, { ...testSigningKey("other"), kid: "same" }] }), TypeError);
+  for (const range of ["10.0.0.0/33", "10.0.0.0", "bad/8", "2001:db8::/129"]) assert.throws(() => webhookDelivery({ egressIpRanges: [range] }), TypeError, range);
 });
 
 test("webhook: events/unsubscribe of the subscription of another principal gives NotFound", async () => {

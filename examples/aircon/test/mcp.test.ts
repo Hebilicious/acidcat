@@ -214,3 +214,27 @@ test("events/poll on the server of the application reads aircon.status.changed f
   assert.deepEqual(polled.events.map((each) => each.data.fan), ["medium"]);
   await client.close();
 });
+
+test("the MCP binding serves a Server Card, and the wrapped binding adds the revisions of the handshake", async () => {
+  const Card = z.object({ name: z.string(), version: z.string(), remotes: z.array(z.object({ url: z.string(), supportedProtocolVersions: z.array(z.string()) })) });
+  const response = await fetch(`${served.url}/capabilities/mcp/server-card`);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Content-Type"), "application/mcp-server-card+json");
+  const card = Card.parse(await response.json());
+  assert.deepEqual([card.name, card.version], ["dev.acid-cat/aircon", "0.1.0"]);
+  assert.deepEqual(card.remotes, [{ url: `${served.url}/capabilities/mcp`, supportedProtocolVersions: ["2026-07-28"] }]);
+  const legacy = Card.parse(await (await fetch(`${served.url}/capabilities/mcp-legacy/server-card`)).json());
+  assert.deepEqual(legacy.remotes, [{ url: `${served.url}/capabilities/mcp-legacy`, supportedProtocolVersions: ["2026-07-28", "2025-11-25", "2025-06-18"] }]);
+});
+
+test("the server of the application, behind Mcp.withEvents, serves a Server Card with the version of its server/discover", async () => {
+  const Card = z.object({ name: z.string(), version: z.string(), description: z.string(), remotes: z.array(z.object({ url: z.string(), supportedProtocolVersions: z.array(z.string()) })) });
+  const response = await fetch(`${served.url}/mcp/server-card`);
+  assert.equal(response.status, 200);
+  const card = Card.parse(await response.json());
+  const client = await connect("/mcp");
+  assert.deepEqual([card.name, card.version], ["dev.acid-cat/aircon", client.getServerVersion()?.version]);
+  assert.equal(card.version, "0.1.0");
+  assert.deepEqual(card.remotes, [{ url: `${served.url}/mcp`, supportedProtocolVersions: ["2026-07-28"] }]);
+  await client.close();
+});

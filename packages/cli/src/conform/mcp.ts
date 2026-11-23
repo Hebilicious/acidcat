@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { bundle, encodeMcpHeaderValue, MCP_EVENTS_EXTENSION, MCP_HEADER_MISMATCH, MCP_HEARTBEAT_MAX_MS, MCP_HEARTBEAT_MIN_MS, MCP_SUBSCRIPTION_ID, mcpParamHeaders, viewOf } from "@acid-cat/spec-ts";
+import { bundle, encodeMcpHeaderValue, MCP_EVENTS_EXTENSION, MCP_HEADER_MISMATCH, MCP_HEARTBEAT_MAX_MS, MCP_HEARTBEAT_MIN_MS, MCP_PROTOCOL_VERSION_KEY, MCP_SUBSCRIPTION_ID, mcpParamHeaders, viewOf } from "@acid-cat/spec-ts";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 import { isArrayOf, isObject, isStringArray, memberOf, parseJson, readJson } from "../json.ts";
@@ -9,6 +9,7 @@ import { Checks, eventIdsOf, expect, expectEqual, expectOccurrence, fixture, FOR
 import { checkPoll } from "./poll.ts";
 import type { PollSettings } from "./poll.ts";
 import { sseReader } from "./sse.ts";
+import { checkServerCard, signingKeysOf } from "./server-card.ts";
 import { checkWebhook } from "./webhook.ts";
 import type { WebhookSettings } from "./webhook.ts";
 
@@ -77,8 +78,9 @@ export async function checkMcp(url: string, options: McpCheckOptions): Promise<C
   });
 
   await checkHeaders(checks, url);
+  const card = await checkServerCard(checks, url, httpChannel(url));
   await checkEvents(checks, httpChannel(url), { transport: "http", poll: options.poll, webhook: options.webhook !== undefined });
-  if (options.webhook !== undefined) await checkWebhook(checks, url, options.webhook);
+  if (options.webhook !== undefined) await checkWebhook(checks, url, options.webhook, card === undefined ? [] : signingKeysOf(card));
   if (options.handshake) await checkHandshake(checks, url, options.deadline);
   return checks;
 }
@@ -283,7 +285,7 @@ export async function checkTools(checks: Checks, mcp: Client): Promise<void> {
 
 export const EVENTS_REVISION = "2026-07-28";
 
-export const META = { "io.modelcontextprotocol/protocolVersion": EVENTS_REVISION, "io.modelcontextprotocol/clientCapabilities": {} };
+export const META = { [MCP_PROTOCOL_VERSION_KEY]: EVENTS_REVISION, "io.modelcontextprotocol/clientCapabilities": {} };
 
 export type Message = JsonObject;
 

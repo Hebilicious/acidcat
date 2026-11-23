@@ -21,7 +21,9 @@
   },
   "files": [
     "dist",
-    "conformance/fixture.acidcat.json"
+    "conformance/fixture.acidcat.json",
+    "conformance/server-card.LICENSE",
+    "conformance/server-card.schema.json"
   ],
   "bin": {
     "acid-cat": "./src/main.ts"

@@ -383,6 +383,10 @@ The specification defines subscription, verification, signing, retries and netwo
 | `retryDelays` | 5 s, then 4 times longer each time | A `Schedule` of the waits between attempts |
 | `timeoutMs` | `5000` | How long the server waits for each answer |
 | `rotationGraceMs` | `300000` | How long after a secret change the server signs with both secrets |
+| `signingKeys` | None | Ed25519 keys, as private JWKs, that also [sign each request](../../spec/bindings/mcp.md#webhook). To change keys, give the new key beside the old one |
+| `egressIpRanges` | None | The IP ranges from which the server sends, as CIDR text, for the Server Card |
+
+A signing key or an egress range that breaks the rules of [webhook delivery](../../spec/bindings/mcp.md#webhook) makes the server fail when it starts.
 
 `NodeWebhook.sender` follows the spec's network safety rules: it resolves the host for each request, connects only to globally routable addresses (pinned, with the host name in `Host` and TLS), follows no redirects, and reads at most `maxResponseBytes`.
 
@@ -393,6 +397,30 @@ The specification defines subscription, verification, signing, retries and netwo
 | `maxResponseBytes` | `65536` | The most bytes of an answer that the sender reads |
 
 Subscriptions, verifications and limit counts live in process memory and are lost on restart.
+
+#### Server Card
+
+`Mcp.toWebHandler`, `Mcp.makeHandle` and `Mcp.handle` serve an MCP [Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. It is on by default. `serverCard: false` turns it off.
+
+| Option | Default | Use |
+| --- | --- | --- |
+| `serverCard.name` | From the host of the URL and `name` ([Default name](../../spec/bindings/mcp.md#default-name)) | The name of the server in a registry. `name` stays the name that `server/discover` gives |
+| `serverCard.description` | The description of the catalog, else `instructions`, else `name` ([Default description](../../spec/bindings/mcp.md#default-description)) | |
+| `serverCard.url` | The URL of the request, without `/server-card` | Give the `https` URL when a platform in front of the server ends TLS |
+
+With webhook delivery, the card also gives the public keys of `signingKeys` and the `egressIpRanges`. `Mcp.withHandshake` adds its revisions to the card. A setting that breaks the [startup rules of the card](../../spec/bindings/mcp.md#server-card), such as a `version` range with the card on, makes the server fail when it starts. The defaults never make it fail.
+
+```ts
+const mcp = Mcp.withHandshake(
+  Mcp.toWebHandler(aircon, unitLayer, {
+    ...mcpOptions,
+    serverCard: { name: "com.example/aircon" },
+    webhooks: { sender: NodeWebhook.sender(), signingKeys: [signingJwk], egressIpRanges: ["203.0.113.0/24"] },
+  }),
+);
+```
+
+`Mcp.withEvents` also serves a card, for your own server, with the same `serverCard` option. For each `GET` request of the card, it sends `server/discover` of revision `2026-07-28` to your server, with no `Origin` and no credentials. The card takes the version, the revisions, the default name and the default description from that result, so it always agrees with your server. When the result cannot give a card, the request of the card gets 502 Bad Gateway, as the [binding](../../spec/bindings/mcp.md#server-card) tells. A server that requires credentials answers `server/discover` with an error, so give it `serverCard: false`. `signingKeys` and `egressIpRanges` work with `Mcp.withEvents` too.
 
 #### Events beside your own MCP server
 
@@ -408,7 +436,7 @@ const application = HttpRouter.toWebHandler(server);
 const mcp = Mcp.withEvents(aircon, unit, application.handler, { allowedOrigins: [] });
 ```
 
-Options: `allowedOrigins`, `target`, `maximumBytes`, `services`, `heartbeatMs`, `eventBuffer`, `principal`, `poll` and `webhooks`. `mcp.dispose()` ends leases and webhook subscriptions, not your server.
+Options: `allowedOrigins`, `target`, `maximumBytes`, `services`, `heartbeatMs`, `eventBuffer`, `principal`, `poll`, `webhooks` and `serverCard` ([Server Card](#server-card)). `mcp.dispose()` ends leases and webhook subscriptions, not your server.
 
 #### Events in other bindings
 

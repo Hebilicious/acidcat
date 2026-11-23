@@ -130,6 +130,34 @@ An optional `Option` field takes the value of its type, not `null`, so add `#[se
 
 MCP through HTTP also accepts the [`initialize` handshake of earlier revisions](../../spec/bindings/mcp.md#earlier-revisions-through-http). Poll delivery is on. `McpOptions::heartbeat` and `McpStdioOptions::heartbeat` (default 15 seconds) set the push heartbeat interval when the client suggests none. A client that suggests `heartbeatMs` in `events/stream` gets a grant from 1 to 60 seconds ([Push](../../spec/bindings/mcp.md#push)). MCP through HTTP checks the [headers](../../spec/bindings/mcp.md#headers) of each request of revision `2026-07-28` against its body: `Mcp-Method`, `Mcp-Name`, and an `Mcp-Param-*` header for each property that has `x-mcp-header`. A mismatch gets 400 and `-32020`. To annotate a field, use `#[schemars(extend("x-mcp-header" = "Region"))]`. `McpOptions::webhooks` turns on webhook delivery, and `McpOptions::principal` gives the principal of each request.
 
+### Server Card
+
+`McpBinding` serves an [MCP Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. It is on by default: `McpOptions::new` sets `server_card: Some(ServerCard::default())`. `server_card: None` turns it off: a `GET` request to that URL then gets 404.
+
+```rust,ignore
+let options = McpOptions {
+    server_card: Some(ServerCard::named("com.example/aircon")),
+    webhooks: Some(WebhookOptions {
+        signing_keys: vec![private_jwk],
+        egress_ip_ranges: vec!["203.0.113.0/24".into()],
+        ..WebhookOptions::default()
+    }),
+    ..McpOptions::new("aircon", "1.0.0")
+};
+```
+
+| Option | Default | Use |
+| --- | --- | --- |
+| `ServerCard::named(name)`, `ServerCard::name` | From the host of the URL and `McpOptions::name` ([Default name](../../spec/bindings/mcp.md#default-name)) | The name of the server in a registry. `McpOptions::name` stays the name that `server/discover` gives |
+| `ServerCard::description` | The description of the application, else `McpOptions::instructions`, else `McpOptions::name` ([Default description](../../spec/bindings/mcp.md#default-description)) | |
+| `ServerCard::url` | The URL of the request, without `/server-card` | Give the `https` URL when a platform in front of the server ends TLS |
+| `WebhookOptions::signing_keys` | None | Private Ed25519 JSON Web Keys that also [sign each webhook request](../../spec/bindings/mcp.md#webhook). The card gives their public keys. To change keys, give the new key beside the old one |
+| `WebhookOptions::egress_ip_ranges` | None | The CIDR ranges from which the server sends, for the card |
+
+The card gives `McpOptions::version`, and the revisions of the `initialize` handshake if `McpOptions::handshake` is `true`. It gives the signing keys and the egress ranges only if webhook delivery is on.
+
+`McpBinding::new` and `McpBinding::with_request_context` panic when an option breaks the [startup rules of the card](../../spec/bindings/mcp.md#server-card) or of [webhook delivery](../../spec/bindings/mcp.md#webhook), for example a version range with the card on, or signing keys with `server_card: None`. The defaults never make the binding panic.
+
 ### Serving the remote bindings
 
 `McpBinding` and `HttpBinding` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. To use another server, pass each request through `remote::request_body`, then to `handle`.

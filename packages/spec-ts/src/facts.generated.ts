@@ -40,6 +40,8 @@ export const SSE_MEDIA_TYPE = "text/event-stream";
 
 export const MCP_PROTOCOL_VERSION = "2026-07-28";
 
+export const MCP_PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
+
 export const MCP_EVENTS_EXTENSION = "io.modelcontextprotocol/events";
 
 export const MCP_SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId";
@@ -53,6 +55,31 @@ export const MCP_NAMED_METHODS = ["tools/call", "events/stream", "events/poll", 
 export const MCP_HEARTBEAT_MIN_MS = 1000;
 
 export const MCP_HEARTBEAT_MAX_MS = 60000;
+
+export const MCP_SERVER_CARD_PATH = "/server-card";
+
+export const MCP_SERVER_CARD_MEDIA_TYPE = "application/mcp-server-card+json";
+
+export const MCP_SERVER_CARD_SCHEMA = "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json";
+
+export const MCP_SERVER_CARD_CACHE_CONTROL = "public, max-age=3600";
+
+export const MCP_SERVER_CARD_CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET",
+  "Access-Control-Allow-Headers": "Content-Type, If-None-Match",
+  "Access-Control-Expose-Headers": "ETag",
+} as const;
+
+export const MCP_SERVER_CARD_NAME_MIN_LENGTH = 3;
+
+export const MCP_SERVER_CARD_NAME_MAX_LENGTH = 200;
+
+export const MCP_SERVER_CARD_NAME_PART_MAX_LENGTH = 100;
+
+export const MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH = 100;
+
+export const MCP_SERVER_CARD_VERSION_MAX_LENGTH = 255;
 
 export const MCP_EVENT_ERRORS = {
   notFound: -32023,

@@ -53,6 +53,10 @@ export interface WebhookDelivery {
   readonly subscribe: (principal: string, params: JsonObject, open: OpenSession) => Promise<RpcAnswer>;
   readonly unsubscribe: (principal: string, params: JsonObject) => Promise<RpcAnswer>;
   readonly close: () => Promise<void>;
+  /** The `webhooks` member that the Server Card gives for the events extension, or `undefined` for none. */
+  readonly cardInfo?: (() => Promise<JsonObject | undefined>) | undefined;
+  /** True when the deployment gives signing keys or egress ranges, which only the Server Card publishes. */
+  readonly publishesOnServerCard?: boolean | undefined;
 }
 
 export const forbidden: JsonRpcError = { code: MCP_EVENT_ERRORS.forbidden, message: "Forbidden" };

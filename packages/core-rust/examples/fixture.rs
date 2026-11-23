@@ -36,6 +36,7 @@ struct Holds {
     next: AtomicU64,
     holding: Mutex<HashMap<u64, (String, Arc<Notify>)>>,
     blocks_its_thread: bool,
+    holds_interrupt_until_go: bool,
 }
 
 impl Holds {
@@ -49,15 +50,14 @@ impl Holds {
         let _forget = Forget(|| {
             self.holding.lock().unwrap().remove(&id);
         });
-        if self.blocks_its_thread
-            && let Some(path) = &marker
-        {
-            let cancelled = format!("{path}.cancelled");
-            std::thread::spawn(move || {
-                futures::executor::block_on(cancel.cancelled());
-                let _ = std::fs::write(cancelled, "");
-            });
-        }
+        let _cancelled = match &marker {
+            Some(path) if self.blocks_its_thread => Some(write_cancel_marker_then_hold_interrupt(
+                &cancel,
+                path,
+                self.holds_interrupt_until_go,
+            )),
+            _ => None,
+        };
         let _marker = marker.map(MarkerFileWhileAlive::write);
         if self.blocks_its_thread {
             loop {
@@ -114,6 +114,45 @@ impl Watchers {
 }
 
 struct Forget<F: FnMut()>(F);
+
+struct CancelMarkerThenHoldInterrupt {
+    marker: String,
+    holds_until_go: bool,
+}
+
+const HOLD_INTERRUPT_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
+
+// tokio_util wakes this waker inside the `cancel` of the token, so it holds that `cancel` while it waits.
+impl std::task::Wake for CancelMarkerThenHoldInterrupt {
+    fn wake(self: Arc<Self>) {
+        let _ = std::fs::write(format!("{}.cancelled", self.marker), "");
+        let go = std::path::PathBuf::from(format!("{}.go", self.marker));
+        let start = std::time::Instant::now();
+        while self.holds_until_go && !go.exists() && start.elapsed() < HOLD_INTERRUPT_LIMIT {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+}
+
+fn write_cancel_marker_then_hold_interrupt(
+    cancel: &CancellationToken,
+    marker: &str,
+    holds_until_go: bool,
+) -> std::pin::Pin<Box<tokio_util::sync::WaitForCancellationFutureOwned>> {
+    let mut cancelled = Box::pin(cancel.clone().cancelled_owned());
+    let waker = std::task::Waker::from(Arc::new(CancelMarkerThenHoldInterrupt {
+        marker: marker.to_owned(),
+        holds_until_go,
+    }));
+    if cancelled
+        .as_mut()
+        .poll(&mut std::task::Context::from_waker(&waker))
+        .is_ready()
+    {
+        waker.wake();
+    }
+    cancelled
+}
 
 struct MarkerFileWhileAlive(String);
 
@@ -492,6 +531,8 @@ async fn main() {
                     retry_delay: Arc::new(|_| std::time::Duration::from_millis(50)),
                     min_ttl: std::time::Duration::from_millis(fixture_settings::WEBHOOK_MIN_TTL_MS),
                     max_subscriptions: fixture_settings::WEBHOOK_MAX_SUBSCRIPTIONS,
+                    signing_keys: vec![signing_key("fixture-1"), signing_key("fixture-2")],
+                    egress_ip_ranges: vec!["203.0.113.0/24".into(), "2001:db8::/32".into()],
                     ..WebhookOptions::default()
                 });
             let principal: Principal = Arc::new(|headers| {
@@ -586,6 +627,8 @@ async fn main() {
             let context = Fixture {
                 holds: Holds {
                     blocks_its_thread: true,
+                    holds_interrupt_until_go: std::env::var_os("FIXTURE_HOLD_INTERRUPT_UNTIL_GO")
+                        .is_some(),
                     ..Holds::default()
                 },
                 ..Fixture::default()
@@ -606,6 +649,17 @@ async fn main() {
             std::process::exit(2);
         }
     }
+}
+
+fn signing_key(kid: &str) -> Value {
+    use base64::Engine;
+    let seed: [u8; 32] = rand::random();
+    json!({
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "kid": kid,
+        "d": base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(seed),
+    })
 }
 
 fn poll() -> acid_cat_core::mcp::PollOptions {

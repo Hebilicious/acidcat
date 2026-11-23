@@ -10,6 +10,7 @@ use http::{HeaderMap, HeaderValue, Method, Request, Response, header};
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
+use super::card::{Card, CardServer, ServerCard};
 use super::headers::header_mismatch;
 use super::poll::{PollLeases, PollOptions};
 use super::webhook::{WebhookOptions, Webhooks};
@@ -54,6 +55,10 @@ pub struct McpOptions {
     pub principal: Option<Principal>,
     /// Webhook delivery. It is off when this member is `None`.
     pub webhooks: Option<WebhookOptions>,
+    /// The Server Card at the URL of the server and `/server-card`. The default is `Some(ServerCard::default())`, a
+    /// card with the default name and description. With `None`, the server serves no card, and a `GET` request to that
+    /// URL gets 404.
+    pub server_card: Option<ServerCard>,
 }
 
 impl McpOptions {
@@ -71,6 +76,7 @@ impl McpOptions {
             poll: PollOptions::default(),
             principal: None,
             webhooks: None,
+            server_card: Some(ServerCard::default()),
         }
     }
 }
@@ -82,6 +88,7 @@ struct Inner<C> {
     instructions: Option<String>,
     leases: Arc<PollLeases>,
     webhooks: Option<Arc<Webhooks>>,
+    card: Option<Card>,
 }
 
 /// The MCP server of an application through HTTP. Each request has its own session. [`McpBinding::close`] ends the
@@ -137,6 +144,14 @@ fn read_message(body: &Value) -> Message {
 
 impl<C: Send + Sync + 'static> McpBinding<C> {
     /// A binding whose requests share one context.
+    ///
+    /// # Panics
+    ///
+    /// If the options are not valid: a given Server Card name that does not have the reverse-DNS form, a given
+    /// description that does not have 1 to 100 characters, a given URL that is not an absolute `http` or `https` URL
+    /// with a host, a version that is a range or is longer than 255 characters with the Server Card on, a webhook
+    /// signing key that is not a private Ed25519 JWK, two signing keys with the same `kid`, an egress range that is not
+    /// CIDR text, or signing keys or egress ranges with the Server Card off.
     pub fn new(app: Arc<Application<C>>, context: Arc<C>, options: McpOptions) -> Self {
         Self::with_contexts(app, Contexts::Shared(context), options)
     }
@@ -144,6 +159,10 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
     /// A binding that makes a context for each request that passes the screening, from the head of the request: for
     /// example the caller, from a token in a header. A [`Refusal`] answers the request instead. A poll lease or a
     /// webhook subscription keeps the context of the request that started it, until it ends.
+    ///
+    /// # Panics
+    ///
+    /// If the options are not valid, as for [`McpBinding::new`].
     pub fn with_request_context<Make, Made>(
         app: Arc<Application<C>>,
         make: Make,
@@ -162,7 +181,27 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
             .clone()
             .or_else(|| app.description().map(str::to_owned));
         let leases = PollLeases::new(options.poll.clone());
+        let publishes = options.webhooks.as_ref().is_some_and(|webhooks| {
+            !webhooks.signing_keys.is_empty() || !webhooks.egress_ip_ranges.is_empty()
+        });
+        assert!(
+            options.server_card.is_some() || !publishes,
+            "webhook signing keys and egress ranges need a Server Card, because a receiver gets them only from the card: turn the Server Card on, or remove the signing keys and the egress ranges"
+        );
         let webhooks = options.webhooks.clone().map(Webhooks::new);
+        let card = options.server_card.as_ref().map(|card| {
+            let server = CardServer {
+                name: &options.name,
+                version: &options.version,
+                descriptions: [
+                    app.description(),
+                    options.instructions.as_deref(),
+                    Some(&options.name),
+                ],
+                handshake: options.handshake,
+            };
+            Card::new(card, &server, webhooks.as_deref())
+        });
         McpBinding {
             inner: Arc::new(Inner {
                 app,
@@ -171,6 +210,7 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
                 instructions,
                 leases,
                 webhooks,
+                card,
             }),
         }
     }
@@ -202,6 +242,13 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
 
     pub async fn handle(&self, request: Request<RequestBody>) -> Response<ResponseBody> {
         let options = &self.inner.options;
+        if Card::is_card_request(&request) {
+            match &self.inner.card {
+                Some(card) => return card.respond(&request),
+                None if request.method() == Method::GET => return empty_response(404),
+                None => {}
+            }
+        }
         let rules = Rules {
             methods: &[Method::POST],
             allowed_origins: &options.allowed_origins,

@@ -1,5 +1,19 @@
-import { callFailure, canonicalJson, isJsonObject, MCP_EVENT_ERRORS, MCP_WEBHOOK_DEFAULTS, mcpSubscribeError, webhookGrantMs, webhookSecretBytes, webhookSignature, webhookSubscriptionId } from "@acid-cat/spec-ts";
-import type { JsonObject, Occurrence, WebhookError } from "@acid-cat/spec-ts";
+import {
+  callFailure,
+  canonicalJson,
+  importWebhookSigningKey,
+  isJsonObject,
+  MCP_EVENT_ERRORS,
+  MCP_WEBHOOK_DEFAULTS,
+  mcpSubscribeError,
+  readWebhookPublication,
+  webhookCardInfo,
+  webhookGrantMs,
+  webhookSecretBytes,
+  webhookSignature,
+  webhookSubscriptionId,
+} from "@acid-cat/spec-ts";
+import type { JsonObject, Occurrence, WebhookError, WebhookSigningJwk } from "@acid-cat/spec-ts";
 import { Clock, Data, Effect, Exit, Fiber, Option, Schedule, Schema, Scope, Semaphore, Stream } from "effect";
 
 import type { Opener } from "./poll.ts";
@@ -55,6 +69,14 @@ export interface WebhookOptions {
    * `retryWindowMs`. The default is exponential: 5 seconds, then 4 times longer each time.
    */
   readonly retryDelays?: Schedule.Schedule<unknown> | undefined;
+  /**
+   * Ed25519 keys that sign each request with a `v1a,` signature beside the `v1,` signatures, as private JWKs with a
+   * `kid`. The Server Card gives their public keys. Give the new key beside the old one to change keys. A key of another
+   * form, or two keys with the same `kid`, make the server fail when it starts. So do signing keys with no Server Card.
+   */
+  readonly signingKeys?: readonly WebhookSigningJwk[] | undefined;
+  /** The IP ranges from which the server sends its requests, as CIDR text. The Server Card gives them. A value that is not CIDR text, or ranges with no Server Card, make the server fail when it starts. */
+  readonly egressIpRanges?: readonly string[] | undefined;
 }
 
 export interface RpcError {
@@ -68,6 +90,7 @@ export type WebhookAnswer = { readonly result: JsonObject } | { readonly error: 
 export interface Webhooks {
   readonly subscribe: <R>(params: JsonObject, principal: Option.Option<string>, open: Opener<R>) => Effect.Effect<WebhookAnswer>;
   readonly unsubscribe: (params: JsonObject, principal: Option.Option<string>) => Effect.Effect<WebhookAnswer>;
+  readonly cardInfo: Effect.Effect<JsonObject | undefined>;
 }
 
 const nonNegative = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -124,6 +147,8 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
     const rotationGraceMs = options.rotationGraceMs ?? MCP_WEBHOOK_DEFAULTS.rotationGraceMs;
     const retries = (options.retryDelays ?? Schedule.exponential("5 seconds", 4)).pipe(Schedule.upTo({ times: attempts - 1, duration: retryWindowMs }));
     const serverScope = yield* Effect.scope;
+    const seeds = readWebhookPublication(options);
+    const signingKeys = yield* Effect.cached(Effect.promise(() => Promise.all(seeds.map(importWebhookSigningKey))));
 
     const hooks = new Map<string, Hook>();
     const verified = new Set<string>();
@@ -155,7 +180,8 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
         const timestamp = Math.floor(now / 1000);
-        const signature = yield* Effect.promise(() => webhookSignature(secrets(now), webhookId, timestamp, body));
+        const keys = yield* signingKeys;
+        const signature = yield* Effect.promise(() => webhookSignature(secrets(now), webhookId, timestamp, body, keys.map((key) => key.privateKey)));
         const headers = {
           "Content-Type": "application/json",
           "webhook-id": webhookId,
@@ -357,7 +383,9 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
         return { result: { resultType: "complete" } };
       });
 
-    return { subscribe, unsubscribe };
+    const egressIpRanges = [...(options.egressIpRanges ?? [])];
+    const cardInfo = Effect.map(signingKeys, (keys) => webhookCardInfo(keys.map((key) => key.publicJwk), egressIpRanges));
+    return { subscribe, unsubscribe, cardInfo };
   });
 
 function parseUrl(text: string): URL | undefined {

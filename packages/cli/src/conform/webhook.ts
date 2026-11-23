@@ -106,7 +106,7 @@ function header(request: Received, name: string): string {
   return value;
 }
 
-async function expectSigned(request: Received, subscription: string, secrets: readonly string[], type?: string): Promise<string> {
+async function expectSignedWith(signingKeys: readonly JsonObject[], request: Received, subscription: string, secrets: readonly string[], type?: string): Promise<string> {
   expect(header(request, "content-type").startsWith("application/json"), `Content-Type must be application/json, got ${header(request, "content-type")}`);
   const id = header(request, "webhook-id");
   const pattern = type === undefined ? /^msg_[A-Za-z0-9]+$/ : new RegExp(`^msg_${type}_[A-Za-z0-9]+$`);
@@ -116,11 +116,26 @@ async function expectSigned(request: Received, subscription: string, secrets: re
   expect(/^\d+$/.test(timestampText) && Math.abs(timestamp - Date.now() / 1000) <= 300, `webhook-timestamp must be the time in seconds, got ${JSON.stringify(timestampText)}`);
   expectEqual(header(request, "x-mcp-subscription-id"), subscription, "X-MCP-Subscription-Id");
   const signatures = header(request, "webhook-signature").split(" ");
+  expectEqual(signatures.length, secrets.length + signingKeys.length, `the number of signatures, one v1 for each secret and one v1a for each signing key of the Server Card, in ${JSON.stringify(signatures)}`);
+  const symmetric = signatures.slice(0, secrets.length);
   for (const secret of secrets) {
     const expected = await webhookSignature([secret], id, timestamp, request.text);
-    expect(signatures.includes(expected), `webhook-signature must have the signature ${expected} of a secret, got ${JSON.stringify(signatures)}`);
+    expect(symmetric.includes(expected), `webhook-signature must start with the v1 signature ${expected} of each secret, got ${JSON.stringify(signatures)}`);
   }
+  await expectServerSignatures(signingKeys, signatures.slice(secrets.length), `${id}.${timestamp}.${request.text}`);
   return id;
+}
+
+async function expectServerSignatures(signingKeys: readonly JsonObject[], asymmetric: readonly string[], signed: string): Promise<void> {
+  expect(asymmetric.every((each) => each.startsWith("v1a,")), `the signatures after the v1 signatures must be v1a signatures, got ${JSON.stringify(asymmetric)}`);
+  for (const [index, key] of signingKeys.entries()) {
+    const x = key.x;
+    expect(typeof x === "string", `the signing key ${JSON.stringify(key.kid)} must have x`);
+    const publicKey = await crypto.subtle.importKey("jwk", { kty: "OKP", crv: "Ed25519", x }, "Ed25519", false, ["verify"]);
+    const signature = Buffer.from((asymmetric[index] ?? "").slice(4), "base64");
+    const verified = await crypto.subtle.verify("Ed25519", publicKey, signature, new TextEncoder().encode(signed));
+    expect(verified, `the v1a signature ${index + 1} must verify with the signing key ${JSON.stringify(key.kid)} of the Server Card`);
+  }
 }
 
 function expectDelivered(request: Received, name: string) {
@@ -128,7 +143,7 @@ function expectDelivered(request: Received, name: string) {
   return expectOccurrence(request.body, name);
 }
 
-export async function checkWebhook(checks: Checks, url: string, settings: WebhookSettings): Promise<void> {
+export async function checkWebhook(checks: Checks, url: string, settings: WebhookSettings, signingKeys: readonly JsonObject[]): Promise<void> {
   let receiver: Awaited<ReturnType<typeof startReceiver>>;
   try {
     receiver = await startReceiver(settings);
@@ -139,13 +154,14 @@ export async function checkWebhook(checks: Checks, url: string, settings: Webhoo
     return;
   }
   try {
-    await checkWithReceiver(checks, url, settings, receiver);
+    await checkWithReceiver(checks, url, settings, receiver, signingKeys);
   } finally {
     await receiver.close();
   }
 }
 
-async function checkWithReceiver(checks: Checks, url: string, settings: WebhookSettings, receiver: Awaited<ReturnType<typeof startReceiver>>): Promise<void> {
+async function checkWithReceiver(checks: Checks, url: string, settings: WebhookSettings, receiver: Awaited<ReturnType<typeof startReceiver>>, signingKeys: readonly JsonObject[]): Promise<void> {
+  const expectSigned = (request: Received, subscription: string, secrets: readonly string[], type?: string) => expectSignedWith(signingKeys, request, subscription, secrets, type);
   const principal = settings.principal;
   const channel = httpChannel(url, { Authorization: `Bearer ${principal}` });
   const anonymous = httpChannel(url);

@@ -201,8 +201,38 @@ await serve({ "/mcp": mcp });
 | `retryDelayMs(attempt)` | 10 s, 30 s, 90 s, 270 s | The wait before the next attempt |
 | `timeoutMs` | 5 seconds | Wait for each response |
 | `rotationGraceMs` | 5 minutes | How long the old secret still signs after a new one |
+| `signingKeys` | None | Ed25519 keys, as private JWKs, that also [sign each request](../../spec/bindings/mcp.md#webhook). To change keys, give the new key beside the old one |
+| `egressIpRanges` | None | The IP ranges from which the server sends, as CIDR text, for the Server Card |
+
+`webhookDelivery` throws a `TypeError` for a signing key or an egress range that breaks the rules of [webhook delivery](../../spec/bindings/mcp.md#webhook).
 
 Verifications are kept in memory while the process runs. The server checks the endpoint's TLS certificate, never logs or returns a secret, and never passes on the endpoint's response text: `lastError` and `CallbackEndpointError` carry only a category such as `http_4xx`.
+
+### MCP Server Card
+
+`mcpHandler` serves an MCP [Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. It is on by default. `serverCard: false` turns it off.
+
+| Option | Default | Use |
+| --- | --- | --- |
+| `serverCard.name` | From the host of the URL and `name` ([Default name](../../spec/bindings/mcp.md#default-name)) | The name of the server in a registry. `name` stays the name that `server/discover` gives |
+| `serverCard.description` | The description of the catalog, else `instructions`, else `name` ([Default description](../../spec/bindings/mcp.md#default-description)) | |
+| `serverCard.url` | The URL of the request, without `/server-card` | Give the `https` URL when a platform in front of the server ends TLS |
+
+With webhook delivery, the card also gives the public keys of `signingKeys` and the `egressIpRanges`. `mcpHandshake` adds its revisions to the card. A setting that breaks the [startup rules of the card](../../spec/bindings/mcp.md#server-card), such as a `version` range with the card on, makes `mcpHandler` throw a `TypeError`. The defaults never make it throw.
+
+```ts
+const mcp = mcpHandler(aircon, {
+  name: "aircon",
+  version: "1.0.0",
+  allowedOrigins: [],
+  toJsonSchema,
+  context: { unit },
+  serverCard: { name: "com.example/aircon" },
+  principal: (request) => verifiedSubject(request),
+  webhooks: webhookDelivery({ signingKeys: [signingJwk], egressIpRanges: ["203.0.113.0/24"] }),
+});
+await serve({ "/mcp": mcpHandshake(mcp) });
+```
 
 ### Serve on Node.js
 

@@ -1,5 +1,26 @@
-import { bundle, isJsonObject, KEEPALIVE_MS, MCP_HEADER_MISMATCH, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpHeaderMismatch, mcpToolAnnotations, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage } from "@acid-cat/spec-ts";
-import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
+import {
+  bundle,
+  isJsonObject,
+  KEEPALIVE_MS,
+  MCP_HEADER_MISMATCH,
+  MCP_PROTOCOL_VERSION,
+  MCP_PROTOCOL_VERSION_KEY,
+  MCP_REJECTIONS,
+  MCP_UNKNOWN_TOOL,
+  mcpHeaderMismatch,
+  mcpServerCard,
+  mcpServerCardIdentity,
+  mcpServerCardResponse,
+  mcpServerCardSettings,
+  mcpServerUrlOfCardRequest,
+  mcpToolAnnotations,
+  mcpToolResult,
+  readBounded,
+  screenRequest,
+  SSE_MEDIA_TYPE,
+  sseMessage,
+} from "@acid-cat/spec-ts";
+import type { JsonObject, McpServerCardSettings, Rejection } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
 import { openContext, refusalResponse } from "./context.ts";
@@ -48,6 +69,14 @@ export interface McpSettings {
   readonly webhooks?: WebhookDelivery | undefined;
   /** The clock of the poll leases. The default is the clock of the system. */
   readonly clock?: Clock | undefined;
+  /**
+   * The Server Card at the URL of the server and `/server-card` (spec/bindings/mcp.md#server-card). The server serves
+   * it with the default settings when this member is absent. With `false`, the server serves no card, and a `GET`
+   * request to that URL gets 404. A given name, description or URL that breaks the rules makes `mcpHandler` throw, and
+   * so does a version that is a range while the card is on. So does webhook delivery with signing keys or egress ranges
+   * and the card off.
+   */
+  readonly serverCard?: McpServerCardSettings | false | undefined;
 }
 
 /**
@@ -80,7 +109,7 @@ function readRequest(body: unknown): JsonRpcRequest {
     name: isJsonObject(params) && typeof params["name"] === "string" ? params["name"] : undefined,
     arguments: isJsonObject(params) ? params["arguments"] : undefined,
     params: isJsonObject(params) ? params : {},
-    protocolVersion: isJsonObject(meta) ? meta["io.modelcontextprotocol/protocolVersion"] : undefined,
+    protocolVersion: isJsonObject(meta) ? meta[MCP_PROTOCOL_VERSION_KEY] : undefined,
   };
 }
 
@@ -97,7 +126,13 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
   const closeAll = async () => {
     await Promise.allSettled([leases.close(), options.webhooks?.close()]);
   };
+  const cardSettings = mcpServerCardSettings(options.serverCard, options.webhooks?.publishesOnServerCard === true);
+  const identity =
+    cardSettings === undefined ? undefined : mcpServerCardIdentity(cardSettings, { name: options.name, version: options.version, descriptions: [app.description, options.instructions, options.name] });
   const handle = async (request: Request): Promise<Response> => {
+    const serverUrl = mcpServerUrlOfCardRequest(request);
+    if (serverUrl !== undefined && identity !== undefined) return mcpServerCardResponse(request, mcpServerCard(identity, serverUrl, await options.webhooks?.cardInfo?.()));
+    if (serverUrl !== undefined && request.method === "GET") return new Response(null, { status: 404 });
     const screened = screenRequest(request, {
       methods: ["POST"],
       allowedOrigins: options.allowedOrigins,

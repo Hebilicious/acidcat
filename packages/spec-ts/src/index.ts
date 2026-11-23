@@ -7,11 +7,25 @@ import {
   CLI_RESUME_FLAGS,
   HTTP_STATUS,
   MCP_EVENT_ERRORS,
+  MCP_EVENTS_EXTENSION,
   MCP_HEARTBEAT_MAX_MS,
   MCP_HEARTBEAT_MIN_MS,
   MCP_NAMED_METHODS,
+  MCP_PROTOCOL_VERSION,
+  MCP_PROTOCOL_VERSION_KEY,
   MCP_REJECTIONS as REJECTIONS,
+  MCP_SERVER_CARD_CACHE_CONTROL,
+  MCP_SERVER_CARD_CORS_HEADERS,
+  MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH,
+  MCP_SERVER_CARD_MEDIA_TYPE,
+  MCP_SERVER_CARD_NAME_MAX_LENGTH,
+  MCP_SERVER_CARD_NAME_MIN_LENGTH,
+  MCP_SERVER_CARD_NAME_PART_MAX_LENGTH,
+  MCP_SERVER_CARD_PATH,
+  MCP_SERVER_CARD_SCHEMA,
+  MCP_SERVER_CARD_VERSION_MAX_LENGTH,
   MCP_SUBSCRIPTION_ID,
+  SSE_MEDIA_TYPE,
 } from "./facts.generated.ts";
 
 export {
@@ -30,6 +44,11 @@ export {
   MCP_HEARTBEAT_MAX_MS,
   MCP_HEARTBEAT_MIN_MS,
   MCP_PROTOCOL_VERSION,
+  MCP_PROTOCOL_VERSION_KEY,
+  MCP_SERVER_CARD_CACHE_CONTROL,
+  MCP_SERVER_CARD_MEDIA_TYPE,
+  MCP_SERVER_CARD_PATH,
+  MCP_SERVER_CARD_SCHEMA,
   MCP_SUBSCRIPTION_ID,
   MCP_UNKNOWN_TOOL,
   SSE_MEDIA_TYPE,
@@ -796,8 +815,11 @@ export function webhookGrantMs(ttlMs: number | null | undefined, limits: { reado
 /** The text that a Standard Webhooks signature covers. */
 export const webhookSignedText = (webhookId: string, timestamp: number, body: string): string => `${webhookId}.${timestamp}.${body}`;
 
-/** The `webhook-signature` header: one `v1,` signature for each secret, with a space between them. */
-export async function webhookSignature(secrets: readonly string[], webhookId: string, timestamp: number, body: string): Promise<string> {
+/**
+ * The `webhook-signature` header: one `v1,` signature for each secret, then one `v1a,` signature for each signing key,
+ * with a space between them (spec/bindings/mcp.md#webhook).
+ */
+export async function webhookSignature(secrets: readonly string[], webhookId: string, timestamp: number, body: string, signingKeys: readonly CryptoKey[] = []): Promise<string> {
   const content = new TextEncoder().encode(webhookSignedText(webhookId, timestamp, body));
   const signatures: string[] = [];
   for (const secret of secrets) {
@@ -806,7 +828,347 @@ export async function webhookSignature(secrets: readonly string[], webhookId: st
     const key = await crypto.subtle.importKey("raw", bytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
     signatures.push(`v1,${base64OfBytes(new Uint8Array(await crypto.subtle.sign("HMAC", key, content)))}`);
   }
+  for (const key of signingKeys) signatures.push(`v1a,${base64OfBytes(new Uint8Array(await crypto.subtle.sign("Ed25519", key, content)))}`);
   return signatures.join(" ");
+}
+
+function bytesOfBase64Url(text: string): Uint8Array<ArrayBuffer> | undefined {
+  if (!/^[A-Za-z0-9_-]*$/.test(text) || text.length % 4 === 1) return undefined;
+  const binary = atob(text.replaceAll("-", "+").replaceAll("_", "/"));
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+/** A signing key of webhook delivery: the `kid` and the 32 bytes of the Ed25519 seed `d` of a private JWK. */
+export interface WebhookSigningSeed {
+  readonly kid: string;
+  readonly seed: Uint8Array<ArrayBuffer>;
+}
+
+export interface WebhookSigningKey {
+  readonly privateKey: CryptoKey;
+  readonly publicJwk: JsonObject;
+}
+
+/** A signing key of webhook delivery, as a private JWK of an Ed25519 key. The server takes the public key from `d`. */
+export interface WebhookSigningJwk {
+  readonly kty: "OKP";
+  readonly crv: "Ed25519";
+  readonly kid: string;
+  /** The seed of the key: the base64url of 32 bytes, with no padding. */
+  readonly d: string;
+  readonly x?: string | undefined;
+}
+
+export interface WebhookPublication {
+  readonly signingKeys?: readonly WebhookSigningJwk[] | undefined;
+  readonly egressIpRanges?: readonly string[] | undefined;
+}
+
+/**
+ * Read the signing keys and the egress ranges of webhook delivery (spec/bindings/mcp.md#webhook). Each key is a private
+ * JWK of an Ed25519 key. Throws a `TypeError` for a key of another form, two keys with the same `kid`, or a range that
+ * is not CIDR text, so that a server with such settings fails when it starts.
+ */
+export function readWebhookPublication(publication: WebhookPublication): readonly WebhookSigningSeed[] {
+  const seeds = (publication.signingKeys ?? []).map((key, index) => {
+    const seed = signingSeedOf(key);
+    if (seed === undefined) throw new TypeError(`Signing key ${index} must be a private JWK with kty "OKP", crv "Ed25519", a kid that is not empty, and d, the base64url of 32 bytes.`);
+    return seed;
+  });
+  const kids = seeds.map((each) => each.kid);
+  const repeated = kids.find((kid, index) => kids.indexOf(kid) !== index);
+  if (repeated !== undefined) throw new TypeError(`Two signing keys have the kid ${JSON.stringify(repeated)}.`);
+  for (const range of publication.egressIpRanges ?? []) {
+    if (!isCidr(range)) throw new TypeError(`The egress range ${JSON.stringify(range)} is not CIDR text, for example 203.0.113.0/24 or 2001:db8::/32.`);
+  }
+  return seeds;
+}
+
+function signingSeedOf(key: unknown): WebhookSigningSeed | undefined {
+  if (!isJsonObject(key) || key["kty"] !== "OKP" || key["crv"] !== "Ed25519") return undefined;
+  const { kid, d } = key;
+  if (typeof kid !== "string" || kid === "" || typeof d !== "string" || d.length !== 43) return undefined;
+  const seed = bytesOfBase64Url(d);
+  return seed?.length === 32 ? { kid, seed } : undefined;
+}
+
+const PKCS8_ED25519_PREFIX = [0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20];
+
+export async function importWebhookSigningKey({ kid, seed }: WebhookSigningSeed): Promise<WebhookSigningKey> {
+  const pkcs8 = new Uint8Array([...PKCS8_ED25519_PREFIX, ...seed]);
+  const exportable = await crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, true, ["sign"]);
+  const { x } = await crypto.subtle.exportKey("jwk", exportable);
+  if (x === undefined) throw new TypeError("The runtime gives no public key for an Ed25519 key.");
+  const privateKey = await crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, false, ["sign"]);
+  return { privateKey, publicJwk: { kty: "OKP", crv: "Ed25519", kid, x } };
+}
+
+/**
+ * The `webhooks` member of the entry `io.modelcontextprotocol/events` in the `extensionsInfo` of a Server Card, or
+ * `undefined` when the deployment publishes nothing (spec/bindings/mcp.md#server-card).
+ */
+export function webhookCardInfo(publicJwks: readonly JsonObject[], egressIpRanges: readonly string[]): JsonObject | undefined {
+  if (publicJwks.length === 0 && egressIpRanges.length === 0) return undefined;
+  return {
+    ...(publicJwks.length === 0 ? {} : { signingKeys: { keys: [...publicJwks] } }),
+    ...(egressIpRanges.length === 0 ? {} : { egressIpRanges: [...egressIpRanges] }),
+  };
+}
+
+/** Tell if a text is CIDR text: an IPv4 address and a prefix length from 0 to 32, or an IPv6 address and one from 0 to 128. */
+export function isCidr(text: string): boolean {
+  const slash = text.lastIndexOf("/");
+  const address = text.slice(0, slash);
+  const prefixLength = text.slice(slash + 1);
+  if (slash === -1 || !/^(0|[1-9][0-9]{0,2})$/.test(prefixLength)) return false;
+  if (ipv4Bytes(address) !== undefined) return Number(prefixLength) <= 32;
+  return ipv6Words(address) !== undefined && Number(prefixLength) <= 128;
+}
+
+export interface McpServerCardSettings {
+  /**
+   * The name, in reverse-DNS form with one `/`, for example `com.example/aircon`. The default comes from the host of
+   * the URL of the server and the name of the server: `com.example.aircon/<name>` for `aircon.example.com`.
+   */
+  readonly name?: string | undefined;
+  /**
+   * The description, from 1 to 100 characters. The default is the description of the catalog, shortened to 100
+   * characters.
+   */
+  readonly description?: string | undefined;
+  /**
+   * The absolute `http` or `https` URL of the server in the card, with a host. The default is the URL of the request of
+   * the card, without `/server-card`. Give it when a platform in front of the server ends TLS, because the server then
+   * gets `http` URLs.
+   */
+  readonly url?: string | undefined;
+}
+
+/** What the server tells about itself, from which a Server Card takes its defaults. */
+export interface McpServerCardServer {
+  /** The `name` of `serverInfo` in `server/discover`. */
+  readonly name: string;
+  /** The `version` of `serverInfo` in `server/discover`. */
+  readonly version: string;
+  /** The texts from which the default description comes, in order. The first one that is not empty is the description. */
+  readonly descriptions: readonly (string | undefined)[];
+}
+
+export interface McpServerCardIdentity {
+  /** The name that the deployment gives, or `undefined` for the default name of each request. */
+  readonly name: string | undefined;
+  readonly serverName: string;
+  readonly version: string;
+  readonly description: string;
+  readonly url: string | undefined;
+}
+
+const SERVER_CARD_NAME = /^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/;
+
+const characterCount = (text: string): number => Array.from(text).length;
+
+function httpHost(url: string): string | undefined {
+  if (/\s/.test(url) || !URL.canParse(url)) return undefined;
+  const parsed = new URL(url);
+  if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.hostname === "") return undefined;
+  return parsed.hostname;
+}
+
+/** Tell if the deployment gives signing keys or egress ranges, which only a Server Card publishes. */
+export const publishesOnServerCard = (publication: WebhookPublication | undefined): boolean =>
+  (publication?.signingKeys?.length ?? 0) > 0 || (publication?.egressIpRanges?.length ?? 0) > 0;
+
+/**
+ * Tell if a version is a range, as the Server Card extension refuses: it starts with `^`, `~`, `<`, `>` or `=`, has
+ * `||`, has a white space before a `-`, or a part of it before the first `-` or `+` is `x`, `X` or `*`.
+ */
+export function isVersionRange(version: string): boolean {
+  const text = version.trim();
+  if (/^[\^~<>=]/.test(text) || text.includes("||") || /\s-/.test(text)) return true;
+  const release = text.split(/[-+]/, 1)[0] ?? "";
+  return release.split(".").some((part) => part === "x" || part === "X" || part === "*");
+}
+
+/**
+ * Check the settings of the Server Card when the server starts (spec/bindings/mcp.md#server-card), and give
+ * `undefined` when the deployment turns the card off with `false`. Throws a `TypeError` for a given name that is not
+ * in reverse-DNS form, a given description that is empty or too long, or a given URL that is not an
+ * absolute `http` or `https` URL with a host. With the card off, throws a `TypeError` if `publishesWebhookInfo` is
+ * true: no receiver can then get the signing keys and the egress ranges.
+ */
+export function mcpServerCardSettings(settings: McpServerCardSettings | false | undefined, publishesWebhookInfo: boolean): McpServerCardSettings | undefined {
+  if (settings === false) {
+    if (publishesWebhookInfo) {
+      throw new TypeError("Webhook signing keys and egress ranges need a Server Card, because a receiver gets them only from the card. Turn the Server Card on, or remove the signing keys and the egress ranges.");
+    }
+    return undefined;
+  }
+  const card = settings ?? {};
+  const { name, description, url } = card;
+  if (name !== undefined && (!SERVER_CARD_NAME.test(name) || characterCount(name) < MCP_SERVER_CARD_NAME_MIN_LENGTH || characterCount(name) > MCP_SERVER_CARD_NAME_MAX_LENGTH)) {
+    throw new TypeError(`The name of the Server Card ${JSON.stringify(name)} must have the reverse-DNS form with one /, for example com.example/aircon, and ${MCP_SERVER_CARD_NAME_MIN_LENGTH} to ${MCP_SERVER_CARD_NAME_MAX_LENGTH} characters.`);
+  }
+  if (description !== undefined && (description === "" || characterCount(description) > MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH)) {
+    throw new TypeError(`The description of the Server Card must have 1 to ${MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH} characters.`);
+  }
+  if (url !== undefined && httpHost(url) === undefined) {
+    throw new TypeError(`The URL of the Server Card ${JSON.stringify(url)} must be an absolute http or https URL with a host.`);
+  }
+  return card;
+}
+
+/**
+ * The identity of a Server Card, from its checked settings and from what the server tells about itself. Throws a
+ * `TypeError` for a version that is a range or is too long.
+ */
+export function mcpServerCardIdentity(settings: McpServerCardSettings, server: McpServerCardServer): McpServerCardIdentity {
+  const { version } = server;
+  if (characterCount(version) > MCP_SERVER_CARD_VERSION_MAX_LENGTH) {
+    throw new TypeError(`The version of a server with a Server Card must have ${MCP_SERVER_CARD_VERSION_MAX_LENGTH} characters or less.`);
+  }
+  if (isVersionRange(version)) throw new TypeError(`The version of a server with a Server Card ${JSON.stringify(version)} must be one version, not a range such as ^1.2.3, >=1.2.3 or 1.x.`);
+  return {
+    name: settings.name,
+    serverName: server.name,
+    version,
+    description: settings.description ?? mcpServerCardDescription(server.descriptions),
+    url: settings.url,
+  };
+}
+
+const DEFAULT_SERVER_CARD_DESCRIPTION = "MCP server";
+
+/**
+ * The default description of a Server Card: the first text that is not empty, or else `MCP server`. A text longer than
+ * the longest description of a card is cut, and ends with `…`.
+ */
+export function mcpServerCardDescription(texts: readonly (string | undefined)[]): string {
+  const text = texts.find((each) => each !== undefined && each !== "") ?? DEFAULT_SERVER_CARD_DESCRIPTION;
+  const characters = Array.from(text);
+  return characters.length <= MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH ? text : `${characters.slice(0, MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH - 1).join("")}…`;
+}
+
+const FALLBACK_SERVER_CARD_NAMESPACE = "local";
+
+/**
+ * The default name of a Server Card (spec/bindings/mcp.md#server-card), from the host of the URL of the server, with or
+ * without a port, and the name of the server.
+ */
+export function mcpServerCardName(host: string, serverName: string): string {
+  const server = serverName.replace(/[^a-zA-Z0-9._-]/gu, "-").slice(0, MCP_SERVER_CARD_NAME_PART_MAX_LENGTH) || "mcp";
+  return `${serverCardNamespace(host)}/${server}`;
+}
+
+function serverCardNamespace(host: string): string {
+  if (host.startsWith("[")) return FALLBACK_SERVER_CARD_NAMESPACE;
+  const hostname = host
+    .replace(/:[0-9]*$/, "")
+    .replace(/\.$/, "")
+    .replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+  const labels = hostname.split(".");
+  if (hostname === "" || /^[0-9]+$/.test(labels.at(-1) ?? "")) return FALLBACK_SERVER_CARD_NAMESPACE;
+  const namespace = labels.reverse().join(".").replace(/[^a-zA-Z0-9.-]/gu, "-");
+  return namespace.length >= MCP_SERVER_CARD_NAME_PART_MAX_LENGTH ? FALLBACK_SERVER_CARD_NAMESPACE : namespace;
+}
+
+/**
+ * A Server Card (spec/bindings/mcp.md#server-card). `url` is the URL of the server, from the request of the card.
+ * `supportedProtocolVersions` are the revisions that the server serves at that URL.
+ */
+export function mcpServerCard(identity: McpServerCardIdentity, url: string, webhooks: JsonObject | undefined, supportedProtocolVersions: readonly string[] = [MCP_PROTOCOL_VERSION]): JsonObject {
+  const remoteUrl = identity.url ?? url;
+  return {
+    $schema: MCP_SERVER_CARD_SCHEMA,
+    name: identity.name ?? mcpServerCardName(httpHost(remoteUrl) ?? "", identity.serverName),
+    version: identity.version,
+    description: identity.description,
+    remotes: [
+      {
+        type: "streamable-http",
+        url: remoteUrl,
+        supportedProtocolVersions: [...supportedProtocolVersions],
+        ...(webhooks === undefined ? {} : { extensionsInfo: { [MCP_EVENTS_EXTENSION]: { webhooks } } }),
+      },
+    ],
+  };
+}
+
+const MCP_CLIENT_CAPABILITIES_KEY = "io.modelcontextprotocol/clientCapabilities";
+const MCP_SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo";
+
+/**
+ * The MCP headers and the body of a request of revision 2026-07-28 that a wrapper sends, with no session, to the server
+ * that it wraps. The `_meta` of `params` stays, and gets the revision and empty client capabilities. The caller gives
+ * `Content-Type`, so that the server still rejects the media type of a request that is not JSON.
+ */
+export function mcpWrappedRequest(method: string, params: JsonObject = {}): { readonly headers: { readonly [name: string]: string }; readonly body: string } {
+  const name = params["name"];
+  const headers = {
+    Accept: `application/json, ${SSE_MEDIA_TYPE}`,
+    "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
+    "Mcp-Method": method,
+    ...(NAMED_METHODS.has(method) && typeof name === "string" ? { "Mcp-Name": encodeMcpHeaderValue(name) } : {}),
+  };
+  const given = params["_meta"];
+  const meta = { ...(isJsonObject(given) ? given : {}), [MCP_PROTOCOL_VERSION_KEY]: MCP_PROTOCOL_VERSION, [MCP_CLIENT_CAPABILITIES_KEY]: {} };
+  return { headers, body: JSON.stringify({ jsonrpc: "2.0", id: 0, method, params: { ...params, _meta: meta } }) };
+}
+
+/** What a client reads from the result of `server/discover`. A member is `undefined` when the result does not have it in the right form. */
+export interface McpDiscovered {
+  readonly name: string | undefined;
+  readonly version: string | undefined;
+  readonly instructions: string | undefined;
+  readonly supportedVersions: readonly string[] | undefined;
+  readonly capabilities: JsonObject | undefined;
+}
+
+export function mcpDiscovered(result: JsonObject): McpDiscovered {
+  const meta = result["_meta"];
+  const info = isJsonObject(meta) ? meta[MCP_SERVER_INFO_KEY] : undefined;
+  const text = (value: unknown) => (typeof value === "string" ? value : undefined);
+  const { instructions, supportedVersions, capabilities } = result;
+  return {
+    name: isJsonObject(info) ? text(info["name"]) : undefined,
+    version: isJsonObject(info) ? text(info["version"]) : undefined,
+    instructions: text(instructions),
+    supportedVersions: Array.isArray(supportedVersions) && supportedVersions.every((each) => typeof each === "string") ? supportedVersions : undefined,
+    capabilities: isJsonObject(capabilities) ? capabilities : undefined,
+  };
+}
+
+export function mcpServerUrlOfCardRequest(request: Request): string | undefined {
+  const url = new URL(request.url);
+  if (!url.pathname.endsWith(MCP_SERVER_CARD_PATH)) return undefined;
+  return `${url.origin}${url.pathname.slice(0, -MCP_SERVER_CARD_PATH.length)}`;
+}
+
+const SERVER_CARD_HEADERS = { ...MCP_SERVER_CARD_CORS_HEADERS, "Cache-Control": MCP_SERVER_CARD_CACHE_CONTROL } as const;
+
+/**
+ * The answer to a request to the URL of a Server Card that is not a `GET` request: the CORS headers for `OPTIONS`, and
+ * 405 for other methods (spec/bindings/mcp.md#server-card). `undefined` for a `GET` request.
+ */
+export function mcpServerCardPreflight(request: Request): Response | undefined {
+  if (request.method === "GET") return undefined;
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: SERVER_CARD_HEADERS });
+  return new Response(null, { status: 405, headers: { Allow: "GET, OPTIONS" } });
+}
+
+/**
+ * The answer to a request to the URL of a Server Card: the card for `GET`, the CORS headers for `OPTIONS`, and 405 for
+ * other methods (spec/bindings/mcp.md#server-card).
+ */
+export async function mcpServerCardResponse(request: Request, card: JsonObject): Promise<Response> {
+  const preflight = mcpServerCardPreflight(request);
+  if (preflight !== undefined) return preflight;
+  const text = JSON.stringify(card);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+  const etag = `"${Array.from(digest.slice(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("")}"`;
+  const headers = { ...SERVER_CARD_HEADERS, ETag: etag };
+  const tags = (request.headers.get("If-None-Match") ?? "").split(",").map((each) => each.trim());
+  if (tags.includes(etag) || tags.includes("*")) return new Response(null, { status: 304, headers });
+  return new Response(text, { status: 200, headers: { ...headers, "Content-Type": MCP_SERVER_CARD_MEDIA_TYPE } });
 }
 
 /** The subscription id of a webhook subscription: `sub_` and 16 hexadecimal digits of the SHA-256 of its key. */
