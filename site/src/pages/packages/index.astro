@@ -36,7 +36,7 @@ const headings = groups
                 <span class="package-registry">{entry.registry}</span>
                 <span class="package-version" data-live-version>v{entry.version}</span>
               </div>
-              <h3><a href={entry.url}>{entry.title}</a></h3>
+              <h3><a href={entry.url} target="_blank" rel="noopener noreferrer">{entry.title}</a></h3>
               {entry.title !== entry.name && <p class="package-name" title={entry.name}>{entry.name}</p>}
               <p class="package-description">{entry.description}</p>
               <div class="package-install">
@@ -47,7 +47,7 @@ const headings = groups
                 </button>
               </div>
               <p class="package-meta">
-                <a href={`${repository}/tree/main/${entry.directory}`}>Source</a>
+                <a href={`${repository}/tree/main/${entry.directory}`} target="_blank" rel="noopener noreferrer">Source</a>
                 <span data-live-status aria-live="polite"></span>
               </p>
             </li>

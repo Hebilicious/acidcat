@@ -1,13 +1,32 @@
+import { satteri } from "@astrojs/markdown-satteri";
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 import { fileURLToPath } from "node:url";
 import { codeTheme } from "./src/lib/code-theme.ts";
+import { isExternal } from "./src/lib/external-links.ts";
 import { specSidebar } from "./src/lib/spec-pages.ts";
 
 const specItems = await specSidebar(fileURLToPath(new URL("..", import.meta.url)));
 
 export default defineConfig({
   site: "https://acidcat.hebilicious.workers.dev",
+  markdown: {
+    processor: satteri({
+      hastPlugins: [
+        {
+          name: "acidcat-external-links",
+          element: {
+            filter: ["a"],
+            visit(node, context) {
+              if (!isExternal(node.properties["href"])) return;
+              context.setProperty(node, "target", "_blank");
+              context.setProperty(node, "rel", ["noopener", "noreferrer"]);
+            },
+          },
+        },
+      ],
+    }),
+  },
   integrations: [
     starlight({
       title: "AcidCat",
@@ -15,6 +34,7 @@ export default defineConfig({
       logo: { src: "./src/assets/mark.svg", alt: "AcidCat" },
       customCss: ["./src/styles/starlight.css"],
       components: {
+        EditLink: "./src/components/starlight/EditLink.astro",
         Head: "./src/components/starlight/Head.astro",
         Header: "./src/components/starlight/Header.astro",
         PageSidebar: "./src/components/starlight/PageSidebar.astro",

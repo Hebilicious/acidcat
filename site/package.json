@@ -11,6 +11,7 @@
     "preview": "astro preview"
   },
   "dependencies": {
+    "@astrojs/markdown-satteri": "catalog:",
     "@astrojs/starlight": "catalog:",
     "@fontsource/monaspace-argon": "catalog:",
     "@fontsource/monaspace-krypton": "catalog:",

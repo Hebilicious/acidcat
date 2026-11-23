@@ -33,7 +33,7 @@ const tree = (path: string): string => `${githubBlob.replace("/blob/", "/tree/")
           </td>
           {row.note !== undefined && <td>{row.note}</td>}
           <td>
-            <a href={tree(row.example)}>
+            <a href={tree(row.example)} target="_blank" rel="noopener noreferrer">
               <code>{row.example}</code>
             </a>
           </td>

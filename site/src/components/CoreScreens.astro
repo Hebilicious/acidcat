@@ -42,7 +42,7 @@ const cores = [...official, yours].map((core) => ({ ...core, html: highlight(cor
             <div class="console-panel" role="tabpanel" id={`panel-${core.id}`} aria-labelledby={`tab-${core.id}`} hidden={index !== 0}>
               <p class="console-note">{core.note}</p>
               <div class="console-code" set:html={core.html} />
-              <a class="console-source" href={`${repository}/${core.source}`} target="_blank" rel="noopener">Open GitHub example <span aria-hidden="true">↗</span></a>
+              <a class="console-source" href={`${repository}/${core.source}`} target="_blank" rel="noopener noreferrer">Open GitHub example <span aria-hidden="true">↗</span></a>
             </div>
           ))}
         </div>
