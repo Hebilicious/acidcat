@@ -12,6 +12,7 @@ import {
   MCP_HEARTBEAT_MIN_MS,
   MCP_NAMED_METHODS,
   MCP_PROTOCOL_VERSION,
+  MCP_PROTOCOL_VERSION_KEY,
   MCP_REJECTIONS as REJECTIONS,
   MCP_SERVER_CARD_CACHE_CONTROL,
   MCP_SERVER_CARD_CORS_HEADERS,
@@ -19,6 +20,7 @@ import {
   MCP_SERVER_CARD_MEDIA_TYPE,
   MCP_SERVER_CARD_NAME_MAX_LENGTH,
   MCP_SERVER_CARD_NAME_MIN_LENGTH,
+  MCP_SERVER_CARD_NAME_PART_MAX_LENGTH,
   MCP_SERVER_CARD_PATH,
   MCP_SERVER_CARD_SCHEMA,
   MCP_SERVER_CARD_VERSION_MAX_LENGTH,
@@ -42,6 +44,7 @@ export {
   MCP_HEARTBEAT_MAX_MS,
   MCP_HEARTBEAT_MIN_MS,
   MCP_PROTOCOL_VERSION,
+  MCP_PROTOCOL_VERSION_KEY,
   MCP_SERVER_CARD_CACHE_CONTROL,
   MCP_SERVER_CARD_MEDIA_TYPE,
   MCP_SERVER_CARD_PATH,
@@ -1046,14 +1049,13 @@ export function mcpServerCardDescription(texts: readonly (string | undefined)[])
 }
 
 const FALLBACK_SERVER_CARD_NAMESPACE = "local";
-const SERVER_CARD_NAME_PART_MAX_LENGTH = MCP_SERVER_CARD_NAME_MAX_LENGTH / 2;
 
 /**
  * The default name of a Server Card (spec/bindings/mcp.md#server-card), from the host of the URL of the server, with or
  * without a port, and the name of the server.
  */
 export function mcpServerCardName(host: string, serverName: string): string {
-  const server = serverName.replace(/[^a-zA-Z0-9._-]/gu, "-").slice(0, SERVER_CARD_NAME_PART_MAX_LENGTH) || "mcp";
+  const server = serverName.replace(/[^a-zA-Z0-9._-]/gu, "-").slice(0, MCP_SERVER_CARD_NAME_PART_MAX_LENGTH) || "mcp";
   return `${serverCardNamespace(host)}/${server}`;
 }
 
@@ -1066,7 +1068,7 @@ function serverCardNamespace(host: string): string {
   const labels = hostname.split(".");
   if (hostname === "" || /^[0-9]+$/.test(labels.at(-1) ?? "")) return FALLBACK_SERVER_CARD_NAMESPACE;
   const namespace = labels.reverse().join(".").replace(/[^a-zA-Z0-9.-]/gu, "-");
-  return namespace.length >= SERVER_CARD_NAME_PART_MAX_LENGTH ? FALLBACK_SERVER_CARD_NAMESPACE : namespace;
+  return namespace.length >= MCP_SERVER_CARD_NAME_PART_MAX_LENGTH ? FALLBACK_SERVER_CARD_NAMESPACE : namespace;
 }
 
 /**
@@ -1091,7 +1093,6 @@ export function mcpServerCard(identity: McpServerCardIdentity, url: string, webh
   };
 }
 
-const MCP_PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
 const MCP_CLIENT_CAPABILITIES_KEY = "io.modelcontextprotocol/clientCapabilities";
 const MCP_SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo";
 

@@ -158,6 +158,7 @@ const keepaliveMs = integer(field(facts, "keepaliveMs"));
 const interruptGraceMs = integer(field(facts, "interruptGraceMs"));
 const sseMediaType = string(field(facts, "sseMediaType"));
 const mcpProtocolVersion = string(field(facts, "mcpProtocolVersion"));
+const mcpProtocolVersionKey = string(field(facts, "mcpProtocolVersionKey"));
 const mcpEventsExtension = string(field(facts, "mcpEventsExtension"));
 const mcpSubscriptionId = string(field(facts, "mcpSubscriptionId"));
 const mcpUnknownTool = integer(field(facts, "mcpUnknownTool"));
@@ -173,6 +174,7 @@ const mcpServerCardCorsHeaders = list(field(facts, "mcpServerCardCorsHeaders")).
 const mcpServerCardLengths = [
   ["MCP_SERVER_CARD_NAME_MIN_LENGTH", integer(field(facts, "mcpServerCardNameMinLength"))],
   ["MCP_SERVER_CARD_NAME_MAX_LENGTH", integer(field(facts, "mcpServerCardNameMaxLength"))],
+  ["MCP_SERVER_CARD_NAME_PART_MAX_LENGTH", integer(field(facts, "mcpServerCardNamePartMaxLength"))],
   ["MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH", integer(field(facts, "mcpServerCardDescriptionMaxLength"))],
   ["MCP_SERVER_CARD_VERSION_MAX_LENGTH", integer(field(facts, "mcpServerCardVersionMaxLength"))],
 ] as const;
@@ -421,6 +423,8 @@ const specFacts = [
   "",
   `export const MCP_PROTOCOL_VERSION = ${JSON.stringify(mcpProtocolVersion)};`,
   "",
+  `export const MCP_PROTOCOL_VERSION_KEY = ${JSON.stringify(mcpProtocolVersionKey)};`,
+  "",
   `export const MCP_EVENTS_EXTENSION = ${JSON.stringify(mcpEventsExtension)};`,
   "",
   `export const MCP_SUBSCRIPTION_ID = ${JSON.stringify(mcpSubscriptionId)};`,
@@ -563,6 +567,7 @@ const rustFacts = [
   rustConst("SSE_MEDIA_TYPE", "&str", rustString(sseMediaType)),
   "",
   rustConst("MCP_PROTOCOL_VERSION", "&str", rustString(mcpProtocolVersion)),
+  rustConst("MCP_PROTOCOL_VERSION_KEY", "&str", rustString(mcpProtocolVersionKey)),
   rustConst("MCP_EVENTS_EXTENSION", "&str", rustString(mcpEventsExtension)),
   rustConst("MCP_SUBSCRIPTION_ID", "&str", rustString(mcpSubscriptionId)),
   rustConst("MCP_UNKNOWN_TOOL", "i64", String(mcpUnknownTool)),

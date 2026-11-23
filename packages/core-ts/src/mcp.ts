@@ -4,6 +4,7 @@ import {
   KEEPALIVE_MS,
   MCP_HEADER_MISMATCH,
   MCP_PROTOCOL_VERSION,
+  MCP_PROTOCOL_VERSION_KEY,
   MCP_REJECTIONS,
   MCP_UNKNOWN_TOOL,
   mcpHeaderMismatch,
@@ -108,7 +109,7 @@ function readRequest(body: unknown): JsonRpcRequest {
     name: isJsonObject(params) && typeof params["name"] === "string" ? params["name"] : undefined,
     arguments: isJsonObject(params) ? params["arguments"] : undefined,
     params: isJsonObject(params) ? params : {},
-    protocolVersion: isJsonObject(meta) ? meta["io.modelcontextprotocol/protocolVersion"] : undefined,
+    protocolVersion: isJsonObject(meta) ? meta[MCP_PROTOCOL_VERSION_KEY] : undefined,
   };
 }
 

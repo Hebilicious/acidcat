@@ -47,6 +47,8 @@ module facts {
 
   pure val MCP_PROTOCOL_VERSION: str = "2026-07-28"
 
+  pure val MCP_PROTOCOL_VERSION_KEY: str = "io.modelcontextprotocol/protocolVersion"
+
   pure val MCP_EVENTS_EXTENSION: str = "io.modelcontextprotocol/events"
 
   pure val MCP_SUBSCRIPTION_ID: str = "io.modelcontextprotocol/subscriptionId"
@@ -79,6 +81,8 @@ module facts {
   pure val MCP_SERVER_CARD_NAME_MIN_LENGTH: int = 3
 
   pure val MCP_SERVER_CARD_NAME_MAX_LENGTH: int = 200
+
+  pure val MCP_SERVER_CARD_NAME_PART_MAX_LENGTH: int = MCP_SERVER_CARD_NAME_MAX_LENGTH / 2
 
   pure val MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH: int = 100
 
@@ -143,6 +147,7 @@ module factsData {
     interruptGraceMs: int,
     sseMediaType: str,
     mcpProtocolVersion: str,
+    mcpProtocolVersionKey: str,
     mcpEventsExtension: str,
     mcpSubscriptionId: str,
     mcpUnknownTool: int,
@@ -157,6 +162,7 @@ module factsData {
     mcpServerCardCorsHeaders: List[(str, str)],
     mcpServerCardNameMinLength: int,
     mcpServerCardNameMaxLength: int,
+    mcpServerCardNamePartMaxLength: int,
     mcpServerCardDescriptionMaxLength: int,
     mcpServerCardVersionMaxLength: int,
     mcpEventErrors: List[(str, int)],
@@ -177,6 +183,7 @@ module factsData {
     interruptGraceMs: INTERRUPT_GRACE_MS,
     sseMediaType: SSE_MEDIA_TYPE,
     mcpProtocolVersion: MCP_PROTOCOL_VERSION,
+    mcpProtocolVersionKey: MCP_PROTOCOL_VERSION_KEY,
     mcpEventsExtension: MCP_EVENTS_EXTENSION,
     mcpSubscriptionId: MCP_SUBSCRIPTION_ID,
     mcpUnknownTool: MCP_UNKNOWN_TOOL,
@@ -191,6 +198,7 @@ module factsData {
     mcpServerCardCorsHeaders: MCP_SERVER_CARD_CORS_HEADERS,
     mcpServerCardNameMinLength: MCP_SERVER_CARD_NAME_MIN_LENGTH,
     mcpServerCardNameMaxLength: MCP_SERVER_CARD_NAME_MAX_LENGTH,
+    mcpServerCardNamePartMaxLength: MCP_SERVER_CARD_NAME_PART_MAX_LENGTH,
     mcpServerCardDescriptionMaxLength: MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH,
     mcpServerCardVersionMaxLength: MCP_SERVER_CARD_VERSION_MAX_LENGTH,
     mcpEventErrors: MCP_EVENT_ERRORS,

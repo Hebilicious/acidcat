@@ -66,6 +66,7 @@ pub(crate) const INTERRUPT_GRACE_MS: u64 = 1000;
 pub(crate) const SSE_MEDIA_TYPE: &str = "text/event-stream";
 
 pub(crate) const MCP_PROTOCOL_VERSION: &str = "2026-07-28";
+pub(crate) const MCP_PROTOCOL_VERSION_KEY: &str = "io.modelcontextprotocol/protocolVersion";
 pub(crate) const MCP_EVENTS_EXTENSION: &str = "io.modelcontextprotocol/events";
 pub(crate) const MCP_SUBSCRIPTION_ID: &str = "io.modelcontextprotocol/subscriptionId";
 pub(crate) const MCP_UNKNOWN_TOOL: i64 = -32602;
@@ -95,6 +96,7 @@ pub(crate) const MCP_SERVER_CARD_CORS_HEADERS: [(&str, &str); 4] = [
 ];
 pub(crate) const MCP_SERVER_CARD_NAME_MIN_LENGTH: usize = 3;
 pub(crate) const MCP_SERVER_CARD_NAME_MAX_LENGTH: usize = 200;
+pub(crate) const MCP_SERVER_CARD_NAME_PART_MAX_LENGTH: usize = 100;
 pub(crate) const MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH: usize = 100;
 pub(crate) const MCP_SERVER_CARD_VERSION_MAX_LENGTH: usize = 255;
 

@@ -1,5 +1,5 @@
 /** The `initialize` handshake of earlier MCP revisions through HTTP (spec/bindings/mcp.md#earlier-revisions-through-http). */
-import { isJsonObject, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, MCP_SERVER_CARD_MEDIA_TYPE, mcpDiscovered, mcpParamHeaders, mcpServerCardResponse, mcpServerUrlOfCardRequest, mcpWrappedRequest, readBounded } from "@acid-cat/spec-ts";
+import { isJsonObject, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION_KEY, MCP_SERVER_CARD_MEDIA_TYPE, mcpDiscovered, mcpParamHeaders, mcpServerCardResponse, mcpServerUrlOfCardRequest, mcpWrappedRequest, readBounded } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
 export type WebHandler = (request: Request) => Promise<Response>;
@@ -8,8 +8,6 @@ export interface McpHandshakeOptions {
   /** The maximum size of a request body, in bytes. Give the limit of the wrapped handler. The default is 1 MiB. */
   readonly maximumBytes?: number | undefined;
 }
-
-const PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
 
 const HANDSHAKE_VERSIONS = ["2025-11-25", "2025-06-18"] as const;
 const [LATEST_HANDSHAKE_VERSION] = HANDSHAKE_VERSIONS;
@@ -28,7 +26,7 @@ export function mcpHandshake(handler: WebHandler, options: McpHandshakeOptions =
     const header = request.headers.get("MCP-Protocol-Version");
     if (request.method !== "POST" || header === MCP_PROTOCOL_VERSION) return handler(request);
     const message = await readMessage(request.clone(), maximumBytes);
-    if (message === undefined || !isHandshakeRequest(header, metaOf(message)[PROTOCOL_VERSION_KEY])) return handler(request);
+    if (message === undefined || !isHandshakeRequest(header, metaOf(message)[MCP_PROTOCOL_VERSION_KEY])) return handler(request);
     return answer(handler, request, message);
   };
 }

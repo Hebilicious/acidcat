@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { bundle, encodeMcpHeaderValue, MCP_EVENTS_EXTENSION, MCP_HEADER_MISMATCH, MCP_HEARTBEAT_MAX_MS, MCP_HEARTBEAT_MIN_MS, MCP_SUBSCRIPTION_ID, mcpParamHeaders, viewOf } from "@acid-cat/spec-ts";
+import { bundle, encodeMcpHeaderValue, MCP_EVENTS_EXTENSION, MCP_HEADER_MISMATCH, MCP_HEARTBEAT_MAX_MS, MCP_HEARTBEAT_MIN_MS, MCP_PROTOCOL_VERSION_KEY, MCP_SUBSCRIPTION_ID, mcpParamHeaders, viewOf } from "@acid-cat/spec-ts";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 import { isArrayOf, isObject, isStringArray, memberOf, parseJson, readJson } from "../json.ts";
@@ -285,7 +285,7 @@ export async function checkTools(checks: Checks, mcp: Client): Promise<void> {
 
 export const EVENTS_REVISION = "2026-07-28";
 
-export const META = { "io.modelcontextprotocol/protocolVersion": EVENTS_REVISION, "io.modelcontextprotocol/clientCapabilities": {} };
+export const META = { [MCP_PROTOCOL_VERSION_KEY]: EVENTS_REVISION, "io.modelcontextprotocol/clientCapabilities": {} };
 
 export type Message = JsonObject;
 

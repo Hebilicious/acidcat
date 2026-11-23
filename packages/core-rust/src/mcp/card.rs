@@ -10,8 +10,9 @@ use super::{EVENTS_EXTENSION, HANDSHAKE_VERSIONS, PROTOCOL_VERSION};
 use crate::facts_generated::{
     MCP_SERVER_CARD_CACHE_CONTROL, MCP_SERVER_CARD_CORS_HEADERS,
     MCP_SERVER_CARD_DESCRIPTION_MAX_LENGTH, MCP_SERVER_CARD_MEDIA_TYPE,
-    MCP_SERVER_CARD_NAME_MAX_LENGTH, MCP_SERVER_CARD_NAME_MIN_LENGTH, MCP_SERVER_CARD_PATH,
-    MCP_SERVER_CARD_SCHEMA, MCP_SERVER_CARD_VERSION_MAX_LENGTH,
+    MCP_SERVER_CARD_NAME_MAX_LENGTH, MCP_SERVER_CARD_NAME_MIN_LENGTH,
+    MCP_SERVER_CARD_NAME_PART_MAX_LENGTH, MCP_SERVER_CARD_PATH, MCP_SERVER_CARD_SCHEMA,
+    MCP_SERVER_CARD_VERSION_MAX_LENGTH,
 };
 use crate::remote::{ResponseBody, empty_response};
 
@@ -86,7 +87,6 @@ fn is_version_range(version: &str) -> bool {
 }
 
 const FALLBACK_NAMESPACE: &str = "local";
-const NAME_PART_MAX_LENGTH: usize = MCP_SERVER_CARD_NAME_MAX_LENGTH / 2;
 
 fn default_name(host: &str, server_name: &str) -> String {
     let server: String = server_name
@@ -95,7 +95,7 @@ fn default_name(host: &str, server_name: &str) -> String {
             'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '_' | '-' => character,
             _ => '-',
         })
-        .take(NAME_PART_MAX_LENGTH)
+        .take(MCP_SERVER_CARD_NAME_PART_MAX_LENGTH)
         .collect();
     let server = if server.is_empty() {
         "mcp".to_owned()
@@ -131,7 +131,7 @@ fn namespace(host: &str) -> String {
             _ => '-',
         })
         .collect();
-    if namespace.len() >= NAME_PART_MAX_LENGTH {
+    if namespace.len() >= MCP_SERVER_CARD_NAME_PART_MAX_LENGTH {
         FALLBACK_NAMESPACE.to_owned()
     } else {
         namespace
