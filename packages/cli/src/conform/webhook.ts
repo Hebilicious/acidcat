@@ -116,18 +116,18 @@ async function expectSignedWith(signingKeys: readonly JsonObject[], request: Rec
   expect(/^\d+$/.test(timestampText) && Math.abs(timestamp - Date.now() / 1000) <= 300, `webhook-timestamp must be the time in seconds, got ${JSON.stringify(timestampText)}`);
   expectEqual(header(request, "x-mcp-subscription-id"), subscription, "X-MCP-Subscription-Id");
   const signatures = header(request, "webhook-signature").split(" ");
+  expectEqual(signatures.length, secrets.length + signingKeys.length, `the number of signatures, one v1 for each secret and one v1a for each signing key of the Server Card, in ${JSON.stringify(signatures)}`);
+  const symmetric = signatures.slice(0, secrets.length);
   for (const secret of secrets) {
     const expected = await webhookSignature([secret], id, timestamp, request.text);
-    expect(signatures.includes(expected), `webhook-signature must have the signature ${expected} of a secret, got ${JSON.stringify(signatures)}`);
+    expect(symmetric.includes(expected), `webhook-signature must start with the v1 signature ${expected} of each secret, got ${JSON.stringify(signatures)}`);
   }
-  if (signingKeys.length > 0) await expectServerSignatures(signingKeys, signatures, `${id}.${timestamp}.${request.text}`);
+  await expectServerSignatures(signingKeys, signatures.slice(secrets.length), `${id}.${timestamp}.${request.text}`);
   return id;
 }
 
-async function expectServerSignatures(signingKeys: readonly JsonObject[], signatures: readonly string[], signed: string): Promise<void> {
-  const asymmetric = signatures.filter((each) => each.startsWith("v1a,"));
-  expectEqual(asymmetric.length, signingKeys.length, "the number of v1a signatures, one for each signing key of the Server Card");
-  expect(signatures.slice(-asymmetric.length).every((each) => each.startsWith("v1a,")), `the v1a signatures must come after the v1 signatures, got ${JSON.stringify(signatures)}`);
+async function expectServerSignatures(signingKeys: readonly JsonObject[], asymmetric: readonly string[], signed: string): Promise<void> {
+  expect(asymmetric.every((each) => each.startsWith("v1a,")), `the signatures after the v1 signatures must be v1a signatures, got ${JSON.stringify(asymmetric)}`);
   for (const [index, key] of signingKeys.entries()) {
     const x = key.x;
     expect(typeof x === "string", `the signing key ${JSON.stringify(key.kid)} must have x`);
