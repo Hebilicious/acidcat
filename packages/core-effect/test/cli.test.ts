@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, watch } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
@@ -40,7 +40,7 @@ async function interruptedIgnoring(command: readonly string[], interrupts: 1 | 2
   const fixture = bundledProgram("test/fixture-cli-ignoring-interruption.ts");
   const child = spawn(process.execPath, ["--import", PROBE, fixture, ...command, "--key", "k", "--marker", marker], {
     stdio: ["ignore", "ignore", "pipe"],
-    env: { ...process.env, INTERRUPT_PROBE_RECORD: record },
+    env: { ...process.env, INTERRUPT_PROBE_RECORD: record, ...(interrupts === 2 ? { INTERRUPT_PROBE_HOLD: marker } : {}) },
   });
   let stderr = "";
   child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
@@ -56,11 +56,11 @@ async function interruptedIgnoring(command: readonly string[], interrupts: 1 | 2
     await waitFor(marker, "started to hold");
     let interrupted = Date.now();
     child.kill("SIGINT");
-    // Unix merges a signal that is still pending with the next one of the same kind.
     if (interrupts === 2) {
-      await waitFor(`${marker}.cancelled`, "was cancelled");
+      await waitFor(`${marker}.received`, "received the first interrupt");
       interrupted = Date.now();
       child.kill("SIGINT");
+      writeFileSync(`${marker}.go`, "");
     }
     const ended = await Promise.race([exited, pause(DEADLINE_MS, "running" as const)]);
     const [code, signal] = ended === "running" ? [null, null] : ended;
