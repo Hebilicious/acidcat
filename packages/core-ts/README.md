@@ -473,7 +473,7 @@ The client also works alone: `capabilities()`, `invoke(id, input, { signal })` a
 ## Examples and tests
 
 - [`examples/aircon/core-ts`](../../examples/aircon/README.md) is an air conditioner built with this package. [`examples/aircon/apis`](../../examples/aircon/README.md#apis) builds GraphQL, Cap'n Web and Elysia APIs on it.
-- `moon run core-ts:test` tests sessions, handles and every binding, and runs `acid-cat conform` against every binding. The test applications are in `test/`:
+- `moon run core-ts:test` tests sessions, handles and every binding, and runs `acid-cat conform` against every protocol binding. The test applications are in `test/`:
   - [`test/fixture.ts`](test/fixture.ts) has one capability per behavior that `acid-cat conform` tests.
   - [`test/kettle.ts`](test/kettle.ts) is an in-memory kettle: catalog, named types, state, availability and typed handles.
   - [`test/sensors.ts`](test/sensors.ts) is a set of in-memory sensors: events through each binding, slow clients, cursors, and a GraphQL subscription.

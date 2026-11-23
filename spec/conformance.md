@@ -1,6 +1,6 @@
 # Conformance
 
-Conformance is a test from outside. It uses the catalog and the behavior of each binding. It does not look at the code. Thus an implementation that you write by hand, that you generate, or that uses a library is tested in the same way.
+Conformance is a test from outside. It uses the catalog and the behavior of each protocol binding. It does not look at the code. Thus an implementation that you write by hand, that you generate, or that uses a library is tested in the same way.
 
 `acid-cat conform` tests protocol bindings, through the network, a terminal or a web page. A language binding serves code in the same process, so no outside test can reach it. The tests of each core test its language binding against the [programmatic binding](bindings/programmatic.md).
 
@@ -25,7 +25,7 @@ A catalog that is not in [canonical form](catalog.md#canonical-form) gets a warn
 
 ## Provider and bindings
 
-A provider and its bindings conform for a target if, through each binding of the target:
+A provider and its bindings conform for a target if, through each protocol binding of the target:
 
 - a list of capabilities shows only capabilities in the view of the target;
 - a call to an id that is not in the view fails as a call to an unknown id;

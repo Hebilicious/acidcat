@@ -7,7 +7,7 @@ description: |
 
 # AcidCat
 
-AcidCat describes what an application can do in one document, the **catalog**. Each surface of the application, for example a command line, an MCP server or a web page, comes from the catalog through a **binding**. A **core** runs the operations. `acid-cat conform` tests each binding from outside.
+AcidCat describes what an application can do in one document, the **catalog**. Each surface of the application, for example a command line, an MCP server or a web page, comes from the catalog through a **binding**. A **core** runs the operations. `acid-cat conform` tests each protocol binding from outside. A language binding serves code in the same process, so the tests of each core test it.
 
 The specification is at https://github.com/Hebilicious/acidcat/tree/main/spec. Read its vocabulary before you name things: https://github.com/Hebilicious/acidcat/blob/main/spec/README.md#vocabulary.
 
@@ -49,7 +49,7 @@ A core in another language follows the specification and passes `acid-cat confor
 1. Add it to the source of the catalog: id, description, audience, input, output, failures, `readOnly`, `destructive`, `idempotent`, `state`.
 2. Implement it in the core. See [references/cores.md](references/cores.md) for each core.
 3. Write the JSON of the catalog again, and run `acid-cat check --strict <catalog>`.
-4. Run the tests of the application, and `acid-cat conform` for each binding that the application serves.
+4. Run the tests of the application, and `acid-cat conform` for each protocol binding that the application serves.
 
 ## Add an event
 
@@ -76,7 +76,7 @@ Each target of the catalog lists its bindings. Each binding serves the **view** 
 | `cli` | A command for each capability, and the aliases of the target | `cliMain` | `NodeCli.main` | `cli::cli_main` |
 | `webmcp` | Tools of a web page for the agents of the browser | `installWebMcp` | `WebMcp.install` | None |
 
-The `typescript` and `rust` bindings are language bindings. Each one maps the [programmatic binding](https://github.com/Hebilicious/acidcat/blob/main/spec/bindings/programmatic.md): a session gives a handle for each capability and an event handle for each event of its view. A handle gives an external call, which validates an input that is not trusted, and can give a typed call. A result is data. A call failure has a `kind`. Availability and state are observable values with a snapshot. The client can cancel each call and each subscription.
+The `typescript` and `rust` bindings are language bindings. Each one maps the [programmatic binding](https://github.com/Hebilicious/acidcat/blob/main/spec/bindings/programmatic.md): a session gives a handle for each capability and an event handle for each event of its view. A handle gives an external call, which validates an input that is not trusted, and can give a typed call. A result is data. A call failure has a `kind`. The client reads the latest availability and state, and the binding tells it after each one changes. The client can miss a value between two reads. In TypeScript, availability and state are `Observable` values. In Rust, `availability` and `state` read them, and `availability_changes` and `StateWatch::changed` tell that they changed. The client can cancel each call and each subscription.
 
 The MCP and HTTP bindings give web handlers. On Node.js, the server of the core serves them: `serve` from `@acid-cat/core-ts/node`, or `NodeServer` from `@acid-cat/core-effect`. In Rust, `remote::serve` of `acid-cat-core` serves them. It is plain HTTP. TLS ends in the platform, before it. See [references/bindings.md](references/bindings.md) for the options and the traps of each binding.
 
@@ -87,10 +87,10 @@ acid-cat check --strict catalog.acidcat.json   # the catalog conforms, and is in
 acid-cat view catalog.acidcat.json mcp          # the view of one target
 acid-cat conform --mcp http://127.0.0.1:3000/mcp --http http://127.0.0.1:3000/api \
   --cli "node cli.ts" --mcp-stdio "node mcp.ts" \
-  --webmcp http://127.0.0.1:3000/page            # each binding of a running implementation
+  --webmcp http://127.0.0.1:3000/page            # each protocol binding of a running implementation
 ```
 
-`acid-cat` is the npm package `@acid-cat/cli`. `acid-cat conform` tests an implementation of the conformance fixture, not of your catalog. It tests the capabilities and the events of the fixture through each binding: outcomes, call failures, occurrences, the ends of a subscription, and cancellation. Through WebMCP, it opens the page in Chromium with a test host (Playwright installs Chromium). Through MCP, it also tests poll delivery, the Server Card when `<mcp>/server-card` gives 200, and with `--webhook-principal`, `--webhook-cert` and `--webhook-key`, webhook delivery, with the `v1a,` signatures of the keys of the card. Give the deployment under test a small poll buffer, a short minimum webhook lifetime and a small limit of webhook subscriptions, and the same values to `--poll-buffer`, `--webhook-min-ttl-ms` and `--webhook-max-subscriptions`, so that conform tests them too. Keep its lease time and its maximum webhook lifetime longer than the deadline of conform: a check uses a lease or a subscription for its whole time. To test the end of a lease, serve a second MCP server with a short lease time, and give it to `--poll-lease-mcp` with `--poll-lease-ms`. For webhooks, the deployment trusts the test certificate, allows private networks, and takes the principal from `Authorization: Bearer <principal>`. Run it in the tests of a new core or a new binding. To read the result in code or as an agent, give `--output json` to `check` or `conform`: the report is one JSON document on standard output, with the same exit code. Do not read the text of the human output. For an application, test the capabilities through a session, and the surfaces through the bindings.
+`acid-cat` is the npm package `@acid-cat/cli`. `acid-cat conform` tests an implementation of the conformance fixture, not of your catalog. It tests the capabilities and the events of the fixture through each protocol binding: outcomes, call failures, occurrences, the ends of a subscription, and cancellation. Through WebMCP, it opens the page in Chromium with a test host (Playwright installs Chromium). Through MCP, it also tests poll delivery, the Server Card when `<mcp>/server-card` gives 200, and with `--webhook-principal`, `--webhook-cert` and `--webhook-key`, webhook delivery, with the `v1a,` signatures of the keys of the card. Give the deployment under test a small poll buffer, a short minimum webhook lifetime and a small limit of webhook subscriptions, and the same values to `--poll-buffer`, `--webhook-min-ttl-ms` and `--webhook-max-subscriptions`, so that conform tests them too. Keep its lease time and its maximum webhook lifetime longer than the deadline of conform: a check uses a lease or a subscription for its whole time. To test the end of a lease, serve a second MCP server with a short lease time, and give it to `--poll-lease-mcp` with `--poll-lease-ms`. For webhooks, the deployment trusts the test certificate, allows private networks, and takes the principal from `Authorization: Bearer <principal>`. Run it in the tests of a new core or a new binding. To read the result in code or as an agent, give `--output json` to `check` or `conform`: the report is one JSON document on standard output, with the same exit code. Do not read the text of the human output. For an application, test the capabilities through a session, and the surfaces through the bindings.
 
 ## Common mistakes
 

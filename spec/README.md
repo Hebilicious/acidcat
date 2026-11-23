@@ -57,7 +57,7 @@ Every document uses these terms with these meanings.
 | **Cursor** | A string that marks a position in an event's occurrences. A client gives it to resume a subscription |
 | **State** | A value of a capability that clients can observe, for example the temperature of a room |
 | **Handle** | The surface of one capability in a language binding. Through it, a client reads the availability and the state of the capability, and calls it. An **event handle** is the surface of one event in a language binding. Through it, a client subscribes to the event. See [Programmatic binding](bindings/programmatic.md) |
-| **Observable value** | A value that changes, in a language binding. A client reads its value now, the **snapshot**, and follows each new value. Availability and state are observable values |
+| **Observable value** | A value that changes, in a language binding. A client reads the latest value, the **snapshot**. The binding tells the client after the value changes. The client can miss a value between two reads. State is an observable value, and availability usually is one. See [Programmatic binding](bindings/programmatic.md#observable-values) |
 | **External call** | A call through a handle with an input that is not trusted. The handle validates the input. A **typed call** takes an input that is already decoded into the types of the language. An **external subscription** and a **typed subscription** are the same for an event handle |
 
 ## Conventions

@@ -123,7 +123,7 @@ An optional `Option` field takes the value of its type, not `null`, so add `#[se
 | --- | --- |
 | `capability_ids()`, `event_ids()`, `view()` | The capabilities and the events of the view |
 | `invoke(id, input, &cancel)` | A call with an input that is not trusted. It gives an `Outcome`: `Value`, `Failure` or `CallFailure`. `cancel`, or dropping the future, cancels the call |
-| `availability(id)`, `availability_changes()` | The availability of a capability now, and a message each time that an availability changes |
+| `availability(id)`, `availability_changes()` | The latest availability of a capability, and a message after an availability changes. One message can stand for more than one change. The receiver gives `None` when the session closes, or when no availability of the session can change |
 | `state(id)` | A `StateWatch`: `snapshot()` and `changed()` |
 | `subscribe(id, input, options)` | The `Occurrences` of a subscription, or the call failure before the first occurrence. `next()` gives each occurrence, then the end. `cancel()`, or dropping it, cancels the subscription |
 | `closing()`, `close()` | The token that is cancelled when the session starts to close, and the close itself |
@@ -292,4 +292,4 @@ cli_main(app, context, CliOptions::new("aircon", "1.0.0").remote(client)).await;
 
 ## Tests
 
-`moon run core-rust:test` runs the tests. It needs `pnpm install` at the repository root, and `openssl`. The tests run `acid-cat conform` against the fixture through every binding, including poll and webhook delivery and the command line against a server.
+`moon run core-rust:test` runs the tests. It needs `pnpm install` at the repository root, and `openssl`. The tests run `acid-cat conform` against the fixture through every protocol binding, including poll and webhook delivery and the command line against a server.

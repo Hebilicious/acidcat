@@ -118,7 +118,7 @@ Pass the same `aircon` to `mcpStdioMain` for an MCP server, or to `httpHandler` 
 | Catalog | The contract, stored as JSON. Write it in the typed language of your choice: a core's code, a [catalog library](packages/catalog) for TypeScript, Python, Go or Rust, or [Pkl](packages/catalog/pkl). Checked at build time; programs do not read it at run time |
 | Binding | The rules for one surface: CLI, MCP, HTTP, WebMCP or a language such as TypeScript or Rust. Defined in the [specification](spec/bindings/README.md). Each language binding maps one contract with no language, the [programmatic binding](spec/bindings/programmatic.md) |
 | Core | A library that runs your capabilities and serves the bindings |
-| `acid-cat conform` | Tests a running program from the outside, through each binding |
+| `acid-cat conform` | Tests a running program from the outside, through each protocol binding. The tests of each core test its language binding |
 
 ## 🧳 Features
 
@@ -168,7 +168,7 @@ gh skill install Hebilicious/acidcat acid-cat
 
 ## 🗺️ Roadmap
 
-- [x] `acid-cat conform`: test a running implementation through each binding
+- [x] `acid-cat conform`: test a running implementation through each protocol binding
 - [x] Cores in TypeScript: `@acid-cat/core-ts` and `@acid-cat/core-effect`
 - [x] A core in Rust: `acid-cat-core`
 - [ ] Cores in more languages

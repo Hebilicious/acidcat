@@ -671,7 +671,7 @@ The package runs everywhere, browsers included; only `/node` and `/NodeServer` n
 ## Examples and tests
 
 - [`examples/aircon/core-effect`](../../examples/aircon/README.md): an air conditioner with its command line. [`examples/aircon/apis/mcp.ts`](../../examples/aircon/apis/mcp.ts) adds its own MCP tools beside the binding.
-- `moon run core-effect:test` tests sessions, handles and every binding, and runs `acid-cat conform` against each binding, with the apps in [`test/`](test/):
+- `moon run core-effect:test` tests sessions, handles and every binding, and runs `acid-cat conform` against each protocol binding, with the apps in [`test/`](test/):
   - [`test/fixture.ts`](test/fixture.ts): one capability per `acid-cat conform` behavior. CLIs: [`test/fixture-cli.ts`](test/fixture-cli.ts), [`test/fixture-cli-remote.ts`](test/fixture-cli-remote.ts) (calls a server).
   - [`test/events-fixture.ts`](test/events-fixture.ts): one event per subscription behavior (filters, cursors, a defect, a bad payload, an event outside the view). CLI: [`test/events-cli.ts`](test/events-cli.ts).
   - [`test/lamp.ts`](test/lamp.ts): a smart lamp with shared types, failures, state and availability. CLI: [`test/lamp-cli.ts`](test/lamp-cli.ts), run as a separate process.
