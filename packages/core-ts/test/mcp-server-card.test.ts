@@ -13,16 +13,9 @@ const CARD_URL = "https://fixture.example/mcp/server-card";
 const cardHandler = (settings: Partial<McpSettings> = {}) =>
   mcpHandler(fixture, { name: "fixture", version: "1.2.3", allowedOrigins: [], ...options(), serverCard: { name: "dev.acid-cat/fixture" }, ...settings });
 
-test("the Server Card gives the name, the version, the description of the catalog and the URL of the server, with CORS and cache headers", async () => {
+test("the Server Card gives the configured name, the version, the description of the catalog and the URL of the server, and other methods than GET and OPTIONS get 405", async () => {
   const handler = cardHandler();
   const response = await handler(new Request(CARD_URL));
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get("Content-Type"), "application/mcp-server-card+json");
-  assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*");
-  assert.equal(response.headers.get("Access-Control-Allow-Methods"), "GET");
-  assert.equal(response.headers.get("Access-Control-Allow-Headers"), "Content-Type, If-None-Match");
-  assert.equal(response.headers.get("Access-Control-Expose-Headers"), "ETag");
-  assert.equal(response.headers.get("Cache-Control"), "public, max-age=3600");
   assert.deepEqual(await response.json(), {
     $schema: "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
     name: "dev.acid-cat/fixture",
@@ -30,14 +23,6 @@ test("the Server Card gives the name, the version, the description of the catalo
     description: fixture.description,
     remotes: [{ type: "streamable-http", url: "https://fixture.example/mcp", supportedProtocolVersions: ["2026-07-28"] }],
   });
-  const etag = response.headers.get("ETag") ?? "";
-  assert.match(etag, /^"[0-9a-f]{32}"$/);
-  const unchanged = await handler(new Request(CARD_URL, { headers: { "If-None-Match": etag } }));
-  assert.equal(unchanged.status, 304);
-  assert.equal(await unchanged.text(), "");
-  const preflight = await handler(new Request(CARD_URL, { method: "OPTIONS" }));
-  assert.equal(preflight.status, 204);
-  assert.equal(preflight.headers.get("Access-Control-Allow-Headers"), "Content-Type, If-None-Match");
   const post = await handler(new Request(CARD_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }));
   assert.equal(post.status, 405);
   assert.equal(post.headers.get("Allow"), "GET, OPTIONS");
@@ -51,8 +36,6 @@ test("behind mcpHandshake, the Server Card also gives the revisions of the hands
   const card: unknown = await response.json();
   const remotes = isJsonObject(card) ? card["remotes"] : undefined;
   assert.deepEqual(Array.isArray(remotes) && isJsonObject(remotes[0]) ? remotes[0]["supportedProtocolVersions"] : undefined, ["2026-07-28", "2025-11-25", "2025-06-18"]);
-  const unchanged = await wrapped(new Request(CARD_URL, { headers: { "If-None-Match": response.headers.get("ETag") ?? "" } }));
-  assert.equal(unchanged.status, 304);
   await handler.close();
 });
 

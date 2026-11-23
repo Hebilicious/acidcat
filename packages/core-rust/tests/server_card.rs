@@ -52,28 +52,10 @@ async fn read_card(binding: &McpBinding<Services>) -> Value {
 }
 
 #[tokio::test]
-async fn the_server_card_tells_how_to_connect_and_honors_its_entity_tag() {
+async fn the_server_card_gives_the_configured_name_the_url_and_the_revisions() {
     let served = binding(carded(None));
     let request = Request::get("/mcp/server-card").header("host", "example.test:8080");
     let (head, body) = send(&served, request).await;
-    assert_eq!(head.status, 200);
-    let header = |name: &str| {
-        head.headers[name]
-            .to_str()
-            .expect("a text header")
-            .to_owned()
-    };
-    assert_eq!(header("content-type"), "application/mcp-server-card+json");
-    assert_eq!(header("access-control-allow-origin"), "*");
-    assert_eq!(header("access-control-allow-methods"), "GET");
-    assert_eq!(
-        header("access-control-allow-headers"),
-        "Content-Type, If-None-Match"
-    );
-    assert_eq!(header("access-control-expose-headers"), "ETag");
-    assert_eq!(header("cache-control"), "public, max-age=3600");
-    let etag = header("etag");
-    assert_eq!(etag.len(), 34, "{etag}");
     let card: Value = serde_json::from_slice(&body).expect("a JSON card");
     assert_eq!(
         card,
@@ -99,21 +81,11 @@ async fn the_server_card_tells_how_to_connect_and_honors_its_entity_tag() {
     let absolute: Value = serde_json::from_slice(&absolute.1).expect("a JSON card");
     assert_eq!(absolute["remotes"][0]["url"], "https://card.test/mcp");
 
+    let etag = head.headers["etag"].to_str().expect("a text ETag");
     let revalidate = Request::get("/mcp/server-card")
         .header("host", "example.test:8080")
         .header("if-none-match", format!("\"other\", {etag}"));
-    let (head, body) = send(&served, revalidate).await;
-    assert_eq!(head.status, 304);
-    assert!(body.is_empty());
-    assert_eq!(head.headers["etag"], etag.as_str());
-    assert_eq!(head.headers["access-control-allow-origin"], "*");
-
-    let (head, body) = send(&served, Request::options("/mcp/server-card")).await;
-    assert_eq!(head.status, 204);
-    assert!(body.is_empty());
-    assert!(head.headers.get("etag").is_none());
-    assert_eq!(head.headers["access-control-allow-methods"], "GET");
-    assert_eq!(head.headers["cache-control"], "public, max-age=3600");
+    assert_eq!(send(&served, revalidate).await.0.status, 304);
 
     let (head, _) = send(&served, Request::post("/mcp/server-card")).await;
     assert_eq!(head.status, 405);

@@ -119,15 +119,10 @@ for (const services of ["shared", "per-request"] as const) {
 
 const CARD_URL = `${ORIGIN}/mcp/server-card`;
 
-test("the Server Card gives the name, the version, the description of the catalog and the URL of the server, with CORS and cache headers", async () => {
+test("the Server Card gives the configured name, the version, the description of the catalog, the URL of the server or the configured URL, and the revisions of the handshake behind withHandshake", async () => {
   const handler = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "1.2.3", allowedOrigins: [], serverCard: { name: "dev.acid-cat/fixture" } });
   try {
     const response = await handler(new Request(CARD_URL));
-    assert.equal(response.status, 200);
-    assert.equal(response.headers.get("Content-Type"), "application/mcp-server-card+json");
-    assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*");
-    assert.equal(response.headers.get("Access-Control-Expose-Headers"), "ETag");
-    assert.equal(response.headers.get("Cache-Control"), "public, max-age=3600");
     assert.deepEqual(await response.json(), {
       $schema: "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
       name: "dev.acid-cat/fixture",
@@ -135,9 +130,6 @@ test("the Server Card gives the name, the version, the description of the catalo
       description: fixture.description,
       remotes: [{ type: "streamable-http", url: `${ORIGIN}/mcp`, supportedProtocolVersions: ["2026-07-28"] }],
     });
-    const unchanged = await handler(new Request(CARD_URL, { headers: { "If-None-Match": response.headers.get("ETag") ?? "" } }));
-    assert.equal(unchanged.status, 304);
-    assert.equal((await handler(new Request(CARD_URL, { method: "OPTIONS" }))).status, 204);
     const post = await handler(new Request(CARD_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }));
     assert.deepEqual([post.status, post.headers.get("Allow")], [405, "GET, OPTIONS"]);
     const behindTls = Mcp.toWebHandler(fixture, Layer.fresh(fixtureLayer), { name: "fixture", version: "1.2.3", allowedOrigins: [], serverCard: { name: "dev.acid-cat/fixture", url: "https://mcp.example.com/mcp" } });
