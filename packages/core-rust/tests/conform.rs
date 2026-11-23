@@ -205,6 +205,29 @@ struct Interrupted {
 }
 
 #[cfg(unix)]
+fn wait_for(path: &Path, what: &str) {
+    let start = Instant::now();
+    while !path.exists() {
+        assert!(start.elapsed() < DEADLINE, "the call {what}");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[cfg(unix)]
+fn release_held_interrupt(child: &mut Child, marker: &Path) -> Instant {
+    assert!(
+        child
+            .try_wait()
+            .expect("the status of the fixture")
+            .is_none(),
+        "the fixture exited before the second interrupt"
+    );
+    let grace_period_can_start = Instant::now();
+    std::fs::write(marker.with_extension("go"), "").expect("the go file is written");
+    grace_period_can_start
+}
+
+#[cfg(unix)]
 fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
     let directory = std::env::temp_dir().join(format!(
         "acid-cat-core-rust-interrupt-{}-{interrupts}",
@@ -212,21 +235,17 @@ fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
     ));
     std::fs::create_dir_all(&directory).expect("the directory is made");
     let marker = directory.join("held");
-    let mut child = Command::new(fixture())
+    let mut fixture = Command::new(fixture());
+    fixture
         .args(["cli-blocking", "fixture", "hold", "--key", "k", "--marker"])
         .arg(&marker)
         .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("the fixture starts");
-    let start = Instant::now();
-    while !marker.exists() {
-        assert!(
-            start.elapsed() < DEADLINE,
-            "the call did not write its marker file"
-        );
-        std::thread::sleep(Duration::from_millis(10));
+        .stderr(Stdio::piped());
+    if interrupts == 2 {
+        fixture.env("FIXTURE_HOLD_INTERRUPT_UNTIL_GO", "1");
     }
+    let mut child = fixture.spawn().expect("the fixture starts");
+    wait_for(&marker, "did not write its marker file");
     let interrupt = || {
         Command::new("kill")
             .args(["-INT", &child.id().to_string()])
@@ -237,16 +256,12 @@ fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
     interrupt();
     if interrupts == 2 {
         // Unix merges a signal that is still pending with the next one of the same kind.
-        let cancelled = directory.join("held.cancelled");
-        while !cancelled.exists() {
-            assert!(
-                interrupted.elapsed() < DEADLINE,
-                "the call did not write its marker file when it was cancelled"
-            );
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        interrupted = Instant::now();
+        wait_for(
+            &directory.join("held.cancelled"),
+            "did not write its marker file when it was cancelled",
+        );
         interrupt();
+        interrupted = release_held_interrupt(&mut child, &marker);
     }
     let status = loop {
         if let Some(status) = child.try_wait().expect("the status of the fixture") {
@@ -295,7 +310,7 @@ fn a_call_that_blocks_exits_with_130_after_the_grace_period_or_at_once_after_a_s
     );
     assert!(
         twice.after_interrupt < INTERRUPT_GRACE,
-        "exited {:?} after the second interrupt, not at once",
+        "exited {:?} after the start of the grace period, not at the second interrupt",
         twice.after_interrupt
     );
 }
