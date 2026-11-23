@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.17.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.16.0...@acid-cat/core-effect@0.17.0) (2026-11-23)
+
+
+### Features
+
+* **mcp:** check the Mcp-Method, Mcp-Name and Mcp-Param headers against the body ([#206](https://github.com/Hebilicious/acidcat/issues/206)) ([8067e0e](https://github.com/Hebilicious/acidcat/commit/8067e0ec328a1271afa5091b56f90cbf4b3142c9))
+* **mcp:** negotiate the heartbeat interval of events/stream ([#205](https://github.com/Hebilicious/acidcat/issues/205)) ([73fcdd0](https://github.com/Hebilicious/acidcat/commit/73fcdd043badc06aedbfec0f67aead146ff8828a))
+* **mcp:** serve an MCP Server Card, and sign webhook requests with Ed25519 keys ([#208](https://github.com/Hebilicious/acidcat/issues/208)) ([9fc1e51](https://github.com/Hebilicious/acidcat/commit/9fc1e511119fb9fd7a826072366372b19eaf20cd))
+
 ## [0.16.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.15.0...@acid-cat/core-effect@0.16.0) (2026-11-19)
 
 
