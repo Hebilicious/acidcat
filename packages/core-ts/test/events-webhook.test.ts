@@ -12,6 +12,7 @@ import { sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
 import { startReceiver, testCertificate } from "./webhook-receiver.ts";
 import type { Received } from "./webhook-receiver.ts";
 import { until as untilWithin } from "./until.ts";
+import { mcpHeaders } from "./mcp-headers.ts";
 
 const until = (condition: () => boolean | Promise<boolean>) => untilWithin(condition, 2000);
 
@@ -71,7 +72,7 @@ function server(options: WebhookOptions = {}) {
   });
   handlers.push(handler);
   const rpc = async (method: string, params: object, principal: string | null = "alice") => {
-    const headers: Record<string, string> = { "Content-Type": "application/json", "MCP-Protocol-Version": VERSION };
+    const headers: Record<string, string> = { "Content-Type": "application/json", ...mcpHeaders(method, params), "MCP-Protocol-Version": VERSION };
     if (principal !== null) headers["X-Principal"] = principal;
     const response = await handler(new Request("https://sensors.example/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: META } }) }));
     return objectOf(await response.text());

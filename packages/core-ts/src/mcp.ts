@@ -1,4 +1,4 @@
-import { bundle, isJsonObject, KEEPALIVE_MS, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpToolAnnotations, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage } from "@acid-cat/spec-ts";
+import { bundle, isJsonObject, KEEPALIVE_MS, MCP_HEADER_MISMATCH, MCP_PROTOCOL_VERSION, MCP_REJECTIONS, MCP_UNKNOWN_TOOL, mcpHeaderMismatch, mcpToolAnnotations, mcpToolResult, readBounded, screenRequest, SSE_MEDIA_TYPE, sseMessage } from "@acid-cat/spec-ts";
 import type { JsonObject, Rejection } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
@@ -146,6 +146,8 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
     const { session, close } = await open();
     let streamOwnsClose = false;
     try {
+      const mismatch = mcpHeaderMismatch((name) => request.headers.get(name), message.method ?? "", message.params, inputSchemaOf(session, message));
+      if (mismatch !== undefined) return error(400, id, MCP_HEADER_MISMATCH, mismatch);
       if (message.method === "events/stream" && message.id !== null && message.id !== undefined && servesEvents(session)) {
         const started = await startEventStream(session, message.id, message.params, {
           defaultHeartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
@@ -201,14 +203,14 @@ function answerWithoutSession(request: Request, message: JsonRpcRequest): Respon
   // Revision 2026-07-28: each request names its revision in a header, and each request repeats it in `_meta`.
   const version = request.headers.get("MCP-Protocol-Version");
   const id = message.id ?? null;
-  if (version === null) return error(400, id, -32020, "MCP-Protocol-Version header is required");
+  if (version === null) return error(400, id, MCP_HEADER_MISMATCH, "MCP-Protocol-Version header is required");
   if (version !== MCP_PROTOCOL_VERSION) {
     return error(400, id, -32022, `Unsupported protocol version ${version}`, { supported: [MCP_PROTOCOL_VERSION] });
   }
   if (message.id === undefined) return new Response(null, { status: 200, headers: { "Content-Type": "application/json" } });
   const metaVersion = message.protocolVersion;
   if (metaVersion === undefined) return error(400, id, -32602, "Required request metadata is missing");
-  if (metaVersion !== version) return error(400, id, -32020, "MCP-Protocol-Version header does not match request metadata");
+  if (metaVersion !== version) return error(400, id, MCP_HEADER_MISMATCH, "MCP-Protocol-Version header does not match request metadata");
   return undefined;
 }
 
@@ -260,6 +262,18 @@ async function answer(session: Session, message: JsonRpcRequest, options: McpSet
   return error(404, id, -32601, `Method not found: ${message.method}`);
 }
 
+function inputSchemaOf(session: Session, message: JsonRpcRequest): JsonObject | undefined {
+  const name = message.name ?? "";
+  if (message.method === "tools/call") {
+    const capability = session.handles.get(name)?.availability.getSnapshot().available === true ? session.view.capabilities[name] : undefined;
+    return capability === undefined ? undefined : toolInputSchema(session, capability.input);
+  }
+  const event = message.method?.startsWith("events/") === true && servesEvents(session) && Object.hasOwn(session.view.events ?? {}, name) ? session.view.events?.[name] : undefined;
+  return event?.input === undefined ? undefined : bundle(event.input, session.view.$defs ?? {});
+}
+
+const toolInputSchema = (session: Session, input: JsonObject | undefined): JsonObject => bundle(input ?? { type: "object" }, session.view.$defs ?? {});
+
 export function listTools(session: Session) {
   const types = session.view.$defs ?? {};
   return [...session.handles.values()]
@@ -271,7 +285,7 @@ export function listTools(session: Session) {
       return {
         name: handle.id,
         description: capability.description,
-        inputSchema: bundle(capability.input ?? { type: "object" }, types),
+        inputSchema: toolInputSchema(session, capability.input),
         ...(output?.type === "object" ? { outputSchema: output } : {}),
         annotations: mcpToolAnnotations(capability),
       };

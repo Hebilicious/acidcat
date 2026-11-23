@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { isJsonObject } from "@acid-cat/spec-ts";
+import { isJsonObject, mcpHeaderMismatch } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
 import { mcpHandshake } from "../src/index.ts";
@@ -67,13 +67,31 @@ test("tools/list and tools/call go to the handler, and their results lose the me
   assert.deepEqual(listed, { jsonrpc: "2.0", id: 1, result: { tools: [{ name: "stub.echo" }] } });
   const called = await bodyOf(await handler(post({ id: "a", method: "tools/call", params: { name: "stub.echo", arguments: {} } }, { "MCP-Protocol-Version": "2025-11-25" })));
   assert.deepEqual(called, { jsonrpc: "2.0", id: "a", result: { content: [{ type: "text", text: "{}" }] } });
-  const call = seen[1];
+  assert.deepEqual(seen.map(({ body }) => body["method"]), ["tools/list", "tools/list", "tools/call"]);
+  const call = seen[2];
   assert.equal(call?.headers.get("Mcp-Name"), "stub.echo");
   const params = isJsonObject(call?.body["params"]) ? call.body["params"] : {};
   assert.deepEqual(params["_meta"], { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} });
   const unknown = await handler(post({ id: 3, method: "tools/call", params: { name: "stub.hidden" } }, { "MCP-Protocol-Version": "2025-11-25" }));
   assert.equal(unknown.status, 200);
   assert.deepEqual(await bodyOf(unknown), { jsonrpc: "2.0", id: 3, error: { code: -32602, message: "Tool not found" } });
+});
+
+test("tools/call of an annotated tool reaches a server that checks the headers: the wrapper encodes Mcp-Name and mirrors each annotated argument", async () => {
+  const name = "stub.región";
+  const tool = { name, inputSchema: { type: "object", properties: { region: { type: "string", "x-mcp-header": "Region" }, query: { type: "string" } } } };
+  const handler = mcpHandshake(async (request) => {
+    const body: unknown = await request.json();
+    if (!isJsonObject(body) || typeof body["method"] !== "string") throw new Error("the body is not a request");
+    const params = isJsonObject(body["params"]) ? body["params"] : {};
+    const mismatch = mcpHeaderMismatch((header) => request.headers.get(header), body["method"], params, body["method"] === "tools/call" ? tool.inputSchema : undefined);
+    if (mismatch !== undefined) return Response.json({ jsonrpc: "2.0", id: body["id"], error: { code: -32020, message: mismatch } }, { status: 400 });
+    const result = body["method"] === "tools/list" ? { tools: [tool] } : { content: [{ type: "text", text: JSON.stringify(params["arguments"]) }] };
+    return Response.json({ jsonrpc: "2.0", id: body["id"], result: { _meta: SERVER_INFO, resultType: "complete", ...result } });
+  });
+  const called = await handler(post({ id: 1, method: "tools/call", params: { name, arguments: { region: "Zürich", query: "q" } } }, { "MCP-Protocol-Version": "2025-11-25", "Mcp-Param-Region": "stale" }));
+  assert.equal(called.status, 200);
+  assert.deepEqual(await bodyOf(called), { jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: '{"region":"Zürich","query":"q"}' }] } });
 });
 
 test("ping, notifications and unknown methods are answered after the handler screens them", async () => {

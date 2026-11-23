@@ -161,6 +161,8 @@ const mcpProtocolVersion = string(field(facts, "mcpProtocolVersion"));
 const mcpEventsExtension = string(field(facts, "mcpEventsExtension"));
 const mcpSubscriptionId = string(field(facts, "mcpSubscriptionId"));
 const mcpUnknownTool = integer(field(facts, "mcpUnknownTool"));
+const mcpHeaderMismatch = integer(field(facts, "mcpHeaderMismatch"));
+const mcpNamedMethods = list(field(facts, "mcpNamedMethods")).map(string);
 const mcpHeartbeatMinMs = integer(field(facts, "mcpHeartbeatMinMs"));
 const mcpHeartbeatMaxMs = integer(field(facts, "mcpHeartbeatMaxMs"));
 const mcpEventErrors = numbered(field(facts, "mcpEventErrors"));
@@ -414,6 +416,10 @@ const specFacts = [
   "",
   `export const MCP_UNKNOWN_TOOL = ${mcpUnknownTool};`,
   "",
+  `export const MCP_HEADER_MISMATCH = ${mcpHeaderMismatch};`,
+  "",
+  typescriptTuple("MCP_NAMED_METHODS", mcpNamedMethods),
+  "",
   `export const MCP_HEARTBEAT_MIN_MS = ${mcpHeartbeatMinMs};`,
   "",
   `export const MCP_HEARTBEAT_MAX_MS = ${mcpHeartbeatMaxMs};`,
@@ -439,12 +445,22 @@ const rustEscape = (value: string, quote: string): string =>
 const rustString = (value: string): string => `"${rustEscape(value, '"')}"`;
 const rustChar = (value: string): string => `'${rustEscape(value, "'")}'`;
 const RUSTFMT_WIDTH = 100;
+// rustfmt keeps an array or a tuple on one line only when its items fit in 60 columns (`array_width` and `fn_call_width`).
+const RUSTFMT_ITEMS_WIDTH = 60;
 const rustConst = (name: string, type: string, value: string): string => {
   const line = `pub(crate) const ${name}: ${type} = ${value};`;
   const broken = `    ${value};`;
-  return line.length <= RUSTFMT_WIDTH || broken.length > RUSTFMT_WIDTH ? line : `pub(crate) const ${name}: ${type} =\n${broken}`;
+  if (value.includes("\n") || line.length <= RUSTFMT_WIDTH || broken.length > RUSTFMT_WIDTH) return line;
+  return `pub(crate) const ${name}: ${type} =\n${broken}`;
 };
-const rustList = (name: string, items: readonly string[]): string => rustConst(name, `[&str; ${items.length}]`, `[${items.map(rustString).join(", ")}]`);
+const rustItems = (open: string, close: string, items: readonly string[], indent: string): string => {
+  const inline = items.join(", ");
+  if (inline.length <= RUSTFMT_ITEMS_WIDTH && !inline.includes("\n")) return `${open}${inline}${close}`;
+  return [open, ...items.map((item) => `${indent}    ${item},`), `${indent}${close}`].join("\n");
+};
+const rustTuple = (items: readonly string[]): string => rustItems("(", ")", items, "    ");
+const rustArray = (name: string, type: string, items: readonly string[]): string => rustConst(name, `[${type}; ${items.length}]`, rustItems("[", "]", items, ""));
+const rustList = (name: string, items: readonly string[]): string => rustArray(name, "&str", items.map(rustString));
 const snake = (key: string): string => key.replaceAll(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`).toUpperCase();
 
 const rust = [
@@ -452,21 +468,17 @@ const rust = [
   "",
   rustConst("CI_VARIABLE", "&str", rustString(ciVariable)),
   "",
-  `pub(crate) const AGENT_VARIABLES: [&str; ${agentVariables.length}] = [`,
-  ...agentVariables.map((name) => `    ${rustString(name)},`),
-  "];",
+  rustList("AGENT_VARIABLES", agentVariables),
   "",
   rustList("FALSE_VALUES", falseValues),
   "",
-  rustConst("TRIM_CHARACTERS", `[char; ${trimCharacters.length}]`, `[${trimCharacters.map(rustChar).join(", ")}]`),
+  rustArray("TRIM_CHARACTERS", "char", trimCharacters.map(rustChar)),
   "",
   rustList("PROGRAM_FLAGS", programFlags),
   "",
   rustList("RESUME_FLAGS", resumeFlags),
   "",
-  `pub(crate) const RESERVED_FLAGS: [(&str, &str); ${reservedFlags.length}] = [`,
-  ...reservedFlags.map(([name, what]) => `    (${rustString(name)}, ${rustString(what)}),`),
-  "];",
+  rustArray("RESERVED_FLAGS", "(&str, &str)", reservedFlags.map((flag) => rustTuple(flag.map(rustString)))),
   "",
   rustConst("INVALID_INPUT_EXIT_CODE", "i32", String(exitCode)),
   "",
@@ -532,6 +544,8 @@ const rustFacts = [
   rustConst("MCP_EVENTS_EXTENSION", "&str", rustString(mcpEventsExtension)),
   rustConst("MCP_SUBSCRIPTION_ID", "&str", rustString(mcpSubscriptionId)),
   rustConst("MCP_UNKNOWN_TOOL", "i64", String(mcpUnknownTool)),
+  rustConst("MCP_HEADER_MISMATCH", "i64", String(mcpHeaderMismatch)),
+  rustList("MCP_NAMED_METHODS", mcpNamedMethods),
   rustConst("MCP_HEARTBEAT_MIN_MS", "u64", String(mcpHeartbeatMinMs)),
   rustConst("MCP_HEARTBEAT_MAX_MS", "u64", String(mcpHeartbeatMaxMs)),
   "",

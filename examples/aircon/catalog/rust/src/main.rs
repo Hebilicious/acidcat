@@ -126,7 +126,7 @@ fn aircon_catalog() -> Catalog {
         .capability("aircon.power.set", Capability {
             description: "Turn the unit on or off.".into(),
             audience: everywhere.clone(),
-            input: Some(setting("on", json!({ "type": "boolean" }))),
+            input: Some(setting("on", json!({ "type": "boolean", "x-mcp-header": "On" }))),
             failures: offline_only(),
             destructive: Some(true),
             idempotent: Some(true),

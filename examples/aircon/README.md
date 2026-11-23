@@ -165,6 +165,8 @@ The first three use the `@acid-cat/core-ts` application, share [`apis/shared.ts`
 | `/capabilities/mcp` | `Mcp.toWebHandler(…)` | Clients of revision `2026-07-28`. |
 | `/capabilities/mcp-legacy` | `Mcp.withHandshake(Mcp.toWebHandler(…))` | Clients that open with the [`initialize` handshake](../../spec/bindings/mcp.md#earlier-revisions-through-http) of `2025-11-25` or `2025-06-18`. It keeps no session, so it sends no `notifications/tools/list_changed`. |
 
+The input property `on` of `aircon.power.set` has `"x-mcp-header": "On"` in the catalog, and each catalog source and core writes it. Through HTTP, a call of `aircon.power.set` must send the header `Mcp-Param-On: true` or `Mcp-Param-On: false`, with the same value as `on`, or it gets 400 and `-32020` ([Headers](../../spec/bindings/mcp.md#headers)). The official MCP client, and `Mcp.withHandshake` for a client of an earlier revision, send it. Through stdio, the tool gives the annotation, and no header exists.
+
 Every API rejects origins it does not allow.
 
 ### How the APIs use sessions

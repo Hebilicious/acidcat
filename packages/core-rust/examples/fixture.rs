@@ -170,6 +170,7 @@ struct Watched {
 
 #[derive(Deserialize, JsonSchema)]
 struct Switch {
+    #[schemars(extend("x-mcp-header" = "On"))]
     on: bool,
 }
 
@@ -239,6 +240,7 @@ struct Ticks {
     #[schemars(range(min = 1, max = 100))]
     gap: Option<i64>,
     #[allow(dead_code)]
+    #[schemars(extend("x-mcp-header" = "Key"))]
     key: Option<String>,
 }
 

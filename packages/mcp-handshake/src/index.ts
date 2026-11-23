@@ -1,5 +1,5 @@
 /** The `initialize` handshake of earlier MCP revisions through HTTP (spec/bindings/mcp.md#earlier-revisions-through-http). */
-import { isJsonObject, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, readBounded } from "@acid-cat/spec-ts";
+import { encodeMcpHeaderValue, isJsonObject, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, mcpParamHeaders, readBounded } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
 export type WebHandler = (request: Request) => Promise<Response>;
@@ -37,7 +37,8 @@ async function answer(handler: WebHandler, request: Request, message: JsonObject
   const method = typeof message["method"] === "string" ? message["method"] : "";
   const params = isJsonObject(message["params"]) ? message["params"] : {};
   const ownMethod = method === "tools/list" || method === "tools/call" ? method : "server/discover";
-  const response = await handler(asCurrentRevisionRequest(request, ownMethod, ownMethod === "server/discover" ? {} : params));
+  const paramHeaders = ownMethod === "tools/call" ? mcpParamHeaders(await inputSchemaOf(handler, request, params["name"]), params["arguments"]) : {};
+  const response = await handler(asCurrentRevisionRequest(request, ownMethod, ownMethod === "server/discover" ? {} : params, paramHeaders));
   if (!response.ok) return response;
   const reply = parseObject(await response.text()) ?? {};
   if (!("id" in message)) return new Response(null, { status: 202 });
@@ -55,12 +56,21 @@ function isHandshakeRequest(header: string | null, metaVersion: unknown): boolea
   return HANDSHAKE_VERSIONS.some((version) => version === header);
 }
 
-function asCurrentRevisionRequest(request: Request, method: string, params: JsonObject): Request {
-  const headers = new Headers(request.headers);
+async function inputSchemaOf(handler: WebHandler, request: Request, name: unknown): Promise<unknown> {
+  const response = await handler(asCurrentRevisionRequest(request, "tools/list", {}));
+  const result = response.ok ? parseObject(await response.text())?.["result"] : undefined;
+  const tools = isJsonObject(result) && Array.isArray(result["tools"]) ? result["tools"] : [];
+  const tool: unknown = tools.find((each: unknown) => isJsonObject(each) && each["name"] === name);
+  return isJsonObject(tool) ? tool["inputSchema"] : undefined;
+}
+
+function asCurrentRevisionRequest(request: Request, method: string, params: JsonObject, paramHeaders: Record<string, string> = {}): Request {
+  const headers = new Headers([...request.headers].filter(([name]) => !name.startsWith("mcp-param-")));
   headers.set("MCP-Protocol-Version", MCP_PROTOCOL_VERSION);
   headers.set("Mcp-Method", method);
   headers.set("Accept", "application/json, text/event-stream");
-  if (method === "tools/call" && typeof params["name"] === "string") headers.set("Mcp-Name", params["name"]);
+  if (method === "tools/call" && typeof params["name"] === "string") headers.set("Mcp-Name", encodeMcpHeaderValue(params["name"]));
+  for (const [name, value] of Object.entries(paramHeaders)) headers.set(name, value);
   const meta = { ...metaOf({ params }), [PROTOCOL_VERSION_KEY]: MCP_PROTOCOL_VERSION, [CLIENT_CAPABILITIES_KEY]: {} };
   const body = JSON.stringify({ jsonrpc: "2.0", id: 0, method, params: { ...params, _meta: meta } });
   return new Request(request.url, { method: "POST", headers, body, signal: request.signal });

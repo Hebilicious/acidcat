@@ -106,6 +106,7 @@ struct Export {
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 struct Power {
+    #[schemars(extend("x-mcp-header" = "On"))]
     on: bool,
 }
 

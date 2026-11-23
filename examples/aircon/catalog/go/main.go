@@ -86,7 +86,7 @@ func airconCatalog() *catalog.Catalog {
 		Capability("aircon.power.set", catalog.Capability{
 			Description: "Turn the unit on or off.",
 			Audience:    everywhere,
-			Input:       setting("on", schema{"type": "boolean"}),
+			Input:       setting("on", schema{"type": "boolean", "x-mcp-header": "On"}),
 			Failures:    offlineOnly,
 			Destructive: new(true),
 			Idempotent:  new(true),

@@ -263,7 +263,7 @@ export const fixture = App.make({
       audience: everywhere,
       destructive: true,
       idempotent: true,
-      input: Schema.Struct({ on: Schema.Boolean }),
+      input: Schema.Struct({ on: Schema.Boolean.annotate({ "x-mcp-header": "On" }) }),
       run: ({ on }) =>
         Effect.gen(function* () {
           yield* SubscriptionRef.set(yield* Switch, position(on));
@@ -323,7 +323,7 @@ export const fixture = App.make({
       input: Schema.Struct({
         count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
         gap: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))),
-        key: Schema.optionalKey(Schema.String),
+        key: Schema.optionalKey(Schema.String.annotate({ "x-mcp-header": "Key" })),
       }),
       payload: Tick,
       subscribe: ({ count, gap }, { cursor }) =>

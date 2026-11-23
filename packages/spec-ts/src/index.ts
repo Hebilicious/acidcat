@@ -9,6 +9,7 @@ import {
   MCP_EVENT_ERRORS,
   MCP_HEARTBEAT_MAX_MS,
   MCP_HEARTBEAT_MIN_MS,
+  MCP_NAMED_METHODS,
   MCP_REJECTIONS as REJECTIONS,
   MCP_SUBSCRIPTION_ID,
 } from "./facts.generated.ts";
@@ -25,6 +26,7 @@ export {
   KEEPALIVE_MS,
   MCP_EVENT_ERRORS,
   MCP_EVENTS_EXTENSION,
+  MCP_HEADER_MISMATCH,
   MCP_HEARTBEAT_MAX_MS,
   MCP_HEARTBEAT_MIN_MS,
   MCP_PROTOCOL_VERSION,
@@ -545,6 +547,151 @@ export function mcpHeartbeatGrant(suggestion: number | null | undefined, deploym
   return Math.min(MCP_HEARTBEAT_MAX_MS, Math.max(MCP_HEARTBEAT_MIN_MS, suggestion));
 }
 
+const NAMED_METHODS: ReadonlySet<string> = new Set(MCP_NAMED_METHODS);
+
+const BASE64_PREFIX = "=?base64?";
+const BASE64_SUFFIX = "?=";
+
+const isSentinel = (value: string): boolean => value.length >= BASE64_PREFIX.length + BASE64_SUFFIX.length && value.startsWith(BASE64_PREFIX) && value.endsWith(BASE64_SUFFIX);
+
+/** The value of an `Mcp-Name` or `Mcp-Param-{Name}` header for a text: the text, or the base64 sentinel form when the text is not a safe header value. */
+export function encodeMcpHeaderValue(text: string): string {
+  const safe = /^(?:[\x21-\x7e](?:[\t\x20-\x7e]*[\x21-\x7e])?)?$/.test(text) && !isSentinel(text);
+  if (safe) return text;
+  return `${BASE64_PREFIX}${base64OfBytes(new TextEncoder().encode(text))}${BASE64_SUFFIX}`;
+}
+
+function base64OfBytes(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+export function decodeMcpHeaderValue(value: string): string | undefined {
+  if (!isSentinel(value)) return /^[\t\x20-\x7e]*$/.test(value) ? value : undefined;
+  const encoded = value.slice(BASE64_PREFIX.length, -BASE64_SUFFIX.length);
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 !== 0) return undefined;
+  try {
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0)));
+  } catch {
+    return undefined;
+  }
+}
+
+/** A property of an input schema with an `x-mcp-header` annotation: the name after `Mcp-Param-`, and the path of the property in the arguments. */
+export interface McpHeaderProperty {
+  readonly header: string;
+  readonly path: readonly string[];
+}
+
+/** The properties with an `x-mcp-header` annotation that a chain of `properties` keys reaches from the root of a bundled input schema. */
+export function mcpHeaderProperties(inputSchema: unknown): readonly McpHeaderProperty[] {
+  const found: McpHeaderProperty[] = [];
+  const visit = (schema: unknown, path: readonly string[]) => {
+    const properties = isJsonObject(schema) ? schema["properties"] : undefined;
+    if (!isJsonObject(properties)) return;
+    for (const [name, property] of Object.entries(properties)) {
+      const header = isJsonObject(property) ? property["x-mcp-header"] : undefined;
+      if (typeof header === "string") found.push({ header, path: [...path, name] });
+      visit(property, [...path, name]);
+    }
+  };
+  visit(inputSchema, []);
+  return found;
+}
+
+const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const MCP_HEADER_TYPES: ReadonlySet<unknown> = new Set(["string", "integer", "boolean"]);
+const SCHEMA_MAPS: ReadonlySet<string> = new Set(["$defs", "patternProperties", "dependentSchemas"]);
+
+const pointerOf = (path: readonly string[]): string => path.map((key) => `/${key.replaceAll("~", "~0").replaceAll("/", "~1")}`).join("");
+
+/**
+ * The errors of the `x-mcp-header` members of a bundled input schema (spec/bindings/mcp.md#header-annotations). Each
+ * error names the location of the member as a JSON pointer into the bundled schema.
+ */
+export function mcpHeaderErrors(inputSchema: unknown): string[] {
+  const errors: string[] = [];
+  const seen = new Map<string, string>();
+  const visit = (node: unknown, path: readonly string[], onChain: boolean) => {
+    if (Array.isArray(node)) {
+      node.forEach((item, index) => visit(item, [...path, String(index)], false));
+      return;
+    }
+    if (!isJsonObject(node)) return;
+    if (Object.hasOwn(node, "x-mcp-header")) {
+      const header = node["x-mcp-header"];
+      const where = `the x-mcp-header at ${pointerOf(path) || "the root"}`;
+      if (!onChain || path.length === 0) errors.push(`${where} is not on a property that a chain of properties members reaches from the root`);
+      else if (typeof header !== "string" || !HTTP_TOKEN.test(header)) errors.push(`${where} is ${JSON.stringify(header)}, which is not an HTTP token`);
+      else if (!MCP_HEADER_TYPES.has(node["type"])) errors.push(`${where} is on a property whose type is not string, integer or boolean`);
+      else {
+        const earlier = seen.get(header.toLowerCase());
+        if (earlier === undefined) seen.set(header.toLowerCase(), pointerOf(path));
+        else errors.push(`${where} is ${JSON.stringify(header)}, which the x-mcp-header at ${earlier} already names without regard to case`);
+      }
+    }
+    for (const [key, value] of Object.entries(node)) {
+      if ((key === "properties" || SCHEMA_MAPS.has(key)) && isJsonObject(value)) {
+        for (const [name, schema] of Object.entries(value)) visit(schema, [...path, key, name], onChain && key === "properties");
+      } else {
+        visit(value, [...path, key], false);
+      }
+    }
+  };
+  visit(inputSchema, [], true);
+  return errors;
+}
+
+function argumentAt(args: unknown, path: readonly string[]): unknown {
+  let value = args;
+  for (const key of path) value = isJsonObject(value) && Object.hasOwn(value, key) ? value[key] : undefined;
+  return value;
+}
+
+function headerTextOf(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (typeof value === "boolean") return String(value);
+  if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
+  return undefined;
+}
+
+/** The `Mcp-Param-{Name}` headers that a client sends through HTTP for the arguments of a request, encoded. */
+export function mcpParamHeaders(inputSchema: unknown, args: unknown): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const { header, path } of mcpHeaderProperties(inputSchema)) {
+    const text = headerTextOf(argumentAt(args, path));
+    if (text !== undefined) headers[`Mcp-Param-${header}`] = encodeMcpHeaderValue(text);
+  }
+  return headers;
+}
+
+function paramAgrees(header: string | null, value: unknown): boolean {
+  if (value === undefined || value === null) return header === null;
+  const decoded = header === null ? undefined : decodeMcpHeaderValue(header);
+  if (decoded === undefined) return false;
+  if (typeof value === "number") return Number.isSafeInteger(value) && decoded.trim() !== "" && Number(decoded) === value;
+  return headerTextOf(value) === decoded;
+}
+
+/**
+ * Why the headers of a request of revision 2026-07-28 through HTTP do not agree with its body, or `undefined` when they
+ * agree (spec/bindings/mcp.md#http). `inputSchema` is the bundled input schema of the tool or the event that the
+ * request names, or `undefined` when the server does not know it. The server answers a mismatch with the status 400 and
+ * `MCP_HEADER_MISMATCH`.
+ */
+export function mcpHeaderMismatch(header: (name: string) => string | null, method: string, params: JsonObject, inputSchema: unknown): string | undefined {
+  if (header("Mcp-Method") !== method) return "The Mcp-Method header does not agree with the method of the request.";
+  if (NAMED_METHODS.has(method)) {
+    const name = header("Mcp-Name");
+    if (typeof params["name"] !== "string" || name === null || decodeMcpHeaderValue(name) !== params["name"]) return "The Mcp-Name header does not agree with params.name.";
+  }
+  for (const { header: name, path } of mcpHeaderProperties(inputSchema)) {
+    if (!paramAgrees(header(`Mcp-Param-${name}`), argumentAt(params["arguments"], path))) return `The Mcp-Param-${name} header does not agree with params.arguments.${path.join(".")}.`;
+  }
+  return undefined;
+}
+
 /**
  * Order strings by Unicode code point. The `<` operator compares UTF-16 code units, which put a character after U+FFFF
  * before a character from U+E000 to U+FFFF.
@@ -602,9 +749,7 @@ export function decodePollCursor(cursor: string): PollPosition | undefined {
 }
 
 function base64UrlOfText(text: string): string {
-  let binary = "";
-  for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  return base64OfBytes(new TextEncoder().encode(text)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
 function textOfBase64Url(text: string): string {
@@ -659,10 +804,7 @@ export async function webhookSignature(secrets: readonly string[], webhookId: st
     const bytes = webhookSecretBytes(secret);
     if (bytes === undefined) throw new TypeError("A webhook secret is not valid.");
     const key = await crypto.subtle.importKey("raw", bytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, content));
-    let binary = "";
-    for (const byte of mac) binary += String.fromCharCode(byte);
-    signatures.push(`v1,${btoa(binary)}`);
+    signatures.push(`v1,${base64OfBytes(new Uint8Array(await crypto.subtle.sign("HMAC", key, content)))}`);
   }
   return signatures.join(" ");
 }

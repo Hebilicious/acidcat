@@ -318,7 +318,7 @@ export const fixture = defineApp<Context>({
       audience: everywhere,
       destructive: true,
       idempotent: true,
-      input: z.object({ on: z.boolean() }),
+      input: z.object({ on: z.boolean().meta({ "x-mcp-header": "On" }) }),
       run: ({ on }, { context }) => {
         context.switch.set(on);
         return ok(null);
@@ -372,7 +372,11 @@ export const fixture = defineApp<Context>({
       id: "fixture.ticks",
       description: "Give the occurrences n = 1 to count, with the eventId and the cursor String(n), then end. With a cursor c, start at c + 1. With a gap g, the occurrence n = g has truncated: true, as if the source skipped occurrences before it. The key changes nothing: it gives the subscriptions of each test their own input.",
       audience: everywhere,
-      input: z.object({ count: z.number().int().min(0).max(100), gap: z.number().int().min(1).max(100).optional(), key: z.string().optional() }),
+      input: z.object({
+        count: z.number().int().min(0).max(100),
+        gap: z.number().int().min(1).max(100).optional(),
+        key: z.string().meta({ "x-mcp-header": "Key" }).optional(),
+      }),
       payload: Tick,
       async *subscribe({ count, gap }, { cursor }) {
         for (let n = after(cursor); n <= count; n += 1) {

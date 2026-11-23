@@ -11,6 +11,7 @@ import { ManualClock } from "./manual-clock.ts";
 import { sseReader } from "./sse.ts";
 import { startReceiver, testCertificate } from "./webhook-receiver.ts";
 import { until } from "./until.ts";
+import { mcpHeaders } from "./mcp-headers.ts";
 
 interface Services {
   readonly caller: string;
@@ -122,7 +123,7 @@ test("through MCP, a tool reads the caller from the context of the request and t
     handler(
       new Request("https://who.example/mcp", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "mcp-method": "tools/call", "mcp-protocol-version": "2026-07-28", ...headers },
+        headers: { "Content-Type": "application/json", "mcp-method": "tools/call", "mcp-name": "caller.get", "mcp-protocol-version": "2026-07-28", ...headers },
         body: JSON.stringify({
           jsonrpc: "2.0",
           id: 1,
@@ -158,7 +159,7 @@ test("the provider of an event receives the target of the session", async () => 
 function mcpRequest(caller: string, method: string, params: object): Request {
   return new Request("https://who.example/mcp", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "MCP-Protocol-Version": "2026-07-28", Authorization: `Bearer ${caller}` },
+    headers: { "Content-Type": "application/json", ...mcpHeaders(method, params), "MCP-Protocol-Version": "2026-07-28", Authorization: `Bearer ${caller}` },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } } }),
   });
 }

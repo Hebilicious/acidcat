@@ -53,6 +53,10 @@ module facts {
 
   pure val MCP_UNKNOWN_TOOL: int = -32602
 
+  pure val MCP_HEADER_MISMATCH: int = -32020
+
+  pure val MCP_NAMED_METHODS: List[str] = ["tools/call", "events/stream", "events/poll", "events/subscribe", "events/unsubscribe"]
+
   pure val MCP_HEARTBEAT_MIN_MS: int = 1000
 
   pure val MCP_HEARTBEAT_MAX_MS: int = 60000
@@ -119,6 +123,8 @@ module factsData {
     mcpEventsExtension: str,
     mcpSubscriptionId: str,
     mcpUnknownTool: int,
+    mcpHeaderMismatch: int,
+    mcpNamedMethods: List[str],
     mcpHeartbeatMinMs: int,
     mcpHeartbeatMaxMs: int,
     mcpEventErrors: List[(str, int)],
@@ -142,6 +148,8 @@ module factsData {
     mcpEventsExtension: MCP_EVENTS_EXTENSION,
     mcpSubscriptionId: MCP_SUBSCRIPTION_ID,
     mcpUnknownTool: MCP_UNKNOWN_TOOL,
+    mcpHeaderMismatch: MCP_HEADER_MISMATCH,
+    mcpNamedMethods: MCP_NAMED_METHODS,
     mcpHeartbeatMinMs: MCP_HEARTBEAT_MIN_MS,
     mcpHeartbeatMaxMs: MCP_HEARTBEAT_MAX_MS,
     mcpEventErrors: MCP_EVENT_ERRORS,

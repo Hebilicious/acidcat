@@ -10,7 +10,7 @@ import {
   mcpHeartbeatGrant,
   mcpSubscribeError,
 } from "@acid-cat/spec-ts";
-import type { CallFailure, JsonObject, Occurrence } from "@acid-cat/spec-ts";
+import type { CallFailure, CatalogDocument, JsonObject, Occurrence } from "@acid-cat/spec-ts";
 import { Effect, Schema, Stream } from "effect";
 import type { Option, Scope } from "effect";
 
@@ -21,8 +21,6 @@ import { maxAgeFailure, maxAgeOf, resumeOf } from "./resume.ts";
 import type { Webhooks } from "./webhooks.ts";
 
 const METHODS = new Set(["events/list", "events/stream", "events/poll", "events/subscribe", "events/unsubscribe"]);
-
-export const NAMED_METHODS = new Set(["events/stream", "events/poll", "events/subscribe", "events/unsubscribe"]);
 
 /** The capabilities member that tells a client of revision 2026-07-28 that the server serves events. */
 export const EXTENSIONS = { [MCP_EVENTS_EXTENSION]: {} };
@@ -49,6 +47,12 @@ export function eventsRequestOf(message: unknown): EventsRequest | undefined {
   const meta = params._meta;
   if (!isJsonObject(meta) || meta["io.modelcontextprotocol/protocolVersion"] !== MCP_PROTOCOL_VERSION) return undefined;
   return { id, method: message.method, params };
+}
+
+export function inputSchemaOf(view: CatalogDocument, name: unknown): JsonObject | undefined {
+  const events = view.events ?? {};
+  const input = typeof name === "string" && Object.hasOwn(events, name) ? events[name]?.input : undefined;
+  return input === undefined ? undefined : bundle(input, view.$defs ?? {});
 }
 
 export type Answer =

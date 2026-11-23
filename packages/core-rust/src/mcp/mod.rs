@@ -1,6 +1,7 @@
 //! The MCP binding (spec/bindings/mcp.md): tools, and events through the MCP events extension. The HTTP and the
 //! stdio transports share this module.
 
+mod headers;
 mod http;
 mod poll;
 mod stdio;
@@ -36,6 +37,7 @@ pub(crate) const EVENTS_EXTENSION: &str = crate::facts_generated::MCP_EVENTS_EXT
 
 pub(crate) mod codes {
     pub use crate::facts_generated::event_errors::*;
+    pub const HEADER_MISMATCH: i64 = crate::facts_generated::MCP_HEADER_MISMATCH;
     pub const METHOD_NOT_FOUND: i64 = -32601;
     pub const UNKNOWN_TOOL: i64 = crate::facts_generated::MCP_UNKNOWN_TOOL;
 }
@@ -151,21 +153,29 @@ pub(crate) fn list_tools<C: Send + Sync + 'static>(session: &Session<C>) -> Vec<
     session
         .capability_ids()
         .iter()
-        .filter(|id| session.availability(id).is_some_and(|availability| availability.is_available()))
+        .filter(|id| {
+            session
+                .availability(id)
+                .is_some_and(|availability| availability.is_available())
+        })
         .filter_map(|id| {
             let capability = view.get("capabilities")?.get(id.as_str())?;
             let mut tool = json!({
                 "name": id,
                 "description": capability.get("description").cloned().unwrap_or(Value::Null),
-                "inputSchema": bundle(capability.get("input").unwrap_or(&json!({ "type": "object" })), types),
+                "inputSchema": tool_input_schema(capability, types),
             });
             if let Some(output) = capability.get("output").map(|output| bundle(output, types))
                 && output.get("type") == Some(&json!("object"))
             {
                 tool["outputSchema"] = output;
             }
-            let mut annotations = json!({ "readOnlyHint": capability.get("readOnly") == Some(&json!(true)) });
-            for (member, hint) in [("destructive", "destructiveHint"), ("idempotent", "idempotentHint")] {
+            let mut annotations =
+                json!({ "readOnlyHint": capability.get("readOnly") == Some(&json!(true)) });
+            for (member, hint) in [
+                ("destructive", "destructiveHint"),
+                ("idempotent", "idempotentHint"),
+            ] {
                 if let Some(value) = capability.get(member) {
                     annotations[hint] = value.clone();
                 }
@@ -174,6 +184,40 @@ pub(crate) fn list_tools<C: Send + Sync + 'static>(session: &Session<C>) -> Vec<
             Some(tool)
         })
         .collect()
+}
+
+fn tool_input_schema(capability: &Value, types: &Map<String, Value>) -> Value {
+    let object = json!({ "type": "object" });
+    bundle(capability.get("input").unwrap_or(&object), types)
+}
+
+pub(crate) fn input_schema<C: Send + Sync + 'static>(
+    session: &Session<C>,
+    method: &str,
+    params: &Map<String, Value>,
+) -> Option<Value> {
+    let name = params.get("name").and_then(Value::as_str)?;
+    let view = session.view();
+    let empty = Map::new();
+    let types = view
+        .get("$defs")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    if method == "tools/call" {
+        if !session
+            .availability(name)
+            .is_some_and(|availability| availability.is_available())
+        {
+            return None;
+        }
+        let capability = view.get("capabilities")?.get(name)?;
+        return Some(tool_input_schema(capability, types));
+    }
+    if !method.starts_with("events/") || !serves_events(session) {
+        return None;
+    }
+    let input = view.get("events")?.get(name)?.get("input")?;
+    Some(bundle(input, types))
 }
 
 pub(crate) fn has_object_output<C: Send + Sync + 'static>(session: &Session<C>, id: &str) -> bool {

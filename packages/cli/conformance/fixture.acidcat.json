@@ -427,7 +427,8 @@
       "input": {
         "properties": {
           "on": {
-            "type": "boolean"
+            "type": "boolean",
+            "x-mcp-header": "On"
           }
         },
         "required": [
@@ -536,7 +537,8 @@
             "type": "integer"
           },
           "key": {
-            "type": "string"
+            "type": "string",
+            "x-mcp-header": "Key"
           }
         },
         "required": [

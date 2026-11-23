@@ -39,7 +39,7 @@ You get the JSON document only when the options are correct. With incorrect opti
 - An **error** is a broken rule. Examples: an audience that names an unknown target, an event payload that is not an object, or an id that is both a capability and an event.
 - A **warning** is a broken recommendation. Examples: a file that is not in [canonical form](../../spec/catalog.md#canonical-form), or a member with no `x-` prefix.
 
-It also checks each alias in `options.cli` against the [alias rules](../../spec/bindings/cli.md#aliases).
+It also checks each alias in `options.cli` against the [alias rules](../../spec/bindings/cli.md#aliases), and each `x-mcp-header` member in an input schema against the [header annotation rules](../../spec/bindings/mcp.md#header-annotations) of MCP. An error about `x-mcp-header` names the capability or the event, and the location of the member as a JSON pointer into the bundled input schema.
 
 The exit code is 1 with errors, and 0 otherwise. With `--strict`, warnings also give exit code 1.
 
@@ -89,6 +89,7 @@ Each flag has an equivalent option for `conform()` in code. Give one or more bin
 - [Webhook delivery](../../spec/bindings/mcp.md#webhook): Through MCP over HTTP, with the three `--webhook-*` options. The checks run an HTTPS receiver on `127.0.0.1` with that certificate. Configure the deployment to trust the certificate, allow deliveries to private addresses, and give the principal `<name>` to a request with `Authorization: Bearer <name>`. The deadline must be longer than the deployment's first retry wait, and the maximum lifetime must be longer than the deadline. Give `--webhook-other-principal` with `--webhook-max-subscriptions`: the limit check then fills a principal that no other check uses. Without the webhook options, a server that does not list `webhook` must answer `Unsupported`.
 - [Hints](../../spec/bindings/mcp.md#tools): Each MCP tool's annotations match its capability's hints.
 - [Heartbeat](../../spec/bindings/mcp.md#push): Through MCP with each transport, each `notifications/events/active` grants a `heartbeatMs`. A suggestion is clamped between 1000 and 60 000, a heartbeat comes after the grant, and a suggestion that is not valid gets `-32602`.
+- [Headers](../../spec/bindings/mcp.md#headers): Through MCP over HTTP, a missing or wrong `Mcp-Method`, `Mcp-Name` or `Mcp-Param-*` header on `tools/call` and `events/stream` gets 400 and `-32020`, and a value in the base64 form is decoded, with a leading U+FEFF kept. Every request of conform mirrors the annotated arguments of the fixture (`fixture.switch.set` and `fixture.ticks`) into their headers.
 - Properties: With fast-check, through MCP and HTTP: concurrent calls each get their own outcome, and a cancellation changes only its own call.
 
 Each poll check uses a new key, so leases from an earlier run do not change the result.

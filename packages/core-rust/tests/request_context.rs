@@ -166,6 +166,8 @@ async fn through_mcp_the_capability_gets_the_caller_of_the_request_and_the_targe
             post("/", token)
                 .header("accept", "application/json, text/event-stream")
                 .header("mcp-protocol-version", PROTOCOL_VERSION)
+                .header("mcp-method", "tools/call")
+                .header("mcp-name", "who.get")
                 .body(Full::new(bytes::Bytes::from(call.to_string())))
                 .expect("a request"),
         )

@@ -82,7 +82,7 @@ export function airconCatalog(): Catalog {
     .capability("aircon.power.set", {
       description: "Turn the unit on or off.",
       audience: everywhere,
-      ...setting("on", { type: "boolean" }),
+      ...setting("on", { type: "boolean", "x-mcp-header": "On" }),
     })
     .capability("aircon.mode.set", {
       description: "Choose how the unit runs.",

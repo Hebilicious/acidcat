@@ -8,12 +8,13 @@ import { countedFixtureLayer, fixture, fixtureLayer, heldApp, recordingApp } fro
 
 const ORIGIN = "https://fixture.example";
 
-function mcpRequest(method: string, params: object = {}, name?: string) {
+function mcpRequest(method: string, params: object = {}, name?: string, others: Record<string, string> = {}) {
   const headers = new Headers({
     Accept: "application/json, text/event-stream",
     "Content-Type": "application/json",
     "mcp-method": method,
     "mcp-protocol-version": "2026-07-28",
+    ...others,
   });
   if (name !== undefined) headers.set("mcp-name", name);
   const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} };
@@ -55,7 +56,7 @@ test("with per-request services, each request that passes the screening has its 
   const { counts, layer } = countedFixtureLayer();
   const perRequest = Mcp.toWebHandler(fixture, layer, { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN], services: "per-request" });
 
-  const set = mcpRequest("tools/call", { name: "fixture.switch.set", arguments: { on: false } }, "fixture.switch.set");
+  const set = mcpRequest("tools/call", { name: "fixture.switch.set", arguments: { on: false } }, "fixture.switch.set", { "Mcp-Param-On": "false" });
   assert.equal((await perRequest(set)).status, 200);
   const { tools } = resultOf(Tools, await answerOf(await perRequest(mcpRequest("tools/list"))));
   assert.ok(tools.some((tool) => tool.name === "fixture.toggle"));

@@ -67,6 +67,29 @@ test("the MCP binding serves one tool for each capability, on the same unit", as
   assert.deepEqual(status.structuredContent, { power: true, mode: "heat", fan: "high", targetCelsius: 24, roomCelsius: 25 });
 });
 
+test("the MCP binding gives the x-mcp-header annotation of aircon.power.set, and rejects a call whose Mcp-Param-On header does not agree with on", async () => {
+  const client = await connect("/capabilities/mcp");
+  const { tools } = await client.listTools();
+  const inputSchema = z.object({ properties: z.object({ on: z.looseObject({ "x-mcp-header": z.string() }) }) }).parse(tools.find((tool) => tool.name === "aircon.power.set")?.inputSchema);
+  assert.equal(inputSchema.properties.on["x-mcp-header"], "On");
+  const mirrored = await client.callTool({ name: "aircon.power.set", arguments: { on: true } });
+  assert.equal(mirrored.isError ?? false, false);
+  await client.close();
+
+  const call = (headers: Record<string, string>) =>
+    fetch(`${served.url}/capabilities/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2026-07-28", "Mcp-Method": "tools/call", "Mcp-Name": "aircon.power.set", ...headers },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "aircon.power.set", arguments: { on: false }, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} } } }),
+    });
+  for (const headers of [{}, { "Mcp-Param-On": "true" }]) {
+    const rejected = await call(headers);
+    assert.equal(rejected.status, 400);
+    assert.equal(Message.parse(await rejected.json()).error?.code, -32020);
+  }
+  assert.equal((await call({ "Mcp-Param-On": "false" })).status, 200);
+});
+
 test("the MCP binding serves revision 2026-07-28 only, and the wrapped binding serves the initialize handshake too", async () => {
   // The default of the official client is the initialize handshake of revision 2025-11-25. When this default becomes
   // revision 2026-07-28, this test fails: see the roadmap of spec/bindings/mcp.md.
@@ -81,6 +104,8 @@ test("the MCP binding serves revision 2026-07-28 only, and the wrapped binding s
   const status = await client.callTool({ name: "aircon.status.get", arguments: {} });
   assert.equal(status.isError ?? false, false);
   assert.equal(typeof status.structuredContent, "object");
+  const powered = await client.callTool({ name: "aircon.power.set", arguments: { on: true } });
+  assert.equal(powered.isError ?? false, false, "the wrapper mirrors the argument on into the header Mcp-Param-On");
   await client.close();
 
   const current = await connect("/capabilities/mcp-legacy");

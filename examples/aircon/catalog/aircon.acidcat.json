@@ -261,7 +261,8 @@
       "input": {
         "properties": {
           "on": {
-            "type": "boolean"
+            "type": "boolean",
+            "x-mcp-header": "On"
           }
         },
         "required": [
