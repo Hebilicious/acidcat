@@ -53,6 +53,10 @@ module facts {
 
   pure val MCP_UNKNOWN_TOOL: int = -32602
 
+  pure val MCP_HEARTBEAT_MIN_MS: int = 1000
+
+  pure val MCP_HEARTBEAT_MAX_MS: int = 60000
+
   pure val MCP_EVENT_ERRORS: List[(str, int)] = [
     ("notFound", -32023),
     ("forbidden", -32024),
@@ -115,6 +119,8 @@ module factsData {
     mcpEventsExtension: str,
     mcpSubscriptionId: str,
     mcpUnknownTool: int,
+    mcpHeartbeatMinMs: int,
+    mcpHeartbeatMaxMs: int,
     mcpEventErrors: List[(str, int)],
     mcpRejections: List[{ rejection: str, status: int, code: RpcCode }],
     startMessages: { genericCommand: str, sharedPrefix: str, resumeProperty: str },
@@ -136,6 +142,8 @@ module factsData {
     mcpEventsExtension: MCP_EVENTS_EXTENSION,
     mcpSubscriptionId: MCP_SUBSCRIPTION_ID,
     mcpUnknownTool: MCP_UNKNOWN_TOOL,
+    mcpHeartbeatMinMs: MCP_HEARTBEAT_MIN_MS,
+    mcpHeartbeatMaxMs: MCP_HEARTBEAT_MAX_MS,
     mcpEventErrors: MCP_EVENT_ERRORS,
     mcpRejections: MCP_REJECTIONS,
     startMessages: START_MESSAGES,

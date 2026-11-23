@@ -226,7 +226,7 @@ const answerEvents = <R>(
     const open: Opener<R> = (holder) => Effect.andThen(state.keep(holder), Session.make(app, sessionOptions).pipe(Scope.provide(holder), Effect.provideContext(context)));
     const principal = options.principal === undefined ? Option.none() : yield* options.principal(request);
     const answerOptions: McpEvents.AnswerOptions<R> = {
-      heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
+      defaultHeartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
       principal,
       polls: state.polls,
       webhooks: state.webhooks,
@@ -419,7 +419,7 @@ export const layerStdio = <R>(app: App.App<R>, options: StdioOptions) =>
           if (events === undefined) return;
           const context = yield* Effect.context<R>();
           const answerOptions: McpEvents.AnswerOptions<R> = {
-            heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
+            defaultHeartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
             principal: Option.none(),
             polls: yield* makePolls(options.poll),
             webhooks: undefined,

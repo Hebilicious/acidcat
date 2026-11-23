@@ -330,7 +330,7 @@ const Subscription = new GraphQLObjectType({
 
 #### Events over MCP
 
-When the view has events, the MCP binding serves the [events extension](../../spec/bindings/mcp.md#events) to `2026-07-28` clients: push (`events/stream`) through HTTP and stdio, [poll](#poll-delivery) through HTTP and stdio, and [webhook](#webhook-delivery) through HTTP when the `webhooks` option is set. The `heartbeatMs` option (default 15 000) sets the push heartbeat interval.
+When the view has events, the MCP binding serves the [events extension](../../spec/bindings/mcp.md#events) to `2026-07-28` clients: push (`events/stream`) through HTTP and stdio, [poll](#poll-delivery) through HTTP and stdio, and [webhook](#webhook-delivery) through HTTP when the `webhooks` option is set. The `heartbeatMs` option (default 15 000) sets the push heartbeat interval when the client suggests none. A client that suggests `heartbeatMs` in `events/stream` gets a grant from 1 000 to 60 000 ([Push](../../spec/bindings/mcp.md#push)).
 
 #### Poll delivery
 

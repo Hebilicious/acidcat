@@ -7,6 +7,8 @@ import {
   CLI_RESUME_FLAGS,
   HTTP_STATUS,
   MCP_EVENT_ERRORS,
+  MCP_HEARTBEAT_MAX_MS,
+  MCP_HEARTBEAT_MIN_MS,
   MCP_REJECTIONS as REJECTIONS,
   MCP_SUBSCRIPTION_ID,
 } from "./facts.generated.ts";
@@ -23,6 +25,8 @@ export {
   KEEPALIVE_MS,
   MCP_EVENT_ERRORS,
   MCP_EVENTS_EXTENSION,
+  MCP_HEARTBEAT_MAX_MS,
+  MCP_HEARTBEAT_MIN_MS,
   MCP_PROTOCOL_VERSION,
   MCP_SUBSCRIPTION_ID,
   MCP_UNKNOWN_TOOL,
@@ -529,6 +533,16 @@ export function mcpEventEntry(
 export function mcpEventParams(occurrence: Occurrence, subscriptionId: string | number): JsonObject {
   const { truncated: _, ...rest } = occurrence;
   return { ...rest, _meta: { [MCP_SUBSCRIPTION_ID]: subscriptionId } };
+}
+
+/** A valid `heartbeatMs` of `events/stream`: absent, `null`, or an integer that is 1 or more (spec/bindings/mcp.md#push). */
+export const isMcpHeartbeatSuggestion = (value: unknown): value is number | null | undefined =>
+  value === undefined || value === null || (typeof value === "number" && Number.isSafeInteger(value) && value >= 1);
+
+/** The heartbeat interval that the server grants for a valid suggestion, or `deploymentMs` with no suggestion. */
+export function mcpHeartbeatGrant(suggestion: number | null | undefined, deploymentMs: number): number {
+  if (suggestion === null || suggestion === undefined) return deploymentMs;
+  return Math.min(MCP_HEARTBEAT_MAX_MS, Math.max(MCP_HEARTBEAT_MIN_MS, suggestion));
 }
 
 /**

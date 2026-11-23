@@ -128,7 +128,7 @@ An optional `Option` field takes the value of its type, not `null`, so add `#[se
 | HTTP | `http::HttpBinding::new(app, context, HttpOptions::default())` |
 | CLI | `cli::cli_main(app, context, CliOptions::new(name, version))` |
 
-MCP through HTTP also accepts the [`initialize` handshake of earlier revisions](../../spec/bindings/mcp.md#earlier-revisions-through-http). Poll delivery is on. `McpOptions::webhooks` turns on webhook delivery, and `McpOptions::principal` gives the principal of each request.
+MCP through HTTP also accepts the [`initialize` handshake of earlier revisions](../../spec/bindings/mcp.md#earlier-revisions-through-http). Poll delivery is on. `McpOptions::heartbeat` and `McpStdioOptions::heartbeat` (default 15 seconds) set the push heartbeat interval when the client suggests none. A client that suggests `heartbeatMs` in `events/stream` gets a grant from 1 to 60 seconds ([Push](../../spec/bindings/mcp.md#push)). `McpOptions::webhooks` turns on webhook delivery, and `McpOptions::principal` gives the principal of each request.
 
 ### Serving the remote bindings
 

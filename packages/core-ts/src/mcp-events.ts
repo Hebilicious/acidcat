@@ -1,4 +1,4 @@
-import { bundle, CallFailureError, MCP_EVENT_ERRORS, MCP_EVENTS_EXTENSION, MCP_SUBSCRIPTION_ID, mcpEventEntry, mcpEventParams, mcpSubscribeError } from "@acid-cat/spec-ts";
+import { bundle, CallFailureError, isMcpHeartbeatSuggestion, MCP_EVENT_ERRORS, MCP_EVENTS_EXTENSION, MCP_SUBSCRIPTION_ID, mcpEventEntry, mcpEventParams, mcpHeartbeatGrant, mcpSubscribeError } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
 import { maxAgeOf, subscribeWithMaxAge } from "./session.ts";
@@ -79,7 +79,7 @@ export const endMessage = (error: unknown): string => (error instanceof CallFail
 export type StreamMessages = () => Promise<readonly JsonObject[] | undefined>;
 
 export interface StreamSettings {
-  readonly heartbeatMs: number;
+  readonly defaultHeartbeatMs: number;
   readonly resultMeta: JsonObject;
   readonly signal: AbortSignal;
 }
@@ -87,13 +87,16 @@ export interface StreamSettings {
 export async function startEventStream(session: Session, id: string | number, params: JsonObject, settings: StreamSettings): Promise<{ readonly error: JsonRpcError } | { readonly messages: StreamMessages; readonly cancel: () => void }> {
   const read = subscriptionParams(params);
   if ("error" in read) return read;
+  const suggestion = params["heartbeatMs"];
+  if (!isMcpHeartbeatSuggestion(suggestion)) return invalidParams("heartbeatMs must be a positive integer or null.");
+  const heartbeatMs = mcpHeartbeatGrant(suggestion, settings.defaultHeartbeatMs);
   const subscribed = await subscribeWithMaxAge(session, read.name, read.input, { signal: settings.signal, cursor: read.cursor, maxAge: read.maxAge });
   if ("kind" in subscribed) return { error: mcpSubscribeError(subscribed) };
 
   const meta = { [MCP_SUBSCRIPTION_ID]: id };
   const notification = (method: string, members: JsonObject): JsonObject => ({ jsonrpc: "2.0", method: `notifications/events/${method}`, params: { ...members, _meta: meta } });
   const result: JsonObject = { jsonrpc: "2.0", id, result: { resultType: "complete", _meta: { ...settings.resultMeta, ...meta } } };
-  const pull = idlePuller(subscribed, settings.heartbeatMs);
+  const pull = idlePuller(subscribed, heartbeatMs);
   let state: "start" | "open" | "ended" = "start";
   let lastCursor: string | null = null;
 
@@ -101,7 +104,7 @@ export async function startEventStream(session: Session, id: string | number, pa
     if (state === "ended") return undefined;
     if (state === "start") {
       state = "open";
-      return [notification("active", { truncated: false })];
+      return [notification("active", { truncated: false, heartbeatMs })];
     }
     const pulled = await pull();
     if ("idle" in pulled) return [notification("heartbeat", { cursor: lastCursor })];
@@ -117,7 +120,7 @@ export async function startEventStream(session: Session, id: string | number, pa
     if (occurrence.cursor !== undefined) lastCursor = occurrence.cursor;
     const event: JsonObject = { jsonrpc: "2.0", method: "notifications/events/event", params: mcpEventParams(occurrence, id) };
     if (occurrence.truncated !== true) return [event];
-    return [notification("active", { truncated: true, ...(occurrence.cursor === undefined ? {} : { cursor: occurrence.cursor }) }), event];
+    return [notification("active", { truncated: true, ...(occurrence.cursor === undefined ? {} : { cursor: occurrence.cursor }), heartbeatMs }), event];
   };
   return { messages, cancel: () => void subscribed.return() };
 }

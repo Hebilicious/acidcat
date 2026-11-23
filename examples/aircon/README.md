@@ -202,8 +202,10 @@ curl -X PATCH http://127.0.0.1:3000/status -H 'Content-Type: application/json' -
 # MCP, with events/stream of revision 2026-07-28
 curl -N http://127.0.0.1:3000/mcp -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' \
   -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: events/stream' -H 'Mcp-Name: aircon.status.changed' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"events/stream","params":{"name":"aircon.status.changed","arguments":{},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"events/stream","params":{"name":"aircon.status.changed","arguments":{},"heartbeatMs":30000,"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
+
+The MCP stream starts with `notifications/events/active`, which grants the suggested `heartbeatMs: 30000`. With no `heartbeatMs`, the grant is 15000. The server sends `notifications/events/heartbeat` each time the stream is idle for that interval ([Push](../../spec/bindings/mcp.md#push)).
 
 A Cap'n Web client:
 

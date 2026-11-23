@@ -96,10 +96,29 @@ test("MCP through HTTP: maxAgeMs reaches the provider, and an idle stream gets h
   const reader = sseReader(await handler(request("events/stream", { name: "sensor.reading.changed", cursor: "0", maxAgeMs: 1000 })));
   const read = async () => objectOf((await reader.next())?.data ?? "null");
   assert.equal(member(await read(), "params")["truncated"], false);
-  assert.deepEqual(await read(), { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: true, cursor: "2", _meta: sub(1) } });
+  assert.deepEqual(await read(), { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: true, cursor: "2", heartbeatMs: 20, _meta: sub(1) } });
   await read();
   assert.deepEqual(await read(), { jsonrpc: "2.0", method: "notifications/events/heartbeat", params: { cursor: "2", _meta: sub(1) } });
   await reader.cancel();
+});
+
+test("MCP through HTTP: notifications/events/active grants the heartbeatMs that the request suggests, between 1000 and 60000, or the heartbeatMs of the deployment", async () => {
+  const { handler, request, rpc } = httpServer(new Sensors(), 15_000);
+  const grant = async (heartbeatMs?: number) => {
+    const reader = sseReader(await handler(request("events/stream", { name: "sensor.reading.changed", ...(heartbeatMs === undefined ? {} : { heartbeatMs }) })));
+    try {
+      return objectOf((await reader.next())?.data ?? "null");
+    } finally {
+      await reader.cancel();
+    }
+  };
+  assert.deepEqual(await grant(), { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: false, heartbeatMs: 15_000, _meta: sub(1) } });
+  for (const [suggested, granted] of [[5, 1000], [999_999, 60_000], [2500, 2500]] as const) {
+    assert.equal(member(await grant(suggested), "params")["heartbeatMs"], granted, String(suggested));
+  }
+  for (const heartbeatMs of [0, -1, 1.5, "x"]) {
+    assert.equal(member(await rpc("events/stream", { name: "sensor.reading.changed", heartbeatMs }), "error")["code"], -32602, String(heartbeatMs));
+  }
 });
 
 test("MCP through HTTP: a client with the initialize handshake gets no events", async () => {
@@ -164,6 +183,7 @@ test("MCP through stdio: an idle stream gets heartbeats", async () => {
   const heartbeat = () => io.of(1).find((message) => message["method"] === "notifications/events/heartbeat");
   try {
     await until(() => heartbeat() !== undefined);
+    assert.deepEqual(io.of(1)[0], { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: false, heartbeatMs: 20, _meta: sub(1) } });
     assert.deepEqual(heartbeat(), { jsonrpc: "2.0", method: "notifications/events/heartbeat", params: { cursor: null, _meta: sub(1) } });
   } finally {
     io.end();

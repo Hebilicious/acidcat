@@ -161,6 +161,8 @@ const mcpProtocolVersion = string(field(facts, "mcpProtocolVersion"));
 const mcpEventsExtension = string(field(facts, "mcpEventsExtension"));
 const mcpSubscriptionId = string(field(facts, "mcpSubscriptionId"));
 const mcpUnknownTool = integer(field(facts, "mcpUnknownTool"));
+const mcpHeartbeatMinMs = integer(field(facts, "mcpHeartbeatMinMs"));
+const mcpHeartbeatMaxMs = integer(field(facts, "mcpHeartbeatMaxMs"));
 const mcpEventErrors = numbered(field(facts, "mcpEventErrors"));
 const mcpRejections = list(field(facts, "mcpRejections")).map((each) => {
   const code = variant(field(each, "code"), ["NoCode", "Code"]);
@@ -412,6 +414,10 @@ const specFacts = [
   "",
   `export const MCP_UNKNOWN_TOOL = ${mcpUnknownTool};`,
   "",
+  `export const MCP_HEARTBEAT_MIN_MS = ${mcpHeartbeatMinMs};`,
+  "",
+  `export const MCP_HEARTBEAT_MAX_MS = ${mcpHeartbeatMaxMs};`,
+  "",
   typescriptRecord("MCP_EVENT_ERRORS", numbers(mcpEventErrors)),
   "",
   typescriptRecord(
@@ -526,6 +532,8 @@ const rustFacts = [
   rustConst("MCP_EVENTS_EXTENSION", "&str", rustString(mcpEventsExtension)),
   rustConst("MCP_SUBSCRIPTION_ID", "&str", rustString(mcpSubscriptionId)),
   rustConst("MCP_UNKNOWN_TOOL", "i64", String(mcpUnknownTool)),
+  rustConst("MCP_HEARTBEAT_MIN_MS", "u64", String(mcpHeartbeatMinMs)),
+  rustConst("MCP_HEARTBEAT_MAX_MS", "u64", String(mcpHeartbeatMaxMs)),
   "",
   "pub(crate) mod event_errors {",
   ...mcpEventErrors.map(([name, code]) => `    pub const ${screaming(name)}: i64 = ${code};`),
