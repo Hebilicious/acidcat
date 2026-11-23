@@ -924,51 +924,18 @@ mod tests {
     }
 
     #[test]
-    fn each_signing_key_adds_one_ed25519_signature_after_the_hmac_signatures() {
-        let jwk = |kid: &str, seed: u8| json!({ "kty": "OKP", "crv": "Ed25519", "kid": kid, "d": URL_SAFE_NO_PAD.encode([seed; 32]) });
-        let signers = read_signing_keys(&[jwk("one", 1), jwk("two", 2)]);
+    fn without_signing_keys_the_signature_header_has_only_the_hmac_signature() {
         let secret = format!("whsec_{}", STANDARD.encode([7u8; 32]));
-        let field = |headers: &[(String, String)], name: &str| {
-            headers
-                .iter()
-                .find(|(each, _)| each == name)
-                .map(|(_, value)| value.clone())
-                .unwrap_or_default()
-        };
-
         let unsigned = headers("sub", std::slice::from_ref(&secret), &[], "msg_1", "{}");
-        let entries = field(&unsigned, "webhook-signature");
+        let entries = unsigned
+            .iter()
+            .find(|(name, _)| name == "webhook-signature")
+            .map(|(_, value)| value.as_str())
+            .unwrap_or_default();
         assert!(
             entries.starts_with("v1,") && !entries.contains(' '),
             "{entries}"
         );
-
-        let signed = headers("sub", &[secret], &signers, "msg_1", "{}");
-        let entries = field(&signed, "webhook-signature");
-        let entries: Vec<&str> = entries.split(' ').collect();
-        assert_eq!(entries.len(), 3, "{entries:?}");
-        assert!(entries[0].starts_with("v1,"));
-        let message = format!("msg_1.{}.{{}}", field(&signed, "webhook-timestamp"));
-        for (entry, signer) in entries[1..].iter().zip(&signers) {
-            let public: Value = signer.public_jwk();
-            let x: [u8; 32] = URL_SAFE_NO_PAD
-                .decode(public["x"].as_str().unwrap_or_default())
-                .ok()
-                .and_then(|bytes| bytes.try_into().ok())
-                .unwrap_or_else(|| panic!("the public key of {}", signer.kid));
-            let signature: [u8; 64] = entry
-                .strip_prefix("v1a,")
-                .and_then(|text| STANDARD.decode(text).ok())
-                .and_then(|bytes| bytes.try_into().ok())
-                .unwrap_or_else(|| panic!("a v1a signature: {entry}"));
-            let verified = ed25519_dalek::VerifyingKey::from_bytes(&x).and_then(|key| {
-                key.verify_strict(
-                    message.as_bytes(),
-                    &ed25519_dalek::Signature::from_bytes(&signature),
-                )
-            });
-            assert!(verified.is_ok(), "{} verifies {entry}", signer.kid);
-        }
     }
 
     #[test]

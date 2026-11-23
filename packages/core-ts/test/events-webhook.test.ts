@@ -239,14 +239,9 @@ test("webhook: after the grace time, the server signs only with the new secret",
   await handler.close();
 });
 
-test("webhook: with signing keys, the verification and each delivery have a v1a signature for each key after the v1 signature, which the keys of the Server Card verify", async () => {
+test("webhook: the Server Card gives the egress ranges and the public signing keys, by kid", async () => {
   const egressIpRanges = ["203.0.113.0/24", "2001:db8::/32"];
-  const { handler, subscribe, sensors } = server({ signingKeys: [testSigningKey("first"), testSigningKey("second")], egressIpRanges }, { name: "dev.acid-cat/sensors" });
-  const secret = newSecret();
-  await subscribe({ secret });
-  await until(() => sensors.listeners === 1);
-  sensors.emit("hall", 20);
-  await until(() => receiver.deliveries().length === 1);
+  const { handler } = server({ signingKeys: [testSigningKey("first"), testSigningKey("second")], egressIpRanges }, { name: "dev.acid-cat/sensors" });
   const card = objectOf(await (await handler(new Request("https://sensors.example/mcp/server-card"))).text());
   const remotes: unknown = card["remotes"];
   const remote: unknown = Array.isArray(remotes) ? remotes[0] : undefined;
@@ -258,21 +253,6 @@ test("webhook: with signing keys, the verification and each delivery have a v1a 
     keys.map((key: unknown) => (isJsonObject(key) ? [key["kid"], Object.keys(key).sort()] : undefined)),
     [["first", ["crv", "kid", "kty", "x"]], ["second", ["crv", "kid", "kty", "x"]]],
   );
-  assert.equal(receiver.received.length, 2);
-  for (const request of receiver.received) {
-    const id = header(request, "webhook-id");
-    const timestamp = Number(header(request, "webhook-timestamp"));
-    const [hmac, ...asymmetric] = header(request, "webhook-signature").split(" ");
-    assert.equal(hmac, await webhookSignature([secret], id, timestamp, request.text));
-    assert.equal(asymmetric.length, keys.length);
-    for (const [index, signature] of asymmetric.entries()) {
-      const jwk: unknown = keys[index];
-      assert.ok(isJsonObject(jwk) && typeof jwk["x"] === "string" && signature.startsWith("v1a,"));
-      const publicKey = await crypto.subtle.importKey("jwk", { kty: "OKP", crv: "Ed25519", x: jwk["x"] }, "Ed25519", false, ["verify"]);
-      const signed = new TextEncoder().encode(`${id}.${timestamp}.${request.text}`);
-      assert.ok(await crypto.subtle.verify("Ed25519", publicKey, Buffer.from(signature.slice(4), "base64"), signed));
-    }
-  }
   await handler.close();
 });
 

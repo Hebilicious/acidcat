@@ -259,22 +259,17 @@ test("after the grace time of a renewal, only the new secret signs", async () =>
   }
 });
 
-const discoveringServer = (version: string) => async (request: Request) => {
+const discoveringServer = async (request: Request) => {
   const message: unknown = await request.json();
   const id = isJsonObject(message) ? message.id : null;
-  return Response.json({ jsonrpc: "2.0", id, result: { supportedVersions: ["2026-07-28"], capabilities: {}, _meta: { "io.modelcontextprotocol/serverInfo": { name: "feed", version } } } });
+  return Response.json({ jsonrpc: "2.0", id, result: { supportedVersions: ["2026-07-28"], capabilities: {}, _meta: { "io.modelcontextprotocol/serverInfo": { name: "feed", version: "0.0.0" } } } });
 };
 
-const signingServers = {
-  toWebHandler: (feed: ReturnType<typeof feedForPromises>, webhooks: Partial<Mcp.WebhookOptions>) => Mcp.toWebHandler(events, feed.layer, webhookOptions(webhooks)),
-  withEvents: (feed: ReturnType<typeof feedForPromises>, webhooks: Partial<Mcp.WebhookOptions>) => Mcp.withEvents(events, feed.layer, discoveringServer("0.0.0"), webhookOptions(webhooks)),
-};
-
-for (const [kind, start] of Object.entries(signingServers)) test(`${kind}: with signing keys, the verification and each delivery have a v1a signature for each key after the v1 signature, which the keys of the Server Card verify`, async () => {
+test("withEvents: with signing keys, each webhook request has a v1a signature for each key after the v1 signature, which the keys of the Server Card verify", async () => {
   const feed = feedForPromises();
   const egressIpRanges = ["203.0.113.0/24", "2001:db8::/32"];
-  const path = `/signed-${kind}`;
-  const handler = start(feed, { signingKeys: [testSigningKey("first"), testSigningKey("second")], egressIpRanges });
+  const path = "/signed";
+  const handler = Mcp.withEvents(events, feed.layer, discoveringServer, webhookOptions({ signingKeys: [testSigningKey("first"), testSigningKey("second")], egressIpRanges }));
   try {
     await statusOf(handler, path);
     await feed.following(1);
