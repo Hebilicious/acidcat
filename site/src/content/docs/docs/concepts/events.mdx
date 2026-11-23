@@ -5,22 +5,16 @@ sidebar:
   order: 14
 ---
 
+import { TabItem, Tabs } from "@astrojs/starlight/components";
+import CatalogExample from "../../../../components/docs/CatalogExample.astro";
+
 An **event** is a kind of thing that happens in the application, and that clients can follow, for example `aircon.status.changed`. A client **subscribes** to an event with an input. Then it gets an **occurrence** each time that the thing happens, until the subscription ends.
 
 Use an event when clients must know about a change as it happens. Use a capability for a call that gives one result.
 
 ## Declare an event
 
-```json title="aircon.acidcat.json (part)"
-"events": {
-  "aircon.status.changed": {
-    "description": "The status of the unit changed.",
-    "audience": ["app", "taskbar", "cli", "mcp", "api"],
-    "input": { "properties": {}, "type": "object" },
-    "payload": { "$ref": "#/$defs/Status" }
-  }
-}
-```
+<CatalogExample event="aircon.status.changed" />
 
 | Member | Required | Value |
 | --- | --- | --- |
@@ -33,9 +27,48 @@ The payload is always an object. An object can get new members, and old clients 
 
 ## Occurrences
 
-Each occurrence has this form:
+Each occurrence has the same members in every core and on every surface. The JSON tab shows the form on the network. The other tabs show how a client reads occurrences in the same process.
 
-```json
+<Tabs syncKey="core">
+<TabItem label="TypeScript">
+
+```ts title="@acid-cat/core-ts"
+const status = session.eventHandle(statusChanged);
+for await (const occurrence of await status.subscribe({})) {
+  console.log(occurrence.eventId, occurrence.timestamp, occurrence.data, occurrence.cursor);
+}
+```
+
+</TabItem>
+<TabItem label="Effect">
+
+```ts title="@acid-cat/core-effect"
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const session = yield* Session.make(aircon, { target: "app" });
+    const changes = yield* session.follow(statusChanged, {});
+    yield* Stream.runForEach(changes, (occurrence) => Console.log(occurrence.eventId, occurrence.data));
+  }),
+);
+```
+
+</TabItem>
+<TabItem label="Rust">
+
+```rust title="acid-cat-core"
+let session = Session::open(&app, "app", unit);
+let mut occurrences = session
+    .subscribe("aircon.status.changed", json!({}), SubscribeOptions::default())
+    .expect("the subscription starts");
+while let Some(Ok(occurrence)) = occurrences.next().await {
+    println!("{} {} {}", occurrence.event_id, occurrence.timestamp, occurrence.data);
+}
+```
+
+</TabItem>
+<TabItem label="JSON">
+
+```json title="An occurrence"
 {
   "eventId": "41",
   "name": "aircon.status.changed",
@@ -45,7 +78,11 @@ Each occurrence has this form:
 }
 ```
 
+</TabItem>
+</Tabs>
+
 - `data` matches the payload schema.
+- `eventId` identifies the occurrence, and `timestamp` gives its time. The Rust core names the field `event_id`.
 - `cursor` is optional. It marks a position. A client gives it back to **resume** a subscription after that position.
 - `truncated: true` tells the client that occurrences before this one are missing, for example because the client read too slowly.
 

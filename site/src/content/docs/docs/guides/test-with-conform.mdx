@@ -7,6 +7,7 @@ sidebar:
 ---
 
 import { Aside, Steps } from "@astrojs/starlight/components";
+import PackageInstall from "../../../../components/docs/PackageInstall.astro";
 
 `acid-cat conform` tests a running implementation from the outside, through each binding. It does not read your code. It works for any core in any language, and for a binding that you write yourself. Each core in the repository runs it in its tests.
 
@@ -20,16 +21,11 @@ import { Aside, Steps } from "@astrojs/starlight/components";
 
 1. **Install the command line.**
 
-   ```sh
-   pnpm add -D @acid-cat/cli
-   ```
+   <PackageInstall packages={["@acid-cat/cli"]} dev />
 
    It needs Node.js 24 or later. To test WebMCP, also install Playwright and Chromium:
 
-   ```sh
-   pnpm add -D playwright
-   pnpm exec playwright install chromium
-   ```
+   <PackageInstall packages={["playwright"]} dev run="playwright install chromium" />
 
 2. **Serve the conformance fixture.**
 

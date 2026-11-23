@@ -7,12 +7,11 @@ sidebar:
 ---
 
 import { Aside } from "@astrojs/starlight/components";
+import PackageInstall from "../../../../components/docs/PackageInstall.astro";
 
 `@acid-cat/core-ts` is a core in plain TypeScript, with no Effect dependency. A capability is an async function, and an event is an async iterable. Schemas use any [Standard Schema](https://standardschema.dev) library, such as Zod, Valibot or ArkType. The application writes its own catalog from its code.
 
-```sh
-pnpm add @acid-cat/core-ts
-```
+<PackageInstall packages={["@acid-cat/core-ts"]} />
 
 The package needs Node.js 24 or later. Start with the [Quick start](/docs/quick-start/) if you have not used it before.
 

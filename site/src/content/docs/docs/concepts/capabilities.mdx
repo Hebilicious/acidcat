@@ -5,30 +5,15 @@ sidebar:
   order: 12
 ---
 
+import CatalogExample from "../../../../components/docs/CatalogExample.astro";
+
 A **capability** is one operation that a client can do, for example `aircon.power.set`. One call to a capability is an **invocation**: an id and an input go in, and one outcome comes out.
 
 ## Anatomy of a capability
 
-```json title="aircon.acidcat.json (part)"
-"aircon.mode.set": {
-  "description": "Choose how the unit runs.",
-  "audience": ["app", "cli", "mcp", "api"],
-  "input": {
-    "properties": { "mode": { "$ref": "#/$defs/Mode" } },
-    "required": ["mode"],
-    "type": "object"
-  },
-  "failures": {
-    "Offline": { "$ref": "#/$defs/Offline" },
-    "PoweredOff": {
-      "description": "The unit must be on before its mode can change.",
-      "type": "object"
-    }
-  },
-  "destructive": true,
-  "idempotent": true
-}
-```
+This is `aircon.mode.set` from the air conditioner, in each source and in the JSON that each source writes:
+
+<CatalogExample capability="aircon.mode.set" />
 
 | Member | What it gives |
 | --- | --- |

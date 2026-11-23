@@ -7,13 +7,15 @@ sidebar:
 ---
 
 import { Aside } from "@astrojs/starlight/components";
+import PackageInstall from "../../../../components/docs/PackageInstall.astro";
 
 `@acid-cat/core-effect` is a core for [Effect](https://effect.website) users. A capability is an Effect program with Effect Schema types, an event is a `Stream`, a session is a scope, services are layers, and a cancellation interrupts a fiber. The package writes the catalog from your declarations. Without Effect, use the [TypeScript core](/docs/guides/serve-with-core-ts/).
 
-```sh
-pnpm add @acid-cat/core-effect effect
-pnpm add @effect/platform-node  # only for NodeCli and NodeMcp, from @acid-cat/core-effect/node
-```
+<PackageInstall packages={["@acid-cat/core-effect", "effect"]} />
+
+`NodeCli` and `NodeMcp`, from `@acid-cat/core-effect/node`, also need `@effect/platform-node`:
+
+<PackageInstall packages={["@effect/platform-node"]} />
 
 `effect` (version 4) and `@effect/platform-node` are peer dependencies, so the application and the core share one Effect.
 

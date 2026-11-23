@@ -31,6 +31,10 @@ The homepage, the documentation, the specification and the list of packages of A
 | `src/components/Mark.astro`, `src/assets/mark.svg`, `public/favicon.svg`, `art/logo/` | The logo (a brass cat in profile), the favicon, and the explorations behind them |
 | `src/lib/geometry.ts` | Pure functions that compute gears |
 | `src/content/docs/docs/` | The documentation, served under `/docs/` |
+| `src/lib/catalog-examples.ts`, `src/components/docs/` | Read each definition of the aircon catalog from its five sources and its canonical JSON at build time, and show them in language tabs; tabs for the package managers of Node |
+| `src/components/site/` | The header and the font preloads that the homepage and the docs share |
+| `src/route-middleware.ts` | Gives `/docs/` and `/spec/` their own sidebar |
+| `src/lib/spec-diagrams.ts` | The SVG diagram that replaces the ASCII diagram of the specification |
 | `src/lib/spec-pages.ts`, `src/content.config.ts` | Load each file of `spec/` into the docs collection at build time, served under `/spec/` |
 | `src/pages/packages/index.astro`, `src/lib/packages.ts` | The list of published packages, served under `/packages/` |
 | `src/lib/code-theme.ts`, `src/styles/starlight.css`, `src/components/starlight/` | The palette of the site in the docs: colors, fonts, code blocks, and the dark theme only |

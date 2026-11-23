@@ -6,6 +6,9 @@ sidebar:
   label: acid-cat command
 ---
 
+import { TabItem, Tabs } from "@astrojs/starlight/components";
+import PackageInstall from "../../../../components/docs/PackageInstall.astro";
+
 The `acid-cat` command comes from the npm package `@acid-cat/cli`. It checks catalogs and tests implementations. Run it at build time, in CI or by hand. Do not use it in an application at run time.
 
 ```sh
@@ -21,10 +24,7 @@ acid-cat conform --mcp <url> [--mcp-handshake] --mcp-stdio "<command>" --http <u
 
 ## Install
 
-```sh
-pnpm add -D @acid-cat/cli
-pnpm exec acid-cat check aircon.acidcat.json
-```
+<PackageInstall packages={["@acid-cat/cli"]} dev run="acid-cat check aircon.acidcat.json" />
 
 - It needs Node.js 24 or later.
 - `acid-cat conform --webmcp <url>` also needs [Playwright](https://playwright.dev) and Chromium.
@@ -100,19 +100,53 @@ A failed check of a SHOULD rule gives a warning, marked `!`, and passes. The exi
 
 `check` and `conform` take `--output human` (the default) or `--output json`. Human output is text for a person. JSON output is one JSON document on standard output, for a script or an agent, and nothing on standard error. The exit code is the same in both modes.
 
-`check` writes:
+`check` writes the first form below. In code, `check(document, text)` from `@acid-cat/cli` checks one catalog, and returns its errors and warnings. With `text`, it also checks the canonical form.
 
-```json
+<Tabs syncKey="cli-or-code">
+<TabItem label="Command line">
+
+```json title="acid-cat check --output json aircon.acidcat.json"
 { "conforms": false, "catalogs": [{ "file": "aircon.acidcat.json", "errors": ["…"], "warnings": [] }] }
 ```
 
+</TabItem>
+<TabItem label="TypeScript">
+
+```ts title="check.ts"
+import { readFile } from "node:fs/promises";
+import { check } from "@acid-cat/cli";
+
+const text = await readFile("aircon.acidcat.json", "utf8");
+const report = check(JSON.parse(text), text);
+console.log(report.errors, report.warnings);
+```
+
+</TabItem>
+</Tabs>
+
 `conforms` is `false` when the exit code is 1. A file that cannot be read, or that is not JSON, is a catalog with one error.
 
-`conform` writes:
+`conform` writes the first form below. In code, `conform(options)` returns the list of checks, with the same members.
 
-```json
+<Tabs syncKey="cli-or-code">
+<TabItem label="Command line">
+
+```json title="acid-cat conform --output json --http http://127.0.0.1:3000/api"
 { "passed": 0, "failed": 0, "warnings": 0, "checks": [{ "binding": "…", "name": "…", "rule": "…", "passed": true }] }
 ```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```ts title="conform.ts"
+import { conform } from "@acid-cat/cli";
+
+const checks = await conform({ http: "http://127.0.0.1:3000/api" });
+for (const check of checks) console.log(check.binding, check.name, check.passed, check.detail);
+```
+
+</TabItem>
+</Tabs>
 
 Each check can also have `warning` and `detail`. A check with a warning has `"passed": true` and `"warning": true`, and counts in both `passed` and `warnings`.
 

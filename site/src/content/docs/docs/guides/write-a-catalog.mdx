@@ -6,6 +6,8 @@ sidebar:
 ---
 
 import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+import CatalogExample from "../../../../components/docs/CatalogExample.astro";
+import PackageInstall from "../../../../components/docs/PackageInstall.astro";
 
 The catalog is a JSON document, but you seldom write the JSON yourself. Write a **source**, and let a tool write the JSON. A source finds errors before it writes the file, shares types, and gives the same bytes each time.
 
@@ -39,49 +41,9 @@ A schema is a plain JSON Schema object in every language. Declaring a shared typ
 Each example declares one target, one shared type, one capability and one event, then writes the catalog.
 
 <Tabs syncKey="catalog-language">
-<TabItem label="Pkl">
-
-The Pkl package is `package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog`. Replace `<version>` with the version of a release of `acid-cat-catalog`.
-
-```pkl title="greenhouse.pkl"
-amends "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@<version>#/Catalog.pkl"
-
-targets {
-  ["panel"] { bindings { "typescript" } }
-}
-
-capabilities {
-  ["greenhouse.vents.set"] {
-    description = "Open the roof vents to a percentage."
-    audience { "panel" }
-  }
-}
-
-events {
-  ["greenhouse.tank.low"] {
-    description = "The rain-water tank fell below a level. The occurrence gives the litres that are left."
-    audience { "panel" }
-    payload {
-      type = "object"
-      properties { litres { type = "number" } }
-    }
-  }
-}
-```
-
-Pkl writes JSON in its own key order. Render the module, then put it in canonical form:
-
-```sh
-pkl eval greenhouse.pkl --output-path greenhouse.acidcat.json
-acid-cat format --write greenhouse.acidcat.json
-```
-
-</TabItem>
 <TabItem label="TypeScript">
 
-```sh
-pnpm add -D @acid-cat/catalog
-```
+<PackageInstall packages={["@acid-cat/catalog"]} dev />
 
 ```ts title="library.ts"
 import { writeFile } from "node:fs/promises";
@@ -211,121 +173,53 @@ std::fs::write("acidcat.catalog.json", catalog.render().expect("the catalog conf
 `destructive` and `idempotent` are `Option<bool>`. The full example is [`examples/player.rs`](https://github.com/Hebilicious/acidcat/blob/main/packages/catalog/rust/examples/player.rs).
 
 </TabItem>
+<TabItem label="Pkl">
+
+The Pkl package is `package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog`. Replace `<version>` with the version of a release of `acid-cat-catalog`.
+
+```pkl title="greenhouse.pkl"
+amends "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@<version>#/Catalog.pkl"
+
+targets {
+  ["panel"] { bindings { "typescript" } }
+}
+
+capabilities {
+  ["greenhouse.vents.set"] {
+    description = "Open the roof vents to a percentage."
+    audience { "panel" }
+  }
+}
+
+events {
+  ["greenhouse.tank.low"] {
+    description = "The rain-water tank fell below a level. The occurrence gives the litres that are left."
+    audience { "panel" }
+    payload {
+      type = "object"
+      properties { litres { type = "number" } }
+    }
+  }
+}
+```
+
+Pkl writes JSON in its own key order. Render the module, then put it in canonical form:
+
+```sh
+pkl eval greenhouse.pkl --output-path greenhouse.acidcat.json
+acid-cat format --write greenhouse.acidcat.json
+```
+
+</TabItem>
 </Tabs>
 
 ## One catalog, five languages
 
-The air conditioner writes one catalog in all five languages, and its test checks that each language gives the same bytes. Here is the capability `aircon.power.set` in each source. Each source first declares the shared type `Offline` and the list of targets `everywhere`.
+The air conditioner writes one catalog in all five languages, and its test checks that each language gives the same bytes. Here is the capability `aircon.power.set` in each source, with the helper `setting` that it calls, and the JSON that each source writes. Each source first declares the shared type `Offline` and the list of targets `everywhere`.
 
-<Tabs syncKey="catalog-language">
-<TabItem label="Pkl">
+<CatalogExample capability="aircon.power.set" />
 
-```pkl title="aircon.pkl (part)"
-local function setting(text: String, name: String, property: Dynamic) = new Capability {
-  description = text
-  audience = controls
-  input {
-    type = "object"
-    required { name }
-    properties { [name] = property }
-  }
-  failures { ["Offline"] = module.ref("Offline") }
-  destructive = true
-  idempotent = true
-}
-
-capabilities {
-  ["aircon.power.set"] = (setting("Turn the unit on or off.", "on", new Dynamic { type = "boolean" })) {
-    audience = everywhere
-  }
-}
-```
-
-[`aircon.pkl`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/catalog/aircon.pkl)
-
-</TabItem>
-<TabItem label="TypeScript">
-
-```ts title="typescript.ts (part)"
-const setting = (name: string, property: Schema) => ({
-  input: { type: "object", required: [name], properties: { [name]: property } },
-  failures: { Offline: offline },
-  destructive: true,
-  idempotent: true,
-});
-
-catalog.capability("aircon.power.set", {
-  description: "Turn the unit on or off.",
-  audience: everywhere,
-  ...setting("on", { type: "boolean" }),
-});
-```
-
-[`typescript.ts`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/catalog/typescript.ts)
-
-</TabItem>
-<TabItem label="Python">
-
-```python title="python.py (part)"
-def setting(name: str, prop: Schema) -> Schema:
-    return {"type": "object", "required": [name], "properties": {name: prop}}
-
-catalog.capability(
-    "aircon.power.set",
-    description="Turn the unit on or off.",
-    audience=everywhere,
-    input=setting("on", {"type": "boolean"}),
-    failures={"Offline": offline},
-    destructive=True,
-    idempotent=True,
-)
-```
-
-[`python.py`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/catalog/python.py)
-
-</TabItem>
-<TabItem label="Go">
-
-```go title="main.go (part)"
-setting := func(name string, property schema) schema {
-	return schema{"type": "object", "required": []any{name}, "properties": schema{name: property}}
-}
-offlineOnly := map[string]schema{"Offline": offline}
-
-c.Capability("aircon.power.set", catalog.Capability{
-	Description: "Turn the unit on or off.",
-	Audience:    everywhere,
-	Input:       setting("on", schema{"type": "boolean"}),
-	Failures:    offlineOnly,
-	Destructive: new(true),
-	Idempotent:  new(true),
-})
-```
-
-[`go/main.go`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/catalog/go/main.go)
-
-</TabItem>
-<TabItem label="Rust">
-
-```rust title="main.rs (part)"
-let setting = |name: &str, property: Schema| json!({ "type": "object", "required": [name], "properties": { name: property } });
-let offline_only = || vec![("Offline".to_owned(), offline.clone())];
-
-catalog.capability("aircon.power.set", Capability {
-    description: "Turn the unit on or off.".into(),
-    audience: everywhere.clone(),
-    input: Some(setting("on", json!({ "type": "boolean" }))),
-    failures: offline_only(),
-    destructive: Some(true),
-    idempotent: Some(true),
-    ..Capability::default()
-});
-```
-
-[`rust/src/main.rs`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/catalog/rust/src/main.rs)
-
-</TabItem>
-</Tabs>
+The sources are in [`examples/aircon/catalog`](https://github.com/Hebilicious/acidcat/tree/main/examples/aircon/catalog).
 
 ## Check the result
 

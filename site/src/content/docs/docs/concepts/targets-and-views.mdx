@@ -5,27 +5,15 @@ sidebar:
   order: 13
 ---
 
+import CatalogExample from "../../../../components/docs/CatalogExample.astro";
+
 A **target** is a group of clients that can use a set of capabilities, for example `app`, `cli` or `mcp`. The **view** of a target is the part of the catalog that its clients can see. Each binding serves the view of its target, and nothing more.
 
 ## Targets in the air conditioner
 
-The air conditioner has five targets:
+The air conditioner has five targets: `app`, `taskbar`, `cli`, `mcp` and `api`. Here are three of them:
 
-```json title="aircon.acidcat.json (part)"
-"targets": {
-  "api": { "bindings": ["http"], "description": "Home-automation systems and scripts." },
-  "app": {
-    "bindings": ["typescript", "webmcp", "acme:swift", "acme:kotlin"],
-    "description": "The phone, desktop and web apps that people use."
-  },
-  "cli": { "bindings": ["cli"], "options": { "cli": { "...": "..." } } },
-  "mcp": { "bindings": ["mcp"], "description": "Agents, through an MCP server." },
-  "taskbar": {
-    "bindings": ["typescript"],
-    "description": "A desktop taskbar widget showing the status and a power toggle."
-  }
-}
-```
+<CatalogExample target={["app", "cli", "mcp"]} />
 
 | Member | Required | Value |
 | --- | --- | --- |

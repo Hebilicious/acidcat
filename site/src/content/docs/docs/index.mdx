@@ -7,6 +7,8 @@ sidebar:
 ---
 
 import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import CatalogExample from "../../../components/docs/CatalogExample.astro";
+import CatalogFlow from "../../../components/diagrams/CatalogFlow.astro";
 
 AcidCat lists the operations of an application once, in a **catalog**. Each surface of the application comes from that catalog: a command line, an MCP server for AI agents, an HTTP API, tools in a web page, and typed code.
 
@@ -34,17 +36,13 @@ An operation in the catalog is a **capability**. This table shows one capability
 | HTTP | `POST /capabilities/aircon.power.set` |
 | TypeScript | A typed function, for example `execute({ on: true })` |
 
+The catalog declares the capability one time. Write it in the source that you prefer. Each source writes the same JSON:
+
+<CatalogExample capability="aircon.power.set" />
+
 ## How the parts fit
 
-```
-                 catalog (JSON)
-     what the application can do, and for whom
-                       │
-        ┌──────────────┼───────────────┐
-     provider       bindings         clients
-  runs the         rules for each   web, mobile, desktop,
-  operations       surface          CLI, MCP, API, …
-```
+<CatalogFlow />
 
 - The **catalog** is the contract. It is a JSON document that you check at build time. A program does not read it at run time.
 - A **binding** is the set of rules for one kind of surface, for example MCP or a command line.

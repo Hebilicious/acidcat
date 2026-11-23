@@ -363,3 +363,20 @@ site-search button[data-open-modal] {
 .mobile-preferences:has(> :only-child:empty) {
   display: none;
 }
+
+starlight-tabs [role="tablist"] {
+  flex-wrap: wrap;
+  border-bottom-color: color-mix(in oklch, var(--palette-brass-400) 25%, transparent);
+}
+
+starlight-tabs [role="tab"] {
+  font-family: var(--font-family-label);
+  font-size: var(--typography_fluid-text-s);
+  color: var(--palette-cream-400);
+}
+
+starlight-tabs [role="tab"][aria-selected="true"] {
+  color: var(--palette-acid-200);
+  border-color: var(--palette-acid-400);
+  font-weight: var(--typography-weight-display-medium);
+}

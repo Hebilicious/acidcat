@@ -5,6 +5,8 @@ sidebar:
   order: 11
 ---
 
+import CatalogExample from "../../../../components/docs/CatalogExample.astro";
+
 The **catalog** is the contract of an application. It is one JSON document that lists:
 
 - the **capabilities**: the operations that a client can do;
@@ -13,30 +15,13 @@ The **catalog** is the contract of an application. It is one JSON document that 
 
 Each application has one catalog. Every surface comes from it.
 
-## A small catalog
+## A part of a catalog
 
-```json title="aircon.acidcat.json (part)"
-{
-  "acidcat": "0.1",
-  "title": "Living-room air conditioner",
-  "targets": {
-    "app": { "bindings": ["typescript"] },
-    "mcp": { "bindings": ["mcp"] }
-  },
-  "capabilities": {
-    "aircon.temperature.set": {
-      "description": "Set the target temperature in degrees Celsius.",
-      "audience": ["app", "mcp"],
-      "input": {
-        "type": "object",
-        "required": ["celsius"],
-        "properties": { "celsius": { "type": "number", "minimum": 16, "maximum": 31 } }
-      },
-      "failures": { "Offline": { "type": "object" } }
-    }
-  }
-}
-```
+This is one target and one capability of the air conditioner, in each source and in the JSON that each source writes:
+
+<CatalogExample target="mcp" capability="aircon.temperature.set" />
+
+The JSON of a catalog also has the member `"acidcat": "0.1"`, and can have a `title` and a `description`. Each source sets them when it starts the catalog.
 
 The full catalog of the air conditioner is [`examples/aircon/catalog/aircon.acidcat.json`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/catalog/aircon.acidcat.json).
 
@@ -60,22 +45,9 @@ Capabilities and events share one set of ids. An id is a name, not a version. To
 
 ## Shared types
 
-Put a schema that you use in more than one place in `$defs`, and refer to it with `$ref`. In the air conditioner, `Status` is the output of `aircon.status.get` and the payload of `aircon.status.changed`:
+Put a schema that you use in more than one place in `$defs`, and refer to it with `$ref`. In the air conditioner, `Status` is the output and the state of `aircon.status.get`, and the payload of `aircon.status.changed`. Each source declares the type one time, and uses the reference that it gets back:
 
-```json
-{
-  "$defs": {
-    "Status": {
-      "type": "object",
-      "required": ["power", "mode", "fan", "targetCelsius", "roomCelsius"],
-      "properties": { "power": { "type": "boolean" }, "...": "..." }
-    }
-  },
-  "capabilities": {
-    "aircon.status.get": { "output": { "$ref": "#/$defs/Status" }, "...": "..." }
-  }
-}
-```
+<CatalogExample type="Status" capability="aircon.status.get" />
 
 Each schema in a catalog is JSON Schema 2020-12.
 

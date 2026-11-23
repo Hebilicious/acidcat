@@ -1,0 +1,21 @@
+---
+import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
+import { packageManagers } from "./package-managers.ts";
+
+interface Props {
+  readonly command: string;
+  readonly before?: string;
+}
+
+const { command, before } = Astro.props;
+---
+
+<Tabs syncKey="package-manager">
+  {
+    packageManagers.map((manager) => (
+      <TabItem label={manager.name}>
+        <Code code={[...(before === undefined ? [] : [before]), `${manager.exec} ${command}`].join("\n")} lang="sh" />
+      </TabItem>
+    ))
+  }
+</Tabs>

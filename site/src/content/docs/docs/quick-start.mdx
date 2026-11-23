@@ -1,25 +1,53 @@
 ---
 title: Quick start
-description: Declare one capability with the TypeScript core and Zod, check its catalog, and serve it as a command line, an MCP server and an HTTP API.
+description: Declare one capability with the TypeScript core, the Effect core or the Rust core, check its catalog, and serve it as a command line, an MCP server and an HTTP API.
 sidebar:
   order: 1
 ---
 
-import { Aside, Steps } from "@astrojs/starlight/components";
+import { Aside, Steps, TabItem, Tabs } from "@astrojs/starlight/components";
+import PackageInstall from "../../../components/docs/PackageInstall.astro";
+import PackageRun from "../../../components/docs/PackageRun.astro";
 
-This page builds a small air conditioner with one capability, `aircon.power.set`. You write it one time, in TypeScript. Then you serve it through three surfaces: a command line, an MCP server and an HTTP API.
+This page builds a small air conditioner with one capability, `aircon.power.set`. You write it one time. Then you serve it through three surfaces: a command line, an MCP server and an HTTP API.
 
-The page uses `@acid-cat/core-ts`, the core in plain TypeScript, with [Zod](https://zod.dev) for the schemas. It is one implementation among others. The [Effect core](/docs/guides/serve-with-core-effect/) and the [Rust core](/docs/guides/serve-with-core-rust/) do the same work in their own style.
+Choose a core in the tabs. Your choice applies to each step of the page:
+
+| Core | Package | Schemas |
+| --- | --- | --- |
+| TypeScript | `@acid-cat/core-ts` | [Zod](https://zod.dev), or another Standard Schema library |
+| Effect | `@acid-cat/core-effect` | Effect Schema |
+| Rust | `acid-cat-core` | Rust types that derive `serde` and `schemars::JsonSchema` |
+
+Each core is one implementation of the [specification](/spec/). All three cores serve the same surfaces, and write the same catalog.
 
 <Aside type="caution">
-AcidCat is experimental. The packages are `0.x`, and a minor release can break their APIs. Pin exact versions in `package.json`.
+AcidCat is experimental. The packages are `0.x`, and a minor release can break their APIs. Pin exact versions.
 </Aside>
 
 ## Before you start
 
+<Tabs syncKey="core">
+<TabItem label="TypeScript">
+
 - Node.js 24 or later. Node.js runs the `.ts` files directly.
-- pnpm.
 - A project with `"type": "module"` in its `package.json`.
+
+</TabItem>
+<TabItem label="Effect">
+
+- Node.js 24 or later. Node.js runs the `.ts` files directly.
+- A project with `"type": "module"` in its `package.json`.
+- Effect version 4.
+
+</TabItem>
+<TabItem label="Rust">
+
+- Rust 1.85 or later, with Cargo.
+- Node.js 24 or later, for the `acid-cat` command that checks the catalog.
+
+</TabItem>
+</Tabs>
 
 ## Build it
 
@@ -27,16 +55,46 @@ AcidCat is experimental. The packages are `0.x`, and a minor release can break t
 
 1. **Install the packages.**
 
-   ```sh
-   pnpm add @acid-cat/core-ts zod
-   pnpm add -D @acid-cat/cli
-   ```
+   <Tabs syncKey="core">
+   <TabItem label="TypeScript">
+
+   <PackageInstall packages={["@acid-cat/core-ts", "zod"]} />
+
+   <PackageInstall packages={["@acid-cat/cli"]} dev />
 
    `@acid-cat/core-ts` runs the capabilities. `@acid-cat/cli` gives the `acid-cat` command, which you use at build time only.
 
+   </TabItem>
+   <TabItem label="Effect">
+
+   <PackageInstall packages={["@acid-cat/core-effect", "effect", "@effect/platform-node"]} />
+
+   <PackageInstall packages={["@acid-cat/cli"]} dev />
+
+   `@acid-cat/core-effect` runs the capabilities. `effect` and `@effect/platform-node` are peer dependencies, so the application and the core share one Effect. `@acid-cat/cli` gives the `acid-cat` command, which you use at build time only.
+
+   </TabItem>
+   <TabItem label="Rust">
+
+   ```sh
+   cargo new home
+   cd home
+   cargo add acid-cat-core schemars
+   cargo add serde --features derive
+   cargo add tokio --features macros,rt-multi-thread
+   ```
+
+   `acid-cat-core` runs the capabilities on Tokio. The `acid-cat` command comes from the npm package `@acid-cat/cli`. Step 3 runs it with a package runner, so it needs no `package.json`.
+
+   </TabItem>
+   </Tabs>
+
 2. **Declare the capability.**
 
-   A capability has an id, a description, an audience, schemas and a `run` function. These declarations are the source of the catalog.
+   A capability has an id, a description, an audience, schemas and a function that does the work. These declarations are the source of the catalog.
+
+   <Tabs syncKey="core">
+   <TabItem label="TypeScript">
 
    ```ts title="aircon.ts"
    import { defineApp, defineCapability, fail, ok } from "@acid-cat/core-ts";
@@ -76,15 +134,124 @@ AcidCat is experimental. The packages are `0.x`, and a minor release can break t
    };
    ```
 
-   - `targets` names three groups of clients. Each target lists the bindings that serve it.
-   - `audience` gives the targets that can use the capability. A target that is not in the audience does not see the capability.
-   - `destructive` and `idempotent` are hints. MCP clients get them as `destructiveHint` and `idempotentHint`, so an agent knows to ask before it turns the unit off.
    - `run` returns `ok(value)` or `fail(failure)`. A failure is data, with its tag in `_tag`.
    - Standard Schema has no conversion to JSON Schema, so `toJsonSchema` gives the converter of Zod to the core.
 
+   </TabItem>
+   <TabItem label="Effect">
+
+   ```ts title="aircon.ts"
+   import { App, Capability } from "@acid-cat/core-effect";
+   import { Effect, Schema } from "effect";
+
+   const unit = { online: true, on: false };
+
+   const Offline = Schema.TaggedStruct("Offline", {});
+
+   const powerSet = Capability.make({
+     id: "aircon.power.set",
+     description: "Turn the unit on or off.",
+     audience: ["cli", "mcp", "api"],
+     destructive: true,
+     idempotent: true,
+     input: Schema.Struct({ on: Schema.Boolean }),
+     failures: [Offline],
+     run: ({ on }) =>
+       Effect.gen(function* () {
+         if (!unit.online) return yield* Effect.fail(Offline.make({}));
+         unit.on = on;
+         return null;
+       }),
+   });
+
+   export const aircon = App.make({
+     title: "Air conditioner",
+     targets: {
+       cli: { bindings: ["cli"] },
+       mcp: { bindings: ["mcp"] },
+       api: { bindings: ["http"] },
+     },
+     capabilities: [powerSet],
+   });
+   ```
+
+   - `run` is an Effect. Its value is the value of the call, and its error is a failure.
+   - Each failure is a `Schema.TaggedStruct`. Its tag is the failure tag of the catalog.
+
+   </TabItem>
+   <TabItem label="Rust">
+
+   ```rust title="src/main.rs (part)"
+   use std::sync::Arc;
+   use std::sync::atomic::{AtomicBool, Ordering};
+
+   use acid_cat_core::{App, Application, fail};
+   use schemars::JsonSchema;
+   use serde::{Deserialize, Serialize};
+
+   struct Unit {
+       online: AtomicBool,
+       on: AtomicBool,
+   }
+
+   type Capability = acid_cat_core::Capability<Unit>;
+
+   #[derive(Deserialize, JsonSchema)]
+   struct Power {
+       on: bool,
+   }
+
+   #[derive(Serialize, JsonSchema)]
+   #[serde(tag = "_tag")]
+   enum Offline {
+       Offline {},
+   }
+
+   fn aircon() -> Arc<Application<Unit>> {
+       App::new()
+           .title("Air conditioner")
+           .target("cli", ["cli"])
+           .target("mcp", ["mcp"])
+           .target("api", ["http"])
+           .capability(
+               Capability::new("aircon.power.set", "Turn the unit on or off.")
+                   .audience(["cli", "mcp", "api"])
+                   .destructive(true)
+                   .idempotent(true)
+                   .input::<Power>()
+                   .failures::<Offline>()
+                   .run(|Power { on }, call| async move {
+                       let unit = call.context();
+                       if !unit.online.load(Ordering::SeqCst) {
+                           return fail(Offline::Offline {});
+                       }
+                       unit.on.store(on, Ordering::SeqCst);
+                       Ok(())
+                   }),
+           )
+           .build()
+           .expect("the application conforms")
+   }
+   ```
+
+   - `Unit` holds the services of the application. `call.context()` gives them to the work.
+   - The work returns `Ok(value)` or `fail(failure)`. With no output type, the value is `null`.
+   - Each variant of the enum with `#[serde(tag = "_tag")]` is one failure. Its name is the tag.
+   - `build()` checks the application, and gives the rules that it breaks, if any.
+
+   </TabItem>
+   </Tabs>
+
+   - `targets` names three groups of clients. Each target lists the bindings that serve it.
+   - `audience` gives the targets that can use the capability. A target that is not in the audience does not see the capability.
+   - `destructive` and `idempotent` are hints. MCP clients get them as `destructiveHint` and `idempotentHint`, so an agent knows to ask before it turns the unit off.
+
 3. **Write the catalog and check it.**
 
-   At build time, write the catalog as JSON:
+   At build time, write the catalog as JSON. Then check it with `acid-cat check`.
+
+   <Tabs syncKey="core">
+   <TabItem label="TypeScript">
 
    ```ts title="catalog.ts"
    import { writeFile } from "node:fs/promises";
@@ -94,20 +261,60 @@ AcidCat is experimental. The packages are `0.x`, and a minor release can break t
    await writeFile("aircon.acidcat.json", renderCatalog(aircon, { toJsonSchema }));
    ```
 
-   Then run the program, and check its output:
+   <PackageRun before="node catalog.ts" command="acid-cat check aircon.acidcat.json" />
+
+   </TabItem>
+   <TabItem label="Effect">
+
+   ```ts title="catalog.ts"
+   import { writeFile } from "node:fs/promises";
+   import { App } from "@acid-cat/core-effect";
+   import { aircon } from "./aircon.ts";
+
+   await writeFile("aircon.acidcat.json", App.render(aircon));
+   ```
+
+   <PackageRun before="node catalog.ts" command="acid-cat check aircon.acidcat.json" />
+
+   </TabItem>
+   <TabItem label="Rust">
+
+   One program serves every surface. Its first argument chooses what it does. With `catalog`, it prints the catalog:
+
+   ```rust title="src/main.rs (part)"
+   #[tokio::main]
+   async fn main() {
+       let app = aircon();
+       let unit = Arc::new(Unit { online: AtomicBool::new(true), on: AtomicBool::new(false) });
+       let args: Vec<String> = std::env::args().skip(1).collect();
+       match args.first().map(String::as_str) {
+           Some("catalog") => print!("{}", app.render_catalog()),
+           _ => {
+               eprintln!("Usage: home <catalog|cli|mcp|serve>");
+               std::process::exit(2);
+           }
+       }
+   }
+   ```
 
    ```sh
-   node catalog.ts
-   pnpm exec acid-cat check aircon.acidcat.json
+   cargo run -q -- catalog > aircon.acidcat.json
+   npx @acid-cat/cli check aircon.acidcat.json
    ```
+
+   </TabItem>
+   </Tabs>
 
    ```txt title="Output"
    The catalog conforms.
    ```
 
-   `renderCatalog` writes the catalog in [canonical form](/spec/catalog/#canonical-form). Commit `aircon.acidcat.json` with the source, and run `acid-cat check` in your build.
+   The core writes the catalog in [canonical form](/spec/catalog/#canonical-form). Commit `aircon.acidcat.json` with the source, and run `acid-cat check` in your build.
 
 4. **Serve it as a command line.**
+
+   <Tabs syncKey="core">
+   <TabItem label="TypeScript">
 
    ```ts title="cli.ts"
    import { cliMain } from "@acid-cat/core-ts";
@@ -115,8 +322,6 @@ AcidCat is experimental. The packages are `0.x`, and a minor release can break t
 
    cliMain(aircon, { name: "home", version: "0.1.0", context: {}, toJsonSchema });
    ```
-
-   The command line has one command for each capability in the view of the `cli` target. The segments of the id give the path of the command:
 
    ```sh
    $ node cli.ts aircon power set --on
@@ -127,9 +332,59 @@ AcidCat is experimental. The packages are `0.x`, and a minor release can break t
    Turn the unit on or off.
    ```
 
-   The capability has no output schema, so its value is `null`. `node cli.ts list` lists every command.
+   </TabItem>
+   <TabItem label="Effect">
+
+   ```ts title="cli.ts"
+   import { NodeCli } from "@acid-cat/core-effect/node";
+   import { Layer } from "effect";
+   import { aircon } from "./aircon.ts";
+
+   NodeCli.main(aircon, Layer.empty, { name: "home", version: "0.1.0" });
+   ```
+
+   The capability needs no services, so the layer is `Layer.empty`.
+
+   ```sh
+   $ node cli.ts aircon power set --on
+   null
+   $ node cli.ts aircon power set --help
+   Usage: home aircon power set --on
+
+   Turn the unit on or off.
+   ```
+
+   </TabItem>
+   <TabItem label="Rust">
+
+   Add this arm to the `match` in `main`:
+
+   ```rust title="src/main.rs (part)"
+   Some("cli") => {
+       use acid_cat_core::cli::{CliOptions, run_cli_process};
+       let code = run_cli_process(app, unit, CliOptions::new("home", "0.1.0"), args[1..].to_vec()).await;
+       std::process::exit(code);
+   }
+   ```
+
+   ```sh
+   $ cargo run -q -- cli aircon power set --on
+   null
+   $ cargo run -q -- cli aircon power set --help
+   Usage: home aircon power set --on
+
+   Turn the unit on or off.
+   ```
+
+   </TabItem>
+   </Tabs>
+
+   The command line has one command for each capability in the view of the `cli` target. The segments of the id give the path of the command. The capability has no output schema, so its value is `null`. The command `list` lists every command.
 
 5. **Serve it as an MCP server through stdio.**
+
+   <Tabs syncKey="core">
+   <TabItem label="TypeScript">
 
    ```ts title="mcp.ts"
    import { mcpStdioMain } from "@acid-cat/core-ts";
@@ -138,13 +393,50 @@ AcidCat is experimental. The packages are `0.x`, and a minor release can break t
    mcpStdioMain(aircon, { name: "home", version: "0.1.0", context: {}, toJsonSchema });
    ```
 
-   Give the command `node mcp.ts` to your MCP client. The client starts the server as a process. The server has one tool, `aircon.power.set`, with the annotations `destructiveHint: true` and `idempotentHint: true`.
+   Give the command `node mcp.ts` to your MCP client.
+
+   </TabItem>
+   <TabItem label="Effect">
+
+   ```ts title="mcp.ts"
+   import { NodeMcp } from "@acid-cat/core-effect/node";
+   import { Layer } from "effect";
+   import { aircon } from "./aircon.ts";
+
+   NodeMcp.main(aircon, Layer.empty, { name: "home", version: "0.1.0" });
+   ```
+
+   Give the command `node mcp.ts` to your MCP client. Effect logs go to standard error.
+
+   </TabItem>
+   <TabItem label="Rust">
+
+   Add this arm to the `match` in `main`:
+
+   ```rust title="src/main.rs (part)"
+   Some("mcp") => {
+       use acid_cat_core::mcp::{McpStdioOptions, serve_stdio};
+       serve_stdio(app, unit, McpStdioOptions::new("home", "0.1.0")).await;
+   }
+   ```
+
+   Run `cargo build`, then give the command `target/debug/home mcp` to your MCP client.
+
+   </TabItem>
+   </Tabs>
+
+   The client starts the server as a process. The server has one tool, `aircon.power.set`, with the annotations `destructiveHint: true` and `idempotentHint: true`.
 
    <Aside type="caution">
    Standard output carries only MCP messages. Never write to standard output from a capability that this server serves.
    </Aside>
 
 6. **Serve it through HTTP.**
+
+   The HTTP binding serves the `api` target, and the MCP binding serves the `mcp` target. One server serves both, by path prefix.
+
+   <Tabs syncKey="core">
+   <TabItem label="TypeScript">
 
    `httpHandler` and `mcpHandler` give web handlers: functions from a `Request` to a `Response`. `serve` from `@acid-cat/core-ts/node` serves them on Node.js.
 
@@ -160,7 +452,63 @@ AcidCat is experimental. The packages are `0.x`, and a minor release can break t
    console.log(server.url);
    ```
 
-   The HTTP handler serves the `api` target, and the MCP handler serves the `mcp` target. Start the server, then call the capability from another terminal:
+   Start it with `node serve.ts`.
+
+   </TabItem>
+   <TabItem label="Effect">
+
+   `Http.toWebHandler` and `Mcp.toWebHandler` give web handlers: functions from a `Request` to a `Response`. `NodeServer` serves them on Node.js, until its scope closes.
+
+   ```ts title="serve.ts"
+   import { Http, Mcp } from "@acid-cat/core-effect";
+   import * as NodeServer from "@acid-cat/core-effect/NodeServer";
+   import { Console, Effect, Layer } from "effect";
+   import { aircon } from "./aircon.ts";
+
+   const mcp = Mcp.toWebHandler(aircon, Layer.empty, { name: "home", version: "0.1.0", allowedOrigins: [] });
+   const http = Http.toWebHandler(aircon, Layer.empty, { allowedOrigins: [] });
+
+   Effect.runFork(
+     Effect.scoped(
+       Effect.gen(function* () {
+         const server = yield* NodeServer.serve({ "/mcp": mcp, "/": http }, { port: 3000 });
+         yield* Console.log(server.url);
+         return yield* Effect.never;
+       }),
+     ),
+   );
+   ```
+
+   Start it with `node serve.ts`.
+
+   </TabItem>
+   <TabItem label="Rust">
+
+   `HttpBinding` and `McpBinding` are handlers. `remote::serve` serves them by path prefix. Add this arm to the `match` in `main`:
+
+   ```rust title="src/main.rs (part)"
+   Some("serve") => {
+       use acid_cat_core::http::{HttpBinding, HttpOptions};
+       use acid_cat_core::mcp::{McpBinding, McpOptions};
+       let mcp = McpBinding::new(app.clone(), unit.clone(), McpOptions::new("home", "0.1.0"));
+       let http = HttpBinding::new(app, unit, HttpOptions::default());
+       let server = acid_cat_core::remote::serve(
+           "127.0.0.1:3000".parse().expect("an address"),
+           vec![("/mcp".into(), Arc::new(mcp)), ("/".into(), Arc::new(http))],
+       )
+       .await
+       .expect("the server starts");
+       println!("{}", server.url());
+       std::future::pending::<()>().await;
+   }
+   ```
+
+   Start it with `cargo run -q -- serve`.
+
+   </TabItem>
+   </Tabs>
+
+   The server prints `http://127.0.0.1:3000`. Call the capability from another terminal:
 
    ```sh
    $ curl -X POST http://127.0.0.1:3000/capabilities/aircon.power.set \
@@ -178,10 +526,10 @@ AcidCat is experimental. The packages are `0.x`, and a minor release can break t
 - A catalog, `aircon.acidcat.json`, that `acid-cat check` accepts.
 - Three surfaces that take the same input and return the same failure, `Offline`.
 
-`serve` listens on `127.0.0.1` with plain HTTP. For clients on the network, end TLS on the platform in front of it, and set `hostname` to `0.0.0.0`.
+The server listens on `127.0.0.1` with plain HTTP. For clients on the network, end TLS on the platform in front of it, and listen on `0.0.0.0`.
 
 ## Next steps
 
 - Learn the parts: [Catalog](/docs/concepts/catalog/), [Capabilities](/docs/concepts/capabilities/) and [Targets and views](/docs/concepts/targets-and-views/).
-- Add events, aliases, state and per-request context: [Serve with the TypeScript core](/docs/guides/serve-with-core-ts/).
+- Add events, aliases, state and services: [Serve with the TypeScript core](/docs/guides/serve-with-core-ts/), [Serve with the Effect core](/docs/guides/serve-with-core-effect/) or [Serve with the Rust core](/docs/guides/serve-with-core-rust/).
 - See the complete air conditioner, with every surface, on all three cores: [`examples/aircon`](https://github.com/Hebilicious/acidcat/blob/main/examples/aircon/README.md).
