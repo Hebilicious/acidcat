@@ -15,7 +15,6 @@ use crate::facts_generated::{
 };
 use crate::remote::{ResponseBody, empty_response};
 
-/// [`ServerCard::default`] gives the default name and description.
 #[derive(Clone, Debug, Default)]
 pub struct ServerCard {
     /// The name of the card, in reverse-DNS form: 3 to 200 characters, and one `/`, for example
