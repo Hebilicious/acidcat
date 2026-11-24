@@ -10,7 +10,7 @@ The homepage, the documentation, the specification and the list of packages of A
 | `moon run site:tokens` | Write the design tokens from `cssforge.config.ts` into `.cssforge/output.css` |
 | `moon run site:tokens-check` | Check that `.cssforge/output.css` matches `cssforge.config.ts`. `site:test` runs it |
 | `moon run site:build` | Build the static site into `dist/` |
-| `moon run site:test` | Test the geometry of the logo, check that every design token in use exists, render the homepage in Chromium at desktop and phone widths, and compare the image of each GPU renderer with WebGPU and with WebGL 2 |
+| `moon run site:test` | Test the geometry of the logo, check that every design token in use exists, render the homepage in Chromium at desktop and phone widths, compare the image of each GPU renderer with WebGPU and with WebGL 2, and check that the homepage stays in its budget of bytes on a phone (images, fonts, scripts, styles and HTML) |
 | `moon run site:deploy` | Build the site and deploy it to https://acidcat.hebilicious.workers.dev as an assets-only Worker, with the `cf` command. Set `CLOUDFLARE_ACCOUNT_ID` first |
 | `moon run site:typecheck` | Type-check the geometry, the tests and the configuration |
 

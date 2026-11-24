@@ -67,3 +67,24 @@ test("reduced motion keeps the hero still and stops the animations", async () =>
   assert.equal(animation, "none");
   await page.close();
 });
+
+test("on a phone, the homepage loads less than its budget of bytes before the reader acts", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  const page = await browser.newPage({ viewport: { width: 400, height: 860 } });
+  const requests: Promise<{ file: string; type: string; size: number }>[] = [];
+  page.on("requestfinished", (request) => {
+    requests.push(request.sizes().then(({ responseBodySize }) => ({ file: new URL(request.url()).pathname, type: request.resourceType(), size: responseBodySize })));
+  });
+  await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+  await page.locator("[data-plate].is-live").waitFor({ timeout: 10000 });
+  const loaded = await Promise.all(requests);
+  const files = loaded.map(({ file }) => file);
+  const bytes = new Map<string, number>();
+  for (const { type, size } of loaded) bytes.set(type, (bytes.get(type) ?? 0) + size);
+
+  assert.ok(files.includes("/hero/plate.avif"), "the hero is AVIF");
+  assert.deepEqual(files.filter((file) => file.endsWith(".woff2") && !/-core\.[\w-]+\.woff2$/.test(file)), [], "only the core of each font");
+  const budget: Record<string, number> = { image: 560_000, font: 180_000, script: 40_000, stylesheet: 70_000, document: 130_000 };
+  for (const [type, size] of bytes) assert.ok(size <= (budget[type] ?? 0), `${type}: ${size} bytes, budget ${budget[type] ?? 0}`);
+  await page.close();
+});
