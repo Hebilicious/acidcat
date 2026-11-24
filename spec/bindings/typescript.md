@@ -1,6 +1,6 @@
 # TypeScript binding
 
-A language binding for TypeScript and JavaScript. A session gives a **handle** for each capability in its view, and an **event handle** for each event in its view. Code in the same process uses handles. Protocol bindings, such as WebMCP, MCP and the command line, use the same handles.
+The language binding for TypeScript and JavaScript. It maps the [programmatic binding](programmatic.md) to TypeScript. The rules of the programmatic binding apply. This document tells only the TypeScript forms. Protocol bindings, such as WebMCP, MCP and the command line, use the same handles.
 
 ## Handles
 
@@ -19,18 +19,17 @@ interface Handle<Input, Value, Failure, State = never> {
   readonly audience: readonly string[];
   readonly availability: Observable<Availability>;
   readonly snapshot?: Observable<State>;
-  /** A call with an input that is already decoded. */
+  /** The typed call. */
   execute(input: Input, options?: { signal?: AbortSignal }): Promise<Result<Value, Failure>>;
-  /** A call with an input that is not trusted. The handle validates it first. The result is in its JSON form. */
+  /** The external call. */
   invokeExternal(input: unknown, options?: { signal?: AbortSignal }): Promise<Result<unknown, unknown>>;
 }
 ```
 
-- **Names.** A session gives each handle by id. It MAY also put the handles in a tree of objects. The application chooses the tree. No name comes from the tree.
+- **Handles.** A handle is an object. Each handle MUST have `execute` and `invokeExternal`.
 - **Outcomes.** A result resolves the promise. A call failure rejects the promise with an `Error` that has a `kind` property. For `cancelled`, the `name` of the error is `AbortError`. For `invalid-input`, it is `TypeError`.
-- **Listing.** A session gives all its handles. A handle that is not in the view of the target is always unavailable.
-- **Cancellation.** `options.signal` cancels one call. The session has its own signal. It cancels all the work of the session.
-- **State.** `snapshot` observes the [state](../invocation.md#state) of the capability. It is present when the capability has `state`. A handle MAY have a `snapshot` for code in the same process when the catalog has no `state`. Each value from `getSnapshot` or from a listener is a copy. It is not the data of the provider.
+- **Observable values.** `availability` and `snapshot` are `Observable` values. `getSnapshot` reads the latest value. `subscribe` calls the listener after the value changes, with the new value. `snapshot` observes the state.
+- **Cancellation.** `options.signal` cancels one call.
 - **Types.** Each type in `$defs` becomes a named TypeScript type. `Input`, `Value`, `Failure` and `State` come from the schemas of the capability. You can also write them by hand and check them against the catalog.
 
 ## Event handles
@@ -55,16 +54,16 @@ interface EventHandle<Input, Payload> {
   readonly id: string;
   readonly description: string;
   readonly audience: readonly string[];
-  /** A subscription with an input that is already decoded. */
+  /** The typed subscription. */
   subscribe(input: Input, options?: SubscribeOptions): Promise<AsyncIterable<Occurrence<Payload>>>;
-  /** A subscription with an input that is not trusted. The handle validates it first. Each `data` is in its JSON form. */
+  /** The external subscription. */
   subscribeExternal(input: unknown, options?: SubscribeOptions): Promise<AsyncIterable<Occurrence<unknown>>>;
 }
 ```
 
-- **Names.** A session gives each event handle by id, apart from the handles of capabilities. It MAY also put them in a tree of objects. No name comes from the tree.
+- **Event handles.** An event handle is an object. Each event handle MUST have `subscribe` and `subscribeExternal`.
 - **Subscribing.** The promise resolves when the subscription has started. A call failure before the first occurrence rejects the promise with an `Error` that has a `kind` property, as for a call.
-- **Occurrences.** Each value of the iterable is an occurrence. Each one is a copy. It is not the data of the provider.
+- **Occurrences.** Each value of the async iterable is an occurrence.
 - **Ending.**
 
   | End | The iterator |
@@ -74,11 +73,13 @@ interface EventHandle<Input, Payload> {
   | `internal` | `next()` rejects with an `Error` whose `kind` is `internal`. After that, `next()` resolves with `done: true` |
 
 - **Cancellation.** `return()` of the iterator cancels the subscription. It MUST work while a `next()` waits: that `next()` then resolves with `done: true`. `options.signal` also cancels the subscription, and so does the signal of the session. A `for await` loop that stops early calls `return()`.
-- **Listing.** A session gives all its event handles. A subscription to an event that is not in the view of the target fails as `unknown-capability`.
 - **Types.** `Input` and `Payload` come from the schemas of the event.
 
 A GraphQL server can use an event handle as the source of a subscription. The `subscribe` resolver of a field returns the promise of `subscribe`. GraphQL calls `return()` when the client ends the subscription, through WebSockets or through server-sent events.
 
 ## Sessions
 
-`dispose(): Promise<void>` closes a session. It follows the [session lifecycle](../invocation.md#sessions).
+- **Opening.** A function of the core opens a session for one target, and gives the session object. It is `createSession` in `@acid-cat/core-ts` and `Handles.open` in `@acid-cat/core-effect`.
+- **Handles.** `handles` is a `ReadonlyMap` of the handles, by id. The session also has a `ReadonlyMap` of the event handles, by id: `eventHandles` in `@acid-cat/core-ts`, and `events` in `@acid-cat/core-effect`. `view` is the view of the target, as a catalog document.
+- **Closing.** `dispose(): Promise<void>` closes a session.
+- **Signal.** The session has its own `signal`, an `AbortSignal`. It aborts when the session starts to close, and it cancels all the work of the session.

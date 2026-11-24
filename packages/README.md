@@ -34,7 +34,7 @@ When a test of a TypeScript package starts a program as a process, it starts the
 
 ### Two TypeScript cores
 
-Each core is complete in its own style, and neither wraps the other. Both serve the TypeScript binding and the four protocol bindings (MCP, HTTP, CLI and WebMCP), take the fixed details from `@acid-cat/spec-ts`, write an application's catalog from its code, and pass every check of `acid-cat conform`. The [Rust core](#reference-implementation-in-rust) is the third core. It has the same features, except the bindings that run in a web page or in TypeScript code.
+Each core is complete in its own style, and neither wraps the other. Both serve the TypeScript binding and the four protocol bindings (MCP, HTTP, CLI and WebMCP), take the fixed details from `@acid-cat/spec-ts`, write an application's catalog from its code, and pass every check of `acid-cat conform`. The [Rust core](#reference-implementation-in-rust) is the third core. It has the same features, except WebMCP, which runs in a web page. It serves the [Rust binding](../spec/bindings/rust.md) in place of the TypeScript binding. Both language bindings map the [programmatic binding](../spec/bindings/programmatic.md).
 
 | | `@acid-cat/core-effect` | `@acid-cat/core-ts` |
 | --- | --- | --- |
@@ -52,9 +52,9 @@ Each core is complete in its own style, and neither wraps the other. Both serve 
 
 | Package | Directory | Registry name | Use |
 | --- | --- | --- | --- |
-| Core for Rust | [`core-rust/`](core-rust) | crates.io `acid-cat-core` | Serve capabilities and events in Rust, on Tokio, through the MCP binding (HTTP and stdio, with push, poll and webhook delivery), the HTTP binding and the CLI binding |
+| Core for Rust | [`core-rust/`](core-rust) | crates.io `acid-cat-core` | Serve capabilities and events in Rust, on Tokio, through the Rust binding, the MCP binding (HTTP and stdio, with push, poll and webhook delivery), the HTTP binding and the CLI binding |
 
-`acid-cat-core` does not use the TypeScript packages. It follows the specification, and its tests run `acid-cat conform` against the conformance fixture, which [`examples/fixture.rs`](core-rust/examples/fixture.rs) serves. It writes an application's catalog from its code with `acid-cat-catalog`. It has no WebMCP binding, because WebMCP runs in a web page. It has no language binding either: Rust code in the same process opens a `Session`.
+`acid-cat-core` does not use the TypeScript packages. It follows the specification, and its tests run `acid-cat conform` against the conformance fixture, which [`examples/fixture.rs`](core-rust/examples/fixture.rs) serves. It writes an application's catalog from its code with `acid-cat-catalog`. It has no WebMCP binding, because WebMCP runs in a web page. Rust code in the same process opens a `Session`, which serves the [Rust binding](../spec/bindings/rust.md).
 
 ## Publishing
 

@@ -143,7 +143,7 @@ What to look at:
 - The controls and the tools share one session, so a person and an agent see each other's changes.
 - The page shows the binding status. It is the installation's `status` in core-ts and its `status` ref in core-effect.
 
-The Rust core has no WebMCP, because it runs as a process, not in a page. Its catalog still has the WebMCP binding on `app`, so the catalog is the same in every language.
+The Rust core has no WebMCP, because it runs as a process, not in a page. Its catalog still has the WebMCP binding on `app`, so the catalog is the same in every language. Rust code uses the `app` target through the [Rust binding](../../spec/bindings/rust.md): the tests in [`core-rust/src/main.rs`](core-rust/src/main.rs) open `Session::open(&app, "app", unit)`, then call `invoke`, `subscribe` and `state`.
 
 [`test/webmcp-page.test.ts`](test/webmcp-page.test.ts) opens each page in Chromium through Playwright with a test WebMCP host.
 

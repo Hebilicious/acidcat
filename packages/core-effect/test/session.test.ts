@@ -73,6 +73,30 @@ test("a call gives a value, a failure or a call failure", () =>
     }),
   ));
 
+test("a run that throws before it gives its Effect is the call failure internal, through each typed call", async () => {
+  const throws = Capability.make({
+    id: "probe.throws",
+    description: "Throw before the Effect starts.",
+    audience: ["app"],
+    input: Schema.Struct({}),
+    run: (): Effect.Effect<null> => {
+      throw new Error("The work does not start.");
+    },
+  });
+  const app = App.make({ targets: { app: { bindings: ["typescript"] } }, capabilities: [throws] });
+  const internal = { kind: "internal", message: "The capability failed." };
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make(app, { target: "app" });
+        assert.deepEqual(yield* session.outcome(throws, {}), internal);
+        const called = yield* Effect.flip(session.call(throws, {}));
+        assert.equal("kind" in called && called.kind, "internal");
+      }),
+    ),
+  );
+});
+
 test("a capability outside the view is the same as an unknown id", () =>
   withSession("mcp", (session) =>
     Effect.gen(function* () {

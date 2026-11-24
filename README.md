@@ -35,7 +35,7 @@ AcidCat lists those operations once, in a **catalog**. Every surface comes from 
 | 🤖 MCP server | the tool `aircon.power.set` |
 | 🌐 WebMCP | a tool that a browser agent calls in your web page, as the signed-in user |
 | 🔌 HTTP | `POST /capabilities/aircon.power.set` |
-| 🧩 Your language | a typed function, for example `execute({ on: true })` in TypeScript |
+| 🧩 Your language | a handle, for example `execute({ on: true })` in TypeScript, or `session.invoke("aircon.power.set", input, &cancel)` in Rust |
 
 ## 🌬️ Example
 
@@ -116,19 +116,20 @@ Pass the same `aircon` to `mcpStdioMain` for an MCP server, or to `httpHandler` 
 | Part | What it is |
 | --- | --- |
 | Catalog | The contract, stored as JSON. Write it in the typed language of your choice: a core's code, a [catalog library](packages/catalog) for TypeScript, Python, Go or Rust, or [Pkl](packages/catalog/pkl). Checked at build time; programs do not read it at run time |
-| Binding | The rules for one surface: CLI, MCP, HTTP, WebMCP or a language such as TypeScript. Defined in the [specification](spec/bindings/README.md) |
+| Binding | The rules for one surface: CLI, MCP, HTTP, WebMCP or a language such as TypeScript or Rust. Defined in the [specification](spec/bindings/README.md). Each language binding maps one contract with no language, the [programmatic binding](spec/bindings/programmatic.md) |
 | Core | A library that runs your capabilities and serves the bindings |
-| `acid-cat conform` | Tests a running program from the outside, through each binding |
+| `acid-cat conform` | Tests a running program from the outside, through each protocol binding. The tests of each core test its language binding |
 
 ## 🧳 Features
 
 - Each target sees only its own capabilities. A capability that writes a local file can belong to the `cli` target alone ([example](examples/aircon/README.md#command-line-only)).
 - Failures are typed data, declared by tag. An unexpected error becomes the call failure `internal`, and its details stay on the server.
-- Events, such as `aircon.status.changed`, stream occurrences to subscribers over the CLI, MCP, HTTP (server-sent events) and TypeScript ([events](spec/events.md)). Through MCP, the events follow the Final text of the [MCP events extension](spec/bindings/mcp.md#events), SEP-3415: push, poll and webhook delivery, and a heartbeat interval that the client suggests and the server grants.
+- Events, such as `aircon.status.changed`, stream occurrences to subscribers over the CLI, MCP, HTTP (server-sent events), TypeScript and Rust ([events](spec/events.md)). Through MCP, the events follow the Final text of the [MCP events extension](spec/bindings/mcp.md#events), SEP-3415: push, poll and webhook delivery, and a heartbeat interval that the client suggests and the server grants.
 - Through MCP over HTTP, an input property with `x-mcp-header` is mirrored into an `Mcp-Param-*` header, for a tool and for an event. Each server checks the `Mcp-Method`, `Mcp-Name` and `Mcp-Param-*` headers against the body, so a load balancer can route on them safely ([headers](spec/bindings/mcp.md#headers)). `acid-cat check` rejects an `x-mcp-header` that the MCP transport forbids ([header annotations](spec/bindings/mcp.md#header-annotations)).
 - Through MCP over HTTP, each server publishes an MCP [Server Card](spec/bindings/mcp.md#server-card) at `<MCP URL>/server-card`, so that a client can find how to connect before it connects. The card is on by default, with a name from the host and the name of the server (`com.example.aircon/aircon` for `aircon.example.com`) and the description of the catalog. The deployment can give its own name, description and URL, or turn the card off. In core-effect, `Mcp.withEvents` serves a card for your own MCP server too, with the version of its `server/discover`. A server with webhook delivery can also sign each delivery with Ed25519 keys (`v1a,` signatures beside the `v1,` HMAC), and the card gives the public keys and the egress IP ranges of the server, so that a gateway can check which server sent a delivery. Signing keys and egress ranges need the card, so a server with them and the card off fails when it starts.
 - WebMCP lets a browser agent call your page's capabilities directly, with the user's session ([binding](spec/bindings/webmcp.md)).
 - The command line has aliases such as `home --on`, JSON or human output, and Ctrl+C cancellation. In a pipe, it writes each result as one line of JSON, so an agent or a script reads less text ([binding](spec/bindings/cli.md)).
+- In code, a session gives a handle for each capability and an event handle for each event. The [programmatic binding](spec/bindings/programmatic.md) gives the rules of handles, outcomes, availability, state, cancellation and events for every language. The [TypeScript](spec/bindings/typescript.md) and [Rust](spec/bindings/rust.md) bindings map it to their language.
 - For an API you design yourself, such as GraphQL, call the same capabilities through a session ([examples](examples/aircon/README.md#apis)).
 
 ## 📚 Specification
@@ -141,7 +142,7 @@ AcidCat is a specification first. The packages here are one implementation of it
 | [Catalog](spec/catalog.md) | Targets, capabilities, events, types, views, canonical form |
 | [Invocation](spec/invocation.md) | Outcomes, availability, sessions, cancellation |
 | [Events](spec/events.md) | Subscriptions, occurrences, resuming |
-| [Bindings](spec/bindings/README.md) | TypeScript, WebMCP, MCP, CLI, HTTP |
+| [Bindings](spec/bindings/README.md) | The programmatic binding and its TypeScript and Rust mappings, WebMCP, MCP, CLI, HTTP |
 | [Extensions](spec/extensions/README.md) | Attachments, pagination |
 | [Conformance](spec/conformance.md) | How to test a catalog and an implementation |
 
@@ -167,7 +168,7 @@ gh skill install Hebilicious/acidcat acid-cat
 
 ## 🗺️ Roadmap
 
-- [x] `acid-cat conform`: test a running implementation through each binding
+- [x] `acid-cat conform`: test a running implementation through each protocol binding
 - [x] Cores in TypeScript: `@acid-cat/core-ts` and `@acid-cat/core-effect`
 - [x] A core in Rust: `acid-cat-core`
 - [ ] Cores in more languages

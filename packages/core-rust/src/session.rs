@@ -11,7 +11,7 @@ use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
 use crate::app::{Application, ServedCapability, ServedEvent, StateWatch, call, subscription};
 use crate::outcome::{Availability, CallFailure, Defect, Kind, Outcome};
-use crate::subscription::{Occurrences, Parts, prepare};
+use crate::subscription::{INTERNAL_MESSAGE, Occurrences, Parts, prepare};
 
 /// The number of occurrences that each subscription keeps for a client that reads slowly, if the binding gives no
 /// limit (spec/events.md#slow-clients).
@@ -74,6 +74,13 @@ struct Inner<C> {
     capability_ids: Vec<String>,
     event_ids: Vec<String>,
     buffer_limit: usize,
+}
+
+const CAPABILITY_FAILED: &str = "The capability failed.";
+
+fn internal<C>(inner: &Inner<C>, id: &str, defect: &Defect, message: &str) -> CallFailure {
+    inner.app.defect(id, defect);
+    CallFailure::new(Kind::Internal, message)
 }
 
 /// Clones share the session.
@@ -209,7 +216,8 @@ impl<C: Send + Sync + 'static> Session<C> {
         self.inner.closing.cancel();
     }
 
-    /// A message each time that the availability of a capability changes, until the session closes.
+    /// A message after the availability of a capability changes. One message can stand for more than one change. The
+    /// receiver gives `None` when the session closes, or when no availability of the session can change.
     pub fn availability_changes(&self) -> mpsc::UnboundedReceiver<()> {
         let (sender, receiver) = mpsc::unbounded_channel();
         for served in self.inner.capabilities.values() {
@@ -261,13 +269,24 @@ impl<C: Send + Sync + 'static> Session<C> {
         let token = inner.closing.child_token();
         let _cancel_on_end = token.clone().drop_guard();
         let _cancel_with_caller = cancel_when_cancelled(cancel, token.clone());
-        let work = match (capability.definition.run)(
-            input,
-            call(inner.context.clone(), inner.target.clone(), token.clone()),
-        ) {
-            Ok(work) => work,
-            Err(message) => {
+        let started = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            (capability.definition.run)(
+                input,
+                call(inner.context.clone(), inner.target.clone(), token.clone()),
+            )
+        }));
+        let work = match started {
+            Ok(Ok(work)) => work,
+            Ok(Err(message)) => {
                 return Outcome::CallFailure(CallFailure::new(Kind::InvalidInput, message));
+            }
+            Err(panic) => {
+                return Outcome::CallFailure(internal(
+                    inner,
+                    id,
+                    &Defect::from_panic(panic),
+                    CAPABILITY_FAILED,
+                ));
             }
         };
         let ended = tokio::select! {
@@ -308,8 +327,7 @@ impl<C: Send + Sync + 'static> Session<C> {
             }
         };
         checked.unwrap_or_else(|defect| {
-            inner.app.defect(id, &defect);
-            Outcome::CallFailure(CallFailure::new(Kind::Internal, "The capability failed."))
+            Outcome::CallFailure(internal(inner, id, &defect, CAPABILITY_FAILED))
         })
     }
 
@@ -350,17 +368,30 @@ impl<C: Send + Sync + 'static> Session<C> {
             return Err(CallFailure::new(Kind::InvalidInput, issues));
         }
         let (token, start) = prepare();
-        let source = (event.definition.subscribe)(
-            input,
-            subscription(
-                inner.context.clone(),
-                inner.target.clone(),
-                options.cursor,
-                max_age_ms,
-                token,
-            ),
-        )
-        .map_err(|message| CallFailure::new(Kind::InvalidInput, message))?;
+        let started = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            (event.definition.subscribe)(
+                input,
+                subscription(
+                    inner.context.clone(),
+                    inner.target.clone(),
+                    options.cursor,
+                    max_age_ms,
+                    token,
+                ),
+            )
+        }));
+        let source = match started {
+            Ok(Ok(source)) => source,
+            Ok(Err(message)) => return Err(CallFailure::new(Kind::InvalidInput, message)),
+            Err(panic) => {
+                return Err(internal(
+                    inner,
+                    id,
+                    &Defect::from_panic(panic),
+                    INTERNAL_MESSAGE,
+                ));
+            }
+        };
         let checked = event.clone();
         let app = inner.app.clone();
         let name = id.to_owned();

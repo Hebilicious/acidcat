@@ -3,7 +3,7 @@
 A **binding** makes one kind of surface from a target's [view](../catalog.md#views). One binding works for every catalog.
 
 - A **protocol binding** makes a surface on the network or in a terminal, for example MCP or a command line. Any language can implement it.
-- A **language binding** makes a surface in code, for example TypeScript. It tells how a capability looks as a function, as types and as an observable value. Applications use language bindings.
+- A **language binding** makes a surface in code, for example TypeScript or Rust. Each language binding follows the [programmatic binding](programmatic.md), the contract with no language. The language binding tells how a handle, a call, an outcome, an observable value and a cancellation look in its language. Applications use language bindings.
 
 A target lists its bindings, and it can use more than one. For example, a web page can use `typescript` and `webmcp`.
 
@@ -50,12 +50,13 @@ After these checks, the deployment MAY refuse a request, for example when it doe
 | Name | Kind | Surface | Events |
 | --- | --- | --- | --- |
 | [`typescript`](typescript.md) | Language | Handles in TypeScript and JavaScript | Async iterables |
+| [`rust`](rust.md) | Language | The functions of a session in Rust | `Occurrences`, read with `next` |
 | [`webmcp`](webmcp.md) | Protocol | WebMCP tools in a web page | None |
 | [`mcp`](mcp.md) | Protocol | An MCP server through HTTP, or through standard input and output | The MCP events extension |
 | [`cli`](cli.md) | Protocol | A command line | `watch`, with one line of JSON for each occurrence |
 | [`http`](http.md) | Protocol | JSON through HTTP | Server-sent events |
 
-You can write other bindings to the same rules, for example for Swift, Kotlin or gRPC. Give a new binding a prefixed name, such as `acme:swift`.
+You can write other bindings to the same rules, for example for Swift, Kotlin or gRPC. A language binding for another language maps the [programmatic binding](programmatic.md). Give a new binding a prefixed name, such as `acme:swift`.
 
 An API whose design you want to control, such as a GraphQL API, is application code. Build it on a language binding, with the library you prefer, and keep the HTTP binding for generic access to the capabilities. A GraphQL subscription comes from an event: the TypeScript binding gives an async iterable, which is the source of a GraphQL subscription through WebSockets or server-sent events.
 

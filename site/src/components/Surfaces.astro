@@ -45,7 +45,7 @@ const surfaces = [
     text: "A session gives a handle for each capability. execute returns a result: the value, or a failure with its tag. An AbortSignal cancels the call.",
     language: "typescript",
     code: 'const result = await handle.execute({ on: true });\nif (!result.ok && result.error._tag === "Offline") {\n  showOffline();\n}',
-    spec: "spec/bindings/typescript.md",
+    spec: "spec/bindings/programmatic.md",
   },
 ].map((surface) => ({ ...surface, html: highlight(surface.code, surface.language) }));
 ---

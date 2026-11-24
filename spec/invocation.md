@@ -68,7 +68,7 @@ A call ends when its work is complete. There is no polling and no time limit.
 
 ## State
 
-A capability with `state` has a value that a client can read and follow. A discrete thing that happens is an [event](events.md), not state. Examples are the status of a device, or the progress of long work. Each language binding tells how to read state and how to get its changes. A protocol binding MAY omit state.
+A capability with `state` has a value that a client can read and follow. A discrete thing that happens is an [event](events.md), not state. Examples are the status of a device, or the progress of long work. Each language binding gives state as the [programmatic binding](bindings/programmatic.md#handles) tells. A protocol binding MAY omit state.
 
 ## Design notes
 

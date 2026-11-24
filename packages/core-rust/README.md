@@ -1,6 +1,6 @@
 # acid-cat-core
 
-`acid-cat-core` is the AcidCat core for Rust, published on crates.io. It serves your application's capabilities and events through the [MCP](../../spec/bindings/mcp.md), [HTTP](../../spec/bindings/http.md) and [CLI](../../spec/bindings/cli.md) bindings. You declare everything in code, and the core writes the catalog from it. The core passes every `acid-cat conform` check for these three bindings.
+`acid-cat-core` is the AcidCat core for Rust, published on crates.io. It serves your application's capabilities and events through the [MCP](../../spec/bindings/mcp.md), [HTTP](../../spec/bindings/http.md) and [CLI](../../spec/bindings/cli.md) bindings, and to Rust code in the same process through the [Rust binding](../../spec/bindings/rust.md). You declare everything in code, and the core writes the catalog from it. The core passes every `acid-cat conform` check for these three bindings.
 
 ```sh
 cargo add acid-cat-core
@@ -117,7 +117,16 @@ An optional `Option` field takes the value of its type, not `null`, so add `#[se
 
 `render_catalog()` returns the catalog in canonical form. Write it to a file at build time and run `acid-cat check` on it.
 
-`Session::open(&app, target, context)` opens a session in the same process, with `invoke` and `subscribe`.
+`Session::open(&app, target, context)` opens a session in the same process. It serves the [Rust binding](../../spec/bindings/rust.md), which maps the [programmatic binding](../../spec/bindings/programmatic.md):
+
+| Method | Use |
+| --- | --- |
+| `capability_ids()`, `event_ids()`, `view()` | The capabilities and the events of the view |
+| `invoke(id, input, &cancel)` | A call with an input that is not trusted. It gives an `Outcome`: `Value`, `Failure` or `CallFailure`. `cancel`, or dropping the future, cancels the call |
+| `availability(id)`, `availability_changes()` | The latest availability of a capability, and a message after an availability changes. One message can stand for more than one change. The receiver gives `None` when the session closes, or when no availability of the session can change |
+| `state(id)` | A `StateWatch`: `snapshot()` and `changed()` |
+| `subscribe(id, input, options)` | The `Occurrences` of a subscription, or the call failure before the first occurrence. `next()` gives each occurrence, then the end. `cancel()`, or dropping it, cancels the subscription |
+| `closing()`, `close()` | The token that is cancelled when the session starts to close, and the close itself |
 
 ## Bindings
 
@@ -283,4 +292,4 @@ cli_main(app, context, CliOptions::new("aircon", "1.0.0").remote(client)).await;
 
 ## Tests
 
-`moon run core-rust:test` runs the tests. It needs `pnpm install` at the repository root, and `openssl`. The tests run `acid-cat conform` against the fixture through every binding, including poll and webhook delivery and the command line against a server.
+`moon run core-rust:test` runs the tests. It needs `pnpm install` at the repository root, and `openssl`. The tests run `acid-cat conform` against the fixture through every protocol binding, including poll and webhook delivery and the command line against a server.

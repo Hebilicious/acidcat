@@ -4,7 +4,9 @@ use std::time::Duration;
 
 use acid_cat_core::cli::{CliIo, CliOptions, OutputForm, exit, run_cli};
 use acid_cat_core::mcp::{McpStdioOptions, PROTOCOL_VERSION, run_stdio};
-use acid_cat_core::{App, Application, Availability, Emitted};
+use acid_cat_core::{
+    App, Application, Availability, Defect, Emitted, Kind, Outcome, Session, SubscribeOptions,
+};
 use futures::StreamExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -375,4 +377,58 @@ async fn an_interrupt_before_the_answer_to_watch_exits_with_130_and_writes_nothi
     .expect("the commands follow the rules");
     assert_eq!(code, exit::CANCELLED);
     assert_eq!(written.lock().unwrap().as_str(), "");
+}
+
+#[tokio::test]
+async fn a_provider_that_panics_before_it_gives_its_work_fails_as_internal() {
+    let defects = Arc::new(Mutex::new(Vec::new()));
+    let reported = defects.clone();
+    let app = App::new()
+        .title("Test")
+        .target("app", ["rust"])
+        .on_defect(move |id, _| reported.lock().unwrap().push(id.to_owned()))
+        .capability(
+            Capability::new("test.panics", "Panic before the work starts.")
+                .audience(["app"])
+                .input::<Text>()
+                .run(|input: Text, _| {
+                    assert_ne!(input.text, "panic", "the work does not start");
+                    async move { Ok(()) }
+                }),
+        )
+        .event(
+            Event::new("test.broken", "Panic before the stream starts.")
+                .audience(["app"])
+                .input::<Text>()
+                .payload::<Tick>()
+                .subscribe(|input: Text, _| {
+                    assert_ne!(input.text, "panic", "the stream does not start");
+                    futures::stream::empty::<Result<Emitted<Tick>, Defect>>()
+                }),
+        )
+        .build()
+        .unwrap_or_else(|problems| panic!("the application does not conform: {problems:?}"));
+    let session = Session::open(&app, "app", Arc::new(Services::default()));
+
+    let outcome = session
+        .invoke(
+            "test.panics",
+            json!({ "text": "panic" }),
+            &CancellationToken::new(),
+        )
+        .await;
+    let Outcome::CallFailure(failure) = outcome else {
+        panic!("the call gives a call failure");
+    };
+    assert_eq!(failure.kind, Kind::Internal);
+
+    let Err(failure) = session.subscribe(
+        "test.broken",
+        json!({ "text": "panic" }),
+        SubscribeOptions::default(),
+    ) else {
+        panic!("the subscription gives a call failure");
+    };
+    assert_eq!(failure.kind, Kind::Internal);
+    assert_eq!(*defects.lock().unwrap(), ["test.panics", "test.broken"]);
 }

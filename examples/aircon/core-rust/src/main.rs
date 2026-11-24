@@ -334,7 +334,7 @@ pub fn aircon() -> (Arc<Application<Unit>>, CliOutput) {
             "app",
             target(
                 "The phone, desktop and web apps that people use.",
-                &["typescript", "webmcp", "acme:swift", "acme:kotlin"],
+                &["typescript", "rust", "webmcp", "acme:swift", "acme:kotlin"],
             ),
         )
         .target_with(
