@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
-import type { Browser } from "playwright";
+import type { Browser, Page } from "playwright";
 import { dist, serveDist } from "./static-server.ts";
 import type { StaticServer } from "./static-server.ts";
 
@@ -87,4 +87,21 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   const budget: Record<string, number> = { image: 560_000, font: 180_000, script: 40_000, stylesheet: 70_000, document: 130_000 };
   for (const [type, size] of bytes) assert.ok(size <= (budget[type] ?? 0), `${type}: ${size} bytes, budget ${budget[type] ?? 0}`);
   await page.close();
+});
+
+test("each page preloads every font face that it loads, and the homepage preloads no other", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  for (const path of ["/", "/docs/", "/spec/catalog/", "/packages/"]) {
+    const page: Page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    const loaded = new Set<string>();
+    page.on("requestfinished", (request) => {
+      const file = new URL(request.url()).pathname;
+      if (file.endsWith(".woff2")) loaded.add(file);
+    });
+    await page.goto(`${origin}${path}`, { waitUntil: "networkidle" });
+    const preloaded = new Set<string>(await page.locator('link[rel="preload"][as="font"]').evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? "")));
+    assert.deepEqual([...loaded].filter((file) => !preloaded.has(file)), [], `${path} loads a face that it does not preload`);
+    if (path === "/") assert.deepEqual([...preloaded].filter((file) => !loaded.has(file)), [], "the homepage preloads a face that it does not use");
+    await page.close();
+  }
 });
