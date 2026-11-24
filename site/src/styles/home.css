@@ -407,7 +407,7 @@ h2 em {
 .footer {
   position: relative;
   overflow: hidden;
-  padding: 0 var(--layout-gutter-inline) var(--spacing_fluid-space-2xl);
+  padding: 0 var(--layout-gutter-inline);
   background:
     radial-gradient(ellipse 60% 80% at 15% 100%, color-mix(in oklch, var(--palette-acid-400) 7%, transparent), transparent 70%),
     linear-gradient(180deg, var(--palette-ink-950), var(--palette-ink-925));
@@ -457,10 +457,14 @@ h2 em {
 }
 .footer-status {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--spacing_fluid-space-xs);
   margin: var(--spacing_fluid-space-m) 0 0;
-  max-width: 28rem;
+  font-family: var(--font-family-label);
+  font-size: var(--typography_fluid-text-xs);
+  letter-spacing: var(--font-tracking-label);
+  text-transform: uppercase;
+  color: var(--palette-nixie-400);
 }
 .footer-lamp {
   flex: none;
@@ -506,15 +510,23 @@ h2 em {
   color: var(--palette-acid-400);
 }
 .footer-watermark {
-  position: absolute;
-  inset: auto 0 calc(-0.28 * var(--typography_fluid-display-4xl) * 1.8) 0;
-  margin: 0;
+  margin: var(--spacing_fluid-space-xl) 0 -0.3em;
   font-family: var(--font-family-display);
-  font-size: calc(var(--typography_fluid-display-4xl) * 1.8);
+  font-size: min(calc(var(--typography_fluid-display-4xl) * 1.8), 20vw);
   line-height: 1;
   text-align: center;
   color: transparent;
-  -webkit-text-stroke: 1px color-mix(in oklch, var(--palette-brass-400) 16%, transparent);
+  background-image: linear-gradient(
+    100deg,
+    color-mix(in oklch, var(--palette-brass-400) 30%, transparent),
+    color-mix(in oklch, var(--palette-acid-400) 24%, transparent) 35%,
+    color-mix(in oklch, var(--palette-cyan-400) 22%, transparent) 65%,
+    color-mix(in oklch, var(--palette-nixie-400) 26%, transparent)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-stroke: 1px color-mix(in oklch, var(--palette-brass-300) 28%, transparent);
+  mask-image: linear-gradient(180deg, var(--palette-neutral-black) 15%, transparent 85%);
   pointer-events: none;
   white-space: nowrap;
 }
@@ -543,7 +555,7 @@ h2 em {
 
 @media (max-width: 560px) {
   .footer-columns {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--spacing_fluid-space-s);
   }
   .button {
     flex: 1 1 100%;

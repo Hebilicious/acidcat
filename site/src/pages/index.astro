@@ -10,13 +10,44 @@ import FontPreload from "../components/site/FontPreload.astro";
 import SiteNav from "../components/site/SiteNav.astro";
 import { siteUrl, socialImage } from "../lib/social.ts";
 import Schematic from "../components/Schematic.astro";
+import { isExternal } from "../lib/external-links.ts";
 
 const repository = "https://github.com/Hebilicious/acidcat";
 const title = "AcidCat — Application Capability Identification Catalog";
 const description = "Describe what your application can do once. Serve it as a CLI, an MCP server, an HTTP API and typed client code.";
-
-
-
+const footerColumns = [
+  {
+    heading: "Docs",
+    links: [
+      { label: "Introduction", href: "/docs/" },
+      { label: "Quick start", href: "/docs/quick-start/" },
+      { label: "Concepts", href: "/docs/concepts/catalog/" },
+      { label: "Guides", href: "/docs/guides/write-a-catalog/" },
+      { label: "Reference", href: "/docs/reference/cli/" },
+    ],
+  },
+  {
+    heading: "Spec",
+    links: [
+      { label: "Catalog", href: "/spec/catalog/" },
+      { label: "Invocation", href: "/spec/invocation/" },
+      { label: "Events", href: "/spec/events/" },
+      { label: "Bindings", href: "/spec/bindings/" },
+      { label: "Conformance", href: "/spec/conformance/" },
+    ],
+  },
+  {
+    heading: "Project",
+    links: [
+      { label: "Packages", href: "/packages/" },
+      { label: "Source code", href: repository },
+      { label: "Releases", href: `${repository}/releases` },
+      { label: "Issues", href: `${repository}/issues` },
+      { label: "License", href: `${repository}/blob/main/LICENSE` },
+    ],
+  },
+];
+const newTab = (href: string) => (isExternal(href) ? { target: "_blank", rel: "noopener noreferrer" } : {});
 ---
 
 <!doctype html>
@@ -92,36 +123,19 @@ const description = "Describe what your application can do once. Serve it as a C
           <Mark size={56} />
           <p class="footer-name">AcidCat</p>
           <p class="footer-expansion"><b>A</b>pplication <b>C</b>apability <b>Id</b>entification <b>Cat</b>alog</p>
-          <p class="footer-status"><span class="footer-lamp" aria-hidden="true"></span>Specification 0.1, draft. The packages are 0.x: pin exact versions.</p>
+          <p class="footer-status"><span class="footer-lamp" aria-hidden="true"></span>Specification 0.1 · Draft</p>
         </div>
         <nav class="footer-columns" aria-label="Footer">
-          <div>
-            <p class="footer-heading">Specification</p>
-            <ul>
-              <li><a href="/spec/catalog/">Catalog</a></li>
-              <li><a href="/spec/invocation/">Invocation</a></li>
-              <li><a href="/spec/events/">Events</a></li>
-              <li><a href="/spec/bindings/">Bindings</a></li>
-              <li><a href="/spec/extensions/">Extensions</a></li>
-              <li><a href="/spec/conformance/">Conformance</a></li>
-            </ul>
-          </div>
-          <div>
-            <p class="footer-heading">Build</p>
-            <ul>
-              <li><a href="https://www.npmjs.com/package/@acid-cat/cli" target="_blank" rel="noopener noreferrer">The acid-cat command</a></li>
-              <li><a href={`${repository}/tree/main/examples/aircon`} target="_blank" rel="noopener noreferrer">Air conditioner example</a></li>
-              <li><a href={`${repository}/blob/main/skills/acid-cat/SKILL.md`} target="_blank" rel="noopener noreferrer">Agent skill</a></li>
-            </ul>
-          </div>
-          <div>
-            <p class="footer-heading">Project</p>
-            <ul>
-              <li><a href={`${repository}/releases`} target="_blank" rel="noopener noreferrer">Releases</a></li>
-              <li><a href={`${repository}/issues`} target="_blank" rel="noopener noreferrer">Issues</a></li>
-              <li><a href={`${repository}/blob/main/LICENSE`} target="_blank" rel="noopener noreferrer">MIT license</a></li>
-            </ul>
-          </div>
+          {footerColumns.map((column) => (
+            <div>
+              <p class="footer-heading">{column.heading}</p>
+              <ul>
+                {column.links.map((link) => (
+                  <li><a href={link.href} {...newTab(link.href)}>{link.label}</a></li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </nav>
       </div>
       <p class="footer-watermark" aria-hidden="true">AcidCat</p>

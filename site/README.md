@@ -104,9 +104,11 @@ The site does not copy the specification. At build time, `spec-pages.ts` reads e
 - **Fig. 3.** A tab for each surface: the command line, the MCP server, WebMCP, the HTTP API and programmatic access. The selected tab shows a render of the surface, who uses it, what it does, an example from its binding and a link to the binding. Glass gauges fill and bubble when a tab is selected or under the pointer. Without JavaScript, all five panels show.
 - **Fig. 4.** A console with a vertical tab for each core: TypeScript, Effect, Rust, and "Your own core", which shows how `acid-cat conform` tests a core in any other language. The code comes from the README of each core. On wide screens with HTML-in-Canvas, `bluescreen.ts` draws the console as a calm blue screen that builds up from noise, and builds up again quickly when the reader changes the tab. Other browsers show the plain console.
 
-## The hero buttons
+## The hero buttons and the footer
 
 "Get started" goes to `/docs/`. "Star on GitHub" goes to the repository. In the browser, it asks the GitHub API for the number of stars, and shows it in a badge on the button. When the request fails, the badge does not show.
+
+The footer has one link column for each section of the header: Docs, Spec and Project. Each column has five links. Under the links, the large word AcidCat has a gradient of brass, acid green, cyan and Nixie amber.
 
 ## Roadmap
 
