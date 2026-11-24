@@ -46,6 +46,7 @@ catalog:
   fast-check: 4.10.2
   graphql: 17.1.0
   hast-util-from-html: 2.0.3
+  lighthouse: 13.6.0
   hast-util-to-mdast: 10.1.2
   mdast-util-gfm: 3.1.0
   mdast-util-to-markdown: 2.2.2

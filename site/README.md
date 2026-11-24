@@ -148,6 +148,15 @@ The renderer checks the GPU before it downloads the textures. It decodes each te
 - **Requests to other websites.** The number of stars on GitHub and the latest versions on the packages page load at low priority, so they do not take bandwidth from the page.
 - **Cache.** Each file that a page loads has a hash in its name, so the browser keeps it for a year.
 
+## Lighthouse
+
+`moon run site:lighthouse` builds the site, serves `dist/` with Brotli and the cache headers of `public/_headers`, and runs [Lighthouse](https://developer.chrome.com/docs/lighthouse) on mobile (simulated throttling) on `/` and `/docs/quick-start/`, five times each, in the Chromium of Playwright. It writes each report as HTML and JSON, and a summary table, into `.tmp/lighthouse/`. It fails when one of these budgets does not hold:
+
+- Each run of each page passes the audits that pass or fail: "Network dependency tree", "Forced reflow", "Improve image delivery", "Render blocking requests", "Layout shift culprits", "Cumulative Layout Shift" and "Accessibility tree is well-formed" (Agentic Browsing).
+- The median score of each category is at least its budget in `scripts/lighthouse.ts`.
+
+The workflow [`lighthouse.yml`](../.github/workflows/lighthouse.yml) runs the task on a runner of GitHub for each pull request that changes `site/`. It writes the summary table to the job summary, and uploads the reports as the artifact `lighthouse-reports`. Local results are not comparable: the score of a run depends on the load of the machine.
+
 ## The GPU renderers
 
 The hero, Fig. 1 and the blue screens draw with WebGPU when `navigator.gpu` gives a hardware adapter (a low-power one, so that it shares the GPU of the compositor), and with WebGL 2 otherwise. Code for WebGPU and three.js loads only when a renderer needs it. Each shader has one source, so both backends draw the same image.

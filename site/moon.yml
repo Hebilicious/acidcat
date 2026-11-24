@@ -107,3 +107,11 @@ tasks:
     command: "tsc"
     args: ["-p", "."]
     inputs: ["src/lib/**/*.ts", "test/**/*.ts", "worker/**/*.ts", "scripts/**/*.ts", ".vitepress/**/*.ts", "content/**/*.ts", "cssforge.config.ts", "cloudflare.config.ts", "tsconfig.json", "/tsconfig.base.json"]
+
+  lighthouse:
+    deps: ["build"]
+    description: "Serve dist/ with compression, run Lighthouse on mobile on the homepage and the quick start several times, and fail when a median score or a pass-or-fail audit misses its budget. The workflow lighthouse.yml runs it on GitHub's runners."
+    command: "node"
+    args: ["scripts/lighthouse.ts"]
+    options:
+      cache: false
