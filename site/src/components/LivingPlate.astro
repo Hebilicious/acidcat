@@ -137,9 +137,8 @@ const phoneSizes = `${Math.ceil(102 * (phoneCrop.width / art.height))}vw`;
         root.dataset["gpu"] = plate.backend;
         let visible = true;
         const sync = () => (visible && document.visibilityState === "visible" ? plate.start() : plate.stop());
-        // A resize across 960px gives the still image a plate with other columns. The canvas draws from the same file.
         let swap = Promise.resolve();
-        const follow = () => {
+        const followStillPlate = () => {
           const source = still.currentSrc;
           const rect = plateRect();
           swap = swap.then(async () => {
@@ -153,8 +152,8 @@ const phoneSizes = `${Math.ceil(102 * (phoneCrop.width / art.height))}vw`;
             root.classList.remove("is-live");
           });
         };
-        still.addEventListener("load", follow);
-        follow();
+        still.addEventListener("load", followStillPlate);
+        followStillPlate();
         new IntersectionObserver(([entry]) => {
           visible = entry?.isIntersecting ?? false;
           sync();

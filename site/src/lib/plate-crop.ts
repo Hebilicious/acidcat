@@ -7,5 +7,4 @@ export const art = { width: 2400, height: 941, pad: 728 } as const;
  */
 export const phoneCrop = { x: 1130, width: 1052 } as const;
 
-/** The media query of the phone layout of the hero: a fixed aspect ratio, and the phone plates. */
 export const phoneMedia = "(max-width: 960px)";

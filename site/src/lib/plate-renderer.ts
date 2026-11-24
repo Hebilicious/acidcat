@@ -31,8 +31,7 @@ export interface PlateHandle {
   readonly start: () => void;
   readonly stop: () => void;
   readonly setActive: (active: boolean) => void;
-  /** Draws from another plate: the file, and the columns of the key art that it holds. */
-  readonly setPlate: (plate: string, rect: readonly [number, number]) => Promise<void>;
+  readonly setPlate: (plate: string, plateRect: readonly [number, number]) => Promise<void>;
 }
 
 const FOCUS_DEPTH = 0.64;

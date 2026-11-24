@@ -5,11 +5,7 @@ const onIdle = (callback: () => void) => {
   else setTimeout(callback, 1);
 };
 
-/**
- * The table of contents of a docs page: it marks the link of the heading at the top of the viewport. It takes the
- * place of the `starlight-toc` element of Starlight, with the same markup and behavior, and it reads the sizes of the
- * header and of the viewport only in a `ResizeObserver` callback, where the layout is already done.
- */
+/** Reads the sizes of the header and of the viewport only in a `ResizeObserver` callback, where the browser has already done the layout. */
 export class StarlightTOC extends HTMLElement {
   private currentLink = this.querySelector<HTMLAnchorElement>('a[aria-current="true"]');
   private readonly minLevel = Number.parseInt(this.dataset["minH"] ?? "2", 10);

@@ -55,7 +55,7 @@ test("every character on every page is in the core of the fonts, so no page load
 test("every character that the browser draws beside the text of a page is in the core: list markers, generated content and text from scripts", async () => {
   if (browser === undefined || server === undefined) throw new Error("No browser.");
   const page = await browser.newPage();
-  // The search button of the docs shows the key of the platform, and only macOS has its own symbol.
+  // The search button of Starlight shows ⌘ only when `navigator.platform` is an Apple platform.
   await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "platform", { get: () => "MacIntel" }));
   const outside = new Map<string, string>();
   for (const file of await builtPages()) {
