@@ -1,15 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createCssVariablesTheme, createHighlighter } from "shiki";
 import { catalogExamples } from "./catalog-examples.ts";
 import { catalogLanguages, cores, exampleFor, repositoryRoot as repository } from "./ecosystem.ts";
+import { fences } from "./markdown-fences.ts";
 
 const fence = async (file: string, language: string, from?: RegExp): Promise<string> => {
-  const text = await readFile(join(repository, file), "utf8");
-  const match = new RegExp("```" + language + "[^\\n]*\\n([\\s\\S]*?)\\n```").exec(text);
-  if (match?.[1] === undefined) throw new Error(`No ${language} block in ${file}.`);
-  if (from === undefined) return match[1];
-  const lines = match[1].split("\n");
+  const code = fences(await readFile(join(repository, file), "utf8")).find((candidate) => candidate.language === language)?.code;
+  if (code === undefined) throw new Error(`No ${language} block in ${file}.`);
+  if (from === undefined) return code;
+  const lines = code.split("\n");
   const first = lines.findIndex((line) => from.test(line));
   if (first < 0) throw new Error(`No match for ${from} in ${file}.`);
   return lines.slice(first).join("\n");
@@ -69,8 +68,3 @@ export const coreSnippets = async (): Promise<Snippet[]> =>
       return { id: core.id, label: core.label, language: core.lang, source: core.readme, code: await fence(core.readme, readme.language, readme.from) };
     }),
   );
-
-const theme = createCssVariablesTheme({ name: "acidcat", variablePrefix: "--code-", fontStyle: true });
-const highlighter = await createHighlighter({ themes: [theme], langs: ["typescript", "python", "go", "rust", "pkl", "json", "shellscript", "http"] });
-
-export const highlight = (code: string, language: string): string => highlighter.codeToHtml(code, { lang: language, theme: "acidcat" });

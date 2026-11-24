@@ -1,0 +1,26 @@
+---
+title: The web page with WebMCP
+description: A web page that serves the app target as WebMCP tools, with controls that share one session with the agent.
+sidebar:
+  order: 5
+  label: Web page with WebMCP
+tableOfContents: false
+---
+
+import ExampleBlock from "../../../../components/docs/ExampleBlock.astro";
+import CodeExplorer from "../../../../components/docs/CodeExplorer.astro";
+import FileLink from "../../../../components/docs/FileLink.astro";
+
+The page shows the status of the unit, with controls for each setting. It registers each capability of the `app` target as a WebMCP tool. The controls and the tools share one session, so a person and an agent see the changes of each other.
+
+<FileLink file="core-ts/page.ts" /> and <FileLink file="core-effect/page.ts" /> open the session with each TypeScript core. Both use <FileLink file="web/page.ts" /> and <FileLink file="web/controls.ts" />.
+
+Serve a page from `examples/aircon`, and open the URL that it prints:
+
+<ExampleBlock section="WebMCP" />
+
+Without WebMCP in the browser, the controls work and the status reads `no host`.
+
+<CodeExplorer open="core-ts/page.ts" />
+
+See the [WebMCP binding](/spec/bindings/webmcp/).

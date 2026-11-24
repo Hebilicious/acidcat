@@ -52,7 +52,7 @@ tasks:
       - "/packages/**/Cargo.toml"
       - "/packages/**/pyproject.toml"
       - "/packages/core-*/README.md"
-      - "/examples/aircon/catalog/**/*"
+      - "/examples/**/*"
       - "/skills/**/*"
       - "/packages/core-ts/src/**/*.ts"
       - "/packages/spec-ts/src/**/*.ts"

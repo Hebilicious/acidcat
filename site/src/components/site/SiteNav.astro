@@ -18,7 +18,7 @@ const current = (href: string) => href.startsWith("/") && path.startsWith(href);
     <span>AcidCat</span>
   </a>
   <div class="site-search"><slot name="search" /></div>
-  <nav class="site-links" aria-label="Main">
+  <nav class="site-links" aria-label="Site">
     {links.map((link) => (
       <a href={link.href} aria-label={link.label} aria-current={current(link.href) ? "page" : undefined} target={link.href.startsWith("http") ? "_blank" : undefined} rel={link.href.startsWith("http") ? "noopener noreferrer" : undefined}>
         <svg class="site-icon" viewBox="0 0 24 24" aria-hidden="true" set:html={link.icon} />

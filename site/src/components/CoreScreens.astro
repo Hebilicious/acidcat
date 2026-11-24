@@ -1,6 +1,7 @@
 ---
 import { cores as registry, githubBlob as repository, ownCore } from "../lib/ecosystem.ts";
-import { coreSnippets, highlight } from "../lib/snippets.ts";
+import { highlight } from "../lib/highlight.ts";
+import { coreSnippets } from "../lib/snippets.ts";
 
 const snippets = await coreSnippets();
 const official = registry.map((core) => {

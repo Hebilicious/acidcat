@@ -1,0 +1,13 @@
+---
+import { requireExampleFile } from "../../lib/example-files.ts";
+
+interface Props {
+  readonly file: string;
+  readonly example?: string;
+}
+
+const { file, example = "aircon" } = Astro.props;
+requireExampleFile(example, file, Astro.url.pathname);
+---
+
+<a href={`#file=${file}`} data-file-link><code>{file}</code></a>

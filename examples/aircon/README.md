@@ -16,6 +16,8 @@ The same application exists on all three cores, so you can compare them:
 
 The example imports the packages by name. The packages never import the example.
 
+The [Examples](https://acidcat.hebilicious.workers.dev/docs/examples/) pages of the site show these files in a code explorer. The site reads them from this directory when it is built, so a new file appears there without a change to the site.
+
 Run the commands below from `examples/aircon` unless a section says otherwise. Build the Rust program once with `cargo build --manifest-path core-rust/Cargo.toml` before you use `core-rust/target/debug/aircon`.
 
 ## The catalog
