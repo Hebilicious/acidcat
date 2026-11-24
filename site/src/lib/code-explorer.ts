@@ -37,9 +37,13 @@ export const initExplorer = (root: HTMLElement): void => {
 
   const fileItem = (file: string): HTMLElement | undefined => items(tree).find((item) => item.dataset["file"] !== undefined && item.dataset["path"] === file);
 
-  const focusItem = (item: HTMLElement): void => {
+  const setTabStop = (item: HTMLElement): void => {
     for (const other of items(tree)) other.tabIndex = -1;
     item.tabIndex = 0;
+  };
+
+  const focusItem = (item: HTMLElement): void => {
+    setTabStop(item);
     item.focus();
   };
 
@@ -65,10 +69,7 @@ export const initExplorer = (root: HTMLElement): void => {
     for (let parent = parentItem(item); parent !== null; parent = parentItem(parent)) parent.setAttribute("aria-expanded", "true");
     for (const other of items(tree)) if (other.dataset["file"] !== undefined) other.setAttribute("aria-selected", String(other === item));
     if (options.focus) focusItem(item);
-    else {
-      for (const other of items(tree)) other.tabIndex = -1;
-      item.tabIndex = 0;
-    }
+    else setTabStop(item);
     if (options.updateHash) history.replaceState(history.state, "", `${hashPrefix}${file}`);
     if (root.dataset["current"] === file) return;
     root.dataset["current"] = file;
@@ -81,7 +82,9 @@ export const initExplorer = (root: HTMLElement): void => {
       if (current !== request) return;
       source.innerHTML = html;
     } catch {
-      if (current === request) source.textContent = `Could not load ${file}. Open it on GitHub.`;
+      if (current !== request) return;
+      source.textContent = `Could not load ${file}. Open it on GitHub.`;
+      root.dataset["current"] = "";
     } finally {
       if (current === request) source.setAttribute("aria-busy", "false");
     }
@@ -105,6 +108,12 @@ export const initExplorer = (root: HTMLElement): void => {
   tree.addEventListener("click", (event) => {
     const item = event.target instanceof Element ? event.target.closest<HTMLElement>('[role="treeitem"]') : null;
     if (item !== null) activate(item);
+  });
+
+  tree.addEventListener("focusout", (event) => {
+    if (event.relatedTarget instanceof Node && tree.contains(event.relatedTarget)) return;
+    const selected = tree.querySelector<HTMLElement>('[role="treeitem"][aria-selected="true"]');
+    if (selected !== null && isVisible(selected, tree)) setTabStop(selected);
   });
 
   tree.addEventListener("keydown", (event) => {
