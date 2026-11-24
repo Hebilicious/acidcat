@@ -1,0 +1,65 @@
+name: Lighthouse
+
+on:
+  pull_request:
+    # The inputs of the built site, as the build of Workers Builds watches them, and this workflow.
+    paths:
+      - "site/**"
+      - "spec/**"
+      - "schemas/**"
+      - "examples/**"
+      - "packages/**"
+      - "skills/**"
+      - "release-please-config.json"
+      - ".release-please-manifest.json"
+      - ".prototools"
+      - ".moon/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - ".github/workflows/lighthouse.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lighthouse-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lighthouse:
+    name: moon run site:lighthouse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # Moon compares the pull request with its base, so it needs the full history.
+        with:
+          fetch-depth: 0
+
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - run: pnpm install --frozen-lockfile
+
+      - id: playwright
+        run: echo "version=$(pnpm --dir site exec playwright --version)" >> "$GITHUB_OUTPUT"
+      - id: browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      # The runner image already has the system libraries that Chromium needs.
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --dir site exec playwright install --with-deps chromium
+
+      - run: moon run site:lighthouse
+
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lighthouse-reports
+          path: site/.tmp/lighthouse/
+          if-no-files-found: ignore

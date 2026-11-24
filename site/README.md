@@ -67,6 +67,7 @@ The Worker runs first only for the paths in `workerPaths` of `cloudflare.config.
 | `src/lib/page-chunks.ts` | Puts the modules that only one page imports in a chunk of their own, when that page also imports a module dynamically, so that each module runs once. See [Loading](#loading) |
 | `src/lib/preload-scripts.ts` | Names each script that a page loads at once as a preload link of its head, and starts the scripts after the first paint. See [Loading](#loading) |
 | `src/lib/server-roles.ts` | Adds `role` to each element that has `data-role` in the built HTML. See [Loading](#loading) |
+| `src/lib/content-types.ts` | The media type of each kind of file in the build, as Cloudflare serves it. The server of the tests and the server of the Lighthouse run send each file with it, and `test/pages.test.ts` fails when a file of the build has no type in it |
 | `src/lib/sitemap.ts` | Writes `/sitemap-index.xml` and `/sitemap-0.xml` |
 | `cloudflare.config.ts` | The Worker that serves the site: its name, its entrypoint, the paths that run the Worker first, the assets binding, and the 404 page for unknown paths |
 | `worker/index.ts`, `worker/discovery.ts` | The Worker. It serves the MCP server and the HTTP API of the AcidCat app, the well-known documents, Markdown to a client that asks for it, and the `Link` header of each page. Everything else comes from the assets |
@@ -147,6 +148,25 @@ The renderer checks the GPU before it downloads the textures. It decodes each te
 - **Raster.** A gradient that fades one color to transparent names `in srgb`. Between colors of CSS Color 4, a gradient interpolates in OKLab by default, and a software rasterizer draws that slowly. In sRGB, such a gradient gives the same pixels. A gradient between two hues keeps OKLab.
 - **Requests to other websites.** The number of stars on GitHub and the latest versions on the packages page load at low priority, so they do not take bandwidth from the page.
 - **Cache.** Each file that a page loads has a hash in its name, so the browser keeps it for a year.
+
+## Lighthouse
+
+`moon run site:lighthouse` builds the site, and serves `dist/` from memory as the Worker does: it compresses each text file with Brotli once when it starts, as Cloudflare serves a compressed file from its cache, and it sends the cache headers of `public/_headers` and the media type of each file from `src/lib/content-types.ts`. It runs [Lighthouse](https://developer.chrome.com/docs/lighthouse) on mobile (simulated throttling) on `/` and `/docs/quick-start/`, five times each, in the Chromium of Playwright. It writes each report as HTML and JSON, and a summary table, into `.tmp/lighthouse/`. It fails when one of these budgets does not hold:
+
+- Each run of each page passes the audits that pass or fail: "Network dependency tree", "Forced reflow", "Improve image delivery", "Render blocking requests", "Layout shift culprits", "Cumulative Layout Shift" and "Accessibility tree is well-formed" (Agentic Browsing).
+- The median score of each category is at least its budget in `scripts/lighthouse.ts`.
+
+The run blocks the request of the homepage for the star count, so it does not use the network, and the console error that the block makes is one that Lighthouse ignores. The budgets come from nine runs of the job on the runners, with five runs of each page in each job. Each budget of a median is the lowest median of a job, less 5 points:
+
+| Page | Category | Each run | Median of each job | Budget of the median |
+| --- | --- | --- | --- | --- |
+| `/` | Performance | 85 to 94 | 87 to 94 | 82 |
+| `/docs/quick-start/` | Performance | 97 to 100 | 100 | 95 |
+| Both | Accessibility, Best practices, SEO | 100 | 100 | 100 |
+
+Each audit that passes or fails passed in each of the 90 runs.
+
+The workflow [`lighthouse.yml`](../.github/workflows/lighthouse.yml) runs the task on a runner of GitHub for each pull request that changes a file that the built site reads: the same files that start a build of Workers Builds (see [Deployment](#deployment)), and the workflow itself. It writes the summary table to the job summary, and uploads the reports as the artifact `lighthouse-reports`. Local results are not comparable: the score of a run depends on the load of the machine.
 
 ## The GPU renderers
 
