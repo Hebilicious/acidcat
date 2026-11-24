@@ -6,14 +6,17 @@
   "dependencies": {
     "@vitejs/plugin-vue": "catalog:",
     "@vue/compiler-sfc": "catalog:",
+    "hast-util-from-html": "catalog:",
+    "minisearch": "catalog:",
     "satteri": "catalog:",
+    "vite": "catalog:",
     "sharp": "catalog:",
     "vue": "catalog:",
     "vue-router": "catalog:",
-    "vite": "catalog:",
     "yaml": "catalog:"
   },
   "devDependencies": {
+    "@types/hast": "catalog:",
     "@types/node": "catalog:",
     "playwright": "catalog:",
     "typescript": "catalog:"
@@ -24,6 +27,6 @@
     "./behaviors": "./src/behaviors/index.ts",
     "./markdown": "./src/markdown.ts",
     "./data": "./src/data.ts",
-    "./image": "./src/image-module.d.ts"
+    "./search": "./src/search.ts"
   }
 }

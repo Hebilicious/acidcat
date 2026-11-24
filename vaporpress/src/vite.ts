@@ -12,8 +12,10 @@ import type { ImageOptions } from "./images.ts";
 import { leanTemplates } from "./lean.ts";
 import { compileMarkdown } from "./markdown.ts";
 import type { MarkdownOptions } from "./markdown.ts";
-import { prerender } from "./prerender.ts";
+import { pageUrl, prerender } from "./prerender.ts";
 import type { DocumentOptions } from "./prerender.ts";
+import { searchIndexJson, searchMeta } from "./search-index.ts";
+import { devPageUrl, devSearchIndexUrl } from "./search-shared.ts";
 
 export type { BuildFiles } from "./prerender.ts";
 
@@ -33,6 +35,8 @@ export interface VaporpressOptions extends DocumentOptions {
   readonly images?: false | ImageOptions;
   /** Runs after the build has written every page, with the folder of the build. */
   readonly afterBuild?: (outDir: string) => void | Promise<void>;
+  /** Indexes the content of each built page for `loadSearch` of `vaporpress/search`. A page marks its content with the attribute `data-search`. */
+  readonly search?: boolean;
   /** Options for `@vitejs/plugin-vue`. The framework compiles every component in Vapor mode. */
   readonly vue?: VueOptions;
 }
@@ -58,12 +62,22 @@ const splitId = (id: string): { readonly file: string; readonly query: string } 
 
 const isPageFile = (file: string): boolean => file.endsWith(".md") || file.endsWith(".vue");
 
-const devDocument = (options: DocumentOptions): string =>
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+
+interface DevServerEntry {
+  readonly paths: () => readonly string[];
+  readonly render: (path: string) => Promise<{ readonly html: string }>;
+}
+
+const isDevServerEntry = (value: unknown): value is DevServerEntry => isRecord(value) && typeof value["paths"] === "function" && typeof value["render"] === "function";
+
+const devDocument = (options: VaporpressOptions): string =>
   [
     "<!doctype html>",
     `<html lang="${options.lang ?? "en"}">`,
     '<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
     options.headHtml ?? "",
+    options.search === true ? searchMeta(devSearchIndexUrl) : "",
     "</head>",
     `<body><div id="app"></div><script type="module" src="/@fs${clientEntry}"></script></body>`,
     "</html>",
@@ -149,6 +163,21 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
     configureServer(server) {
       return () => {
         server.middlewares.use((request, response, next) => {
+          const url = new URL(request.url ?? "/", "http://localhost");
+          if (request.method !== "GET" || options.search !== true || (url.pathname !== devSearchIndexUrl && url.pathname !== devPageUrl)) return next();
+          const answer = async (): Promise<{ readonly type: string; readonly body: string }> => {
+            const entry: unknown = await server.ssrLoadModule(serverEntry);
+            if (!isDevServerEntry(entry)) throw new Error("The server entry does not export paths and render.");
+            if (url.pathname === devPageUrl) return { type: "text/html", body: (await entry.render(url.searchParams.get("url") ?? "/")).html };
+            const pages = await Promise.all(entry.paths().map(async (path) => ({ url: pageUrl(path), html: (await entry.render(pageUrl(path))).html })));
+            return { type: "application/json", body: searchIndexJson(pages) };
+          };
+          void answer().then(({ type, body }) => {
+            response.setHeader("Content-Type", type);
+            response.end(body);
+          }, next);
+        });
+        server.middlewares.use((request, response, next) => {
           const accept = request.headers.accept ?? "";
           if (request.method !== "GET" || !accept.includes("text/html")) return next();
           void server.transformIndexHtml(request.url ?? "/", devDocument(options)).then((html) => {
@@ -170,6 +199,8 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
         routeFiles,
         options,
         clientEntryName,
+        search: options.search === true,
+        assetsDir: client.config.build.assetsDir,
       });
       await options.afterBuild?.(resolve(siteRoot, client.config.build.outDir));
     },
