@@ -17,17 +17,48 @@ const staticImports = (dist: string, href: string): Promise<readonly string[]> =
   return found;
 };
 
+const starter = (sources: readonly string[]): string => {
+  const imports = sources.reduce((chain, src) => `${chain}.then(()=>import(${JSON.stringify(src)}))`, "Promise.resolve()");
+  return [
+    "<script>{",
+    "let started=false;",
+    `const start=()=>{if(started)return;started=true;${imports}};`,
+    "const afterPaint=()=>{",
+    'if(document.visibilityState!=="visible"||!PerformanceObserver.supportedEntryTypes.includes("paint"))return start();',
+    'new PerformanceObserver((_,observer)=>{observer.disconnect();start()}).observe({type:"paint",buffered:true});',
+    'addEventListener("load",start,{once:true})',
+    "};",
+    'document.readyState==="loading"?addEventListener("DOMContentLoaded",afterPaint,{once:true}):afterPaint()',
+    "}</script>",
+  ].join("");
+};
+
 /**
- * Names each module script of the head as a `modulepreload` link, and each script that those scripts import
- * statically, at any depth. The browser fetches every script of the page at once, and Lighthouse counts no preload in a
- * chain of critical requests, so the page passes the audit "Network dependency tree".
+ * Fetches the scripts of a page with its HTML, and starts them after the first paint.
+ *
+ * - Each module script and `modulepreload` link of the head, and each script that they import statically at any depth,
+ *   becomes a `preload` link. The browser fetches each script at once, and compiles it only when the page imports it.
+ *   Lighthouse counts no preload in a chain of critical requests, so the page passes the audit "Network dependency
+ *   tree".
+ * - One inline script imports the module scripts in their order when the document is parsed and the browser reports
+ *   its first paint, so the browser paints the page from the server before it evaluates the scripts and hydrates the
+ *   page. A hidden page does not paint, so it imports them when the document is parsed, as does a browser that does
+ *   not report paints. A page that has nothing to paint before its scripts run, such as the 404 page of VitePress,
+ *   imports them at the load event.
  */
-export const preloadModuleScripts = async (html: string, dist: string): Promise<string> => {
+export const startScriptsAfterFirstPaint = async (html: string, dist: string): Promise<string> => {
   const end = html.indexOf("</head>");
-  const head = html.slice(0, end).replace(moduleScript, (script, src: string) => `<link rel="modulepreload" href="${src}">${script}`);
-  const named = [...head.matchAll(modulePreload)].map(([, href = ""]) => href);
-  const all = new Set(named);
-  for (const href of all) for (const imported of await staticImports(dist, href)) all.add(imported);
-  const missing = [...all].filter((href) => !named.includes(href)).map((href) => `<link rel="modulepreload" href="${href}">`);
-  return head + missing.join("") + html.slice(end);
+  const head = html.slice(0, end);
+  const sources = [...head.matchAll(moduleScript)].map(([, src = ""]) => src);
+  if (sources.length === 0) return html;
+  const scripts = new Set([...sources, ...[...head.matchAll(modulePreload)].map(([, href = ""]) => href)]);
+  for (const href of scripts) for (const imported of await staticImports(dist, href)) scripts.add(imported);
+  const preloads = [...scripts].map((href) => `<link rel="preload" as="script" crossorigin href="${href}">`).join("");
+  let first = true;
+  const rewritten = head.replace(modulePreload, "").replace(moduleScript, () => {
+    const replacement = first ? preloads + starter(sources) : "";
+    first = false;
+    return replacement;
+  });
+  return rewritten + html.slice(end);
 };

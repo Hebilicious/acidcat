@@ -11,6 +11,7 @@ import type { StaticServer } from "./static-server.ts";
 
 const pages = ["/", "/docs/", "/spec/catalog/", "/packages/"];
 const phone = { width: 400, height: 860 };
+const phoneThatShowsTheHeroOnly = { width: 400, height: 700 };
 const viewports = [phone, { width: 1440, height: 900 }];
 
 // The rules of axe-core that the Lighthouse audit "Accessibility tree is well-formed" checks.
@@ -84,18 +85,20 @@ test("every file that a page loads has a hash in its name, and the browser keeps
   assert.deepEqual([...offenders], []);
 });
 
-test("the homepage loads no stylesheet, and the head names each script that it loads at once, as a script or a modulepreload link", async () => {
+test("the homepage loads no stylesheet, names each script that it loads before a figure comes near as a preload link of its head, and starts the scripts from one inline script", async () => {
   if (browser === undefined) throw new Error("No browser.");
-  const page = await openPage(browser, { viewport: phone });
+  const page = await openPage(browser, { viewport: phoneThatShowsTheHeroOnly });
   const loaded: { file: string; type: string }[] = [];
   page.on("request", (request) => loaded.push({ file: new URL(request.url()).pathname, type: request.resourceType() }));
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
-  const preloaded = new Set(await page.locator('head link[rel="modulepreload"], head script[type="module"][src]').evaluateAll((elements) => elements.map((element) => element.getAttribute("href") ?? element.getAttribute("src") ?? "")));
+  const preloaded = new Set(await page.locator('head link[rel="preload"][as="script"]').evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? "")));
+  const moduleScripts = await page.locator('script[type="module"]').count();
   await page.close();
   assert.deepEqual(loaded.filter(({ type }) => type === "stylesheet"), []);
   const scripts = loaded.filter(({ type, file }) => type === "script" && file.startsWith("/assets/")).map(({ file }) => file);
   assert.ok(scripts.length > 0, "the homepage loads its scripts");
   assert.deepEqual(scripts.filter((file) => !preloaded.has(file)), []);
+  assert.equal(moduleScripts, 0, "the inline script imports the module scripts after the first paint");
 });
 
 test("no script imports the chunk of a page, so a page that starts from its lean chunk runs each module once", async () => {

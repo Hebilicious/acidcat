@@ -14,7 +14,7 @@ import { writeExplorerSources } from "../src/lib/example-highlight.ts";
 import { packageHeaders } from "../src/lib/package-groups.ts";
 import { readPublishedPackages } from "../src/lib/packages.ts";
 import { pageModuleChunks } from "../src/lib/page-chunks.ts";
-import { preloadModuleScripts } from "../src/lib/preload-scripts.ts";
+import { startScriptsAfterFirstPaint } from "../src/lib/preload-scripts.ts";
 import { inlineStyles, markRoutes } from "../src/lib/route-styles.ts";
 import { writeRoles } from "../src/lib/server-roles.ts";
 import { writeSitemap } from "../src/lib/sitemap.ts";
@@ -72,7 +72,7 @@ export default defineConfig<SiteTheme>({
     if (pageData.relativePath === "packages/index.md") pageData.headers = packageHeaders(packages);
     pageData.frontmatter["head"] = pageHead(pageData, siteUrl);
   },
-  transformHtml: async (html, _id, { siteConfig }) => writeExplorerSources(await preloadModuleScripts(writeRoles(html), siteConfig.outDir), repositoryRoot),
+  transformHtml: async (html, _id, { siteConfig }) => writeExplorerSources(await startScriptsAfterFirstPaint(writeRoles(html), siteConfig.outDir), repositoryRoot),
   transformHead: ({ pageData, assets }): HeadConfig[] => fontPreloads(pageData.relativePath === "index.md" ? "home" : "docs", assets),
   buildEnd: async (config) => {
     await inlineStyles(config.outDir);
