@@ -4,6 +4,7 @@ import { defineConfig } from "astro/config";
 import { fileURLToPath } from "node:url";
 import { codeTheme } from "./src/lib/code-theme.ts";
 import { isExternal } from "./src/lib/external-links.ts";
+import { fontSubsets } from "./src/lib/fonts.ts";
 import { specSidebar } from "./src/lib/spec-pages.ts";
 
 const specItems = await specSidebar(fileURLToPath(new URL("..", import.meta.url)));
@@ -28,6 +29,7 @@ export default defineConfig({
     }),
   },
   integrations: [
+    fontSubsets(fileURLToPath(new URL(".fonts", import.meta.url))),
     starlight({
       title: "AcidCat",
       description: "Describe what your application can do once. Serve it as a CLI, an MCP server, an HTTP API and typed client code.",

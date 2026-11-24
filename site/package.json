@@ -21,11 +21,13 @@
     "astro": "catalog:",
     "sharp": "catalog:",
     "shiki": "catalog:",
+    "subset-font": "catalog:",
     "three": "catalog:"
   },
   "devDependencies": {
     "@hebilicious/cssforge": "catalog:",
     "@types/node": "catalog:",
+    "@types/subset-font": "catalog:",
     "@types/three": "catalog:",
     "cf": "catalog:",
     "playwright": "catalog:",

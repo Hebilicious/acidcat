@@ -49,6 +49,7 @@ The homepage, the documentation, the specification and the list of packages of A
 | `public/_headers` | The cache headers of the Worker. The files in `/_astro/` have a hash in their name, so the browser keeps them for a year. The hero textures and the surface renders have no hash, so the browser keeps them for a day |
 | `cssforge.config.ts` | The design tokens: colors, fluid type and spacing scales, font families, tracking, radii and layout widths. [cssforge](https://github.com/Hebilicious/cssforge) writes them as CSS variables into `.cssforge/output.css`, which is committed |
 | `src/styles/tokens.css` | Imports the design tokens and the fonts that the homepage and the documentation share |
+| `src/lib/fonts.ts` | Splits each font face into a small core file and the rest at build time, and writes their `@font-face` rules into `.fonts/` |
 | `public/hero/` | The hero textures. `art/pack.sh` writes them |
 | `src/lib/social.ts`, `public/og/`, `art/og/build.sh` | The Open Graph and Twitter card of each section (home, docs, spec, packages). `art/og/build.sh` writes the 1200 by 630 images from the key art, the logo and the Monaspace fonts; `test/pages.test.ts` fails when a page has no card |
 | `art/` | The sources of the hero art, and the scripts that make the textures |
@@ -70,6 +71,8 @@ The art is futuristic steampunk: polished brass, copper and dark steel, with aci
 The CSS uses only the design tokens: colors (`--palette-*`, in OKLCH), sizes (`--typography_fluid-text-*`, `--typography_fluid-display-*`), spacing (`--spacing_fluid-space-*`), `--font-family-*`, `--font-tracking-*`, `--radius-size-*` and `--layout-*`. For transparency, it mixes a color with `transparent`: `color-mix(in oklch, var(--palette-acid-400) 40%, transparent)`.
 
 The fonts are from [Monaspace](https://monaspace.githubnext.com/): Xenon for headings, Radon for the accent words in headings, Argon for text, Krypton for labels and Neon for code. Texture healing (`calt`) is on. cssforge has no Vite plugin, so `site:dev` runs `cssforge --watch` next to Astro.
+
+`src/lib/fonts.ts` splits each face of Monaspace in two files when the build starts, and writes them with their `@font-face` rules into `.fonts/` (not in git). The core file has ASCII and the few other characters that the site uses, with all the OpenType features, at about half the size of the full face. The full face serves the other characters, with a `unicode-range`, so the browser downloads it only for a page that has one of them. `test/fonts.test.ts` fails when a page has a character outside the core: add it to `coreRanges`.
 
 ## The hero
 

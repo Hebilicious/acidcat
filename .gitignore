@@ -2,6 +2,7 @@ node_modules/
 dist/
 .out/
 .astro/
+.fonts/
 _apalache-out/
 .moon/cache/
 .moon/docker/

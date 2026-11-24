@@ -1,15 +1,6 @@
 @import "../../.cssforge/output.css";
 @import "./code.css";
-@import "@fontsource/monaspace-xenon/latin-400.css";
-@import "@fontsource/monaspace-xenon/latin-700.css";
-@import "@fontsource/monaspace-radon/latin-400.css";
-@import "@fontsource/monaspace-radon/latin-500.css";
-@import "@fontsource/monaspace-argon/latin-400.css";
-@import "@fontsource/monaspace-argon/latin-500.css";
-@import "@fontsource/monaspace-krypton/latin-400.css";
-@import "@fontsource/monaspace-krypton/latin-500.css";
-@import "@fontsource/monaspace-neon/latin-400.css";
-@import "@fontsource/monaspace-neon/latin-500.css";
+@import "../../.fonts/fonts.css";
 
 :root {
   font-feature-settings: "calt" 1, "liga" 1;
