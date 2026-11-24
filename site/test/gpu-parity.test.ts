@@ -114,7 +114,8 @@ const capture = async (origin: string, item: Case, backend: Backend): Promise<{ 
   await context.close();
   assert.deepEqual(errors, []);
   if (item.backendOf === "[data-plate]") {
-    assert.deepEqual([...new Set(plates)].length, 1, `the hero loads one plate, not ${[...new Set(plates)].join(" and ")}`);
+    const loaded = new Set(plates);
+    assert.equal(loaded.size, 1, `the hero loads one plate, not ${[...loaded].join(" and ")}`);
     assert.ok(region !== null && region.width >= item.viewport.width - 1, "the live hero fills the width");
   }
   return { image, backend: used };
