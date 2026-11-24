@@ -3,7 +3,8 @@ import { lookup as dnsLookup } from "node:dns";
 import type { LookupAddress } from "node:dns";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
-import { rootCertificates } from "node:tls";
+import { createSecureContext, rootCertificates } from "node:tls";
+import type { SecureContext } from "node:tls";
 
 import {
   canonicalJson,
@@ -114,7 +115,7 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
   const signingKeys = () => (imported ??= Promise.all(seeds.map(importWebhookSigningKey)));
   const network: Network = {
     allowPrivateNetworks: options.allowPrivateNetworks === true,
-    ca: options.ca === undefined ? undefined : [...rootCertificates, ...(typeof options.ca === "string" || Buffer.isBuffer(options.ca) ? [options.ca] : options.ca)],
+    secureContext: options.ca === undefined ? undefined : createSecureContext({ ca: [...rootCertificates, ...(typeof options.ca === "string" || Buffer.isBuffer(options.ca) ? [options.ca] : options.ca)] }),
     timeoutMs: settings.timeoutMs,
   };
   const subscriptions = new Map<string, Subscription>();
@@ -397,7 +398,7 @@ function constantTimeEquals(received: string | undefined, expected: string): boo
 
 interface Network {
   readonly allowPrivateNetworks: boolean;
-  readonly ca: readonly (string | Buffer)[] | undefined;
+  readonly secureContext: SecureContext | undefined;
   readonly timeoutMs: number;
 }
 
@@ -430,7 +431,7 @@ function postToAcceptedAddressWithoutRedirects(url: URL, headers: Record<string,
         headers: { ...headers, "Content-Length": String(Buffer.byteLength(body)) },
         agent: false,
         ...(isIP(host) === 0 ? { servername: host } : {}),
-        ...(network.ca === undefined ? {} : { ca: [...network.ca] }),
+        ...(network.secureContext === undefined ? {} : { secureContext: network.secureContext }),
         lookup: (hostname, lookupOptions, callback) => {
           dnsLookup(hostname, { all: true, family: lookupOptions.family ?? 0 }, (error, addresses: LookupAddress[]) => {
             if (error !== null) return callback(error, "", 0);
