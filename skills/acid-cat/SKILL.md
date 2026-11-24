@@ -7,7 +7,7 @@ description: |
 
 # AcidCat
 
-AcidCat describes what an application can do in one document, the **catalog**. Each surface of the application, for example a command line, an MCP server or a web page, comes from the catalog through a **binding**. A **core** runs the operations. `acid-cat conform` tests each protocol binding from outside. A language binding serves code in the same process, so the tests of each core test it.
+AcidCat describes what an application can do in one document, the **catalog**. Each **surface** of the application, for example a command line, an MCP server or WebMCP tools in a web page, comes from the catalog through a **binding**: the binding is the set of rules, and the surface is what a client uses. A **core** runs your providers and serves the surfaces. `acid-cat conform` tests each protocol binding from outside. A language binding serves code in the same process, so the tests of each core test it.
 
 The specification is at https://github.com/Hebilicious/acidcat/tree/main/spec. Read its vocabulary before you name things: https://github.com/Hebilicious/acidcat/blob/main/spec/README.md#vocabulary.
 

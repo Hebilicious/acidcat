@@ -116,8 +116,9 @@ Pass the same `aircon` to `mcpStdioMain` for an MCP server, or to `httpHandler` 
 | Part | What it is |
 | --- | --- |
 | Catalog | The contract, stored as JSON. Write it in the typed language of your choice: a core's code, a [catalog library](packages/catalog) for TypeScript, Python, Go or Rust, or [Pkl](packages/catalog/pkl). Checked at build time; programs do not read it at run time |
-| Binding | The rules for one surface: CLI, MCP, HTTP, WebMCP or a language such as TypeScript or Rust. Defined in the [specification](spec/bindings/README.md). Each language binding maps one contract with no language, the [programmatic binding](spec/bindings/programmatic.md) |
-| Core | A library that runs your capabilities and serves the bindings |
+| Surface | What a client uses: a command line, an MCP server, an HTTP API, WebMCP tools in a web page, or handles in code. The [vocabulary](spec/README.md#vocabulary) defines each term |
+| Binding | The rules for one kind of surface: CLI, MCP, HTTP, WebMCP or a language such as TypeScript or Rust. Defined in the [specification](spec/bindings/README.md). Each language binding maps one contract with no language, the [programmatic binding](spec/bindings/programmatic.md) |
+| Core | A library that runs your capabilities and serves the surfaces of the bindings |
 | `acid-cat conform` | Tests a running program from the outside, through each protocol binding. The tests of each core test its language binding |
 
 ## 🧳 Features

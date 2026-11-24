@@ -1,15 +1,15 @@
 # AcidCat specification
 
-An application describes what it can do in one JSON document, the **catalog**. Every surface of the application comes from the catalog: a web app, a desktop widget, a mobile app, a command line, an MCP server or an HTTP API. A **binding** defines how one kind of surface is made from the catalog. A **provider** runs the operations.
+An application describes what it can do in one JSON document, the **catalog**. Every **surface** of the application comes from the catalog: a command line, an MCP server, an HTTP API, tools in a web page, or handles in code. A **binding** defines how one kind of surface is made from the catalog. A **provider** runs the operations. Clients use the surfaces: a web app, a desktop widget or a mobile app uses handles in code, and an AI agent uses an MCP server.
 
 ```
                  catalog (JSON)
      what the application can do, and for whom
                        │
         ┌──────────────┼───────────────┐
-     provider       bindings         clients
-  runs the         rules for each   web, mobile, desktop,
-  operations       surface          CLI, MCP, API, …
+     provider       bindings         surfaces ──── clients
+  runs the         rules for each   CLI, MCP,      web, mobile,
+  operations       kind of surface  HTTP, …        agents, …
 ```
 
 The specification does not depend on a language or a library. Bindings depend on the specification, never the reverse.
@@ -43,10 +43,12 @@ Every document uses these terms with these meanings.
 | **Target** | A group of clients that can use a set of capabilities, for example `app`, `cli` or `mcp` |
 | **Audience** | The targets that can use a capability or an event. A capability or an event with no audience is available to no target |
 | **View** | The part of the catalog that one target can see. A view is itself a catalog |
+| **Surface** | What a client uses to reach the capabilities and the events of a target: for example a command line, an MCP server, an HTTP API, WebMCP tools in a web page, or handles in code. A binding makes a surface |
 | **Binding** | The rules that make one kind of surface from a view. A **protocol binding** makes a surface on the network or in a terminal, for example MCP or a command line. A **language binding** makes a surface in code, for example TypeScript or Rust. The **programmatic binding** is the contract that every language binding follows, with no language. See [Bindings](bindings/README.md) and [Programmatic binding](bindings/programmatic.md) |
 | **Alias** | A short command-line name for a capability or an event. A **command alias** is one or two words; a **flag alias** is `--` and one word. Command aliases with the same first word form a **group**. A command alias whose name is a shared prefix of commands is the **prefix default** of that prefix. The **fixed input** of an alias is the part of the input that the alias always gives. The **default alias** runs when the command line gets no command. See [CLI binding](bindings/cli.md#aliases) |
 | **Transport** | How a protocol binding carries messages between a client and a server, for example HTTP, or a process's standard input and output (stdio) |
 | **Provider** | The code that does the operations |
+| **Core** | A library that implements this specification in one language. It runs the providers and serves the bindings of each target. A program can follow this specification without a core |
 | **Client** | A program or a person that calls capabilities through a binding |
 | **Session** | One period in which one client calls the capabilities of one target and follows its events. It holds the client's identity. It opens, and later it closes |
 | **Invocation** | One call: an id and an input go in, one outcome comes out. See [Invocation](invocation.md) |

@@ -5,7 +5,7 @@ sidebar:
   order: 15
 ---
 
-A **binding** makes one kind of surface from the view of a target. One binding works for every catalog. It gets everything from the definitions of the application, so a new capability or a new event needs no change to the binding.
+A **binding** makes one kind of surface from the view of a target. A **surface** is what a client uses: for example the commands of a command line, the tools of an MCP server, or the handles in code. The binding is the set of rules in the specification; the surface is what a core serves by those rules. One binding works for every catalog. It gets everything from the definitions of the application, so a new capability or a new event needs no change to the binding.
 
 There are two kinds:
 
