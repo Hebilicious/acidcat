@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
 import type { Browser, Page } from "playwright";
-import { openPage } from "./github.ts";
+import { openPage, waitForHydration } from "./github.ts";
 import { serveDist } from "./static-server.ts";
 import type { StaticServer } from "./static-server.ts";
 
@@ -39,6 +39,7 @@ for (const viewport of [
     if (browser === undefined) throw new Error("No browser.");
     const page = await openPage(browser, { viewport });
     await page.goto(`${origin}/docs/quick-start/`, { waitUntil: "networkidle" });
+    await waitForHydration(page);
     assert.equal(await page.locator('link[data-route="search"]').count(), 0, "the page loads the CSS of the search only when the search opens");
     await page.locator(".search-button").click();
     const input = page.locator("#localsearch-input");

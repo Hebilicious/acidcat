@@ -78,6 +78,7 @@ test("at 960px, the hero shows the phone plate with the phone framing, as at 959
     if (browser === undefined) throw new Error("No browser.");
     const page = await openPage(browser, { viewport: { width, height: 900 } });
     await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+    await page.waitForFunction(() => (document.querySelector<HTMLElement>("[data-plate]")?.style.getPropertyValue("--plate-position") ?? "") !== "");
     const { plate, position } = await page.locator("[data-plate]").evaluate((root) => ({
       plate: root.querySelector("img")?.currentSrc ?? "",
       position: root instanceof HTMLElement ? root.style.getPropertyValue("--plate-position") : "",

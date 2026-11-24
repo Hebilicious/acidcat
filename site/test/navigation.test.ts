@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
 import type { Browser, Page } from "playwright";
-import { openPage } from "./github.ts";
+import { openPage, waitForHydration } from "./github.ts";
 import { serveDist } from "./static-server.ts";
 import type { StaticServer } from "./static-server.ts";
 
@@ -31,6 +31,7 @@ test("a link to another page changes the page in the browser, with no new docume
     if (request.resourceType() === "document") documents.push(new URL(request.url()).pathname);
   });
   await page.goto(`${origin}/docs/`, { waitUntil: "networkidle" });
+  await waitForHydration(page);
   await page.evaluate(() => Reflect.set(window, "sameDocument", true));
 
   await page.locator('.sidebar-content a[href="/docs/quick-start/"]').click();
@@ -55,6 +56,7 @@ test("a page change from the homepage to the docs loads the CSS of the docs befo
   if (browser === undefined) throw new Error("No browser.");
   const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+  await waitForHydration(page);
   assert.deepEqual(await page.locator("[data-route]").evaluateAll((elements) => elements.map((element) => element.getAttribute("data-route"))), ["home"], "the homepage has only its own CSS");
   await page.locator('.site-links a[href="/docs/"]').click();
   await page.locator("h1#_top").waitFor();
@@ -75,6 +77,7 @@ test("a page change moves no content that stays on the page, from the homepage, 
     for (const [from = "", to = ""] of changes) {
       const page = await openPage(browser, { viewport });
       await page.goto(`${origin}${from}`, { waitUntil: "networkidle" });
+      await waitForHydration(page);
       await page.evaluate(() => {
         const shifts: number[] = [];
         Reflect.set(window, "shifts", shifts);
@@ -182,6 +185,7 @@ test("leaving the homepage stops its observers and its animation frames, and com
   };
 
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+  await waitForHydration(page);
   await page.locator(".machine").scrollIntoViewIfNeeded();
   assert.ok((await lifecycle()).home > 0, "the homepage observes its sections");
   const gpu = await page.locator("[data-plate]").getAttribute("data-gpu");

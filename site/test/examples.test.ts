@@ -8,6 +8,7 @@ import { catalogLanguages, cores } from "../src/lib/ecosystem.ts";
 import { exampleFiles, exampleNames, fileTree, fragmentUrl, requireExampleFile } from "../src/lib/example-files.ts";
 import type { TreeNode } from "../src/lib/example-files.ts";
 import { fences, pickFence } from "../src/lib/markdown-fences.ts";
+import { waitForHydration } from "./github.ts";
 import { builtPages, dist, serveDist } from "./static-server.ts";
 import type { StaticServer } from "./static-server.ts";
 
@@ -48,6 +49,7 @@ const open = async (path: string, viewport = { width: 1440, height: 900 }): Prom
   pageErrors.set(page, errors);
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(`${origin}${path}`, { waitUntil: "networkidle" });
+  await waitForHydration(page);
   return page;
 };
 
