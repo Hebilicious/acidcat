@@ -32,7 +32,8 @@ const release = ({ gpu }: Prepared) => {
   else gpu.gl.getExtension("WEBGL_lose_context")?.loseContext();
 };
 
-export function mountCatalogEngine(host: HTMLElement) {
+/** Builds Fig. 1 in 3D when it comes near the viewport, and frees its renderer and its GPU context when `signal` aborts. */
+export function mountCatalogEngine(host: HTMLElement, signal: AbortSignal) {
   if (!supportsHtmlInCanvas()) return;
   const still = matchMedia("(prefers-reduced-motion: reduce)");
   const wide = matchMedia("(min-width: 901px)");
@@ -51,12 +52,21 @@ export function mountCatalogEngine(host: HTMLElement) {
   async function build(prepared: Prepared): Promise<boolean> {
     try {
       const { buildMachine } = await import("./catalog-engine.ts");
-      if (!near) {
+      if (!near || signal.aborted) {
         release(prepared);
         return true;
       }
       stage.dataset["layout"] = layout();
-      stop = await buildMachine(host, prepared.canvas, prepared.gpu, { layout: layout(), still: still.matches });
+      const restore = await buildMachine(host, prepared.canvas, prepared.gpu, { layout: layout(), still: still.matches });
+      stop = () => {
+        restore();
+        release(prepared);
+      };
+      if (signal.aborted) {
+        stop();
+        stop = undefined;
+        return true;
+      }
       stage.dataset["engine"] = "live";
       stage.dataset["gpu"] = prepared.gpu.kind;
       return true;
@@ -67,7 +77,7 @@ export function mountCatalogEngine(host: HTMLElement) {
   }
 
   async function activate() {
-    if (!near || stop || loading) return;
+    if (!near || stop || loading || signal.aborted) return;
     loading = true;
     const first = await prepare(true);
     const built = first !== undefined && (await build(first));
@@ -84,14 +94,25 @@ export function mountCatalogEngine(host: HTMLElement) {
   };
 
   void yieldToMain().then(hardwareGpu).then((hardware) => {
-    if (!hardware) return;
+    if (!hardware || signal.aborted) return;
     stage.dataset["engine"] = "pending";
     stage.dataset["layout"] = layout();
-    new IntersectionObserver(([entry]) => {
+    const observer = new IntersectionObserver(([entry]) => {
       near = entry?.isIntersecting ?? false;
       if (near) void activate();
-    }, { rootMargin: nearMargin }).observe(stage);
-    still.addEventListener("change", rebuild);
-    wide.addEventListener("change", rebuild);
+    }, { rootMargin: nearMargin });
+    observer.observe(stage);
+    signal.addEventListener("abort", () => observer.disconnect(), { once: true });
+    still.addEventListener("change", rebuild, { signal });
+    wide.addEventListener("change", rebuild, { signal });
   });
+  signal.addEventListener(
+    "abort",
+    () => {
+      near = false;
+      stop?.();
+      stop = undefined;
+    },
+    { once: true },
+  );
 }

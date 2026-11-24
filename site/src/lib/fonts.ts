@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AstroIntegration } from "astro";
+import type { HeadConfig } from "vitepress";
 import subsetFont from "subset-font";
 
 type CodeRange = readonly [number, number];
@@ -100,11 +100,33 @@ export const writeFonts = async (directory: string): Promise<void> => {
   await writeFile(join(directory, "fonts.css"), fontFaceCss());
 };
 
-export const fontSubsets = (directory: string): AstroIntegration => ({
-  name: "acidcat-font-subsets",
-  hooks: {
-    "astro:config:setup": async () => {
-      await writeFonts(directory);
-    },
-  },
-});
+const preloaded: Readonly<Record<"home" | "docs", readonly Face[]>> = {
+  home: [
+    { family: "Monaspace Xenon", weight: 400 },
+    { family: "Monaspace Xenon", weight: 700 },
+    { family: "Monaspace Radon", weight: 500 },
+    { family: "Monaspace Argon", weight: 400 },
+    { family: "Monaspace Krypton", weight: 400 },
+    { family: "Monaspace Krypton", weight: 500 },
+    { family: "Monaspace Neon", weight: 400 },
+  ],
+  docs: [
+    { family: "Monaspace Xenon", weight: 400 },
+    { family: "Monaspace Xenon", weight: 700 },
+    { family: "Monaspace Argon", weight: 400 },
+    { family: "Monaspace Argon", weight: 500 },
+    { family: "Monaspace Krypton", weight: 400 },
+    { family: "Monaspace Krypton", weight: 500 },
+    { family: "Monaspace Neon", weight: 400 },
+    { family: "Monaspace Neon", weight: 500 },
+  ],
+};
+
+/** A preload link for the core file of each face that the first view of the page draws, so that the browser lays out the text once. */
+export const fontPreloads = (page: "home" | "docs", assets: readonly string[]): HeadConfig[] =>
+  preloaded[page].map((face) => {
+    const stem = fontFile(face, "core").replace(/\.woff2$/, "");
+    const href = assets.find((asset) => asset.split("/").pop()?.startsWith(`${stem}.`) === true && asset.endsWith(".woff2"));
+    if (href === undefined) throw new Error(`The build has no file for ${stem}.woff2.`);
+    return ["link", { rel: "preload", as: "font", type: "font/woff2", href, crossorigin: "" }];
+  });

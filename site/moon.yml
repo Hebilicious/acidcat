@@ -3,7 +3,7 @@ layer: "application"
 
 project:
   title: "AcidCat site"
-  description: "The homepage and the documentation of AcidCat, built with Astro Starlight."
+  description: "The homepage and the documentation of AcidCat, built with VitePress."
 
 toolchains:
   default: ["javascript", "node", "pnpm"]
@@ -24,8 +24,8 @@ tasks:
 
   dev:
     deps: ["tokens-watch"]
-    description: "Serve the site with live reload at http://localhost:4321, and write the design tokens on each change."
-    command: "astro"
+    description: "Serve the site with live reload at http://localhost:5173, and write the design tokens on each change."
+    command: "vitepress"
     args: ["dev"]
     preset: "server"
 
@@ -36,12 +36,14 @@ tasks:
 
   build:
     description: "Build the static site into dist/."
-    command: "astro"
+    command: "vitepress"
     args: ["build"]
     inputs:
       - "src/**/*"
+      - "content/**/*"
       - "public/**/*"
-      - "astro.config.ts"
+      - ".vitepress/config.ts"
+      - ".vitepress/theme/**/*"
       - "cssforge.config.ts"
       - "package.json"
       - "/spec/**/*.md"
@@ -98,10 +100,10 @@ tasks:
     description: "Test the geometry of the art, render the homepage in Chromium at desktop and phone widths, and call the AcidCat app of the site through the Worker, MCP, HTTP and WebMCP."
     command: "node"
     args: ["--test", "test/"]
-    inputs: ["src/**/*", "test/**/*.ts", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*"]
+    inputs: ["src/**/*", "content/**/*", ".vitepress/**/*", "test/**/*.ts", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*"]
 
   typecheck:
     description: "Type-check the art geometry, the tests and the configuration."
     command: "tsc"
     args: ["-p", "."]
-    inputs: ["src/lib/**/*.ts", "test/**/*.ts", "worker/**/*.ts", "scripts/**/*.ts", "astro.config.ts", "cssforge.config.ts", "cloudflare.config.ts", "tsconfig.json", "/tsconfig.base.json"]
+    inputs: ["src/lib/**/*.ts", "test/**/*.ts", "worker/**/*.ts", "scripts/**/*.ts", ".vitepress/**/*.ts", "content/**/*.ts", "cssforge.config.ts", "cloudflare.config.ts", "tsconfig.json", "/tsconfig.base.json"]

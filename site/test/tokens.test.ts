@@ -12,7 +12,7 @@ const sources = async (directory: string): Promise<string[]> => {
     entries.map((entry) => {
       const path = join(directory, entry.name);
       if (entry.isDirectory()) return sources(path);
-      return Promise.resolve(/\.(astro|css|ts)$/.test(entry.name) ? [path] : []);
+      return Promise.resolve(/\.(vue|css|ts)$/.test(entry.name) ? [path] : []);
     }),
   );
   return nested.flat();

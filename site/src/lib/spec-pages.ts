@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, posix, relative, sep } from "node:path";
+import type { SidebarItem, SidebarLink } from "../theme/site-theme.ts";
 import { replaceDiagrams } from "./spec-diagrams.ts";
 
 export const repositoryUrl = "https://github.com/Hebilicious/acidcat";
@@ -22,6 +23,9 @@ export const pageId = (file: string): string => {
   const id = withoutExtension === "README" ? "" : withoutExtension.replace(/\/README$/, "");
   return id === "" ? "spec" : `spec/${id}`;
 };
+
+/** The parameter of the dynamic route of a page: its path under /spec/, which ends with index so that its URL ends with a slash. */
+export const specRoute = (id: string): string => (id === "spec" ? "index" : `${id.slice("spec/".length)}/index`);
 
 const markdownFiles = async (root: string, directory = root): Promise<string[]> => {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -92,34 +96,23 @@ export const readSpecPages = async (repositoryRoot: string): Promise<SpecPage[]>
   return pages.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
 };
 
-export interface SpecSidebarLink {
-  readonly label: string;
-  readonly link: string;
-}
-
-export interface SpecSidebarGroup {
-  readonly label: string;
-  readonly items: SpecSidebarLink[];
-}
-
-export const specSidebar = async (repositoryRoot: string): Promise<(SpecSidebarLink | SpecSidebarGroup)[]> => {
-  const pages = await readSpecPages(repositoryRoot);
-  const groups = new Map<string, SpecSidebarLink[]>();
-  const items: (SpecSidebarLink | SpecSidebarGroup)[] = [];
+/** The sidebar of the specification, in the order of the pages: a group for each directory with an overview. */
+export const specSidebar = (pages: readonly SpecPage[]): SidebarItem[] => {
+  const groups = new Map<string, SidebarLink[]>();
+  const items: SidebarItem[] = [];
   for (const page of pages) {
     const parts = page.id.split("/");
-    const link = { label: page.id === "spec" ? "Overview" : page.title, link: `/${page.id}/` };
-    if (parts.length < 3) {
-      if (parts.length === 2 && ["surfaces", "extensions"].includes(parts[1] ?? "")) {
-        const children: SpecSidebarLink[] = [{ label: "Overview", link: link.link }];
-        groups.set(parts[1] ?? "", children);
-        items.push({ label: page.title, items: children });
-      } else {
-        items.push(link);
-      }
-      continue;
+    const link = { text: page.id === "spec" ? "Overview" : page.title, link: `/${page.id}/` };
+    const directory = parts[1] ?? "";
+    if (parts.length === 2 && ["surfaces", "extensions"].includes(directory)) {
+      const children: SidebarLink[] = [{ text: "Overview", link: link.link }];
+      groups.set(directory, children);
+      items.push({ text: page.title, items: children });
+    } else if (parts.length < 3) {
+      items.push(link);
+    } else {
+      groups.get(directory)?.push(link);
     }
-    groups.get(parts[1] ?? "")?.push(link);
   }
   return items;
 };

@@ -57,7 +57,7 @@ export const framingSpan = (width: number, height: number, framing: PlateFraming
  * Draws the hero on a hardware GPU, and gives `undefined` when the browser has none. It checks the GPU before it
  * downloads the textures, so a software renderer downloads nothing.
  */
-export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSources, framing: () => PlateFraming): Promise<PlateHandle | undefined> => {
+export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSources, framing: () => PlateFraming, signal: AbortSignal): Promise<PlateHandle | undefined> => {
   if (!(await hardwareGpu())) return undefined;
 
   let scale = 1;
@@ -75,6 +75,10 @@ export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSourc
 
   const [pass, plate, clean, data] = await Promise.all([createPass(canvas, plateShader, { alpha: false }), loadImage(sources.plate), loadImage(sources.clean), loadImage(sources.data)]);
   if (pass === undefined) return undefined;
+  if (signal.aborted) {
+    pass.destroy();
+    return undefined;
+  }
   let plateRect = sources.plateRect;
   const imageSize = [data.width, data.height] as const;
   // Each texture waits until the GPU has taken the one before it. Otherwise its upload blocks the main thread.
@@ -148,12 +152,25 @@ export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSourc
         pointer.y = (event.clientY / window.innerHeight) * 2 - 1;
         pointer.active = 1;
       },
-      { passive: true },
+      { passive: true, signal },
     );
-    document.addEventListener("pointerleave", () => {
-      pointer.active = 0;
-    });
+    document.addEventListener(
+      "pointerleave",
+      () => {
+        pointer.active = 0;
+      },
+      { signal },
+    );
   }
+  signal.addEventListener(
+    "abort",
+    () => {
+      running = false;
+      cancelAnimationFrame(frame);
+      pass.destroy();
+    },
+    { once: true },
+  );
 
   render({ reveal: 0 });
 

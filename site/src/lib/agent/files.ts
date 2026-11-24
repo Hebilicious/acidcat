@@ -1,8 +1,6 @@
-import type { AstroIntegration } from "astro";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, posix, relative, sep } from "node:path";
-import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { readPublishedPackages } from "../packages.ts";
 import { pageMarkdown } from "../page-markdown.ts";
@@ -138,28 +136,23 @@ const writeOut = async (dist: string, path: string, data: string | Buffer): Prom
   await writeFile(file, data);
 };
 
-export const agentFiles = (repositoryRoot: string): AstroIntegration => {
-  let origin = "";
-  return {
-    name: "acidcat-agent-files",
-    hooks: {
-      "astro:config:done": ({ config }) => {
-        origin = (config.site ?? "").replace(/\/$/, "");
-      },
-      "astro:build:done": async ({ dir }) => {
-        const dist = fileURLToPath(dir);
-        const home = await readFile(new URL("home.md", import.meta.url), "utf8");
-        const pages = await readPages(dist, home);
-        const packages = (await readPublishedPackages(repositoryRoot)).map(({ name, registry, version, description, install, url }) => ({ name, registry, version, description, install, url }));
-        const content: SiteContent = { pages, packages };
-        await Promise.all([
-          ...pages.map((page) => writeOut(dist, `${page.path}index.md`, page.markdown)),
-          writeOut(dist, CONTENT_PATH, JSON.stringify(content)),
-          writeOut(dist, "/llms.txt", llmsText(pages, origin, home)),
-          writeOut(dist, "/llms-full.txt", pages.map((page) => page.markdown).join("\n\n---\n\n")),
-          writeSkills(dist, join(repositoryRoot, "skills")),
-        ]);
-      },
-    },
-  };
+export interface AgentFilesOptions {
+  readonly dist: string;
+  readonly repositoryRoot: string;
+  readonly origin: string;
+}
+
+/** Writes the Markdown of each page, /content.json, llms.txt, llms-full.txt and the agent skills into the build. */
+export const writeAgentFiles = async ({ dist, repositoryRoot, origin }: AgentFilesOptions): Promise<void> => {
+  const home = await readFile(new URL("home.md", import.meta.url), "utf8");
+  const pages = await readPages(dist, home);
+  const packages = (await readPublishedPackages(repositoryRoot)).map(({ name, registry, version, description, install, url }) => ({ name, registry, version, description, install, url }));
+  const content: SiteContent = { pages, packages };
+  await Promise.all([
+    ...pages.map((page) => writeOut(dist, `${page.path}index.md`, page.markdown)),
+    writeOut(dist, CONTENT_PATH, JSON.stringify(content)),
+    writeOut(dist, "/llms.txt", llmsText(pages, origin, home)),
+    writeOut(dist, "/llms-full.txt", pages.map((page) => page.markdown).join("\n\n---\n\n")),
+    writeSkills(dist, join(repositoryRoot, "skills")),
+  ]);
 };

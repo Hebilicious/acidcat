@@ -1,0 +1,44 @@
+/* The search dialog of the docs: the local search box of VitePress, in the palette of the site. */
+
+@import "vitepress/dist/client/theme-default/styles/icons.css";
+
+:root {
+  --vp-c-brand-1: var(--palette-acid-400);
+  --vp-c-divider: color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
+  --vp-backdrop-bg-color: color-mix(in oklch, var(--palette-ink-950) 75%, transparent);
+  --vp-local-search-bg: var(--palette-ink-900);
+  --vp-local-search-result-bg: var(--palette-ink-800);
+  --vp-local-search-result-border: color-mix(in oklch, var(--palette-brass-400) 20%, transparent);
+  --vp-local-search-result-selected-bg: var(--palette-ink-800);
+  --vp-local-search-result-selected-border: var(--palette-acid-400);
+  --vp-local-search-highlight-bg: var(--palette-acid-400);
+  --vp-local-search-highlight-text: var(--palette-ink-900);
+  --vp-z-index-local-search: 100;
+}
+
+.VPLocalSearchBox {
+  color: var(--palette-cream-100);
+  font-family: var(--font-family-sans);
+}
+
+.VPLocalSearchBox :is(button, input) {
+  color: inherit;
+  font: inherit;
+  background: none;
+  border: 0;
+}
+
+.VPLocalSearchBox ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.VPLocalSearchBox a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.VPLocalSearchBox kbd {
+  font-family: var(--font-family-mono);
+}

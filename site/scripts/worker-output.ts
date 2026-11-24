@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import config from "../cloudflare.config.ts";
 
-// `cf` builds a project with a Worker entrypoint through the framework's own command, and Astro writes only static files.
+// `cf` builds a project with a Worker entrypoint through the framework's own command, and VitePress writes only static files.
 
 const site = join(import.meta.dirname, "..");
 const output = join(site, ".cloudflare/output/v1");

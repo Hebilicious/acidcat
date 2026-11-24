@@ -1,11 +1,2 @@
-/_astro/*
-  Cache-Control: public, max-age=31536000, immutable
-
-/pagefind/fragment/*
-  Cache-Control: public, max-age=31536000, immutable
-
-/pagefind/index/*
-  Cache-Control: public, max-age=31536000, immutable
-
-/pagefind/pagefind.*.pf_meta
+/assets/*
   Cache-Control: public, max-age=31536000, immutable

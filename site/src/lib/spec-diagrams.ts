@@ -16,31 +16,6 @@ const terminals = [
   },
 ];
 
-const diagramStyle = `<style>
-  .catalog-flow { margin-inline: 0; container-type: inline-size; }
-  .catalog-flow .cf-sheet { width: 100%; height: auto; display: block; margin: 0; background: var(--palette-blueprint-900); }
-  .catalog-flow .cf-narrow { display: none; }
-  @container (max-width: 34rem) {
-    .catalog-flow .cf-wide { display: none; }
-    .catalog-flow .cf-narrow { display: block; }
-  }
-  .cf-grid { fill: none; stroke: color-mix(in oklch, var(--palette-cyan-400) 12%, transparent); }
-  .cf-frame, .cf-wire { fill: none; stroke: color-mix(in oklch, var(--palette-cyan-400) 55%, transparent); }
-  .cf-wire { stroke-width: 5; }
-  .cf-bore { fill: none; stroke: var(--palette-blueprint-900); stroke-width: 3; }
-  .cf-current { fill: none; stroke: var(--palette-acid-400); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 6 94; filter: drop-shadow(0 0 2px var(--palette-acid-600)); animation: cf-flow 4s linear infinite; }
-  @keyframes cf-flow { to { stroke-dashoffset: -100; } }
-  @media (prefers-reduced-motion: reduce) { .cf-current { animation: none; stroke-dashoffset: -52; } }
-  .cf-case { fill: var(--palette-brass-950); stroke: var(--palette-brass-400); }
-  .cf-plate { fill: var(--palette-blueprint-800); stroke: var(--palette-brass-300); }
-  .cf-port { fill: var(--palette-ink-900); stroke: var(--palette-cyan-400); }
-  .cf-pin { fill: var(--palette-acid-400); }
-  .cf-tool { fill: none; stroke: var(--palette-cream-100); stroke-width: 1.4; stroke-linejoin: round; }
-  .cf-gold { stroke: var(--palette-brass-300); }
-  .cf-name { font: bold 19px var(--font-family-display); fill: var(--palette-cream-100); }
-  .cf-note { font: 13px var(--font-family-mono); fill: var(--palette-cream-400); }
-  .catalog-flow .cf-caption { margin: 0; padding: .55em 1em; background: var(--palette-blueprint-800); border-top: 1px solid var(--palette-copper-700); color: var(--palette-cream-400); font: small var(--font-family-label); }
-</style>`;
 
 function diagram(narrow: boolean): string {
   const layout = narrow ? "narrow" : "wide";
@@ -71,9 +46,6 @@ function diagram(narrow: boolean): string {
     ? '<tspan x="0">what the application can do,</tspan> <tspan x="0" dy="17">and for whom</tspan>'
     : "what the application can do, and for whom";
   return `<svg xmlns="http://www.w3.org/2000/svg" class="cf-sheet cf-${layout}" viewBox="0 0 ${width} ${height}" role="img" aria-label="The catalog (JSON): what the application can do, and for whom. The provider runs the operations. The targets say who can use what. The surfaces serve the catalog of each target: CLI, MCP, HTTP, WebMCP and code.">
-    
-    
-    ${narrow ? "" : diagramStyle}
     <defs><pattern id="${grid}" width="16" height="16" patternUnits="userSpaceOnUse"><path class="cf-grid" d="M16 0H0V16"/></pattern></defs>
     <rect width="100%" height="100%" fill="url(#${grid})"/>
     <rect class="cf-frame" x="7" y="7" width="${width - 14}" height="${height - 14}"/>

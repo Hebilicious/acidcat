@@ -77,7 +77,7 @@ test("the Examples pages copy no code block of the example README, and read it i
   const readme = await readFile(join(repository, "examples/aircon/README.md"), "utf8");
   const readmeLines = new Set(fences(readme).flatMap((fence) => fence.code.split("\n").map((line) => line.trim()).filter((line) => line !== "")));
   const copies: string[] = [];
-  const directory = new URL("../src/content/docs/docs/examples/", import.meta.url).pathname;
+  const directory = new URL("../content/docs/examples/", import.meta.url).pathname;
   for (const name of await readdir(directory)) {
     for (const fence of fences(await readFile(join(directory, name), "utf8"))) {
       for (const line of fence.code.split("\n")) if (readmeLines.has(line.trim())) copies.push(`${name}: ${line}`);

@@ -20,7 +20,7 @@ const parentItem = (item: HTMLElement): HTMLElement | null => item.parentElement
 
 const isFolder = (item: HTMLElement): boolean => item.hasAttribute("aria-expanded");
 
-export const initExplorer = (root: HTMLElement): void => {
+export const initExplorer = (root: HTMLElement, signal: AbortSignal): void => {
   const tree = root.querySelector<HTMLElement>("[data-tree]");
   const source = root.querySelector<HTMLElement>("[data-source]");
   const path = root.querySelector<HTMLElement>("[data-current-path]");
@@ -172,7 +172,7 @@ export const initExplorer = (root: HTMLElement): void => {
     root.toggleAttribute("data-expanded");
     fullscreen.setAttribute("aria-pressed", String(expanded()));
   });
-  document.addEventListener("fullscreenchange", () => fullscreen.setAttribute("aria-pressed", String(expanded())));
+  document.addEventListener("fullscreenchange", () => fullscreen.setAttribute("aria-pressed", String(expanded())), { signal });
   root.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && root.hasAttribute("data-expanded")) {
       root.removeAttribute("data-expanded");
@@ -191,5 +191,5 @@ export const initExplorer = (root: HTMLElement): void => {
     if (scroll) root.scrollIntoView({ block: "nearest" });
   };
   fromHash(false);
-  addEventListener("hashchange", () => fromHash(true));
+  addEventListener("hashchange", () => fromHash(true), { signal });
 };

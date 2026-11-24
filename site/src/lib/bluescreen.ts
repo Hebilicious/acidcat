@@ -17,7 +17,8 @@ export interface BluescreenOptions {
   readonly still?: boolean;
 }
 
-export const createBluescreen = async (host: HTMLElement, options: BluescreenOptions = {}): Promise<Bluescreen | undefined> => {
+/** Draws `host` as a blue screen until `signal` aborts. Gives `undefined` when the browser cannot, or when `signal` aborts first. */
+export const createBluescreen = async (host: HTMLElement, options: BluescreenOptions, signal: AbortSignal): Promise<Bluescreen | undefined> => {
   const intensity = options.intensity ?? 1;
   const still = options.still ?? false;
   let revealMs = options.revealMs ?? 1600;
@@ -26,9 +27,17 @@ export const createBluescreen = async (host: HTMLElement, options: BluescreenOpt
   canvas.setAttribute("content", "drawable");
   canvas.className = "bluescreen-canvas";
   if (!isDrawableCanvas(canvas)) return undefined;
-  await whenNear(host);
+  const near = await whenNear(host, signal).then(
+    () => true,
+    () => false,
+  );
+  if (!near) return undefined;
   const pass = await createPass(canvas, bluescreenShader, { alpha: true, elements: true }).catch(() => undefined);
   if (pass === undefined) return undefined;
+  if (signal.aborted) {
+    pass.destroy();
+    return undefined;
+  }
   canvas.dataset["gpu"] = pass.backend;
 
   const content = host;
@@ -69,7 +78,10 @@ export const createBluescreen = async (host: HTMLElement, options: BluescreenOpt
   resizer.observe(content);
   fit();
 
+  let destroyed = false;
   const destroy = () => {
+    if (destroyed) return;
+    destroyed = true;
     observer.disconnect();
     resizer.disconnect();
     cancelAnimationFrame(frame);
@@ -119,6 +131,7 @@ export const createBluescreen = async (host: HTMLElement, options: BluescreenOpt
     if (still) draw();
   });
   canvas.requestPaint();
+  signal.addEventListener("abort", destroy, { once: true });
 
   return {
     replay: () => {

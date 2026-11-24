@@ -10,8 +10,8 @@ export interface PageMarkdown {
   readonly markdown: string;
 }
 
-const dropped = new Set(["script", "style", "template", "svg", "canvas", "button", "noscript", "starlight-tabs-restore", "link", "meta"]);
-const droppedClasses = ["copy", "sr-only", "tablist-wrapper", "sl-anchor-link", "plate", "star-count"];
+const dropped = new Set(["script", "style", "template", "svg", "canvas", "button", "noscript", "link", "meta"]);
+const droppedClasses = ["copy", "sr-only", "tablist-wrapper", "header-anchor", "plate", "star-count"];
 
 const classes = (node: Element): string[] => {
   const value = node.properties["className"];
@@ -44,13 +44,16 @@ const findAll = (node: Nodes, test: (element: Element) => boolean, found: Elemen
 
 const element = (tagName: string, children: ElementContent[]): Element => ({ type: "element", tagName, properties: {}, children });
 
+/** The components of the docs write `data-role` in place of `role`, and the page sets the role in the browser. */
+const roleOf = (node: Element): unknown => node.properties["role"] ?? node.properties["dataRole"];
+
 const tabLabels = (root: Root): Map<string, string> =>
-  new Map(findAll(root, (node) => node.properties["role"] === "tab").map((tab) => [String(tab.properties["id"] ?? ""), textOf(tab).trim()]));
+  new Map(findAll(root, (node) => roleOf(node) === "tab").map((tab) => [String(tab.properties["id"] ?? ""), textOf(tab).trim()]));
 
 const isDropped = (node: Element): boolean =>
   dropped.has(node.tagName) || node.properties["ariaHidden"] === "true" || classes(node).some((name) => droppedClasses.includes(name));
 
-const clean = (node: Element, labels: Map<string, string>): void => {
+const clean = (node: Element, labels: Map<string, string>, inCode = false): void => {
   const children: ElementContent[] = [];
   for (const child of node.children) {
     if (!isElement(child)) {
@@ -58,8 +61,8 @@ const clean = (node: Element, labels: Map<string, string>): void => {
       continue;
     }
     if (isDropped(child)) continue;
-    clean(child, labels);
-    if (child.properties["role"] === "tabpanel") {
+    clean(child, labels, inCode || child.tagName === "pre");
+    if (roleOf(child) === "tabpanel") {
       const label = labels.get(String(child.properties["ariaLabelledBy"] ?? ""));
       delete child.properties["hidden"];
       if (label !== undefined) children.push(element("p", [element("strong", [{ type: "text", value: label }])]));
@@ -67,16 +70,14 @@ const clean = (node: Element, labels: Map<string, string>): void => {
     if (child.tagName === "figure" && classes(child).includes("frame")) {
       const title = textOf(find(child, (node) => classes(node).includes("title")) ?? element("span", [])).trim();
       child.children = child.children.filter((grandchild) => !(isElement(grandchild) && grandchild.tagName === "figcaption"));
-      if (title !== "") children.push(element("p", [element("code", [{ type: "text", value: title }])]));
-    }
-    if (child.tagName === "pre") {
       const language = child.properties["dataLanguage"];
       const code = find(child, (node) => node.tagName === "code");
-      if (typeof language === "string" && code !== undefined) code.properties["className"] = [`language-${language}`];
+      if (typeof language === "string" && language !== "" && code !== undefined) code.properties["className"] = [`language-${language}`];
+      if (title !== "") children.push(element("p", [element("code", [{ type: "text", value: title }])]));
     }
     if (child.tagName === "aside") child.tagName = "blockquote";
     const previous = children.at(-1);
-    if (child.tagName === "span" && previous !== undefined && isElement(previous) && previous.tagName === "span" && node.tagName !== "code" && node.tagName !== "pre") {
+    if (child.tagName === "span" && previous !== undefined && isElement(previous) && previous.tagName === "span" && !inCode) {
       children.push({ type: "text", value: " " });
     }
     children.push(child);
@@ -96,7 +97,7 @@ export const pageMarkdown = (html: string): PageMarkdown => {
   const heading = find(main, (node) => node.tagName === "h1");
   const title = heading === undefined ? "" : textOf(heading).trim();
   const description = metaContent(root, "description");
-  const body = find(main, (node) => classes(node).includes("sl-markdown-content")) ?? main;
+  const body = find(main, (node) => classes(node).includes("markdown-content")) ?? main;
   const labels = tabLabels(root);
   clean(body, labels);
   if (body === main && heading !== undefined) heading.tagName = "p";

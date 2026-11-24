@@ -68,14 +68,14 @@ after(async () => {
 test("every file that a page loads has a hash in its name, and the browser keeps it for a year", async () => {
   if (browser === undefined) throw new Error("No browser.");
   const headers = await readFile(join(dist, "_headers"), "utf8");
-  assert.match(headers, /^\/_astro\/\*\n\s+Cache-Control: public, max-age=31536000, immutable$/m);
+  assert.match(headers, /^\/assets\/\*\n\s+Cache-Control: public, max-age=31536000, immutable$/m);
   const offenders = new Set<string>();
   for (const viewport of viewports) {
     for (const path of pages) {
       const page = await openPage(browser, { viewport });
       page.on("request", (request) => {
         const url = new URL(request.url());
-        if (url.origin === origin && request.resourceType() !== "document" && !url.pathname.startsWith("/_astro/")) offenders.add(`${path}: ${url.pathname}`);
+        if (url.origin === origin && request.resourceType() !== "document" && !url.pathname.startsWith("/assets/")) offenders.add(`${path}: ${url.pathname}`);
       });
       await page.goto(`${origin}${path}`, { waitUntil: "networkidle" });
       await page.close();
@@ -84,16 +84,16 @@ test("every file that a page loads has a hash in its name, and the browser keeps
   assert.deepEqual([...offenders], []);
 });
 
-test("the homepage loads no stylesheet, and each script that it loads at once has a modulepreload link", async () => {
+test("the homepage loads no stylesheet, and the head names each script that it loads at once, as a script or a modulepreload link", async () => {
   if (browser === undefined) throw new Error("No browser.");
   const page = await openPage(browser, { viewport: phone });
   const loaded: { file: string; type: string }[] = [];
   page.on("request", (request) => loaded.push({ file: new URL(request.url()).pathname, type: request.resourceType() }));
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
-  const preloaded = new Set(await page.locator('link[rel="modulepreload"]').evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? "")));
+  const preloaded = new Set(await page.locator('head link[rel="modulepreload"], head script[type="module"][src]').evaluateAll((elements) => elements.map((element) => element.getAttribute("href") ?? element.getAttribute("src") ?? "")));
   await page.close();
   assert.deepEqual(loaded.filter(({ type }) => type === "stylesheet"), []);
-  const scripts = loaded.filter(({ type, file }) => type === "script" && file.startsWith("/_astro/")).map(({ file }) => file);
+  const scripts = loaded.filter(({ type, file }) => type === "script" && file.startsWith("/assets/")).map(({ file }) => file);
   assert.ok(scripts.length > 0, "the homepage loads its scripts");
   assert.deepEqual(scripts.filter((file) => !preloaded.has(file)), []);
 });
@@ -151,7 +151,7 @@ test("the table of contents reads no layout when a docs page starts, and marks t
     const reads = await page.evaluate((): unknown => Reflect.get(window, "layoutReads"));
     assert.deepEqual(reads, [], `at ${viewport.width}px`);
 
-    const toc = viewport === phone ? "mobile-starlight-toc" : "starlight-toc";
+    const toc = viewport === phone ? ".mobile-toc" : ".toc";
     const target = await page.locator(`${toc} a`).nth(2).getAttribute("href");
     if (target === null) throw new Error("The table of contents has no third link.");
     await page.locator(target).evaluate((heading) => heading.scrollIntoView({ block: "start" }));

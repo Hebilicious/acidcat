@@ -1,0 +1,20 @@
+---
+title: An Elysia API
+description: A REST API on a session of the TypeScript core, with Elysia, server-sent events and a WebSocket.
+sidebar:
+  order: 8
+  label: Elysia
+tableOfContents: false
+---
+
+<FileLink file="apis/elysia.ts" /> serves `GET /status`, `PATCH /status`, `GET /status/changes` through server-sent events, and the WebSocket `/status/follow`. A failure is status 409. It mounts the HTTP surface at `/api`.
+
+Run it from `examples/aircon` with the name `elysia`. It listens on `http://127.0.0.1:3000`:
+
+<ExampleBlock section="Run an API" match="apis/main.ts" />
+
+Follow the changes in one terminal, through server-sent events or the WebSocket, and change the unit in another:
+
+<ExampleBlock section="Run an API" match="3000/status" />
+
+<CodeExplorer open="apis/elysia.ts" />
