@@ -1,5 +1,5 @@
 import type { MachineGpu } from "./catalog-engine.ts";
-import { isDrawableCanvas, requestDevice, softwareRenderer, supportsHtmlInCanvas, supportsWebgl2Elements, supportsWebgpuElements } from "./gpu/support.ts";
+import { hardwareGpu, hardwareWebgl2, isDrawableCanvas, nearMargin, requestDevice, supportsHtmlInCanvas, supportsWebgl2Elements, supportsWebgpuElements, yieldToMain } from "./gpu/support.ts";
 import type { DrawableCanvas } from "./gpu/support.ts";
 
 interface Prepared {
@@ -19,18 +19,12 @@ const prepare = async (webgpu: boolean): Promise<Prepared | undefined> => {
   const canvas = drawableCanvas();
   if (canvas === undefined) return undefined;
   if (webgpu && supportsWebgpuElements()) {
-    const adapter = await requestDevice();
-    if (adapter !== undefined) return { canvas, gpu: { kind: "webgpu", device: adapter.device } };
+    const device = await requestDevice();
+    if (device !== undefined) return { canvas, gpu: { kind: "webgpu", device } };
   }
-  if (!supportsWebgl2Elements()) return undefined;
+  if (!supportsWebgl2Elements() || !(await hardwareWebgl2())) return undefined;
   const gl = canvas.getContext("webgl2", { alpha: true, antialias: true });
-  if (gl === null) return undefined;
-  const debug = gl.getExtension("WEBGL_debug_renderer_info");
-  if (softwareRenderer.test(String(gl.getParameter(debug?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER)))) {
-    gl.getExtension("WEBGL_lose_context")?.loseContext();
-    return undefined;
-  }
-  return { canvas, gpu: { kind: "webgl2", gl } };
+  return gl === null ? undefined : { canvas, gpu: { kind: "webgl2", gl } };
 };
 
 const release = ({ gpu }: Prepared) => {
@@ -44,8 +38,6 @@ export function mountCatalogEngine(host: HTMLElement) {
   const wide = matchMedia("(min-width: 901px)");
   const layout = () => (wide.matches ? "wide" : "tall");
   const stage = host.parentElement ?? host;
-  stage.dataset["engine"] = "pending";
-  stage.dataset["layout"] = layout();
 
   let near = false;
   let loading = false;
@@ -84,16 +76,22 @@ export function mountCatalogEngine(host: HTMLElement) {
     loading = false;
   }
 
-  new IntersectionObserver(([entry]) => {
-    near = entry?.isIntersecting ?? false;
-    if (near) void activate();
-  }, { rootMargin: "900px" }).observe(stage);
   const rebuild = () => {
     stop?.();
     stop = undefined;
     stage.dataset["engine"] = "pending";
     void activate();
   };
-  still.addEventListener("change", rebuild);
-  wide.addEventListener("change", rebuild);
+
+  void yieldToMain().then(hardwareGpu).then((hardware) => {
+    if (!hardware) return;
+    stage.dataset["engine"] = "pending";
+    stage.dataset["layout"] = layout();
+    new IntersectionObserver(([entry]) => {
+      near = entry?.isIntersecting ?? false;
+      if (near) void activate();
+    }, { rootMargin: nearMargin }).observe(stage);
+    still.addEventListener("change", rebuild);
+    wide.addEventListener("change", rebuild);
+  });
 }

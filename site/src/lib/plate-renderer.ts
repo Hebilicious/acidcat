@@ -1,4 +1,5 @@
 import { createPass } from "./gpu/pass.ts";
+import { hardwareGpu } from "./gpu/support.ts";
 import type { Backend } from "./gpu/pass.ts";
 import { plateShader } from "./plate-shader.ts";
 
@@ -24,7 +25,6 @@ export interface PlateState {
 
 export interface PlateHandle {
   readonly backend: Backend;
-  readonly software: boolean;
   readonly render: (state?: PlateState) => void;
   readonly start: () => void;
   readonly stop: () => void;
@@ -33,12 +33,11 @@ export interface PlateHandle {
 
 const FOCUS_DEPTH = 0.64;
 
-const loadImage = async (source: string): Promise<HTMLImageElement> => {
-  const image = new Image();
-  image.decoding = "async";
-  image.src = source;
-  await image.decode();
-  return image;
+// A bitmap decodes off the main thread, and the GPU copies it without a second decode.
+const loadImage = async (source: string): Promise<ImageBitmap> => {
+  const response = await fetch(source);
+  if (!response.ok) throw new Error(`${source}: ${response.status}`);
+  return createImageBitmap(await response.blob(), { premultiplyAlpha: "none" });
 };
 
 export const framingSpan = (width: number, height: number, framing: PlateFraming): { span: [number, number]; center: [number, number] } => {
@@ -51,29 +50,14 @@ export const framingSpan = (width: number, height: number, framing: PlateFraming
   return { span, center: [centerX, clamp(0.5, span[1])] };
 };
 
-export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSources, framing: () => PlateFraming): Promise<PlateHandle> => {
-  const [pass, plate, clean, data] = await Promise.all([
-    createPass(canvas, plateShader, { alpha: false, preserveDrawingBuffer: true }),
-    loadImage(sources.plate),
-    loadImage(sources.clean),
-    loadImage(sources.data),
-  ]);
-  pass.setImage("uPlate", plate);
-  pass.setImage("uClean", clean);
-  pass.setImage("uData", data);
-  const imageSize = [data.naturalWidth, data.naturalHeight] as const;
-
-  const pointer = { x: 0, y: 0, active: 0 };
-  const eased = { x: 0, y: 0, active: 0 };
-  const started = performance.now();
-  let frame = 0;
-  let running = false;
+/**
+ * Draws the hero on a hardware GPU, and gives `undefined` when the browser has none. It checks the GPU before it
+ * downloads the textures, so a software renderer downloads nothing.
+ */
+export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSources, framing: () => PlateFraming): Promise<PlateHandle | undefined> => {
+  if (!(await hardwareGpu())) return undefined;
 
   let scale = 1;
-  let budgetFrames = 0;
-  let budgetTime = 0;
-  let last = 0;
-
   const resize = () => {
     const ratio = Math.min(window.devicePixelRatio, 1.75) * scale;
     const width = Math.max(1, Math.round(canvas.clientWidth * ratio));
@@ -83,6 +67,28 @@ export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSourc
       canvas.height = height;
     }
   };
+  // A WebGL context allocates its drawing buffer at the size of the canvas, and allocates it again at each resize.
+  resize();
+
+  const [pass, plate, clean, data] = await Promise.all([createPass(canvas, plateShader, { alpha: false }), loadImage(sources.plate), loadImage(sources.clean), loadImage(sources.data)]);
+  if (pass === undefined) return undefined;
+  const imageSize = [data.width, data.height] as const;
+  // Each texture waits until the GPU has taken the one before it. Otherwise its upload blocks the main thread.
+  for (const [name, image] of [["uClean", clean], ["uData", data], ["uPlate", plate]] as const) {
+    pass.setImage(name, image);
+    image.close();
+    await pass.idle();
+  }
+
+  const pointer = { x: 0, y: 0, active: 0 };
+  const eased = { x: 0, y: 0, active: 0 };
+  const started = performance.now();
+  let frame = 0;
+  let running = false;
+
+  let budgetFrames = 0;
+  let budgetTime = 0;
+  let last = 0;
 
   const render = (state: PlateState = {}) => {
     resize();
@@ -144,9 +150,10 @@ export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSourc
     });
   }
 
+  render({ reveal: 0 });
+
   return {
     backend: pass.backend,
-    software: pass.software,
     render,
     start: () => {
       if (running) return;

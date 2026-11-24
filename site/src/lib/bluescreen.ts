@@ -1,6 +1,6 @@
 import { bluescreenShader } from "./bluescreen-shader.ts";
 import { createPass } from "./gpu/pass.ts";
-import { isDrawableCanvas } from "./gpu/support.ts";
+import { isDrawableCanvas, whenNear } from "./gpu/support.ts";
 
 export { supportsHtmlInCanvas } from "./gpu/support.ts";
 
@@ -26,12 +26,9 @@ export const createBluescreen = async (host: HTMLElement, options: BluescreenOpt
   canvas.setAttribute("content", "drawable");
   canvas.className = "bluescreen-canvas";
   if (!isDrawableCanvas(canvas)) return undefined;
+  await whenNear(host);
   const pass = await createPass(canvas, bluescreenShader, { alpha: true, elements: true }).catch(() => undefined);
   if (pass === undefined) return undefined;
-  if (pass.software) {
-    pass.destroy();
-    return undefined;
-  }
   canvas.dataset["gpu"] = pass.backend;
 
   const content = host;
@@ -72,12 +69,25 @@ export const createBluescreen = async (host: HTMLElement, options: BluescreenOpt
   resizer.observe(content);
   fit();
 
+  const destroy = () => {
+    observer.disconnect();
+    resizer.disconnect();
+    cancelAnimationFrame(frame);
+    pass.destroy();
+    canvas.replaceWith(content);
+    content.removeAttribute("drawable");
+  };
+
   canvas.addEventListener("paint", () => {
     const size = canvas.getElementImageDefaultSize(content);
     pass.setElement("uContent", content, Math.ceil(size.width), Math.ceil(size.height));
     canvas.updateElementGeometry(content, { canvasTransform: new DOMMatrix() });
     uploaded = true;
-    draw();
+    try {
+      draw();
+    } catch {
+      destroy();
+    }
   });
 
   const loop = () => {
@@ -116,13 +126,6 @@ export const createBluescreen = async (host: HTMLElement, options: BluescreenOpt
       visibleSince = performance.now();
       canvas.requestPaint();
     },
-    destroy: () => {
-      observer.disconnect();
-      resizer.disconnect();
-      cancelAnimationFrame(frame);
-      pass.destroy();
-      canvas.replaceWith(content);
-      content.removeAttribute("drawable");
-    },
+    destroy,
   };
 };

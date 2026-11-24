@@ -32,9 +32,9 @@ fn fragmentMain(input: Varyings) -> @location(0) vec4f {
 
 const mipLevels = (width: number, height: number) => Math.floor(Math.log2(Math.max(width, height))) + 1;
 
-const mipmapper = (device: GPUDevice) => {
+const mipmapper = async (device: GPUDevice) => {
   const module = device.createShaderModule({ code: downsample });
-  const pipeline = device.createRenderPipeline({
+  const pipeline = await device.createRenderPipelineAsync({
     layout: "auto",
     vertex: { module, entryPoint: "vertexMain" },
     fragment: { module, entryPoint: "fragmentMain", targets: [{ format }] },
@@ -67,16 +67,15 @@ export const createWebgpuPass = async (canvas: HTMLCanvasElement, source: Shader
   if (options.elements === true && !canDrawElements(queue)) throw new Error("WebGPU cannot draw HTML into a texture.");
   const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
 
-  device.pushErrorScope("validation");
   const module = device.createShaderModule({ code: toWgsl(source) });
-  const pipeline = device.createRenderPipeline({
-    layout: "auto",
-    vertex: { module, entryPoint: "vertexMain" },
-    fragment: { module, entryPoint: "fragmentMain", targets: [{ format: canvasFormat }] },
-  });
-  const generateMipmaps = source.textures.some((texture) => texture.mipmaps) ? mipmapper(device) : () => {};
-  const failure = await device.popErrorScope();
-  if (failure !== null) throw new Error(failure.message);
+  const [pipeline, generateMipmaps] = await Promise.all([
+    device.createRenderPipelineAsync({
+      layout: "auto",
+      vertex: { module, entryPoint: "vertexMain" },
+      fragment: { module, entryPoint: "fragmentMain", targets: [{ format: canvasFormat }] },
+    }),
+    source.textures.some((texture) => texture.mipmaps) ? mipmapper(device) : () => {},
+  ]);
 
   const slots = uniformSlots(source);
   const uniformData = new Float32Array(Math.max(1, slots.length) * 4);
@@ -119,10 +118,9 @@ export const createWebgpuPass = async (canvas: HTMLCanvasElement, source: Shader
 
   return {
     backend: "webgpu",
-    software: false,
     setImage: (name, image) => {
-      const texture = replace(name, image.naturalWidth, image.naturalHeight);
-      queue.copyExternalImageToTexture({ source: image }, { texture }, [image.naturalWidth, image.naturalHeight]);
+      const texture = replace(name, image.width, image.height);
+      queue.copyExternalImageToTexture({ source: image }, { texture }, [image.width, image.height]);
       if (texture.mipLevelCount > 1) generateMipmaps(texture);
     },
     setElement: (name, element, width, height) => {
@@ -149,6 +147,7 @@ export const createWebgpuPass = async (canvas: HTMLCanvasElement, source: Shader
       pass.end();
       queue.submit([encoder.finish()]);
     },
+    idle: () => queue.onSubmittedWorkDone(),
     destroy: () => {
       context.unconfigure();
       device.destroy();

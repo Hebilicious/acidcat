@@ -81,10 +81,12 @@ const alt = "A mechanical brass cat with glowing acid-green eyes sits on a brass
     const sources = () => ({ artPad: art.pad, plate: large ? "/hero/plate@2x.webp" : `/hero/plate.${format()}`, clean: `/hero/clean.${format()}`, data: "/hero/data.webp" });
     still.decode().catch(() => undefined).then(() => createPlate(canvas, sources(), framing)).then(
       (plate) => {
-        plate.render({ reveal: 0 });
+        if (plate === undefined) {
+          canvas.remove();
+          return;
+        }
         root.classList.add("is-live");
         root.dataset["gpu"] = plate.backend;
-        if (plate.software) return;
         let visible = true;
         const sync = () => (visible && document.visibilityState === "visible" ? plate.start() : plate.stop());
         new IntersectionObserver(([entry]) => {
