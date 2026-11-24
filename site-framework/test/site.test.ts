@@ -257,6 +257,23 @@ describe("in the browser", () => {
     await page.close();
   });
 
+  test("moves the focus to the target of a link to a hash on another page", async () => {
+    const { page, problems } = await open("/guide/");
+    await page.evaluate(() => {
+      const link = document.createElement("a");
+      link.href = "/guide/long/#section-12";
+      link.id = "cross-hash";
+      link.textContent = "Section 12";
+      document.body.prepend(link);
+    });
+    await page.click("#cross-hash");
+    await page.waitForFunction(() => document.activeElement?.id === "section-12");
+    await page.keyboard.press("Tab");
+    assert.equal(await page.evaluate(() => document.querySelector("#section-12")?.compareDocumentPosition(document.activeElement ?? document.body) === Node.DOCUMENT_POSITION_FOLLOWING), true, "The next Tab goes on from the heading.");
+    assert.deepEqual(problems, []);
+    await page.close();
+  });
+
   const toggleBranches = async (page: Page): Promise<void> => {
     assert.equal(await page.locator(".when-false").count(), 1);
     await page.click(".toggle");

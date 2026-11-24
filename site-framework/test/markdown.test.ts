@@ -80,6 +80,16 @@ test("the lean copy of a component empties the static templates that it always r
   assert.deepEqual(templatesOf(leanTemplates(code)), ["", ""]);
 });
 
+test("the lean copy empties a template only when its flags say that it has no dynamic part", () => {
+  const code = [
+    'const t0 = _template("<h1>Static", 2)',
+    'const t1 = _template("<div><!><p>x", 1)',
+    'const t2 = _template("<svg><path d=\\"M0\\"></path>", 3, 1)',
+    "export default { setup() { return [t0(), t1(), t2()] } }",
+  ].join("\n");
+  assert.deepEqual(templatesOf(leanTemplates(code)), ["", "<div><!><p>x", ""]);
+});
+
 test("the lean copy keeps each template that hydration may not meet", () => {
   const branches = [
     '<section v-if="show"><p>When true</p><p>x</p></section><div v-else><p>When false</p><p>x</p></div>',
