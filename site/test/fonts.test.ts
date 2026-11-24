@@ -1,15 +1,8 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { complement, coreRanges, unicodeRange } from "../src/lib/fonts.ts";
-
-const dist = new URL("../dist/", import.meta.url).pathname;
-
-const pages = async (directory: string): Promise<string[]> => {
-  const entries = await readdir(directory, { withFileTypes: true, recursive: true });
-  return entries.filter((entry) => entry.isFile() && entry.name.endsWith(".html")).map((entry) => join(entry.parentPath, entry.name));
-};
+import { builtPages, dist } from "./static-server.ts";
 
 const inCore = (codePoint: number) => coreRanges.some(([first, last]) => codePoint >= first && codePoint <= last);
 
@@ -34,7 +27,7 @@ test("the core and the rest of each font cover every code point once", () => {
 
 test("every character on every page is in the core of the fonts, so no page loads the rest", async () => {
   const outside = new Map<string, string>();
-  for (const file of await pages(dist)) {
+  for (const file of await builtPages()) {
     for (const character of visibleText(await readFile(file, "utf8"))) {
       const codePoint = character.codePointAt(0);
       if (codePoint !== undefined && !inCore(codePoint)) outside.set(character, file.slice(dist.length));

@@ -1,26 +1,13 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
-
-const dist = new URL("../dist/", import.meta.url).pathname;
-const site = "https://acidcat.hebilicious.workers.dev";
-
-const pages = async (directory: string): Promise<string[]> => {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const nested = await Promise.all(
-    entries.map((entry) => {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) return pages(path);
-      return Promise.resolve(entry.name.endsWith(".html") ? [path] : []);
-    }),
-  );
-  return nested.flat();
-};
+import { siteUrl as site } from "../src/lib/social.ts";
+import { builtPages, dist } from "./static-server.ts";
 
 test("every link to another website opens in a new tab", async () => {
   const offenders: string[] = [];
-  for (const file of await pages(dist)) {
+  for (const file of await builtPages()) {
     const html = await readFile(file, "utf8");
     for (const match of html.matchAll(/<a\b[^>]*>/g)) {
       const tag = match[0];
@@ -34,7 +21,7 @@ test("every link to another website opens in a new tab", async () => {
 
 test("every page has an absolute social image of 1200 by 630 that exists in the build", async () => {
   const offenders: string[] = [];
-  for (const file of await pages(dist)) {
+  for (const file of await builtPages()) {
     const html = await readFile(file, "utf8");
     const image = /<meta property="og:image" content="([^"]+)"/.exec(html)?.[1];
     const card = /<meta name="twitter:card" content="summary_large_image"/.test(html);

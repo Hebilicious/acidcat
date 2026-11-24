@@ -1,9 +1,14 @@
-import { readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize } from "node:path";
 
 export const dist = new URL("../dist/", import.meta.url).pathname;
+
+export const builtPages = async (): Promise<string[]> => {
+  const entries = await readdir(dist, { withFileTypes: true, recursive: true });
+  return entries.filter((entry) => entry.isFile() && entry.name.endsWith(".html")).map((entry) => join(entry.parentPath, entry.name));
+};
 const types: Record<string, string> = {
   ".html": "text/html",
   ".css": "text/css",
