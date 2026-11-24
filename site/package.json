@@ -43,6 +43,7 @@
     "esbuild": "catalog:",
     "playwright": "catalog:",
     "postcss": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite": "catalog:"
   }
 }
