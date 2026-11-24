@@ -47,6 +47,10 @@ use crate::facts_generated::{
 pub const INTERRUPT_GRACE: std::time::Duration =
     std::time::Duration::from_millis(INTERRUPT_GRACE_MS);
 
+/// The name of the thread that exits the process [`INTERRUPT_GRACE`] after an interrupt. The exit at a second
+/// interrupt runs on another thread.
+pub const INTERRUPT_GRACE_THREAD: &str = "acid-cat-interrupt-grace";
+
 fn resume_words() -> impl Iterator<Item = &'static str> {
     RESUME_FLAGS
         .iter()
@@ -503,11 +507,13 @@ fn listen_for_interrupt(cancel: CancellationToken) {
 fn interrupted(cancel: &CancellationToken) {
     cancel.cancel();
     // A thread, not a task: the runtime drops its tasks when it shuts down, and a capability can block the threads
-    // of the runtime.
-    std::thread::spawn(|| {
-        std::thread::sleep(INTERRUPT_GRACE);
-        std::process::exit(exit::CANCELLED);
-    });
+    // of the runtime. Its name tells a test which of the two exits ran.
+    let _ = std::thread::Builder::new()
+        .name(INTERRUPT_GRACE_THREAD.to_owned())
+        .spawn(|| {
+            std::thread::sleep(INTERRUPT_GRACE);
+            std::process::exit(exit::CANCELLED);
+        });
 }
 
 struct UsageError {

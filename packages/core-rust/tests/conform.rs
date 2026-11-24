@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 mod fixture_program;
 mod fixture_settings;
 
-use acid_cat_core::cli::{INTERRUPT_GRACE, exit};
+use acid_cat_core::cli::{INTERRUPT_GRACE, INTERRUPT_GRACE_THREAD, exit};
 use serde_json::{Map, Value, json};
 
 use fixture_program::fixture;
@@ -210,6 +210,7 @@ struct Interrupted {
     code: Option<i32>,
     stderr: String,
     after_interrupt: Duration,
+    exited_on: String,
 }
 
 #[cfg(unix)]
@@ -243,10 +244,12 @@ fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
     ));
     std::fs::create_dir_all(&directory).expect("the directory is made");
     let marker = directory.join("held");
+    let record = directory.join("exit");
     let mut fixture = Command::new(fixture());
     fixture
         .args(["cli-blocking", "fixture", "hold", "--key", "k", "--marker"])
         .arg(&marker)
+        .env("FIXTURE_EXIT_RECORD", &record)
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
     if interrupts == 2 {
@@ -290,11 +293,13 @@ fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
         )
         .expect("standard error is text");
     }
+    let exited_on = std::fs::read_to_string(&record).unwrap_or_default();
     let _ = std::fs::remove_dir_all(&directory);
     Interrupted {
         code: status.and_then(|status| status.code()),
         stderr,
         after_interrupt: elapsed,
+        exited_on,
     }
 }
 
@@ -303,8 +308,8 @@ fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
 fn a_call_that_blocks_exits_with_130_after_the_grace_period_or_at_once_after_a_second_interrupt() {
     let once = interrupted_blocking_call(1);
     assert_eq!(
-        (once.code, once.stderr.as_str()),
-        (Some(exit::CANCELLED), "")
+        (once.code, once.stderr.as_str(), once.exited_on.as_str()),
+        (Some(exit::CANCELLED), "", INTERRUPT_GRACE_THREAD)
     );
     assert!(
         once.after_interrupt >= INTERRUPT_GRACE,
@@ -316,10 +321,9 @@ fn a_call_that_blocks_exits_with_130_after_the_grace_period_or_at_once_after_a_s
         (twice.code, twice.stderr.as_str()),
         (Some(exit::CANCELLED), "")
     );
-    assert!(
-        twice.after_interrupt < INTERRUPT_GRACE,
-        "exited {:?} after the start of the grace period, not at the second interrupt",
-        twice.after_interrupt
+    assert_ne!(
+        twice.exited_on, INTERRUPT_GRACE_THREAD,
+        "the process exited after the grace period, not at the second interrupt"
     );
 }
 

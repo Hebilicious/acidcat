@@ -633,6 +633,7 @@ async fn main() {
         }
         Some("cli-blocking") => {
             use acid_cat_core::cli::{CliOptions, run_cli_process};
+            record_the_thread_of_the_exit();
             let context = Fixture {
                 holds: Holds {
                     blocks_its_thread: true,
@@ -675,5 +676,23 @@ fn poll() -> acid_cat_core::mcp::PollOptions {
     acid_cat_core::mcp::PollOptions {
         buffer_limit: fixture_settings::POLL_BUFFER,
         ..Default::default()
+    }
+}
+
+unsafe extern "C" {
+    fn atexit(callback: extern "C" fn()) -> std::ffi::c_int;
+}
+
+/// With `FIXTURE_EXIT_RECORD`, write the name of the thread that exits the process to that path, so that a test can tell
+/// the exit at a second interrupt from the exit after the grace period. Both exit with code 130.
+fn record_the_thread_of_the_exit() {
+    extern "C" fn record() {
+        if let Some(path) = std::env::var_os("FIXTURE_EXIT_RECORD") {
+            let _ = std::fs::write(path, std::thread::current().name().unwrap_or("unnamed"));
+        }
+    }
+    // SAFETY: `atexit` of the C library takes a function with no arguments, and `std::process::exit` calls it.
+    unsafe {
+        atexit(record);
     }
 }
