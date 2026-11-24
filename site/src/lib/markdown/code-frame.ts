@@ -4,13 +4,10 @@ const escapeHtml = (text: string): string => text.replaceAll("&", "&amp;").repla
 
 const titleAttribute = /(?:^|\s)title="([^"]*)"/;
 
-/** The title of a code block, from `title="…"` in the info string of its fence. */
 export const frameTitle = (info: string): string | undefined => titleAttribute.exec(info)?.[1];
 
-/** The info string of a fence without its title. */
 export const withoutTitle = (info: string): string => info.replace(titleAttribute, "");
 
-/** Puts the colored HTML of a code block in a frame: an editor tab when it has a title, a terminal for a shell, and a copy button. */
 export const codeFrame = (code: string, language: string, title: string | undefined): string => {
   const terminal = terminalLanguages.has(language);
   const classes = ["frame", ...(title === undefined ? [] : ["has-title"]), ...(terminal ? ["is-terminal"] : [])].join(" ");

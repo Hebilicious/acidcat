@@ -14,7 +14,6 @@ export interface DocumentOptions {
 }
 
 export interface BuildFiles {
-  /** The path from the root of the site of each file of the client build, such as `/assets/font-a1b2c3.woff2`. */
   readonly files: readonly string[];
 }
 

@@ -61,7 +61,7 @@ interface Box {
   readonly height: number;
 }
 
-/** The most that a channel of a pixel may differ, for the antialiasing of the GPU. */
+/** For the antialiasing of the GPU. */
 const tolerance = 1;
 
 const pixels = async (images: readonly Buffer[]): Promise<Buffer> => Buffer.concat(await Promise.all(images.map((image) => sharp(image).raw().toBuffer())));
@@ -75,10 +75,7 @@ const differentPixels = (expected: Buffer, actual: Buffer): number => {
   return count;
 };
 
-/**
- * The regions that the comparison leaves out: the search box, which has not moved, and the diamond under the header,
- * a square that CSS turns by 45 degrees, whose edges Chromium shades a few levels apart from one render to the next.
- */
+/** Chromium shades the edges of the diamond under the header, a square that CSS turns by 45 degrees, a few levels apart from one render to the next. */
 const hiddenRegions = (page: Page): Promise<readonly Box[]> =>
   page.evaluate(() => {
     const boxes = [...document.querySelectorAll(".site-search, .site-search *")].map((element) => element.getBoundingClientRect());
@@ -90,7 +87,7 @@ const hiddenRegions = (page: Page): Promise<readonly Box[]> =>
     return [search, ...diamond];
   });
 
-/** A screenshot of the whole page, taken in parts, since one image of a long page at full height needs gigabytes of memory. */
+/** One screenshot of a long page at full height needs gigabytes of memory. */
 const segments = async (page: Page, width: number, hidden: readonly Box[]): Promise<readonly Buffer[]> => {
   await page.evaluate((boxes) => {
     for (const box of boxes) {

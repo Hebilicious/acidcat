@@ -11,7 +11,6 @@ const isBundledLanguage = (language: string): language is keyof typeof bundledLa
 
 const shellLanguages: ReadonlySet<string> = new Set(["shellscript", "shell", "bash", "sh", "zsh"]);
 
-/** Makes the prompt `$` or `>` at the start of a shell line one token that a selection leaves out, as VitePress does. */
 const unselectablePrompt: ShikiTransformer = {
   name: "acidcat:unselectable-prompt",
   tokens(lines) {
@@ -32,7 +31,6 @@ const colored = async (code: string, language: string): Promise<string> => {
   return highlighter.codeToHtml(code.replace(/\n$/, ""), { lang, theme: codeTheme.name ?? "acidcat", transformers: [unselectablePrompt] }).replace(/^<pre /, '<pre dir="ltr" ');
 };
 
-/** Colors each code block with the theme of the site, and puts it in a frame. */
 export const highlightBlock = async (code: string, language: string, meta: string): Promise<string> => codeFrame(await colored(code, language), language, frameTitle(meta));
 
 /** Adds a link to each heading. Its label names the heading, and CSS draws its mark, so the text of the heading has no extra character. */

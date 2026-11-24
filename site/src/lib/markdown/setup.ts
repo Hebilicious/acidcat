@@ -6,7 +6,6 @@ import { specRoute } from "../spec-pages.ts";
 import { codeFrame, frameTitle, withoutTitle } from "./code-frame.ts";
 import { expandComponents } from "./components.ts";
 
-/** Puts each code block in a frame. */
 const codeFrames = (md: MarkdownRenderer): void => {
   const fence = md.renderer.rules.fence;
   if (fence === undefined) throw new Error("The Markdown renderer has no fence rule.");

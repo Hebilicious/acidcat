@@ -100,7 +100,6 @@ export const writeFonts = async (directory: string): Promise<void> => {
 /** VitePress names a built file `<name>.<hash>`, and Vite `<name>-<hash>`. */
 const hashSeparators = [".", "-"];
 
-/** The file of the core of each face that the first view of a page draws, from the files of the build. */
 const preloadedFonts = (page: "home" | "docs", assets: readonly string[]): string[] =>
   routeFaces[page].map((face) => {
     const stem = fontFile(face, "core").replace(/\.woff2$/, "");
@@ -109,11 +108,9 @@ const preloadedFonts = (page: "home" | "docs", assets: readonly string[]): strin
     return href;
   });
 
-/** A preload link for the core file of each face that the first view of the page draws, so that the browser lays out the text once. */
 export const fontPreloads = (page: "home" | "docs", assets: readonly string[]): HeadConfig[] =>
   preloadedFonts(page, assets).map((href) => ["link", { rel: "preload", as: "font", type: "font/woff2", href, crossorigin: "" }]);
 
-/** The same preload links as HTML. */
 export const fontPreloadHtml = (page: "home" | "docs", assets: readonly string[]): string =>
   preloadedFonts(page, assets)
     .map((href) => `<link rel="preload" as="font" type="font/woff2" href="${href}" crossorigin>`)

@@ -28,11 +28,7 @@ export interface ComponentContext {
   readonly content: string;
   /** Counts the tab groups of the page, so that each tab and each panel has its own id. */
   readonly ids: { next: number };
-  /**
-   * Writes `role` beside `data-role`. VitePress leaves the static HTML of a page out of its script only when each
-   * attribute is a known HTML attribute, and `role` is not one, so its build adds the roles to the built pages
-   * (`src/lib/server-roles.ts`). A build that keeps `role` in its templates sets this.
-   */
+  /** VitePress leaves the static HTML of a page out of its script only when each attribute is a known HTML attribute, and `role` is not one. */
   readonly roles?: boolean;
 }
 

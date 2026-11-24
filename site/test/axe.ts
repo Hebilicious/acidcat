@@ -43,7 +43,6 @@ export const agentRules = [
 
 const axeSource = readFile(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
 
-/** Runs axe-core in the page, and gives each violation with the elements that break it. */
 export const axeViolations = async (page: Page, rules: readonly string[] | "every rule"): Promise<unknown> => {
   await page.addScriptTag({ content: await axeSource });
   const values = rules === "every rule" ? "axe.getRules().map((rule) => rule.ruleId)" : JSON.stringify(rules);
@@ -52,7 +51,6 @@ export const axeViolations = async (page: Page, rules: readonly string[] | "ever
   );
 };
 
-/** With its scripts blocked, each page with tabs or a code explorer has its roles in its HTML, and passes the rules that agents rely on. */
 export const checkRolesWithScriptsBlocked = async (browser: Browser, origin: string): Promise<void> => {
   for (const [path, roles] of [
     ["/docs/quick-start/", ["tablist", "tab", "tabpanel"]],

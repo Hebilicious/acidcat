@@ -37,7 +37,6 @@ export interface CardPage {
   readonly description: string;
 }
 
-/** The canonical URL of a page, and the meta elements of its Open Graph and Twitter cards with its social image. */
 export const pageCard = (page: CardPage): { readonly url: string; readonly meta: Record<string, string>[] } => {
   const url = `${siteUrl}${page.path}`;
   return {
