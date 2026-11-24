@@ -63,6 +63,36 @@ test("a page change from the homepage to the docs loads the CSS of the docs befo
   await page.close();
 });
 
+test("a page change moves no content that stays on the page, from the homepage, into the examples and out of them", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  const changes = [
+    ["/", "/spec/"],
+    ["/docs/", "/examples/"],
+    ["/examples/", "/spec/"],
+    ["/docs/", "/spec/"],
+  ];
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 400, height: 860 }]) {
+    for (const [from = "", to = ""] of changes) {
+      const page = await openPage(browser, { viewport });
+      await page.goto(`${origin}${from}`, { waitUntil: "networkidle" });
+      await page.evaluate(() => {
+        const shifts: number[] = [];
+        Reflect.set(window, "shifts", shifts);
+        new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) shifts.push(Number(Reflect.get(entry, "value")));
+        }).observe({ type: "layout-shift" });
+      });
+      // A click from a script is no input, so Chromium counts each shift, however soon it comes after the click.
+      await page.evaluate((href) => document.querySelector<HTMLElement>(`header a[href="${href}"]`)?.click(), to);
+      await page.waitForURL(`${origin}${to}`);
+      await page.waitForLoadState("networkidle");
+      const shifts: unknown = await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(Reflect.get(window, "shifts"))))));
+      assert.deepEqual(shifts, [], `${from} to ${to} at ${viewport.width}px`);
+      await page.close();
+    }
+  }
+});
+
 test("VitePress fetches ahead the page that a link in view leads to, before the reader clicks it", async () => {
   if (browser === undefined) throw new Error("No browser.");
   const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });

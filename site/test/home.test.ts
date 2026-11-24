@@ -115,7 +115,8 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   const loaded = await Promise.all(requests);
   const files = loaded.map(({ file }) => file);
   const bytes = new Map<string, number>();
-  for (const { type, size } of loaded) bytes.set(type, (bytes.get(type) ?? 0) + size);
+  const group = (file: string, type: string) => (type === "other" ? (file.endsWith(".css") ? "stylesheet ahead" : "pages ahead") : type);
+  for (const { file, type, size } of loaded) bytes.set(group(file, type), (bytes.get(group(file, type)) ?? 0) + size);
 
   const plates = files.filter((file) => /^\/assets\/(phone|plate)[\w@-]*\./.test(file));
   assert.equal(plates.length, 1, `the hero loads one plate, not ${plates.join(" and ")}`);
@@ -128,8 +129,17 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   const vueVitePressAndHomepage = 195_000;
   const homepageWithItsCss = 176_000;
   const starCount = 1_000;
-  const prefetchOfEachSectionInTheHeaderAndItsCss = 150_000;
-  const budget: Record<string, number> = { image: phonePlate, font: fontCores, script: vueVitePressAndHomepage, document: homepageWithItsCss, fetch: starCount, other: prefetchOfEachSectionInTheHeaderAndItsCss };
+  const prefetchOfEachSectionInTheHeader = 110_000;
+  const cssOfTheDocs = 40_000;
+  const budget: Record<string, number> = {
+    image: phonePlate,
+    font: fontCores,
+    script: vueVitePressAndHomepage,
+    document: homepageWithItsCss,
+    fetch: starCount,
+    "pages ahead": prefetchOfEachSectionInTheHeader,
+    "stylesheet ahead": cssOfTheDocs,
+  };
   for (const [type, size] of bytes) assert.ok(size <= (budget[type] ?? 0), `${type}: ${size} bytes, budget ${budget[type] ?? 0}`);
   await page.close();
 });

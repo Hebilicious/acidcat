@@ -70,7 +70,7 @@ usePageBehaviors();
         <div class="sidebar-content"><Sidebar :section="section" /></div>
       </nav>
     </template>
-    <div class="main-frame">
+    <div :key="route.path" class="main-frame">
       <div class="main-row">
         <aside v-if="hasToc" class="right-sidebar-container" aria-label="On this page">
           <div class="right-sidebar">
