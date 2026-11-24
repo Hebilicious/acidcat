@@ -113,7 +113,6 @@ body {
 }
 
 header.header {
-  view-transition-name: site-header;
   padding-inline: var(--layout-gutter-inline);
   background: linear-gradient(color-mix(in oklch, var(--palette-ink-900) 94%, transparent), color-mix(in oklch, var(--palette-ink-900) 80%, transparent));
   backdrop-filter: blur(12px);
@@ -146,12 +145,6 @@ site-search button[data-open-modal] {
 
 .sl-menu-button {
   z-index: calc(var(--sl-z-index-navbar) + 2) !important;
-}
-
-@media (min-width: 50rem) {
-  .sidebar-pane {
-    view-transition-name: site-sidebar;
-  }
 }
 
 .sidebar-pane {

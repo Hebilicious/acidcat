@@ -107,7 +107,6 @@ h2 em {
   align-items: center;
   height: 4rem;
   padding: 0 var(--layout-gutter-inline);
-  view-transition-name: site-header;
   background: linear-gradient(in srgb, color-mix(in oklch, var(--palette-ink-900) 92%, transparent), color-mix(in oklch, var(--palette-ink-900) 70%, transparent));
   backdrop-filter: blur(12px);
   border-bottom: 1px solid color-mix(in oklch, var(--palette-brass-400) 28%, transparent);

@@ -7,6 +7,7 @@ import CoreScreens from "../components/CoreScreens.astro";
 import Surfaces from "../components/Surfaces.astro";
 import Mark from "../components/Mark.astro";
 import FontPreload from "../components/site/FontPreload.astro";
+import InstantNavigation from "../components/site/InstantNavigation.astro";
 import SiteNav from "../components/site/SiteNav.astro";
 import { siteUrl, socialImage } from "../lib/social.ts";
 import Schematic from "../components/Schematic.astro";
@@ -58,6 +59,7 @@ const newTab = (href: string) => (isExternal(href) ? { target: "_blank", rel: "n
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <FontPreload page="home" />
+    <InstantNavigation />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#0b0e14" />
     <link rel="icon" href={favicon} type="image/svg+xml" />

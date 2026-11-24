@@ -34,3 +34,19 @@ test("every page has an absolute social image of 1200 by 630 that exists in the 
   }
   assert.deepEqual(offenders, []);
 });
+
+test("every page asks the browser to prerender the pages of the site that a reader is about to open", async () => {
+  const offenders: string[] = [];
+  for (const file of await builtPages()) {
+    const html = await readFile(file, "utf8");
+    const rules = /<script type="speculationrules">([^<]*)<\/script>/.exec(html)?.[1];
+    if (rules === undefined) {
+      offenders.push(`${file.slice(dist.length)}: no speculation rules`);
+      continue;
+    }
+    const parsed: unknown = JSON.parse(rules);
+    const text = JSON.stringify(parsed);
+    if (!text.includes('"prerender"') || !text.includes('"href_matches":"/*"') || !text.includes("target=_blank")) offenders.push(`${file.slice(dist.length)}: ${text}`);
+  }
+  assert.deepEqual(offenders, []);
+});

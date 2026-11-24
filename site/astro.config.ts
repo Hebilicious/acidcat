@@ -13,6 +13,7 @@ const tableOfContents = fileURLToPath(new URL("src/lib/table-of-contents.ts", im
 
 export default defineConfig({
   site: "https://acidcat.hebilicious.workers.dev",
+  prefetch: { prefetchAll: true, defaultStrategy: "hover" },
   build: { inlineStylesheets: "always" },
   vite: {
     plugins: [
