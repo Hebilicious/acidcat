@@ -33,7 +33,7 @@ const snippets = await catalogSnippets();
       <div class="engine-card">
         <div class="language-rail" role="group" aria-label="Catalog language">
           {snippets.map(snippet => (
-            <button type="button" data-language={snippet.id} aria-label={snippet.label} aria-controls={`fig1-${snippet.id}`} aria-pressed={snippet.id === "ts"}>
+            <button type="button" data-language={snippet.id} aria-label={`${snippet.id.toUpperCase()}, ${snippet.label}`} aria-controls={`fig1-${snippet.id}`} aria-pressed={snippet.id === "ts"}>
               {snippet.id.toUpperCase()}
             </button>
           ))}
