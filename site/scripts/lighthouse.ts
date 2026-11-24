@@ -19,8 +19,8 @@ const gatedAudits = ["network-dependency-tree-insight", "forced-reflow-insight",
 
 /** The lowest median score of each category. See "Lighthouse" in the README for the spread that each number allows. */
 const categoryBudgets: Readonly<Record<keyof typeof pages, Readonly<Record<string, number>>>> = {
-  home: { performance: 70, accessibility: 100, "best-practices": 100, seo: 100 },
-  "quick-start": { performance: 90, accessibility: 100, "best-practices": 100, seo: 100 },
+  home: { performance: 82, accessibility: 100, "best-practices": 100, seo: 100 },
+  "quick-start": { performance: 95, accessibility: 100, "best-practices": 100, seo: 100 },
 };
 
 const types: Readonly<Record<string, string>> = {

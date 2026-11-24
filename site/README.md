@@ -150,22 +150,22 @@ The renderer checks the GPU before it downloads the textures. It decodes each te
 
 ## Lighthouse
 
-`moon run site:lighthouse` builds the site, serves `dist/` with Brotli and the cache headers of `public/_headers`, and runs [Lighthouse](https://developer.chrome.com/docs/lighthouse) on mobile (simulated throttling) on `/` and `/docs/quick-start/`, five times each, in the Chromium of Playwright. It writes each report as HTML and JSON, and a summary table, into `.tmp/lighthouse/`. It fails when one of these budgets does not hold:
+`moon run site:lighthouse` builds the site, and serves `dist/` from memory as the Worker does: it compresses each text file with Brotli once when it starts, as Cloudflare serves a compressed file from its cache, and it sends the cache headers of `public/_headers`. It runs [Lighthouse](https://developer.chrome.com/docs/lighthouse) on mobile (simulated throttling) on `/` and `/docs/quick-start/`, five times each, in the Chromium of Playwright. It writes each report as HTML and JSON, and a summary table, into `.tmp/lighthouse/`. It fails when one of these budgets does not hold:
 
 - Each run of each page passes the audits that pass or fail: "Network dependency tree", "Forced reflow", "Improve image delivery", "Render blocking requests", "Layout shift culprits", "Cumulative Layout Shift" and "Accessibility tree is well-formed" (Agentic Browsing).
 - The median score of each category is at least its budget in `scripts/lighthouse.ts`.
 
-The run blocks the request of the homepage for the star count, so it does not use the network, and the console error that the block makes is one that Lighthouse ignores. The budgets come from four runs of the job on the runners, with five runs of each page in each job:
+The run blocks the request of the homepage for the star count, so it does not use the network, and the console error that the block makes is one that Lighthouse ignores. The budgets come from nine runs of the job on the runners, with five runs of each page in each job. Each budget of a median is the lowest median of a job, less 5 points:
 
 | Page | Category | Each run | Median of each job | Budget of the median |
 | --- | --- | --- | --- | --- |
-| `/` | Performance | 73 to 88 | 79 to 84 | 70 |
-| `/docs/quick-start/` | Performance | 99 to 100 | 100 | 90 |
+| `/` | Performance | 85 to 94 | 87 to 94 | 82 |
+| `/docs/quick-start/` | Performance | 97 to 100 | 100 | 95 |
 | Both | Accessibility, Best practices, SEO | 100 | 100 | 100 |
 
-Each audit that passes or fails passed in each of the 40 runs.
+Each audit that passes or fails passed in each of the 90 runs.
 
-The workflow [`lighthouse.yml`](../.github/workflows/lighthouse.yml) runs the task on a runner of GitHub for each pull request that changes `site/`. It writes the summary table to the job summary, and uploads the reports as the artifact `lighthouse-reports`. Local results are not comparable: the score of a run depends on the load of the machine.
+The workflow [`lighthouse.yml`](../.github/workflows/lighthouse.yml) runs the task on a runner of GitHub for each pull request that changes a file that the built site reads: the same files that start a build of Workers Builds (see [Deployment](#deployment)), and the workflow itself. It writes the summary table to the job summary, and uploads the reports as the artifact `lighthouse-reports`. Local results are not comparable: the score of a run depends on the load of the machine.
 
 ## The GPU renderers
 
