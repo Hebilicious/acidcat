@@ -212,5 +212,5 @@ By default, the command line writes JSON only. The `output` option adds a human 
 ## Read more
 
 - The full [`@acid-cat/core-ts` README](https://github.com/Hebilicious/acidcat/blob/main/packages/core-ts/README.md): every option, poll and webhook delivery, human output and application commands.
-- [The air conditioner on the TypeScript core](/docs/examples/core-ts/), in a code explorer.
+- [The air conditioner on the TypeScript core](/examples/core-ts/), in a code explorer.
 - [Surfaces](/docs/concepts/surfaces/) and [the TypeScript surface](/spec/surfaces/typescript/).

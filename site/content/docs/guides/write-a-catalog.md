@@ -197,7 +197,7 @@ The air conditioner writes one catalog in each supported language, and its test 
 
 <CatalogExample capability="aircon.power.set" />
 
-The sources are in [`examples/aircon/catalog`](/docs/examples/catalog/).
+The sources are in [`examples/aircon/catalog`](/examples/catalog/).
 
 ## Check the result
 
@@ -222,4 +222,4 @@ A JSON document is a catalog when it conforms, however it was written. If you wr
 - [Catalog](/docs/concepts/catalog/) and [Capabilities](/docs/concepts/capabilities/)
 - [Catalog](/spec/catalog/) in the specification
 - [Packages](/packages/), with the registry name of each catalog library
-- [The catalog in each language](/docs/examples/catalog/), in a code explorer
+- [The catalog in each language](/examples/catalog/), in a code explorer

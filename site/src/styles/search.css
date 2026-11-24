@@ -1,15 +1,15 @@
-/* The search dialog of the docs: the local search box of VitePress, in the palette of the site. */
+/* The search dialog of the docs: the local search box of VitePress, in the palette of the site. The scoped styles of VitePress have the specificity of two classes, so each rule here starts with two classes. */
 
 @import "vitepress/dist/client/theme-default/styles/icons.css";
 
 :root {
   --vp-c-brand-1: var(--palette-acid-400);
   --vp-c-divider: color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
-  --vp-backdrop-bg-color: color-mix(in oklch, var(--palette-ink-950) 75%, transparent);
+  --vp-backdrop-bg-color: color-mix(in oklch, var(--palette-ink-950) 80%, transparent);
   --vp-local-search-bg: var(--palette-ink-900);
   --vp-local-search-result-bg: var(--palette-ink-800);
   --vp-local-search-result-border: color-mix(in oklch, var(--palette-brass-400) 20%, transparent);
-  --vp-local-search-result-selected-bg: var(--palette-ink-800);
+  --vp-local-search-result-selected-bg: color-mix(in oklch, var(--palette-acid-400) 8%, var(--palette-ink-800));
   --vp-local-search-result-selected-border: var(--palette-acid-400);
   --vp-local-search-highlight-bg: var(--palette-acid-400);
   --vp-local-search-highlight-text: var(--palette-ink-900);
@@ -39,6 +39,114 @@
   text-decoration: none;
 }
 
-.VPLocalSearchBox kbd {
+.VPLocalSearchBox .shell {
+  gap: var(--spacing_fluid-space-s);
+  padding: var(--spacing_fluid-space-s);
+  border: 1px solid color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
+  border-radius: var(--radius-size-m);
+  box-shadow: 0 var(--spacing_fluid-space-s) var(--spacing_fluid-space-2xl) var(--palette-ink-950);
+}
+
+.VPLocalSearchBox .search-bar {
+  gap: var(--spacing_fluid-space-2xs);
+  min-height: var(--spacing_fluid-space-xl);
+  padding-inline: var(--spacing_fluid-space-xs);
+  border: 1px solid color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
+  border-radius: var(--radius-size-m);
+  background: var(--palette-ink-950);
+}
+
+.VPLocalSearchBox .search-bar:focus-within {
+  border-color: var(--palette-acid-400);
+  box-shadow: 0 0 var(--spacing_fluid-space-s) color-mix(in oklch, var(--palette-acid-400) 25%, transparent);
+}
+
+.VPLocalSearchBox .search-icon {
+  margin: 0;
+  color: var(--palette-acid-400);
+}
+
+/* The search bar shows the focus of its input with its border, so the input draws no outline of its own. */
+.VPLocalSearchBox .search-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--spacing_fluid-space-2xs) var(--spacing_fluid-space-3xs);
+  font-size: var(--typography_fluid-text-m);
+  outline: none;
+}
+
+.VPLocalSearchBox .search-input::placeholder {
+  color: var(--palette-cream-400);
+  opacity: 1;
+}
+
+.VPLocalSearchBox .search-actions button {
+  padding: var(--spacing_fluid-space-2xs);
+  border-radius: var(--radius-size-s);
+  color: var(--palette-cream-400);
+}
+
+.VPLocalSearchBox .search-actions button:focus-visible {
+  outline: 2px solid var(--palette-acid-400);
+  outline-offset: -2px;
+}
+
+.VPLocalSearchBox .search-actions button:not([disabled]):hover,
+.VPLocalSearchBox .toggle-layout-button.detailed-list {
+  color: var(--palette-acid-400);
+}
+
+.VPLocalSearchBox .results {
+  gap: var(--spacing_fluid-space-2xs);
+}
+
+.VPLocalSearchBox .result {
+  border-width: 1px;
+  border-radius: var(--radius-size-s);
+  background: var(--vp-local-search-result-bg);
+  font-size: var(--typography_fluid-text-s);
+}
+
+.VPLocalSearchBox .result.selected {
+  box-shadow: 0 0 var(--spacing_fluid-space-xs) color-mix(in oklch, var(--palette-acid-400) 20%, transparent);
+}
+
+.VPLocalSearchBox .title-icon {
+  opacity: 1;
+  color: var(--palette-brass-400);
+}
+
+.VPLocalSearchBox .no-results {
+  padding: var(--spacing_fluid-space-l) var(--spacing_fluid-space-s);
+  border: 1px dashed color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
+  border-radius: var(--radius-size-s);
+  color: var(--palette-cream-400);
+  font-size: var(--typography_fluid-text-s);
+}
+
+.VPLocalSearchBox .no-results strong {
+  color: var(--palette-acid-400);
+}
+
+.VPLocalSearchBox .search-keyboard-shortcuts {
+  color: var(--palette-cream-400);
+  font-size: var(--typography_fluid-text-xs);
+  opacity: 1;
+}
+
+.VPLocalSearchBox .search-keyboard-shortcuts kbd {
+  border: 1px solid color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
+  border-radius: var(--radius-size-s);
+  background: var(--palette-ink-800);
+  box-shadow: none;
+  color: var(--palette-cream-100);
   font-family: var(--font-family-mono);
+}
+
+@media not all and (min-width: 48rem) {
+  .VPLocalSearchBox .shell {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
 }

@@ -44,8 +44,7 @@ const findAll = (node: Nodes, test: (element: Element) => boolean, found: Elemen
 
 const element = (tagName: string, children: ElementContent[]): Element => ({ type: "element", tagName, properties: {}, children });
 
-/** The components of the docs write `data-role` in place of `role`, and the page sets the role in the browser. */
-const roleOf = (node: Element): unknown => node.properties["role"] ?? node.properties["dataRole"];
+const roleOf = (node: Element): unknown => node.properties["role"];
 
 const tabLabels = (root: Root): Map<string, string> =>
   new Map(findAll(root, (node) => roleOf(node) === "tab").map((tab) => [String(tab.properties["id"] ?? ""), textOf(tab).trim()]));

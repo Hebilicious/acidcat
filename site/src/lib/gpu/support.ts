@@ -54,6 +54,10 @@ export const whenNear = (element: Element, signal: AbortSignal): Promise<void> =
     );
   });
 
+export const onNear = (element: Element, signal: AbortSignal, start: () => void): void => {
+  whenNear(element, signal).then(start, () => undefined);
+};
+
 // lib.dom does not declare GPUBufferUsage, GPUTextureUsage and GPUMapMode. These are their values in the WebGPU specification.
 export const bufferUsage = { mapRead: 0x1, copyDst: 0x8, uniform: 0x40 } as const;
 export const textureUsage = { copySrc: 0x1, copyDst: 0x2, textureBinding: 0x4, renderAttachment: 0x10 } as const;

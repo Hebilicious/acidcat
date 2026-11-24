@@ -173,7 +173,7 @@ gh skill install Hebilicious/acidcat acid-cat
 - [x] Cores in TypeScript: `@acid-cat/core-ts` and `@acid-cat/core-effect`
 - [x] A core in Rust: `acid-cat-core`
 - [ ] Cores in more languages
-- [x] A site that publishes the documentation, the examples, the specification and the list of packages: [acidcat.hebilicious.workers.dev](https://acidcat.hebilicious.workers.dev), from [`site/`](site/README.md), built with VitePress. A click on a link changes the page in the browser, with no new document. Each page of [Examples](https://acidcat.hebilicious.workers.dev/docs/examples/) has a code explorer that reads the files of [`examples/`](examples/aircon/README.md) when the site is built. The site serves its own content to agents through AcidCat: an MCP server at `/mcp`, an HTTP API at `/api`, WebMCP tools in each page, each page as Markdown, `llms.txt`, and the `acid-cat` skill at `/.well-known/agent-skills/index.json`
+- [x] A site that publishes the documentation, the examples, the specification and the list of packages: [acidcat.hebilicious.workers.dev](https://acidcat.hebilicious.workers.dev), from [`site/`](site/README.md), built with VitePress. A click on a link changes the page in the browser, with no new document. Each page of [Examples](https://acidcat.hebilicious.workers.dev/examples/) has a code explorer that reads the files of [`examples/`](examples/aircon/README.md) when the site is built. The site serves its own content to agents through AcidCat: an MCP server at `/mcp`, an HTTP API at `/api`, WebMCP tools in each page, each page as Markdown, `llms.txt`, and the `acid-cat` skill at `/.well-known/agent-skills/index.json`
 
 ## 🛠️ Development
 

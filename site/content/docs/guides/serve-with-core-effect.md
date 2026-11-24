@@ -220,4 +220,4 @@ With the `remote` option and `Http.client(url)`, the command line calls the HTTP
 ## Read more
 
 - The full [`@acid-cat/core-effect` README](https://github.com/Hebilicious/acidcat/blob/main/packages/core-effect/README.md): availability and state, poll and webhook delivery, events beside your own MCP server, output for a person, and application flags and commands.
-- [The air conditioner on the Effect core](/docs/examples/core-effect/), in a code explorer.
+- [The air conditioner on the Effect core](/examples/core-effect/), in a code explorer.

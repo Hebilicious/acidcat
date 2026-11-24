@@ -84,6 +84,7 @@
       "enum": [
         "home",
         "docs",
+        "examples",
         "spec",
         "packages"
       ],

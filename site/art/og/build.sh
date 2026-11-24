@@ -36,6 +36,7 @@ card() {
 
 card home "APPLICATION CAPABILITY IDENTIFICATION CATALOG" "AcidCat" $'Describe what your application\ncan do once. Serve it as a CLI,\nan MCP server, an HTTP API\nand typed code.'
 card docs "ACIDCAT · DOCUMENTATION" "Docs" $'Quick start, concepts and\nguides for every language\nand core.'
+card examples "ACIDCAT · EXAMPLES" "Examples" $'An air conditioner on every\ncore, with each surface, in\na code explorer.'
 card spec "ACIDCAT · SPECIFICATION 0.1" "Spec" $'The catalog, the surfaces,\ninvocation, events and\nconformance.'
 card packages "ACIDCAT · PACKAGES" "Packages" $'Catalog libraries, cores\nand tools on npm, crates.io,\nPyPI, Go and Pkl.'
 ls -la "$out"

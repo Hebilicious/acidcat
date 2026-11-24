@@ -80,7 +80,6 @@ usePageBehaviors();
                   <h2 id="on-this-page">On this page</h2>
                   <TocList :headers="headers" :active="active" overview />
                 </nav>
-                <PageActions :edit-url="editUrl" :issue-url="issueUrl" />
               </div>
             </div>
           </div>
@@ -103,10 +102,7 @@ usePageBehaviors();
               <div class="container">
                 <Content class="markdown-content" />
                 <footer class="page-footer">
-                  <a v-if="editUrl" class="edit-link" :href="editUrl" target="_blank" rel="noopener noreferrer">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></svg>
-                    Edit page
-                  </a>
+                  <PageActions :edit-url="editUrl" :issue-url="issueUrl" />
                   <Pagination v-if="previous || next" :previous="previous" :next="next" />
                 </footer>
               </div>

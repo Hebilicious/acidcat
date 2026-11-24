@@ -41,5 +41,6 @@ export const docsSidebar = async (content: string): Promise<SidebarItem[]> => [
   { text: "Concepts", items: await directoryLinks(content, "docs/concepts") },
   { text: "Guides", items: await directoryLinks(content, "docs/guides") },
   { text: "Reference", items: await directoryLinks(content, "docs/reference") },
-  { text: "Examples", items: await directoryLinks(content, "docs/examples") },
 ];
+
+export const examplesSidebar = (content: string): Promise<SidebarItem[]> => directoryLinks(content, "examples");

@@ -10,6 +10,7 @@ import type { Page, SiteContent } from "./content.ts";
 const sections = [
   { section: "home", prefix: "/", title: "Home" },
   { section: "docs", prefix: "/docs/", title: "Documentation" },
+  { section: "examples", prefix: "/examples/", title: "Examples" },
   { section: "spec", prefix: "/spec/", title: "Specification" },
   { section: "packages", prefix: "/packages/", title: "Packages" },
 ] as const;

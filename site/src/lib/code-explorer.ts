@@ -182,7 +182,9 @@ export const initExplorer = (root: HTMLElement, signal: AbortSignal): void => {
   });
 
   treeToggle.setAttribute("aria-expanded", String(!narrow()));
-  root.dataset["current"] = root.dataset["open"] ?? "";
+  const open = root.dataset["open"] ?? "";
+  root.dataset["current"] = source.childElementCount > 0 ? open : "";
+  if (source.childElementCount === 0) void select(open, { focus: false, updateHash: false });
 
   const fromHash = (scroll: boolean): void => {
     const file = fileFromHash(location.hash);

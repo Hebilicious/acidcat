@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
+import { onNear } from "../lib/gpu/support.ts";
 import { mountCoreConsole } from "../lib/core-console.ts";
 import { coreSlot } from "../lib/home-slots.ts";
 import { vCodeHtml } from "./code-html.ts";
@@ -8,7 +9,8 @@ import { data } from "./home.data.ts";
 const root = ref<HTMLElement>();
 const lifetime = new AbortController();
 onMounted(() => {
-  if (root.value !== undefined) mountCoreConsole(root.value, lifetime.signal);
+  const element = root.value;
+  if (element !== undefined) onNear(element, lifetime.signal, () => mountCoreConsole(element, lifetime.signal));
 });
 onUnmounted(() => lifetime.abort());
 </script>

@@ -51,6 +51,28 @@ test("a link to another page changes the page in the browser, with no new docume
   await page.close();
 });
 
+test("a page change from the homepage to the docs loads the CSS of the docs before the page renders, in the order of the build", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
+  await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+  assert.deepEqual(await page.locator("[data-route]").evaluateAll((elements) => elements.map((element) => element.getAttribute("data-route"))), ["home"], "the homepage has only its own CSS");
+  await page.locator('.site-links a[href="/docs/"]').click();
+  await page.locator("h1#_top").waitFor();
+  assert.equal(await page.locator(".page > .header").evaluate((header) => getComputedStyle(header).position), "fixed", "the docs have their CSS when they render");
+  assert.deepEqual(await page.locator("[data-route]").evaluateAll((elements) => elements.map((element) => element.getAttribute("data-route"))), ["docs", "home"]);
+  await page.close();
+});
+
+test("VitePress fetches ahead the page that a link in view leads to, before the reader clicks it", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
+  const prefetched = page.waitForRequest((request) => /\/assets\/docs_quick-start_index\.md\.[\w-]+\.js$/.test(new URL(request.url()).pathname));
+  await page.goto(`${origin}/docs/`);
+  await prefetched;
+  assert.equal(await documentLoads(page), 1);
+  await page.close();
+});
+
 test("leaving the homepage stops its observers and its animation frames, and coming back starts them again", async () => {
   if (browser === undefined) throw new Error("No browser.");
   const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });

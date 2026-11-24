@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 import { createBluescreen, supportsHtmlInCanvas } from "../lib/bluescreen.ts";
+import { onNear } from "../lib/gpu/support.ts";
 import Exploded from "./Exploded.vue";
 
 const specs = [
@@ -24,8 +25,10 @@ onMounted(() => {
     screen = new AbortController();
     void createBluescreen(panel, { still: motion.matches }, AbortSignal.any([lifetime.signal, screen.signal]));
   };
-  draw();
-  motion.addEventListener("change", draw, { signal: lifetime.signal });
+  onNear(panel, lifetime.signal, () => {
+    draw();
+    motion.addEventListener("change", draw, { signal: lifetime.signal });
+  });
 });
 onUnmounted(() => lifetime.abort());
 </script>

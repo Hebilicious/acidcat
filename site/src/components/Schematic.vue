@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
+import { onNear } from "../lib/gpu/support.ts";
 import { mountSchematic } from "../lib/schematic.ts";
 import { catalogSlot } from "../lib/home-slots.ts";
 import { vCodeHtml } from "./code-html.ts";
@@ -21,7 +22,8 @@ const pipePath = (index: number) => {
 const root = ref<HTMLElement>();
 const lifetime = new AbortController();
 onMounted(() => {
-  if (root.value !== undefined) mountSchematic(root.value, lifetime.signal);
+  const element = root.value;
+  if (element !== undefined) onNear(element, lifetime.signal, () => mountSchematic(element, lifetime.signal));
 });
 onUnmounted(() => lifetime.abort());
 </script>

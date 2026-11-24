@@ -114,6 +114,56 @@ test("the accessibility tree of each page passes the rules that agents rely on",
   }
 });
 
+test("with its scripts blocked, each page with tabs or a code explorer has the roles that agents rely on", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  const axe = await readFile(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
+  const run = `axe.run(document, { runOnly: { type: "rule", values: ${JSON.stringify(agentRules)} } }).then((result) => result.violations.map((violation) => violation.id + ": " + violation.nodes.length))`;
+  for (const [path, role] of [
+    ["/docs/quick-start/", "tab"],
+    ["/examples/core-ts/", "treeitem"],
+  ] as const) {
+    const page = await openPage(browser, { viewport: phone });
+    await page.route(`${origin}/assets/**/*.js`, (route) => route.abort());
+    await page.goto(`${origin}${path}`, { waitUntil: "load" });
+    assert.ok((await page.locator(`[role="${role}"]`).count()) > 0, `${path} has the role ${role} in its HTML`);
+    await page.addScriptTag({ content: axe });
+    const violations: unknown = await page.evaluate(run);
+    await page.close();
+    assert.deepEqual(violations, [], path);
+  }
+});
+
+test("each docs page shows Edit page and Report issue once, at every width", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  for (const viewport of viewports) {
+    for (const path of ["/docs/quick-start/", "/examples/core-ts/", "/spec/catalog/"]) {
+      const page = await openPage(browser, { viewport });
+      await page.goto(`${origin}${path}`, { waitUntil: "networkidle" });
+      for (const name of ["Edit page", "Report issue"]) {
+        const links = page.getByRole("link", { name });
+        assert.equal(await links.count(), 1, `${path} at ${viewport.width}px has one ${name} link`);
+        assert.ok(await links.isVisible(), `${path} at ${viewport.width}px shows ${name}`);
+      }
+      await page.close();
+    }
+  }
+});
+
+test("on a phone, the 404 page centres its message", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  const page = await openPage(browser, { viewport: phone });
+  await page.goto(`${origin}/404.html`, { waitUntil: "networkidle" });
+  for (const selector of ["h1", ".tagline"]) {
+    const { align, middle } = await page.locator(selector).evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return { align: getComputedStyle(element).textAlign, middle: box.left + box.width / 2 };
+    });
+    assert.equal(align, "center", selector);
+    assert.ok(Math.abs(middle - phone.width / 2) < 2, `${selector} is in the middle of the screen: ${middle}`);
+  }
+  await page.close();
+});
+
 test("the table of contents reads no layout when a docs page starts, and marks the heading at the top", async () => {
   if (browser === undefined) throw new Error("No browser.");
   for (const viewport of viewports) {

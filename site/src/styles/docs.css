@@ -506,6 +506,7 @@ details[open] > summary .caret {
   align-items: center;
   gap: 1rem;
   padding-bottom: 1rem;
+  text-align: center;
 }
 
 @media (min-width: 50rem) {
@@ -513,18 +514,25 @@ details[open] > summary .caret {
     grid-template-columns: 7fr 4fr;
     gap: 3%;
     padding-block: clamp(2.5rem, 1rem + 10vmin, 10rem);
+    text-align: start;
   }
 }
 
 .hero .copy {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 1rem;
 }
 
 .hero .copy > * {
   max-width: 50ch;
+}
+
+@media (min-width: 50rem) {
+  .hero .copy {
+    align-items: flex-start;
+  }
 }
 
 .content-panel .hero h1 {
@@ -618,15 +626,14 @@ details[open] > summary .caret {
 }
 
 .page-actions {
-  display: grid;
-  gap: var(--spacing_fluid-space-xs);
-  margin-top: var(--spacing_fluid-space-l);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing_fluid-space-xs) var(--spacing_fluid-space-l);
   padding-top: var(--spacing_fluid-space-m);
   border-top: 1px solid var(--sl-hairline);
 }
 
-.page-actions a,
-.edit-link {
+.page-actions a {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing_fluid-space-xs);
@@ -635,13 +642,11 @@ details[open] > summary .caret {
   text-decoration: none;
 }
 
-.page-actions a:hover,
-.edit-link:hover {
+.page-actions a:hover {
   color: var(--palette-acid-400);
 }
 
-.page-actions svg,
-.edit-link svg {
+.page-actions svg {
   width: 1.1em;
   height: 1.1em;
   fill: none;
@@ -765,12 +770,6 @@ details[open] > summary .caret {
   flex-direction: column;
   gap: 1.5rem;
   margin-top: 3rem;
-}
-
-@media (min-width: 72rem) {
-  .page-footer .edit-link {
-    display: none;
-  }
 }
 
 .pagination-links {

@@ -13,12 +13,12 @@ Each example is a directory of [`examples/`](https://github.com/Hebilicious/acid
 
 A simulated air conditioner, described once in a catalog and served to every surface. The unit lives in memory, so each program runs without hardware.
 
-- [The catalog in each language](/docs/examples/catalog/)
+- [The catalog in each language](/examples/catalog/)
 
 <CoreExamples />
 
-- [The web page with WebMCP tools](/docs/examples/web-page/)
-- APIs that you write on a session: [GraphQL](/docs/examples/graphql/), [Cap'n Web](/docs/examples/capnweb/), [Elysia](/docs/examples/elysia/) and [MCP with Effect](/docs/examples/mcp-api/)
+- [The web page with WebMCP tools](/examples/web-page/)
+- APIs that you write on a session: [GraphQL](/examples/graphql/), [Cap'n Web](/examples/capnweb/), [Elysia](/examples/elysia/) and [MCP with Effect](/examples/mcp-api/)
 
 ## Run the examples
 

@@ -8,7 +8,7 @@ import { catalogLanguages, cores, exampleFor, githubBlob, installCode, ownCore, 
 import type { Install } from "../ecosystem.ts";
 import { exampleFiles, fileTree, fragmentDirectory, githubUrl, requireExampleFile, sourcePath } from "../example-files.ts";
 import type { TreeNode } from "../example-files.ts";
-import { highlightExampleFile } from "../example-highlight.ts";
+import { explorerSource } from "../example-highlight.ts";
 import { inlineCode } from "../inline-code.ts";
 import { pickFence } from "../markdown-fences.ts";
 import { catalogFlowSvg } from "../spec-diagrams.ts";
@@ -123,10 +123,9 @@ const icon = {
   fullscreen: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" /></svg>',
 };
 
-const codeExplorer: Component = async (attributes, _inner, context) => {
+const codeExplorer: Component = (attributes, _inner, context) => {
   const example = text(attributes, "example") ?? "aircon";
   const selected = requireExampleFile(example, required(attributes, "open", "CodeExplorer", context), context.page, context.repositoryRoot);
-  const html = await highlightExampleFile(example, selected, context.repositoryRoot);
   const id = `explorer-${example}`;
   const prefix = sourcePath(example, "");
   const name = escapeHtml(prefix.slice(0, -1));
@@ -140,7 +139,7 @@ const codeExplorer: Component = async (attributes, _inner, context) => {
     "</div>",
     '<div class="body">',
     `<nav class="files" id="${id}-files" aria-label="Files of ${name}"><ul data-role="tree" aria-label="${name}" data-tree>${treeItems(fileTree(exampleFiles(example, context.repositoryRoot)), selected, 0)}</ul></nav>`,
-    `<section class="code" aria-label="Source"><p class="path" data-current-path>${escapeHtml(sourcePath(example, selected))}</p><div class="source" data-source aria-busy="false">${html}</div></section>`,
+    `<section class="code" aria-label="Source"><p class="path" data-current-path>${escapeHtml(sourcePath(example, selected))}</p>${explorerSource(example, selected)}</section>`,
     "</div>",
     "</figure>",
   ].join("");
@@ -249,9 +248,9 @@ const components: Readonly<Record<string, Component>> = {
   CoreExamples: (_attributes, _inner, context) =>
     cores
       .map((core) => {
-        const page = `docs/examples/${core.id}.md`;
+        const page = `examples/${core.id}.md`;
         if (!existsSync(join(context.content, page))) throw new Error(`site/content/${page} does not exist. Each core in site/src/lib/ecosystem.ts has an example page.`);
-        return `- [The air conditioner on the ${core.label} core](/docs/examples/${core.id}/): ${core.note}`;
+        return `- [The air conditioner on the ${core.label} core](/examples/${core.id}/): ${core.note}`;
       })
       .join("\n"),
 

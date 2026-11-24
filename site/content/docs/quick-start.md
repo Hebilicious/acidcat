@@ -565,7 +565,7 @@ The Rust core has no WebMCP surface, because WebMCP runs in a web page and the R
 </TabItem>
 </EcosystemTabs>
 
-Bundle `page.ts` for the browser with your bundler, and load it in the page. In a browser with WebMCP, the tool `aircon.power.set` appears, and the status goes to `ready`. The [example pages](/docs/examples/web-page/) show the status, and remove a tool while its capability is unavailable.
+Bundle `page.ts` for the browser with your bundler, and load it in the page. In a browser with WebMCP, the tool `aircon.power.set` appears, and the status goes to `ready`. The [example pages](/examples/web-page/) show the status, and remove a tool while its capability is unavailable.
 
 ### Typed calls in the same process
 
@@ -628,4 +628,4 @@ The TypeScript surface is for TypeScript code, so the Rust core does not serve i
 
 - Learn the parts: [Catalog](/docs/concepts/catalog/), [Capabilities](/docs/concepts/capabilities/) and [Targets](/docs/concepts/targets/).
 - Add events, aliases, state and services: <CoreGuides />.
-- See the complete air conditioner, with every surface, on each core: [Examples](/docs/examples/).
+- See the complete air conditioner, with every surface, on each core: [Examples](/examples/).

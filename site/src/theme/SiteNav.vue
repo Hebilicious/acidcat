@@ -6,6 +6,7 @@ import Mark from "./Mark.vue";
 const repository = "https://github.com/Hebilicious/acidcat";
 const links = [
   { href: "/docs/", label: "Docs", icon: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" /><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5" /><path d="M9 8h7M9 12h5" />' },
+  { href: "/examples/", label: "Examples", icon: '<path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16" />' },
   { href: "/spec/", label: "Spec", icon: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /><path d="M9 13h6M9 17h4" />' },
   { href: "/packages/", label: "Packages", icon: '<path d="M12 2.5 3.5 7v10l8.5 4.5 8.5-4.5V7z" /><path d="M3.5 7 12 11.5 20.5 7M12 11.5v10" />' },
   { href: repository, label: "GitHub", icon: '<path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21" />' },

@@ -35,13 +35,24 @@ test("every page has an absolute social image of 1200 by 630 that exists in the 
   assert.deepEqual(offenders, []);
 });
 
-test("each redirect leads to a page of the build", async () => {
+test("each redirect leads to a page or a file of the build", async () => {
   const rules = (await readFile(join(dist, "_redirects"), "utf8")).split("\n").filter((line) => line.trim() !== "");
   const missing: string[] = [];
   for (const rule of rules) {
     const [, to = ""] = rule.split(/\s+/);
-    const page = to.replace(/:splat$/, "");
-    await readFile(join(dist, page, "index.html")).catch(() => missing.push(rule));
+    const target = to.endsWith("/") || to.endsWith(":splat") ? join(to.replace(/:splat$/, ""), "index.html") : to;
+    await readFile(join(dist, target)).catch(() => missing.push(rule));
   }
   assert.deepEqual(missing, []);
+});
+
+test("every page declares the icon of the site, and /favicon.ico leads to it", async () => {
+  const redirects = await readFile(join(dist, "_redirects"), "utf8");
+  const icon = /^\/favicon\.ico (\/assets\/favicon\.[\w-]+\.svg) 302$/m.exec(redirects)?.[1];
+  if (icon === undefined) throw new Error("No redirect from /favicon.ico to the icon.");
+  const offenders: string[] = [];
+  for (const file of await builtPages()) {
+    if (!(await readFile(file, "utf8")).includes(`<link rel="icon" type="image/svg+xml" href="${icon}">`)) offenders.push(file.slice(dist.length));
+  }
+  assert.deepEqual(offenders, []);
 });

@@ -67,7 +67,8 @@ for (const viewport of [
     const docs = page.locator('a.button-acid[href="/docs/"]').first();
     await docs.click();
     await page.waitForURL(`${origin}/docs/`);
-    await page.locator("h1", { hasText: "Introduction" }).waitFor();
+    await page.locator("h1#_top").waitFor();
+    assert.equal(await page.locator("h1").first().textContent(), "Introduction");
     await page.close();
   });
 }
@@ -122,9 +123,13 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   assert.deepEqual(files.filter((file) => /^\/assets\/(clean|data)\./.test(file)), [], "a software renderer loads no texture of the hero");
   assert.deepEqual(files.filter((file) => /catalog-engine|webgpu-pass/.test(file)), [], "no renderer loads before its figure is near");
   assert.deepEqual(files.filter((file) => file.endsWith(".woff2") && !/-core\.[\w-]+\.woff2$/.test(file)), [], "only the core of each font");
-  // The scripts are the runtime of Vue and VitePress, which change pages in the browser, and the homepage. "other" is the
-  // prefetch of the pages that the links in view lead to, which makes a click on them show the page at once.
-  const budget: Record<string, number> = { image: 560_000, font: 180_000, script: 200_000, document: 235_000, fetch: 1_000, other: 100_000 };
+  const phonePlate = 88_000;
+  const fontCores = 170_000;
+  const vueVitePressAndHomepage = 195_000;
+  const homepageWithItsCss = 176_000;
+  const starCount = 1_000;
+  const prefetchOfEachSectionInTheHeader = 110_000;
+  const budget: Record<string, number> = { image: phonePlate, font: fontCores, script: vueVitePressAndHomepage, document: homepageWithItsCss, fetch: starCount, other: prefetchOfEachSectionInTheHeader };
   for (const [type, size] of bytes) assert.ok(size <= (budget[type] ?? 0), `${type}: ${size} bytes, budget ${budget[type] ?? 0}`);
   await page.close();
 });

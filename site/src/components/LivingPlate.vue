@@ -1,20 +1,10 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import phone840 from "../assets/hero/phone-840.avif?url";
-import phone from "../assets/hero/phone.avif?url";
-import phone2x from "../assets/hero/phone@2x.avif?url";
-import plateAvif from "../assets/hero/plate.avif?url";
-import plate2xAvif from "../assets/hero/plate@2x.avif?url";
-import plateWebp from "../assets/hero/plate.webp?url";
-import plate2xWebp from "../assets/hero/plate@2x.webp?url";
-import { art, phoneCrop, phoneMedia } from "../lib/plate-crop.ts";
+import { plateImages } from "../lib/plate-images.ts";
 import { mountPlate } from "../lib/living-plate.ts";
 
 const alt = "A mechanical brass cat with glowing acid-green eyes sits on a brass pedestal in a dark workshop of the future, with holographic rings around it.";
-const phoneWidth = (scale: number) => Math.round(phoneCrop.width * scale);
-// At 960px and below the hero is 1.02 times as tall as it is wide, and the plate covers it by its height.
-const phoneSizes = `${Math.ceil(102 * (phoneCrop.width / art.height))}vw`;
-const phoneSrcset = `${phone840} 840w, ${phone} ${phoneWidth(1)}w, ${phone2x} ${phoneWidth(2)}w`;
+const { phone, wide, fallback } = plateImages;
 
 const root = ref<HTMLElement>();
 const lifetime = new AbortController();
@@ -27,9 +17,9 @@ onUnmounted(() => lifetime.abort());
 <template>
   <div ref="root" class="plate" data-plate>
     <picture>
-      <source type="image/avif" :media="phoneMedia" :srcset="phoneSrcset" :sizes="phoneSizes" data-phone />
-      <source type="image/avif" :srcset="`${plateAvif} 1672w, ${plate2xAvif} 3344w`" sizes="100vw" />
-      <img class="plate-still" :src="plateWebp" :srcset="`${plateWebp} 1672w, ${plate2xWebp} 3344w`" sizes="100vw" width="1672" height="941" :alt="alt" fetchpriority="high" />
+      <source type="image/avif" :media="phone.media" :srcset="phone.srcset" :sizes="phone.sizes" data-phone />
+      <source type="image/avif" :srcset="wide.srcset" :sizes="wide.sizes" />
+      <img class="plate-still" :src="fallback.src" :srcset="fallback.srcset" :sizes="fallback.sizes" width="1672" height="941" :alt="alt" fetchpriority="high" />
     </picture>
     <canvas class="plate-canvas" aria-hidden="true"></canvas>
   </div>
