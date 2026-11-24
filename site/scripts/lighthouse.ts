@@ -19,8 +19,8 @@ const gatedAudits = ["network-dependency-tree-insight", "forced-reflow-insight",
 
 /** The lowest median score of each category. See "Lighthouse" in the README for the spread that each number allows. */
 const categoryBudgets: Readonly<Record<keyof typeof pages, Readonly<Record<string, number>>>> = {
-  home: { performance: 0, accessibility: 100, "best-practices": 100, seo: 100 },
-  "quick-start": { performance: 0, accessibility: 100, "best-practices": 100, seo: 100 },
+  home: { performance: 70, accessibility: 100, "best-practices": 100, seo: 100 },
+  "quick-start": { performance: 90, accessibility: 100, "best-practices": 100, seo: 100 },
 };
 
 const types: Readonly<Record<string, string>> = {
@@ -103,7 +103,7 @@ try {
     const path = pages[name];
     const results: Result[] = [];
     for (let run = 1; run <= runs; run += 1) {
-      const runner = await lighthouse(`${server.origin}${path}`, { port, output: ["html", "json"], logLevel: "error" });
+      const runner = await lighthouse(`${server.origin}${path}`, { port, output: ["html", "json"], logLevel: "error", blockedUrlPatterns: ["https://api.github.com/*"] });
       if (runner === undefined) throw new Error(`Lighthouse gave no result for ${path}.`);
       const [html = "", json = ""] = Array.isArray(runner.report) ? runner.report : [runner.report];
       await writeFile(join(out, `${name}-${run}.report.html`), html);

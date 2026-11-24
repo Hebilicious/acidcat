@@ -155,6 +155,16 @@ The renderer checks the GPU before it downloads the textures. It decodes each te
 - Each run of each page passes the audits that pass or fail: "Network dependency tree", "Forced reflow", "Improve image delivery", "Render blocking requests", "Layout shift culprits", "Cumulative Layout Shift" and "Accessibility tree is well-formed" (Agentic Browsing).
 - The median score of each category is at least its budget in `scripts/lighthouse.ts`.
 
+The run blocks the request of the homepage for the star count, so it does not use the network, and the console error that the block makes is one that Lighthouse ignores. The budgets come from four runs of the job on the runners, with five runs of each page in each job:
+
+| Page | Category | Each run | Median of each job | Budget of the median |
+| --- | --- | --- | --- | --- |
+| `/` | Performance | 73 to 88 | 79 to 84 | 70 |
+| `/docs/quick-start/` | Performance | 99 to 100 | 100 | 90 |
+| Both | Accessibility, Best practices, SEO | 100 | 100 | 100 |
+
+Each audit that passes or fails passed in each of the 40 runs.
+
 The workflow [`lighthouse.yml`](../.github/workflows/lighthouse.yml) runs the task on a runner of GitHub for each pull request that changes `site/`. It writes the summary table to the job summary, and uploads the reports as the artifact `lighthouse-reports`. Local results are not comparable: the score of a run depends on the load of the machine.
 
 ## The GPU renderers
