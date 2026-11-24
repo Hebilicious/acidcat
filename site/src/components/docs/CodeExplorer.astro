@@ -217,10 +217,12 @@ const prefix = sourcePath(example, "");
     min-block-size: 0;
     margin: 0;
     padding-block: var(--spacing_fluid-space-xs);
-    overflow: auto;
+    overflow-y: auto;
     font-family: var(--font-family-mono);
     font-size: var(--typography_fluid-text-s);
     line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
     font-feature-settings: "calt" 1, "liga" 1;
   }
 
@@ -230,14 +232,15 @@ const prefix = sourcePath(example, "");
   }
 
   .source :global(code) {
-    display: block;
-    inline-size: max-content;
-    min-inline-size: 100%;
+    --explorer-gutter: 6ch;
+    display: flex;
+    flex-direction: column;
     counter-reset: line;
   }
 
   .source :global(.line) {
-    padding-inline-end: var(--spacing_fluid-space-s);
+    padding-inline: var(--explorer-gutter) var(--spacing_fluid-space-s);
+    text-indent: calc(-1 * var(--explorer-gutter));
   }
 
   .source :global(.line::before) {
@@ -246,6 +249,7 @@ const prefix = sourcePath(example, "");
     display: inline-block;
     inline-size: 4ch;
     margin-inline-end: 2ch;
+    text-indent: 0;
     color: color-mix(in oklch, var(--palette-cream-400) 45%, transparent);
     text-align: end;
     user-select: none;
