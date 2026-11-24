@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/Hebilicious/acidcat/compare/packages/catalog/go/v0.3.1...packages/catalog/go/v0.4.0) (2026-11-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **spec:** rename binding to surface, and give each target its catalog in place of a view ([#215](https://github.com/Hebilicious/acidcat/issues/215))
+
+### Features
+
+* **spec:** rename binding to surface, and give each target its catalog in place of a view ([#215](https://github.com/Hebilicious/acidcat/issues/215)) ([052ceab](https://github.com/Hebilicious/acidcat/commit/052ceab833bcdad8fb764e25b187e68e6b776087))
+
 ## [0.3.1](https://github.com/Hebilicious/acidcat/compare/packages/catalog/go/v0.3.0...packages/catalog/go/v0.3.1) (2026-11-18)
 
 

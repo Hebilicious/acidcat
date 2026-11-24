@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.0](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.7.0...crates-core/v0.8.0) (2026-11-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **spec:** rename binding to surface, and give each target its catalog in place of a view ([#215](https://github.com/Hebilicious/acidcat/issues/215))
+
+### Features
+
+* **spec:** rename binding to surface, and give each target its catalog in place of a view ([#215](https://github.com/Hebilicious/acidcat/issues/215)) ([052ceab](https://github.com/Hebilicious/acidcat/commit/052ceab833bcdad8fb764e25b187e68e6b776087))
+
+
+### Bug Fixes
+
+* **spec:** add the programmatic binding, map it to TypeScript and Rust, and fix the gaps it found in the cores ([752c2a6](https://github.com/Hebilicious/acidcat/commit/752c2a6b2783fb21105675142effb5a96edb8b3a))
+
 ## [0.7.0](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.6.0...crates-core/v0.7.0) (2026-11-23)
 
 

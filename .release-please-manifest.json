@@ -1,13 +1,13 @@
 {
-  "packages/spec-ts": "0.17.0",
-  "packages/mcp-handshake": "0.17.0",
-  "packages/catalog/typescript": "0.17.0",
-  "packages/cli": "0.17.0",
-  "packages/core-effect": "0.17.0",
-  "packages/core-ts": "0.17.0",
-  "packages/catalog/python": "0.4.1",
-  "packages/catalog/rust": "0.3.1",
-  "packages/core-rust": "0.7.0",
-  "packages/catalog/go": "0.3.1",
-  "packages/catalog/pkl": "0.3.1"
+  "packages/spec-ts": "0.18.0",
+  "packages/mcp-handshake": "0.18.0",
+  "packages/catalog/typescript": "0.18.0",
+  "packages/cli": "0.18.0",
+  "packages/core-effect": "0.18.0",
+  "packages/core-ts": "0.18.0",
+  "packages/catalog/python": "0.5.0",
+  "packages/catalog/rust": "0.4.0",
+  "packages/core-rust": "0.8.0",
+  "packages/catalog/go": "0.4.0",
+  "packages/catalog/pkl": "0.4.0"
 }
