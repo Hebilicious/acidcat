@@ -7,7 +7,8 @@ import { TestClock } from "effect/testing";
 
 import { Mcp } from "../src/index.ts";
 import { events, Feed, feedForPromises, feedLayer, following, publish } from "./events-fixture.ts";
-import { decodeMessage, decodePollResult, eventually, json, mcpRequest, meta, ORIGIN } from "./mcp-client.ts";
+import { decodeMessage, decodePollResult, json, mcpRequest, meta, ORIGIN } from "./mcp-client.ts";
+import { until } from "./until.ts";
 import type { Message } from "./mcp-client.ts";
 
 const base = { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN] };
@@ -29,7 +30,7 @@ async function poll(handler: Mcp.WebHandler, params: Record<string, unknown>, us
   return decodePollResult(answer.result);
 }
 
-test("through HTTP, the same arguments in another key order poll the same lease, nextPollMs is 2000 or the option, and a complete subscription keeps its buffer until the lease ends", async () => {
+test("through HTTP, the same arguments in another key order poll the same lease, nextPollMs is 2000 or the option, and a complete subscription keeps its buffer until the lease ends", async (t) => {
   const feed = feedForPromises();
   const handler = pollHandler(feed);
   const paced = pollHandler(feed, { nextPollMs: 500 });
@@ -39,7 +40,7 @@ test("through HTTP, the same arguments in another key order poll the same lease,
     const again = await poll(handler, { arguments: { b: 2, a: 1 }, name: "feed.counted" });
     assert.equal(decodePollCursor(again.cursor)?.lease, decodePollCursor(started.cursor)?.lease);
     const params = { name: "feed.counted", arguments: { a: 1, b: 2 } };
-    const read = await eventually(() => poll(handler, { ...params, cursor: started.cursor }), (result) => result.events.length === 2);
+    const read = await until(t, () => poll(handler, { ...params, cursor: started.cursor }), (result) => result.events.length === 2);
     assert.deepEqual(read.events.map((each) => each.eventId), ["a", "b"]);
     const kept = await poll(handler, { ...params, cursor: read.cursor });
     assert.deepEqual(kept.events, []);
@@ -52,19 +53,19 @@ test("through HTTP, the same arguments in another key order poll the same lease,
   }
 });
 
-test("through HTTP, a lease that resumes after the cursor of the provider gives it the cursor and maxAgeMs", async () => {
+test("through HTTP, a lease that resumes after the cursor of the provider gives it the cursor and maxAgeMs", async (t) => {
   const feed = feedForPromises();
   const handler = pollHandler(feed);
   try {
     const resumed = await poll(handler, { name: "feed.resumed", cursor: encodePollCursor({ lease: "gone", position: 4, provider: "7" }), maxAgeMs: 1000 });
-    const read = await eventually(() => poll(handler, { name: "feed.resumed", cursor: resumed.cursor }), (result) => result.events.length === 1);
+    const read = await until(t, () => poll(handler, { name: "feed.resumed", cursor: resumed.cursor }), (result) => result.events.length === 1);
     assert.deepEqual(read.events[0]?.data, { cursor: "7", maxAgeMs: 1000 });
   } finally {
     await handler.dispose();
   }
 });
 
-test("through HTTP, each principal has its own leases", async () => {
+test("through HTTP, each principal has its own leases", async (t) => {
   const feed = feedForPromises();
   const handler = pollHandler(feed);
   try {
@@ -74,7 +75,7 @@ test("through HTTP, each principal has its own leases", async () => {
     assert.notEqual(decodePollCursor(alice.cursor)?.lease, decodePollCursor(bob.cursor)?.lease);
     await feed.following(2);
     await feed.publish({ room: "a", count: 1 });
-    await eventually(() => poll(handler, { ...params, cursor: alice.cursor }, "alice"), (result) => result.events.length === 1);
+    await until(t, () => poll(handler, { ...params, cursor: alice.cursor }, "alice"), (result) => result.events.length === 1);
     const stolen = await poll(handler, { ...params, cursor: alice.cursor }, "bob");
     assert.deepEqual(stolen.events, []);
     assert.equal(stolen.truncated, true);
@@ -96,7 +97,7 @@ test("through HTTP, dispose ends the leases", async () => {
   await feed.following(0);
 });
 
-test("through HTTP with per-request services, a lease keeps the services of its request until it ends", async () => {
+test("through HTTP with per-request services, a lease keeps the services of its request until it ends", async (t) => {
   const feed = feedForPromises();
   let released = 0;
   const layer = Layer.effect(Feed, Effect.acquireRelease(Effect.service(Feed), () => Effect.sync(() => (released += 1)))).pipe(Layer.provide(feed.layer));
@@ -108,7 +109,7 @@ test("through HTTP with per-request services, a lease keeps the services of its 
     await feed.following(1);
     assert.equal(released, 1);
     await feed.following(0);
-    await eventually(async () => released, (count) => count === 2);
+    await until(t, async () => released, (count) => count === 2);
   } finally {
     await handler.dispose();
   }

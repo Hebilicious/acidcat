@@ -86,12 +86,12 @@ test("a comment line keeps an idle stream alive", async () => {
   await reader.cancel();
 });
 
-test("the handler alone gives a stream that the client can cancel", async () => {
+test("the handler alone gives a stream that the client can cancel", async (t) => {
   const sensors = new Sensors();
   const handler = httpHandler(sensorsApp, { allowedOrigins: [], ...sensorOptions(sensors) });
   const response = await handler(new Request("http://localhost/events/sensor.reading.changed", { method: "POST", headers: { "Content-Type": "application/json" }, body: "" }));
   assert.equal(response.status, 200);
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   await response.body?.cancel();
-  await until(() => sensors.listeners === 0);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 0);
 });

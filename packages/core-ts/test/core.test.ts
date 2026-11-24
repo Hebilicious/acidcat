@@ -459,7 +459,7 @@ test("the command line stops when it starts if the path of a capability is the s
   assert.equal((await run("aircon.status.get", "aircon.statuses", "aircon.power.set")).code, 0);
 });
 
-test("WebMCP: a failed update keeps the last tools, and retry registers them again", async () => {
+test("WebMCP: a failed update keeps the last tools, and retry registers them again", async (t) => {
   const tools = new Map<string, ModelContextTool>();
   const refuse = new Set<string>();
   const host = {
@@ -475,20 +475,20 @@ test("WebMCP: a failed update keeps the last tools, and retry registers them aga
   const installed = installWebMcp(session, { host });
   assert.ok(installed !== undefined);
   const phase = () => installed.status.getSnapshot().phase;
-  await until(() => phase() === "ready");
+  await until(t, phase, (seen) => seen === "ready");
   assert.ok(tools.has("fixture.hidden"));
 
   context.context.switch.set(false);
-  await until(() => !tools.has("fixture.toggle"));
+  await until(t, () => !tools.has("fixture.toggle"));
 
   refuse.add("fixture.toggle");
   context.context.switch.set(true);
-  await until(() => phase() === "failed");
+  await until(t, phase, (seen) => seen === "failed");
   assert.ok(tools.has("fixture.echo"));
 
   refuse.clear();
   installed.retry();
-  await until(() => tools.has("fixture.toggle"));
+  await until(t, () => tools.has("fixture.toggle"));
   assert.equal(phase(), "ready");
 
   await installed.dispose();

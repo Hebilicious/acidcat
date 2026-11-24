@@ -9,6 +9,9 @@ import { join } from "node:path";
 import { isJsonObject } from "@acid-cat/spec-ts";
 import type { JsonObject, WebhookSigningJwk } from "@acid-cat/spec-ts";
 
+import { until } from "./until.ts";
+import type { Waiter } from "./until.ts";
+
 export interface Received {
   readonly headers: IncomingHttpHeaders;
   readonly text: string;
@@ -59,9 +62,8 @@ export async function startReceiver(certificate: { readonly cert: string; readon
     url: `https://127.0.0.1:${port}/hook`,
     received,
     deliveries,
-    /** The test timeout stops a wait that does not end. */
-    async waitForDeliveries(count: number): Promise<Received[]> {
-      while (deliveries().length < count) await arrived.promise;
+    async waitForDeliveries(t: Waiter, count: number): Promise<Received[]> {
+      await until(t, () => deliveries().map((each) => each.body), (bodies) => bodies.length >= count, { next: () => arrived.promise, what: `${count} deliveries` });
       return deliveries();
     },
     answer: (choose: (request: Received) => Answer | undefined) => {

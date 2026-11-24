@@ -78,12 +78,12 @@ test("the catalog of a target has only its events, and the session gives their h
   assert.equal(other.catalog.events?.["sensor.ticks"], undefined);
 });
 
-test("a subscription gives each occurrence, with the members of the provider or the ones that the surface makes", async () => {
+test("a subscription gives each occurrence, with the members of the provider or the ones that the surface makes", async (t) => {
   const sensors = new Sensors();
   await using session = createSession(sensorsApp, { target: "app", ...sensorOptions(sensors) });
   const handle = session.eventHandle(readingChanged);
   const occurrences = await handle.subscribe({ room: "kitchen" });
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   sensors.emit("hall", 18, "2026-11-10T09:00:00.000Z");
   sensors.emit("kitchen", 21, "2026-11-10T09:00:01.000Z");
   const first = await nextOf(occurrences);
@@ -178,20 +178,20 @@ test("a payload that does not agree with its schema, or a provider that throws, 
   }
 });
 
-test("return() cancels while a next() waits: that next() resolves with done, and the provider stops", async () => {
+test("return() cancels while a next() waits: that next() resolves with done, and the provider stops", async (t) => {
   const sensors = new Sensors();
   await using session = createSession(sensorsApp, { target: "app", ...sensorOptions(sensors) });
   const occurrences = await session.eventHandle(readingChanged).subscribe({});
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   const pending = occurrences.next();
   const returned = occurrences.return();
   assert.deepEqual(await pending, { done: true, value: undefined });
   assert.deepEqual(await returned, { done: true, value: undefined });
   assert.deepEqual(await occurrences.next(), { done: true, value: undefined });
-  await until(() => sensors.listeners === 0);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 0);
 });
 
-test("options.signal cancels one subscription, and the others continue", async () => {
+test("options.signal cancels one subscription, and the others continue", async (t) => {
   const sensors = new Sensors();
   await using session = createSession(sensorsApp, { target: "app", ...sensorOptions(sensors) });
   const handle = session.eventHandle(readingChanged);
@@ -199,22 +199,22 @@ test("options.signal cancels one subscription, and the others continue", async (
   const first = await handle.subscribe({}, { signal: controller.signal });
   const second = await handle.subscribe({});
   const third = await handle.subscribe({ room: "kitchen" });
-  await until(() => sensors.listeners === 3);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 3);
   controller.abort();
   assert.deepEqual(await first.next(), { done: true, value: undefined });
-  await until(() => sensors.listeners === 2);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 2);
   sensors.emit("kitchen", 22);
   assert.equal((await nextOf(second)).data.celsius, 22);
   assert.equal((await nextOf(third)).data.celsius, 22);
   assert.deepEqual(await session.handle(read).invokeExternal({}), { ok: true, value: { room: "kitchen", celsius: 22 } });
 });
 
-test("dispose ends each subscription as complete, and the providers stop", async () => {
+test("dispose ends each subscription as complete, and the providers stop", async (t) => {
   const sensors = new Sensors();
   const session = createSession(sensorsApp, { target: "app", ...sensorOptions(sensors) });
   const first = await session.eventHandle(readingChanged).subscribe({});
   const second = await session.eventHandle(clock).subscribe({});
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   const pending = first.next();
   await session.dispose();
   assert.deepEqual(await pending, { done: true, value: undefined });

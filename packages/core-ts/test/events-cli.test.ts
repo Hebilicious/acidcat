@@ -38,7 +38,7 @@ test("in a process, a command line that breaks a rule stops when it starts, with
   assert.equal(stderr, "The command watch of the application has the same name as another command.\n");
 });
 
-test("watch --cursor and --max-age-ms resume the subscription", async () => {
+test("watch --cursor and --max-age-ms resume the subscription", async (t) => {
   const sensors = new Sensors();
   const old = new Date(Date.now() - 60_000).toISOString();
   sensors.emit("kitchen", 18, old);
@@ -47,7 +47,7 @@ test("watch --cursor and --max-age-ms resume the subscription", async () => {
   const controller = new AbortController();
   const flags = commandLine(["watch", "sensor.reading.changed", "--room", "kitchen", "--cursor", "0"], sensors, controller.signal);
   const json = commandLine(["watch", "sensor.reading.changed", "--cursor=-1", "--max-age-ms=1000"], sensors, controller.signal);
-  await until(() => flags.out.length === 1 && json.out.length === 2);
+  await until(t, () => flags.out.length === 1 && json.out.length === 2);
   controller.abort();
   assert.equal(await flags.code, 130);
   assert.equal(await json.code, 130);
@@ -57,15 +57,15 @@ test("watch --cursor and --max-age-ms resume the subscription", async () => {
   assert.equal(memberOf(json.out[1] ?? "", "cursor"), "2");
 });
 
-test("watch takes the resume flags after JSON text, and rejects a negative or empty --max-age-ms and a --cursor with no value", async () => {
+test("watch takes the resume flags after JSON text, and rejects a negative or empty --max-age-ms and a --cursor with no value", async (t) => {
   const sensors = new Sensors();
   sensors.emit("hall", 25);
   sensors.emit("hall", 26);
   const controller = new AbortController();
   const json = commandLine(["watch", "sensor.threshold", '{"above":20}', "--cursor", "0"], sensors, controller.signal);
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   sensors.emit("hall", 27);
-  await until(() => json.out.length === 1);
+  await until(t, () => json.out, (out) => out.length === 1);
   controller.abort();
   assert.equal(await json.code, 130);
   assert.equal(memberOf(json.out[0] ?? "", "cursor"), "2");

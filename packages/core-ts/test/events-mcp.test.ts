@@ -161,23 +161,23 @@ function stdio(sensors = new Sensors(), heartbeatMs?: number) {
   };
 }
 
-test("MCP through stdio: the end of standard input completes each open stream, and its provider stops", async () => {
+test("MCP through stdio: the end of standard input completes each open stream, and its provider stops", async (t) => {
   const sensors = new Sensors();
   const io = stdio(sensors);
   io.send({ id: 1, method: "events/stream", params: { name: "sensor.reading.changed", _meta: META } });
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   io.end();
   await io.served;
   assert.deepEqual(io.of(1).at(-1), { jsonrpc: "2.0", id: 1, result: { resultType: "complete", _meta: { ...SERVER_INFO, ...sub(1) } } });
   assert.equal(sensors.listeners, 0);
 });
 
-test("MCP through stdio: an idle stream gets heartbeats", async () => {
+test("MCP through stdio: an idle stream gets heartbeats", async (t) => {
   const io = stdio(new Sensors(), 20);
   io.send({ id: 1, method: "events/stream", params: { name: "sensor.reading.changed", _meta: META } });
   const heartbeat = () => io.of(1).find((message) => message["method"] === "notifications/events/heartbeat");
   try {
-    await until(() => heartbeat() !== undefined);
+    await until(t, () => heartbeat() !== undefined);
     assert.deepEqual(io.of(1)[0], { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: false, heartbeatMs: 20, _meta: sub(1) } });
     assert.deepEqual(heartbeat(), { jsonrpc: "2.0", method: "notifications/events/heartbeat", params: { cursor: null, _meta: sub(1) } });
   } finally {
@@ -186,11 +186,11 @@ test("MCP through stdio: an idle stream gets heartbeats", async () => {
   }
 });
 
-test("MCP through stdio: a request with no _meta is -32601, and initialize gives no events extension", async () => {
+test("MCP through stdio: a request with no _meta is -32601, and initialize gives no events extension", async (t) => {
   const io = stdio();
   io.send({ id: 1, method: "events/stream", params: { name: "sensor.reading.changed" } });
   io.send({ id: 2, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } });
-  await until(() => io.of(1).length === 1 && io.of(2).length === 1);
+  await until(t, () => io.of(1).length === 1 && io.of(2).length === 1);
   assert.equal(member(io.of(1)[0], "error")["code"], -32601);
   assert.deepEqual(member(member(io.of(2)[0], "result"), "capabilities"), { tools: { listChanged: true } });
   io.end();

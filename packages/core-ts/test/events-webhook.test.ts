@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
+import type { TestContext } from "node:test";
 
 import { isJsonObject, webhookSignature, webhookSubscriptionId } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
@@ -22,9 +23,7 @@ let receiver: Awaited<ReturnType<typeof startReceiver>>;
 before(async () => {
   receiver = await startReceiver(certificate);
 });
-const handlers: { readonly close: () => Promise<void> }[] = [];
 after(async () => {
-  await Promise.all(handlers.map((handler) => handler.close()));
   await receiver.close();
 });
 
@@ -55,7 +54,7 @@ async function assertSigned(request: Received | undefined, secrets: readonly str
   assert.equal(header(request, "content-type"), "application/json");
 }
 
-function server(options: WebhookOptions = {}, serverCard?: { readonly name: string }) {
+function server(t: TestContext, options: WebhookOptions = {}, serverCard?: { readonly name: string }) {
   const sensors = new Sensors();
   receiver.received.length = 0;
   receiver.answer(() => undefined);
@@ -69,7 +68,7 @@ function server(options: WebhookOptions = {}, serverCard?: { readonly name: stri
     webhooks,
     serverCard,
   });
-  handlers.push(handler);
+  t.after(() => handler.close());
   const rpc = async (method: string, params: object, principal: string | null = "alice") => {
     const headers: Record<string, string> = { "Content-Type": "application/json", ...mcpHeaders(method, params), "MCP-Protocol-Version": VERSION };
     if (principal !== null) headers["X-Principal"] = principal;
@@ -83,8 +82,8 @@ function server(options: WebhookOptions = {}, serverCard?: { readonly name: stri
   return { handler, rpc, subscribe, sensors };
 }
 
-test("webhook: parameters that are not valid get -32602, and an unknown event gets NotFound, with no request to the receiver", async () => {
-  const { handler, rpc, subscribe } = server();
+test("webhook: parameters that are not valid get -32602, and an unknown event gets NotFound, with no request to the receiver", async (t) => {
+  const { rpc, subscribe } = server(t);
   assert.equal(member(await subscribe({ url: "not a URL" }), "error")["code"], -32602);
   for (const secret of [`whsec_${randomBytes(65).toString("base64")}`, "whsec_!!!!"]) {
     assert.equal(member(await subscribe({ secret }), "error")["code"], -32602, secret);
@@ -93,33 +92,32 @@ test("webhook: parameters that are not valid get -32602, and an unknown event ge
   assert.equal(member(await subscribe({ ttlMs: "soon" }), "error")["code"], -32602);
   assert.deepEqual(member(await subscribe({ name: "sensor.hidden" }), "error"), { code: -32023, message: "There is no event sensor.hidden.", data: { kind: "event" } });
   assert.deepEqual(receiver.received, []);
-  await handler.close();
 });
 
-test("webhook: a new subscription has no watermark and a delivery status with no delivery and no error", async () => {
-  const { handler, subscribe } = server();
+test("webhook: a new subscription has no watermark and a delivery status with no delivery and no error", async (t) => {
+  const { subscribe } = server(t);
   const result = member(await subscribe({ arguments: { room: "hall" } }), "result");
   assert.equal(result["cursor"], null);
   assert.deepEqual(result["deliveryStatus"], { active: true, lastDeliveryAt: null, lastError: null });
-  await handler.close();
 });
 
-test("webhook: a truncated occurrence before the first delivery comes after a gap message with no cursor", async () => {
-  const { handler, subscribe, sensors } = server();
+test("webhook: a truncated occurrence before the first delivery comes after a gap message with no cursor", async (t) => {
+  const { handler, subscribe, sensors } = server(t);
   const old = new Date(Date.now() - 60_000).toISOString();
   sensors.emit("hall", 1, old);
   sensors.emit("hall", 2, old);
   sensors.emit("hall", 3);
   assert.ok(isJsonObject((await subscribe({ cursor: "0", maxAgeMs: 1000 }))["result"]));
-  await receiver.waitForDeliveries(2);
-  const [gap, occurrence] = receiver.deliveries();
+  await receiver.waitForDeliveries(t, 2);
+  await handler.close();
+  const [gap, occurrence, ...more] = receiver.deliveries();
   assert.deepEqual(gap?.body, { type: "gap", cursor: null });
   assert.equal(occurrence?.body["cursor"], "2");
-  await handler.close();
+  assert.deepEqual(more, []);
 });
 
-test("webhook: the reason of CallbackEndpointError tells the status of the answer to the verification, and no subscription starts", async () => {
-  const { handler, subscribe, sensors } = server();
+test("webhook: the reason of CallbackEndpointError tells the status of the answer to the verification, and no subscription starts", async (t) => {
+  const { subscribe, sensors } = server(t);
   for (const status of [302, 399]) {
     receiver.answer(() => ({ status }));
     assert.deepEqual(member(member(await subscribe({}), "error"), "data"), { reason: "challenge_failed" }, String(status));
@@ -129,118 +127,117 @@ test("webhook: the reason of CallbackEndpointError tells the status of the answe
   receiver.answer(() => ({ status: 404 }));
   assert.deepEqual(member(member(await subscribe({}), "error"), "data"), { reason: "http_4xx" });
   assert.equal(sensors.listeners, 0);
-  await handler.close();
 });
 
-test("webhook: the subscription id and key use delivery.url as the client sent it, not the parsed URL", async () => {
-  const { handler, rpc, subscribe, sensors } = server();
+test("webhook: the subscription id and key use delivery.url as the client sent it, not the parsed URL", async (t) => {
+  const { rpc, subscribe, sensors } = server(t);
   const sent = `https://127.0.0.1:${receiver.port}/other/../hook`;
   assert.notEqual(new URL(sent).href, sent);
   const result = member(await subscribe({ arguments: { room: "hall" }, url: sent }), "result");
   assert.equal(result["id"], await webhookSubscriptionId("alice", sent, "sensor.reading.changed", { room: "hall" }));
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   const parsed = { name: "sensor.reading.changed", arguments: { room: "hall" }, delivery: { url: new URL(sent).href } };
   assert.equal(member(member(await rpc("events/unsubscribe", parsed), "error"), "data")["kind"], "subscription");
   const done = await rpc("events/unsubscribe", { ...parsed, delivery: { url: sent } });
   assert.equal(member(done, "result")["resultType"], "complete");
-  await until(() => sensors.listeners === 0);
-  await handler.close();
+  await until(t, () => sensors.listeners, (listeners) => listeners === 0);
 });
 
-test("webhook: maxAgeMs that is not an integer of 0 or more is -32602, after the id of the event", async () => {
-  const { handler, subscribe, sensors } = server();
+test("webhook: maxAgeMs that is not an integer of 0 or more is -32602, after the id of the event", async (t) => {
+  const { subscribe, sensors } = server(t);
   for (const maxAgeMs of [1.5, -1, "soon"]) {
     assert.equal(member(await subscribe({ maxAgeMs }), "error")["code"], -32602, String(maxAgeMs));
     assert.equal(member(await subscribe({ name: "sensor.hidden", maxAgeMs }), "error")["code"], -32023, String(maxAgeMs));
   }
   member(await subscribe({ arguments: { room: "hall" } }), "result");
   assert.equal(member(await subscribe({ arguments: { room: "hall" }, maxAgeMs: 1.5 }), "error")["code"], -32602);
-  await until(() => sensors.listeners === 1);
-  await handler.close();
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
 });
 
-test("webhook: a certificate that the server does not trust is tls_error", async () => {
-  const { handler, subscribe } = server({ ca: undefined });
+test("webhook: a certificate that the server does not trust is tls_error", async (t) => {
+  const { subscribe } = server(t, { ca: undefined });
   assert.deepEqual(member(member(await subscribe({}), "error"), "data"), { reason: "tls_error" });
-  await handler.close();
 });
 
-test("webhook: the server connects to no address that is not globally routable, unless the deployment allows it", async () => {
-  const { handler, subscribe } = server({ allowPrivateNetworks: false });
+test("webhook: the server connects to no address that is not globally routable, unless the deployment allows it", async (t) => {
+  const { subscribe } = server(t, { allowPrivateNetworks: false });
   assert.deepEqual(member(member(await subscribe({}), "error"), "data"), { reason: "connection_refused" });
   assert.deepEqual(member(member(await subscribe({ url: `https://localhost:${receiver.port}/hook` }), "error"), "data"), { reason: "connection_refused" });
   assert.deepEqual(receiver.received, []);
-  await handler.close();
 });
 
-test("webhook: a URL of the allowlist gets deliveries with no verification", async () => {
-  const { handler, subscribe, sensors } = server({ allow: (url) => url.hostname === "127.0.0.1" });
+test("webhook: a URL of the allowlist gets deliveries with no verification", async (t) => {
+  const { handler, subscribe, sensors } = server(t, { allow: (url) => url.hostname === "127.0.0.1" });
   assert.ok(isJsonObject((await subscribe({}))["result"]));
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   sensors.emit("hall", 20);
-  const [delivery] = await receiver.waitForDeliveries(1);
-  assert.equal(delivery?.body["eventId"], "reading-0");
-  assert.equal(receiver.received.length, 1);
+  await receiver.waitForDeliveries(t, 1);
   await handler.close();
+  assert.deepEqual(
+    receiver.received.map((each) => each.body["eventId"]),
+    ["reading-0"],
+  );
 });
 
-test("webhook: after a delivery that succeeds on a retry, the delivery status has the time of the delivery and no error", async () => {
-  const { handler, subscribe, sensors } = server();
+test("webhook: after a delivery that succeeds on a retry, the delivery status has the time of the delivery and no error", async (t) => {
+  const { handler, subscribe, sensors } = server(t);
   let failures = 2;
   receiver.answer((request) => (request.body["type"] === undefined && failures-- > 0 ? { status: 500 } : undefined));
   const params = { secret: newSecret() };
   assert.ok(isJsonObject((await subscribe(params))["result"]));
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   sensors.emit("hall", 20);
-  await receiver.waitForDeliveries(3);
-  let status: JsonObject = {};
-  await until(async () => {
-    status = member(member(await subscribe(params), "result"), "deliveryStatus");
-    return status["lastDeliveryAt"] !== null;
-  });
+  await receiver.waitForDeliveries(t, 3);
+  const status = await until(
+    t,
+    async () => member(member(await subscribe(params), "result"), "deliveryStatus"),
+    (seen) => seen["lastDeliveryAt"] !== null,
+  );
   assert.equal(status["lastError"], null);
   assert.equal(typeof status["lastDeliveryAt"], "string");
   await handler.close();
+  assert.deepEqual(
+    receiver.deliveries().map((each) => each.body["eventId"]),
+    ["reading-0", "reading-0", "reading-0"],
+  );
 });
 
-test("webhook: the server abandons a delivery after the last attempt, keeps the error, and sends the next occurrence", async () => {
-  const { handler, subscribe, sensors } = server({ attempts: 3 });
+test("webhook: the server abandons a delivery after the last attempt, keeps the error, and sends the next occurrence", async (t) => {
+  const { handler, subscribe, sensors } = server(t, { attempts: 3 });
   receiver.answer((request) => (request.body["type"] === undefined && request.body["eventId"] === "reading-0" ? { status: 503 } : undefined));
   const params = { secret: newSecret() };
   assert.ok(isJsonObject((await subscribe(params))["result"]));
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   sensors.emit("hall", 20);
-  await receiver.waitForDeliveries(3);
-  let result: JsonObject = {};
-  await until(async () => {
-    result = member(await subscribe(params), "result");
-    return result["cursor"] === "0";
-  });
+  await receiver.waitForDeliveries(t, 3);
+  const result = await until(t, async () => member(await subscribe(params), "result"), (seen) => seen["cursor"] === "0");
   assert.equal(member(result, "deliveryStatus")["lastError"], "http_5xx");
   sensors.emit("hall", 21);
-  await receiver.waitForDeliveries(4);
+  await receiver.waitForDeliveries(t, 4);
+  await handler.close();
   assert.deepEqual(
     receiver.deliveries().map((each) => each.body["eventId"]),
     ["reading-0", "reading-0", "reading-0", "reading-1"],
   );
-  await handler.close();
 });
 
-test("webhook: after the grace time, the server signs only with the new secret", async () => {
-  const { handler, subscribe, sensors } = server({ rotationGraceMs: 0 });
+test("webhook: after the grace time, the server signs only with the new secret", async (t) => {
+  const { handler, subscribe, sensors } = server(t, { rotationGraceMs: 0 });
   const newer = newSecret();
   await subscribe({ secret: newSecret() });
   await subscribe({ secret: newer });
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   sensors.emit("hall", 20);
-  await receiver.waitForDeliveries(1);
-  await assertSigned(receiver.deliveries()[0], [newer]);
+  await receiver.waitForDeliveries(t, 1);
   await handler.close();
+  const [delivery, ...more] = receiver.deliveries();
+  await assertSigned(delivery, [newer]);
+  assert.deepEqual(more, []);
 });
 
-test("webhook: the Server Card gives the egress ranges and the public signing keys, by kid", async () => {
+test("webhook: the Server Card gives the egress ranges and the public signing keys, by kid", async (t) => {
   const egressIpRanges = ["203.0.113.0/24", "2001:db8::/32"];
-  const { handler } = server({ signingKeys: [testSigningKey("first"), testSigningKey("second")], egressIpRanges }, { name: "dev.acid-cat/sensors" });
+  const { handler } = server(t, { signingKeys: [testSigningKey("first"), testSigningKey("second")], egressIpRanges }, { name: "dev.acid-cat/sensors" });
   const card = objectOf(await (await handler(new Request("https://sensors.example/mcp/server-card"))).text());
   const remotes: unknown = card["remotes"];
   const remote: unknown = Array.isArray(remotes) ? remotes[0] : undefined;
@@ -252,7 +249,6 @@ test("webhook: the Server Card gives the egress ranges and the public signing ke
     keys.map((key: unknown) => (isJsonObject(key) ? [key["kid"], Object.keys(key).sort()] : undefined)),
     [["first", ["crv", "kid", "kty", "x"]], ["second", ["crv", "kid", "kty", "x"]]],
   );
-  await handler.close();
 });
 
 test("webhook: a signing key of another form, two keys with the same kid, or an egress range that is not CIDR text, make webhookDelivery throw", () => {
@@ -262,40 +258,36 @@ test("webhook: a signing key of another form, two keys with the same kid, or an 
   for (const range of ["10.0.0.0/33", "10.0.0.0", "bad/8", "2001:db8::/129"]) assert.throws(() => webhookDelivery({ egressIpRanges: [range] }), TypeError, range);
 });
 
-test("webhook: events/unsubscribe of the subscription of another principal gives NotFound", async () => {
-  const { handler, rpc, subscribe, sensors } = server();
+test("webhook: events/unsubscribe of the subscription of another principal gives NotFound", async (t) => {
+  const { rpc, subscribe, sensors } = server(t);
   await subscribe({ arguments: { room: "hall" } });
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   const params = { name: "sensor.reading.changed", arguments: { room: "hall" }, delivery: { url: receiver.url } };
   assert.deepEqual(await rpc("events/unsubscribe", params, "bob").then((answer) => answer["error"]), { code: -32023, message: "There is no such subscription.", data: { kind: "subscription" } });
   assert.equal(sensors.listeners, 1);
-  await handler.close();
 });
 
-test("webhook: a complete subscription ends with no message", async () => {
-  const { handler, subscribe } = server({ maxSubscriptions: 1 });
+test("webhook: a complete subscription ends with no message", async (t) => {
+  const { subscribe } = server(t, { maxSubscriptions: 1 });
   assert.ok(isJsonObject((await subscribe({ name: "sensor.ticks" }))["result"]));
   const firstEnded = async () => isJsonObject((await subscribe({}))["result"]);
-  await until(firstEnded);
+  await until(t, firstEnded);
   assert.equal(receiver.deliveries().length, 3);
-  await handler.close();
 });
 
-test("webhook: parallel new subscriptions of one principal cannot pass the limit together", async () => {
-  const { handler, subscribe } = server({ maxSubscriptions: 2 });
+test("webhook: parallel new subscriptions of one principal cannot pass the limit together", async (t) => {
+  const { subscribe } = server(t, { maxSubscriptions: 2 });
   const answers = await Promise.all(["a", "b", "c", "d"].map((room) => subscribe({ arguments: { room }, url: `${receiver.url}?room=${room}` })));
   assert.equal(answers.filter((answer) => isJsonObject(answer["result"])).length, 2);
   assert.equal(answers.filter((answer) => isJsonObject(answer["error"]) && answer["error"]["code"] === -32025).length, 2);
-  await handler.close();
 });
 
-test("webhook: the verification is for the pair of the principal and the URL as the client sent it", async () => {
-  const { handler, subscribe } = server();
+test("webhook: the verification is for the pair of the principal and the URL as the client sent it", async (t) => {
+  const { subscribe } = server(t);
   const spelled = receiver.url.replace("https://", "HTTPS://");
   assert.ok(isJsonObject((await subscribe({ arguments: { room: "a" } }))["result"]));
   assert.ok(isJsonObject((await subscribe({ arguments: { room: "b" } }))["result"]));
   assert.ok(isJsonObject((await subscribe({ arguments: { room: "c" }, url: spelled }))["result"]));
   assert.equal(receiver.received.filter((each) => each.body["type"] === "verification").length, 2);
-  await handler.close();
 });
 

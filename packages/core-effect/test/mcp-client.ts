@@ -44,14 +44,3 @@ export const PollResult = Schema.Struct({
 });
 export type PollResult = typeof PollResult.Type;
 export const decodePollResult = Schema.decodeUnknownSync(PollResult);
-
-export const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-/** The test timeout stops a wait that does not end. */
-export async function eventually<A>(attempt: () => Promise<A>, done: (value: A) => boolean): Promise<A> {
-  for (;;) {
-    const value = await attempt();
-    if (done(value)) return value;
-    await delay(10);
-  }
-}

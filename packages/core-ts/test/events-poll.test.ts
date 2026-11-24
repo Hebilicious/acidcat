@@ -69,27 +69,27 @@ function httpServer(options: { readonly poll?: PollOptions } = {}) {
 
 const READINGS = { name: "sensor.reading.changed", arguments: {} };
 
-test("poll: nextPollMs is 2000 by default, and closing the handler ends the leases", async () => {
+test("poll: nextPollMs is 2000 by default, and closing the handler ends the leases", async (t) => {
   const { handler, poll, sensors } = httpServer();
   assert.equal((await poll(READINGS)).nextPollMs, 2000);
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   await handler.close();
   assert.equal(sensors.listeners, 0);
 });
 
-test("poll: the maxEvents of the server limits a poll with no maxEvents, and hasMore tells that more wait", async () => {
+test("poll: the maxEvents of the server limits a poll with no maxEvents, and hasMore tells that more wait", async (t) => {
   const { handler, poll, sensors } = httpServer({ poll: { maxEvents: 3 } });
   const start = await poll(READINGS);
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   for (let reading = 0; reading < 5; reading += 1) sensors.emit("hall", reading);
-  await until(async () => positionOf((await poll(READINGS)).cursor).position === 5);
+  await until(t, async () => positionOf((await poll(READINGS)).cursor).position, (position) => position === 5);
   const first = await poll({ ...READINGS, cursor: start.cursor });
   assert.deepEqual(celsius(first.events), [0, 1, 2]);
   assert.equal(first.hasMore, true);
   await handler.close();
 });
 
-test("poll: a cursor that is not a string, or a maxAgeMs that is not an integer of 0 or more, is -32602, after an unknown event, with a lease or not", async () => {
+test("poll: a cursor that is not a string, or a maxAgeMs that is not an integer of 0 or more, is -32602, after an unknown event, with a lease or not", async (t) => {
   const { handler, rpc, poll, sensors } = httpServer();
   const error = async (params: object) => {
     const answer = await rpc("events/poll", params);
@@ -104,19 +104,19 @@ test("poll: a cursor that is not a string, or a maxAgeMs that is not an integer 
   }
   assert.equal(sensors.listeners, 0);
   const start = await poll(READINGS);
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   assert.equal(await error({ ...READINGS, cursor: start.cursor, maxAgeMs: 1.5 }), -32602);
   await handler.close();
 });
 
-test("poll: maxAgeMs bounds the replay of a lease that resumes", async () => {
+test("poll: maxAgeMs bounds the replay of a lease that resumes", async (t) => {
   const { handler, poll, sensors } = httpServer();
   const old = new Date(Date.now() - 60_000).toISOString();
   sensors.emit("hall", 0, old);
   sensors.emit("hall", 1, old);
   sensors.emit("hall", 2);
   const resumed = await poll({ ...READINGS, cursor: encodePollCursor({ lease: "gone", position: 0, provider: "0" }), maxAgeMs: 1000 });
-  await until(async () => (await poll({ ...READINGS, cursor: resumed.cursor })).events.length === 1);
+  await until(t, async () => (await poll({ ...READINGS, cursor: resumed.cursor })).events, (events) => events.length === 1);
   const read = await poll({ ...READINGS, cursor: resumed.cursor });
   assert.deepEqual(celsius(read.events), [2]);
   assert.equal(read.truncated, true);
@@ -124,41 +124,41 @@ test("poll: maxAgeMs bounds the replay of a lease that resumes", async () => {
   await handler.close();
 });
 
-test("poll: a lease that gets no poll for the lease time ends, and its subscription is cancelled", async () => {
+test("poll: a lease that gets no poll for the lease time ends, and its subscription is cancelled", async (t) => {
   const { handler, poll, sensors, clock } = httpServer({ poll: { leaseMs: 60_000 } });
   const start = await poll(READINGS);
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   clock.advance(59_000);
   await poll({ ...READINGS, cursor: start.cursor });
   clock.advance(59_000);
   assert.equal(sensors.listeners, 1);
   clock.advance(1000);
-  await until(() => sensors.listeners === 0);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 0);
   const restarted = await poll({ ...READINGS, cursor: start.cursor });
   assert.equal(restarted.truncated, true);
   assert.notEqual(positionOf(restarted.cursor).lease, positionOf(start.cursor).lease);
   await handler.close();
 });
 
-test("poll: the principal is part of the key, so two principals have two leases", async () => {
+test("poll: the principal is part of the key, so two principals have two leases", async (t) => {
   const { handler, poll, sensors } = httpServer();
   const alice = await poll(READINGS, "alice");
   const bob = await poll(READINGS, "bob");
   const nobody = await poll(READINGS);
-  await until(() => sensors.listeners === 3);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 3);
   assert.notEqual(positionOf(alice.cursor).lease, positionOf(bob.cursor).lease);
   assert.notEqual(positionOf(alice.cursor).lease, positionOf(nobody.cursor).lease);
   sensors.emit("hall", 20);
-  await until(async () => (await poll({ ...READINGS, cursor: alice.cursor }, "alice")).events.length === 1);
+  await until(t, async () => (await poll({ ...READINGS, cursor: alice.cursor }, "alice")).events, (events) => events.length === 1);
   const stolen = await poll({ ...READINGS, cursor: alice.cursor }, "bob");
   assert.equal(positionOf(stolen.cursor).lease, positionOf(bob.cursor).lease);
   await poll({ name: "sensor.reading.changed", arguments: { room: "hall" } }, "alice");
-  await until(() => sensors.listeners === 4);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 4);
   await handler.close();
   assert.equal(sensors.listeners, 0);
 });
 
-test("poll through stdio: the option nextPollMs, and the end of standard input ends the leases", async () => {
+test("poll through stdio: the option nextPollMs, and the end of standard input ends the leases", async (t) => {
   const sensors = new Sensors();
   const lines = [JSON.stringify({ jsonrpc: "2.0", id: 1, method: "events/poll", params: { ...READINGS, _meta: META } })];
   let answered = () => {};
@@ -166,7 +166,7 @@ test("poll through stdio: the option nextPollMs, and the end of standard input e
   async function* input(): AsyncGenerator<string> {
     for (const line of lines) yield `${line}\n`;
     await answer;
-    await until(() => sensors.listeners === 1);
+    await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   }
   const written: JsonObject[] = [];
   const served = runMcpStdio(sensorsApp, { name: "sensors", version: "0.0.0", ...sensorOptions(sensors), clock: new ManualClock(), poll: { nextPollMs: 500 } }, {
