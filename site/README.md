@@ -86,7 +86,7 @@ The fonts are from [Monaspace](https://monaspace.githubnext.com/): Xenon for hea
 | `cut-mask-wide.png` | The region that the clean plate replaces | The inpainting step, with the matte dilated |
 | `depth-wide.png` | A depth map | `derive.py` (Depth Anything V2 Large, CC-BY-NC-4.0) |
 | `matte-wide.png` | The cat, the pedestal and the brass bands | `derive.py` on `key-art.png` (BiRefNet, MIT), padded to the wide size |
-| `plate-wide@2x.png` | The wide key art at twice the size. Not in git | `derive.py` (Swin2SR, Apache-2.0) |
+| `plate-wide@2x.png` | The wide key art at twice the size | `derive.py` (Swin2SR, Apache-2.0) |
 
 `uv run --script art/derive.py art/key-art-wide.png <directory>` writes the depth map, the matte and the large plate. It needs an NVIDIA GPU to run in a few minutes. `art/pack.sh` packs the depth, the matte and the cut mask into `public/hero/data.webp` (lossless WebP), and writes the plates as AVIF and WebP. It needs ImageMagick and `avifenc`.
 
