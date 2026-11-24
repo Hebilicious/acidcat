@@ -13,3 +13,6 @@ export const openPage = async (browser: Browser, options: BrowserContextOptions 
   await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "onLine", { get: () => true }));
   return page;
 };
+
+/** Resolves when Vue has mounted the app of the page. */
+export const waitForHydration = (page: Page) => page.waitForFunction(() => Reflect.get(document.getElementById("app") ?? {}, "__vue_app__") !== undefined);

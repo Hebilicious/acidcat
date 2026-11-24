@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
 import type { Browser } from "playwright";
-import { openPage } from "./github.ts";
+import { openPage, waitForHydration } from "./github.ts";
 import { dist, serveDist } from "./static-server.ts";
 import type { StaticServer } from "./static-server.ts";
 
@@ -99,6 +99,35 @@ test("the homepage loads no stylesheet, names each script that it loads before a
   assert.ok(scripts.length > 0, "the homepage loads its scripts");
   assert.deepEqual(scripts.filter((file) => !preloaded.has(file)), []);
   assert.equal(moduleScripts, 0, "the inline script imports the module scripts after the first paint");
+});
+
+const starts: Record<string, () => void> = {
+  "a browser without PerformanceObserver": () => Reflect.deleteProperty(window, "PerformanceObserver"),
+  "a browser without paint timing": () => Object.defineProperty(PerformanceObserver, "supportedEntryTypes", { get: () => ["navigation"] }),
+  "a browser that reports no paint": () => Object.defineProperty(PerformanceObserver.prototype, "observe", { value: () => undefined }),
+  "a background tab or a prerender": () => Object.defineProperty(Document.prototype, "visibilityState", { get: () => "hidden" }),
+};
+
+for (const [browserState, setup] of Object.entries(starts)) {
+  test(`the homepage starts its scripts in ${browserState}`, async () => {
+    if (browser === undefined) throw new Error("No browser.");
+    const page = await openPage(browser);
+    await page.addInitScript(setup);
+    await page.goto(`${origin}/`);
+    await waitForHydration(page);
+    await page.close();
+  });
+}
+
+test("the homepage runs its scripts when the reader comes back to it from another document", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  const page = await openPage(browser);
+  await page.goto(`${origin}/`);
+  await waitForHydration(page);
+  await page.goto(`${origin}/robots.txt`);
+  await page.goBack();
+  await waitForHydration(page);
+  await page.close();
 });
 
 test("no script imports the chunk of a page, so a page that starts from its lean chunk runs each module once", async () => {

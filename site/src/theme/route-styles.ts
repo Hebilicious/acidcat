@@ -71,6 +71,11 @@ const intent = (event: Event): void => {
   if (route === "home") preloadPlate();
 };
 
+const whenIdle = (callback: () => void): void => {
+  if ("requestIdleCallback" in window) requestIdleCallback(callback);
+  else setTimeout(callback, 0);
+};
+
 const prefetchLinkedRoutes = (): void => {
   const current = routeOfPage(location.pathname);
   for (const link of document.querySelectorAll<HTMLAnchorElement>("#app a[href]")) {
@@ -94,6 +99,6 @@ export const useRouteStyles = (router: Router): void => {
   // VitePress renders the new page in the same task as the end of this hook, so no frame shows the old page with the new stylesheet.
   router.onAfterPageLoad = async () => apply(await pending);
   for (const type of ["pointerover", "focusin", "touchstart"]) document.addEventListener(type, intent, { passive: true });
-  if (document.readyState === "complete") requestIdleCallback(prefetchLinkedRoutes);
-  else addEventListener("load", () => requestIdleCallback(prefetchLinkedRoutes), { once: true });
+  if (document.readyState === "complete") whenIdle(prefetchLinkedRoutes);
+  else addEventListener("load", () => whenIdle(prefetchLinkedRoutes), { once: true });
 };
