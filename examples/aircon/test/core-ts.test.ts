@@ -14,7 +14,7 @@ import { aircon, fanSet, powerSet, Status, output, statusChanged, statusGet, toJ
 import { catalogOf, createSession, renderCatalog, runCli } from "@acid-cat/core-ts";
 import { OFFLINE, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import { bundledProgram } from "./bundled-program.ts";
-import { run } from "./run.ts";
+import { run, tracked } from "./run.ts";
 import { firstLine, startServer, subscriptionProxy } from "./server.ts";
 import { assertHelp } from "./help.ts";
 import { shape, writtenText } from "./shape.ts";
@@ -169,7 +169,7 @@ function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<{
 
 test("the TypeScript command line controls the unit of a server, and watch follows its changes", async (context) => {
   const url = await startServer(context, process.execPath, [bundledProgram("core-ts/serve.ts")]);
-  const client = (target: string) => (...args: string[]) => spawn(process.execPath, [program, ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  const client = (target: string) => (...args: string[]) => tracked(spawn(process.execPath, [program, ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"] }));
   const remote = client(url);
 
   assert.equal((await finish(remote("aircon", "power", "set", "--on"))).code, 0);

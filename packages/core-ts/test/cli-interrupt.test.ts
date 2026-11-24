@@ -9,8 +9,8 @@ import { fileURLToPath } from "node:url";
 import { INTERRUPT_GRACE_MS } from "@acid-cat/spec-ts";
 
 import { bundledProgram } from "./bundled-program.ts";
-import { until } from "./until.ts";
-import type { Waiter } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
+import type { Waiter } from "../../../test-support/until.ts";
 
 const PROBE = fileURLToPath(new URL("interrupt-probe.ts", import.meta.url));
 

@@ -45,7 +45,7 @@ test("the state gives the current value, then each change, and a capability with
     Effect.gen(function* () {
       const values = yield* session.state("lamp.light.get").pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }));
       yield* session.invoke("lamp.power.set", { on: true });
-      const [first, second] = yield* Fiber.join(values).pipe(Effect.timeout(1000));
+      const [first, second] = yield* Fiber.join(values);
       assert.deepEqual(first, { on: false, brightness: 80, kelvin: 3000 });
       assert.deepEqual(second, { on: true, brightness: 80, kelvin: 3000 });
       assert.deepEqual(yield* session.state("lamp.power.set").pipe(Stream.runCollect), []);

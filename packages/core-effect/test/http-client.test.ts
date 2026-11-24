@@ -174,7 +174,8 @@ test("an interrupt before the server answers a subscription ends watch with 130,
       }),
   );
   context.after(server.close);
-  const child = spawn(process.execPath, [remoteCli, server.url, "watch", "fixture.ticks", "--count", "1"], { stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  const child = spawn(process.execPath, [remoteCli, server.url, "watch", "fixture.ticks", "--count", "1"], { stdio: ["ignore", "pipe", "pipe"] });
+  context.after(() => child.kill("SIGKILL"));
   let stdout = "";
   let stderr = "";
   child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));
@@ -200,7 +201,8 @@ test("an interrupt during a call or list of a server that does not answer is can
   );
   context.after(server.close);
   const interrupted = (...args: string[]) => {
-    const child = spawn(process.execPath, [remoteCli, server.url, ...args], { stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+    const child = spawn(process.execPath, [remoteCli, server.url, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+    context.after(() => child.kill("SIGKILL"));
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));
@@ -259,7 +261,7 @@ test("a 200 answer to a subscription that is not a stream of server-sent events 
     return new Response(body, { status: 200, headers: { "Content-Type": "application/json" } });
   });
   context.after(server.close);
-  const failure = await Effect.runPromise(Effect.scoped(Effect.flip(Http.client(server.url).subscribe("fixture.watch", {}))).pipe(Effect.timeout("5 seconds")));
+  const failure = await Effect.runPromise(Effect.scoped(Effect.flip(Http.client(server.url).subscribe("fixture.watch", {}))), { signal: context.signal });
   assert.equal(failure.kind, "internal");
   await closed.promise;
 });

@@ -17,8 +17,8 @@ import { CliListing, decodeText } from "./decode.ts";
 import { fixture } from "./fixture.ts";
 import { run } from "./run.ts";
 import { bundledProgram } from "./bundled-program.ts";
-import { until } from "./until.ts";
-import type { Waiter } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
+import type { Waiter } from "../../../test-support/until.ts";
 
 const commandLine = (file: string) => (...args: string[]) => run(bundledProgram(file), ...args);
 

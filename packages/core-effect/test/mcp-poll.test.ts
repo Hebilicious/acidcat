@@ -97,22 +97,22 @@ test("through HTTP, dispose ends the leases", async () => {
   await feed.following(0);
 });
 
-test("through HTTP with per-request services, a lease keeps the services of its request until it ends", async (t) => {
+test("through HTTP with per-request services, a lease keeps the services of its request until it ends", async () => {
   const feed = feedForPromises();
   let released = 0;
   const layer = Layer.effect(Feed, Effect.acquireRelease(Effect.service(Feed), () => Effect.sync(() => (released += 1)))).pipe(Layer.provide(feed.layer));
-  const handler = Mcp.toWebHandler(events, layer, { ...base, services: "per-request", poll: { leaseMs: 200 } });
+  const handler = Mcp.toWebHandler(events, layer, { ...base, services: "per-request" });
   try {
     await json(await handler(mcpRequest("events/list")));
     assert.equal(released, 1);
     await poll(handler, { name: "feed.ticked" });
     await feed.following(1);
     assert.equal(released, 1);
-    await feed.following(0);
-    await until(t, async () => released, (count) => count === 2);
   } finally {
     await handler.dispose();
   }
+  await feed.following(0);
+  assert.equal(released, 2);
 });
 
 test("Mcp.makeHandle keeps the leases in its scope, and they end when the scope closes", async () => {

@@ -18,7 +18,7 @@ import { output } from "../core-effect/output.ts";
 import { bundledProgram } from "./bundled-program.ts";
 import { assertHelp } from "./help.ts";
 import { OFFLINE, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
-import { run } from "./run.ts";
+import { run, tracked } from "./run.ts";
 import { firstLine, startServer, subscriptionProxy } from "./server.ts";
 import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
@@ -85,7 +85,7 @@ test("the state gives the current value, then each change", () =>
         const session = yield* Session.make(aircon, { target: "app" });
         const values = yield* session.state("aircon.status.get").pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }));
         yield* session.invoke("aircon.power.set", { on: true });
-        const [first, second] = yield* Fiber.join(values).pipe(Effect.timeout(1000));
+        const [first, second] = yield* Fiber.join(values);
         assert.deepEqual([first, second], [OFF, { ...OFF, power: true }]);
         assert.deepEqual(yield* session.state("aircon.power.set").pipe(Stream.runCollect), []);
       }),
@@ -149,7 +149,7 @@ function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<R
 test("the command line controls the unit of a server, and watch and follow write its changes", async (context) => {
   const url = await startServer(context, process.execPath, [bundledProgram("core-effect/serve.ts")]);
   const client = (target: string) => (...args: string[]) =>
-    spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+    tracked(spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"] }));
   const remote = client(url);
 
   assert.equal((await finish(remote("aircon", "power", "set", "--on"))).code, 0);

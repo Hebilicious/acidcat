@@ -11,13 +11,14 @@ import { check } from "@acid-cat/cli";
 import { SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import { assertHelp } from "./help.ts";
 import type { Run } from "./run.ts";
+import { tracked } from "./run.ts";
 import { firstLine, startServer, subscriptionProxy } from "./server.ts";
 import { shape, writtenText } from "./shape.ts";
 
 const aircon = new URL("target/debug/aircon", new URL("../core-rust/", import.meta.url)).pathname;
 
 function run(...args: string[]): Promise<Run> {
-  return finish(spawn(aircon, args, { stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 }));
+  return finish(tracked(spawn(aircon, args, { stdio: ["ignore", "pipe", "pipe"] })));
 }
 
 function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<Run> {
@@ -66,7 +67,7 @@ test("the Rust command line writes the human form with its output flags", async 
 
 test("the Rust command line controls the unit of a server, and watch and follow write its changes", async (context) => {
   const url = await startServer(context, aircon, ["serve"]);
-  const client = (target: string) => (...args: string[]) => spawn(aircon, ["cli", ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  const client = (target: string) => (...args: string[]) => tracked(spawn(aircon, ["cli", ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"] }));
   const remote = client(url);
 
   assert.equal((await finish(remote("aircon", "power", "set", "--on"))).code, 0);

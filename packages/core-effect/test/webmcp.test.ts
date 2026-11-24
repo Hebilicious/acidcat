@@ -6,6 +6,7 @@ import { Effect, Exit, Layer, Option, Scope, SubscriptionRef } from "effect";
 import { Handles, Session, WebMcp } from "../src/index.ts";
 import { fixture, fixtureLayer, position, Switch } from "./fixture.ts";
 import { lamp, lampLayer } from "./lamp.ts";
+import { until as waitUntil } from "../../../test-support/until.ts";
 
 function fakeHost() {
   const tools = new Map<string, WebMcp.ModelContextTool>();
@@ -33,9 +34,9 @@ function toolOf(host: ReturnType<typeof fakeHost>, name: string) {
 const until = (done: () => boolean | Promise<boolean>) =>
   Effect.gen(function* () {
     while (!(yield* Effect.promise(async () => done()))) yield* Effect.sleep(5);
-  }).pipe(Effect.timeout("5 seconds"), Effect.orDie);
+  });
 
-test("a failed update keeps the last tools, retry reconciles them, and closing removes them", () =>
+test("a failed update keeps the last tools, retry reconciles them, and closing removes them", (t) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const host = fakeHost();
@@ -59,9 +60,10 @@ test("a failed update keeps the last tools, retry reconciles them, and closing r
       assert.equal(host.tools.size, 0);
       assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "disposed");
     }).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
+    { signal: t.signal },
   ));
 
-test("remove takes the tools away while the scope stays open, does nothing a second time, and closing works after it", () =>
+test("remove takes the tools away while the scope stays open, does nothing a second time, and closing works after it", (t) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const host = fakeHost();
@@ -88,6 +90,7 @@ test("remove takes the tools away while the scope stays open, does nothing a sec
       yield* installed.remove;
       assert.equal((yield* SubscriptionRef.get(installed.status)).phase, "disposed");
     }).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
+    { signal: t.signal },
   ));
 
 test("with no host, the surface does nothing", () =>
@@ -100,7 +103,7 @@ test("with no host, the surface does nothing", () =>
     ).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
   ));
 
-test("Handles.open registers the tools on a host, observes their status, and dispose removes them", async () => {
+test("Handles.open registers the tools on a host, observes their status, and dispose removes them", async (t) => {
   const host = fakeHost();
   const phases: WebMcp.Phase[] = [];
   {
@@ -108,12 +111,12 @@ test("Handles.open registers the tools on a host, observes their status, and dis
     const webmcp = session.webmcp;
     assert.ok(webmcp !== undefined);
     webmcp.status.subscribe((status) => phases.push(status.phase));
-    await Effect.runPromise(until(() => webmcp.status.getSnapshot().phase === "ready"));
+    await waitUntil(t, () => webmcp.status.getSnapshot().phase === "ready");
     assert.equal(webmcp.status.getSnapshot().phase, "ready");
     const available = [...session.handles.values()].filter((handle) => handle.availability.getSnapshot().available);
     assert.deepEqual([...host.tools.keys()].sort(), available.map((handle) => handle.id).sort());
     await webmcp.retry();
-    await Effect.runPromise(until(() => webmcp.status.getSnapshot().phase === "ready"));
+    await waitUntil(t, () => webmcp.status.getSnapshot().phase === "ready");
     assert.equal(webmcp.status.getSnapshot().phase, "ready");
   }
   assert.equal(host.tools.size, 0);
@@ -125,7 +128,7 @@ test("Handles.open without a host registers no tool", async () => {
   assert.equal(session.webmcp, undefined);
 });
 
-test("Handles.open: remove takes the tools away during a call of the same session, and the calls in progress complete", async () => {
+test("Handles.open: remove takes the tools away during a call of the same session, and the calls in progress complete", async (t) => {
   const host = fakeHost();
   const phases: WebMcp.Phase[] = [];
   const session = await Handles.open(fixture, fixtureLayer, { target: "app", webmcp: host });
@@ -137,12 +140,12 @@ test("Handles.open: remove takes the tools away during a call of the same sessio
     assert.ok(found !== undefined, `The session has no handle ${id}.`);
     return found;
   };
-  await Effect.runPromise(until(() => host.tools.has("fixture.toggle")));
+  await waitUntil(t, () => host.tools.has("fixture.toggle"));
   assert.ok(host.tools.has("fixture.toggle"));
 
   const sessionCall = handle("fixture.hold").invokeExternal({ key: "session" });
   const toolCall = toolOf(host, "fixture.hold").execute({ key: "tool" });
-  await Effect.runPromise(until(async () => JSON.stringify(await handle("fixture.held").invokeExternal({})).includes('"session","tool"')));
+  await waitUntil(t, async () => JSON.stringify(await handle("fixture.held").invokeExternal({})).includes('"session","tool"'));
   assert.deepEqual(await handle("fixture.held").invokeExternal({}), { ok: true, value: { keys: ["session", "tool"] } });
 
   await webmcp.remove();
@@ -161,7 +164,7 @@ test("Handles.open: remove takes the tools away during a call of the same sessio
   await handle("fixture.release").invokeExternal({ key: "tool" });
   assert.deepEqual(await sessionCall, { ok: true, value: { key: "session" } });
   assert.deepEqual(await toolCall, { ok: true, value: { key: "tool" } });
-  await Effect.runPromise(until(() => webmcp.status.getSnapshot().phase === "disposed"));
+  await waitUntil(t, () => webmcp.status.getSnapshot().phase === "disposed");
   assert.equal(host.registrations, registrations, "no tool is registered after remove");
   assert.deepEqual(await handle("fixture.echo").invokeExternal({ text: "still open" }), { ok: true, value: { text: "still open" } });
 
