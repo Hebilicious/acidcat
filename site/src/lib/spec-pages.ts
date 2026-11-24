@@ -13,7 +13,7 @@ export interface SpecPage {
   readonly order: number;
 }
 
-const order = ["README.md", "catalog.md", "invocation.md", "events.md", "bindings/README.md", "bindings/typescript.md", "bindings/webmcp.md", "bindings/mcp.md", "bindings/cli.md", "bindings/http.md", "extensions/README.md", "extensions/attachments.md", "extensions/pagination.md", "conformance.md"];
+const order = ["README.md", "catalog.md", "invocation.md", "events.md", "bindings/README.md", "bindings/programmatic.md", "bindings/typescript.md", "bindings/rust.md", "bindings/webmcp.md", "bindings/mcp.md", "bindings/cli.md", "bindings/http.md", "extensions/README.md", "extensions/attachments.md", "extensions/pagination.md", "conformance.md"];
 
 const toPosix = (path: string): string => path.split(sep).join(posix.sep);
 
