@@ -1,22 +1,29 @@
-import { AdditiveBlending, BoxGeometry, Color, BufferGeometry, CanvasTexture, CylinderGeometry, Float32BufferAttribute, Group, InstancedMesh, LatheGeometry, LineBasicMaterial, LineSegments, type Material, Mesh, MeshBasicMaterial, MeshPhongMaterial, Object3D, PlaneGeometry, SRGBColorSpace, ShaderMaterial, Vector2 } from "three";
+import { AdditiveBlending, BoxGeometry, BufferGeometry, CanvasTexture, CylinderGeometry, Float32BufferAttribute, Group, InstancedMesh, LatheGeometry, LineBasicMaterial, LineSegments, type Material, Mesh, MeshBasicMaterial, MeshPhongMaterial, NodeMaterial, Object3D, PlaneGeometry, SRGBColorSpace, Vector2 } from "three/webgpu";
+import type { Node, UniformNode } from "three/webgpu";
+import { abs, clamp, dot, exp, length, max, normalView, normalize, positionView, pow, reflect, select, sin, smoothstep, uniform, uv, vec2, vec3, vec4 } from "three/tsl";
+import { shaderMaterial } from "./engine-shader.js";
 
+const gaussian = (offset: Node<"float">, sharpness: number) => {
+  const scaled = offset.mul(sharpness);
+  return exp(scaled.mul(scaled).negate());
+};
 
-
-const glassFragment = `
-varying vec3 normalEye;
-varying vec3 viewEye;
-void main() {
-  vec3 n = normalize(normalEye);
-  vec3 v = normalize(viewEye);
-  vec3 r = reflect(-v,n);
-  float rim = pow(1.0 - max(dot(n,v),0.0),2.4);
-  float window = exp(-pow((r.x + .83)*10.,2.)) * smoothstep(-.62,.35,r.y);
-  float strip = exp(-pow((r.x - .94)*24.,2.)) * smoothstep(-.85,-.25,r.y);
-  float overhead = exp(-pow((r.y-.86)*16.,2.)) * smoothstep(-.4,.6,-r.x);
-  vec3 color = vec3(.17,.23,.28)*rim + vec3(.75,.87,1.)*window + vec3(.95,.71,.38)*(strip+overhead);
-  gl_FragColor = vec4(color + vec3(.045,.036,.03), clamp(.075 + rim*.65 + window*.47 + strip*.62 + overhead*.55,0.,.9));
-  #include <colorspace_fragment>
-}`;
+function glassMaterial() {
+  const n = normalView;
+  const v = normalize(positionView.negate());
+  const r = reflect(v.negate(), n);
+  const rim = pow(max(dot(n, v), 0).oneMinus(), 2.4);
+  const window = gaussian(r.x.add(0.83), 10).mul(smoothstep(-0.62, 0.35, r.y));
+  const strip = gaussian(r.x.sub(0.94), 24).mul(smoothstep(-0.85, -0.25, r.y));
+  const overhead = gaussian(r.y.sub(0.86), 16).mul(smoothstep(-0.4, 0.6, r.x.negate()));
+  const color = vec3(0.17, 0.23, 0.28).mul(rim).add(vec3(0.75, 0.87, 1).mul(window)).add(vec3(0.95, 0.71, 0.38).mul(strip.add(overhead)));
+  const material = new NodeMaterial();
+  material.fog = false;
+  material.transparent = true;
+  material.depthWrite = false;
+  material.fragmentNode = vec4(color.add(vec3(0.045, 0.036, 0.03)), clamp(rim.mul(0.65).add(window.mul(0.47)).add(strip.mul(0.62)).add(overhead.mul(0.55)).add(0.075), 0, 0.9));
+  return material;
+}
 
 const strokes: Record<string, string> = {
   T: "M1 2H21 M11 2V39",
@@ -154,14 +161,7 @@ function buildTube() {
     turn([[.318, y], [.327, y + .008], [.323, y + .023], [.308, y + .027]], copper);
   }
 
-  const glass = new ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    vertexShader: `varying vec3 normalEye; varying vec3 viewEye;
-      void main(){ vec4 eye=modelViewMatrix*vec4(position,1.); normalEye=normalMatrix*normal;
-      viewEye=-eye.xyz; gl_Position=projectionMatrix*eye; }`,
-    fragmentShader: glassFragment,
-  });
+  const glass = glassMaterial();
   const envelope = turn([
     [.37, .42],
     [.398, .45],
@@ -184,49 +184,27 @@ function buildTube() {
   return group;
 }
 
-const haloVertex = `
-varying vec2 vUv;
-void main() {
-  vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`;
-
-const haloFragment = `
-uniform vec3 tint;
-uniform float strength;
-uniform float ring;
-uniform float time;
-varying vec2 vUv;
-void main() {
-  vec2 p = vUv - 0.5;
-  float d = length(p * vec2(1.0, 0.72));
-  float glow = exp(-d * d * 18.0) * strength;
-  float beam = smoothstep(0.16, 0.0, abs(p.x)) * smoothstep(-0.05, 0.2, p.y) * smoothstep(0.45, 0.25, p.y) * strength * 0.3;
-  float pulse = 0.85 + 0.15 * sin(time * 3.0);
-  float halo = smoothstep(0.025, 0.0, abs(d - 0.27 - 0.012 * sin(time * 4.0))) * ring;
-  vec3 color = tint * (glow * pulse + beam) + vec3(0.25, 0.9, 1.0) * halo * 1.6;
-  float a = clamp(max(color.r, max(color.g, color.b)), 0.0, 1.0);
-  gl_FragColor = vec4(a > 0.001 ? color / a : vec3(0.0), a);
-}
-`;
-
 export interface BulbLight {
-  readonly material: ShaderMaterial;
+  readonly material: NodeMaterial;
+  readonly uniforms: { readonly strength: UniformNode<"float", number>; readonly ring: UniformNode<"float", number>; readonly time: UniformNode<"float", number> };
   strength: number;
   ring: number;
 }
 
 function halo(): BulbLight {
-  const material = new ShaderMaterial({
-    vertexShader: haloVertex,
-    fragmentShader: haloFragment,
-    uniforms: { tint: { value: new Color(1.0, 0.45, 0.12) }, strength: { value: 0 }, ring: { value: 0 }, time: { value: 0 } },
-    blending: AdditiveBlending,
-    transparent: true,
-    depthWrite: false,
-  });
-  return { material, strength: 0, ring: 0 };
+  const strength = uniform(0);
+  const ring = uniform(0);
+  const time = uniform(0);
+  const p = uv().sub(0.5);
+  const d = length(p.mul(vec2(1, 0.72)));
+  const glow = exp(d.mul(d).mul(-18)).mul(strength);
+  const beam = smoothstep(0.16, 0, abs(p.x)).mul(smoothstep(-0.05, 0.2, p.y)).mul(smoothstep(0.45, 0.25, p.y)).mul(strength).mul(0.3);
+  const pulse = sin(time.mul(3)).mul(0.15).add(0.85);
+  const outline = smoothstep(0.025, 0, abs(d.sub(0.27).sub(sin(time.mul(4)).mul(0.012)))).mul(ring);
+  const color = vec3(1, 0.45, 0.12).mul(glow.mul(pulse).add(beam)).add(vec3(0.25, 0.9, 1).mul(outline).mul(1.6));
+  const alpha = clamp(max(color.r, max(color.g, color.b)), 0, 1);
+  const material = shaderMaterial(select(alpha.greaterThan(0.001), color.div(alpha), vec3(0)), alpha, { transparent: true, depthWrite: false, blending: AdditiveBlending });
+  return { material, uniforms: { strength, ring, time }, strength: 0, ring: 0 };
 }
 
 export function tubeBank(labels: string[], socketY: number) {

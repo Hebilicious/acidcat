@@ -1,5 +1,5 @@
 import type { Pass, PassOptions, UniformValues } from "./pass.ts";
-import { toWgsl, uniformSlots } from "./shader.ts";
+import { toWgsl, uniformSlots } from "./wgsl.ts";
 import type { ShaderSource } from "./shader.ts";
 
 interface ElementDrawingQueue extends GPUQueue {

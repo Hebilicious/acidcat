@@ -1,6 +1,8 @@
-import { AdditiveBlending, PlaneGeometry, InstancedMesh, TorusGeometry, BoxGeometry, CubicBezierCurve3, CylinderGeometry, ExtrudeGeometry, Group, Mesh, MeshPhongMaterial, MeshStandardMaterial, ShaderMaterial, Shape, TubeGeometry, Vector3 } from "three";
+import { AdditiveBlending, PlaneGeometry, InstancedMesh, TorusGeometry, BoxGeometry, CubicBezierCurve3, CylinderGeometry, ExtrudeGeometry, Group, Mesh, MeshPhongMaterial, MeshStandardMaterial, Shape, TubeGeometry, Vector3 } from "three/webgpu";
+import type * as Three from "three/webgpu";
+import { abs, cos, exp, floor, fract, length, max, min, mix, normalView, pow, sin, smoothstep, uv, vec2, vec3 } from "three/tsl";
 import { machinedFinish } from "./engine-finish.js";
-import type * as Three from "three";
+import { shaderMaterial } from "./engine-shader.js";
 
 export function hardware(scene: Three.Scene) {
   const finish = machinedFinish();
@@ -65,18 +67,9 @@ export function hardware(scene: Three.Scene) {
     scene.add(group);
     const margin = catalog ? 40 : 29;
     const width = w + margin, height = h + margin;
-    const shade = new ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      uniforms: { bounds: { value: [width, height] } },
-      vertexShader: "varying vec2 v; void main(){v=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}",
-      fragmentShader: `varying vec2 v; uniform vec2 bounds;
-        void main(){
-          vec2 d = abs(v-.5)*(bounds+60.)-.5*bounds+6.;
-          float distanceToEdge = length(max(d,0.))+min(max(d.x,d.y),0.)-6.;
-          gl_FragColor = vec4(.005,.008,.012,.65*exp(-max(distanceToEdge,0.)*.12));
-        }`,
-    });
+    const edge = abs(uv().sub(0.5)).mul(vec2(width + 60, height + 60)).sub(vec2(width / 2 - 6, height / 2 - 6));
+    const distanceToEdge = length(max(edge, 0)).add(min(max(edge.x, edge.y), 0)).sub(6);
+    const shade = shaderMaterial(vec3(0.005, 0.008, 0.012), exp(max(distanceToEdge, 0).mul(-0.12)).mul(0.65), { transparent: true, depthWrite: false });
     mesh(group, new PlaneGeometry(width+60,height+60), shade, 4,-8,-53);
     slab(group, w + margin - 6, h + margin - 4, -48, 33, 5, steel);
     for (const z of [-42, -33, -24]) {
@@ -190,36 +183,21 @@ export function hardware(scene: Three.Scene) {
     }
     return group;
   }
-  function pipe(start: Three.Vector3, end: Three.Vector3, time: Three.IUniform<number>, excitation: Three.IUniform<number>, bend?: { readonly out: Three.Vector3; readonly in: Three.Vector3 }) {
+  function pipe(start: Three.Vector3, end: Three.Vector3, time: Three.UniformNode<"float", number>, excitation: Three.UniformNode<"float", number>, bend?: { readonly out: Three.Vector3; readonly in: Three.Vector3 }) {
     const curve = new CubicBezierCurve3(start, start.clone().add(bend?.out ?? new Vector3(78, -20, 14)), end.clone().sub(bend?.in ?? new Vector3(83, 25, 6)), end);
-    const fluid = new ShaderMaterial({
-      uniforms: { time, excitation },
-      vertexShader: 'varying vec2 v; void main(){ v=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',
-      fragmentShader: `varying vec2 v;
-        uniform float time, excitation;
-        void main(){
-          float pulse = pow(.5+.5*cos(v.x*38.-time*3.2), 5.);
-          float tube = .55+.45*cos(v.y*6.283);
-          vec3 acid = mix(vec3(.18,.48,.04), vec3(.75,1.,.22), pulse);
-          vec2 cell = vec2(fract(v.x*13.-time*.65)-.5, sin(v.y*6.283 + floor(v.x*13.-time*.65)*2.4));
-          float bubble = length(cell*vec2(3.4,1.7));
-          acid += vec3(.52,.62,.40)*(1.-smoothstep(.08,.24,abs(bubble-.69)));
-          gl_FragColor = vec4(mix(acid, vec3(.6,1.,.74), excitation*.72)*(.62+.38*tube)+excitation*.12,1.);
-        }`,
-    });
+    const along = uv().x;
+    const around = uv().y;
+    const pulse = pow(cos(along.mul(38).sub(time.mul(3.2))).mul(0.5).add(0.5), 5);
+    const tube = cos(around.mul(6.283)).mul(0.45).add(0.55);
+    const flow = along.mul(13).sub(time.mul(0.65));
+    const cell = vec2(fract(flow).sub(0.5), sin(around.mul(6.283).add(floor(flow).mul(2.4))));
+    const bubble = length(cell.mul(vec2(3.4, 1.7)));
+    const acid = mix(vec3(0.18, 0.48, 0.04), vec3(0.75, 1, 0.22), pulse).add(vec3(0.52, 0.62, 0.4).mul(smoothstep(0.08, 0.24, abs(bubble.sub(0.69))).oneMinus()));
+    const fluid = shaderMaterial(mix(acid, vec3(0.6, 1, 0.74), excitation.mul(0.72)).mul(tube.mul(0.38).add(0.62)).add(excitation.mul(0.12)), 1);
     mesh(scene, new TubeGeometry(curve, 54, 4.2, 14, false), fluid, 0, 0, 0);
     mesh(scene, new TubeGeometry(curve, 54, 7, 18, false), glass, 0, 0, 0);
-    const halo = new ShaderMaterial({
-      transparent: true,
-      blending: AdditiveBlending,
-      depthWrite: false,
-      uniforms: { excitation },
-      vertexShader: `varying vec3 eyeNormal; void main(){eyeNormal=normalMatrix*normal;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-      fragmentShader: `varying vec3 eyeNormal; uniform float excitation; void main(){
-        float falloff=pow(max(normalize(eyeNormal).z,0.),3.);
-        gl_FragColor=vec4(.48,.95,.06,falloff*(.17+.22*excitation));
-      }`,
-    });
+    const falloff = pow(max(normalView.z, 0), 3);
+    const halo = shaderMaterial(vec3(0.48, 0.95, 0.06), falloff.mul(excitation.mul(0.22).add(0.17)), { transparent: true, depthWrite: false, blending: AdditiveBlending });
     mesh(scene, new TubeGeometry(curve, 54, 14, 20, false), halo, 0, 0, 0);
     const axis = new Vector3(0, 1, 0);
     function sleeve(t: number, radius: number, length: number, material: Three.Material, geometry = cylinder) {

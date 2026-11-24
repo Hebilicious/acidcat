@@ -1,59 +1,25 @@
 import assert from "node:assert/strict";
 import { readFile, stat } from "node:fs/promises";
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
-import { extname, join, normalize } from "node:path";
+import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
 import type { Browser } from "playwright";
-
-const dist = new URL("../dist/", import.meta.url).pathname;
-const types: Record<string, string> = {
-  ".html": "text/html",
-  ".css": "text/css",
-  ".js": "text/javascript",
-  ".svg": "image/svg+xml",
-  ".woff2": "font/woff2",
-  ".webp": "image/webp",
-  ".png": "image/png",
-};
-
-const resolveFile = async (url: string): Promise<string | undefined> => {
-  const path = normalize(join(dist, decodeURIComponent(new URL(url, "http://site").pathname)));
-  if (!path.startsWith(dist)) return undefined;
-  const info = await stat(path).catch(() => undefined);
-  if (info?.isDirectory() === true) return join(path, "index.html");
-  return info === undefined ? undefined : path;
-};
-
-const server = createServer((request, response) => {
-  resolveFile(request.url ?? "/")
-    .then(async (path) => {
-      if (path === undefined) throw new Error("not found");
-      const body = await readFile(path);
-      response.writeHead(200, { "content-type": types[extname(path)] ?? "application/octet-stream" });
-      response.end(body);
-    })
-    .catch(() => {
-      response.writeHead(404);
-      response.end();
-    });
-});
+import { dist, serveDist } from "./static-server.ts";
+import type { StaticServer } from "./static-server.ts";
 
 let origin = "";
+let server: StaticServer | undefined;
 let browser: Browser | undefined;
 
 before(async () => {
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address: AddressInfo | string | null = server.address();
-  if (address === null || typeof address === "string") throw new Error("The server has no port.");
-  origin = `http://127.0.0.1:${address.port}`;
+  server = await serveDist();
+  origin = server.origin;
   browser = await chromium.launch();
 });
 
 after(async () => {
   await browser?.close();
-  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await server?.close();
 });
 
 test("the build writes the homepage and the docs", async () => {

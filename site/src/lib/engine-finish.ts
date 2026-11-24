@@ -1,4 +1,4 @@
-import { CanvasTexture, RepeatWrapping, SRGBColorSpace } from "three";
+import { CanvasTexture, RepeatWrapping, SRGBColorSpace } from "three/webgpu";
 
 export function machinedFinish() {
   const canvas = document.createElement("canvas");

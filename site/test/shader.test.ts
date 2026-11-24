@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { toGlsl, toWgsl } from "../src/lib/gpu/shader.ts";
+import { toGlsl } from "../src/lib/gpu/shader.ts";
+import { toWgsl } from "../src/lib/gpu/wgsl.ts";
 import type { ShaderSource } from "../src/lib/gpu/shader.ts";
 
 const source: ShaderSource = {
