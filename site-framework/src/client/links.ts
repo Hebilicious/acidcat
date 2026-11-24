@@ -20,7 +20,7 @@ const anchorOf = (target: EventTarget | null): HTMLAnchorElement | undefined => 
 
 const focusable = "a[href], area[href], button, input, select, textarea, iframe, summary, [tabindex], [contenteditable]";
 
-/** Moves the focus to the element of a hash, so that the next Tab goes on from there, as the browser does when it follows a link in the page. */
+/** As the browser does when it follows a link in the page, so that the next Tab goes on from the target. */
 const focusHash = (hash: string): void => {
   const target = hash === "" ? null : document.getElementById(decodeURIComponent(hash.slice(1)));
   if (target === null) return;

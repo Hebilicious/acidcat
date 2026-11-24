@@ -23,10 +23,8 @@ const hasRenderFunction = (value: unknown): boolean =>
   typeof value === "function" ||
   (isRecord(value) && renderFunctions.every((key) => isOptionalFunction(value[key])) && renderFunctions.some((key) => typeof value[key] === "function"));
 
-/** A component in Vapor mode, as the Vue compiler writes it for the browser: a function, or an object with a `setup` or a `render` function. */
 export const isVaporComponent = (value: unknown): value is VaporComponent => hasRenderFunction(value);
 
-/** A component as the router and the server renderer take it: a function, or an object with a `setup`, a `render` or an `ssrRender` function. */
 export const isComponent = (value: unknown): value is Component => hasRenderFunction(value);
 
 const isSiteDefinition = (value: unknown): value is SiteDefinition =>

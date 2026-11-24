@@ -42,7 +42,6 @@ const open = async (path: string, prepare?: (page: Page) => void): Promise<{ rea
   return { page, problems };
 };
 
-/** The URL of the chunk that a page change loads for the page in a file. */
 const chunkUrl = async (file: string): Promise<string> => {
   const manifest: unknown = JSON.parse(await readDist(".vite/manifest.json"));
   const chunk: unknown = typeof manifest === "object" && manifest !== null ? Reflect.get(manifest, file) : undefined;

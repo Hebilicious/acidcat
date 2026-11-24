@@ -31,11 +31,9 @@ const branching: ReadonlySet<string> = new Set([
 const nameOf = (node: unknown): string | undefined => (isAstNode(node) && node.type === "Identifier" && typeof node["name"] === "string" ? node["name"] : undefined);
 
 interface StaticTemplate {
-  /** The string of HTML, as the first argument of the call. */
   readonly html: AstNode;
 }
 
-/** The module-level `const tN = _template("…", flags)` declarations whose flags mark a template with no dynamic part. */
 const staticTemplates = (program: AstNode): Map<string, StaticTemplate> => {
   const templates = new Map<string, StaticTemplate>();
   for (const statement of childrenOf(program)) {
@@ -54,10 +52,6 @@ const staticTemplates = (program: AstNode): Map<string, StaticTemplate> => {
   return templates;
 };
 
-/**
- * The names of the templates that are called only where the component always renders them: in the body of its `setup`
- * or `render` function, out of each callback (a branch of `v-if`, an item of `v-for`, a slot) and out of each condition.
- */
 const alwaysRendered = (program: AstNode, templates: ReadonlyMap<string, StaticTemplate>): Set<string> => {
   const sure = new Set<string>();
   const unsure = new Set<string>();
@@ -78,12 +72,7 @@ const alwaysRendered = (program: AstNode, templates: ReadonlyMap<string, StaticT
   return new Set([...sure].filter((name) => !unsure.has(name)));
 };
 
-/**
- * Empties the HTML of each static template that a component always renders. While it hydrates, Vapor takes a static
- * template from the DOM when its HTML is empty, and keeps a copy for the next render. So the lean copy of a page
- * hydrates the same and leaves most of its static HTML out of its script. A template that hydration may not meet, such
- * as a branch of `v-if` that is false on the server, an item of `v-for` that comes later, or a slot, keeps its HTML.
- */
+/** While it hydrates, Vapor takes a static template from the DOM when its HTML is empty, and keeps a copy for the next render. */
 export const leanTemplates = (code: string): string => {
   const program: unknown = parseAst(code);
   if (!isAstNode(program)) return code;
