@@ -4,7 +4,6 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 import { INTERRUPT_GRACE_MS } from "@acid-cat/spec-ts";
@@ -18,6 +17,8 @@ import { CliListing, decodeText } from "./decode.ts";
 import { fixture } from "./fixture.ts";
 import { run } from "./run.ts";
 import { bundledProgram } from "./bundled-program.ts";
+import { until } from "./until.ts";
+import type { Waiter } from "./until.ts";
 
 const commandLine = (file: string) => (...args: string[]) => run(bundledProgram(file), ...args);
 
@@ -29,11 +30,9 @@ const cliWithRepeated = commandLine("test/fixture-cli-repeated.ts");
 
 const cliWithInherited = commandLine("test/fixture-cli-inherited.ts");
 
-const DEADLINE_MS = 10_000;
-
 const PROBE = fileURLToPath(new URL("interrupt-probe.ts", import.meta.url));
 
-async function interruptedIgnoring(command: readonly string[], interrupts: 1 | 2) {
+async function interruptedIgnoring(t: Waiter, command: readonly string[], interrupts: 1 | 2) {
   const directory = mkdtempSync(join(tmpdir(), "core-effect-interrupt-"));
   const marker = join(directory, "held");
   const record = join(directory, "exit");
@@ -45,12 +44,11 @@ async function interruptedIgnoring(command: readonly string[], interrupts: 1 | 2
   let stderr = "";
   child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
   const exited = new Promise<[number | null, NodeJS.Signals | null]>((resolve) => child.on("close", (...exit) => resolve(exit)));
+  let ended: [number | null, NodeJS.Signals | null] | undefined;
+  void exited.then((exit) => (ended = exit));
   const waitFor = async (path: string, state: string) => {
-    const start = Date.now();
-    while (!existsSync(path)) {
-      if (Date.now() - start > DEADLINE_MS) throw new Error(`The call did not write its marker file when it ${state}. ${stderr}`);
-      await pause(10);
-    }
+    await until(t, () => existsSync(path) || ended !== undefined, Boolean, { what: `the marker file when it ${state}` });
+    if (!existsSync(path)) throw new Error(`The call exited before it wrote its marker file when it ${state}. ${stderr}`);
   };
   try {
     await waitFor(marker, "started to hold");
@@ -62,10 +60,9 @@ async function interruptedIgnoring(command: readonly string[], interrupts: 1 | 2
       child.kill("SIGINT");
       writeFileSync(`${marker}.go`, "");
     }
-    const ended = await Promise.race([exited, pause(DEADLINE_MS, "running" as const)]);
-    const [code, signal] = ended === "running" ? [null, null] : ended;
+    const [code, signal] = await until(t, () => ended, (exit) => exit !== undefined, { next: () => exited, what: "the exit of the process" });
     const exit = existsSync(record) ? readFileSync(record, "utf-8") : undefined;
-    return { code, signal, stderr, exit, elapsed: Date.now() - interrupted, running: ended === "running" };
+    return { code, signal, stderr, exit, elapsed: Date.now() - interrupted };
   } finally {
     child.kill("SIGKILL");
     rmSync(directory, { recursive: true, force: true });
@@ -136,13 +133,13 @@ describe("the command line of an application", { concurrency: true }, () => {
     }
   });
 
-  test("a call or a subscription that ignores the interrupt exits with 130 after the grace period, or at once after a second interrupt", async () => {
+  test("a call or a subscription that ignores the interrupt exits with 130 after the grace period, or at once after a second interrupt", async (t) => {
     const commands = [["fixture", "hold"], ["watch", "fixture.watch"]] as const;
-    const runs = await Promise.all(commands.flatMap((command) => [interruptedIgnoring(command, 1), interruptedIgnoring(command, 2)]));
+    const runs = await Promise.all(commands.flatMap((command) => [interruptedIgnoring(t, command, 1), interruptedIgnoring(t, command, 2)]));
     for (const [index, run] of runs.entries()) {
       const what = `${commands[Math.floor(index / 2)]?.join(" ")} with ${index % 2 === 0 ? "one interrupt" : "two interrupts"}`;
       const exit = index % 2 === 0 ? "exit after interrupt 1" : "exit during interrupt 2";
-      assert.deepEqual({ ...run, elapsed: undefined }, { code: 130, signal: null, stderr: "", exit, elapsed: undefined, running: false }, what);
+      assert.deepEqual({ ...run, elapsed: undefined }, { code: 130, signal: null, stderr: "", exit, elapsed: undefined }, what);
       if (index % 2 === 0) assert.ok(run.elapsed >= INTERRUPT_GRACE_MS, `${what}: exited ${run.elapsed} ms after the interrupt, before the grace period`);
     }
   });

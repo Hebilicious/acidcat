@@ -3,7 +3,6 @@ import { existsSync, writeFileSync } from "node:fs";
 const record = process.env.INTERRUPT_PROBE_RECORD;
 if (record === undefined) throw new Error("Give the path of the record in INTERRUPT_PROBE_RECORD.");
 const hold = process.env.INTERRUPT_PROBE_HOLD;
-const HOLD_LIMIT_MS = 10_000;
 const sleeper = new Int32Array(new SharedArrayBuffer(4));
 
 let interrupts = 0;
@@ -21,8 +20,9 @@ process.on("SIGINT", () => {
 // Unix merges a pending signal with the next one of the same kind.
 function holdEventLoopUntilTestSendsSecondInterrupt(hold: string) {
   writeFileSync(`${hold}.received`, "");
-  const start = Date.now();
-  while (!existsSync(`${hold}.go`) && Date.now() - start < HOLD_LIMIT_MS) Atomics.wait(sleeper, 0, 0, 5);
+  const test = process.ppid;
+  // The hold ends when the test process ends, so a test that stops early leaves no process behind.
+  while (!existsSync(`${hold}.go`) && process.ppid === test) Atomics.wait(sleeper, 0, 0, 5);
 }
 
 process.on("exit", () => writeFileSync(record, `${handling ? "exit during" : "exit after"} interrupt ${interrupts}`));

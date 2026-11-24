@@ -4,14 +4,13 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 import { INTERRUPT_GRACE_MS } from "@acid-cat/spec-ts";
 
 import { bundledProgram } from "./bundled-program.ts";
-
-const DEADLINE_MS = 10_000;
+import { until } from "./until.ts";
+import type { Waiter } from "./until.ts";
 
 const PROBE = fileURLToPath(new URL("interrupt-probe.ts", import.meta.url));
 
@@ -20,7 +19,7 @@ const PROGRAMS = {
   watch: { program: "test/fixture-cli-watch-ignoring-cancellation.ts", args: ["watch", "fixture.watch", "--key", "k"], stderr: "" },
 } as const;
 
-async function interrupted(kind: keyof typeof PROGRAMS, interrupts: 1 | 2) {
+async function interrupted(t: Waiter, kind: keyof typeof PROGRAMS, interrupts: 1 | 2) {
   const directory = mkdtempSync(join(tmpdir(), "core-ts-interrupt-"));
   const marker = join(directory, "running");
   const record = join(directory, "exit");
@@ -32,12 +31,11 @@ async function interrupted(kind: keyof typeof PROGRAMS, interrupts: 1 | 2) {
   let stderr = "";
   child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
   const exited = new Promise<[number | null, NodeJS.Signals | null]>((resolve) => child.on("close", (...exit) => resolve(exit)));
+  let ended: [number | null, NodeJS.Signals | null] | undefined;
+  void exited.then((exit) => (ended = exit));
   const waitFor = async (path: string, state: string) => {
-    const start = Date.now();
-    while (!existsSync(path)) {
-      if (Date.now() - start > DEADLINE_MS) throw new Error(`The ${kind} did not write its marker file when it ${state}. ${stderr}`);
-      await pause(10);
-    }
+    await until(t, () => existsSync(path) || ended !== undefined, Boolean, { what: `the marker file when it ${state}` });
+    if (!existsSync(path)) throw new Error(`The ${kind} exited before it wrote its marker file when it ${state}. ${stderr}`);
   };
   try {
     await waitFor(marker, "started");
@@ -49,10 +47,9 @@ async function interrupted(kind: keyof typeof PROGRAMS, interrupts: 1 | 2) {
       child.kill("SIGINT");
       writeFileSync(`${marker}.go`, "");
     }
-    const ended = await Promise.race([exited, pause(DEADLINE_MS, "running" as const)]);
-    const [code, signal] = ended === "running" ? [null, null] : ended;
+    const [code, signal] = await until(t, () => ended, (exit) => exit !== undefined, { next: () => exited, what: "the exit of the process" });
     const exit = existsSync(record) ? readFileSync(record, "utf-8") : undefined;
-    return { code, signal, stderr, exit, elapsed: Date.now() - interruptedAt, running: ended === "running" };
+    return { code, signal, stderr, exit, elapsed: Date.now() - interruptedAt };
   } finally {
     child.kill("SIGKILL");
     rmSync(directory, { recursive: true, force: true });
@@ -60,9 +57,9 @@ async function interrupted(kind: keyof typeof PROGRAMS, interrupts: 1 | 2) {
 }
 
 for (const kind of ["call", "watch"] as const) {
-  test(`in a process, a ${kind} that ignores the interrupt exits with 130 after the grace period, or at once after a second interrupt`, async () => {
-    const [once, twice] = await Promise.all([interrupted(kind, 1), interrupted(kind, 2)]);
-    const exit = { code: 130, signal: null, stderr: PROGRAMS[kind].stderr, elapsed: undefined, running: false };
+  test(`in a process, a ${kind} that ignores the interrupt exits with 130 after the grace period, or at once after a second interrupt`, async (t) => {
+    const [once, twice] = await Promise.all([interrupted(t, kind, 1), interrupted(t, kind, 2)]);
+    const exit = { code: 130, signal: null, stderr: PROGRAMS[kind].stderr, elapsed: undefined };
     assert.deepEqual({ ...once, elapsed: undefined }, { ...exit, exit: "exit after interrupt 1" });
     assert.ok(once.elapsed >= INTERRUPT_GRACE_MS, `exited ${once.elapsed} ms after the interrupt, before the grace period`);
     assert.deepEqual({ ...twice, elapsed: undefined }, { ...exit, exit: "exit during interrupt 2" });

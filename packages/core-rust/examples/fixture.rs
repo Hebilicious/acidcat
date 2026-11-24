@@ -120,15 +120,14 @@ struct CancelMarkerThenHoldInterrupt {
     holds_until_go: bool,
 }
 
-const HOLD_INTERRUPT_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
-
 // tokio_util wakes this waker inside the `cancel` of the token, so it holds that `cancel` while it waits.
 impl std::task::Wake for CancelMarkerThenHoldInterrupt {
     fn wake(self: Arc<Self>) {
         let _ = std::fs::write(format!("{}.cancelled", self.marker), "");
         let go = std::path::PathBuf::from(format!("{}.go", self.marker));
-        let start = std::time::Instant::now();
-        while self.holds_until_go && !go.exists() && start.elapsed() < HOLD_INTERRUPT_LIMIT {
+        // The hold ends when the test process ends, so a test that stops early leaves no process behind.
+        let test = parent_process();
+        while self.holds_until_go && !go.exists() && parent_process() == test {
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
     }
@@ -152,6 +151,16 @@ fn write_cancel_marker_then_hold_interrupt(
         waker.wake();
     }
     cancelled
+}
+
+#[cfg(unix)]
+fn parent_process() -> u32 {
+    std::os::unix::process::parent_id()
+}
+
+#[cfg(not(unix))]
+fn parent_process() -> u32 {
+    0
 }
 
 struct MarkerFileWhileAlive(String);
