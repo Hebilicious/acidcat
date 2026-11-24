@@ -124,7 +124,7 @@ test("the check finds hand-written tabs, tables and titles", () => {
   assert.equal(handWrittenLists('```ts title="aircon.ts"\nx\n```').length, 0);
   assert.equal(handWrittenLists("title: The catalog in five languages").length, 1);
   assert.equal(handWrittenLists("The two TypeScript cores serve it.").length, 1);
-  assert.equal(handWrittenLists("Each TypeScript core serves it, in four protocol bindings.").length, 0);
+  assert.equal(handWrittenLists("Each TypeScript core serves it, in four protocol surfaces.").length, 0);
   assert.equal(handWrittenLists("Written in Pkl, TypeScript, Python, Go and Rust.").length, 1);
-  assert.equal(handWrittenLists("The CLI, MCP, HTTP and Rust bindings.").length, 0);
+  assert.equal(handWrittenLists("The CLI, MCP, HTTP and Rust surfaces.").length, 0);
 });

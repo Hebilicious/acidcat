@@ -56,7 +56,7 @@ export const llmsText = (pages: readonly Page[], origin: string, home: string): 
     "## For agents",
     "",
     `- [MCP server](${origin}/mcp): the content of this site as MCP tools. Its Server Card is at ${origin}/mcp/server-card.`,
-    `- [HTTP API](${origin}/api/capabilities): the same capabilities through the HTTP binding of AcidCat. The catalog is at ${origin}/api/catalog.`,
+    `- [HTTP API](${origin}/api/capabilities): the same capabilities through the HTTP surface of AcidCat. The catalog is at ${origin}/api/catalog.`,
     `- [Agent skills](${origin}/.well-known/agent-skills/index.json): the skill that tells an agent how to build with AcidCat.`,
     "",
     "## Optional",

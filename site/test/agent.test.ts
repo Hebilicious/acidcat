@@ -142,7 +142,7 @@ test("an MCP client lists and calls the tools of the site", async () => {
   assert.ok(tools.every((tool) => tool.annotations?.readOnlyHint === true));
 
   const found = await client.callTool({ name: "site.pages.search", arguments: { query: "server card", limit: 3 } });
-  assert.match(JSON.stringify(found.structuredContent), /\/spec\/bindings\/mcp\//);
+  assert.match(JSON.stringify(found.structuredContent), /\/spec\/surfaces\/mcp\//);
   const missing = await client.callTool({ name: "site.pages.read", arguments: { path: "/no/such/page/" } });
   assert.equal(missing.isError, true);
   await client.close();

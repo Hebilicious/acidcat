@@ -192,7 +192,7 @@ The capabilities read `/content.json`, which the build writes: each page with it
 | URL | What it serves |
 | --- | --- |
 | `/mcp` | The MCP server of the app, through `mcpHandler` and `mcpHandshake` of `@acid-cat/core-ts`. Its Server Card is at `/mcp/server-card` |
-| `/api/` | The HTTP binding of the app: `GET /api/capabilities`, `POST /api/capabilities/{id}` and `GET /api/catalog`. `GET /api`, the anchor of the API Catalog, redirects to `/api/capabilities` |
+| `/api/` | The HTTP surface of the app: `GET /api/capabilities`, `POST /api/capabilities/{id}` and `GET /api/catalog`. `GET /api`, the anchor of the API Catalog, redirects to `/api/capabilities` |
 | Each page | WebMCP tools, through `installWebMcp` of `@acid-cat/core-ts`, in a browser with WebMCP. Chromium has WebMCP with `--enable-features=WebMCP` |
 | Each page, with `Accept: text/markdown` | The Markdown of the page, with `Content-Type: text/markdown` and `Vary: Accept`. A browser gets the HTML. Each page also has its Markdown at `<path>/index.md` |
 | Each page that exists | A `Link` header (RFC 8288) to the API Catalog, the catalog of the HTTP API, the Server Card, the docs, `llms.txt`, the agent skills, the sitemap and the Markdown of the page |

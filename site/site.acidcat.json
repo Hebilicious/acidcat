@@ -4,7 +4,7 @@
   "description": "Read the documentation, the specification and the packages of AcidCat.",
   "targets": {
     "agents": {
-      "bindings": [
+      "surfaces": [
         "http",
         "mcp",
         "webmcp"

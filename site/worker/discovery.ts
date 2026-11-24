@@ -43,12 +43,12 @@ export const apiCatalog = (origin: string): object => ({
     {
       anchor: `${origin}${API_BASE}`,
       "service-desc": [{ href: `${origin}${API_BASE}/catalog`, type: "application/json" }],
-      "service-doc": [{ href: `${origin}/spec/bindings/http/`, type: "text/html" }],
+      "service-doc": [{ href: `${origin}/spec/surfaces/http/`, type: "text/html" }],
     },
     {
       anchor: `${origin}${MCP_PATH}`,
       "service-desc": [{ href: `${origin}${SERVER_CARD_PATH}`, type: "application/mcp-server-card+json" }],
-      "service-doc": [{ href: `${origin}/spec/bindings/mcp/`, type: "text/html" }],
+      "service-doc": [{ href: `${origin}/spec/surfaces/mcp/`, type: "text/html" }],
     },
   ],
 });
