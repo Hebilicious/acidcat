@@ -381,3 +381,9 @@ starlight-tabs [role="tab"][aria-selected="true"] {
   border-color: var(--palette-acid-400);
   font-weight: var(--typography-weight-display-medium);
 }
+
+.sl-markdown-content .expressive-code,
+.sl-markdown-content starlight-tabs {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--spacing_fluid-space-3xl);
+}
