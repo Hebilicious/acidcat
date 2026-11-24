@@ -1,16 +1,18 @@
 # AcidCat site
 
-The homepage, the documentation, the specification and the list of packages of AcidCat. The site uses [Astro](https://astro.build) and [Starlight](https://starlight.astro.build). It is a Moon project, and it is not published to a registry.
+The homepage, the documentation, the specification and the list of packages of AcidCat. The site uses [VitePress](https://vitepress.dev) 2 with a theme of its own, written in Vue. It is a Moon project, and it is not published to a registry.
+
+A click on a link to another page of the site changes the page in the browser, with no new document: VitePress loads the page from a script, and it prefetches the pages that the links in view lead to, so the new page shows at once.
 
 ## Commands
 
 | Command | Use |
 | --- | --- |
-| `moon run site:dev` | Serve the site with live reload at `http://localhost:4321`, and write the design tokens again each time `cssforge.config.ts` changes |
+| `moon run site:dev` | Serve the site with live reload at `http://localhost:5173`, and write the design tokens again each time `cssforge.config.ts` changes |
 | `moon run site:tokens` | Write the design tokens from `cssforge.config.ts` into `.cssforge/output.css` |
 | `moon run site:tokens-check` | Check that `.cssforge/output.css` matches `cssforge.config.ts`. `site:test` runs it |
 | `moon run site:build` | Build the static site into `dist/` |
-| `moon run site:test` | Test the geometry of the logo, check that every design token in use exists, check that every file that an Examples page points to exists, drive the code explorer in Chromium (the tree, a file, a failed load, a deep link, the keyboard, wrapped lines and the phone layout), check that no Examples page copies a code block of the example README, render the homepage in Chromium at desktop and phone widths, check that Fig. 1 keeps its height while it loads, compare the image of each GPU renderer with WebGPU and with WebGL 2, and check that the homepage stays in its budget of bytes on a phone (images, fonts, scripts and HTML), with no texture of the hero on a software renderer and no renderer code before its figure is near. Check that each page loads only files with a hash in their name, that the homepage loads no stylesheet and preloads each of its scripts, that each page passes the accessibility rules of the Lighthouse audit "Accessibility tree is well-formed", that the homepage passes every rule of axe-core, and that the table of contents of the docs reads no layout when the page starts (`test/delivery.test.ts`). Check that the hero frames 960px as a phone, and, on a hardware GPU, that it keeps its animation after a resize across 960px. Call the [AcidCat app of the site](#agents) through the Worker, an MCP client, the HTTP API and WebMCP in Chromium |
+| `moon run site:test` | Test the geometry of the logo, check that every design token in use exists, check that every file that an Examples page points to exists, drive the code explorer in Chromium (the tree, a file, a failed load, a deep link, the keyboard, wrapped lines and the phone layout), check that no Examples page copies a code block of the example README, render the homepage in Chromium at desktop and phone widths, check that Fig. 1 keeps its height while it loads, compare the image of each GPU renderer with WebGPU and with WebGL 2, and check that the homepage stays in its budget of bytes on a phone (images, fonts, scripts and HTML), with no texture of the hero on a software renderer and no renderer code before its figure is near. Check that each page loads only files with a hash in their name, that the homepage loads no stylesheet and names each of its scripts in its head, that each page passes the accessibility rules of the Lighthouse audit "Accessibility tree is well-formed", that the homepage passes every rule of axe-core, and that the table of contents of the docs reads no layout when the page starts (`test/delivery.test.ts`). Check that a click on a link changes the page with no new document, and that the homepage stops its observers, its animation frames and its WebGL contexts when the reader leaves it, and starts them again when the reader comes back (`test/navigation.test.ts`). Check that the hero frames 960px as a phone, and, on a hardware GPU, that it keeps its animation after a resize across 960px. Call the [AcidCat app of the site](#agents) through the Worker, an MCP client, the HTTP API and WebMCP in Chromium |
 | `moon run site:catalog` | Write `site.acidcat.json`, the catalog of the AcidCat app of the site, from its code |
 | `moon run site:deploy` | Build the site, bundle the Worker, and deploy both to https://acidcat.hebilicious.workers.dev with the `cf` command. Set `CLOUDFLARE_ACCOUNT_ID` first |
 | `moon run site:preview` | Build the site and the Worker, and deploy them as a Worker Preview named after the Git branch, at `https://<branch>-acidcat.hebilicious.workers.dev`. Production does not change. Set `CLOUDFLARE_ACCOUNT_ID` first |
@@ -21,39 +23,48 @@ The homepage, the documentation, the specification and the list of packages of A
 
 [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) deploys the site when a commit reaches `main`. It is connected to the Worker `acidcat`, and it runs `bash site/scripts/cloudflare.sh build`, then `bash site/scripts/cloudflare.sh deploy`, from the root of the repository. The script installs proto, then Node, pnpm and Moon from `.prototools`, then the dependencies with `pnpm install --frozen-lockfile`, and runs `site:build` or `site:deploy`. Workers Builds gives `site:deploy` the account and the token. A build starts only when a commit changes a file that the build reads: `site/`, `spec/`, `schemas/`, `examples/`, `packages/`, `skills/`, the release files, and the files of the toolchain and the workspace.
 
-The Worker has code and assets. `cf` builds a project with a Worker entrypoint through the framework's own command, and Astro writes only static files. So `site:deploy` runs `astro build`, then `scripts/worker-output.ts`, which bundles `worker/index.ts` with esbuild and writes the [Build Output](https://developers.cloudflare.com/cf/projects/#deploy-a-prebuilt-build) in `.cloudflare/output/v1/`: the bundle, `dist/` as the assets, and the settings of `cloudflare.config.ts`. Then `cf deploy --prebuilt` uploads it. `site:preview` does the same with `cf previews deploy --prebuilt`.
+The Worker has code and assets. `cf` builds a project with a Worker entrypoint through the framework's own command, and VitePress writes only static files. So `site:deploy` runs `vitepress build`, then `scripts/worker-output.ts`, which bundles `worker/index.ts` with esbuild and writes the [Build Output](https://developers.cloudflare.com/cf/projects/#deploy-a-prebuilt-build) in `.cloudflare/output/v1/`: the bundle, `dist/` as the assets, and the settings of `cloudflare.config.ts`. Then `cf deploy --prebuilt` uploads it. `site:preview` does the same with `cf previews deploy --prebuilt`.
 
-The Worker runs first only for the paths in `workerPaths` of `cloudflare.config.ts`: the pages, `/mcp`, `/api` and the well-known documents that it writes. For a page, the Worker reads the file from the assets binding and adds the headers. It makes the MCP server and the HTTP API only when a request for them comes. Other files, such as `/_astro/*` and `/hero/*`, go to the assets directly.
+The Worker runs first only for the paths in `workerPaths` of `cloudflare.config.ts`: the pages, `/mcp`, `/api` and the well-known documents that it writes. For a page, the Worker reads the file from the assets binding and adds the headers. It makes the MCP server and the HTTP API only when a request for them comes. Other files, such as `/assets/*`, go to the assets directly.
 
 ## Structure
 
 | Path | Contents |
 | --- | --- |
-| `src/pages/index.astro` | The homepage. It does not use the Starlight layout |
-| `src/components/LivingPlate.astro` | The hero: the key art as a still image, and a canvas that brings it to life |
+| `.vitepress/config.ts` | The configuration of VitePress: the pages, the head of each page, the Markdown, the search and the steps after the build |
+| `.vitepress/theme/index.ts`, `src/theme/` | The theme. `Layout.vue` shows the homepage, or `DocsLayout.vue` for every other page: the header, the sidebar of the section, the content, the table of contents, the links to the next pages, "Edit page" and "Report issue". The theme has the look of the site and uses no CSS of the default theme of VitePress |
+| `src/theme/page-behaviors.ts`, `src/theme/tabs.ts` | Start the tabs and the code explorers of each page when its content is in the DOM, and stop them when it leaves |
+| `src/theme/active-heading.ts` | Marks the heading at the top of the content in the table of contents, with an `IntersectionObserver`, so the page reads no layout |
+| `src/theme/SearchButton.vue`, `src/styles/search.css` | The local search of VitePress, in the palette of the site. VitePress builds its index from each page; `searchRender` in `src/lib/markdown/setup.ts` gives it the pages of the specification and the packages |
+| `content/` | The pages. `content/index.md` is the homepage, `content/docs/` the documentation, `content/spec/[page].md` the pages of the specification, and `content/packages/index.md` the packages |
+| `src/components/HomePage.vue` | The homepage. It does not use the layout of the docs |
+| `src/components/LivingPlate.vue`, `src/lib/living-plate.ts` | The hero: the key art as a still image, and a canvas that brings it to life |
 | `src/lib/plate-renderer.ts`, `src/lib/plate-shader.ts` | The renderer of the hero and its shader |
 | `src/lib/gpu/` | A full-screen shader pass for the hero and the blue screens. It draws with WebGPU when the browser gives a hardware adapter, and with WebGL 2 otherwise. Each shader is written once, in a subset of GLSL ES 3.00 that `shader.ts` gives to WebGL 2 and `wgsl.ts` translates to WGSL, so both backends draw the same image |
-| `src/components/Schematic.astro` | Fig. 1: one capability of the catalog, and what each surface makes from it |
+| `src/components/Schematic.vue`, `src/lib/schematic.ts` | Fig. 1: one capability of the catalog, and what each surface makes from it |
 | `src/lib/holo.ts`, `src/lib/catalog-engine.ts`, `src/lib/engine-hardware.ts`, `src/lib/engine-finish.ts`, `src/lib/engine-shader.ts`, `src/lib/nixie-scene.ts` | Fig. 1 in 3D: worn brass screens, glass pipes and a rail of Nixie bulbs in three.js, with the HTML of each screen drawn by HTML-in-Canvas. The custom materials are TSL node materials |
-| `src/components/Blueprint.astro`, `src/components/Exploded.astro` | Fig. 2: an animated blueprint of the flow Spec, Catalog, Core and Verify, and the key specifications on a blue screen |
-| `src/components/Surfaces.astro`, `src/assets/surfaces/`, `art/surfaces/` | Fig. 3: the five surfaces in tabs, each with a render, an example and a gauge |
-| `src/components/CoreScreens.astro`, `src/lib/bluescreen.ts`, `src/lib/bluescreen-shader.ts` | Fig. 4: how to use each core, on a console drawn with HTML-in-Canvas |
-| `src/lib/snippets.ts`, `src/lib/highlight.ts` | Read the code examples from `examples/aircon` and the READMEs of the cores at build time. `highlight.ts` is the one Shiki highlighter of the site: it colors the code with the variables of `src/styles/code.css` |
+| `src/components/Blueprint.vue`, `src/components/Exploded.vue` | Fig. 2: an animated blueprint of the flow Spec, Catalog, Core and Verify, and the key specifications on a blue screen |
+| `src/components/Surfaces.vue`, `src/lib/surfaces.ts`, `src/lib/surface-tabs.ts`, `src/assets/surfaces/`, `art/surfaces/` | Fig. 3: the five surfaces in tabs, each with a render, an example and a gauge |
+| `src/components/CoreScreens.vue`, `src/lib/core-console.ts`, `src/lib/bluescreen.ts`, `src/lib/bluescreen-shader.ts` | Fig. 4: how to use each core, on a console drawn with HTML-in-Canvas |
+| `src/lib/home-code.ts`, `src/components/home.data.ts`, `src/components/home-code.data.ts`, `src/components/code-html.ts` | The code of the homepage figures. The data loaders read it at build time. The highlighted code is in the HTML that the server writes, and not in the JavaScript of the page: the directive `v-code-html` gives it to the server only, and Vue keeps the children of an element that has none in the browser. After a page change in the browser, the directive loads the code from its own chunk |
+| `src/lib/snippets.ts`, `src/lib/highlight.ts` | Read the code examples from `examples/aircon` and the READMEs of the cores at build time. `highlight.ts` is the Shiki highlighter of the homepage and the code explorer: it colors the code with the variables of `src/styles/code.css` |
 | `src/styles/code.css` | Maps the colors of the code to the palette |
-| `src/components/Mark.astro`, `src/assets/mark.svg`, `src/assets/favicon.svg`, `art/logo/` | The logo (a brass cat in profile), the favicon, and the explorations behind them |
+| `src/theme/Mark.vue`, `src/assets/mark.svg`, `src/assets/favicon.svg`, `art/logo/` | The logo (a brass cat in profile), the favicon, and the explorations behind them |
 | `src/lib/geometry.ts` | Pure functions that compute gears |
-| `src/content/docs/docs/` | The documentation, served under `/docs/` |
+| `src/lib/docs-sidebar.ts`, `src/lib/spec-pages.ts` | The sidebar of each section: the docs from the frontmatter of each page (`sidebar.order` and `sidebar.label`), and the specification in the order of its pages |
 | `src/lib/ecosystem.ts` | The one list of catalog languages and cores. Every page and component that shows them reads it, and the build fails when one has no example. `test/ecosystem.test.ts` fails when it disagrees with `packages/`, and when a page writes a count or a list of languages or cores by hand ("five languages") |
-| `src/content/docs/docs/examples/`, `src/components/docs/CodeExplorer.astro`, `src/components/docs/ExampleBlock.astro`, `src/lib/example-files.ts`, `src/lib/example-highlight.ts`, `src/lib/markdown-fences.ts`, `src/lib/code-explorer.ts`, `src/pages/example-files/` | The Examples section of the docs, and its code explorer. See [The examples](#the-examples) |
-| `src/lib/catalog-examples.ts`, `src/components/docs/` | Read each definition of the aircon catalog from its five sources and its canonical JSON at build time, and show them in language tabs; tabs for the package managers of Node |
-| `src/components/site/` | The header and the font preloads that the homepage and the docs share. Each page preloads only the faces that it uses, so the browser lays out the text once |
-| `src/components/site/InstantNavigation.astro` | Speculation rules in each page: when the reader points at a link to another page of the site, Chromium renders that page in the background, so a click shows it at once. Other browsers fetch the page on hover (`prefetch` in `astro.config.ts`). A page change has no animation |
-| `src/lib/external-links.ts` | Tells which links go to another website. A Markdown plugin in `astro.config.ts` opens them in a new tab, and `test/pages.test.ts` fails when a built page has an external link that does not |
-| `src/route-middleware.ts` | Gives `/docs/` and `/spec/` their own sidebar |
-| `src/lib/spec-diagrams.ts` | The SVG diagram that replaces the ASCII diagram of the specification |
-| `src/lib/spec-pages.ts`, `src/content.config.ts` | Load each file of `spec/` into the docs collection at build time, served under `/spec/` |
-| `src/pages/packages/index.astro`, `src/lib/packages.ts` | The list of published packages, served under `/packages/` |
-| `src/lib/code-theme.ts`, `src/styles/starlight.css`, `src/components/starlight/` | The palette of the site in the docs: colors, fonts, code blocks, and the dark theme only |
+| `src/lib/markdown/components.ts` | The components of the docs. A page writes each one like a Vue component, for example `<CatalogExample capability="aircon.power.set" />`, and it becomes Markdown before the page renders, so a missing file fails the build. They render static HTML: Vue keeps static HTML as one string, and VitePress leaves it out of the script that starts the page. See [The components of the docs](#the-components-of-the-docs) |
+| `src/lib/markdown/setup.ts` | Renders the components of the docs before each page, puts each code block in a frame (an editor tab with its file name, or a terminal), and gives the search the Markdown of each page |
+| `content/docs/examples/`, `src/lib/example-files.ts`, `src/lib/example-highlight.ts`, `src/lib/example-fragments.ts`, `src/lib/markdown-fences.ts`, `src/lib/code-explorer.ts`, `src/styles/explorer.css` | The Examples section of the docs, and its code explorer. See [The examples](#the-examples) |
+| `src/lib/catalog-examples.ts` | Read each definition of the aircon catalog from its five sources and its canonical JSON at build time, for the language tabs |
+| `src/lib/external-links.ts` | Tells which links go to another website. The Markdown opens them in a new tab, and `test/pages.test.ts` fails when a built page has an external link that does not |
+| `src/lib/spec-diagrams.ts`, `src/styles/diagrams.css` | The SVG diagram that replaces the ASCII diagram of the specification |
+| `src/lib/spec-pages.ts`, `content/spec/[page].paths.ts` | Load each file of `spec/` into a page of the dynamic route `content/spec/[page].md` at build time, served under `/spec/` |
+| `src/components/PackagesPage.vue`, `src/components/packages.data.ts`, `src/lib/packages.ts`, `src/lib/packages-page.ts`, `src/lib/package-groups.ts` | The list of published packages, served under `/packages/` |
+| `src/lib/code-theme.ts`, `src/styles/docs.css`, `src/styles/content.css` | The palette of the site in the docs: the layout, colors, fonts, code blocks, and the dark theme only |
+| `src/lib/page-head.ts`, `src/lib/social.ts` | The title, the canonical link and the Open Graph and Twitter cards of each page |
+| `src/lib/inline-styles.ts` | Writes the stylesheet of the site into each page after the build, so no stylesheet blocks the first render |
+| `src/lib/sitemap.ts` | Writes `/sitemap-index.xml` and `/sitemap-0.xml` |
 | `cloudflare.config.ts` | The Worker that serves the site: its name, its entrypoint, the paths that run the Worker first, the assets binding, and the 404 page for unknown paths |
 | `worker/index.ts`, `worker/discovery.ts` | The Worker. It serves the MCP server and the HTTP API of the AcidCat app, the well-known documents, Markdown to a client that asks for it, and the `Link` header of each page. Everything else comes from the assets |
 | `scripts/worker-output.ts` | Bundles the Worker, and writes the Build Output that `cf` uploads |
@@ -61,17 +72,15 @@ The Worker runs first only for the paths in `workerPaths` of `cloudflare.config.
 | `src/lib/agent/` | The AcidCat app of the site (`app.ts`), the content that it reads (`content.ts`), its WebMCP tools in the page (`page.ts`), the Markdown of the homepage (`home.md`), and the files for agents that the build writes (`files.ts`) |
 | `site.acidcat.json` | The catalog of the AcidCat app of the site. `site:catalog` writes it from `src/lib/agent/app.ts`, and `test/agent.test.ts` fails when it is stale |
 | `src/lib/page-markdown.ts` | Converts the HTML of a built page into Markdown: the content of the page, each panel of a tab group under the label of its tab, and each code block with its language |
-| `src/components/site/WebMcp.astro` | Loads the WebMCP tools in a browser that has `document.modelContext` or `navigator.modelContext`. Other browsers load none of their code |
+| `.vitepress/theme/index.ts` | Loads the WebMCP tools in a browser that has `document.modelContext` or `navigator.modelContext`. Other browsers load none of their code |
 | `public/robots.txt` | The crawl rules: every crawler, and each AI crawler by name, can read every page. It gives the Content Signals of the site and the sitemap |
-| `src/lib/table-of-contents.ts` | The table of contents of the docs. It takes the place of the element of Starlight, with the same markup and behavior, and reads the sizes of the header and of the viewport only after layout. A Vite plugin in `astro.config.ts` gives it to the components of Starlight |
-| `src/lib/module-preload.ts` | Adds a `modulepreload` link at the top of the head of each page for each script that the page loads at once, and for each module that the script imports |
 | `public/_redirects` | The permanent redirects of the Worker, from the old URLs of the specification and the docs to their new URLs. `test/pages.test.ts` fails when a redirect leads to no page |
-| `public/_headers` | The cache headers of the Worker. The files in `/_astro/` have a hash in their name, so the browser keeps them for a year. Each file that a page loads is in `/_astro/`: the images, the favicon and the fonts are imports, not files in `public/` |
+| `public/_headers` | The cache headers of the Worker. The files in `/assets/` have a hash in their name, so the browser keeps them for a year. Each file that a page loads is in `/assets/`: the images, the fonts and the search index are imports, not files in `public/` |
 | `cssforge.config.ts` | The design tokens: colors, fluid type and spacing scales, font families, tracking, radii and layout widths. [cssforge](https://github.com/Hebilicious/cssforge) writes them as CSS variables into `.cssforge/output.css`, which is committed |
-| `src/styles/tokens.css` | Imports the design tokens and the fonts that the homepage and the documentation share |
-| `src/lib/fonts.ts` | Splits each font face into a small core file and the rest at build time, and writes their `@font-face` rules into `.fonts/` |
+| `src/styles/site.css`, `src/styles/tokens.css` | The stylesheet of the site, and the design tokens and the fonts that the homepage and the documentation share |
+| `src/lib/fonts.ts` | Splits each font face into a small core file and the rest at build time, writes their `@font-face` rules into `.fonts/`, and gives each page a preload link for the faces that it draws first |
 | `src/assets/hero/`, `src/lib/plate-crop.ts` | The hero textures, and the columns of the key art that the phone plates keep. `art/pack.sh` writes the textures |
-| `src/lib/social.ts`, `public/og/`, `art/og/build.sh` | The Open Graph and Twitter card of each section (home, docs, spec, packages). `art/og/build.sh` writes the 1200 by 630 images from the key art, the logo and the Monaspace fonts; `test/pages.test.ts` fails when a page has no card |
+| `public/og/`, `art/og/build.sh` | The Open Graph and Twitter card of each section (home, docs, spec, packages). `art/og/build.sh` writes the 1200 by 630 images from the key art, the logo and the Monaspace fonts; `test/pages.test.ts` fails when a page has no card |
 | `art/` | The sources of the hero art, and the scripts that make the textures |
 
 ## Art direction
@@ -90,7 +99,7 @@ The art is futuristic steampunk: polished brass, copper and dark steel, with aci
 
 The CSS uses only the design tokens: colors (`--palette-*`, in OKLCH), sizes (`--typography_fluid-text-*`, `--typography_fluid-display-*`), spacing (`--spacing_fluid-space-*`), `--font-family-*`, `--font-tracking-*`, `--radius-size-*` and `--layout-*`. For transparency, it mixes a color with `transparent`: `color-mix(in oklch, var(--palette-acid-400) 40%, transparent)`.
 
-The fonts are from [Monaspace](https://monaspace.githubnext.com/): Xenon for headings, Radon for the accent words in headings, Argon for text, Krypton for labels and Neon for code. Texture healing (`calt`) is on. cssforge has no Vite plugin, so `site:dev` runs `cssforge --watch` next to Astro.
+The fonts are from [Monaspace](https://monaspace.githubnext.com/): Xenon for headings, Radon for the accent words in headings, Argon for text, Krypton for labels and Neon for code. Texture healing (`calt`) is on. cssforge has no Vite plugin, so `site:dev` runs `cssforge --watch` next to VitePress.
 
 `src/lib/fonts.ts` splits each face of Monaspace in two files when the build starts, and writes them with their `@font-face` rules into `.fonts/` (not in git). The core file has ASCII and the few other characters that the site uses, with all the OpenType features, at about half the size of the full face. The full face serves the other characters, with a `unicode-range`, so the browser downloads it only for a page that has one of them. `test/fonts.test.ts` fails when a page has a character outside the core: add it to `coreRanges`. It checks the text of each built page, and in Chromium it also checks the characters that the browser draws beside the text: list markers (a bullet is a character of the font), generated content, and the text that scripts write, such as the command key of the search button on macOS.
 
@@ -122,13 +131,15 @@ The renderer checks the GPU before it downloads the textures. It decodes each te
 
 ## Loading
 
-- **Styles.** Astro writes the CSS of each page into its HTML (`build.inlineStylesheets`), so no stylesheet blocks the first render. Expressive Code writes the styles of the code blocks into the page too (`emitExternalStylesheet: false`).
-- **Scripts.** `src/lib/module-preload.ts` adds a `modulepreload` link for each script that a page loads at once, and for each module that the script imports. The browser fetches them all together with the HTML, and not one after the other.
+- **Page changes.** VitePress changes the page in the browser. When a link comes into view, VitePress prefetches the script of its page at low priority, so a click shows the page at once. Each figure of the homepage starts its renderers, observers and animation frames when it mounts, and stops them, and frees its WebGL and WebGPU contexts, when it unmounts.
+- **Static content.** Vue keeps static HTML as one string, and VitePress leaves these strings out of the script that starts a page (the `.lean.js` file). So the components of the docs render static HTML, and the code of the homepage figures is only in the HTML. Vue keeps static HTML as one string only when each attribute is a known HTML attribute, and `role` is not one: the components write `data-role`, and the page sets `role` when it mounts.
+- **Styles.** `src/lib/inline-styles.ts` writes the one stylesheet of the site into each page after the build, so no stylesheet blocks the first render.
+- **Scripts.** The head of each page names each script that the page loads at once, as a script or a `modulepreload` link, so the browser fetches them all together with the HTML.
 - **Layout.** The sections under the hero, and the footer, have `content-visibility: auto`. The browser computes their style and their layout only when they come near the viewport, so the first layout of the page is short. Each section has an estimate of its height (`contain-intrinsic-size`), and the browser keeps its real height after the first layout. On a docs page, each code block and each group of tabs has `content-visibility: auto` too, because the code blocks hold most of the elements of the page.
 - **Fonts.** Each font stack ends with the generic `monospace` and names no local font. The browser looks up each local font that a stack names during the first layout, and on a system that does not have it, such as Linux with `ui-monospace`, `SFMono-Regular` or `Menlo`, the lookup makes the first layout several times longer.
 - **Raster.** A gradient that fades one color to transparent names `in srgb`. Between colors of CSS Color 4, a gradient interpolates in OKLab by default, and a software rasterizer draws that slowly. In sRGB, such a gradient gives the same pixels. A gradient between two hues keeps OKLab.
 - **Requests to other websites.** The number of stars on GitHub and the latest versions on the packages page load at low priority, so they do not take bandwidth from the page.
-- **Cache.** Each file that a page loads has a hash in its name, so the browser keeps it for a year. The files of the search index that have a hash in their name (`/pagefind/fragment/`, `/pagefind/index/` and the `.pf_meta` file) have the same lifetime.
+- **Cache.** Each file that a page loads has a hash in its name, so the browser keeps it for a year.
 
 ## The GPU renderers
 
@@ -145,7 +156,25 @@ Fig. 1, Fig. 2 and Fig. 4 start their renderer only when they come near the view
 
 ## The specification
 
-The site does not copy the specification. At build time, `spec-pages.ts` reads each Markdown file of `spec/`, takes the first heading as the title, and rewrites the links: a link to another file of `spec/` goes to its page under `/spec/`, and a link to any other file of the repository goes to GitHub. `content.config.ts` adds these pages to the Starlight docs collection, so they have the sidebar, the search and the table of contents. In `site:dev`, a change to `spec/` loads the pages again.
+The site does not copy the specification. At build time, `spec-pages.ts` reads each Markdown file of `spec/`, takes the first heading as the title, and rewrites the links: a link to another file of `spec/` goes to its page under `/spec/`, and a link to any other file of the repository goes to GitHub. `content/spec/[page].paths.ts` gives these pages to the dynamic route `content/spec/[page].md` of VitePress, so they have the sidebar, the search and the table of contents. In `site:dev`, a change to `spec/` loads the pages again.
+
+## The components of the docs
+
+A page of the docs is Markdown. `src/lib/markdown/components.ts` replaces each component of the docs with Markdown or static HTML before the page renders. A component that reads a file fails the build when the file does not exist.
+
+| Component | What it renders |
+| --- | --- |
+| `<CatalogExample capability="…" />` | One definition of the aircon catalog in each catalog language and in JSON, in language tabs. `target`, `type` and `event` choose other entries |
+| `<EcosystemTable of="cores" />`, `<EcosystemInstall of="…" />` | The table and the install steps of the catalog languages or the cores of `ecosystem.ts` |
+| `<EcosystemTabs of="cores">` | One tab for each entry of `ecosystem.ts`. The page writes the content of each tab in `<TabItem for="core-ts">`, and the build fails when one is missing |
+| `<Tabs sync-key="…">` with `<TabItem label="…">` | Tabs written by hand. Groups with the same sync key change together, and the browser keeps the choice for the next pages |
+| `<PackageInstall packages="…" dev />`, `<PackageRun command="…" />` | The commands for pnpm, npm, yarn and bun, in tabs |
+| `<CodeExplorer open="…" />`, `<FileLink file="…" />`, `<ExampleBlock section="…" />`, `<CatalogSources />`, `<CoreExamples />` | The code explorer and the commands of the examples. See [The examples](#the-examples) |
+| `<CatalogSteps />`, `<CatalogWrite />`, `<CoreGuides />`, `<OwnCore />`, `<CatalogFlow />` | The steps of each catalog library, the commands that write the JSON, the links to the guides of the cores, how to write your own core, and the diagram of the catalog |
+| `<CardGrid>`, `<LinkCard title="…" href="…" />`, `<Steps>` | Cards and numbered steps |
+| `::: note`, `::: tip`, `::: caution`, `::: danger` | An aside. A word after the type is its title |
+
+A code block with `title="file.ts"` after its language shows the file name in an editor tab. A shell code block shows as a terminal.
 
 ## The examples
 
@@ -154,10 +183,10 @@ The Examples section of the docs has one page for each program of `examples/` th
 The site does not copy the code or the commands of the examples. At build time, `example-files.ts` lists the files of each directory of `examples/` with `git ls-files --cached --others --exclude-standard`, so it leaves out what the `.gitignore` files leave out: dependencies, build output and the `target/` directories of Cargo. It also leaves out lock files. A new file or a new example appears in the explorer without a change to the docs. The build needs git.
 
 - `<CodeExplorer open="core-ts/aircon.ts" />` shows the tree of `examples/aircon` and opens one file. `<FileLink file="core-ts/cli.ts" />` links to a file in the explorer of the page. The build fails when either one points to a file that does not exist.
-- `CatalogSources.astro` lists the catalog source of each language of `ecosystem.ts`, and `CoreExamples.astro` links to the page of each core. The build fails when a core has no page, and `test/examples.test.ts` fails when the page of a core does not open a file of its example.
+- `<CatalogSources />` lists the catalog source of each language of `ecosystem.ts`, and `<CoreExamples />` links to the page of each core. The build fails when a core has no page, and `test/examples.test.ts` fails when the page of a core does not open a file of its example.
 - `<ExampleBlock section="Run an API" match="apis/main.ts" />` shows a code block of the README of the example. It takes the blocks under that heading, and keeps the commands that contain `match`; `language` chooses one block. `markdown-fences.ts` reads the blocks. The build fails when the heading or the match is not in the README, and `test/examples.test.ts` fails when a page copies a line of a code block of the README.
-- `example-highlight.ts` highlights each file with `highlight.ts`, the one Shiki highlighter of the site. The page holds the highlighted HTML of the file that it opens. `src/pages/example-files/` writes the HTML of every other file into `/example-files/<example>/<path>.json`, and the explorer loads one only when the reader selects it.
-- `code-explorer.ts` is the script of the explorer, with no framework. The tree follows the [WAI-ARIA tree pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/): the arrow keys, Home, End, Enter and Space. When the tree gets the focus again, the focus goes to the selected file. The selected file is in the URL (`#file=core-ts/aircon.ts`), so a reload or a shared link opens it. A file that fails to load loads again when the reader selects it again. Long lines wrap, as in each code block of the site, and the wrapped rows start under the code. A button hides the tree, and another button shows the explorer in full screen. Below 50rem, the tree is a drawer over the code, and it closes when the reader selects a file.
+- `example-highlight.ts` highlights each file with `highlight.ts`. The page holds the highlighted HTML of the file that it opens. `example-fragments.ts` writes the HTML of every file, after the build, into `/example-files/<example>/<path>.json`, and the explorer loads one only when the reader selects it.
+- `code-explorer.ts` is the script of the explorer, with no framework. `src/theme/page-behaviors.ts` starts it when the page mounts, and stops it when the page leaves. The tree follows the [WAI-ARIA tree pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/): the arrow keys, Home, End, Enter and Space. When the tree gets the focus again, the focus goes to the selected file. The selected file is in the URL (`#file=core-ts/aircon.ts`), so a reload or a shared link opens it. A file that fails to load loads again when the reader selects it again. Long lines wrap, as in each code block of the site, and the wrapped rows start under the code. A button hides the tree, and another button shows the explorer in full screen. Below 50rem, the tree is a drawer over the code, and it closes when the reader selects a file.
 
 ## The packages
 
@@ -202,7 +231,7 @@ The capabilities read `/content.json`, which the build writes: each page with it
 | `/.well-known/ai-catalog.json` | The AI Catalog of Agentic Resource Discovery: the MCP server and the agent skill. The identifier of the host is the origin of the site. The type of the skill is `application/gzip`, the media type that the Agent Skills Discovery RFC gives to a `.tar.gz` archive |
 | `/.well-known/agent-skills/index.json` | The Agent Skills Discovery index (0.2.0). It lists the skill `skills/acid-cat` of the repository as a `.tar.gz` archive, with its SHA-256 digest. The build makes the archive from the files of the skill |
 
-`src/lib/agent/files.ts` writes the Markdown of each page, `/content.json`, `llms.txt`, `llms-full.txt` and the agent skills after `astro build`. The Markdown of each page comes from its built HTML, so the components of the docs, such as the language tabs, keep their content. The homepage has its own Markdown, `src/lib/agent/home.md`.
+`src/lib/agent/files.ts` writes the Markdown of each page, `/content.json`, `llms.txt`, `llms-full.txt` and the agent skills after `vitepress build`. The Markdown of each page comes from its built HTML, so the components of the docs, such as the language tabs, keep their content. The homepage has its own Markdown, `src/lib/agent/home.md`.
 
 ## Roadmap
 
