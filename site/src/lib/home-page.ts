@@ -15,7 +15,7 @@ export const showStarCount = (badge: HTMLElement, signal: AbortSignal): void => 
     .catch(() => undefined);
 };
 
-/** Fades each section of the homepage in when it comes into view. */
+/** Fades each section under `root` in when it comes into view. A section that another call already fades keeps its observer. */
 export const revealSections = (root: HTMLElement, signal: AbortSignal): void => {
   const reveal = new IntersectionObserver(
     (entries) => {
@@ -27,7 +27,7 @@ export const revealSections = (root: HTMLElement, signal: AbortSignal): void => 
     },
     { threshold: 0.15 },
   );
-  for (const element of root.querySelectorAll(".section-head, .surface, .machine:not([drawable]), .blueprint, .spec-sheet")) {
+  for (const element of root.querySelectorAll(".section-head:not(.will-reveal), .surface:not(.will-reveal), .machine:not([drawable], .will-reveal), .blueprint:not(.will-reveal), .spec-sheet:not(.will-reveal)")) {
     element.classList.add("will-reveal");
     reveal.observe(element);
   }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 import { onNear } from "../lib/gpu/support.ts";
+import { revealSections } from "../lib/home-page.ts";
 import { mountSurfaceTabs } from "../lib/surface-tabs.ts";
 import { surfaceSlot } from "../lib/home-slots.ts";
 import { vCodeHtml } from "./code-html.ts";
@@ -17,7 +18,9 @@ const root = ref<HTMLElement>();
 const lifetime = new AbortController();
 onMounted(() => {
   const element = root.value;
-  if (element !== undefined) onNear(element, lifetime.signal, () => mountSurfaceTabs(element, lifetime.signal));
+  if (element === undefined) return;
+  revealSections(element, lifetime.signal);
+  onNear(element, lifetime.signal, () => mountSurfaceTabs(element, lifetime.signal));
 });
 onUnmounted(() => lifetime.abort());
 </script>

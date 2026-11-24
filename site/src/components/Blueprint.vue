@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref } from "vue";
 import { createBluescreen, supportsHtmlInCanvas } from "../lib/bluescreen.ts";
 import { onNear } from "../lib/gpu/support.ts";
+import { revealSections } from "../lib/home-page.ts";
 import Exploded from "./Exploded.vue";
 
 const specs = [
@@ -13,9 +14,11 @@ const specs = [
   ["Cores", "Effect · TypeScript · Rust"],
 ];
 
+const root = ref<HTMLElement>();
 const sheet = ref<HTMLElement>();
 const lifetime = new AbortController();
 onMounted(() => {
+  if (root.value !== undefined) revealSections(root.value, lifetime.signal);
   const panel = sheet.value;
   if (panel === undefined || !supportsHtmlInCanvas()) return;
   const motion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -34,7 +37,7 @@ onUnmounted(() => lifetime.abort());
 </script>
 
 <template>
-  <div class="blueprint-row">
+  <div ref="root" class="blueprint-row">
     <div class="blueprint">
       <p class="blueprint-label">Exploded drawing</p>
       <Exploded />

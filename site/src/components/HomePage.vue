@@ -4,11 +4,13 @@ import { isExternal } from "../lib/external-links.ts";
 import { revealSections, showStarCount } from "../lib/home-page.ts";
 import Mark from "../theme/Mark.vue";
 import SiteNav from "../theme/SiteNav.vue";
-import Blueprint from "./Blueprint.vue";
-import CoreScreens from "./CoreScreens.vue";
 import LivingPlate from "./LivingPlate.vue";
-import Schematic from "./Schematic.vue";
-import Surfaces from "./Surfaces.vue";
+import { nearFigure } from "./near-figure.ts";
+
+const Schematic = nearFigure(() => import("./Schematic.vue"));
+const Blueprint = nearFigure(() => import("./Blueprint.vue"));
+const Surfaces = nearFigure(() => import("./Surfaces.vue"));
+const CoreScreens = nearFigure(() => import("./CoreScreens.vue"));
 
 const repository = "https://github.com/Hebilicious/acidcat";
 const footerColumns = [
