@@ -13,7 +13,7 @@ case "${1:-build}" in
 esac
 
 export PROTO_HOME="${PROTO_HOME:-$HOME/.proto}"
-export PATH="$PROTO_HOME/bin:$PROTO_HOME/shims:$PATH"
+export PATH="$PROTO_HOME/shims:$PROTO_HOME/bin:$PATH"
 
 if ! command -v proto >/dev/null 2>&1; then
   curl --fail --location --silent --show-error https://moonrepo.dev/install/proto.sh \
