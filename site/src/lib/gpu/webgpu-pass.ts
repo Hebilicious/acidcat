@@ -1,18 +1,10 @@
 import type { Pass, PassOptions, UniformValues } from "./pass.ts";
+import { bufferUsage, canDrawElements, textureUsage } from "./support.ts";
 import { toWgsl, uniformSlots } from "./wgsl.ts";
 import type { ShaderSource } from "./shader.ts";
 
-interface ElementDrawingQueue extends GPUQueue {
-  drawElementImageToTexture: (source: { source: Element }, destination: { texture: GPUTexture; premultipliedAlpha: boolean }) => void;
-}
-
-const canDrawElements = (queue: GPUQueue): queue is ElementDrawingQueue => typeof Reflect.get(queue, "drawElementImageToTexture") === "function";
-
 const format = "rgba8unorm";
 
-// lib.dom does not declare GPUBufferUsage and GPUTextureUsage. These are their values in the WebGPU specification.
-const bufferUsage = { copyDst: 0x8, uniform: 0x40 } as const;
-const textureUsage = { copyDst: 0x2, textureBinding: 0x4, renderAttachment: 0x10 } as const;
 
 const downsample = `
 @group(0) @binding(0) var source: texture_2d<f32>;

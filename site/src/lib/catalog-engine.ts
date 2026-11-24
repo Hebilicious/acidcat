@@ -2,6 +2,7 @@ import { BufferGeometry, DirectionalLight, ExternalTexture, FogExp2, InstancedMe
 import type * as Three from "three/webgpu";
 import { abs, cos, dot, exp, float, fract, max, mix, screenCoordinate, sin, smoothstep, texture, uniform, uv, vec2, vec3 } from "three/tsl";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { canDrawElements, hasElementTextures, textureUsage } from "./gpu/support.js";
 import type { DrawableCanvas } from "./gpu/support.js";
 import { tubeBank } from "./nixie-scene.js";
 import { hardware } from "./engine-hardware.js";
@@ -14,20 +15,6 @@ export interface MachineOptions {
   /** Renders one frame each time the content or the pointer changes, with no animation and a still camera. */
   readonly still: boolean;
 }
-
-interface ElementDrawingQueue extends GPUQueue {
-  drawElementImageToTexture: (source: { source: Element }, destination: { texture: GPUTexture; premultipliedAlpha: boolean }) => void;
-}
-
-interface ElementTextureContext extends WebGL2RenderingContext {
-  texElementSubImage2D: (target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, element: Element) => void;
-}
-
-const canDrawElements = (queue: GPUQueue): queue is ElementDrawingQueue => typeof Reflect.get(queue, "drawElementImageToTexture") === "function";
-const hasElementTextures = (gl: WebGL2RenderingContext): gl is ElementTextureContext => typeof Reflect.get(gl, "texElementSubImage2D") === "function";
-
-// lib.dom does not declare GPUTextureUsage. These are its values in the WebGPU specification.
-const textureUsage = { copyDst: 0x2, textureBinding: 0x4, renderAttachment: 0x10 } as const;
 
 interface ScreenTexture {
   readonly sample: (at: Three.Node<"vec2">) => Three.TextureNode;

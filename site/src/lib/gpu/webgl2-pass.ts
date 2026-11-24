@@ -1,13 +1,7 @@
 import type { Pass, PassOptions, UniformValues } from "./pass.ts";
-import { pause } from "./support.ts";
+import { hasElementTextures, pause } from "./support.ts";
 import { glslVertex, toGlsl } from "./shader.ts";
 import type { ShaderSource } from "./shader.ts";
-
-interface ElementTextureContext extends WebGL2RenderingContext {
-  texElementSubImage2D: (target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, element: Element) => void;
-}
-
-const hasElementTextures = (gl: WebGL2RenderingContext): gl is ElementTextureContext => typeof Reflect.get(gl, "texElementSubImage2D") === "function";
 
 const compile = (gl: WebGL2RenderingContext, type: GLenum, source: string): WebGLShader => {
   const shader = gl.createShader(type);

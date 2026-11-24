@@ -7,6 +7,17 @@ export interface DrawableCanvas extends HTMLCanvasElement {
 export const isDrawableCanvas = (canvas: HTMLCanvasElement): canvas is DrawableCanvas =>
   ["requestPaint", "updateElementGeometry", "getElementImageDefaultSize"].every((name) => typeof Reflect.get(canvas, name) === "function");
 
+export interface ElementDrawingQueue extends GPUQueue {
+  drawElementImageToTexture: (source: { source: Element }, destination: { texture: GPUTexture; premultipliedAlpha: boolean }) => void;
+}
+
+export interface ElementTextureContext extends WebGL2RenderingContext {
+  texElementSubImage2D: (target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, element: Element) => void;
+}
+
+export const canDrawElements = (queue: GPUQueue): queue is ElementDrawingQueue => typeof Reflect.get(queue, "drawElementImageToTexture") === "function";
+export const hasElementTextures = (gl: WebGL2RenderingContext): gl is ElementTextureContext => typeof Reflect.get(gl, "texElementSubImage2D") === "function";
+
 export const softwareRenderer = /swiftshader|llvmpipe|softpipe|software/i;
 
 export const supportsWebgl2Elements = (): boolean =>
@@ -35,8 +46,8 @@ export const whenNear = (element: Element): Promise<void> =>
   });
 
 // lib.dom does not declare GPUBufferUsage, GPUTextureUsage and GPUMapMode. These are their values in the WebGPU specification.
-const bufferUsage = { mapRead: 0x1, copyDst: 0x8 } as const;
-const textureUsage = { copySrc: 0x1, renderAttachment: 0x10 } as const;
+export const bufferUsage = { mapRead: 0x1, copyDst: 0x8, uniform: 0x40 } as const;
+export const textureUsage = { copySrc: 0x1, copyDst: 0x2, textureBinding: 0x4, renderAttachment: 0x10 } as const;
 const mapRead = 0x1;
 
 /**
@@ -61,7 +72,7 @@ const drawsPixels = async (device: GPUDevice): Promise<boolean> => {
 
 const newDevice = async (): Promise<GPUDevice | undefined> => {
   const gpu: unknown = Reflect.get(navigator, "gpu");
-  if (!(gpu instanceof GPU)) return undefined;
+  if (typeof GPU === "undefined" || !(gpu instanceof GPU)) return undefined;
   const adapter = await gpu.requestAdapter({ powerPreference: "low-power" }).catch(() => null);
   if (adapter === null || adapter.info.isFallbackAdapter || softwareRenderer.test(adapter.info.description)) return undefined;
   return adapter.requestDevice().catch(() => undefined);
