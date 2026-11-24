@@ -2,13 +2,15 @@ import { satteri } from "@astrojs/markdown-satteri";
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 import { fileURLToPath } from "node:url";
+import { agentFiles } from "./src/lib/agent/files.ts";
 import { codeTheme } from "./src/lib/code-theme.ts";
 import { isExternal } from "./src/lib/external-links.ts";
 import { fontSubsets } from "./src/lib/fonts.ts";
 import { modulePreload } from "./src/lib/module-preload.ts";
 import { specSidebar } from "./src/lib/spec-pages.ts";
 
-const specItems = await specSidebar(fileURLToPath(new URL("..", import.meta.url)));
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
+const specItems = await specSidebar(repositoryRoot);
 const tableOfContents = fileURLToPath(new URL("src/lib/table-of-contents.ts", import.meta.url));
 
 export default defineConfig({
@@ -44,6 +46,7 @@ export default defineConfig({
   integrations: [
     fontSubsets(fileURLToPath(new URL(".fonts", import.meta.url))),
     modulePreload(),
+    agentFiles(repositoryRoot),
     starlight({
       title: "AcidCat",
       description: "Describe what your application can do once. Serve it as a CLI, an MCP server, an HTTP API and typed client code.",

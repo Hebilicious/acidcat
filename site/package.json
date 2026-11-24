@@ -11,6 +11,7 @@
     "preview": "astro preview"
   },
   "dependencies": {
+    "@acid-cat/core-ts": "workspace:*",
     "@astrojs/markdown-satteri": "catalog:",
     "@astrojs/starlight": "catalog:",
     "@fontsource/monaspace-argon": "catalog:",
@@ -19,18 +20,28 @@
     "@fontsource/monaspace-radon": "catalog:",
     "@fontsource/monaspace-xenon": "catalog:",
     "astro": "catalog:",
+    "hast-util-from-html": "catalog:",
+    "hast-util-to-mdast": "catalog:",
+    "mdast-util-gfm": "catalog:",
+    "mdast-util-to-markdown": "catalog:",
     "sharp": "catalog:",
     "shiki": "catalog:",
     "subset-font": "catalog:",
-    "three": "catalog:"
+    "three": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@acid-cat/cli": "workspace:*",
     "@hebilicious/cssforge": "catalog:",
+    "@modelcontextprotocol/client": "catalog:",
+    "@types/hast": "catalog:",
+    "@types/mdast": "catalog:",
     "@types/node": "catalog:",
     "@types/subset-font": "catalog:",
     "@types/three": "catalog:",
     "axe-core": "catalog:",
     "cf": "catalog:",
+    "esbuild": "catalog:",
     "playwright": "catalog:",
     "typescript": "catalog:"
   }
