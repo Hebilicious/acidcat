@@ -270,7 +270,13 @@ export async function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gp
     if (hovered !== id) document.dispatchEvent(new CustomEvent("acidcat:surface", { detail: id }));
   }
 
-  host.addEventListener("languagechange", () => canvas.requestPaint(), listen);
+  const catalogScreen = screens[0]?.element;
+  const fitCatalog = () => {
+    if (catalogScreen) fitToHeight(catalogScreen);
+    canvas.requestPaint();
+  };
+  host.addEventListener("languagechange", fitCatalog, listen);
+  void document.fonts.ready.then(() => events.signal.aborted || fitCatalog());
   document.addEventListener("acidcat:surface", event => {
     hovered = event instanceof CustomEvent && typeof event.detail === "string" ? event.detail : null;
     if (still) schedule();
@@ -322,7 +328,7 @@ export async function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gp
   renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
   update(performance.now());
   renderer.render(scene, camera);
-  canvas.requestPaint();
+  fitCatalog();
 
   function restore() {
     if (events.signal.aborted) return;
@@ -359,4 +365,17 @@ export async function buildMachine(host: HTMLElement, canvas: DrawableCanvas, gp
   }
   renderer.onDeviceLost = restore;
   return restore;
+}
+
+const smallestCodeScale = 0.6;
+
+function fitToHeight(screen: HTMLElement) {
+  const code = [...screen.querySelectorAll<HTMLElement>(".catalog-code")].find(element => element.offsetParent !== null);
+  if (!code) return;
+  let scale = 1;
+  code.style.zoom = "";
+  while (screen.scrollHeight > screen.clientHeight && scale > smallestCodeScale) {
+    scale -= 0.05;
+    code.style.zoom = String(scale);
+  }
 }

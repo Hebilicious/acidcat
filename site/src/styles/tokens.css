@@ -4,6 +4,7 @@
 
 :root {
   font-feature-settings: "calt" 1, "liga" 1;
+  -webkit-tap-highlight-color: transparent;
 }
 
 @view-transition {

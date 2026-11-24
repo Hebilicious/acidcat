@@ -46,6 +46,9 @@ for (const viewport of [
 
     assert.deepEqual(errors, []);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), viewport.width);
+    assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("-webkit-tap-highlight-color")), "rgba(0, 0, 0, 0)", "a tap does not flash the color of the browser");
+    const wide = await page.locator(".console-code").evaluateAll((blocks) => blocks.filter((block) => block.scrollWidth > block.clientWidth + 1).length);
+    assert.equal(wide, 0, "the code of Fig. 4 wraps, with no sideways scroll");
     await page.locator("[data-plate] canvas").waitFor({ state: "detached", timeout: 10000 });
     const still = await page.locator("[data-plate] img").boundingBox();
     assert.ok(still !== null && still.width >= viewport.width - 1, "with a software renderer, the still image fills the hero");

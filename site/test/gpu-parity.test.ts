@@ -223,3 +223,27 @@ test("the hero keeps its animation after a resize across 960px", async (t) => {
   await page.close();
   assert.deepEqual(errors, []);
 });
+
+test("the code of each language fits the catalog screen of Fig. 1, wide and tall", async (t) => {
+  if (browser === undefined || server === undefined) throw new Error("No browser.");
+  const missing = await hardwareProblem();
+  if (missing !== undefined) {
+    t.skip(`This machine has no hardware GPU: ${missing}`);
+    return;
+  }
+  for (const width of [390, 1440]) {
+    const page = await openPage(browser, { viewport: { width, height: 900 } });
+    await page.goto(`${server.origin}/`);
+    await page.locator(".engine-stage").evaluate((element) => element.scrollIntoView({ block: "center" }));
+    await page.waitForFunction(() => document.querySelector<HTMLElement>(".engine-stage")?.dataset["engine"] === "live", undefined, { timeout: 20000 });
+    for (const language of await page.locator("button[data-language]").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("data-language") ?? ""))) {
+      const overflow = await page.evaluate((id) => {
+        document.querySelector<HTMLButtonElement>(`button[data-language="${id}"]`)?.click();
+        const screen = document.querySelector<HTMLElement>("[data-catalog-screen]");
+        return screen === null ? -1 : screen.scrollHeight - screen.clientHeight;
+      }, language);
+      assert.ok(overflow === 0, `at ${width}px, the ${language} code overflows the catalog screen by ${overflow}px`);
+    }
+    await page.close();
+  }
+});
