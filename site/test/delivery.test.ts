@@ -113,3 +113,63 @@ test("the accessibility tree of each page passes the rules that agents rely on",
     }
   }
 });
+
+test("the table of contents reads no layout when a docs page starts, and marks the heading at the top", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  for (const viewport of viewports) {
+    const page = await openPage(browser, { viewport });
+    await page.addInitScript(() => {
+      const reads: string[] = [];
+      Reflect.set(window, "layoutReads", reads);
+      let observing = 0;
+      const NativeObserver = window.ResizeObserver;
+      window.ResizeObserver = class extends NativeObserver {
+        constructor(callback: ResizeObserverCallback) {
+          super((entries, observer) => {
+            observing += 1;
+            try {
+              callback(entries, observer);
+            } finally {
+              observing -= 1;
+            }
+          });
+        }
+      };
+      const read: unknown = Reflect.get(Element.prototype, "getBoundingClientRect");
+      if (typeof read !== "function") throw new Error("No getBoundingClientRect.");
+      Object.defineProperty(Element.prototype, "getBoundingClientRect", {
+        value(this: Element): DOMRect {
+          if (observing === 0) reads.push(new Error().stack ?? "");
+          const rect: unknown = Reflect.apply(read, this, []);
+          if (!(rect instanceof DOMRect)) throw new Error("getBoundingClientRect gave no DOMRect.");
+          return rect;
+        },
+      });
+    });
+    await page.goto(`${origin}/docs/quick-start/`, { waitUntil: "networkidle" });
+    await page.evaluate(() => new Promise<void>((resolve) => requestIdleCallback(() => resolve())));
+    const reads = await page.evaluate((): unknown => Reflect.get(window, "layoutReads"));
+    assert.deepEqual(reads, [], `at ${viewport.width}px`);
+
+    const toc = viewport === phone ? "mobile-starlight-toc" : "starlight-toc";
+    const target = await page.locator(`${toc} a`).nth(2).getAttribute("href");
+    if (target === null) throw new Error("The table of contents has no third link.");
+    await page.locator(target).evaluate((heading) => heading.scrollIntoView({ block: "start" }));
+    await page.locator(`${toc} a[aria-current="true"][href="${target}"]`).waitFor({ state: "attached" });
+    await page.close();
+  }
+});
+
+test("the homepage passes every rule of axe-core, the experimental rules too", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  const axe = await readFile(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
+  const everyRule = `axe.run(document, { runOnly: { type: "rule", values: axe.getRules().map((rule) => rule.ruleId) } }).then((result) => result.violations.map((violation) => violation.id + ": " + violation.nodes.map((node) => node.target.join(" ")).join(", ")))`;
+  for (const viewport of viewports) {
+    const page = await openPage(browser, { viewport });
+    await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+    await page.addScriptTag({ content: axe });
+    const violations: unknown = await page.evaluate(everyRule);
+    await page.close();
+    assert.deepEqual(violations, [], `at ${viewport.width}px`);
+  }
+});

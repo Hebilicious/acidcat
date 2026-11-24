@@ -9,10 +9,20 @@ import { modulePreload } from "./src/lib/module-preload.ts";
 import { specSidebar } from "./src/lib/spec-pages.ts";
 
 const specItems = await specSidebar(fileURLToPath(new URL("..", import.meta.url)));
+const tableOfContents = fileURLToPath(new URL("src/lib/table-of-contents.ts", import.meta.url));
 
 export default defineConfig({
   site: "https://acidcat.hebilicious.workers.dev",
   build: { inlineStylesheets: "always" },
+  vite: {
+    plugins: [
+      {
+        name: "acidcat-table-of-contents",
+        enforce: "pre",
+        resolveId: (source) => (/\/TableOfContents\/starlight-toc(\.[jt]s)?$/.test(source) ? tableOfContents : null),
+      },
+    ],
+  },
   markdown: {
     processor: satteri({
       hastPlugins: [
@@ -51,6 +61,7 @@ export default defineConfig({
       editLink: { baseUrl: "https://github.com/Hebilicious/acidcat/edit/main/site/" },
       pagination: true,
       expressiveCode: {
+        emitExternalStylesheet: false,
         themes: [codeTheme],
         defaultProps: { wrap: true, preserveIndent: true },
         useStarlightDarkModeSwitch: false,
