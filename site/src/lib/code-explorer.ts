@@ -20,7 +20,7 @@ const parentItem = (item: HTMLElement): HTMLElement | null => item.parentElement
 
 const isFolder = (item: HTMLElement): boolean => item.hasAttribute("aria-expanded");
 
-export const initExplorer = (root: HTMLElement): void => {
+export const initExplorer = (root: HTMLElement, signal: AbortSignal): void => {
   const tree = root.querySelector<HTMLElement>("[data-tree]");
   const source = root.querySelector<HTMLElement>("[data-source]");
   const path = root.querySelector<HTMLElement>("[data-current-path]");
@@ -172,7 +172,7 @@ export const initExplorer = (root: HTMLElement): void => {
     root.toggleAttribute("data-expanded");
     fullscreen.setAttribute("aria-pressed", String(expanded()));
   });
-  document.addEventListener("fullscreenchange", () => fullscreen.setAttribute("aria-pressed", String(expanded())));
+  document.addEventListener("fullscreenchange", () => fullscreen.setAttribute("aria-pressed", String(expanded())), { signal });
   root.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && root.hasAttribute("data-expanded")) {
       root.removeAttribute("data-expanded");
@@ -182,7 +182,9 @@ export const initExplorer = (root: HTMLElement): void => {
   });
 
   treeToggle.setAttribute("aria-expanded", String(!narrow()));
-  root.dataset["current"] = root.dataset["open"] ?? "";
+  const open = root.dataset["open"] ?? "";
+  root.dataset["current"] = source.childElementCount > 0 ? open : "";
+  if (source.childElementCount === 0) void select(open, { focus: false, updateHash: false });
 
   const fromHash = (scroll: boolean): void => {
     const file = fileFromHash(location.hash);
@@ -191,5 +193,5 @@ export const initExplorer = (root: HTMLElement): void => {
     if (scroll) root.scrollIntoView({ block: "nearest" });
   };
   fromHash(false);
-  addEventListener("hashchange", () => fromHash(true));
+  addEventListener("hashchange", () => fromHash(true), { signal });
 };

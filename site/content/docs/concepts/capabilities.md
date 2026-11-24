@@ -1,0 +1,74 @@
+---
+title: Capabilities
+description: A capability is one operation that a client can do. It declares its input, its output, its failures, its hints and its audience.
+sidebar:
+  order: 12
+---
+
+A **capability** is one operation that a client can do, for example `aircon.power.set`. One call to a capability is an **invocation**: an id and an input go in, and one outcome comes out.
+
+## Anatomy of a capability
+
+This is `aircon.mode.set` from the air conditioner, in each source and in the JSON that each source writes:
+
+<CatalogExample capability="aircon.mode.set" />
+
+| Member | What it gives |
+| --- | --- |
+| `description` | What the capability does, in one sentence, for people and for agents. Required |
+| `audience` | The targets that can use the capability |
+| `input` | The schema of the input. It is an object. With no input schema, the input is an empty object |
+| `output` | The schema of the value of a successful call. With no output schema, the value is `null` |
+| `failures` | The failures that the capability can return, by tag |
+| `readOnly`, `destructive`, `idempotent` | Hints for clients |
+| `state` | The schema of a value that clients can observe |
+
+## Input
+
+The input is always a JSON object. The core validates each input against the schema before the operation starts. An input that does not match fails with the call failure `invalid-input`, and the operation does not run.
+
+Put each limit in the schema, for example `"minimum": 16` and `"maximum": 31` for a temperature. Then the catalog, the agents and the validation agree.
+
+An input never contains identity data, credentials or tokens. The session holds the identity of the client.
+
+## Outcomes and failures
+
+Each call ends one time, with one of three outcomes:
+
+| Outcome | Meaning | JSON form |
+| --- | --- | --- |
+| Value | The capability did the operation | `{ "ok": true, "value": <output> }` |
+| Failure | The capability did not do the operation, for a reason in its `failures` | `{ "ok": false, "error": <failure> }` |
+| Call failure | The call did not give a result | `{ "kind": <kind>, "message": <text> }` |
+
+A **failure** is data that the client can act on. Its `_tag` member gives its tag, for example `{ "_tag": "Offline" }`. A **call failure** is a problem with the call itself. Its kind is `cancelled`, `unknown-capability`, `unavailable`, `invalid-input` or `internal`.
+
+An unexpected error in your code becomes the call failure `internal`. Its details stay on the server.
+
+## Hints
+
+The hints tell a client what a call does. They do not change the behavior of a call.
+
+| Hint | `true` means |
+| --- | --- |
+| `readOnly` | A call changes nothing that a client can see |
+| `destructive` | A call can delete or overwrite something. `false` means that a call only adds things |
+| `idempotent` | A second call with the same input has no more effect |
+
+In the air conditioner, `aircon.status.get` is `readOnly`, and each setter, such as `aircon.power.set`, is `destructive` and `idempotent`. The MCP surface gives the hints to agents as `readOnlyHint`, `destructiveHint` and `idempotentHint`. Agent clients use them to decide when to ask the user before a call.
+
+## Audience
+
+The **audience** lists the targets that can use the capability. A capability with no audience is available to no target, so a new capability never goes to an agent by accident.
+
+In the air conditioner, `aircon.status.export` writes a file. Its audience is only `cli`, because only the command line gives its sessions the file system. [Targets](/docs/concepts/targets/) tells how the audience makes the catalog of each target.
+
+## Availability and state
+
+- **Availability** tells if a capability can run now in a session. In the air conditioner, `aircon.firmware.update` is available only while the unit is online. A call to an unavailable capability fails with `unavailable`.
+- **State** is a value of a capability that clients can read and follow, for example the status of the unit. Language surfaces, such as TypeScript, expose it.
+
+## Read more
+
+- [Catalog: capabilities](/spec/catalog/#capabilities) and [Invocation](/spec/invocation/) in the specification.
+- [Events](/docs/concepts/events/), for things that happen instead of calls that give one result.

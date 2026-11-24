@@ -8,11 +8,12 @@ import { catalogLanguages, cores } from "../src/lib/ecosystem.ts";
 import { exampleFiles, exampleNames, fileTree, fragmentUrl, requireExampleFile } from "../src/lib/example-files.ts";
 import type { TreeNode } from "../src/lib/example-files.ts";
 import { fences, pickFence } from "../src/lib/markdown-fences.ts";
+import { waitForHydration } from "./github.ts";
 import { builtPages, dist, serveDist } from "./static-server.ts";
 import type { StaticServer } from "./static-server.ts";
 
 const repository = new URL("../../", import.meta.url).pathname;
-const examplePages = async (): Promise<string[]> => (await builtPages()).filter((file) => file.startsWith(join(dist, "docs/examples/")));
+const examplePages = async (): Promise<string[]> => (await builtPages()).filter((file) => file.startsWith(join(dist, "examples/")));
 
 const pointers = (html: string): string[] => [
   ...Array.from(html.matchAll(/\sdata-open="([^"]+)"/g), (match) => match[1] ?? ""),
@@ -48,6 +49,7 @@ const open = async (path: string, viewport = { width: 1440, height: 900 }): Prom
   pageErrors.set(page, errors);
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(`${origin}${path}`, { waitUntil: "networkidle" });
+  await waitForHydration(page);
   return page;
 };
 
@@ -77,7 +79,7 @@ test("the Examples pages copy no code block of the example README, and read it i
   const readme = await readFile(join(repository, "examples/aircon/README.md"), "utf8");
   const readmeLines = new Set(fences(readme).flatMap((fence) => fence.code.split("\n").map((line) => line.trim()).filter((line) => line !== "")));
   const copies: string[] = [];
-  const directory = new URL("../src/content/docs/docs/examples/", import.meta.url).pathname;
+  const directory = new URL("../content/examples/", import.meta.url).pathname;
   for (const name of await readdir(directory)) {
     for (const fence of fences(await readFile(join(directory, name), "utf8"))) {
       for (const line of fence.code.split("\n")) if (readmeLines.has(line.trim())) copies.push(`${name}: ${line}`);
@@ -105,16 +107,16 @@ test("every file that an Examples page points to exists, and has its fragment in
 
 test("each core and each catalog language has its example", async () => {
   for (const core of cores) {
-    const html = await readFile(join(dist, `docs/examples/${core.id}/index.html`), "utf8");
+    const html = await readFile(join(dist, `examples/${core.id}/index.html`), "utf8");
     const opened = /\sdata-open="([^"]+)"/.exec(html)?.[1];
     assert.ok(opened !== undefined && `examples/aircon/${opened}`.startsWith(`${core.example}/`), `${core.id} opens ${opened}`);
   }
-  const catalog = pointers(await readFile(join(dist, "docs/examples/catalog/index.html"), "utf8"));
+  const catalog = pointers(await readFile(join(dist, "examples/catalog/index.html"), "utf8"));
   for (const language of catalogLanguages) assert.ok(catalog.includes(language.example.slice("examples/aircon/".length)), language.id);
 });
 
 test("the explorer renders the tree of the example, with the selected file and its code", async () => {
-  const page = await open("/docs/examples/core-ts/");
+  const page = await open("/examples/core-ts/");
   const tree = page.locator('[role="tree"]');
   assert.equal(await tree.locator('[role="treeitem"]').count(), count(fileTree(exampleFiles("aircon", repository))));
   const selected = tree.locator('[aria-selected="true"]');
@@ -124,8 +126,20 @@ test("the explorer renders the tree of the example, with the selected file and i
   await close(page);
 });
 
+test("the script of an Examples page does not carry the opened file, and a page change in the browser loads it", async () => {
+  const script = (await readdir(join(dist, "assets"))).find((file) => /^examples_core-ts_index\.md\.[\w-]+\.js$/.test(file));
+  if (script === undefined) throw new Error("No script for /examples/core-ts/.");
+  assert.ok(!(await readFile(join(dist, "assets", script), "utf8")).includes("cliAliasDefault"), "the page script has no highlighted code of core-ts/aircon.ts");
+  const page = await open("/examples/");
+  await page.locator('.sidebar-content a[href="/examples/core-ts/"]').click();
+  await page.locator('[role="treeitem"][data-path="core-ts/aircon.ts"][aria-selected="true"]').waitFor();
+  await page.locator("[data-source] .line").nth(10).waitFor();
+  assert.equal(await page.evaluate(() => performance.getEntriesByType("navigation").length), 1);
+  await close(page);
+});
+
 test("selecting a file shows its code, its GitHub link and its deep link", async () => {
-  const page = await open("/docs/examples/core-ts/");
+  const page = await open("/examples/core-ts/");
   const fragment = page.waitForResponse((response) => response.url().endsWith(fragmentUrl("aircon", "apis/graphql.ts")));
   await page.locator('[role="treeitem"][data-path="apis"] > .row').click();
   await page.locator('[role="treeitem"][data-path="apis/graphql.ts"]').click();
@@ -140,7 +154,7 @@ test("selecting a file shows its code, its GitHub link and its deep link", async
 });
 
 test("a file that failed to load loads when the reader selects it again", async () => {
-  const page = await open("/docs/examples/core-ts/");
+  const page = await open("/examples/core-ts/");
   const url = `${origin}${fragmentUrl("aircon", "apis/graphql.ts")}`;
   let requests = 0;
   await page.route(url, (route) => {
@@ -158,7 +172,7 @@ test("a file that failed to load loads when the reader selects it again", async 
 });
 
 test("a deep link to a file survives a reload", async () => {
-  const page = await open("/docs/examples/catalog/#file=core-rust/src/main.rs");
+  const page = await open("/examples/catalog/#file=core-rust/src/main.rs");
   const item = page.locator('[role="treeitem"][data-path="core-rust/src/main.rs"]');
   await page.waitForFunction(() => document.querySelector("[data-source]")?.getAttribute("aria-busy") === "false" && document.querySelector("[data-source] code")?.textContent?.includes("fn main") === true);
   assert.equal(await item.getAttribute("aria-selected"), "true");
@@ -171,7 +185,7 @@ test("a deep link to a file survives a reload", async () => {
 
 test("long lines wrap under the code, with the line number on the first row", async () => {
   for (const width of [390, 1440]) {
-    const page = await open("/docs/examples/core-ts/", { width, height: 900 });
+    const page = await open("/examples/core-ts/", { width, height: 900 });
     const layout = await page.locator("[data-source] .line").evaluateAll((lines) => {
       const wrapped = lines.find((line) => line.getClientRects().length === 1 && line.getBoundingClientRect().height > 1.5 * Number.parseFloat(getComputedStyle(line).lineHeight));
       if (wrapped === undefined) return undefined;
@@ -189,7 +203,7 @@ test("long lines wrap under the code, with the line number on the first row", as
 });
 
 test("the tree follows the keyboard pattern of a WAI-ARIA tree", async () => {
-  const page = await open("/docs/examples/core-ts/");
+  const page = await open("/examples/core-ts/");
   const focused = (): Promise<string | undefined> => page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.dataset["path"] : undefined));
   assert.equal(await page.locator('[role="tree"] [tabindex="0"]').count(), 1);
   await page.locator('[role="treeitem"][data-path="core-ts/aircon.ts"]').focus();
@@ -219,7 +233,7 @@ test("the tree follows the keyboard pattern of a WAI-ARIA tree", async () => {
 });
 
 test("the tree toggle and the full-screen button work", async () => {
-  const page = await open("/docs/examples/core-ts/");
+  const page = await open("/examples/core-ts/");
   const toggle = page.locator("[data-tree-toggle]");
   assert.equal(await toggle.getAttribute("aria-expanded"), "true");
   await toggle.click();
@@ -232,7 +246,7 @@ test("the tree toggle and the full-screen button work", async () => {
 });
 
 test("the Examples pages have no sideways scroll at 390px, with the drawer of files closed and open", async () => {
-  for (const path of ["/docs/examples/", "/docs/examples/core-ts/", "/docs/examples/catalog/", "/docs/examples/graphql/"]) {
+  for (const path of ["/examples/", "/examples/core-ts/", "/examples/catalog/", "/examples/graphql/"]) {
     const page = await open(path, { width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390, path);
     assert.equal(await page.locator("[data-source] pre").evaluate((pre) => pre.scrollWidth - pre.clientWidth), 0, `${path}: the code does not scroll sideways`);

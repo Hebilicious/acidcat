@@ -32,8 +32,9 @@ export const supportsHtmlInCanvas = (): boolean =>
 /** The margin around the viewport inside which a renderer starts its work. Each figure starts below it at load. */
 export const nearMargin = "30% 0px";
 
-export const whenNear = (element: Element): Promise<void> =>
-  new Promise((resolve) => {
+/** Resolves when the element comes near the viewport. Rejects when `signal` aborts first. */
+export const whenNear = (element: Element, signal: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry?.isIntersecting !== true) return;
@@ -43,7 +44,19 @@ export const whenNear = (element: Element): Promise<void> =>
       { rootMargin: nearMargin },
     );
     observer.observe(element);
+    signal.addEventListener(
+      "abort",
+      () => {
+        observer.disconnect();
+        reject(signal.reason);
+      },
+      { once: true },
+    );
   });
+
+export const onNear = (element: Element, signal: AbortSignal, start: () => void): void => {
+  whenNear(element, signal).then(start, () => undefined);
+};
 
 // lib.dom does not declare GPUBufferUsage, GPUTextureUsage and GPUMapMode. These are their values in the WebGPU specification.
 export const bufferUsage = { mapRead: 0x1, copyDst: 0x8, uniform: 0x40 } as const;

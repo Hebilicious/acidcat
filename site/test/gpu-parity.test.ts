@@ -101,7 +101,7 @@ const capture = async (origin: string, item: Case, backend: Backend): Promise<{ 
   const plates: string[] = [];
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
-    if (/^\/_astro\/(plate|phone)/.test(path)) plates.push(path);
+    if (/^\/assets\/(plate|phone)/.test(path)) plates.push(path);
   });
   if (item.reducedMotion === "no-preference") {
     await page.clock.install({ time: 0 });
@@ -211,7 +211,7 @@ test("the hero keeps its animation after a resize across 960px", async (t) => {
     await page.setViewportSize({ width, height: 900 });
     await page.waitForFunction((name) => {
       const still = document.querySelector<HTMLImageElement>("[data-plate] img");
-      return still !== null && still.complete && new URL(still.currentSrc).pathname.startsWith(`/_astro/${name}`);
+      return still !== null && still.complete && new URL(still.currentSrc).pathname.startsWith(`/assets/${name}`);
     }, plate);
     await page.waitForTimeout(1000);
     const canvas = page.locator("[data-plate].is-live canvas");

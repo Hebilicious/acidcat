@@ -1,6 +1,6 @@
 import * as z from "zod/mini";
 
-export const Section = z.enum(["home", "docs", "spec", "packages"]).check(z.meta({ id: "Section" }));
+export const Section = z.enum(["home", "docs", "examples", "spec", "packages"]).check(z.meta({ id: "Section" }));
 
 const described = (text: string) => z.string().check(z.describe(text));
 

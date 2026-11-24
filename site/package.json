@@ -2,24 +2,21 @@
   "name": "acid-cat-site",
   "version": "0.0.0",
   "private": true,
-  "description": "The AcidCat site: a homepage and the documentation, built with Astro Starlight.",
+  "description": "The AcidCat site: a homepage and the documentation, built with VitePress.",
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build",
-    "preview": "astro preview"
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
   },
   "dependencies": {
     "@acid-cat/core-ts": "workspace:*",
-    "@astrojs/markdown-satteri": "catalog:",
-    "@astrojs/starlight": "catalog:",
     "@fontsource/monaspace-argon": "catalog:",
     "@fontsource/monaspace-krypton": "catalog:",
     "@fontsource/monaspace-neon": "catalog:",
     "@fontsource/monaspace-radon": "catalog:",
     "@fontsource/monaspace-xenon": "catalog:",
-    "astro": "catalog:",
     "hast-util-from-html": "catalog:",
     "hast-util-to-mdast": "catalog:",
     "mdast-util-gfm": "catalog:",
@@ -28,7 +25,9 @@
     "shiki": "catalog:",
     "subset-font": "catalog:",
     "three": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "vitepress": "catalog:",
+    "vue": "catalog:"
   },
   "devDependencies": {
     "@acid-cat/cli": "workspace:*",
@@ -43,6 +42,8 @@
     "cf": "catalog:",
     "esbuild": "catalog:",
     "playwright": "catalog:",
-    "typescript": "catalog:"
+    "postcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
   }
 }

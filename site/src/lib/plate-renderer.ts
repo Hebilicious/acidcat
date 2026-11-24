@@ -1,6 +1,8 @@
 import { createPass } from "./gpu/pass.ts";
 import { hardwareGpu } from "./gpu/support.ts";
 import type { Backend } from "./gpu/pass.ts";
+import { framingSpan } from "./plate-framing.ts";
+import type { PlateFraming } from "./plate-framing.ts";
 import { plateShader } from "./plate-shader.ts";
 
 export interface PlateSources {
@@ -10,13 +12,6 @@ export interface PlateSources {
   readonly plateRect: readonly [number, number];
   readonly clean: string;
   readonly data: string;
-}
-
-export interface PlateFraming {
-  readonly aspect: number;
-  readonly focusX: number;
-  readonly targetX: number;
-  readonly zoom: number;
 }
 
 export interface PlateState {
@@ -43,21 +38,11 @@ const loadImage = async (source: string): Promise<ImageBitmap> => {
   return createImageBitmap(await response.blob(), { premultiplyAlpha: "none" });
 };
 
-export const framingSpan = (width: number, height: number, framing: PlateFraming): { span: [number, number]; center: [number, number] } => {
-  const viewAspect = width / height;
-  const span: [number, number] = viewAspect > framing.aspect ? [1, framing.aspect / viewAspect] : [viewAspect / framing.aspect, 1];
-  span[0] /= framing.zoom;
-  span[1] /= framing.zoom;
-  const clamp = (value: number, size: number) => Math.min(1 - size / 2, Math.max(size / 2, value));
-  const centerX = clamp(framing.focusX - (framing.targetX - 0.5) * span[0], span[0]);
-  return { span, center: [centerX, clamp(0.5, span[1])] };
-};
-
 /**
  * Draws the hero on a hardware GPU, and gives `undefined` when the browser has none. It checks the GPU before it
  * downloads the textures, so a software renderer downloads nothing.
  */
-export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSources, framing: () => PlateFraming): Promise<PlateHandle | undefined> => {
+export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSources, framing: () => PlateFraming, signal: AbortSignal): Promise<PlateHandle | undefined> => {
   if (!(await hardwareGpu())) return undefined;
 
   let scale = 1;
@@ -75,6 +60,10 @@ export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSourc
 
   const [pass, plate, clean, data] = await Promise.all([createPass(canvas, plateShader, { alpha: false }), loadImage(sources.plate), loadImage(sources.clean), loadImage(sources.data)]);
   if (pass === undefined) return undefined;
+  if (signal.aborted) {
+    pass.destroy();
+    return undefined;
+  }
   let plateRect = sources.plateRect;
   const imageSize = [data.width, data.height] as const;
   // Each texture waits until the GPU has taken the one before it. Otherwise its upload blocks the main thread.
@@ -148,12 +137,25 @@ export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSourc
         pointer.y = (event.clientY / window.innerHeight) * 2 - 1;
         pointer.active = 1;
       },
-      { passive: true },
+      { passive: true, signal },
     );
-    document.addEventListener("pointerleave", () => {
-      pointer.active = 0;
-    });
+    document.addEventListener(
+      "pointerleave",
+      () => {
+        pointer.active = 0;
+      },
+      { signal },
+    );
   }
+  signal.addEventListener(
+    "abort",
+    () => {
+      running = false;
+      cancelAnimationFrame(frame);
+      pass.destroy();
+    },
+    { once: true },
+  );
 
   render({ reveal: 0 });
 

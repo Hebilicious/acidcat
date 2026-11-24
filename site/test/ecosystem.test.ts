@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { catalogLanguages, cores, ownCore, syncKeys } from "../src/lib/ecosystem.ts";
 
 const repository = new URL("../../", import.meta.url).pathname;
-const docs = new URL("../src/content/docs/docs/", import.meta.url).pathname;
+const docs = new URL("../content/docs/", import.meta.url).pathname;
 
 const exists = async (path: string): Promise<boolean> =>
   stat(join(repository, path)).then(
@@ -58,12 +58,12 @@ test("each entry of the registry names its package, and points at files that exi
   for (const core of cores) {
     assert.ok(await exists(core.readme), `${core.id}: ${core.readme} exists`);
     assert.ok(await exists(core.example), `${core.id}: ${core.example} exists`);
-    assert.ok(await exists(`site/src/content/docs${core.guide.replace(/\/$/, "")}.mdx`), `${core.id}: the guide ${core.guide} exists`);
+    assert.ok(await exists(`site/content${core.guide.replace(/\/$/, "")}.md`), `${core.id}: the guide ${core.guide} exists`);
   }
   assert.equal(new Set([...catalogLanguages, ...cores, ownCore].map((entry) => entry.id)).size, catalogLanguages.length + cores.length + 1, "ids are unique");
 });
 
-const pages = async (directory: string, extension = /\.mdx?$/): Promise<string[]> => {
+const pages = async (directory: string, extension = /\.md$/): Promise<string[]> => {
   const entries = await readdir(directory, { withFileTypes: true, recursive: true });
   return entries.filter((entry) => entry.isFile() && extension.test(entry.name)).map((entry) => join(entry.parentPath, entry.name));
 };
@@ -80,9 +80,9 @@ const registryCount = /\b(?:two|three|four|five|six|seven|eight|nine|ten|both|\d
 const handWrittenLists = (text: string): string[] => {
   const problems: string[] = [];
   for (const match of text.matchAll(/<Tabs\b([^>]*)>([\s\S]*?)<\/Tabs>/g)) {
-    const syncKey = /syncKey="([^"]+)"/.exec(match[1] ?? "")?.[1];
+    const syncKey = /sync-key="([^"]+)"/.exec(match[1] ?? "")?.[1];
     const labels = [...(match[2] ?? "").matchAll(/<TabItem\s+label="([^"]+)"/g)].map((item) => item[1] ?? "");
-    if (syncKey !== undefined && registrySyncKeys.has(syncKey)) problems.push(`<Tabs syncKey="${syncKey}"> written by hand`);
+    if (syncKey !== undefined && registrySyncKeys.has(syncKey)) problems.push(`<Tabs sync-key="${syncKey}"> written by hand`);
     else if (listsTheRegistry(labels)) problems.push(`<Tabs> with the tabs ${labels.join(", ")} written by hand`);
   }
   for (const table of text.match(/^\|.*\|\n\|\s*-.*\n(?:\|.*\|\n?)*/gm) ?? []) {
@@ -107,16 +107,16 @@ test("no docs page writes by hand a list of languages or cores that the registry
   for (const page of await pages(docs)) {
     for (const problem of handWrittenLists(await readFile(page, "utf8"))) problems.push(`${relative(repository, page)}: ${problem}`);
   }
-  for (const page of await pages(new URL("../src/", import.meta.url).pathname, /\.astro$/)) {
+  for (const page of await pages(new URL("../src/", import.meta.url).pathname, /\.vue$/)) {
     for (const match of (await readFile(page, "utf8")).matchAll(registryCount)) problems.push(`${relative(repository, page)}: the count "${match[0]}"`);
   }
-  assert.deepEqual(problems, [], "Use EcosystemTabs, EcosystemInstall, EcosystemTable or CatalogExample from site/src/components/docs/, give each code block a file name as its title, and write no count or list of what the registry gives.");
+  assert.deepEqual(problems, [], "Use EcosystemTabs, EcosystemInstall, EcosystemTable or CatalogExample from site/src/lib/markdown/components.ts, give each code block a file name as its title, and write no count or list of what the registry gives.");
 });
 
 test("the check finds hand-written tabs, tables and titles", () => {
-  assert.equal(handWrittenLists('<Tabs syncKey="core">\n<TabItem label="Anything">x</TabItem>\n</Tabs>').length, 1);
+  assert.equal(handWrittenLists('<Tabs sync-key="core">\n<TabItem label="Anything">x</TabItem>\n</Tabs>').length, 1);
   assert.equal(handWrittenLists('<Tabs>\n<TabItem label="Python">x</TabItem>\n<TabItem label="Go">y</TabItem>\n</Tabs>').length, 1);
-  assert.equal(handWrittenLists('<Tabs syncKey="cli-or-code">\n<TabItem label="Command line">x</TabItem>\n<TabItem label="TypeScript">y</TabItem>\n</Tabs>').length, 0);
+  assert.equal(handWrittenLists('<Tabs sync-key="cli-or-code">\n<TabItem label="Command line">x</TabItem>\n<TabItem label="TypeScript">y</TabItem>\n</Tabs>').length, 0);
   assert.equal(handWrittenLists("| Step | Pkl | Go |\n| --- | --- | --- |\n| a | b | c |").length, 1);
   assert.equal(handWrittenLists("| Core | Package |\n| --- | --- |\n| TypeScript | a |\n| Effect | b |\n").length, 1);
   assert.equal(handWrittenLists("| Surface | Use |\n| --- | --- |\n| TypeScript | a |\n| WebMCP | b |\n").length, 0);

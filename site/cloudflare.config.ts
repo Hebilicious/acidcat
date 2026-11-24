@@ -1,6 +1,6 @@
 import { bindings, defineConfig } from "cf/config";
 
-export const workerPaths = ["/", "/docs/*", "/spec/*", "/packages/*", "/mcp", "/mcp/*", "/api", "/api/*", "/.well-known/api-catalog", "/.well-known/ai-catalog.json", "/.well-known/mcp/*"];
+export const workerPaths = ["/", "/docs/*", "/examples/*", "/spec/*", "/packages/*", "/mcp", "/mcp/*", "/api", "/api/*", "/.well-known/api-catalog", "/.well-known/ai-catalog.json", "/.well-known/mcp/*"];
 
 export default defineConfig({
   worker: {
