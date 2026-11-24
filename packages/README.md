@@ -94,7 +94,7 @@ Each registry has its own release workflow. A tag pushed by hand on `main` also 
 
 | Registry | Packages | Tag | Workflow |
 | --- | --- | --- | --- |
-| npm | The six npm packages, all at one version | `npm/v0.1.0` | `release-npm.yml`: `moon run verify`, then `scripts/publish-npm.ts` |
+| npm | The six npm packages, all at one version | `npm/v0.1.0`. `release.yml` makes it on each run when the release of `@acid-cat/cli` exists without it | `release-npm.yml`: `moon run verify`, then `scripts/publish-npm.ts` |
 | PyPI | `acid-cat-catalog` | `pypi/v0.1.0` | `release-pypi.yml` |
 | crates.io | `acid-cat-catalog` | `crates/v0.1.0` | `release-crates.yml` |
 | crates.io | `acid-cat-core` | `crates-core/v0.1.0` | `release-crates-core.yml` |
