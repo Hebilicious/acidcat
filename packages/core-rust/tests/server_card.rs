@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use acid_cat_core::App;
-use acid_cat_core::mcp::{McpBinding, McpOptions, ServerCard, WebhookOptions};
+use acid_cat_core::mcp::{McpOptions, McpSurface, ServerCard, WebhookOptions};
 use acid_cat_core::remote::request_body;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -23,8 +23,8 @@ fn private_jwk(kid: &str, seed: u8) -> Value {
     json!({ "kty": "OKP", "crv": "Ed25519", "kid": kid, "d": URL_SAFE_NO_PAD.encode([seed; 32]) })
 }
 
-fn binding(options: McpOptions) -> McpBinding<Services> {
-    McpBinding::new(app(), Arc::new(Services), options)
+fn surface(options: McpOptions) -> McpSurface<Services> {
+    McpSurface::new(app(), Arc::new(Services), options)
 }
 
 fn carded(webhooks: Option<WebhookOptions>) -> McpOptions {
@@ -36,24 +36,24 @@ fn carded(webhooks: Option<WebhookOptions>) -> McpOptions {
 }
 
 async fn send(
-    binding: &McpBinding<Services>,
+    surface: &McpSurface<Services>,
     request: http::request::Builder,
 ) -> (http::response::Parts, Vec<u8>) {
     let request = request_body(request.body(Empty::new()).expect("a request"));
-    let (parts, body) = binding.handle(request).await.into_parts();
+    let (parts, body) = surface.handle(request).await.into_parts();
     let bytes = body.collect().await.expect("the body").to_bytes();
     (parts, bytes.to_vec())
 }
 
-async fn read_card(binding: &McpBinding<Services>) -> Value {
+async fn read_card(surface: &McpSurface<Services>) -> Value {
     let request = Request::get("/mcp/server-card").header("host", "example.test:8080");
-    let (_, body) = send(binding, request).await;
+    let (_, body) = send(surface, request).await;
     serde_json::from_slice(&body).expect("a JSON card")
 }
 
 #[tokio::test]
 async fn the_server_card_gives_the_configured_name_the_url_and_the_revisions() {
-    let served = binding(carded(None));
+    let served = surface(carded(None));
     let request = Request::get("/mcp/server-card").header("host", "example.test:8080");
     let (head, body) = send(&served, request).await;
     let card: Value = serde_json::from_slice(&body).expect("a JSON card");
@@ -91,7 +91,7 @@ async fn the_server_card_gives_the_configured_name_the_url_and_the_revisions() {
     assert_eq!(head.status, 405);
     assert_eq!(head.headers["allow"], "GET, OPTIONS");
 
-    let no_handshake = binding(McpOptions {
+    let no_handshake = surface(McpOptions {
         handshake: false,
         ..carded(None)
     });
@@ -100,7 +100,7 @@ async fn the_server_card_gives_the_configured_name_the_url_and_the_revisions() {
         json!(["2026-07-28"])
     );
 
-    let behind_tls = binding(McpOptions {
+    let behind_tls = surface(McpOptions {
         server_card: Some(ServerCard {
             url: Some("https://mcp.example.com/mcp".into()),
             ..ServerCard::named("dev.acid-cat/test")
@@ -115,7 +115,7 @@ async fn the_server_card_gives_the_configured_name_the_url_and_the_revisions() {
 
 #[tokio::test]
 async fn with_no_settings_the_server_serves_a_card_with_the_default_name_and_description() {
-    let served = binding(McpOptions::new("test", "1.2.3"));
+    let served = surface(McpOptions::new("test", "1.2.3"));
     let card = read_card(&served).await;
     assert_eq!(card["name"], "test.example/test");
     assert_eq!(card["version"], "1.2.3");
@@ -132,7 +132,7 @@ async fn with_no_settings_the_server_serves_a_card_with_the_default_name_and_des
         .target("mcp", ["mcp"])
         .build()
         .expect("the application conforms");
-    let served = McpBinding::new(
+    let served = McpSurface::new(
         no_description,
         Arc::new(Services),
         McpOptions::new("test server", "0.0.0"),
@@ -147,7 +147,7 @@ async fn with_no_settings_the_server_serves_a_card_with_the_default_name_and_des
 
 #[tokio::test]
 async fn a_server_with_the_card_off_answers_404_and_starts_with_a_version_range() {
-    let served = binding(McpOptions {
+    let served = surface(McpOptions {
         server_card: None,
         ..McpOptions::new("test", "^1.2.3")
     });
@@ -159,7 +159,7 @@ async fn a_server_with_the_card_off_answers_404_and_starts_with_a_version_range(
 #[tokio::test]
 async fn the_card_gives_the_public_signing_keys_and_the_egress_ranges() {
     let ranges = vec!["203.0.113.0/24".to_owned(), "2001:db8::/32".to_owned()];
-    let served = binding(carded(Some(WebhookOptions {
+    let served = surface(carded(Some(WebhookOptions {
         signing_keys: vec![private_jwk("one", 1), private_jwk("two", 2)],
         egress_ip_ranges: ranges.clone(),
         ..WebhookOptions::default()
@@ -180,7 +180,7 @@ async fn the_card_gives_the_public_signing_keys_and_the_egress_ranges() {
     }
     assert_eq!(keys.len(), 2);
 
-    let plain = binding(carded(Some(WebhookOptions::default())));
+    let plain = surface(carded(Some(WebhookOptions::default())));
     assert!(
         read_card(&plain).await["remotes"][0]
             .get("extensionsInfo")
@@ -189,9 +189,9 @@ async fn the_card_gives_the_public_signing_keys_and_the_egress_ranges() {
 }
 
 fn panic_message(options: McpOptions) -> String {
-    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| binding(options)))
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| surface(options)))
         .err()
-        .expect("the binding panics");
+        .expect("the surface panics");
     panic
         .downcast_ref::<String>()
         .cloned()
@@ -200,7 +200,7 @@ fn panic_message(options: McpOptions) -> String {
 }
 
 #[test]
-fn invalid_card_or_webhook_options_panic_when_the_binding_starts() {
+fn invalid_card_or_webhook_options_panic_when_the_surface_starts() {
     let with_webhooks = |webhooks: WebhookOptions| carded(Some(webhooks));
     for range in ["10.0.0.0/33", "10.0.0.0", "bad/8", "10.0.0.0/08", "::/129"] {
         let message = panic_message(with_webhooks(WebhookOptions {
@@ -249,7 +249,7 @@ fn invalid_card_or_webhook_options_panic_when_the_binding_starts() {
 }
 
 #[test]
-fn signing_keys_or_egress_ranges_with_the_card_off_panic_when_the_binding_starts() {
+fn signing_keys_or_egress_ranges_with_the_card_off_panic_when_the_surface_starts() {
     for webhooks in [
         WebhookOptions {
             signing_keys: vec![private_jwk("one", 1)],

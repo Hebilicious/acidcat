@@ -36,7 +36,7 @@ export interface Options {
    */
   readonly services?: "shared" | "per-request" | undefined;
   /**
-   * The time in milliseconds with no message on a stream of server-sent events after which the binding sends a comment
+   * The time in milliseconds with no message on a stream of server-sent events after which the surface sends a comment
    * line as a keepalive. The default is 15 000.
    */
   readonly keepaliveMs?: number | undefined;
@@ -45,8 +45,8 @@ export interface Options {
 }
 
 /**
- * A client of the HTTP binding of an application that runs in another process or on another machine. Give it to the
- * `remote` option of the command line (spec/bindings/cli.md#server).
+ * A client of the HTTP surface of an application that runs in another process or on another machine. Give it to the
+ * `remote` option of the command line (spec/surfaces/cli.md#server).
  */
 export type Client = HttpClient.Client;
 
@@ -56,13 +56,13 @@ export type ClientOptions = HttpClient.ClientOptions;
 export type Listed = HttpClient.Listed;
 
 /**
- * A client of the HTTP binding at `base`, an `http` or `https` URL, for example `http://pi.local:8080/cli`. It throws an
+ * A client of the HTTP surface at `base`, an `http` or `https` URL, for example `http://pi.local:8080/cli`. It throws an
  * `Error` when `base` is not such a URL, when `base` has a user name, a password, a query or a fragment, or when a
  * header is not valid. Give a token in a header, for example `Authorization`. The message of the error does not contain
  * the URL or the value of a header.
  *
  * The client gives the call failure `unavailable` when the server does not answer, and `internal` when the server
- * gives an answer that the HTTP binding does not give.
+ * gives an answer that the HTTP surface does not give.
  */
 export const client = (base: string, options?: ClientOptions): Client => HttpClient.make(base, options);
 
@@ -132,10 +132,10 @@ const respond = <R>(app: App.App<R>, request: Request, body: string, options: Op
       return json(200, list);
     }
     if (request.method === "GET" && path === "/events") {
-      return json(200, Object.keys(session.view.events ?? {}).map((id) => ({ id })));
+      return json(200, Object.keys(session.catalog.events ?? {}).map((id) => ({ id })));
     }
     if (request.method === "GET" && path === "/catalog" && options.serveCatalog !== false) {
-      return json(200, session.view);
+      return json(200, session.catalog);
     }
     const route = request.method === "POST" && path !== undefined ? routeOf(path) : undefined;
     if (route === undefined) return json(404, callFailure("unknown-capability", "There is no such route."));

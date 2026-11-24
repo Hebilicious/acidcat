@@ -15,7 +15,7 @@ from pathlib import Path
 from acid_cat_catalog import Catalog
 
 catalog = Catalog(title="Hilltop weather station")
-catalog.target("logger", bindings=["http"])
+catalog.target("logger", surfaces=["http"])
 fault = catalog.type("SensorFault", {"type": "object"})
 catalog.capability(
     "weather.sensor.calibrate",

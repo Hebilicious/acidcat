@@ -13,5 +13,5 @@ export const didNotSettle = new RegExp(`^did not settle within ${deadline} ms`);
 export const failures = (results: readonly Check[]) =>
   results
     .filter((result) => !result.passed)
-    .map((result) => `${result.binding}: ${result.name}: ${result.detail}`)
+    .map((result) => `${result.surface}: ${result.name}: ${result.detail}`)
     .join("\n");

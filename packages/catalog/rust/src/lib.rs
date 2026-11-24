@@ -25,10 +25,10 @@ static REFERENCE: LazyLock<Regex> =
 
 #[derive(Clone, Debug, Default)]
 pub struct Target {
-    /// The bindings that serve the target, such as `"typescript"` and `"webmcp"`.
-    pub bindings: Vec<String>,
+    /// The surfaces that serve the target, such as `"typescript"` and `"webmcp"`.
+    pub surfaces: Vec<String>,
     pub description: Option<String>,
-    /// Settings for the bindings, in a form each binding defines.
+    /// Settings for the surfaces, in a form each surface defines.
     pub options: Option<Value>,
 }
 
@@ -133,19 +133,19 @@ impl Catalog {
             if !NAME.is_match(name) {
                 problems.push(format!("the target name {name} is malformed"));
             }
-            if target.bindings.is_empty() {
-                problems.push(format!("the target {name} has no bindings"));
+            if target.surfaces.is_empty() {
+                problems.push(format!("the target {name} has no surfaces"));
             }
-            if has_repeat(&target.bindings) {
-                problems.push(format!("the target {name} repeats a binding"));
+            if has_repeat(&target.surfaces) {
+                problems.push(format!("the target {name} repeats a surface"));
             }
-            for binding in target
-                .bindings
+            for surface in target
+                .surfaces
                 .iter()
-                .filter(|binding| !NAME.is_match(binding))
+                .filter(|surface| !NAME.is_match(surface))
             {
                 problems.push(format!(
-                    "the target {name} names the malformed binding {binding}"
+                    "the target {name} names the malformed surface {surface}"
                 ));
             }
         }
@@ -272,7 +272,7 @@ impl Catalog {
         let mut targets = Map::new();
         for (name, target) in &self.targets {
             let mut out = Map::new();
-            out.insert("bindings".into(), json!(target.bindings));
+            out.insert("surfaces".into(), json!(target.surfaces));
             insert_some(
                 &mut out,
                 "description",

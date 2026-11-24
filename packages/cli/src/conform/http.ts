@@ -5,7 +5,7 @@ import type { JsonObject } from "../json.ts";
 import { Checks, eventIdsOf, expect, expectEqual, expectOccurrence, FORBIDDEN_ORIGIN, idsOf, sorted, until } from "./check.ts";
 import { sseReader } from "./sse.ts";
 
-const RULE = "spec/bindings/http.md";
+const RULE = "spec/surfaces/http.md";
 
 type Entry = JsonObject & { readonly id: string };
 
@@ -28,7 +28,7 @@ export async function checkHttp(base: string, options: { readonly maximumBytes: 
     });
   const kindOf = async (response: Response) => memberOf(await readJson(response), "kind");
 
-  await checks.run("GET /capabilities lists the view with availability", `${RULE}#requests`, async (signal) => {
+  await checks.run("GET /capabilities lists the capabilities of the target with their availability", `${RULE}#requests`, async (signal) => {
     const list = await entriesOf(await fetch(`${base}/capabilities`, { signal }));
     expectEqual(sorted(list.map((entry) => entry.id)), idsOf("api"), "ids");
     expect(list.every((entry) => typeof entry.available === "boolean"), "each entry must have available");
@@ -46,7 +46,7 @@ export async function checkHttp(base: string, options: { readonly maximumBytes: 
   });
   for (const [name, id, input, status, kind] of [
     ["invalid input has the status 422", "fixture.echo", { text: 1 }, 422, "invalid-input"],
-    ["a capability outside the view has the status 404", "fixture.hidden", {}, 404, "unknown-capability"],
+    ["a capability outside the target has the status 404", "fixture.hidden", {}, 404, "unknown-capability"],
     ["a defect has the status 500", "fixture.crash", {}, 500, "internal"],
   ] as const) {
     await checks.run(name, `${RULE}#requests`, async (signal) => {
@@ -139,13 +139,13 @@ async function checkEvents(checks: Checks, base: string): Promise<void> {
     return delivered;
   };
 
-  await checks.run("GET /events lists the events of the view", `${RULE}#requests`, async (signal) => {
+  await checks.run("GET /events lists the events of the target", `${RULE}#requests`, async (signal) => {
     const list = await readJson(await fetch(`${base}/events`, { signal }));
     if (!isArrayOf(list, isEntry)) throw new Error(`GET /events must give a list of objects with an id, got ${JSON.stringify(list)}`);
     expectEqual(sorted(list.map((entry) => entry.id)), eventIdsOf("api"), "ids");
   });
   for (const [name, id, input, status, kind] of [
-    ["a subscription to an event outside the view has the status 404", "fixture.secret", {}, 404, "unknown-capability"],
+    ["a subscription to an event outside the target has the status 404", "fixture.secret", {}, 404, "unknown-capability"],
     ["a subscription to the id of a capability has the status 404", "fixture.echo", { text: "x" }, 404, "unknown-capability"],
     ["a subscription with invalid input has the status 422", "fixture.ticks", { count: 101 }, 422, "invalid-input"],
   ] as const) {

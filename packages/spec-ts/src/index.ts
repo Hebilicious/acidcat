@@ -75,7 +75,7 @@ export const callFailure = (kind: CallFailureKind, message: string): CallFailure
 
 export const isCallFailure = (outcome: Outcome<unknown, unknown>): outcome is CallFailure => !("ok" in outcome);
 
-/** The JavaScript error for a call failure (spec/bindings/typescript.md#handles). */
+/** The JavaScript error for a call failure (spec/surfaces/typescript.md#handles). */
 export class CallFailureError extends Error {
   readonly kind: CallFailureKind;
 
@@ -98,7 +98,7 @@ export interface Occurrence<Payload = unknown> {
   readonly truncated?: true;
 }
 
-/** What a provider gives for one occurrence. The binding adds `name`, and makes `eventId` and `timestamp` if they are absent. */
+/** What a provider gives for one occurrence. The surface adds `name`, and makes `eventId` and `timestamp` if they are absent. */
 export interface Emitted<Payload = unknown> {
   readonly data: Payload;
   readonly eventId?: string;
@@ -162,7 +162,7 @@ export const cliExitCode = (outcome: Outcome<unknown, unknown>): number =>
   isCallFailure(outcome) ? CLI_EXIT_CODES[outcome.kind] : outcome.ok ? CLI_EXIT_CODES.value : CLI_EXIT_CODES.failure;
 
 /**
- * The flags of a command, as `usage` writes them (spec/bindings/cli.md#commands): required flags first, each group in
+ * The flags of a command, as `usage` writes them (spec/surfaces/cli.md#commands): required flags first, each group in
  * code point order of the names. `input` is from `cliInputSchema`.
  */
 export function cliFlags(input: JsonObject): string[] {
@@ -186,7 +186,7 @@ export function cliResolve(property: JsonObject, definitions: JsonObject): JsonO
 }
 
 /**
- * The schema of the items of a repeated flag (spec/bindings/cli.md#commands), or `undefined` when the property does
+ * The schema of the items of a repeated flag (spec/surfaces/cli.md#commands), or `undefined` when the property does
  * not give a repeated flag. A property gives a repeated flag when its type is `array`, and its `items` schema, or the
  * type that it refers to, is an `enum` of strings, `integer`, `number` or `string`. `property` is already resolved.
  */
@@ -197,7 +197,7 @@ export function cliRepeatedItems(property: JsonObject, definitions: JsonObject):
 }
 
 /**
- * The array that a repeated flag gives as JSON text (spec/bindings/cli.md#commands), or `undefined` when its values
+ * The array that a repeated flag gives as JSON text (spec/surfaces/cli.md#commands), or `undefined` when its values
  * give one item each. `values` are the values of the flag, in the order of the flags. They give an array as JSON text
  * when the flag occurs exactly once and its value is JSON text of an array.
  */
@@ -222,7 +222,7 @@ function flagValue(property: JsonObject): string {
 }
 
 /**
- * The `usage` of a capability in `list` (spec/bindings/cli.md#commands). `input` is from `cliInputSchema`, or
+ * The `usage` of a capability in `list` (spec/surfaces/cli.md#commands). `input` is from `cliInputSchema`, or
  * `undefined` when the capability has no input.
  */
 export function cliUsage(program: string, id: string, input: JsonObject | undefined): string {
@@ -231,7 +231,7 @@ export function cliUsage(program: string, id: string, input: JsonObject | undefi
 }
 
 /**
- * The `usage` of an event in `list` (spec/bindings/cli.md#events). `input` is from `cliInputSchema`, or `undefined`
+ * The `usage` of an event in `list` (spec/surfaces/cli.md#events). `input` is from `cliInputSchema`, or `undefined`
  * when the event has no input.
  */
 export function cliEventUsage(program: string, id: string, input: JsonObject | undefined): string {
@@ -240,11 +240,11 @@ export function cliEventUsage(program: string, id: string, input: JsonObject | u
   return [program, "watch", id, ...(input === undefined ? [] : cliFlags(input)), resume].join(" ");
 }
 
-/** The help of a capability, an alias or an event (spec/bindings/cli.md#commands). */
+/** The help of a capability, an alias or an event (spec/surfaces/cli.md#commands). */
 export const cliHelp = (usage: string, description: string): string => `Usage: ${usage}\n\n${description}`;
 
 /**
- * The command list of a shared prefix (spec/bindings/cli.md#commands): the usage of each capability under the prefix,
+ * The command list of a shared prefix (spec/surfaces/cli.md#commands): the usage of each capability under the prefix,
  * in the order of `capabilities`, the capabilities of `list`. It is `undefined` when `prefix` is not a shared prefix.
  */
 export function cliCommandList(prefix: readonly string[], capabilities: readonly { readonly id: string; readonly usage: string }[]): string | undefined {
@@ -264,7 +264,7 @@ export const CLI_ALIAS_NAME = new RegExp(`^(--${CLI_WORD}|${CLI_WORD}( ${CLI_WOR
 const CLI_WORD_ONLY = new RegExp(`^${CLI_WORD}$`);
 
 /**
- * The alias that the first arguments name, with the arguments after its name (spec/bindings/cli.md#aliases), or the
+ * The alias that the first arguments name, with the arguments after its name (spec/surfaces/cli.md#aliases), or the
  * words of an unknown command. `paths` are the paths of the commands of the capabilities. The arguments that start with
  * the path of a command name no alias. A word after an alias is an unknown command when the alias is a shared prefix,
  * or when it is a one-word alias whose group has two-word aliases.
@@ -306,7 +306,7 @@ export interface CliAliases {
 
 /**
  * The aliases of a target in `options.cli.aliases`, and its default alias in `options.cli.default`
- * (spec/bindings/cli.md#aliases). `catalog` is a catalog or the view of the target.
+ * (spec/surfaces/cli.md#aliases). `catalog` is a catalog or the catalog of the target.
  */
 export function cliAliases(catalog: CatalogDocument, target: string): CliAliases {
   const none: CliAliases = { aliases: [], default: undefined, errors: [] };
@@ -316,16 +316,16 @@ export function cliAliases(catalog: CatalogDocument, target: string): CliAliases
   const where = `target ${target}`;
   if (!isJsonObject(settings)) return { ...none, errors: [filled(ALIAS_MESSAGES.settingsNotObject, { where })] };
   const errors: string[] = [];
-  if (!declared.bindings.includes("cli")) errors.push(filled(ALIAS_MESSAGES.noCliBinding, { where }));
+  if (!declared.surfaces.includes("cli")) errors.push(filled(ALIAS_MESSAGES.noCliSurface, { where }));
   const declaredAliases = ownMember(settings, "aliases");
   const members = declaredAliases === undefined ? {} : declaredAliases;
   if (!isJsonObject(members)) return { ...none, errors: [...errors, filled(ALIAS_MESSAGES.aliasesNotObject, { where })] };
 
   const types = catalog.$defs ?? {};
-  const inView = (entries: { readonly [id: string]: { readonly audience?: readonly string[]; readonly input?: JsonObject } } | undefined) =>
+  const inTarget = (entries: { readonly [id: string]: { readonly audience?: readonly string[]; readonly input?: JsonObject } } | undefined) =>
     Object.entries(entries ?? {}).filter(([, entry]) => (entry.audience ?? []).includes(target));
-  const capabilities = new Map(inView(catalog.capabilities).map(([id, capability]) => [id, capability.input]));
-  const events = new Map(inView(catalog.events).map(([id, event]) => [id, event.input]));
+  const capabilities = new Map(inTarget(catalog.capabilities).map(([id, capability]) => [id, capability.input]));
+  const events = new Map(inTarget(catalog.events).map(([id, event]) => [id, event.input]));
   const paths = new Set([...capabilities.keys()].map((id) => commandPath(id).join(" ")));
   const aliases: CliAlias[] = [];
   for (const name of Object.keys(members).sort(byCodePoint)) {
@@ -357,7 +357,7 @@ export function cliAliases(catalog: CatalogDocument, target: string): CliAliases
     const id = typeof value.event === "string" ? value.event : typeof value.capability === "string" ? value.capability : "";
     const entries = kind === "event" ? events : capabilities;
     if (!entries.has(id)) {
-      problem(ALIAS_MESSAGES.notInView, { id, kind: kind === "event" ? "an event" : "a capability" });
+      problem(ALIAS_MESSAGES.notInTarget, { id, kind: kind === "event" ? "an event" : "a capability" });
       continue;
     }
     if (value.input === undefined) {
@@ -403,9 +403,9 @@ export function cliAliases(catalog: CatalogDocument, target: string): CliAliases
 }
 
 /**
- * The input schema of an alias (spec/bindings/cli.md#aliases): the input schema of its capability or its event, from
+ * The input schema of an alias (spec/surfaces/cli.md#aliases): the input schema of its capability or its event, from
  * `cliInputSchema`, without the properties of the fixed input. The flags of the alias come from it. `catalog` is a
- * catalog or the view that has the alias.
+ * catalog or the catalog of the target that has the alias.
  */
 export function cliAliasInput(catalog: CatalogDocument, alias: CliAlias): JsonObject | undefined {
   const entry = alias.kind === "event" ? ownMember(catalog.events ?? {}, alias.id) : ownMember(catalog.capabilities, alias.id);
@@ -420,7 +420,7 @@ export function cliAliasFlagNames(catalog: CatalogDocument, alias: CliAlias): re
 
 /**
  * An input schema from `cliInputSchema`, without the properties of the fixed input of an alias
- * (spec/bindings/cli.md#aliases).
+ * (spec/surfaces/cli.md#aliases).
  */
 export function cliAliasSchema(input: JsonObject, fixed: JsonObject | undefined): JsonObject {
   if (fixed === undefined || !isJsonObject(input.properties)) return input;
@@ -431,7 +431,7 @@ export function cliAliasSchema(input: JsonObject, fixed: JsonObject | undefined)
 }
 
 /**
- * The `usage` of an alias in `list` (spec/bindings/cli.md#aliases). `input` is the input schema of the alias, from
+ * The `usage` of an alias in `list` (spec/surfaces/cli.md#aliases). `input` is the input schema of the alias, from
  * `cliAliasInput`, or `undefined` when it has no input. The usage of an alias of an event ends with the cursor flags.
  */
 export function cliAliasUsage(program: string, alias: Pick<CliAlias, "name" | "kind">, input: JsonObject | undefined): string {
@@ -458,7 +458,7 @@ export function sseMessage(fields: { readonly event?: string | undefined; readon
   return `${lines.join("\n")}\n\n`;
 }
 
-/** The messages of a subscription through the HTTP binding (spec/bindings/http.md#events). */
+/** The messages of a subscription through the HTTP surface (spec/surfaces/http.md#events). */
 export const httpEventMessage = {
   next: (occurrence: Occurrence): string => sseMessage({ event: "next", id: occurrence.cursor, data: JSON.stringify(occurrence) }),
   complete: (): string => sseMessage({ event: "complete", data: "" }),
@@ -556,7 +556,7 @@ export function mcpEventParams(occurrence: Occurrence, subscriptionId: string | 
   return { ...rest, _meta: { [MCP_SUBSCRIPTION_ID]: subscriptionId } };
 }
 
-/** A valid `heartbeatMs` of `events/stream`: absent, `null`, or an integer that is 1 or more (spec/bindings/mcp.md#push). */
+/** A valid `heartbeatMs` of `events/stream`: absent, `null`, or an integer that is 1 or more (spec/surfaces/mcp.md#push). */
 export const isMcpHeartbeatSuggestion = (value: unknown): value is number | null | undefined =>
   value === undefined || value === null || (typeof value === "number" && Number.isSafeInteger(value) && value >= 1);
 
@@ -626,7 +626,7 @@ const SCHEMA_MAPS: ReadonlySet<string> = new Set(["$defs", "patternProperties", 
 const pointerOf = (path: readonly string[]): string => path.map((key) => `/${key.replaceAll("~", "~0").replaceAll("/", "~1")}`).join("");
 
 /**
- * The errors of the `x-mcp-header` members of a bundled input schema (spec/bindings/mcp.md#header-annotations). Each
+ * The errors of the `x-mcp-header` members of a bundled input schema (spec/surfaces/mcp.md#header-annotations). Each
  * error names the location of the member as a JSON pointer into the bundled schema.
  */
 export function mcpHeaderErrors(inputSchema: unknown): string[] {
@@ -695,7 +695,7 @@ function paramAgrees(header: string | null, value: unknown): boolean {
 
 /**
  * Why the headers of a request of revision 2026-07-28 through HTTP do not agree with its body, or `undefined` when they
- * agree (spec/bindings/mcp.md#http). `inputSchema` is the bundled input schema of the tool or the event that the
+ * agree (spec/surfaces/mcp.md#http). `inputSchema` is the bundled input schema of the tool or the event that the
  * request names, or `undefined` when the server does not know it. The server answers a mismatch with the status 400 and
  * `MCP_HEADER_MISMATCH`.
  */
@@ -725,7 +725,7 @@ export function byCodePoint(left: string, right: string): number {
   return a.length - b.length;
 }
 
-/** The canonical JSON of a value (spec/bindings/mcp.md#canonical-json): no spaces, and the keys of each object in code point order. */
+/** The canonical JSON of a value (spec/surfaces/mcp.md#canonical-json): no spaces, and the keys of each object in code point order. */
 export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (isJsonObject(value)) {
@@ -735,7 +735,7 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(value) ?? "null";
 }
 
-/** The defaults of poll delivery (spec/bindings/mcp.md#poll). */
+/** The defaults of poll delivery (spec/surfaces/mcp.md#poll). */
 export const MCP_POLL_DEFAULTS = { leaseMs: 300_000, bufferLimit: 1000, maxEvents: 100, nextPollMs: 2000 } as const;
 
 /** Where a poll cursor points: a lease, a position in its buffer, and the last cursor of the provider. */
@@ -776,7 +776,7 @@ function textOfBase64Url(text: string): string {
   return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
 }
 
-/** The defaults of webhook delivery (spec/bindings/mcp.md#webhook). */
+/** The defaults of webhook delivery (spec/surfaces/mcp.md#webhook). */
 export const MCP_WEBHOOK_DEFAULTS = {
   maxTtlMs: 3_600_000,
   minTtlMs: 60_000,
@@ -787,7 +787,7 @@ export const MCP_WEBHOOK_DEFAULTS = {
   rotationGraceMs: 300_000,
 } as const;
 
-/** The reasons of a `CallbackEndpointError`, and the values of `lastError` (spec/bindings/mcp.md#webhook). */
+/** The reasons of a `CallbackEndpointError`, and the values of `lastError` (spec/surfaces/mcp.md#webhook). */
 export const WEBHOOK_ERRORS = ["challenge_failed", "connection_refused", "timeout", "tls_error", "http_4xx", "http_5xx"] as const;
 
 export type WebhookError = (typeof WEBHOOK_ERRORS)[number];
@@ -806,7 +806,7 @@ export function webhookSecretBytes(secret: string): Uint8Array<ArrayBuffer> | un
   return binary.length >= 24 && binary.length <= 64 ? Uint8Array.from(binary, (character) => character.charCodeAt(0)) : undefined;
 }
 
-/** The lifetime that the server grants for a suggested `ttlMs` (spec/bindings/mcp.md#webhook). */
+/** The lifetime that the server grants for a suggested `ttlMs` (spec/surfaces/mcp.md#webhook). */
 export function webhookGrantMs(ttlMs: number | null | undefined, limits: { readonly maxTtlMs: number; readonly minTtlMs: number }): number {
   if (ttlMs === null || ttlMs === undefined) return limits.maxTtlMs;
   return Math.min(limits.maxTtlMs, Math.max(limits.minTtlMs, ttlMs));
@@ -817,7 +817,7 @@ export const webhookSignedText = (webhookId: string, timestamp: number, body: st
 
 /**
  * The `webhook-signature` header: one `v1,` signature for each secret, then one `v1a,` signature for each signing key,
- * with a space between them (spec/bindings/mcp.md#webhook).
+ * with a space between them (spec/surfaces/mcp.md#webhook).
  */
 export async function webhookSignature(secrets: readonly string[], webhookId: string, timestamp: number, body: string, signingKeys: readonly CryptoKey[] = []): Promise<string> {
   const content = new TextEncoder().encode(webhookSignedText(webhookId, timestamp, body));
@@ -865,7 +865,7 @@ export interface WebhookPublication {
 }
 
 /**
- * Read the signing keys and the egress ranges of webhook delivery (spec/bindings/mcp.md#webhook). Each key is a private
+ * Read the signing keys and the egress ranges of webhook delivery (spec/surfaces/mcp.md#webhook). Each key is a private
  * JWK of an Ed25519 key. Throws a `TypeError` for a key of another form, two keys with the same `kid`, or a range that
  * is not CIDR text, so that a server with such settings fails when it starts.
  */
@@ -905,7 +905,7 @@ export async function importWebhookSigningKey({ kid, seed }: WebhookSigningSeed)
 
 /**
  * The `webhooks` member of the entry `io.modelcontextprotocol/events` in the `extensionsInfo` of a Server Card, or
- * `undefined` when the deployment publishes nothing (spec/bindings/mcp.md#server-card).
+ * `undefined` when the deployment publishes nothing (spec/surfaces/mcp.md#server-card).
  */
 export function webhookCardInfo(publicJwks: readonly JsonObject[], egressIpRanges: readonly string[]): JsonObject | undefined {
   if (publicJwks.length === 0 && egressIpRanges.length === 0) return undefined;
@@ -990,7 +990,7 @@ export function isVersionRange(version: string): boolean {
 }
 
 /**
- * Check the settings of the Server Card when the server starts (spec/bindings/mcp.md#server-card), and give
+ * Check the settings of the Server Card when the server starts (spec/surfaces/mcp.md#server-card), and give
  * `undefined` when the deployment turns the card off with `false`. Throws a `TypeError` for a given name that is not
  * in reverse-DNS form, a given description that is empty or too long, or a given URL that is not an
  * absolute `http` or `https` URL with a host. With the card off, throws a `TypeError` if `publishesWebhookInfo` is
@@ -1051,7 +1051,7 @@ export function mcpServerCardDescription(texts: readonly (string | undefined)[])
 const FALLBACK_SERVER_CARD_NAMESPACE = "local";
 
 /**
- * The default name of a Server Card (spec/bindings/mcp.md#server-card), from the host of the URL of the server, with or
+ * The default name of a Server Card (spec/surfaces/mcp.md#server-card), from the host of the URL of the server, with or
  * without a port, and the name of the server.
  */
 export function mcpServerCardName(host: string, serverName: string): string {
@@ -1072,7 +1072,7 @@ function serverCardNamespace(host: string): string {
 }
 
 /**
- * A Server Card (spec/bindings/mcp.md#server-card). `url` is the URL of the server, from the request of the card.
+ * A Server Card (spec/surfaces/mcp.md#server-card). `url` is the URL of the server, from the request of the card.
  * `supportedProtocolVersions` are the revisions that the server serves at that URL.
  */
 export function mcpServerCard(identity: McpServerCardIdentity, url: string, webhooks: JsonObject | undefined, supportedProtocolVersions: readonly string[] = [MCP_PROTOCOL_VERSION]): JsonObject {
@@ -1147,7 +1147,7 @@ const SERVER_CARD_HEADERS = { ...MCP_SERVER_CARD_CORS_HEADERS, "Cache-Control": 
 
 /**
  * The answer to a request to the URL of a Server Card that is not a `GET` request: the CORS headers for `OPTIONS`, and
- * 405 for other methods (spec/bindings/mcp.md#server-card). `undefined` for a `GET` request.
+ * 405 for other methods (spec/surfaces/mcp.md#server-card). `undefined` for a `GET` request.
  */
 export function mcpServerCardPreflight(request: Request): Response | undefined {
   if (request.method === "GET") return undefined;
@@ -1157,7 +1157,7 @@ export function mcpServerCardPreflight(request: Request): Response | undefined {
 
 /**
  * The answer to a request to the URL of a Server Card: the card for `GET`, the CORS headers for `OPTIONS`, and 405 for
- * other methods (spec/bindings/mcp.md#server-card).
+ * other methods (spec/surfaces/mcp.md#server-card).
  */
 export async function mcpServerCardResponse(request: Request, card: JsonObject): Promise<Response> {
   const preflight = mcpServerCardPreflight(request);
@@ -1335,7 +1335,7 @@ export interface CatalogDocument extends JsonObject {
   readonly acidcat: string;
   readonly title?: string;
   readonly description?: string;
-  readonly targets: { readonly [name: string]: JsonObject & { readonly bindings: readonly string[] } };
+  readonly targets: { readonly [name: string]: JsonObject & { readonly surfaces: readonly string[] } };
   readonly $defs?: { readonly [name: string]: JsonObject };
   readonly capabilities: { readonly [id: string]: CatalogCapability };
   readonly events?: { readonly [id: string]: CatalogEvent };
@@ -1442,7 +1442,7 @@ export function bundle(schema: JsonObject, types: { readonly [name: string]: Jso
 }
 
 /**
- * The input schema that the CLI binding reads (spec/bindings/cli.md#commands): the bundled type that the `$ref` of the
+ * The input schema that the CLI surface reads (spec/surfaces/cli.md#commands): the bundled type that the `$ref` of the
  * schema refers to, whatever other keys the schema has, as `resolveType` gives it. The flags, the usage and the choice
  * of JSON text come from it.
  */
@@ -1450,8 +1450,8 @@ export function cliInputSchema(schema: JsonObject, types: { readonly [name: stri
   return bundle(resolveType(schema, types), types);
 }
 
-/** The view of a target (spec/catalog.md#views). */
-export function viewOf(catalog: CatalogDocument, target: string): CatalogDocument {
+/** The catalog of a target (spec/catalog.md#the-catalog-of-a-target). */
+export function targetCatalog(catalog: CatalogDocument, target: string): CatalogDocument {
   const types = catalog.$defs ?? {};
   const capabilities = Object.fromEntries(
     Object.entries(catalog.capabilities)

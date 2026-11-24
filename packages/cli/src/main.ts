@@ -5,7 +5,7 @@ import { Console, Data, Effect, FileSystem, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 
 import packageJson from "../package.json" with { type: "json" };
-import { check, isCatalog, viewOf } from "./catalog.ts";
+import { check, isCatalog, targetCatalog } from "./catalog.ts";
 import { conform, DEADLINE } from "./conform/index.ts";
 import { parseJson } from "./json.ts";
 
@@ -96,8 +96,8 @@ const formatCommand = Command.make(
   }, Effect.catchTag("UnreadableFile", reportUnreadable)),
 ).pipe(Command.withDescription("Write catalogs in canonical form."));
 
-const viewCommand = Command.make(
-  "view",
+const targetCommand = Command.make(
+  "target",
   {
     file: Argument.String("catalog").pipe(Argument.withDescription("A catalog file")),
     target: Argument.String("target").pipe(Argument.withDescription("The name of a target in the catalog")),
@@ -112,9 +112,9 @@ const viewCommand = Command.make(
       yield* Console.error(`${file}: error: there is no target ${target}`);
       return yield* fail;
     }
-    yield* Effect.sync(() => process.stdout.write(canonicalText(viewOf(catalog, target))));
+    yield* Effect.sync(() => process.stdout.write(canonicalText(targetCatalog(catalog, target))));
   }, Effect.catchTag("UnreadableFile", reportUnreadable)),
-).pipe(Command.withDescription("Print the view of one target."));
+).pipe(Command.withDescription("Print the catalog of one target."));
 
 const url = (name: string, description: string) =>
   Flag.String(name).pipe(Flag.withDescription(description), Flag.optional);
@@ -153,7 +153,7 @@ const conformCommand = Command.make(
       Flag.withDescription("The maximum number of webhook subscriptions of one principal in the deployment. With it, conform tests the limit"),
       Flag.optional,
     ),
-    maximumBytes: Flag.Int("max-bytes").pipe(Flag.withDescription("The body limit of the remote bindings"), Flag.withDefault(1_048_576)),
+    maximumBytes: Flag.Int("max-bytes").pipe(Flag.withDescription("The body limit of the remote surfaces"), Flag.withDefault(1_048_576)),
     deadline: Flag.Int("deadline").pipe(
       Flag.withDescription("The time, in milliseconds, that each check has to settle. A check that does not settle in this time fails"),
       Flag.withDefault(DEADLINE),
@@ -207,7 +207,7 @@ const conformCommand = Command.make(
       }),
     );
     if (results.length === 0) {
-      yield* Console.error("Give at least one binding: --mcp, --mcp-stdio, --http, --cli or --webmcp.");
+      yield* Console.error("Give at least one surface: --mcp, --mcp-stdio, --http, --cli or --webmcp.");
       return yield* fail;
     }
     const failed = results.filter((result) => !result.passed).length;
@@ -218,16 +218,16 @@ const conformCommand = Command.make(
       return;
     }
     for (const result of results) {
-      yield* Console.log(`${result.warning === true ? "!" : result.passed ? "✓" : "✗"} ${result.binding}: ${result.name} (${result.rule})${result.detail ? `\n    ${result.detail}` : ""}`);
+      yield* Console.log(`${result.warning === true ? "!" : result.passed ? "✓" : "✗"} ${result.surface}: ${result.name} (${result.rule})${result.detail ? `\n    ${result.detail}` : ""}`);
     }
     yield* Console.log(`\n${results.length - failed} passed, ${failed} failed${warnings === 0 ? "" : `, ${warnings} with a warning`}.`);
     if (failed > 0) return yield* fail;
   }, Effect.catchTag("UnreadableFile", reportUnreadable)),
-).pipe(Command.withDescription("Test a running implementation of the conformance fixture through its bindings."));
+).pipe(Command.withDescription("Test a running implementation of the conformance fixture through its surfaces."));
 
 const acidCat = Command.make("acid-cat").pipe(
-  Command.withDescription("Check, format and view AcidCat catalogs, and test implementations."),
-  Command.withSubcommands([checkCommand, formatCommand, viewCommand, conformCommand]),
+  Command.withDescription("Check and format AcidCat catalogs, print the catalog of a target, and test implementations."),
+  Command.withSubcommands([checkCommand, formatCommand, targetCommand, conformCommand]),
 );
 
 // Package runners, such as `pnpm` and `npx`, pass a `--` before the arguments of the program.

@@ -90,7 +90,7 @@ test("remove takes the tools away while the scope stays open, does nothing a sec
     }).pipe(Effect.provide(Layer.fresh(fixtureLayer))),
   ));
 
-test("with no host, the binding does nothing", () =>
+test("with no host, the surface does nothing", () =>
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {

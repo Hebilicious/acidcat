@@ -13,7 +13,7 @@ import type { Channel, EventStream, Message } from "./mcp.ts";
 import type { PollSettings } from "./poll.ts";
 import { checkProperties, clientInvoke } from "./properties.ts";
 
-const RULE = "spec/bindings/mcp.md#stdio";
+const RULE = "spec/surfaces/mcp.md#stdio";
 
 const ERAS = [
   { revision: "2026-07-28", connects: "an MCP client connects with revision 2026-07-28", options: { versionNegotiation: { mode: { pin: "2026-07-28" } } } },

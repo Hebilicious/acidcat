@@ -4,7 +4,7 @@ import { isArrayOf, isObject, isStringArray, memberOf, parseJson } from "../json
 import type { JsonObject } from "../json.ts";
 import { abortable, Checks, expect, expectEqual, fixture, idsOf, sorted, until } from "./check.ts";
 
-const RULE = "spec/bindings/webmcp.md";
+const RULE = "spec/surfaces/webmcp.md";
 
 const TARGET = "app";
 
@@ -210,18 +210,18 @@ async function heldKeys(driver: WebMcpDriver, signal: AbortSignal): Promise<read
 
 export async function checkWebMcp(driver: WebMcpDriver, options: { readonly deadline: number }): Promise<Checks> {
   const checks = new Checks("webmcp", options.deadline);
-  const view = fixture.capabilities;
+  const capabilities = fixture.capabilities;
   const expected = idsOf(TARGET);
 
-  await checks.run("each available capability of the view is a tool", `${RULE}#tools`, async (signal) => {
+  await checks.run("each available capability of the target is a tool", `${RULE}#tools`, async (signal) => {
     await until(`the tools are ${expected.join(", ")}`, () => names(driver, signal), (tools) => JSON.stringify(tools) === JSON.stringify(expected), signal);
   });
   await checks.run("a tool has the description and the bundled input schema of its capability", `${RULE}#tools`, async (signal) => {
     for (const tool of await driver.tools(signal)) {
-      expectEqual(tool.description, view[tool.name]?.description, `description of ${tool.name}`);
+      expectEqual(tool.description, capabilities[tool.name]?.description, `description of ${tool.name}`);
       const schema = tool.inputSchema;
       expect(isObject(schema), `the input schema of ${tool.name} must be an object`);
-      expectSameInputShape(tool.name, schema, view[tool.name]?.input ?? {});
+      expectSameInputShape(tool.name, schema, capabilities[tool.name]?.input ?? {});
       expect(isBundled(schema), `the input schema of ${tool.name} must be bundled`);
     }
   });

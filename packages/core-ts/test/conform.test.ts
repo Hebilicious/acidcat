@@ -16,7 +16,7 @@ import { bundledProgram } from "./bundled-program.ts";
 
 function assertConforms(results: readonly Check[], minimum: number) {
   const failed = results.filter((result) => !result.passed);
-  assert.deepEqual(failed, [], failed.map((result) => `${result.binding}: ${result.name}: ${result.detail}`).join("\n"));
+  assert.deepEqual(failed, [], failed.map((result) => `${result.surface}: ${result.name}: ${result.detail}`).join("\n"));
   assert.deepEqual(results.filter((result) => result.warning === true), []);
   assert.ok(results.length >= minimum, `${results.length} checks, expected ${minimum} or more`);
 }
@@ -53,7 +53,7 @@ describe("the TypeScript core passes acid-cat conform", { concurrency: true }, (
   test("through MCP over HTTP, with the handshake, poll and webhook delivery", { timeout }, async () => {
     const results = await conform({ mcp: `${url}/mcp`, mcpHandshake: true, poll: POLL, pollLease: { mcp: `${url}/mcp-lease`, leaseMs: POLL_LEASE_MS }, webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS } });
     assertConforms(results, 60);
-    assert.ok(results.some((result) => result.rule === "spec/bindings/mcp.md#server-card"), "the default Server Card is checked");
+    assert.ok(results.some((result) => result.rule === "spec/surfaces/mcp.md#server-card"), "the default Server Card is checked");
   });
 
   test("through MCP over stdio", { timeout }, async () => {

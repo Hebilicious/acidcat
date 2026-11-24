@@ -279,7 +279,7 @@ export const makeWebhooks = (options: WebhookOptions): Effect.Effect<Webhooks, n
         const session = yield* open(scope);
         if (maxAge._tag === "Invalid") {
           yield* Scope.close(scope, Exit.void);
-          return { error: mcpSubscribeError(maxAgeFailure(session.view.events, params.name, maxAge.issue)) };
+          return { error: mcpSubscribeError(maxAgeFailure(session.catalog.events, params.name, maxAge.issue)) };
         }
         const started = yield* Effect.result(session.subscribe(params.name, input, resumeOf(params.cursor, maxAge)).pipe(Scope.provide(scope)));
         if (started._tag === "Failure") {

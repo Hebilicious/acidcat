@@ -14,7 +14,7 @@ use crate::subscription::Occurrence;
 
 const MAXIMUM_ANSWER: usize = 64 * 1024 * 1024;
 
-/// A client of an HTTP binding at a base URL, for example `http://pi.local:8080/api`. Clones share the settings.
+/// A client of an HTTP surface at a base URL, for example `http://pi.local:8080/api`. Clones share the settings.
 #[derive(Clone)]
 pub struct HttpClient {
     base: String,
@@ -48,7 +48,7 @@ fn reject_credentials(base: &str) -> Result<(), String> {
 }
 
 impl HttpClient {
-    /// A client of the HTTP binding at `base`, an `http` or `https` URL. The error tells what is wrong with the URL.
+    /// A client of the HTTP surface at `base`, an `http` or `https` URL. The error tells what is wrong with the URL.
     pub fn new(base: &str) -> Result<Self, String> {
         let base = base.trim_end_matches('/').to_owned();
         reject_credentials(&base)?;
@@ -91,7 +91,7 @@ impl HttpClient {
         &self.base
     }
 
-    /// The capabilities of the view of the server, with their availability: `GET {base}/capabilities`.
+    /// The capabilities of the target of the server, with their availability: `GET {base}/capabilities`.
     pub async fn capabilities(&self) -> Result<Vec<(String, Availability)>, CallFailure> {
         let answer = self.send(Method::GET, "/capabilities", None, None).await?;
         let (status, body) = read(answer).await?;
@@ -262,7 +262,7 @@ fn call_failure(body: &Value) -> CallFailure {
 fn not_an_answer() -> CallFailure {
     CallFailure::new(
         Kind::Internal,
-        "The server gave an answer that the HTTP binding does not give.",
+        "The server gave an answer that the HTTP surface does not give.",
     )
 }
 
@@ -425,7 +425,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_item_of_capabilities_that_the_binding_does_not_give_is_internal() {
+    async fn an_item_of_capabilities_that_the_surface_does_not_give_is_internal() {
         for body in [
             r#"[{"id":"a","available":"false"}]"#,
             r#"[{"id":"a","available":false}]"#,

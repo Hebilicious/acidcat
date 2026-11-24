@@ -66,7 +66,7 @@ test("with no settings, the server serves a Server Card with the default name, a
   assert.equal((await cardOf(await handler(new Request("http://127.0.0.1:3000/mcp/server-card"))))["name"], "local/fixture");
   await handler.close();
   const app = defineApp({
-    targets: { mcp: { bindings: ["mcp"] } },
+    targets: { mcp: { surfaces: ["mcp"] } },
     capabilities: [defineCapability({ id: "probe.run", description: "Run the probe.", audience: ["mcp"], run: () => ok(null) })],
   });
   const noDescription = mcpHandler(app, { name: "probe server", version: "0.0.0", allowedOrigins: [], context: undefined, toJsonSchema });

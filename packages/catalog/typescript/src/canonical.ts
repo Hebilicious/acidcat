@@ -8,7 +8,7 @@ type JsonObject = { readonly [key: string]: unknown };
 const isObject = (value: unknown): value is JsonObject => value !== null && typeof value === "object";
 
 const CATALOG_ORDER = ["acidcat", "title", "description", "targets", "$defs", "capabilities", "events"];
-const TARGET_ORDER = ["bindings", "description", "options"];
+const TARGET_ORDER = ["surfaces", "description", "options"];
 const CAPABILITY_ORDER = ["description", "audience", "input", "output", "failures", "readOnly", "destructive", "idempotent", "state"];
 const EVENT_ORDER = ["description", "audience", "input", "payload"];
 

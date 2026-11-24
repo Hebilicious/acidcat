@@ -237,7 +237,7 @@ impl CliFormats {
             };
             if !ids.contains(&format.id) {
                 problems.push(format!(
-                    "The command line has a format for {}, which is not {what} in the view of the target {target}.",
+                    "The command line has a format for {}, which is not {what} in the catalog of the target {target}.",
                     format.id
                 ));
             }

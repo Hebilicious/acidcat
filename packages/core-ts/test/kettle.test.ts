@@ -18,8 +18,8 @@ function filledKettle(litres = 1): Kettle {
 test("the catalog has the targets, the audiences and the members of each capability", () => {
   const catalog = catalogOf(kettle, { toJsonSchema });
   assert.deepEqual(Object.keys(catalog.targets), ["app", "panel", "cli", "mcp"]);
-  assert.deepEqual(catalog.targets.panel, { bindings: ["typescript"], description: "The buttons and the display on the base of the kettle." });
-  assert.deepEqual(catalog.targets.cli, { bindings: ["cli"] });
+  assert.deepEqual(catalog.targets.panel, { surfaces: ["typescript"], description: "The buttons and the display on the base of the kettle." });
+  assert.deepEqual(catalog.targets.cli, { surfaces: ["cli"] });
 
   const status = catalog.capabilities["kettle.status.get"];
   assert.deepEqual(status?.audience, ["app", "panel", "cli", "mcp"]);
@@ -52,7 +52,7 @@ test("two different schemas with the same name stop the catalog", () => {
   const First = z.enum(["a", "b"]).meta({ id: "Choice" });
   const Second = z.enum(["c", "d"]).meta({ id: "Choice" });
   const app = defineApp({
-    targets: { mcp: { bindings: ["mcp"] } },
+    targets: { mcp: { surfaces: ["mcp"] } },
     capabilities: [
       defineCapability({ id: "probe.first", description: "Use the first choice.", audience: ["mcp"], input: z.object({ choice: First }), run: () => ok(null) }),
       defineCapability({ id: "probe.second", description: "Use the second choice.", audience: ["mcp"], input: z.object({ choice: Second }), run: () => ok(null) }),
@@ -133,10 +133,10 @@ test("session.handle gives a handle with the types of its capability", async () 
   await session.dispose();
 });
 
-test("session.handle gives an always unavailable handle for a capability outside the view", async () => {
+test("session.handle gives an always unavailable handle for a capability outside the target", async () => {
   const session = createSession(kettle, { target: "panel", context: { kettle: new Kettle() }, toJsonSchema });
   assert.deepEqual([...session.handles.keys()].sort(), ["kettle.boil", "kettle.status.get"]);
-  assert.deepEqual(Object.keys(session.view.capabilities).sort(), ["kettle.boil", "kettle.status.get"]);
+  assert.deepEqual(Object.keys(session.catalog.capabilities).sort(), ["kettle.boil", "kettle.status.get"]);
 
   const warming = session.handle(warmSet);
   assert.equal(session.handles.has(warmSet.id), false);
@@ -162,7 +162,7 @@ test("session.handle serves only the capability object of the application, and a
       return ok(null);
     },
   });
-  const app = defineApp({ targets: { app: { bindings: ["typescript"] } }, capabilities: [probe] });
+  const app = defineApp({ targets: { app: { surfaces: ["typescript"] } }, capabilities: [probe] });
   const session = createSession(app, { target: "app", context: undefined, toJsonSchema });
 
   assert.deepEqual(await session.handle(probe).execute({}), { ok: true, value: null });

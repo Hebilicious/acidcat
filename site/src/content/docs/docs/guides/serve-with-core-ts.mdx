@@ -1,6 +1,6 @@
 ---
 title: Serve with the TypeScript core
-description: Write capabilities and events with @acid-cat/core-ts, and serve them through the TypeScript, MCP, HTTP, CLI and WebMCP bindings.
+description: Write capabilities and events with @acid-cat/core-ts, and serve them through the TypeScript, MCP, HTTP, CLI and WebMCP surfaces.
 sidebar:
   order: 22
   label: TypeScript core
@@ -28,7 +28,7 @@ const capability = capabilitiesFor<{ unit: Unit }>();
 
 export const aircon = defineApp<{ unit: Unit }>({
   title: "Living-room air conditioner",
-  targets: { cli: { bindings: ["cli"] }, mcp: { bindings: ["mcp"] } },
+  targets: { cli: { surfaces: ["cli"] }, mcp: { surfaces: ["mcp"] } },
   capabilities: [
     capability({
       id: "aircon.power.set",
@@ -82,9 +82,9 @@ await writeFile("acidcat.catalog.json", renderCatalog(aircon, { toJsonSchema }))
 
 `toJsonSchema` is the converter of your schema library, for example `z.toJSONSchema`.
 
-## Serve each binding
+## Serve each surface
 
-| Function | Binding |
+| Function | Surface |
 | --- | --- |
 | `createSession(app, options)` | TypeScript: a handle for each capability and each event |
 | `mcpHandler(app, options)` | MCP through HTTP: a web handler |
@@ -152,7 +152,7 @@ const webmcp = installWebMcp(session);
 webmcp?.status.subscribe(({ phase, message }) => console.log(phase, message));
 ```
 
-Use a session whose target has the `webmcp` binding. With no WebMCP host in the browser, `installWebMcp` returns `undefined`, and the page works without tools.
+Use a session whose target has the `webmcp` surface. With no WebMCP host in the browser, `installWebMcp` returns `undefined`, and the page works without tools.
 
 ### A context for each request
 
@@ -174,7 +174,7 @@ const handler = httpHandler(aircon, {
 
 ## The command line
 
-`cliMain` builds the command line of the view of the `cli` target:
+`cliMain` builds the command line of the target of the `cli` target:
 
 ```sh
 node cli.ts aircon temperature set --celsius 22
@@ -189,7 +189,7 @@ Declare aliases in the `cli` member of the `cli` target. `cliAlias(capabilityOrE
 ```ts
 targets: {
   cli: {
-    bindings: ["cli"],
+    surfaces: ["cli"],
     cli: {
       aliases: {
         status: cliAlias(statusGet),
@@ -210,10 +210,10 @@ node cli.ts fan high  # same as: node cli.ts aircon fan set --speed high
 
 By default, the command line writes JSON only. The `output` option adds a human form, with output flags such as `--json` and formatters made by `cliFormat`. With `default: "auto"`, the human form is used on a terminal, and JSON in a pipe, in CI or under a coding agent.
 
-`remote: httpClient(url)` makes the command line a client of the HTTP binding of a server. The commands still come from the local view.
+`remote: httpClient(url)` makes the command line a client of the HTTP surface of a server. The commands still come from the local catalog of the target.
 
 ## Read more
 
 - The full [`@acid-cat/core-ts` README](https://github.com/Hebilicious/acidcat/blob/main/packages/core-ts/README.md): every option, poll and webhook delivery, human output and application commands.
 - [The air conditioner on the TypeScript core](/docs/examples/core-ts/), in a code explorer.
-- [Bindings](/docs/concepts/bindings/) and [the TypeScript binding](/spec/bindings/typescript/).
+- [Surfaces](/docs/concepts/surfaces/) and [the TypeScript surface](/spec/surfaces/typescript/).

@@ -7,7 +7,7 @@ import * as NodeCli from "../src/NodeCli.ts";
 const Name = Schema.Struct({ constructor: Schema.String, text: Schema.optionalKey(Schema.String) });
 
 const app = App.make({
-  targets: { cli: { bindings: ["cli"], options: { cli: { aliases: { go: { capability: "probe.name", input: { constructor: "fixed" } } } } } } },
+  targets: { cli: { surfaces: ["cli"], options: { cli: { aliases: { go: { capability: "probe.name", input: { constructor: "fixed" } } } } } } },
   capabilities: [
     Capability.make({
       id: "probe.name",

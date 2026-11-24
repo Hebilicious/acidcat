@@ -25,7 +25,7 @@ export interface ConformOptions {
   readonly mcp?: string | undefined;
   /**
    * Check the `initialize` handshake of revision 2025-11-25 through the MCP server too
-   * (spec/bindings/mcp.md#earlier-revisions-through-http). The default is `false`.
+   * (spec/surfaces/mcp.md#earlier-revisions-through-http). The default is `false`.
    */
   readonly mcpHandshake?: boolean | undefined;
   /**
@@ -38,7 +38,7 @@ export interface ConformOptions {
   /** The command that starts the command line, for example `["node", "fixture-cli.ts"]`. */
   readonly cli?: readonly string[] | undefined;
   /**
-   * The WebMCP binding: the URL of a page that serves the `app` target, or a function that installs the implementation
+   * The WebMCP surface: the URL of a page that serves the `app` target, or a function that installs the implementation
    * on a host in the same process. A page runs in Chromium, through Playwright.
    */
   readonly webmcp?: string | WebMcpInstall | undefined;
@@ -58,7 +58,7 @@ export interface ConformOptions {
    * header `Authorization: Bearer <principal>`.
    */
   readonly webhook?: WebhookSettings | undefined;
-  /** The body limit of the remote bindings, in bytes. The default is 1 MiB. */
+  /** The body limit of the remote surfaces, in bytes. The default is 1 MiB. */
   readonly maximumBytes?: number | undefined;
   /**
    * The time, in milliseconds, that each check has to settle. A check that does not settle in this time fails. The
@@ -67,7 +67,7 @@ export interface ConformOptions {
   readonly deadline?: number | undefined;
 }
 
-/** Run all checks for the bindings that the options give. */
+/** Run all checks for the surfaces that the options give. */
 export async function conform(options: ConformOptions): Promise<readonly Check[]> {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
   const deadline = options.deadline ?? DEADLINE;

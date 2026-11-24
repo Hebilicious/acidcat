@@ -1,5 +1,5 @@
 // pkl eval fails with: Type constraint `this.getPropertyOrNull("type") == "object" || this.toMap().containsKey("$ref")` violated.
 amends "../Catalog.pkl"
 
-targets { ["cli"] { bindings { "cli" } } }
+targets { ["cli"] { surfaces { "cli" } } }
 capabilities { ["shop.item.get"] { description = "Get an item."; audience { "cli" }; input { type = "string" } } }

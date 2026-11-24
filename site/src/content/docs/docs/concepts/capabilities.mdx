@@ -57,18 +57,18 @@ The hints tell a client what a call does. They do not change the behavior of a c
 | `destructive` | A call can delete or overwrite something. `false` means that a call only adds things |
 | `idempotent` | A second call with the same input has no more effect |
 
-In the air conditioner, `aircon.status.get` is `readOnly`, and each setter, such as `aircon.power.set`, is `destructive` and `idempotent`. The MCP binding gives the hints to agents as `readOnlyHint`, `destructiveHint` and `idempotentHint`. Agent clients use them to decide when to ask the user before a call.
+In the air conditioner, `aircon.status.get` is `readOnly`, and each setter, such as `aircon.power.set`, is `destructive` and `idempotent`. The MCP surface gives the hints to agents as `readOnlyHint`, `destructiveHint` and `idempotentHint`. Agent clients use them to decide when to ask the user before a call.
 
 ## Audience
 
 The **audience** lists the targets that can use the capability. A capability with no audience is available to no target, so a new capability never goes to an agent by accident.
 
-In the air conditioner, `aircon.status.export` writes a file. Its audience is only `cli`, because only the command line gives its sessions the file system. [Targets and views](/docs/concepts/targets-and-views/) tells how the audience makes the view of each target.
+In the air conditioner, `aircon.status.export` writes a file. Its audience is only `cli`, because only the command line gives its sessions the file system. [Targets](/docs/concepts/targets/) tells how the audience makes the catalog of each target.
 
 ## Availability and state
 
 - **Availability** tells if a capability can run now in a session. In the air conditioner, `aircon.firmware.update` is available only while the unit is online. A call to an unavailable capability fails with `unavailable`.
-- **State** is a value of a capability that clients can read and follow, for example the status of the unit. Language bindings, such as TypeScript, expose it.
+- **State** is a value of a capability that clients can read and follow, for example the status of the unit. Language surfaces, such as TypeScript, expose it.
 
 ## Read more
 

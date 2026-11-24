@@ -71,7 +71,7 @@ before(async () => {
 after(() => browser.close());
 
 for (const core of ["core-ts", "core-effect"]) {
-  test(`the page of ${core} gives a browser agent one WebMCP tool for each available capability of the app view`, async () => {
+  test(`the page of ${core} gives a browser agent one WebMCP tool for each available capability of the app target`, async () => {
     const handler = await pageHandler(new URL(`../${core}/page.ts`, import.meta.url));
     await using served = await serve({ "/": handler }, { port: 0 });
     const page = await browser.newPage();

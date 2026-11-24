@@ -74,7 +74,7 @@ function sseMessages(response: Response) {
 
 const json = async (response: Response) => decodeMessage(await response.text());
 
-test("through HTTP, a view with no events declares no extension, and events/list is an unknown method", async () => {
+test("through HTTP, a target with no events declares no extension, and events/list is an unknown method", async () => {
   const without = Mcp.toWebHandler(recordingApp().app, Layer.empty, { name: "fixture", version: "0.0.0", allowedOrigins: [ORIGIN] });
   const plain = Schema.decodeUnknownSync(Discovery)((await json(await without(mcpRequest("server/discover")))).result);
   assert.equal(plain.capabilities.extensions?.[EXTENSION], undefined);

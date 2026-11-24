@@ -45,9 +45,8 @@ The catalog declares the capability one time. Write it in the source that you pr
 <CatalogFlow />
 
 - The **catalog** is the contract. It is a JSON document that you check at build time. A program does not read it at run time.
-- A **target** is a group of clients, for example `cli` or `mcp`. Its **view** is the part of the catalog that those clients can see.
-- A **binding** is the set of rules for one kind of surface, for example the MCP binding or the CLI binding. The specification defines each binding.
-- A **surface** is what a client uses: the commands of a command line, the tools of an MCP server, the routes of an HTTP API. A binding makes a surface from a view.
+- A **target** is a group of clients and what they can use, for example `cli` or `mcp`. Each target sees only its part of the catalog, the **catalog of the target**.
+- A **surface** is one way for clients to reach a target: MCP, WebMCP, the CLI, HTTP, or a language such as TypeScript or Rust. AcidCat serves one catalog through many surfaces, and the specification defines each one.
 - A **provider** is your code that does the operation. A **core** is a library that runs your providers and serves the surfaces.
 - `acid-cat conform` tests a running program from the outside, through each surface.
 
@@ -57,10 +56,10 @@ AcidCat is a specification first. The TypeScript and Rust packages are one imple
 
 <CardGrid>
   <LinkCard title="Quick start" description="Declare a capability, check the catalog, and serve it as a CLI, an MCP server and an HTTP API." href="/docs/quick-start/" />
-  <LinkCard title="Concepts" description="Catalogs, capabilities, targets, events, bindings, cores and conformance, one page each." href="/docs/concepts/catalog/" />
+  <LinkCard title="Concepts" description="Catalogs, capabilities, targets, events, surfaces, cores and conformance, one page each." href="/docs/concepts/catalog/" />
   <LinkCard title="Guides" description="Write a catalog in your language, serve it with a core, and test an implementation." href="/docs/guides/write-a-catalog/" />
   <LinkCard title="Examples" description="Programs that you can run, each with a code explorer on its source." href="/docs/examples/" />
   <LinkCard title="The acid-cat command" description="Every command and flag of the command-line tool." href="/docs/reference/cli/" />
-  <LinkCard title="Specification" description="The normative rules: catalog, invocation, events, bindings and conformance." href="/spec/" />
+  <LinkCard title="Specification" description="The normative rules: catalog, invocation, events, surfaces and conformance." href="/spec/" />
   <LinkCard title="Packages" description="The published packages: the command line, the cores and the catalog libraries." href="/packages/" />
 </CardGrid>

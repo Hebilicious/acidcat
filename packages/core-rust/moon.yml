@@ -3,7 +3,7 @@ layer: "library"
 
 project:
   title: "acid-cat-core"
-  description: "Serve AcidCat capabilities and events in Rust, through the MCP, HTTP and CLI bindings. Published to crates.io as acid-cat-core."
+  description: "Serve AcidCat capabilities and events in Rust, through the MCP, HTTP and CLI surfaces. Published to crates.io as acid-cat-core."
 
 tasks:
   test:

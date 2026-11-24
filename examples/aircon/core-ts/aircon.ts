@@ -226,10 +226,10 @@ export const aircon = defineApp<Context>({
   title: "Living-room air conditioner",
   description: "Control and monitor one split-unit air conditioner on the home network.",
   targets: {
-    app: { description: "The phone, desktop and web apps that people use.", bindings: ["typescript", "rust", "webmcp", "acme:swift", "acme:kotlin"] },
-    taskbar: { description: "A desktop taskbar widget showing the status and a power toggle.", bindings: ["typescript"] },
+    app: { description: "The phone, desktop and web apps that people use.", surfaces: ["typescript", "rust", "webmcp", "acme:swift", "acme:kotlin"] },
+    taskbar: { description: "A desktop taskbar widget showing the status and a power toggle.", surfaces: ["typescript"] },
     cli: {
-      bindings: ["cli"],
+      surfaces: ["cli"],
       cli: {
         aliases: {
           status: cliAliasDefault(statusGet),
@@ -243,8 +243,8 @@ export const aircon = defineApp<Context>({
         },
       },
     },
-    mcp: { description: "Agents, through an MCP server.", bindings: ["mcp"] },
-    api: { description: "Home-automation systems and scripts.", bindings: ["http"] },
+    mcp: { description: "Agents, through an MCP server.", surfaces: ["mcp"] },
+    api: { description: "Home-automation systems and scripts.", surfaces: ["http"] },
   },
   capabilities: [statusGet, powerSet, modeSet, temperatureSet, fanSet, scheduleSet, statusExport, firmwareUpdate],
   events: [statusChanged],

@@ -42,7 +42,7 @@ export interface CliOutput {
   readonly default?: "auto" | "json" | undefined;
   /**
    * The formatters of the human form, made with `cliFormat`. Give one format at most for each capability or event of
-   * the view. A value with no formatter has the generic layout.
+   * the target. A value with no formatter has the generic layout.
    */
   readonly formats?: readonly CliFormat[] | undefined;
 }
@@ -165,7 +165,7 @@ export function cliFormatErrors(formats: readonly CliFormat[], capabilities: rea
   for (const { member, id } of formats) {
     if (seen.has(id)) errors.push(`Two formats are for ${id}. Give one format for each capability or event.`);
     seen.add(id);
-    if (!(member === "capability" ? capabilities : events).includes(id)) errors.push(`A format is for the ${member} ${id}, which is not in the view of the command line.`);
+    if (!(member === "capability" ? capabilities : events).includes(id)) errors.push(`A format is for the ${member} ${id}, which is not in the target of the command line.`);
   }
   return errors;
 }

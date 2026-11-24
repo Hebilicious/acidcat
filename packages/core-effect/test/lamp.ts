@@ -130,11 +130,11 @@ export const lamp = App.make({
   title: "Bedside lamp",
   description: "Control one smart lamp with a dimmable bulb.",
   targets: {
-    app: { description: "The phone app.", bindings: ["typescript"] },
-    remote: { description: "A small remote with a power button and a dimmer.", bindings: ["typescript"] },
-    cli: { bindings: ["cli"] },
-    mcp: { description: "Agents, through an MCP server.", bindings: ["mcp"] },
-    api: { description: "Home-automation systems.", bindings: ["http"] },
+    app: { description: "The phone app.", surfaces: ["typescript"] },
+    remote: { description: "A small remote with a power button and a dimmer.", surfaces: ["typescript"] },
+    cli: { surfaces: ["cli"] },
+    mcp: { description: "Agents, through an MCP server.", surfaces: ["mcp"] },
+    api: { description: "Home-automation systems.", surfaces: ["http"] },
   },
   capabilities: [lightGet, powerSet, brightnessSet, temperatureSet, sceneSet, pair],
 });

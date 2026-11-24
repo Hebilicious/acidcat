@@ -45,7 +45,7 @@ describe("the command line that calls a server", () => {
     }
   });
 
-  test("an answer that the HTTP binding does not give, or a stream with an occurrence that is not valid or with no complete, is internal, with exit code 5", async (context) => {
+  test("an answer that the HTTP surface does not give, or a stream with an occurrence that is not valid or with no complete, is internal, with exit code 5", async (context) => {
     const answers: readonly (() => Response)[] = [
       () => new Response("<html>Not an API</html>", { status: 200, headers: { "Content-Type": "text/html" } }),
       () => new Response(JSON.stringify({ hello: "world" }), { status: 200, headers: { "Content-Type": "application/json" } }),

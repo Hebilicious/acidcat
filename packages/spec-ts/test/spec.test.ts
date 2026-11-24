@@ -35,7 +35,7 @@ import {
   occurrenceOf,
   ok,
   readBounded,
-  viewOf,
+  targetCatalog,
   type CatalogDocument,
 } from "../src/index.ts";
 
@@ -95,20 +95,20 @@ test("a request body one byte over the limit is too large", async () => {
   assert.deepEqual(await readBounded(request("12345678"), 8), { text: "12345678" });
 });
 
-test("views keep one target, and bundles keep the types they use", () => {
+test("the catalog of a target keeps one target, and bundles keep the types they use", () => {
   const catalog: CatalogDocument = {
     acidcat: "0.1",
-    targets: { app: { bindings: ["typescript"] }, mcp: { bindings: ["mcp"] } },
+    targets: { app: { surfaces: ["typescript"] }, mcp: { surfaces: ["mcp"] } },
     $defs: { Mode: { enum: ["cool", "heat"] }, Status: { type: "object", properties: { mode: { $ref: "#/$defs/Mode" } } }, Hidden: { type: "string" } },
     capabilities: {
       "a.status": { description: "x", audience: ["app", "mcp"], output: { $ref: "#/$defs/Status" } },
       "a.hidden": { description: "y", audience: ["app"], output: { $ref: "#/$defs/Hidden" } },
     },
   };
-  const view = viewOf(catalog, "mcp");
-  assert.deepEqual(Object.keys(view.capabilities), ["a.status"]);
-  assert.deepEqual(view.capabilities["a.status"]?.audience, ["mcp"]);
-  assert.deepEqual(Object.keys(view.$defs ?? {}).sort(), ["Mode", "Status"]);
+  const filtered = targetCatalog(catalog, "mcp");
+  assert.deepEqual(Object.keys(filtered.capabilities), ["a.status"]);
+  assert.deepEqual(filtered.capabilities["a.status"]?.audience, ["mcp"]);
+  assert.deepEqual(Object.keys(filtered.$defs ?? {}).sort(), ["Mode", "Status"]);
   assert.ok(catalog.$defs !== undefined);
   const bundled = bundle({ $ref: "#/$defs/Status" }, catalog.$defs);
   assert.equal(bundled.type, "object");
@@ -124,14 +124,14 @@ test("views keep one target, and bundles keep the types they use", () => {
 test("inherited names, such as constructor and toString, are not targets or types", () => {
   const catalog: CatalogDocument = {
     acidcat: "0.1",
-    targets: { app: { bindings: ["typescript"] } },
+    targets: { app: { surfaces: ["typescript"] } },
     capabilities: { "a.status": { description: "x", audience: ["app"], output: { $ref: "#/$defs/toString" } } },
   };
-  const view = viewOf(catalog, "constructor");
-  assert.deepEqual(view.targets, {});
-  assert.deepEqual(view.capabilities, {});
+  const filtered = targetCatalog(catalog, "constructor");
+  assert.deepEqual(filtered.targets, {});
+  assert.deepEqual(filtered.capabilities, {});
   assert.equal(typesUsedBy({ $ref: "#/$defs/toString" }, {}).size, 0);
-  assert.equal(viewOf(catalog, "app").$defs, undefined);
+  assert.equal(targetCatalog(catalog, "app").$defs, undefined);
   assert.equal(ownMember({}, "constructor"), undefined);
   assert.deepEqual(bundle({ $ref: "#/$defs/valueOf" }, {}), { $ref: "#/$defs/valueOf" });
   assert.deepEqual(resolveType({ $ref: "#/$defs/hasOwnProperty" }, {}), { $ref: "#/$defs/hasOwnProperty" });
@@ -160,10 +160,10 @@ test("an input that is a union of objects becomes an object schema", () => {
   assert.equal(objectInput(reference, types), reference);
 });
 
-test("views keep the events of one target, and the types that they use", () => {
+test("the catalog of a target keeps the events of one target, and the types that they use", () => {
   const catalog: CatalogDocument = {
     acidcat: "0.1",
-    targets: { app: { bindings: ["typescript"] }, mcp: { bindings: ["mcp"] } },
+    targets: { app: { surfaces: ["typescript"] }, mcp: { surfaces: ["mcp"] } },
     $defs: { Status: { type: "object" }, Secret: { type: "object" } },
     capabilities: {},
     events: {
@@ -171,11 +171,11 @@ test("views keep the events of one target, and the types that they use", () => {
       "a.secret": { description: "y", audience: ["app"], payload: { $ref: "#/$defs/Secret" } },
     },
   };
-  const view = viewOf(catalog, "mcp");
-  assert.deepEqual(Object.keys(view.events ?? {}), ["a.changed"]);
-  assert.deepEqual(view.events?.["a.changed"]?.audience, ["mcp"]);
-  assert.deepEqual(Object.keys(view.$defs ?? {}), ["Status"]);
-  assert.equal("events" in viewOf({ ...catalog, events: { "a.secret": { description: "y", audience: ["app"] } } }, "mcp"), false);
+  const filtered = targetCatalog(catalog, "mcp");
+  assert.deepEqual(Object.keys(filtered.events ?? {}), ["a.changed"]);
+  assert.deepEqual(filtered.events?.["a.changed"]?.audience, ["mcp"]);
+  assert.deepEqual(Object.keys(filtered.$defs ?? {}), ["Status"]);
+  assert.equal("events" in targetCatalog({ ...catalog, events: { "a.secret": { description: "y", audience: ["app"] } } }, "mcp"), false);
 });
 
 test("an emitted value becomes an occurrence", () => {
@@ -207,7 +207,7 @@ test("a poll cursor keeps its lease, position and provider cursor, and other tex
   assert.equal(decodePollCursor(`p1.${btoa(JSON.stringify(["l", -1]))}`), undefined);
 });
 
-test("webhook secrets, grants, signatures and subscription ids follow Standard Webhooks and the MCP binding", async () => {
+test("webhook secrets, grants, signatures and subscription ids follow Standard Webhooks and the MCP surface", async () => {
   assert.equal(webhookSecretBytes("whsec_not base64!"), undefined);
   assert.equal(webhookGrantMs(120_000, { maxTtlMs: 3_600_000, minTtlMs: 60_000 }), 120_000);
 
@@ -235,7 +235,7 @@ test("only globally routable addresses are allowed for webhooks", () => {
 test("cliAliases reads the input schema of a capability through $defs, and ignores a target that is not in the catalog", () => {
   const catalog = {
     acidcat: "0.1",
-    targets: { cli: { bindings: ["cli"], options: { cli: { aliases: { "--on": { capability: "aircon.power.set", input: { on: true } }, loud: { capability: "aircon.power.set", input: { volume: 1 } } } } } } },
+    targets: { cli: { surfaces: ["cli"], options: { cli: { aliases: { "--on": { capability: "aircon.power.set", input: { on: true } }, loud: { capability: "aircon.power.set", input: { volume: 1 } } } } } } },
     $defs: { Power: { type: "object", required: ["on"], properties: { on: { type: "boolean" } } } },
     capabilities: { "aircon.power.set": { description: "", audience: ["cli"], input: { $ref: "#/$defs/Power" } } },
   } as const;

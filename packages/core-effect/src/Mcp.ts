@@ -22,7 +22,7 @@ import {
   screenRequest,
   SSE_MEDIA_TYPE,
   sseMessage,
-  viewOf,
+  targetCatalog,
 } from "@acid-cat/spec-ts";
 import type { JsonObject, McpServerCardIdentity, McpServerCardSettings, Outcome, Rejection } from "@acid-cat/spec-ts";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberMap, Layer, Logger, Option, Queue, Schema, Scope, Semaphore, Sink, Stdio, Stream, SubscriptionRef } from "effect";
@@ -49,7 +49,7 @@ export type { WebhookOptions, WebhookRequest, WebhookResponse, WebhookSender } f
 
 /**
  * Wrap the web handler of `toWebHandler` so that it also serves MCP clients of revisions 2025-11-25 and 2025-06-18,
- * which open the session with `initialize` (spec/bindings/mcp.md#earlier-revisions-through-http). It keeps no state.
+ * which open the session with `initialize` (spec/surfaces/mcp.md#earlier-revisions-through-http). It keeps no state.
  */
 export { mcpHandshake as withHandshake } from "@acid-cat/mcp-handshake";
 export type { McpHandshakeOptions as HandshakeOptions } from "@acid-cat/mcp-handshake";
@@ -95,12 +95,12 @@ export interface Options {
   readonly principal?: ((request: Request) => Effect.Effect<Option.Option<string>>) | undefined;
   readonly poll?: PollOptions | undefined;
   /**
-   * The settings of webhook delivery (spec/bindings/mcp.md#webhook). Webhook delivery is off when this member is
+   * The settings of webhook delivery (spec/surfaces/mcp.md#webhook). Webhook delivery is off when this member is
    * absent. `NodeWebhook.sender` from `@acid-cat/core-effect/node` gives a sender for Node.js.
    */
   readonly webhooks?: WebhookOptions | undefined;
   /**
-   * The Server Card at the URL of the server and `/server-card` (spec/bindings/mcp.md#server-card). The server serves
+   * The Server Card at the URL of the server and `/server-card` (spec/surfaces/mcp.md#server-card). The server serves
    * it with the default settings when this member is absent. With `false`, the server serves no card, and a `GET`
    * request to that URL gets 404. A given name, description or URL that breaks the rules makes the server fail when it
    * starts, and so does a version that is a range while the card is on. So do webhook signing keys or egress ranges
@@ -246,7 +246,7 @@ const respond = <R>(app: App.App<R>, admitted: Admitted, options: Options, scope
   Effect.gen(function* () {
     const sessionOptions = { target: options.target ?? "mcp", eventBuffer: options.eventBuffer };
     const session = yield* Session.make(app, sessionOptions).pipe(Scope.provide(scope));
-    const hasEvents = session.view.events !== undefined;
+    const hasEvents = session.catalog.events !== undefined;
     const request = admitted.request;
     const events = hasEvents ? eventsRequestOf(admitted) : undefined;
     if (events !== undefined) return yield* answerEvents(app, session, events, request, options, scope, state);
@@ -309,11 +309,11 @@ export type EventsOptions = Pick<
 export const eventsExtensions: { readonly [name: string]: JsonObject } = McpEvents.EXTENSIONS;
 
 /**
- * Serve the events of an application beside an MCP server of your own, through HTTP (spec/bindings/mcp.md#events).
+ * Serve the events of an application beside an MCP server of your own, through HTTP (spec/surfaces/mcp.md#events).
  * `server` is the web handler of your server, for example a server of `effect/ai` with your own tools. The result is a
  * web handler for the same URL. It screens each request as `toWebHandler` does. It answers each request of the events
  * extension of revision 2026-07-28 itself, with push, poll and, if `options.webhooks` turns it on, webhook delivery,
- * for the events in the view of `options.target`. It gives each other request to `server`.
+ * for the events in the catalog of the target `options.target`. It gives each other request to `server`.
  *
  * Your server declares the extension: give it `eventsExtensions` as the `extensions` of its capabilities, so that
  * `server/discover` tells clients that the server serves events. `dispose` ends the poll leases and the webhook
@@ -342,7 +342,7 @@ export function withEvents<R, E>(
 ): WebHandler {
   const cardSettings = mcpServerCardSettings(options.serverCard, publishesOnServerCard(options.webhooks));
   const target = options.target ?? "mcp";
-  const hasEvents = viewOf(App.document(app), target).events !== undefined;
+  const hasEvents = targetCatalog(App.document(app), target).events !== undefined;
   const { answer, dispose: release } = answerWith(layer, options.services);
   const scope = Effect.runSync(Scope.make());
   const deliveries = Effect.runSync(makeDeliveries(options).pipe(Scope.provide(scope)));
@@ -424,7 +424,7 @@ const respondToEvents = <R>(
   Effect.gen(function* () {
     const accepted = (http.headers.get("Accept") ?? "").split(",").map((each) => each.split(";")[0]?.trim().toLowerCase());
     if (!accepted.includes("application/json") || !accepted.includes(SSE_MEDIA_TYPE)) return new Response(null, { status: 406 });
-    const mismatch = mcpHeaderMismatch((name) => http.headers.get(name), request.method, request.params, McpEvents.inputSchemaOf(session.view, request.params.name));
+    const mismatch = mcpHeaderMismatch((name) => http.headers.get(name), request.method, request.params, McpEvents.inputSchemaOf(session.catalog, request.params.name));
     if (mismatch !== undefined) return jsonResponse(400, McpEvents.errorMessage(request.id, { code: MCP_HEADER_MISMATCH, message: mismatch }));
     const answer = yield* McpEvents.answer(session, request, options).pipe(Scope.provide(scope));
     if (answer._tag === "Message") return jsonResponse(200, answer.message);
@@ -441,13 +441,13 @@ const jsonResponse = (status: number, body: JsonObject) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
 /**
- * Register one tool for each available capability in the view of the session. The abort of `signal` cancels the calls
+ * Register one tool for each available capability in the catalog of the session. The abort of `signal` cancels the calls
  * of the tools.
  */
 export const registerTools = (session: Session.Session, signal: AbortSignal = new AbortController().signal) =>
   Effect.gen(function* () {
     const server = yield* McpServer.McpServer;
-    for (const id of Object.keys(session.view.capabilities)) {
+    for (const id of Object.keys(session.catalog.capabilities)) {
       if (!(yield* session.availability(id)).available) continue;
       yield* server.addTool(yield* toolFor(session, id, Context.empty(), cancelOnAbort(signal)));
     }
@@ -460,9 +460,9 @@ const toolFor = (
   around: (call: Effect.Effect<Outcome<unknown, unknown>>) => Effect.Effect<Outcome<unknown, unknown>> = (call) => call,
 ) =>
   Effect.gen(function* () {
-    const capability = session.view.capabilities[id];
-    if (capability === undefined) return yield* Effect.die(new Error(`The view of the session has no capability ${id}.`));
-    const types = session.view.$defs ?? {};
+    const capability = session.catalog.capabilities[id];
+    if (capability === undefined) return yield* Effect.die(new Error(`The catalog of the session has no capability ${id}.`));
+    const types = session.catalog.$defs ?? {};
     const output = capability.output === undefined ? undefined : bundle(capability.output, types);
     const hasOutputSchema = output?.type === "object";
     const inputSchema = yield* decodeToolInput(bundle(capability.input ?? { type: "object" }, types));
@@ -496,7 +496,7 @@ export interface StdioOptions {
   readonly heartbeatMs?: number | undefined;
   /** The number of occurrences of one subscription that the session keeps for a slow client. See `Session.Options`. */
   readonly eventBuffer?: number | undefined;
-  /** The settings of poll delivery (spec/bindings/mcp.md#poll). The process has no principal. */
+  /** The settings of poll delivery (spec/surfaces/mcp.md#poll). The process has no principal. */
   readonly poll?: PollOptions | undefined;
 }
 
@@ -508,19 +508,19 @@ interface EventsInput {
 }
 
 /**
- * The MCP server through the standard input and output of `Stdio` (spec/bindings/mcp.md#stdio), while the scope of the
+ * The MCP server through the standard input and output of `Stdio` (spec/surfaces/mcp.md#stdio), while the scope of the
  * layer is open. The server is one session. It serves revision 2026-07-28, and the `initialize` handshake of revisions
  * 2025-11-25 and 2025-06-18. The logs of the effects in the layer go to standard error.
  *
- * When the view has events, the server also serves the events extension to clients of revision 2026-07-28. The server
- * of `effect/ai` has no way to add methods, so the binding takes the requests of the extension from standard input
+ * When the target has events, the server also serves the events extension to clients of revision 2026-07-28. The server
+ * of `effect/ai` has no way to add methods, so the surface takes the requests of the extension from standard input
  * before the server reads it, and writes their messages to standard output itself.
  */
 export const layerStdio = <R>(app: App.App<R>, options: StdioOptions) =>
   Layer.unwrap(
     Effect.gen(function* () {
       const target = options.target ?? "mcp";
-      const hasEvents = viewOf(App.document(app), target).events !== undefined;
+      const hasEvents = targetCatalog(App.document(app), target).events !== undefined;
       const events: EventsInput | undefined = hasEvents ? { inbox: yield* Queue.unbounded<Inbound>(), initializes: new Set() } : undefined;
       return Layer.effectDiscard(
         Effect.gen(function* () {
@@ -592,7 +592,7 @@ const framed = (stdio: Stdio.Stdio, events: EventsInput | undefined): Stdio.Stdi
 };
 
 /**
- * The result of `initialize` gets no `extensions` member for events (spec/bindings/mcp.md#events): the server of
+ * The result of `initialize` gets no `extensions` member for events (spec/surfaces/mcp.md#events): the server of
  * `effect/ai` declares the extension for all revisions.
  */
 function withoutEventsExtension(chunk: string, initializes: Set<McpEvents.RequestId>): string {
@@ -658,7 +658,7 @@ const serveTools = (session: Session.Session) =>
   Effect.gen(function* () {
     const server = yield* McpServer.McpServer;
     const refs = refsOf(session);
-    const ids = Object.keys(session.view.capabilities);
+    const ids = Object.keys(session.catalog.capabilities);
     const isAvailable = (id: string) => {
       const ref = refs.availability(id);
       return ref === undefined || SubscriptionRef.getUnsafe(ref).available;

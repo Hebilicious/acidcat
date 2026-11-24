@@ -1,6 +1,6 @@
 ---
 title: Cores
-description: A core is a library that runs your capabilities and events, and serves the bindings. The repository has official cores, and any language can have one.
+description: A core is a library that runs your capabilities and events, and serves the surfaces. The repository has official cores, and any language can have one.
 sidebar:
   order: 16
 ---
@@ -8,7 +8,7 @@ sidebar:
 import CoreGuides from "../../../../components/docs/CoreGuides.astro";
 import EcosystemTable from "../../../../components/docs/EcosystemTable.astro";
 
-A **core** is a library that runs your capabilities and events, and serves the bindings. You declare the capabilities in code. The core validates each input, runs your function, and gives each outcome the form of each binding. It can also write the catalog from your code.
+A **core** is a library that runs your capabilities and events, and serves the surfaces. You declare the capabilities in code. The core validates each input, runs your function, and gives each outcome the form of each surface. It can also write the catalog from your code.
 
 ## The official cores
 
@@ -16,7 +16,7 @@ The repository has these cores. Each core has the same features, in its own styl
 
 <EcosystemTable of="cores" />
 
-Each TypeScript core serves the CLI, MCP, HTTP, WebMCP and TypeScript bindings. No core wraps another core. The Rust core serves the CLI, MCP, HTTP and Rust bindings. It has no WebMCP binding, because WebMCP runs in a web page.
+Each TypeScript core serves the CLI, MCP, HTTP, WebMCP and TypeScript surfaces. No core wraps another core. The Rust core serves the CLI, MCP, HTTP and Rust surfaces. It has no WebMCP surface, because WebMCP runs in a web page.
 
 ## Compare the TypeScript cores
 

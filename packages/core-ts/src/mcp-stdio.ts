@@ -224,7 +224,7 @@ class StdioServer {
       case "tools/call":
         return this.#call(id, message.params, complete);
     }
-    // The events extension is only for revision 2026-07-28, and only when the view has events.
+    // The events extension is only for revision 2026-07-28, and only when the target has events.
     if (modern && servesEvents(this.#session)) {
       switch (method) {
         case "events/list":

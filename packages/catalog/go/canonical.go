@@ -13,7 +13,7 @@ import (
 
 var (
 	catalogOrder    = []string{"acidcat", "title", "description", "targets", "$defs", "capabilities", "events"}
-	targetOrder     = []string{"bindings", "description", "options"}
+	targetOrder     = []string{"surfaces", "description", "options"}
 	capabilityOrder = []string{"description", "audience", "input", "output", "failures", "readOnly", "destructive", "idempotent", "state"}
 	eventOrder      = []string{"description", "audience", "input", "payload"}
 )

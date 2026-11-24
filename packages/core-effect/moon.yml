@@ -25,7 +25,7 @@ tasks:
 
   test:
     deps: ["test-programs", "cli:browser"]
-    description: "Test sessions, handles and the MCP, HTTP, CLI and WebMCP bindings, with the test applications of the package and the air conditioner."
+    description: "Test sessions, handles and the MCP, HTTP, CLI and WebMCP surfaces, with the test applications of the package and the air conditioner."
     command: "node"
     args: ["--test", "--test-timeout=$TEST_TIMEOUT_MS", "test/"]
     env:

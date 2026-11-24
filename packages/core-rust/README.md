@@ -1,6 +1,6 @@
 # acid-cat-core
 
-`acid-cat-core` is the AcidCat core for Rust, published on crates.io. It serves your application's capabilities and events through the [MCP](../../spec/bindings/mcp.md), [HTTP](../../spec/bindings/http.md) and [CLI](../../spec/bindings/cli.md) bindings, and to Rust code in the same process through the [Rust binding](../../spec/bindings/rust.md). You declare everything in code, and the core writes the catalog from it. The core passes every `acid-cat conform` check for these three bindings.
+`acid-cat-core` is the AcidCat core for Rust, published on crates.io. It serves your application's capabilities and events through the [MCP](../../spec/surfaces/mcp.md), [HTTP](../../spec/surfaces/http.md) and [CLI](../../spec/surfaces/cli.md) surfaces, and to Rust code in the same process through the [Rust surface](../../spec/surfaces/rust.md). You declare everything in code, and the core writes the catalog from it. The core passes every `acid-cat conform` check for these three surfaces.
 
 ```sh
 cargo add acid-cat-core
@@ -77,7 +77,7 @@ async fn main() {
 }
 ```
 
-[`examples/fixture.rs`](examples/fixture.rs), the conformance fixture, uses every binding.
+[`examples/fixture.rs`](examples/fixture.rs), the conformance fixture, uses every surface.
 
 ## Capabilities
 
@@ -111,37 +111,37 @@ An optional `Option` field takes the value of its type, not `null`, so add `#[se
 
 ## The application
 
-`App::new()` takes the targets, then the capabilities and events. Declare a target with `target(name, bindings)`, or `target_with(name, Target { .. })` for a description or options.
+`App::new()` takes the targets, then the capabilities and events. Declare a target with `target(name, surfaces)`, or `target_with(name, Target { .. })` for a description or options.
 
 `build()` checks the application and returns an `Arc<Application<C>>`, or the rules that it breaks. A schema with a `title`, or a failure, that appears in more than one place becomes a shared type in `$defs`, named by its title or tag.
 
 `render_catalog()` returns the catalog in canonical form. Write it to a file at build time and run `acid-cat check` on it.
 
-`Session::open(&app, target, context)` opens a session in the same process. It serves the [Rust binding](../../spec/bindings/rust.md), which maps the [programmatic binding](../../spec/bindings/programmatic.md):
+`Session::open(&app, target, context)` opens a session in the same process. It serves the [Rust surface](../../spec/surfaces/rust.md), which maps the [programmatic surface](../../spec/surfaces/programmatic.md):
 
 | Method | Use |
 | --- | --- |
-| `capability_ids()`, `event_ids()`, `view()` | The capabilities and the events of the view |
+| `capability_ids()`, `event_ids()`, `catalog()` | The capabilities and the events of the target |
 | `invoke(id, input, &cancel)` | A call with an input that is not trusted. It gives an `Outcome`: `Value`, `Failure` or `CallFailure`. `cancel`, or dropping the future, cancels the call |
 | `availability(id)`, `availability_changes()` | The latest availability of a capability, and a message after an availability changes. One message can stand for more than one change. The receiver gives `None` when the session closes, or when no availability of the session can change |
 | `state(id)` | A `StateWatch`: `snapshot()` and `changed()` |
 | `subscribe(id, input, options)` | The `Occurrences` of a subscription, or the call failure before the first occurrence. `next()` gives each occurrence, then the end. `cancel()`, or dropping it, cancels the subscription |
 | `closing()`, `close()` | The token that is cancelled when the session starts to close, and the close itself |
 
-## Bindings
+## Surfaces
 
-| Binding | Function |
+| Surface | Function |
 | --- | --- |
-| MCP through HTTP | `mcp::McpBinding::new(app, context, McpOptions::new(name, version))` |
+| MCP through HTTP | `mcp::McpSurface::new(app, context, McpOptions::new(name, version))` |
 | MCP through stdio | `mcp::serve_stdio(app, context, McpStdioOptions::new(name, version))` |
-| HTTP | `http::HttpBinding::new(app, context, HttpOptions::default())` |
+| HTTP | `http::HttpSurface::new(app, context, HttpOptions::default())` |
 | CLI | `cli::cli_main(app, context, CliOptions::new(name, version))` |
 
-MCP through HTTP also accepts the [`initialize` handshake of earlier revisions](../../spec/bindings/mcp.md#earlier-revisions-through-http). Poll delivery is on. `McpOptions::heartbeat` and `McpStdioOptions::heartbeat` (default 15 seconds) set the push heartbeat interval when the client suggests none. A client that suggests `heartbeatMs` in `events/stream` gets a grant from 1 to 60 seconds ([Push](../../spec/bindings/mcp.md#push)). MCP through HTTP checks the [headers](../../spec/bindings/mcp.md#headers) of each request of revision `2026-07-28` against its body: `Mcp-Method`, `Mcp-Name`, and an `Mcp-Param-*` header for each property that has `x-mcp-header`. A mismatch gets 400 and `-32020`. To annotate a field, use `#[schemars(extend("x-mcp-header" = "Region"))]`. `McpOptions::webhooks` turns on webhook delivery, and `McpOptions::principal` gives the principal of each request.
+MCP through HTTP also accepts the [`initialize` handshake of earlier revisions](../../spec/surfaces/mcp.md#earlier-revisions-through-http). Poll delivery is on. `McpOptions::heartbeat` and `McpStdioOptions::heartbeat` (default 15 seconds) set the push heartbeat interval when the client suggests none. A client that suggests `heartbeatMs` in `events/stream` gets a grant from 1 to 60 seconds ([Push](../../spec/surfaces/mcp.md#push)). MCP through HTTP checks the [headers](../../spec/surfaces/mcp.md#headers) of each request of revision `2026-07-28` against its body: `Mcp-Method`, `Mcp-Name`, and an `Mcp-Param-*` header for each property that has `x-mcp-header`. A mismatch gets 400 and `-32020`. To annotate a field, use `#[schemars(extend("x-mcp-header" = "Region"))]`. `McpOptions::webhooks` turns on webhook delivery, and `McpOptions::principal` gives the principal of each request.
 
 ### Server Card
 
-`McpBinding` serves an [MCP Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. It is on by default: `McpOptions::new` sets `server_card: Some(ServerCard::default())`. `server_card: None` turns it off: a `GET` request to that URL then gets 404.
+`McpSurface` serves an [MCP Server Card](../../spec/surfaces/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. It is on by default: `McpOptions::new` sets `server_card: Some(ServerCard::default())`. `server_card: None` turns it off: a `GET` request to that URL then gets 404.
 
 ```rust,ignore
 let options = McpOptions {
@@ -157,28 +157,28 @@ let options = McpOptions {
 
 | Option | Default | Use |
 | --- | --- | --- |
-| `ServerCard::named(name)`, `ServerCard::name` | From the host of the URL and `McpOptions::name` ([Default name](../../spec/bindings/mcp.md#default-name)) | The name of the server in a registry. `McpOptions::name` stays the name that `server/discover` gives |
-| `ServerCard::description` | The description of the application, else `McpOptions::instructions`, else `McpOptions::name` ([Default description](../../spec/bindings/mcp.md#default-description)) | |
+| `ServerCard::named(name)`, `ServerCard::name` | From the host of the URL and `McpOptions::name` ([Default name](../../spec/surfaces/mcp.md#default-name)) | The name of the server in a registry. `McpOptions::name` stays the name that `server/discover` gives |
+| `ServerCard::description` | The description of the application, else `McpOptions::instructions`, else `McpOptions::name` ([Default description](../../spec/surfaces/mcp.md#default-description)) | |
 | `ServerCard::url` | The URL of the request, without `/server-card` | Give the `https` URL when a platform in front of the server ends TLS |
-| `WebhookOptions::signing_keys` | None | Private Ed25519 JSON Web Keys that also [sign each webhook request](../../spec/bindings/mcp.md#webhook). The card gives their public keys. To change keys, give the new key beside the old one |
+| `WebhookOptions::signing_keys` | None | Private Ed25519 JSON Web Keys that also [sign each webhook request](../../spec/surfaces/mcp.md#webhook). The card gives their public keys. To change keys, give the new key beside the old one |
 | `WebhookOptions::egress_ip_ranges` | None | The CIDR ranges from which the server sends, for the card |
 
 The card gives `McpOptions::version`, and the revisions of the `initialize` handshake if `McpOptions::handshake` is `true`. It gives the signing keys and the egress ranges only if webhook delivery is on.
 
-`McpBinding::new` and `McpBinding::with_request_context` panic when an option breaks the [startup rules of the card](../../spec/bindings/mcp.md#server-card) or of [webhook delivery](../../spec/bindings/mcp.md#webhook), for example a version range with the card on, or signing keys with `server_card: None`. The defaults never make the binding panic.
+`McpSurface::new` and `McpSurface::with_request_context` panic when an option breaks the [startup rules of the card](../../spec/surfaces/mcp.md#server-card) or of [webhook delivery](../../spec/surfaces/mcp.md#webhook), for example a version range with the card on, or signing keys with `server_card: None`. The defaults never make the surface panic.
 
-### Serving the remote bindings
+### Serving the remote surfaces
 
-`McpBinding` and `HttpBinding` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. To use another server, pass each request through `remote::request_body`, then to `handle`.
+`McpSurface` and `HttpSurface` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. To use another server, pass each request through `remote::request_body`, then to `handle`.
 
 Each request gets its own session. With `new`, requests share one context.
 
 ### A context for each request
 
-`HttpBinding::with_request_context(app, make, options)` and `McpBinding::with_request_context(app, make, options)` build a context for each request that passes screening. `make` gets the request head and returns a future of `Result<C, Refusal>`. Use it to authenticate callers:
+`HttpSurface::with_request_context(app, make, options)` and `McpSurface::with_request_context(app, make, options)` build a context for each request that passes screening. `make` gets the request head and returns a future of `Result<C, Refusal>`. Use it to authenticate callers:
 
 ```rust,ignore
-let binding = HttpBinding::with_request_context(app, move |parts: &http::request::Parts| {
+let surface = HttpSurface::with_request_context(app, move |parts: &http::request::Parts| {
     let token = parts.headers.get("authorization").and_then(|value| value.to_str().ok()).map(str::to_owned);
     let accounts = accounts.clone();
     async move {
@@ -192,16 +192,16 @@ let binding = HttpBinding::with_request_context(app, move |parts: &http::request
 
 - A `Refusal` answers with its status, headers and the JSON body `{ "message" }`. No capability runs. `Refusal::new` panics when the status is outside 400 to 599.
 - The core drops the context when the request's session ends. Release resources in `Drop`.
-- An MCP poll lease or webhook subscription keeps the context of the request that started it until it ends ([Subscriptions that outlive a request](../../spec/bindings/mcp.md#subscriptions-that-outlive-a-request)). Set `McpOptions::principal` from the same caller: without a principal, two callers that poll the same event with the same input share one [lease](../../spec/bindings/mcp.md#poll).
+- An MCP poll lease or webhook subscription keeps the context of the request that started it until it ends ([Subscriptions that outlive a request](../../spec/surfaces/mcp.md#subscriptions-that-outlive-a-request)). Set `McpOptions::principal` from the same caller: without a principal, two callers that poll the same event with the same input share one [lease](../../spec/surfaces/mcp.md#poll).
 - The command line and MCP through stdio have one context for the whole process.
 
 ## Command line
 
-`cli_main` runs the command line and exits the process. `cli::run_cli_process` returns the exit code instead. Commands, help, exit codes and interrupts follow the [CLI binding](../../spec/bindings/cli.md). The grace period after an interrupt is `cli::INTERRUPT_GRACE` (one second). When the application breaks a rule of the binding, for example two commands with the same path, both functions write the message to standard error. `run_cli_process` returns 5, and `cli_main` exits with 5.
+`cli_main` runs the command line and exits the process. `cli::run_cli_process` returns the exit code instead. Commands, help, exit codes and interrupts follow the [CLI surface](../../spec/surfaces/cli.md). The grace period after an interrupt is `cli::INTERRUPT_GRACE` (one second). When the application breaks a rule of the surface, for example two commands with the same path, both functions write the message to standard error. `run_cli_process` returns 5, and `cli_main` exits with 5.
 
 ### Aliases
 
-`App::cli_aliases(target, CliAliases::new()...)` gives the target's [aliases](../../spec/bindings/cli.md#aliases):
+`App::cli_aliases(target, CliAliases::new()...)` gives the target's [aliases](../../spec/surfaces/cli.md#aliases):
 
 | Method | Alias |
 | --- | --- |
@@ -273,13 +273,13 @@ cli_main(app, context, CliOptions::new("aircon", "1.0.0").output(output)).await;
 - `failure` takes one function for the whole failure enum.
 - The value is decoded with `serde_json::from_value`, so its type must derive `Deserialize`. If decoding fails or the format panics, the command line writes the generic layout.
 - `CliUi` styles text with `bold`, `dim`, `ok` (green), `warn` (yellow) and `error` (red), and aligns columns with `table(header, rows)`.
-- Two formats for one value, or a format outside the target's view, stop the command line at start.
+- Two formats for one value, or a format outside the target, stop the command line at start.
 
 The generic layout writes a string as it is and a number as JSON. An array of scalars is joined with `, ` (`(none)` when empty), an array of flat objects is a table, and any other array is a `- ` list. An object is one aligned `key  value` line per scalar member, and `key:` with an indented layout for other members. An empty object is `(empty)`.
 
 ### A command line for a server
 
-`CliOptions::remote(client)` makes the command line a [client of a server's HTTP binding](../../spec/bindings/cli.md#server):
+`CliOptions::remote(client)` makes the command line a [client of a server's HTTP surface](../../spec/surfaces/cli.md#server):
 
 ```rust,ignore
 let client = HttpClient::new("http://pi.local:8080/cli")?.header("Authorization", &format!("Bearer {token}"))?;
@@ -287,9 +287,9 @@ cli_main(app, context, CliOptions::new("aircon", "1.0.0").remote(client)).await;
 ```
 
 - Build the program and the server from one application, so they share a catalog.
-- Serve the HTTP binding with the same target: `HttpOptions { target: "cli".into(), base: "/cli".into(), .. }`.
+- Serve the HTTP surface with the same target: `HttpOptions { target: "cli".into(), base: "/cli".into(), .. }`.
 - `HttpClient::trust_certificate(pem)` trusts a self-signed certificate for an `https` URL.
 
 ## Tests
 
-`moon run core-rust:test` runs the tests. It needs `pnpm install` at the repository root, and `openssl`. The tests run `acid-cat conform` against the fixture through every protocol binding, including poll and webhook delivery and the command line against a server.
+`moon run core-rust:test` runs the tests. It needs `pnpm install` at the repository root, and `openssl`. The tests run `acid-cat conform` against the fixture through every protocol surface, including poll and webhook delivery and the command line against a server.

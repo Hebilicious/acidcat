@@ -27,7 +27,7 @@ function burst(id: string, items: readonly { readonly data: { readonly n: number
       resolve();
     },
   });
-  return { app: defineApp({ targets: { app: { bindings: ["typescript"] } }, capabilities: [], events: [event] }), allBuffered };
+  return { app: defineApp({ targets: { app: { surfaces: ["typescript"] } }, capabilities: [], events: [event] }), allBuffered };
 }
 
 const kindOf = (started: Occurrences<unknown> | { readonly kind: string }) => ("kind" in started ? started.kind : undefined);
@@ -54,13 +54,13 @@ test("the catalog has the events, after the capabilities, and each event has its
   assert.deepEqual(catalog.events?.["sensor.ticks"], { description: ticks.description, audience: ["app", "api", "cli", "mcp"] });
   assert.equal(catalog.events?.["sensor.threshold"]?.input?.type, "object");
   assert.ok(renderCatalog(sensorsApp, { toJsonSchema }).includes('"events": {'));
-  const noEvents = defineApp({ targets: { app: { bindings: ["typescript"] } }, capabilities: [] });
+  const noEvents = defineApp({ targets: { app: { surfaces: ["typescript"] } }, capabilities: [] });
   assert.equal("events" in catalogOf(noEvents, { toJsonSchema }), false);
 });
 
 test("an id that is both a capability and an event stops the catalog and the session", () => {
   const app = defineApp({
-    targets: { app: { bindings: ["typescript"] } },
+    targets: { app: { surfaces: ["typescript"] } },
     capabilities: [defineCapability({ id: "probe.same", description: "A capability.", audience: ["app"], run: () => ok(null) })],
     events: [defineEvent({ id: "probe.same", description: "An event.", audience: ["app"], async *subscribe() {} })],
   });
@@ -68,17 +68,17 @@ test("an id that is both a capability and an event stops the catalog and the ses
   assert.throws(() => createSession(app, { target: "app", ...sensorOptions() }), /probe\.same/);
 });
 
-test("the view of a target has only its events, and the session gives their handles", () => {
+test("the catalog of a target has only its events, and the session gives their handles", () => {
   const session = createSession(sensorsApp, { target: "app", ...sensorOptions() });
-  assert.equal(session.view.events?.["sensor.hidden"], undefined);
-  assert.deepEqual(session.view.events?.["sensor.ticks"]?.audience, ["app"]);
+  assert.equal(session.catalog.events?.["sensor.hidden"], undefined);
+  assert.deepEqual(session.catalog.events?.["sensor.ticks"]?.audience, ["app"]);
   assert.deepEqual([...session.eventHandles.keys()].sort(), ["sensor.broken", "sensor.clock", "sensor.failing", "sensor.reading.changed", "sensor.threshold", "sensor.ticks"]);
   const other = createSession(sensorsApp, { target: "other", ...sensorOptions() });
   assert.deepEqual([...other.eventHandles.keys()], ["sensor.hidden"]);
-  assert.equal(other.view.events?.["sensor.ticks"], undefined);
+  assert.equal(other.catalog.events?.["sensor.ticks"], undefined);
 });
 
-test("a subscription gives each occurrence, with the members of the provider or the ones that the binding makes", async () => {
+test("a subscription gives each occurrence, with the members of the provider or the ones that the surface makes", async () => {
   const sensors = new Sensors();
   await using session = createSession(sensorsApp, { target: "app", ...sensorOptions(sensors) });
   const handle = session.eventHandle(readingChanged);
@@ -139,7 +139,7 @@ test("maxAgeMs that is not an integer of 0 or more fails as invalid-input, after
 test("a provider that throws when it starts fails as internal before the first occurrence", async () => {
   const defects: string[] = [];
   const app = defineApp({
-    targets: { app: { bindings: ["typescript"] } },
+    targets: { app: { surfaces: ["typescript"] } },
     capabilities: [],
     events: [
       defineEvent({
@@ -251,7 +251,7 @@ test("the cursor and maxAgeMs reach the provider, and a skipped occurrence gives
 
 test("an event with no payload schema must give an empty object", async () => {
   const app = defineApp({
-    targets: { app: { bindings: ["typescript"] } },
+    targets: { app: { surfaces: ["typescript"] } },
     capabilities: [],
     events: [
       defineEvent({

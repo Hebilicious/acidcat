@@ -56,7 +56,7 @@ export interface McpSettings {
   /** The number of occurrences that each subscription keeps for a client that reads slowly. The default is 256. */
   readonly bufferLimit?: number | undefined;
   /**
-   * The identity of the client of a request: the principal (spec/bindings/mcp.md#webhook). It is part of the key of a
+   * The identity of the client of a request: the principal (spec/surfaces/mcp.md#webhook). It is part of the key of a
    * poll lease and of a webhook subscription. `undefined` means that the request has no identity. With no function, no
    * request has an identity.
    */
@@ -70,7 +70,7 @@ export interface McpSettings {
   /** The clock of the poll leases. The default is the clock of the system. */
   readonly clock?: Clock | undefined;
   /**
-   * The Server Card at the URL of the server and `/server-card` (spec/bindings/mcp.md#server-card). The server serves
+   * The Server Card at the URL of the server and `/server-card` (spec/surfaces/mcp.md#server-card). The server serves
    * it with the default settings when this member is absent. With `false`, the server serves no card, and a `GET`
    * request to that URL gets 404. A given name, description or URL that breaks the rules makes `mcpHandler` throw, and
    * so does a version that is a range while the card is on. So does webhook delivery with signing keys or egress ranges
@@ -300,22 +300,22 @@ async function answer(session: Session, message: JsonRpcRequest, options: McpSet
 function inputSchemaOf(session: Session, message: JsonRpcRequest): JsonObject | undefined {
   const name = message.name ?? "";
   if (message.method === "tools/call") {
-    const capability = session.handles.get(name)?.availability.getSnapshot().available === true ? session.view.capabilities[name] : undefined;
+    const capability = session.handles.get(name)?.availability.getSnapshot().available === true ? session.catalog.capabilities[name] : undefined;
     return capability === undefined ? undefined : toolInputSchema(session, capability.input);
   }
-  const event = message.method?.startsWith("events/") === true && servesEvents(session) && Object.hasOwn(session.view.events ?? {}, name) ? session.view.events?.[name] : undefined;
-  return event?.input === undefined ? undefined : bundle(event.input, session.view.$defs ?? {});
+  const event = message.method?.startsWith("events/") === true && servesEvents(session) && Object.hasOwn(session.catalog.events ?? {}, name) ? session.catalog.events?.[name] : undefined;
+  return event?.input === undefined ? undefined : bundle(event.input, session.catalog.$defs ?? {});
 }
 
-const toolInputSchema = (session: Session, input: JsonObject | undefined): JsonObject => bundle(input ?? { type: "object" }, session.view.$defs ?? {});
+const toolInputSchema = (session: Session, input: JsonObject | undefined): JsonObject => bundle(input ?? { type: "object" }, session.catalog.$defs ?? {});
 
 export function listTools(session: Session) {
-  const types = session.view.$defs ?? {};
+  const types = session.catalog.$defs ?? {};
   return [...session.handles.values()]
     .filter((handle) => handle.availability.getSnapshot().available)
     .map((handle) => {
-      const capability = session.view.capabilities[handle.id];
-      if (capability === undefined) throw new Error(`The view of the session has no capability ${handle.id}.`);
+      const capability = session.catalog.capabilities[handle.id];
+      if (capability === undefined) throw new Error(`The catalog of the session has no capability ${handle.id}.`);
       const output = capability.output === undefined ? undefined : bundle(capability.output, types);
       return {
         name: handle.id,
@@ -328,8 +328,8 @@ export function listTools(session: Session) {
 }
 
 export function hasObjectOutput(session: Session, id: string): boolean {
-  const output = session.view.capabilities[id]?.output;
-  return output !== undefined && bundle(output, session.view.$defs ?? {}).type === "object";
+  const output = session.catalog.capabilities[id]?.output;
+  return output !== undefined && bundle(output, session.catalog.$defs ?? {}).type === "object";
 }
 
 function reply(id: string | number | null, result: object): Response {

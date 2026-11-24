@@ -1,4 +1,4 @@
-//! The MCP binding through standard input and standard output (spec/bindings/mcp.md#stdio). The process is one
+//! The MCP surface through standard input and standard output (spec/surfaces/mcp.md#stdio). The process is one
 //! session. The server serves revision 2026-07-28, and the `initialize` handshake of revisions 2025-11-25 and
 //! 2025-06-18.
 
@@ -383,7 +383,7 @@ impl<C: Send + Sync + 'static> Server<C> {
             }
             _ => {}
         }
-        // The events extension is only for revision 2026-07-28, and only when the view has events.
+        // The events extension is only for revision 2026-07-28, and only when the target has events.
         if modern && serves_events(session) {
             match method {
                 "events/list" => {

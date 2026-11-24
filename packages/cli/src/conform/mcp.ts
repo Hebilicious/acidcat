@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { bundle, encodeMcpHeaderValue, MCP_EVENTS_EXTENSION, MCP_HEADER_MISMATCH, MCP_HEARTBEAT_MAX_MS, MCP_HEARTBEAT_MIN_MS, MCP_PROTOCOL_VERSION_KEY, MCP_SUBSCRIPTION_ID, mcpParamHeaders, viewOf } from "@acid-cat/spec-ts";
+import { bundle, encodeMcpHeaderValue, MCP_EVENTS_EXTENSION, MCP_HEADER_MISMATCH, MCP_HEARTBEAT_MAX_MS, MCP_HEARTBEAT_MIN_MS, MCP_PROTOCOL_VERSION_KEY, MCP_SUBSCRIPTION_ID, mcpParamHeaders, targetCatalog } from "@acid-cat/spec-ts";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 import { isArrayOf, isObject, isStringArray, memberOf, parseJson, readJson } from "../json.ts";
@@ -13,7 +13,7 @@ import { checkServerCard, signingKeysOf } from "./server-card.ts";
 import { checkWebhook } from "./webhook.ts";
 import type { WebhookSettings } from "./webhook.ts";
 
-const RULE = "spec/bindings/mcp.md";
+const RULE = "spec/surfaces/mcp.md";
 
 type ToolResult = Awaited<ReturnType<Client["callTool"]>>;
 
@@ -85,13 +85,13 @@ export async function checkMcp(url: string, options: McpCheckOptions): Promise<C
   return checks;
 }
 
-const mcpView = viewOf(fixture, "mcp");
+const mcpCatalog = targetCatalog(fixture, "mcp");
 
 function inputSchemaOf(method: string, name: unknown): JsonObject | undefined {
   if (typeof name !== "string") return undefined;
-  const entries = method === "tools/call" ? mcpView.capabilities : method.startsWith("events/") ? (mcpView.events ?? {}) : {};
+  const entries = method === "tools/call" ? mcpCatalog.capabilities : method.startsWith("events/") ? (mcpCatalog.events ?? {}) : {};
   const input = Object.hasOwn(entries, name) ? entries[name]?.input : undefined;
-  return input === undefined ? undefined : bundle(input, mcpView.$defs ?? {});
+  return input === undefined ? undefined : bundle(input, mcpCatalog.$defs ?? {});
 }
 
 export function mcpRequestHeaders(method: string, params: JsonObject): Record<string, string> {
@@ -212,7 +212,7 @@ export async function checkTools(checks: Checks, mcp: Client): Promise<void> {
     expectEqual(mcp.getInstructions(), fixture.description, "instructions");
   });
 
-  await checks.run("tools/list gives each available capability of the view", `${RULE}#tools`, async (signal) => {
+  await checks.run("tools/list gives each available capability of the target", `${RULE}#tools`, async (signal) => {
     const { tools } = await mcp.listTools(undefined, { signal });
     expectEqual(sorted(tools.map((tool) => tool.name)), idsOf("mcp"), "tools");
   });
@@ -264,7 +264,7 @@ export async function checkTools(checks: Checks, mcp: Client): Promise<void> {
     expectEqual(memberOf(textOf(result), "kind"), "invalid-input", "kind");
   });
 
-  await checks.run("a capability outside the view is an unknown tool", `${RULE}#tools`, async (signal) => {
+  await checks.run("a capability outside the target is an unknown tool", `${RULE}#tools`, async (signal) => {
     const error = await call(signal, "fixture.hidden", {}).then(
       () => undefined,
       (caught: unknown) => caught,
@@ -432,7 +432,7 @@ export async function checkEvents(checks: Checks, channel: Channel, options: Eve
     expect(isObject(memberOf(extensions, MCP_EVENTS_EXTENSION)), `the capabilities must have the extension ${MCP_EVENTS_EXTENSION}, got ${JSON.stringify(result)}`);
   });
   let delivery: readonly string[] = [];
-  await checks.run("events/list gives each event of the view, with the delivery modes of the server and its schemas", RULE_EVENTS, async (signal) => {
+  await checks.run("events/list gives each event of the target, with the delivery modes of the server and its schemas", RULE_EVENTS, async (signal) => {
     const result = await resultOf("events/list", {}, signal);
     const entries = result.events;
     if (!isArrayOf(entries, isObject)) throw new Error(`events/list must give a list of events, got ${JSON.stringify(result)}`);
@@ -455,7 +455,7 @@ export async function checkEvents(checks: Checks, channel: Channel, options: Eve
     expect(!("nextCursor" in result), "the result must have no nextCursor");
   });
   for (const [name, params, code, kind] of [
-    ["events/stream of an event outside the view is NotFound, with the kind event", { name: "fixture.secret", arguments: {} }, -32023, "event"],
+    ["events/stream of an event outside the target is NotFound, with the kind event", { name: "fixture.secret", arguments: {} }, -32023, "event"],
     ["events/stream of the id of a capability is NotFound", { name: "fixture.echo", arguments: { text: "x" } }, -32023, "event"],
     ["events/stream with invalid input is the error -32602", { name: "fixture.ticks", arguments: { count: 101 } }, -32602, undefined],
     ["events/stream with a maxAgeMs that is not valid is the error -32602", { name: "fixture.ticks", arguments: { count: 1 }, maxAgeMs: -1 }, -32602, undefined],

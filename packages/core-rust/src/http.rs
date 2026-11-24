@@ -1,4 +1,4 @@
-//! The HTTP binding (spec/bindings/http.md): JSON through HTTP, and events as server-sent events.
+//! The HTTP surface (spec/surfaces/http.md): JSON through HTTP, and events as server-sent events.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -32,7 +32,7 @@ pub struct HttpOptions {
     pub serve_catalog: bool,
     /// The maximum size of a request body, in bytes. The default is 1 MiB.
     pub maximum_bytes: usize,
-    /// The time with nothing sent on a stream after which the binding sends a comment line. The default is 15 seconds.
+    /// The time with nothing sent on a stream after which the surface sends a comment line. The default is 15 seconds.
     pub keepalive: Duration,
     /// The number of occurrences that each subscription keeps for a client that reads slowly. The default is 256.
     pub buffer_limit: usize,
@@ -52,16 +52,16 @@ impl Default for HttpOptions {
     }
 }
 
-/// The HTTP binding of an application. Each request has its own session.
-pub struct HttpBinding<C> {
+/// The HTTP surface of an application. Each request has its own session.
+pub struct HttpSurface<C> {
     app: Arc<Application<C>>,
     context: Contexts<C>,
     options: Arc<HttpOptions>,
 }
 
-impl<C> Clone for HttpBinding<C> {
+impl<C> Clone for HttpSurface<C> {
     fn clone(&self) -> Self {
-        HttpBinding {
+        HttpSurface {
             app: self.app.clone(),
             context: self.context.clone(),
             options: self.options.clone(),
@@ -69,17 +69,17 @@ impl<C> Clone for HttpBinding<C> {
     }
 }
 
-impl<C: Send + Sync + 'static> HttpBinding<C> {
-    /// A binding whose requests share one context.
+impl<C: Send + Sync + 'static> HttpSurface<C> {
+    /// A surface whose requests share one context.
     pub fn new(app: Arc<Application<C>>, context: Arc<C>, options: HttpOptions) -> Self {
-        HttpBinding {
+        HttpSurface {
             app,
             context: Contexts::Shared(context),
             options: Arc::new(options),
         }
     }
 
-    /// A binding that makes a context for each request that passes the screening, from the head of the request: for
+    /// A surface that makes a context for each request that passes the screening, from the head of the request: for
     /// example the caller, from a token in a header. A [`Refusal`] answers the request instead. The context is
     /// dropped when the session of the request ends: after the answer, or after the stream of a subscription.
     pub fn with_request_context<Make, Made>(
@@ -91,7 +91,7 @@ impl<C: Send + Sync + 'static> HttpBinding<C> {
         Make: Fn(&http::request::Parts) -> Made + Send + Sync + 'static,
         Made: std::future::Future<Output = Result<C, Refusal>> + Send + 'static,
     {
-        HttpBinding {
+        HttpSurface {
             app,
             context: Contexts::per_request(make),
             options: Arc::new(options),
@@ -154,7 +154,7 @@ impl<C: Send + Sync + 'static> HttpBinding<C> {
                             .collect(),
                     ),
                 ),
-                "/catalog" if options.serve_catalog => json_response(200, session.view()),
+                "/catalog" if options.serve_catalog => json_response(200, session.catalog()),
                 _ => no_route(),
             };
         }
@@ -247,10 +247,10 @@ impl<C: Send + Sync + 'static> HttpBinding<C> {
     }
 }
 
-impl<C: Send + Sync + 'static> Handler for HttpBinding<C> {
+impl<C: Send + Sync + 'static> Handler for HttpSurface<C> {
     fn handle(&self, request: Request<RequestBody>) -> BoxFuture<'static, Response<ResponseBody>> {
-        let binding = self.clone();
-        Box::pin(async move { HttpBinding::handle(&binding, request).await })
+        let surface = self.clone();
+        Box::pin(async move { HttpSurface::handle(&surface, request).await })
     }
 }
 

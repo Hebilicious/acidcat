@@ -14,8 +14,8 @@ export interface Client {
   /** The base URL, with no `/` at the end, for example `http://pi.local:8080/cli`. */
   readonly base: string;
   /**
-   * The capabilities of the view of the server, with their availability: `GET {base}/capabilities`. It fails with
-   * `unavailable` when the server does not answer, and with `internal` when the answer is not of the HTTP binding.
+   * The capabilities of the target of the server, with their availability: `GET {base}/capabilities`. It fails with
+   * `unavailable` when the server does not answer, and with `internal` when the answer is not of the HTTP surface.
    */
   readonly capabilities: Effect.Effect<ReadonlyArray<Listed>, CallFailed>;
   /**
@@ -124,7 +124,7 @@ const CapabilityList = Schema.Array(
 
 const isHeaderValue = (text: string): boolean => /^[\t\x20-\x7e]*$/.test(text);
 
-export const notAnAnswer = callFailure("internal", "The server gave an answer that the HTTP binding does not give.");
+export const notAnAnswer = callFailure("internal", "The server gave an answer that the HTTP surface does not give.");
 
 const parseJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json));
 

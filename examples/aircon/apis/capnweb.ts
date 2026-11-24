@@ -6,7 +6,7 @@ import type { z } from "zod";
 
 import { fanSet, modeSet, powerSet, statusChanged, statusGet, temperatureSet } from "../core-ts/aircon.ts";
 import type { Context, FanSpeed, Mode, Status } from "../core-ts/aircon.ts";
-import { forbidden, foreignOrigin, httpBinding, openSession } from "./shared.ts";
+import { forbidden, foreignOrigin, httpSurface, openSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
 
 export type StatusListener = (status: z.infer<typeof Status>) => void;
@@ -77,7 +77,7 @@ async function deliver(occurrences: AsyncIterable<{ readonly data: z.infer<typeo
 }
 
 export function capnwebApi(options: ApiOptions): (request: Request) => Promise<Response> {
-  const http = httpBinding(options, "/api");
+  const http = httpSurface(options, "/api");
   return async (request) => {
     if (foreignOrigin(request, options)) return forbidden();
     const path = new URL(request.url).pathname;

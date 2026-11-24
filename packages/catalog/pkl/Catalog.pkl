@@ -5,7 +5,7 @@
 /// ```
 /// amends "Catalog.pkl"
 ///
-/// targets { ["cli"] { bindings { "cli" } } }
+/// targets { ["cli"] { surfaces { "cli" } } }
 /// capabilities {
 ///   ["aircon.power.set"] {
 ///     description = "Turn the unit on or off."
@@ -38,7 +38,7 @@ extensions: Mapping<String, Any>
 /// A capability or event id: dotted kebab-case segments, the first of which is the namespace.
 typealias Id = String(length <= 128, matches(Regex(#"[a-z][a-z0-9]*(-[a-z0-9]+)*(\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+"#)))
 
-/// A target or binding name, optionally `prefix:name`.
+/// A target or surface name, optionally `prefix:name`.
 typealias TargetName = String(matches(Regex(#"[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?"#)))
 
 typealias TypeName = String(matches(Regex(#"[A-Za-z][A-Za-z0-9_]*"#)))
@@ -58,13 +58,13 @@ function ref(name: TypeName): Dynamic =
   else throw("There is no type named \(name) in `types`")
 
 class Target {
-  /// The bindings that serve this target, such as `"typescript"` and `"webmcp"`.
-  bindings: Listing<TargetName>(!isEmpty, isDistinct)
+  /// The surfaces that serve this target, such as `"typescript"` and `"webmcp"`.
+  surfaces: Listing<TargetName>(!isEmpty, isDistinct)
 
   /// Who the target is for.
   description: String?
 
-  /// Settings for the bindings, in a form each binding defines. Give the options of the command line in [cli].
+  /// Settings for the surfaces, in a form each surface defines. Give the options of the command line in [cli].
   options: Dynamic(!toMap().containsKey("cli"))?
 
   /// The options of the command line, rendered as `options.cli`.
@@ -74,7 +74,7 @@ class Target {
   extensions: Mapping<String, Any>
 }
 
-/// The options of the command line of a target (spec/bindings/cli.md#aliases).
+/// The options of the command line of a target (spec/surfaces/cli.md#aliases).
 class CliOptions {
   /// The aliases, by name.
   aliases: Mapping<String, CliAlias>

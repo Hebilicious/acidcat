@@ -19,7 +19,7 @@ test("the canonical form writes every value of the shared test catalog", () => {
 });
 
 test("the library writes the hints of a capability in canonical order", () => {
-  const catalog = new Catalog().target("agents", { bindings: ["mcp"] }).capability("notes.count.read", {
+  const catalog = new Catalog().target("agents", { surfaces: ["mcp"] }).capability("notes.count.read", {
     state: { type: "integer" },
     idempotent: true,
     destructive: false,
@@ -32,7 +32,7 @@ test("the library writes the hints of a capability in canonical order", () => {
 
 test("the library reports the catalog rules a catalog breaks", () => {
   const catalog = new Catalog()
-    .target("cli", { bindings: ["cli"] })
+    .target("cli", { surfaces: ["cli"] })
     .capability("Bad.Id", { description: "x" })
     .capability("a.b", { description: "y", audience: ["clii"] })
     .capability("a.c", { description: "z", input: { type: "string" } })
@@ -47,7 +47,7 @@ test("the library reports the catalog rules a catalog breaks", () => {
 });
 
 test("the library reports the catalog rules an event breaks", () => {
-  const catalog = new Catalog().target("cli", { bindings: ["cli"] });
+  const catalog = new Catalog().target("cli", { surfaces: ["cli"] });
   catalog.type("Name", { type: "string" });
   catalog
     .capability("a.b", { description: "x" })
@@ -65,7 +65,7 @@ test("the library reports the catalog rules an event breaks", () => {
 });
 
 test("the library reports a boolean schema", () => {
-  const catalog = new Catalog().target("cli", { bindings: ["cli"] });
+  const catalog = new Catalog().target("cli", { surfaces: ["cli"] });
   // @ts-expect-error A schema in a catalog is an object, not a boolean.
   catalog.type("Anything", true);
   catalog.capability("a.b", {

@@ -19,7 +19,7 @@ module cliAliasNames {
   )
 
   pure val ID: Text = ["p", ".", "r"]
-  pure val CAPABILITIES: List[Entry] = [{ id: ID, inView: true, input: Properties([["x"]]) }]
+  pure val CAPABILITIES: List[Entry] = [{ id: ID, inTarget: true, input: Properties([["x"]]) }]
   pure val VALUE: AliasValue = AliasObject({ capability: Id(ID), event: Absent, input: NoFixedInput, others: [] })
 
   var name: Text

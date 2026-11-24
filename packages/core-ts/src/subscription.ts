@@ -2,7 +2,7 @@ import { CallFailureError, callFailure, occurrenceOf } from "@acid-cat/spec-ts";
 import type { Emitted, Occurrence } from "@acid-cat/spec-ts";
 
 /**
- * The occurrences of one subscription, as an async iterator (spec/bindings/typescript.md#event-handles). `return()`
+ * The occurrences of one subscription, as an async iterator (spec/surfaces/typescript.md#event-handles). `return()`
  * cancels the subscription, also while a `next()` waits: that `next()` then resolves with `done: true`. A `for await`
  * loop that stops early calls `return()`. `await using` also cancels the subscription at the end of its block.
  */

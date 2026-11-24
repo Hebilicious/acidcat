@@ -24,7 +24,7 @@ const Who = z.object({ caller: z.string(), target: z.string() });
 
 const app = defineApp({
   description: "Tell who calls, and through which target.",
-  targets: { app: { bindings: ["typescript"] }, api: { bindings: ["http"] }, mcp: { bindings: ["mcp"] } },
+  targets: { app: { surfaces: ["typescript"] }, api: { surfaces: ["http"] }, mcp: { surfaces: ["mcp"] } },
   capabilities: [
     capability({
       id: "caller.get",

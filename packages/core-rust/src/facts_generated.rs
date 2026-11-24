@@ -48,7 +48,7 @@ impl Rejection {
     }
 }
 
-/// The exit codes of the outcomes (spec/bindings/cli.md#outcomes).
+/// The exit codes of the outcomes (spec/surfaces/cli.md#outcomes).
 pub mod exit {
     pub const VALUE: i32 = 0;
     pub const FAILURE: i32 = 1;
@@ -111,7 +111,7 @@ pub(crate) mod event_errors {
 }
 
 pub(crate) const SETTINGS_NOT_OBJECT_MESSAGE: &str = "{where}: options.cli must be an object";
-pub(crate) const NO_CLI_BINDING_MESSAGE: &str = "{where}: has options.cli, but not the binding cli";
+pub(crate) const NO_CLI_SURFACE_MESSAGE: &str = "{where}: has options.cli, but not the surface cli";
 pub(crate) const ALIASES_NOT_OBJECT_MESSAGE: &str =
     "{where}: options.cli.aliases must be an object";
 pub(crate) const BAD_NAME_MESSAGE: &str = "{where}: the alias {name} must be one word, two words with one space between them, or -- and one word, with the letters a-z, the digits 0-9 and single hyphens in each word";
@@ -124,8 +124,8 @@ pub(crate) const COMMAND_PATH_MESSAGE: &str =
 pub(crate) const BAD_TARGET_MESSAGE: &str = "{where}: the alias {name} must be an object with the id of a capability in capability, or the id of an event in event";
 pub(crate) const UNKNOWN_MEMBER_MESSAGE: &str =
     "{where}: the alias {name} has the unknown member {members}";
-pub(crate) const NOT_IN_VIEW_MESSAGE: &str =
-    "{where}: the alias {name} refers to {id}, which is not {kind} in the view of the target";
+pub(crate) const NOT_IN_TARGET_MESSAGE: &str =
+    "{where}: the alias {name} refers to {id}, which is not {kind} in the catalog of the target";
 pub(crate) const INPUT_NOT_OBJECT_MESSAGE: &str =
     "{where}: the alias {name} must have an object as its input";
 pub(crate) const NO_PROPERTIES_MESSAGE: &str =

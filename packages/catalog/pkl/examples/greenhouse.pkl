@@ -6,7 +6,7 @@ description = "Watch the climate of one greenhouse, open its vents and water its
 targets {
   ["panel"] {
     description = "The touch panel at the greenhouse door."
-    bindings { "typescript" }
+    surfaces { "typescript" }
     options {
       theme = "high-contrast"
       refreshSeconds = 15
@@ -14,11 +14,11 @@ targets {
   }
   ["automation"] {
     description = "Rules that run on the home server."
-    bindings { "http" }
+    surfaces { "http" }
   }
   ["assistant"] {
     description = "Assistants, through an MCP server."
-    bindings { "mcp" }
+    surfaces { "mcp" }
   }
 }
 

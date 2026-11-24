@@ -1,0 +1,4 @@
+/spec/bindings/ /spec/surfaces/ 301
+/spec/bindings/* /spec/surfaces/:splat 301
+/docs/concepts/bindings/ /docs/concepts/surfaces/ 301
+/docs/concepts/targets-and-views/ /docs/concepts/targets/ 301

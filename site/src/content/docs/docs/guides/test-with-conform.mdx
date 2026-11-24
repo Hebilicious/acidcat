@@ -1,6 +1,6 @@
 ---
 title: Test an implementation with acid-cat conform
-description: Serve the conformance fixture with your core, then run acid-cat conform against each binding, from the shell or from your tests.
+description: Serve the conformance fixture with your core, then run acid-cat conform against each surface, from the shell or from your tests.
 sidebar:
   order: 25
   label: Test with acid-cat conform
@@ -9,10 +9,10 @@ sidebar:
 import { Aside, Steps } from "@astrojs/starlight/components";
 import PackageInstall from "../../../../components/docs/PackageInstall.astro";
 
-`acid-cat conform` tests a running implementation from the outside, through each binding. It does not read your code. It works for any core in any language, and for a binding that you write yourself. Each core in the repository runs it in its tests.
+`acid-cat conform` tests a running implementation from the outside, through each surface. It does not read your code. It works for any core in any language, and for a surface that you write yourself. Each core in the repository runs it in its tests.
 
 <Aside>
-`acid-cat conform` tests an implementation of the **conformance fixture**, not of your own catalog. Use it when you write a new core or a new binding. To test your application, test its capabilities through a session, and its surfaces through the bindings.
+`acid-cat conform` tests an implementation of the **conformance fixture**, not of your own catalog. Use it when you write a new core or a new surface. To test your application, test its capabilities through a session, and each surface through its own clients.
 </Aside>
 
 ## Run the checks
@@ -41,11 +41,11 @@ import PackageInstall from "../../../../components/docs/PackageInstall.astro";
    | `fixture.hold` | Holds until `fixture.release` releases its `key` |
    | `fixture.toggle` | Available only while the switch is on |
 
-   Then serve each binding that your core has. The fixture of each core in the repository is a working example, for example [`packages/core-ts/test/fixture.ts`](https://github.com/Hebilicious/acidcat/blob/main/packages/core-ts/test/fixture.ts) and [`packages/core-rust/examples/fixture.rs`](https://github.com/Hebilicious/acidcat/blob/main/packages/core-rust/examples/fixture.rs).
+   Then serve each surface that your core has. The fixture of each core in the repository is a working example, for example [`packages/core-ts/test/fixture.ts`](https://github.com/Hebilicious/acidcat/blob/main/packages/core-ts/test/fixture.ts) and [`packages/core-rust/examples/fixture.rs`](https://github.com/Hebilicious/acidcat/blob/main/packages/core-rust/examples/fixture.rs).
 
-3. **Run conform against each binding.**
+3. **Run conform against each surface.**
 
-   Give one or more bindings:
+   Give one or more surfaces:
 
    ```sh
    acid-cat conform --mcp http://127.0.0.1:3000/mcp --http http://127.0.0.1:3000/api \
@@ -65,12 +65,12 @@ import PackageInstall from "../../../../components/docs/PackageInstall.astro";
 
 ## What the checks test
 
-- **Outcomes.** Each outcome and each kind of call failure has the form of its binding.
-- **Views.** Each binding lists only the capabilities and events of its view, and an id outside the view fails as unknown.
+- **Outcomes.** Each outcome and each kind of call failure has the form of its surface.
+- **Targets.** Each surface lists only the capabilities and events of its target, and an id outside the target fails as unknown.
 - **Validation.** An input that does not match its schema fails as `invalid-input`, and the operation does not start.
-- **Cancellation.** A cancelled call ends with the cancellation of its binding, and its work stops. Through the CLI, the process exits with the code 130.
+- **Cancellation.** A cancelled call ends with the cancellation of its surface, and its work stops. Through the CLI, the process exits with the code 130.
 - **Events.** The list of events, the form and the order of occurrences, the cursor, each end of a subscription, and cancellation.
-- **Rejections.** Remote bindings reject the requests that the specification lists.
+- **Rejections.** Remote surfaces reject the requests that the specification lists.
 - **Properties.** Through MCP and HTTP, concurrent calls each get their own outcome, and the cancellation of one call does not change other calls.
 
 The checks wait for states that they can observe, never for a fixed time. Each check has one deadline, 30 seconds by default (`--deadline`). A check that does not settle in time fails with "did not settle". The deadline never makes a check pass.
@@ -103,7 +103,7 @@ import { conform } from "@acid-cat/cli";
 test("the fixture passes acid-cat conform through HTTP", async () => {
   const checks = await conform({ http: "http://127.0.0.1:3000/api" });
   const failed = checks.filter((check) => !check.passed);
-  assert.deepEqual(failed, [], failed.map((check) => `${check.binding}: ${check.name}: ${check.detail}`).join("\n"));
+  assert.deepEqual(failed, [], failed.map((check) => `${check.surface}: ${check.name}: ${check.detail}`).join("\n"));
 });
 ```
 

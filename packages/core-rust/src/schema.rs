@@ -142,13 +142,13 @@ pub(crate) fn bundle(schema: &Value, types: &Map<String, Value>) -> Value {
     bundled
 }
 
-/// The input schema that the CLI binding reads (spec/bindings/cli.md#commands): the bundled type that the `$ref` of the
+/// The input schema that the CLI surface reads (spec/surfaces/cli.md#commands): the bundled type that the `$ref` of the
 /// schema refers to, whatever other keys the schema has. The flags, the usage and the choice of JSON text come from it.
 pub(crate) fn cli_input_schema(schema: &Value, types: &Map<String, Value>) -> Value {
     bundle(resolve(schema, types), types)
 }
 
-pub(crate) fn view_of(catalog: &Value, target: &str) -> Value {
+pub(crate) fn target_catalog(catalog: &Value, target: &str) -> Value {
     let empty = Map::new();
     let types = catalog
         .get("$defs")
@@ -192,7 +192,7 @@ pub(crate) fn view_of(catalog: &Value, target: &str) -> Value {
             .collect()
     });
 
-    let mut view = Map::new();
+    let mut filtered = Map::new();
     for (member, value) in catalog.as_object().unwrap_or(&empty) {
         match member.as_str() {
             "targets" => {
@@ -200,24 +200,24 @@ pub(crate) fn view_of(catalog: &Value, target: &str) -> Value {
                 if let Some(declared) = value.get(target) {
                     targets.insert(target.to_owned(), declared.clone());
                 }
-                view.insert("targets".into(), Value::Object(targets));
+                filtered.insert("targets".into(), Value::Object(targets));
             }
             "$defs" | "events" => {}
             "capabilities" => {
                 if !used.is_empty() {
-                    view.insert("$defs".into(), Value::Object(used.clone()));
+                    filtered.insert("$defs".into(), Value::Object(used.clone()));
                 }
-                view.insert("capabilities".into(), Value::Object(capabilities.clone()));
+                filtered.insert("capabilities".into(), Value::Object(capabilities.clone()));
                 if !events.is_empty() {
-                    view.insert("events".into(), Value::Object(events.clone()));
+                    filtered.insert("events".into(), Value::Object(events.clone()));
                 }
             }
             _ => {
-                view.insert(member.clone(), value.clone());
+                filtered.insert(member.clone(), value.clone());
             }
         }
     }
-    Value::Object(view)
+    Value::Object(filtered)
 }
 
 pub(crate) struct Validator(jsonschema::Validator);

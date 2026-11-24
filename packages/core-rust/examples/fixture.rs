@@ -300,7 +300,7 @@ pub fn fixture() -> Arc<Application<Fixture>> {
         .target_with(
             "cli",
             Target {
-                bindings: vec!["cli".into()],
+                surfaces: vec!["cli".into()],
                 options: Some(json!({
                     "cli": {
                         "aliases": {
@@ -509,9 +509,9 @@ async fn main() {
     match args.first().map(String::as_str) {
         Some("catalog") => print!("{}", app.render_catalog()),
         Some("serve") => {
-            use acid_cat_core::http::{HttpBinding, HttpOptions};
-            use acid_cat_core::mcp::{McpBinding, McpOptions, Principal, WebhookOptions};
-            let http = HttpBinding::new(
+            use acid_cat_core::http::{HttpOptions, HttpSurface};
+            use acid_cat_core::mcp::{McpOptions, McpSurface, Principal, WebhookOptions};
+            let http = HttpSurface::new(
                 app.clone(),
                 context.clone(),
                 HttpOptions {
@@ -543,7 +543,7 @@ async fn main() {
                     .strip_prefix("Bearer ")
                     .map(str::to_owned)
             });
-            let mcp = McpBinding::new(
+            let mcp = McpSurface::new(
                 app.clone(),
                 context.clone(),
                 McpOptions {
@@ -553,7 +553,7 @@ async fn main() {
                     ..McpOptions::new("fixture", "0.0.0")
                 },
             );
-            let mcp_lease = McpBinding::new(
+            let mcp_lease = McpSurface::new(
                 app.clone(),
                 Arc::new(Fixture::default()),
                 McpOptions {
@@ -564,7 +564,7 @@ async fn main() {
                     ..McpOptions::new("fixture", "0.0.0")
                 },
             );
-            let cli = HttpBinding::new(
+            let cli = HttpSurface::new(
                 app.clone(),
                 context.clone(),
                 HttpOptions {

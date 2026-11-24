@@ -25,7 +25,7 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(canonical_text(catalog), expected)
 
     def test_writes_the_hints_of_a_capability_in_canonical_order(self) -> None:
-        catalog = Catalog().target("agents", bindings=["mcp"])
+        catalog = Catalog().target("agents", surfaces=["mcp"])
         catalog.capability(
             "notes.count.read",
             state={"type": "integer"},
@@ -41,7 +41,7 @@ class CatalogTest(unittest.TestCase):
     def test_reports_the_rules_a_catalog_breaks(self) -> None:
         catalog = (
             Catalog()
-            .target("cli", bindings=["cli"])
+            .target("cli", surfaces=["cli"])
             .capability("Bad.Id", description="x")
             .capability("a.b", description="y", audience=["clii"])
             .capability("a.c", description="z", input={"type": "string"})
@@ -60,7 +60,7 @@ class CatalogTest(unittest.TestCase):
             catalog.render()
 
     def test_reports_the_rules_an_event_breaks(self) -> None:
-        catalog = Catalog().target("cli", bindings=["cli"])
+        catalog = Catalog().target("cli", surfaces=["cli"])
         catalog.type("Name", {"type": "string"})
         catalog.capability("a.b", description="x")
         catalog.event("a.b", description="y")
@@ -79,7 +79,7 @@ class CatalogTest(unittest.TestCase):
         )
 
     def test_reports_a_boolean_schema(self) -> None:
-        catalog = Catalog().target("cli", bindings=["cli"])
+        catalog = Catalog().target("cli", surfaces=["cli"])
         catalog.type("Anything", True)
         catalog.capability("a.b", description="x", input=True, output=True, failures={"Gone": False}, state=True)
         catalog.event("a.c", description="y", input=False, payload=True)

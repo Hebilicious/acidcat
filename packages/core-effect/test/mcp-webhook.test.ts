@@ -74,7 +74,7 @@ async function assertSigned(received: Received, secrets: readonly string[], subs
 
 const bodyOf = (received: Received | undefined) => (received !== undefined && isJsonObject(received.json) ? received.json : {});
 
-test("a secret over 64 bytes, or an event outside the view, is refused before the server sends a request", async () => {
+test("a secret over 64 bytes, or an event outside the target, is refused before the server sends a request", async () => {
   const feed = feedForPromises();
   const handler = webhookHandler(feed);
   try {
@@ -217,7 +217,7 @@ test("a gap message comes before an occurrence with truncated: true", async () =
         Stream.map((count) => ({ data: { count }, cursor: String(count) })),
       ),
   });
-  const app = App.make({ targets: { mcp: { bindings: ["mcp"] } }, capabilities: [], events: [counts] });
+  const app = App.make({ targets: { mcp: { surfaces: ["mcp"] } }, capabilities: [], events: [counts] });
   const handler = Mcp.toWebHandler(app, Layer.empty, { ...webhookOptions(), eventBuffer: 1 });
   const held = Promise.withResolvers<void>();
   try {

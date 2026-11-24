@@ -16,7 +16,7 @@ import { writeFile } from "node:fs/promises";
 import { Catalog } from "@acid-cat/catalog";
 
 const catalog = new Catalog({ title: "Neighbourhood lending library" });
-catalog.target("desk", { bindings: ["cli"] });
+catalog.target("desk", { surfaces: ["cli"] });
 const notFound = catalog.type("NotFound", { type: "object" });
 catalog.capability("library.loan.return", {
   description: "Take a book back from a member.",

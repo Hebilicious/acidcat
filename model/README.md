@@ -51,8 +51,8 @@ The case tests:
 
 | Module | Models | Spec |
 | --- | --- | --- |
-| [`cli-output.qnt`](cli-output.qnt) | Output flags and the automatic form: the startup check of the output flags, reading them from the arguments, choosing the form, and their messages and help lines. | [CLI binding](../spec/bindings/cli.md) |
-| [`cli-aliases.qnt`](cli-aliases.qnt) | The check of a target's aliases: errors, accepted aliases and the default alias. | [Aliases](../spec/bindings/cli.md#aliases) |
+| [`cli-output.qnt`](cli-output.qnt) | Output flags and the automatic form: the startup check of the output flags, reading them from the arguments, choosing the form, and their messages and help lines. | [CLI surface](../spec/surfaces/cli.md) |
+| [`cli-aliases.qnt`](cli-aliases.qnt) | The check of a target's aliases: errors, accepted aliases and the default alias. | [Aliases](../spec/surfaces/cli.md#aliases) |
 | [`facts.qnt`](facts.qnt) | [Shared facts](#shared-facts). | |
 | [`cli-output-properties.qnt`](cli-output-properties.qnt), [`cli-alias-properties.qnt`](cli-alias-properties.qnt) | [Properties](#properties). | |
 | [`cli-output-cases.qnt`](cli-output-cases.qnt), [`cli-alias-cases.qnt`](cli-alias-cases.qnt) | The bounded domains of the [cases](#cases). | |
@@ -69,7 +69,7 @@ The rules of `cli-output.qnt` that a core must match exactly:
 
 The model does not cover the human layout, the formatters, process I/O, or the names of commands and flags that the application adds. Each core's tests and startup checks cover those.
 
-`cli-aliases.qnt` reports only the first problem of each alias, in code point order of the names, as a key of `ALIAS_MESSAGES` and the parts that fill it. Its input is abstract: each capability and event has an id, whether it is in the view, and whether its input schema has properties.
+`cli-aliases.qnt` reports only the first problem of each alias, in code point order of the names, as a key of `ALIAS_MESSAGES` and the parts that fill it. Its input is abstract: each capability and event has an id, whether it is in the target, and whether its input schema has properties.
 
 ### How the models represent text
 
@@ -108,7 +108,7 @@ A message template has a named placeholder for each part, such as `The option {n
 | `MCP_EVENT_ERRORS` | JSON-RPC errors of the events extension | same | `event_errors` |
 | `MCP_REJECTIONS` | HTTP status and JSON-RPC error of each request rejection | same | `Rejection::status`, `Rejection::rpc_code` |
 | `ALIAS_MESSAGES` | Messages for a target's aliases | same, filled by `cliAliases` | one `*_MESSAGE` constant per message |
-| `START_MESSAGES` | Messages for a view the command line cannot serve | none: `MESSAGES` in each TypeScript core's generated output file | one `*_MESSAGE` constant per message in `cli/output_generated.rs` |
+| `START_MESSAGES` | Messages for a target that the command line cannot serve | none: `MESSAGES` in each TypeScript core's generated output file | one `*_MESSAGE` constant per message in `cli/output_generated.rs` |
 
 In the Rust file, a `match` on `Kind` or `Rejection` fails to compile when the enum and the model have different variants.
 

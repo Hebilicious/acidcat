@@ -5,13 +5,13 @@ const terminals = [
     glyph: '<path d="m-4 -16 8 0 1 4 4 2 4 -1 4 6 -3 3v4l3 3 -4 6 -4 -1 -4 2 -1 4h-8l-1 -4 -4 -2 -4 1 -4 -6 3 -3v-4l-3 -3 4 -6 4 1 4 -2Z"/><circle r="7"/><circle r="3"/>',
   },
   {
-    name: "bindings",
-    lines: ["rules for each surface"],
+    name: "targets",
+    lines: ["who can use what"],
     glyph: '<g transform="rotate(-32)"><rect x="-18" y="-8" width="36" height="16" rx="1"/><path d="M-12 -8v8m6 -8v5m6 -5v8m6 -8v5m6 -5v8"/></g>',
   },
   {
-    name: "clients",
-    lines: ["web, mobile, desktop,", "CLI, MCP, API, …"],
+    name: "surfaces",
+    lines: ["CLI, MCP, HTTP,", "WebMCP, code, …"],
     glyph: '<path d="M10 -2v-11h-27v20H0m-7 0v5m-8 1H0m-17 -11H0"/><rect x="4" y="-5" width="12" height="22" rx="2"/><path d="M8 13h4"/>',
   },
 ];
@@ -70,7 +70,7 @@ function diagram(narrow: boolean): string {
   const note = narrow
     ? '<tspan x="0">what the application can do,</tspan> <tspan x="0" dy="17">and for whom</tspan>'
     : "what the application can do, and for whom";
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="cf-sheet cf-${layout}" viewBox="0 0 ${width} ${height}" role="img" aria-label="The catalog (JSON): what the application can do, and for whom. The provider runs the operations. The bindings give rules for each surface. Clients include web, mobile, desktop, CLI, MCP, API.">
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="cf-sheet cf-${layout}" viewBox="0 0 ${width} ${height}" role="img" aria-label="The catalog (JSON): what the application can do, and for whom. The provider runs the operations. The targets say who can use what. The surfaces serve the catalog of each target: CLI, MCP, HTTP, WebMCP and code.">
     
     
     ${narrow ? "" : diagramStyle}
@@ -91,7 +91,7 @@ function diagram(narrow: boolean): string {
   </svg>`;
 }
 
-export const catalogFlowSvg = `<figure class="catalog-flow">${diagram(false)}${diagram(true)}<figcaption class="cf-caption">The catalog, the provider, the bindings and the clients.</figcaption></figure>`;
+export const catalogFlowSvg = `<figure class="catalog-flow">${diagram(false)}${diagram(true)}<figcaption class="cf-caption">The catalog, the provider, the targets and the surfaces.</figcaption></figure>`;
 
 const asciiCatalogFlow = /```\n\s*catalog \(JSON\)[\s\S]*?```/;
 

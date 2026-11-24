@@ -4,13 +4,13 @@
   "description": "Open, close and watch one motorised garage door.",
   "targets": {
     "assistant": {
-      "bindings": [
+      "surfaces": [
         "mcp"
       ],
       "description": "A voice assistant, through an MCP server."
     },
     "keypad": {
-      "bindings": [
+      "surfaces": [
         "acme:keypad"
       ],
       "description": "The keypad on the outside wall.",
@@ -20,7 +20,7 @@
       }
     },
     "phone": {
-      "bindings": [
+      "surfaces": [
         "typescript",
         "acme:swift"
       ],

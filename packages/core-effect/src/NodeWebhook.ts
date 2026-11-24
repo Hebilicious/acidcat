@@ -30,7 +30,7 @@ export interface SenderOptions {
 const NOT_ALLOWED = "EADDRNOTALLOWED";
 
 /**
- * Send the requests of webhook delivery (spec/bindings/mcp.md#webhook) from Node.js, with only `node:https`. Give the
+ * Send the requests of webhook delivery (spec/surfaces/mcp.md#webhook) from Node.js, with only `node:https`. Give the
  * sender to the `webhooks` option of `Mcp.toWebHandler`.
  *
  * The sender protects the network of the server. For each request, it resolves the host name of the URL, and connects

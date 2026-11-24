@@ -1,5 +1,5 @@
 import { canonicalText } from "@acid-cat/catalog";
-import { bundle, cliAliases, eventSchemasOf, mcpHeaderErrors, REFERENCE, resolveType, schemasOf, viewOf, visitObjects } from "@acid-cat/spec-ts";
+import { bundle, cliAliases, eventSchemasOf, mcpHeaderErrors, REFERENCE, resolveType, schemasOf, targetCatalog, visitObjects } from "@acid-cat/spec-ts";
 import type { CatalogCapability, CatalogDocument as Catalog, CatalogEvent } from "@acid-cat/spec-ts";
 import { Result, Schema, SchemaIssue, SchemaRepresentation } from "effect";
 import type { JsonSchema } from "effect";
@@ -8,7 +8,7 @@ import catalogJsonSchema from "../../../schemas/catalog.schema.json" with { type
 import { isObject, isRecordOf, isStringArray } from "./json.ts";
 import type { JsonObject } from "./json.ts";
 
-export { bundle, viewOf };
+export { bundle, targetCatalog };
 export type { Catalog };
 
 /** The result of a check. An error breaks a rule. A warning breaks a recommendation. */
@@ -19,7 +19,7 @@ export interface Report {
 
 const KNOWN_MEMBERS = {
   catalog: ["acidcat", "title", "description", "targets", "$defs", "capabilities", "events"],
-  target: ["bindings", "description", "options"],
+  target: ["surfaces", "description", "options"],
   capability: ["description", "audience", "input", "output", "failures", "readOnly", "destructive", "idempotent", "state"],
   event: ["description", "audience", "input", "payload"],
   cliOptions: ["aliases", "default"],
@@ -32,7 +32,7 @@ const isString = (value: unknown): value is string => typeof value === "string";
 
 const isBoolean = (value: unknown): value is boolean => typeof value === "boolean";
 
-const isTarget = (value: unknown): value is Catalog["targets"][string] => isObject(value) && isStringArray(value.bindings);
+const isTarget = (value: unknown): value is Catalog["targets"][string] => isObject(value) && isStringArray(value.surfaces);
 
 const isCapability = (value: unknown): value is CatalogCapability =>
   isObject(value) &&

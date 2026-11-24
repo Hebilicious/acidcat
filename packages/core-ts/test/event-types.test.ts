@@ -36,7 +36,7 @@ test("subscribe gets the type of its input from the input schema, and each data 
     event({ id: "probe.b", description: "x", audience: [], input: z.object({ room: z.string() }), async *subscribe({ room }) { if (room === 1) yield { data: {} }; } }),
   ];
 
-  const session = createSession(defineApp({ targets: { app: { bindings: ["typescript"] } }, capabilities: [], events: [reading, tick] }), {
+  const session = createSession(defineApp({ targets: { app: { surfaces: ["typescript"] } }, capabilities: [], events: [reading, tick] }), {
     target: "app",
     context: { rooms: ["hall"] },
     toJsonSchema,

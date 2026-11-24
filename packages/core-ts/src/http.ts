@@ -22,7 +22,7 @@ export interface HttpSettings {
   readonly serveCatalog?: boolean | undefined;
   /** The maximum size of a request body, in bytes. The default is 1 MiB. */
   readonly maximumBytes?: number | undefined;
-  /** The time with nothing sent on the stream of a subscription after which the binding sends a comment line, in milliseconds. The default is 15 seconds. */
+  /** The time with nothing sent on the stream of a subscription after which the surface sends a comment line, in milliseconds. The default is 15 seconds. */
   readonly keepaliveMs?: number | undefined;
   /** The number of occurrences that each subscription keeps for a client that reads slowly. The default is 256. */
   readonly bufferLimit?: number | undefined;
@@ -68,7 +68,7 @@ export function httpHandler<Context>(app: App<Context>, options: HttpOptions<Con
         );
       }
       if (request.method === "GET" && path === "/events") return json(200, [...session.eventHandles.keys()].map((id) => ({ id })));
-      if (request.method === "GET" && path === "/catalog" && options.serveCatalog !== false) return json(200, session.view);
+      if (request.method === "GET" && path === "/catalog" && options.serveCatalog !== false) return json(200, session.catalog);
       const route = request.method === "POST" && path !== undefined ? postRoute(path) : undefined;
       if (route === undefined) return json(404, callFailure("unknown-capability", "There is no such route."));
 

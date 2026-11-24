@@ -25,7 +25,7 @@ tasks:
 
   test:
     deps: ["test-programs", "cli:browser"]
-    description: "Test sessions, handles, event handles and the MCP, HTTP, CLI and WebMCP bindings, with the test application, the kettle, the sensors and the air conditioner. WebMCP also runs in Chromium."
+    description: "Test sessions, handles, event handles and the MCP, HTTP, CLI and WebMCP surfaces, with the test application, the kettle, the sensors and the air conditioner. WebMCP also runs in Chromium."
     command: "node"
     args: ["--test", "--test-timeout=60000", "test/"]
     env:

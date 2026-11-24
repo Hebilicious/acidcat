@@ -38,7 +38,7 @@ test("the application writes a catalog that conforms, with the JSON Schema of ea
 test("two different schemas with the same identifier stop the catalog", () => {
   const capability = (id: string, choices: readonly [string, string]) =>
     Capability.make({ id, description: "Use a choice.", audience: ["mcp"], input: Schema.Struct({ choice: Schema.Literals(choices).annotate({ identifier: "Choice" }) }), run: () => Effect.succeed(null) });
-  const app = App.make({ targets: { mcp: { bindings: ["mcp"] } }, capabilities: [capability("probe.first", ["a", "b"]), capability("probe.second", ["c", "d"])] });
+  const app = App.make({ targets: { mcp: { surfaces: ["mcp"] } }, capabilities: [capability("probe.first", ["a", "b"]), capability("probe.second", ["c", "d"])] });
   assert.throws(() => App.document(app), /probe\.second: two different schemas have the identifier Choice/);
 });
 
@@ -46,7 +46,7 @@ test("an input that is a union of objects is an object schema, and the catalog c
   const ByName = Schema.Struct({ name: Schema.String });
   const ById = Schema.Struct({ id: Schema.Int }).annotate({ identifier: "ById" });
   const app = App.make({
-    targets: { mcp: { bindings: ["mcp"] } },
+    targets: { mcp: { surfaces: ["mcp"] } },
     capabilities: [
       Capability.make({
         id: "probe.find",
@@ -83,7 +83,7 @@ test("a run that throws before it gives its Effect is the call failure internal,
       throw new Error("The work does not start.");
     },
   });
-  const app = App.make({ targets: { app: { bindings: ["typescript"] } }, capabilities: [throws] });
+  const app = App.make({ targets: { app: { surfaces: ["typescript"] } }, capabilities: [throws] });
   const internal = { kind: "internal", message: "The capability failed." };
   await Effect.runPromise(
     Effect.scoped(
@@ -97,14 +97,14 @@ test("a run that throws before it gives its Effect is the call failure internal,
   );
 });
 
-test("a capability outside the view is the same as an unknown id", () =>
+test("a capability outside the target is the same as an unknown id", () =>
   withSession("mcp", (session) =>
     Effect.gen(function* () {
       const hidden = yield* session.invoke("fixture.hidden", {});
       const missing = yield* session.invoke("fixture.missing", {});
       assert.equal("kind" in hidden && hidden.kind, "unknown-capability");
       assert.equal("kind" in missing && missing.kind, "unknown-capability");
-      assert.ok(!("fixture.hidden" in session.view.capabilities));
+      assert.ok(!("fixture.hidden" in session.catalog.capabilities));
     }),
   ));
 

@@ -36,7 +36,7 @@ export interface EventsRequest {
 
 /**
  * The request of the events extension in a JSON-RPC message, or `undefined`. A request of the extension is a request
- * with an id, of revision 2026-07-28, whose method is one that the binding answers. A client of an earlier revision
+ * with an id, of revision 2026-07-28, whose method is one that the surface answers. A client of an earlier revision
  * gets no events, so its requests go to the server of `effect/ai`, which does not know the methods.
  */
 export function eventsRequestOf(message: unknown): EventsRequest | undefined {
@@ -50,10 +50,10 @@ export function eventsRequestOf(message: unknown): EventsRequest | undefined {
   return { id, method: message.method, params };
 }
 
-export function inputSchemaOf(view: CatalogDocument, name: unknown): JsonObject | undefined {
-  const events = view.events ?? {};
+export function inputSchemaOf(catalog: CatalogDocument, name: unknown): JsonObject | undefined {
+  const events = catalog.events ?? {};
   const input = typeof name === "string" && Object.hasOwn(events, name) ? events[name]?.input : undefined;
-  return input === undefined ? undefined : bundle(input, view.$defs ?? {});
+  return input === undefined ? undefined : bundle(input, catalog.$defs ?? {});
 }
 
 export type Answer =
@@ -98,15 +98,15 @@ const outcomeMessage = (id: RequestId, outcome: { readonly result: JsonObject } 
 
 export const answer = <R>(session: Session.Session<R>, request: EventsRequest, options: AnswerOptions<R>): Effect.Effect<Answer, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const view = session.view;
-    const types = view.$defs ?? {};
+    const catalog = session.catalog;
+    const types = catalog.$defs ?? {};
     switch (request.method) {
       case "events/list":
         return message({
           id: request.id,
           result: {
             resultType: "complete",
-            events: Object.entries(view.events ?? {}).map(([id, event]) => {
+            events: Object.entries(catalog.events ?? {}).map(([id, event]) => {
               const entry = mcpEventEntry(
                 id,
                 event.description,
@@ -126,7 +126,7 @@ export const answer = <R>(session: Session.Session<R>, request: EventsRequest, o
         }
         const { name, cursor, maxEvents } = params.success;
         const maxAge = maxAgeOf(params.success.maxAgeMs);
-        if (maxAge._tag === "Invalid") return message(errorMessage(request.id, mcpSubscribeError(maxAgeFailure(view.events, name, maxAge.issue))));
+        if (maxAge._tag === "Invalid") return message(errorMessage(request.id, mcpSubscribeError(maxAgeFailure(catalog.events, name, maxAge.issue))));
         const polled = yield* options.polls.poll(
           {
             name,

@@ -14,7 +14,7 @@ The Go package is named `catalog`. Import it with `import "github.com/Hebiliciou
 
 ```go
 c := catalog.New("Garage door", "")
-c.Target("phone", catalog.Target{Bindings: []string{"typescript"}})
+c.Target("phone", catalog.Target{Surfaces: []string{"typescript"}})
 obstructed := c.Type("Obstructed", catalog.Schema{"type": "object"})
 c.Capability("garage.door.open", catalog.Capability{
 	Description: "Open the door.",

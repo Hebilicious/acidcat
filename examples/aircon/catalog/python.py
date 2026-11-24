@@ -17,16 +17,16 @@ def aircon_catalog() -> Catalog:
     catalog.target(
         "app",
         description="The phone, desktop and web apps that people use.",
-        bindings=["typescript", "rust", "webmcp", "acme:swift", "acme:kotlin"],
+        surfaces=["typescript", "rust", "webmcp", "acme:swift", "acme:kotlin"],
     )
     catalog.target(
         "taskbar",
         description="A desktop taskbar widget showing the status and a power toggle.",
-        bindings=["typescript"],
+        surfaces=["typescript"],
     )
     catalog.target(
         "cli",
-        bindings=["cli"],
+        surfaces=["cli"],
         options={
             "cli": {
                 "aliases": {
@@ -43,8 +43,8 @@ def aircon_catalog() -> Catalog:
             }
         },
     )
-    catalog.target("mcp", description="Agents, through an MCP server.", bindings=["mcp"])
-    catalog.target("api", description="Home-automation systems and scripts.", bindings=["http"])
+    catalog.target("mcp", description="Agents, through an MCP server.", surfaces=["mcp"])
+    catalog.target("api", description="Home-automation systems and scripts.", surfaces=["http"])
 
     mode = catalog.type("Mode", {"enum": ["cool", "heat", "dry", "fan", "auto"]})
     fan_speed = catalog.type("FanSpeed", {"enum": ["auto", "low", "medium", "high"]})

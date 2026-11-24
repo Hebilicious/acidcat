@@ -23,7 +23,7 @@ import {
   isJsonObject,
   ownMember,
   unavailable,
-  viewOf,
+  targetCatalog,
 } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CatalogCapability, CatalogDocument, CliAlias, JsonObject, Occurrence, Outcome } from "@acid-cat/spec-ts";
 
@@ -49,13 +49,13 @@ export interface CliOptions<Context> {
   /**
    * The commands of the application, beside the commands of the capabilities, `call`, `list` and `watch`. The name of
    * each one must not be `call`, `list`, `watch`, the name of another command of the application, the first word of a
-   * command alias, or the first word of the command of a capability (spec/bindings/cli.md#commands).
+   * command alias, or the first word of the command of a capability (spec/surfaces/cli.md#commands).
    */
   readonly commands?: readonly CliCommand<Context>[] | undefined;
   /**
-   * The HTTP binding of the application in another process or on another machine (spec/bindings/cli.md#server). With
+   * The HTTP surface of the application in another process or on another machine (spec/surfaces/cli.md#server). With
    * it, the command line sends each call, the availability of `list` and each subscription of `watch` to that server.
-   * The commands still come from the view of `target` in this program. Serve the HTTP binding with the same target, for
+   * The commands still come from the catalog of the target `target` in this program. Serve the HTTP surface with the same target, for
    * example `httpHandler(app, { target: "cli", … })`. The commands of the application still get `context`.
    */
   readonly remote?: HttpClient | undefined;
@@ -63,13 +63,13 @@ export interface CliOptions<Context> {
    * The human form of the output: its flags, its default and its formatters. Without it, the command line writes JSON
    * only. The program stops with an error when it starts if the name of an output flag is not valid, is in two output
    * flags, or is the name of another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or a flag
-   * of the input of a capability or an event of the view.
+   * of the input of a capability or an event of the target.
    */
   readonly output?: CliOutput | undefined;
 }
 
 interface Provider {
-  readonly view: CatalogDocument;
+  readonly catalog: CatalogDocument;
   readonly availability: (signal: AbortSignal | undefined) => Promise<ReadonlyMap<string, Availability> | CallFailure>;
   readonly invoke: (id: string, input: unknown, signal: AbortSignal | undefined) => Promise<Outcome<unknown, unknown>>;
   readonly subscribe: (id: string, input: unknown, options: { readonly signal?: AbortSignal | undefined; readonly cursor?: string; readonly maxAgeMs?: number }) => Promise<AsyncIterable<Occurrence> | CallFailure>;
@@ -79,8 +79,8 @@ interface Provider {
 function localProvider<Context>(app: App<Context>, options: CliOptions<Context>): Provider {
   const session = createSession(app, { target: options.target ?? "cli", context: options.context, toJsonSchema: options.toJsonSchema });
   return {
-    get view() {
-      return session.view;
+    get catalog() {
+      return session.catalog;
     },
     availability: async () => new Map([...session.handles.values()].map((handle) => [handle.id, handle.availability.getSnapshot()])),
     invoke: (id, input, signal) => session.invoke(id, input, { signal }),
@@ -90,13 +90,13 @@ function localProvider<Context>(app: App<Context>, options: CliOptions<Context>)
 }
 
 function remoteProvider<Context>(app: App<Context>, options: CliOptions<Context>, client: HttpClient): Provider {
-  const view = viewOf(catalogOf(app, { toJsonSchema: options.toJsonSchema }), options.target ?? "cli");
+  const catalog = targetCatalog(catalogOf(app, { toJsonSchema: options.toJsonSchema }), options.target ?? "cli");
   return {
-    view,
+    catalog,
     availability: async (signal) => {
       const served = await client.capabilities({ signal });
       if ("kind" in served) return served;
-      return new Map(Object.keys(view.capabilities).map((id) => [id, served.get(id) ?? unavailable("The server does not serve this capability.")]));
+      return new Map(Object.keys(catalog.capabilities).map((id) => [id, served.get(id) ?? unavailable("The server does not serve this capability.")]));
     },
     invoke: (id, input, signal) => client.invoke(id, input, { signal }),
     subscribe: (id, input, subscribeOptions) => client.subscribe(id, input, subscribeOptions),
@@ -178,16 +178,16 @@ export function main<Context>(app: App<Context>, options: CliOptions<Context>, a
   );
 }
 
-/** Run the command line with arguments. The result is the exit code (spec/bindings/cli.md#outcomes). */
+/** Run the command line with arguments. The result is the exit code (spec/surfaces/cli.md#outcomes). */
 export async function runCli<Context>(app: App<Context>, options: CliOptions<Context>, argv: readonly string[], io: CliIo): Promise<number> {
   const provider = options.remote === undefined ? localProvider(app, options) : remoteProvider(app, options, options.remote);
-  const view = provider.view;
-  const types = view.$defs ?? {};
-  const commands = Object.keys(view.capabilities).map((id) => ({ id, path: commandPath(id) }));
+  const catalog = provider.catalog;
+  const types = catalog.$defs ?? {};
+  const commands = Object.keys(catalog.capabilities).map((id) => ({ id, path: commandPath(id) }));
   for (const { path } of commands) {
     if (path[0] !== undefined && isGenericCommand(path[0])) throw new Error(filled(MESSAGES.genericCommand, { command: path.join(" ") }));
   }
-  // A shared prefix is a command that only contains other commands (`spec/bindings/cli.md`), so the path of a capability
+  // A shared prefix is a command that only contains other commands (`spec/surfaces/cli.md`), so the path of a capability
   // must not be the start of the path of another capability.
   for (const { path } of commands) {
     const longer = commands.find((other) => other.path.length > path.length && path.every((word, index) => other.path[index] === word));
@@ -195,26 +195,26 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       throw new Error(filled(MESSAGES.sharedPrefix, { command: path.join(" "), longer: longer.path.join(" ") }));
     }
   }
-  for (const [id, event] of Object.entries(view.events ?? {})) {
+  for (const [id, event] of Object.entries(catalog.events ?? {})) {
     const properties = event.input === undefined ? undefined : cliInputSchema(event.input, types).properties;
     const taken = CLI_RESUME_FLAGS.find((flag) => isJsonObject(properties) && flag in properties);
     if (taken !== undefined) throw new Error(filled(MESSAGES.resumeProperty, { id, flag: taken }));
   }
-  const { aliases, default: defaultAlias, errors: aliasErrors } = cliAliases(view, options.target ?? "cli");
+  const { aliases, default: defaultAlias, errors: aliasErrors } = cliAliases(catalog, options.target ?? "cli");
   if (aliasErrors.length > 0) throw new Error(aliasErrors.join("\n"));
   const usageOf = (id: string): string => {
-    const input = viewCapability(view, id).input;
+    const input = capabilityIn(catalog, id).input;
     return cliUsage(options.name, id, input === undefined ? undefined : cliInputSchema(input, types));
   };
-  const aliasUsage = (alias: CliAlias): string => cliAliasUsage(options.name, alias, cliAliasInput(view, alias));
+  const aliasUsage = (alias: CliAlias): string => cliAliasUsage(options.name, alias, cliAliasInput(catalog, alias));
   const aliasUsages = (kind: CliAlias["kind"], id: string): readonly string[] =>
     aliases.filter((alias) => alias.kind === kind && alias.id === id).map(aliasUsage);
 
   const formats = options.output?.formats ?? [];
-  const formatErrors = cliFormatErrors(formats, Object.keys(view.capabilities), Object.keys(view.events ?? {}));
+  const formatErrors = cliFormatErrors(formats, Object.keys(catalog.capabilities), Object.keys(catalog.events ?? {}));
   if (formatErrors.length > 0) throw new Error(formatErrors.join("\n"));
   const outputFlags = options.output?.flags ?? [];
-  const outputErrors = cliOutputErrors(outputFlags, takenFlags(view, aliases));
+  const outputErrors = cliOutputErrors(outputFlags, takenFlags(catalog, aliases));
   if (outputErrors.length > 0) throw new Error(outputErrors.join("\n"));
   const added = options.commands ?? [];
   const chosen: CliOutputRun = cliOutputRun(outputFlags, argv, added.map(({ name }) => name), options.output?.default, () => io.output ?? "json");
@@ -268,7 +268,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     const [id, ...args] = rest;
     const { flagArgs, resume } = resumeFlags(args);
     if (id === undefined) throw new UsageError("Give the id of an event.", CLI_EXIT_CODES["invalid-input"]);
-    const event = view.events === undefined ? undefined : ownMember(view.events, id);
+    const event = catalog.events === undefined ? undefined : ownMember(catalog.events, id);
     let input: unknown = {};
     if (event !== undefined) {
       const schema = cliInputSchema(event.input ?? { type: "object" }, types);
@@ -312,8 +312,8 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
   };
 
   const runAlias = async (alias: CliAlias, rest: readonly string[]): Promise<number> => {
-    const entry = alias.kind === "event" ? view.events?.[alias.id] : view.capabilities[alias.id];
-    if (entry === undefined) throw new Error(`The view of the session has no ${alias.kind} ${alias.id}.`);
+    const entry = alias.kind === "event" ? catalog.events?.[alias.id] : catalog.capabilities[alias.id];
+    if (entry === undefined) throw new Error(`The catalog of the session has no ${alias.kind} ${alias.id}.`);
     if (isHelp(rest)) {
       io.stdout(cliHelp(aliasUsage(alias), entry.description));
       return CLI_EXIT_CODES.value;
@@ -321,7 +321,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     const { flagArgs, resume } = alias.kind === "event" ? resumeFlags(rest) : { flagArgs: rest, resume: {} };
     const run = async (input: unknown): Promise<number> =>
       alias.kind === "event" ? await follow(alias.id, input, resume) : await invoke(alias.id, input);
-    const schema = cliAliasInput(view, alias) ?? NO_FLAGS;
+    const schema = cliAliasInput(catalog, alias) ?? NO_FLAGS;
     if (schema.properties !== undefined) return await run({ ...alias.input, ...parseFlags(flagArgs, schema) });
     const [text = "{}", extra] = flagArgs;
     if (extra !== undefined) throw new UsageError(`Unexpected argument ${extra}.`, CLI_EXIT_CODES["invalid-input"]);
@@ -359,7 +359,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
     if (first === undefined || first === "--help" || first === "-h") {
       const description = options.description ?? app.description ?? app.title ?? options.name;
       const aliasLines = aliases.map((alias) => aliasUsage(alias).slice(options.name.length + 1));
-      io.stdout(help(options.name, description, commands.map(({ path }) => path.join(" ")), Object.keys(view.events ?? {}).length > 0, added, aliasLines, outputFlags));
+      io.stdout(help(options.name, description, commands.map(({ path }) => path.join(" ")), Object.keys(catalog.events ?? {}).length > 0, added, aliasLines, outputFlags));
       return CLI_EXIT_CODES.value;
     }
     if (first === "--version" || first === "-v") {
@@ -372,18 +372,18 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       if (output === "human") {
         io.stdout(
           cliListText(
-            Object.entries(view.capabilities).map(([id, capability]) => {
+            Object.entries(catalog.capabilities).map(([id, capability]) => {
               const state = availability.get(id) ?? unavailable("There is no such capability.");
               return { id, description: capability.description, unavailable: state.available ? undefined : state.reason };
             }),
-            Object.entries(view.events ?? {}).map(([id, event]) => ({ id, description: event.description })),
+            Object.entries(catalog.events ?? {}).map(([id, event]) => ({ id, description: event.description })),
           ),
         );
         return CLI_EXIT_CODES.value;
       }
       io.stdout(
         jsonText([
-          ...Object.entries(view.capabilities).map(([id, capability]) => {
+          ...Object.entries(catalog.capabilities).map(([id, capability]) => {
             const usages = aliasUsages("capability", id);
             return {
               kind: "capability",
@@ -394,7 +394,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
               ...(usages.length > 0 ? { aliases: usages } : {}),
             };
           }),
-          ...Object.entries(view.events ?? {}).map(([id, event]) => {
+          ...Object.entries(catalog.events ?? {}).map(([id, event]) => {
             const usages = aliasUsages("event", id);
             return {
               kind: "event",
@@ -416,7 +416,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
         input = JSON.parse(text);
       } catch {
         // The call failures of the id come before invalid-input (spec/invocation.md#call-failures).
-        if (ownMember(provider.view.capabilities, id) === undefined) return print({ kind: "unknown-capability", message: `There is no capability ${id}.` });
+        if (ownMember(provider.catalog.capabilities, id) === undefined) return print({ kind: "unknown-capability", message: `There is no capability ${id}.` });
         const availability = await provider.availability(io.signal);
         if ("kind" in availability) return print(availability);
         const state = availability.get(id);
@@ -451,7 +451,7 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
       throw new UsageError(`There is no command ${args.filter((arg) => !arg.startsWith("-")).join(" ")}.`, CLI_EXIT_CODES["unknown-capability"]);
     }
 
-    const capability = viewCapability(view, match.id);
+    const capability = capabilityIn(catalog, match.id);
     const schema = cliInputSchema(capability.input ?? { type: "object" }, types);
     const flagArgs = args.slice(match.path.length);
     if (isHelp(flagArgs)) {
@@ -470,17 +470,17 @@ export async function runCli<Context>(app: App<Context>, options: CliOptions<Con
 
 const leadingWord = (name: string): string => name.split(" ")[0] ?? name;
 
-function takenFlags(view: CatalogDocument, aliases: readonly CliAlias[]): ReadonlyMap<string, string> {
+function takenFlags(catalog: CatalogDocument, aliases: readonly CliAlias[]): ReadonlyMap<string, string> {
   const taken = new Map<string, string>();
   const take = (name: string, what: string) => {
     if (!taken.has(name)) taken.set(name, what);
   };
   for (const [name, what] of RESERVED_FLAGS) take(name, what);
   for (const { name } of aliases) if (name.startsWith("--")) take(name, `the flag alias ${name}`);
-  const types = view.$defs ?? {};
+  const types = catalog.$defs ?? {};
   const members = [
-    ...Object.entries(view.capabilities).map(([id, { input }]) => ({ member: "capability", id, input })),
-    ...Object.entries(view.events ?? {}).map(([id, { input }]) => ({ member: "event", id, input })),
+    ...Object.entries(catalog.capabilities).map(([id, { input }]) => ({ member: "capability", id, input })),
+    ...Object.entries(catalog.events ?? {}).map(([id, { input }]) => ({ member: "event", id, input })),
   ];
   for (const { member, id, input } of members) {
     const properties = input === undefined ? undefined : cliInputSchema(input, types).properties;
@@ -579,9 +579,9 @@ function valueOf(name: string, text: string, type: JsonObject): unknown {
 
 const objectOrEmpty = (value: unknown): JsonObject => (isJsonObject(value) ? value : {});
 
-function viewCapability(view: CatalogDocument, id: string): CatalogCapability {
-  const capability = ownMember(view.capabilities, id);
-  if (capability === undefined) throw new Error(`The view of the session has no capability ${id}.`);
+function capabilityIn(catalog: CatalogDocument, id: string): CatalogCapability {
+  const capability = ownMember(catalog.capabilities, id);
+  if (capability === undefined) throw new Error(`The catalog of the session has no capability ${id}.`);
   return capability;
 }
 

@@ -8,7 +8,7 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-The repository publishes an agent skill, `acid-cat`. It teaches a coding agent to build with AcidCat: write the catalog, implement capabilities and events with a core, serve them through bindings, and test them with `acid-cat check` and `acid-cat conform`.
+The repository publishes an agent skill, `acid-cat`. It teaches a coding agent to build with AcidCat: write the catalog, implement capabilities and events with a core, serve them through surfaces, and test them with `acid-cat check` and `acid-cat conform`.
 
 ## Install the skill
 
@@ -16,9 +16,9 @@ The repository publishes an agent skill, `acid-cat`. It teaches a coding agent t
 gh skill install Hebilicious/acidcat acid-cat
 ```
 
-The agent uses the skill when a repository depends on `@acid-cat/*` or `acid-cat-core`, has a `*.acidcat.json` catalog or a Pkl module that amends `Catalog.pkl`, or when you ask it to add a capability, a target or a binding. It also uses the skill when you ask it to expose an application to agents through MCP or WebMCP, or to give it a command line or an HTTP API.
+The agent uses the skill when a repository depends on `@acid-cat/*` or `acid-cat-core`, has a `*.acidcat.json` catalog or a Pkl module that amends `Catalog.pkl`, or when you ask it to add a capability, a target or a surface. It also uses the skill when you ask it to expose an application to agents through MCP or WebMCP, or to give it a command line or an HTTP API.
 
-The source of the skill is [`skills/acid-cat/SKILL.md`](https://github.com/Hebilicious/acidcat/blob/main/skills/acid-cat/SKILL.md). Two references go with it: [`cores.md`](https://github.com/Hebilicious/acidcat/blob/main/skills/acid-cat/references/cores.md) for each core, and [`bindings.md`](https://github.com/Hebilicious/acidcat/blob/main/skills/acid-cat/references/bindings.md) for the options and the traps of each binding.
+The source of the skill is [`skills/acid-cat/SKILL.md`](https://github.com/Hebilicious/acidcat/blob/main/skills/acid-cat/SKILL.md). Two references go with it: [`cores.md`](https://github.com/Hebilicious/acidcat/blob/main/skills/acid-cat/references/cores.md) for each core, and [`surfaces.md`](https://github.com/Hebilicious/acidcat/blob/main/skills/acid-cat/references/surfaces.md) for the options and the traps of each surface.
 
 ## What the skill tells the agent
 
@@ -44,7 +44,7 @@ The skill gives the agent the steps for a new capability:
 1. Add it to the source of the catalog: id, description, audience, input, output, failures and hints.
 2. Implement it in the core.
 3. Write the JSON of the catalog again, and run `acid-cat check --strict`.
-4. Run the tests of the application, and `acid-cat conform` for each binding that the application serves.
+4. Run the tests of the application, and `acid-cat conform` for each surface that the application serves.
 
 ## Read machine output
 
@@ -57,4 +57,4 @@ A command line that a core builds writes JSON by default. When you set its defau
 ## Read more
 
 - [The acid-cat command](/docs/reference/cli/)
-- [Capabilities](/docs/concepts/capabilities/) and [Targets and views](/docs/concepts/targets-and-views/)
+- [Capabilities](/docs/concepts/capabilities/) and [Targets](/docs/concepts/targets/)

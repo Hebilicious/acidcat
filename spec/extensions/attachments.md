@@ -10,7 +10,7 @@ A handle is a string of 1 to 128 characters. A client MUST NOT use its structure
 { "type": "string", "minLength": 1, "maxLength": 128, "format": "acidcat-attachment" }
 ```
 
-The `format` tells bindings that the field needs an attachment, so they can show an upload control. It does not change validation.
+The `format` tells surfaces that the field needs an attachment, so they can show an upload control. It does not change validation.
 
 A handle is valid only in the session that registered the attachment. Each attachment has a `name`, a `mediaType` and a `size` in bytes.
 
@@ -22,6 +22,6 @@ A handle is valid only in the session that registered the attachment. Each attac
 - A second release of a handle, or the release of an unknown handle, has no effect.
 - A capability that accepts a handle has the failure `AttachmentUnavailable`. It returns this failure for a handle that is released, unknown, or from a different session.
 
-## Bindings
+## Surfaces
 
-A binding that supports attachments tells how a client registers an attachment, for example with an upload route, a file flag or a file picker. A target that cannot register attachments can still use handles from outputs.
+A surface that supports attachments tells how a client registers an attachment, for example with an upload route, a file flag or a file picker. A target that cannot register attachments can still use handles from outputs.

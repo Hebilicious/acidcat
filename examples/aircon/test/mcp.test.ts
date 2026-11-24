@@ -49,12 +49,12 @@ test("the server of the application has its own tools", async () => {
   assert.ok(invalid, "a temperature outside 16 to 31 must be refused");
 });
 
-test("the MCP binding serves one tool for each capability, on the same unit", async () => {
+test("the MCP surface serves one tool for each capability, on the same unit", async () => {
   const application = await connect("/mcp");
   await application.callTool({ name: "set_controls", arguments: { power: true, mode: "heat", fan: "high", targetCelsius: 24 } });
 
-  const binding = await connect("/capabilities/mcp");
-  const { tools } = await binding.listTools();
+  const surface = await connect("/capabilities/mcp");
+  const { tools } = await surface.listTools();
   assert.deepEqual(tools.map((tool) => tool.name).sort(), [
     "aircon.fan.set",
     "aircon.mode.set",
@@ -63,11 +63,11 @@ test("the MCP binding serves one tool for each capability, on the same unit", as
     "aircon.status.get",
     "aircon.temperature.set",
   ]);
-  const status = await binding.callTool({ name: "aircon.status.get", arguments: {} });
+  const status = await surface.callTool({ name: "aircon.status.get", arguments: {} });
   assert.deepEqual(status.structuredContent, { power: true, mode: "heat", fan: "high", targetCelsius: 24, roomCelsius: 25 });
 });
 
-test("the MCP binding gives the x-mcp-header annotation of aircon.power.set, and rejects a call whose Mcp-Param-On header does not agree with on", async () => {
+test("the MCP surface gives the x-mcp-header annotation of aircon.power.set, and rejects a call whose Mcp-Param-On header does not agree with on", async () => {
   const client = await connect("/capabilities/mcp");
   const { tools } = await client.listTools();
   const inputSchema = z.object({ properties: z.object({ on: z.looseObject({ "x-mcp-header": z.string() }) }) }).parse(tools.find((tool) => tool.name === "aircon.power.set")?.inputSchema);
@@ -90,9 +90,9 @@ test("the MCP binding gives the x-mcp-header annotation of aircon.power.set, and
   assert.equal((await call({ "Mcp-Param-On": "false" })).status, 200);
 });
 
-test("the MCP binding serves revision 2026-07-28 only, and the wrapped binding serves the initialize handshake too", async () => {
+test("the MCP surface serves revision 2026-07-28 only, and the wrapped surface serves the initialize handshake too", async () => {
   // The default of the official client is the initialize handshake of revision 2025-11-25. When this default becomes
-  // revision 2026-07-28, this test fails: see the roadmap of spec/bindings/mcp.md.
+  // revision 2026-07-28, this test fails: see the roadmap of spec/surfaces/mcp.md.
   const legacy = () => new Client({ name: "example-test", version: "0.0.0" });
   await assert.rejects(legacy().connect(new StreamableHTTPClientTransport(new URL(`${served.url}/capabilities/mcp`))));
 
@@ -215,7 +215,7 @@ test("events/poll on the server of the application reads aircon.status.changed f
   await client.close();
 });
 
-test("the MCP binding serves a Server Card, and the wrapped binding adds the revisions of the handshake", async () => {
+test("the MCP surface serves a Server Card, and the wrapped surface adds the revisions of the handshake", async () => {
   const Card = z.object({ name: z.string(), version: z.string(), remotes: z.array(z.object({ url: z.string(), supportedProtocolVersions: z.array(z.string()) })) });
   const response = await fetch(`${served.url}/capabilities/mcp/server-card`);
   assert.equal(response.status, 200);

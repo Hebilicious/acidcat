@@ -15,7 +15,7 @@ use acid_cat_catalog::{Capability, Catalog, Event, Target};
 use serde_json::json;
 
 let mut catalog = Catalog::new(Some("Music player"), None);
-catalog.target("remote", Target { bindings: vec!["cli".into()], ..Target::default() });
+catalog.target("remote", Target { surfaces: vec!["cli".into()], ..Target::default() });
 let unknown = catalog.r#type("UnknownTrack", json!({ "type": "object" }));
 catalog.capability("player.track.play", Capability {
     description: "Play a track now.".into(),
@@ -41,7 +41,7 @@ The full example, a music player, is [`examples/player.rs`](examples/player.rs).
 - `event()` declares an [event](../../../spec/events.md). Clients subscribe to it and get its payload in each occurrence. A payload is an object, or a reference to a type that is an object.
 - `read_only`, `destructive` and `idempotent` are a capability's [hints](../../../spec/catalog.md#capabilities) for clients. `destructive` and `idempotent` are `Option<bool>`. A hint you leave out is not in the catalog.
 - `validate()` lists the rules that the catalog breaks. `render()` returns them as an error.
-- `canonical_text()` writes a catalog that you have as a `serde_json::Value` in canonical form. `canonical_json()` writes any value as [canonical JSON](../../../spec/bindings/mcp.md#canonical-json): no spaces, and every key sorted. [`acid-cat-core`](../../core-rust/README.md) uses it for its lease and subscription keys.
+- `canonical_text()` writes a catalog that you have as a `serde_json::Value` in canonical form. `canonical_json()` writes any value as [canonical JSON](../../../spec/surfaces/mcp.md#canonical-json): no spaces, and every key sorted. [`acid-cat-core`](../../core-rust/README.md) uses it for its lease and subscription keys.
 
 ## Tests
 

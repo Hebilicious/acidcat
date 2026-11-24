@@ -107,10 +107,10 @@ export const events = App.make({
   title: "Events fixture",
   description: "One event for each behavior of subscriptions.",
   targets: {
-    app: { bindings: ["typescript"] },
-    mcp: { bindings: ["mcp"] },
-    cli: { bindings: ["cli"] },
-    api: { bindings: ["http"] },
+    app: { surfaces: ["typescript"] },
+    mcp: { surfaces: ["mcp"] },
+    cli: { surfaces: ["cli"] },
+    api: { surfaces: ["http"] },
   },
   capabilities: [
     Capability.make({

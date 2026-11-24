@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use acid_cat_core::App;
-use acid_cat_core::http::{HttpBinding, HttpOptions};
-use acid_cat_core::mcp::{McpBinding, McpOptions, PROTOCOL_VERSION};
+use acid_cat_core::http::{HttpOptions, HttpSurface};
+use acid_cat_core::mcp::{McpOptions, McpSurface, PROTOCOL_VERSION};
 use acid_cat_core::remote::{Refusal, request_body};
 use http::Request;
 use http_body_util::{BodyExt, Full};
@@ -116,7 +116,7 @@ fn post(path: &str, token: Option<&str>) -> http::request::Builder {
 #[tokio::test]
 async fn through_http_the_capability_gets_the_caller_of_the_request_and_the_target() {
     let alive = Arc::new(AtomicUsize::new(0));
-    let binding = HttpBinding::with_request_context(app(), caller(&alive), HttpOptions::default());
+    let surface = HttpSurface::with_request_context(app(), caller(&alive), HttpOptions::default());
     let request = |token: Option<&str>| {
         request_body(
             post("/capabilities/who.get", token)
@@ -125,7 +125,7 @@ async fn through_http_the_capability_gets_the_caller_of_the_request_and_the_targ
         )
     };
 
-    let (status, body) = answer(binding.handle(request(Some("dashboard"))).await).await;
+    let (status, body) = answer(surface.handle(request(Some("dashboard"))).await).await;
     assert_eq!(status, 200);
     assert_eq!(
         body,
@@ -137,7 +137,7 @@ async fn through_http_the_capability_gets_the_caller_of_the_request_and_the_targ
         "the context is dropped after the answer"
     );
 
-    let refused = binding.handle(request(None)).await;
+    let refused = surface.handle(request(None)).await;
     assert_eq!(refused.headers()["www-authenticate"], "Bearer");
     let types: Vec<_> = refused.headers().get_all("content-type").iter().collect();
     assert_eq!(types, ["application/json"]);
@@ -149,8 +149,8 @@ async fn through_http_the_capability_gets_the_caller_of_the_request_and_the_targ
 #[tokio::test]
 async fn through_mcp_the_capability_gets_the_caller_of_the_request_and_the_target() {
     let alive = Arc::new(AtomicUsize::new(0));
-    let binding =
-        McpBinding::with_request_context(app(), caller(&alive), McpOptions::new("who", "0.0.0"));
+    let surface =
+        McpSurface::with_request_context(app(), caller(&alive), McpOptions::new("who", "0.0.0"));
     let call = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -173,7 +173,7 @@ async fn through_mcp_the_capability_gets_the_caller_of_the_request_and_the_targe
         )
     };
 
-    let (status, body) = answer(binding.handle(request(Some("bank-agent"))).await).await;
+    let (status, body) = answer(surface.handle(request(Some("bank-agent"))).await).await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(
         body["result"]["structuredContent"],
@@ -185,7 +185,7 @@ async fn through_mcp_the_capability_gets_the_caller_of_the_request_and_the_targe
         "the context is dropped after the answer"
     );
 
-    let refused = binding.handle(request(None)).await;
+    let refused = surface.handle(request(None)).await;
     assert_eq!(refused.headers()["www-authenticate"], "Bearer");
     let types: Vec<_> = refused.headers().get_all("content-type").iter().collect();
     assert_eq!(types, ["application/json"]);
@@ -203,8 +203,8 @@ fn a_refusal_needs_a_status_from_400_to_599() {
 #[tokio::test]
 async fn through_http_an_event_gets_the_target_and_the_context_lives_until_the_stream_ends() {
     let alive = Arc::new(AtomicUsize::new(0));
-    let binding = HttpBinding::with_request_context(app(), caller(&alive), HttpOptions::default());
-    let response = binding
+    let surface = HttpSurface::with_request_context(app(), caller(&alive), HttpOptions::default());
+    let response = surface
         .handle(request_body(
             post("/events/who.seen", Some("dashboard"))
                 .body(Full::new(bytes::Bytes::from("{}")))
@@ -238,7 +238,7 @@ async fn through_http_a_path_that_is_not_under_base_is_an_unknown_route() {
         base: "/api".into(),
         ..HttpOptions::default()
     };
-    let binding = HttpBinding::with_request_context(app(), caller(&alive), options);
+    let surface = HttpSurface::with_request_context(app(), caller(&alive), options);
     let get = |path: &str| {
         request_body(
             Request::get(path)
@@ -248,21 +248,21 @@ async fn through_http_a_path_that_is_not_under_base_is_an_unknown_route() {
         )
     };
 
-    assert_eq!(binding.handle(get("/api/capabilities")).await.status(), 200);
+    assert_eq!(surface.handle(get("/api/capabilities")).await.status(), 200);
     for path in [
         "/zzz/capabilities",
         "/apix/capabilities",
         "/zzz/catalog",
         "/zzz/events",
     ] {
-        let (status, body) = answer(binding.handle(get(path)).await).await;
+        let (status, body) = answer(surface.handle(get(path)).await).await;
         assert_eq!(
             (status, &body["kind"]),
             (404, &json!("unknown-capability")),
             "{path}"
         );
     }
-    let call = binding
+    let call = surface
         .handle(request_body(
             post("/zzz/capabilities/who.get", Some("dashboard"))
                 .body(Full::new(bytes::Bytes::from("{}")))

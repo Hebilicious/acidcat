@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { z } from "zod";
 
 const Catalog = z.looseObject({
-  targets: z.record(z.string(), z.looseObject({ bindings: z.array(z.string()) })),
+  targets: z.record(z.string(), z.looseObject({ surfaces: z.array(z.string()) })),
   capabilities: z.record(
     z.string(),
     z.looseObject({

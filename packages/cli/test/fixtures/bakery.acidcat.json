@@ -4,25 +4,25 @@
   "description": "Take orders for bread, run the till and start the ovens of one bakery.",
   "targets": {
     "kitchen": {
-      "bindings": [
+      "surfaces": [
         "cli"
       ],
       "description": "The bakers, through a command line in the kitchen."
     },
     "mcp": {
-      "bindings": [
+      "surfaces": [
         "mcp"
       ],
       "description": "Agents that order for a customer, through an MCP server."
     },
     "shop": {
-      "bindings": [
+      "surfaces": [
         "typescript"
       ],
       "description": "The web shop where customers order bread."
     },
     "till": {
-      "bindings": [
+      "surfaces": [
         "typescript"
       ],
       "description": "The till at the counter."

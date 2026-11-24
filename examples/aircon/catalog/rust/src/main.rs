@@ -12,7 +12,7 @@ fn aircon_catalog() -> Catalog {
             "app",
             Target {
                 description: Some("The phone, desktop and web apps that people use.".into()),
-                bindings: strings(&["typescript", "rust", "webmcp", "acme:swift", "acme:kotlin"]),
+                surfaces: strings(&["typescript", "rust", "webmcp", "acme:swift", "acme:kotlin"]),
                 ..Target::default()
             },
         )
@@ -22,14 +22,14 @@ fn aircon_catalog() -> Catalog {
                 description: Some(
                     "A desktop taskbar widget showing the status and a power toggle.".into(),
                 ),
-                bindings: strings(&["typescript"]),
+                surfaces: strings(&["typescript"]),
                 ..Target::default()
             },
         )
         .target(
             "cli",
             Target {
-                bindings: strings(&["cli"]),
+                surfaces: strings(&["cli"]),
                 options: Some(json!({
                     "cli": { "aliases": {
                         "status": { "capability": "aircon.status.get" },
@@ -49,7 +49,7 @@ fn aircon_catalog() -> Catalog {
             "mcp",
             Target {
                 description: Some("Agents, through an MCP server.".into()),
-                bindings: strings(&["mcp"]),
+                surfaces: strings(&["mcp"]),
                 ..Target::default()
             },
         )
@@ -57,7 +57,7 @@ fn aircon_catalog() -> Catalog {
             "api",
             Target {
                 description: Some("Home-automation systems and scripts.".into()),
-                bindings: strings(&["http"]),
+                surfaces: strings(&["http"]),
                 ..Target::default()
             },
         );

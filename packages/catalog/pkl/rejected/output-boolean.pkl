@@ -1,5 +1,5 @@
 // pkl eval fails with: Expected value of type `Dynamic`, but got type `Boolean`.
 amends "../Catalog.pkl"
 
-targets { ["cli"] { bindings { "cli" } } }
+targets { ["cli"] { surfaces { "cli" } } }
 capabilities { ["shop.item.get"] { description = "Get an item."; audience { "cli" }; output = true } }

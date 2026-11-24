@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Any, Callable
 
 _CATALOG_ORDER = ["acidcat", "title", "description", "targets", "$defs", "capabilities", "events"]
-_TARGET_ORDER = ["bindings", "description", "options"]
+_TARGET_ORDER = ["surfaces", "description", "options"]
 _CAPABILITY_ORDER = ["description", "audience", "input", "output", "failures", "readOnly", "destructive", "idempotent", "state"]
 _EVENT_ORDER = ["description", "audience", "input", "payload"]
 

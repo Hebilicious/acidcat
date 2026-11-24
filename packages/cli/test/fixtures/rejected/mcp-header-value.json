@@ -1,6 +1,6 @@
 {
   "acidcat": "0.1",
-  "targets": { "shop": { "bindings": ["mcp"] } },
+  "targets": { "shop": { "surfaces": ["mcp"] } },
   "capabilities": {
     "shop.order.place": {
       "description": "Place an order.",

@@ -28,7 +28,7 @@ export interface Actions {
   readonly online: (online: boolean) => void;
 }
 
-export interface View {
+export interface Controls {
   readonly showStatus: (status: Status) => void;
   readonly showToolStatus: (status: ToolStatus | undefined) => void;
   readonly showTools: (tools: readonly Tool[]) => void;
@@ -53,7 +53,7 @@ function describe(outcome: Outcome<unknown, unknown>): string {
   return `Failure ${tag}.`;
 }
 
-export function bindPage(core: string, actions: Actions): View {
+export function bindPage(core: string, actions: Actions): Controls {
   find("core", HTMLElement).textContent = core;
   const result = find("result", HTMLOutputElement);
   const power = find("power", HTMLButtonElement);

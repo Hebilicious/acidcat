@@ -1,5 +1,5 @@
-//! The MCP binding through HTTP (spec/bindings/mcp.md#http), revision 2026-07-28, and the `initialize` handshake of
-//! earlier revisions (spec/bindings/mcp.md#earlier-revisions-through-http). The server keeps no state between
+//! The MCP surface through HTTP (spec/surfaces/mcp.md#http), revision 2026-07-28, and the `initialize` handshake of
+//! earlier revisions (spec/surfaces/mcp.md#earlier-revisions-through-http). The server keeps no state between
 //! requests, except poll leases and webhook subscriptions.
 
 use std::sync::Arc;
@@ -28,7 +28,7 @@ use crate::remote::{
 };
 use crate::session::{DEFAULT_BUFFER_LIMIT, Session};
 
-/// The identity of the client of a request, from its headers: the principal (spec/bindings/mcp.md#webhook).
+/// The identity of the client of a request, from its headers: the principal (spec/surfaces/mcp.md#webhook).
 pub type Principal = Arc<dyn Fn(&HeaderMap) -> Option<String> + Send + Sync>;
 
 #[derive(Clone)]
@@ -91,15 +91,15 @@ struct Inner<C> {
     card: Option<Card>,
 }
 
-/// The MCP server of an application through HTTP. Each request has its own session. [`McpBinding::close`] ends the
+/// The MCP server of an application through HTTP. Each request has its own session. [`McpSurface::close`] ends the
 /// poll leases and the webhook subscriptions.
-pub struct McpBinding<C> {
+pub struct McpSurface<C> {
     inner: Arc<Inner<C>>,
 }
 
-impl<C> Clone for McpBinding<C> {
+impl<C> Clone for McpSurface<C> {
     fn clone(&self) -> Self {
-        McpBinding {
+        McpSurface {
             inner: self.inner.clone(),
         }
     }
@@ -142,8 +142,8 @@ fn read_message(body: &Value) -> Message {
     }
 }
 
-impl<C: Send + Sync + 'static> McpBinding<C> {
-    /// A binding whose requests share one context.
+impl<C: Send + Sync + 'static> McpSurface<C> {
+    /// A surface whose requests share one context.
     ///
     /// # Panics
     ///
@@ -156,13 +156,13 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
         Self::with_contexts(app, Contexts::Shared(context), options)
     }
 
-    /// A binding that makes a context for each request that passes the screening, from the head of the request: for
+    /// A surface that makes a context for each request that passes the screening, from the head of the request: for
     /// example the caller, from a token in a header. A [`Refusal`] answers the request instead. A poll lease or a
     /// webhook subscription keeps the context of the request that started it, until it ends.
     ///
     /// # Panics
     ///
-    /// If the options are not valid, as for [`McpBinding::new`].
+    /// If the options are not valid, as for [`McpSurface::new`].
     pub fn with_request_context<Make, Made>(
         app: Arc<Application<C>>,
         make: Make,
@@ -202,7 +202,7 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
             };
             Card::new(card, &server, webhooks.as_deref())
         });
-        McpBinding {
+        McpSurface {
             inner: Arc::new(Inner {
                 app,
                 context,
@@ -486,10 +486,10 @@ impl<C: Send + Sync + 'static> McpBinding<C> {
     }
 }
 
-impl<C: Send + Sync + 'static> Handler for McpBinding<C> {
+impl<C: Send + Sync + 'static> Handler for McpSurface<C> {
     fn handle(&self, request: Request<RequestBody>) -> BoxFuture<'static, Response<ResponseBody>> {
-        let binding = self.clone();
-        Box::pin(async move { McpBinding::handle(&binding, request).await })
+        let surface = self.clone();
+        Box::pin(async move { McpSurface::handle(&surface, request).await })
     }
 }
 

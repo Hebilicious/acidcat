@@ -1,6 +1,6 @@
 ---
 title: Serve with the Effect core
-description: Write capabilities as Effect programs with @acid-cat/core-effect, and serve them through the TypeScript, MCP, HTTP, CLI and WebMCP bindings.
+description: Write capabilities as Effect programs with @acid-cat/core-effect, and serve them through the TypeScript, MCP, HTTP, CLI and WebMCP surfaces.
 sidebar:
   order: 23
   label: Effect core
@@ -37,7 +37,7 @@ const greet = Capability.make({
 
 export const greeter = App.make({
   title: "Greeter",
-  targets: { cli: { bindings: ["cli"] } },
+  targets: { cli: { surfaces: ["cli"] } },
   capabilities: [greet],
 });
 
@@ -61,7 +61,7 @@ const Offline = Schema.TaggedStruct("Offline", {});
 
 export const aircon = App.make({
   title: "Living-room air conditioner",
-  targets: { cli: { bindings: ["cli"] }, mcp: { bindings: ["mcp"] } },
+  targets: { cli: { surfaces: ["cli"] }, mcp: { surfaces: ["mcp"] } },
   capabilities: [
     Capability.make({
       id: "aircon.power.set",
@@ -112,9 +112,9 @@ import { App } from "@acid-cat/core-effect";
 await writeFile("acidcat.catalog.json", App.render(aircon));
 ```
 
-## Serve each binding
+## Serve each surface
 
-| Module | Binding | Entry point |
+| Module | Surface | Entry point |
 | --- | --- | --- |
 | `Session` | Invocation and events in Effect | `Session.make(app, { target })` |
 | `Handles` | TypeScript, for code without Effect | `Handles.open(app, layer, { target, webmcp })` |
@@ -191,12 +191,12 @@ const handler = Mcp.toWebHandler(app, makeLayer(env), { ...options, services: "p
 
 ## The command line
 
-`NodeCli.main` serves the view of the `cli` target. `App.alias(capabilityOrEvent, fixedInput?)` makes an alias, and `App.aliasDefault` makes the default alias:
+`NodeCli.main` serves the catalog of the `cli` target. `App.alias(capabilityOrEvent, fixedInput?)` makes an alias, and `App.aliasDefault` makes the default alias:
 
 ```ts
 targets: {
   cli: {
-    bindings: ["cli"],
+    surfaces: ["cli"],
     cli: {
       aliases: {
         status: App.aliasDefault(statusGet),
@@ -218,7 +218,7 @@ node cli.ts follow    # the same subscription as: node cli.ts watch aircon.statu
 node cli.ts           # the default alias: node cli.ts status
 ```
 
-With the `remote` option and `Http.client(url)`, the command line calls the HTTP binding of a server.
+With the `remote` option and `Http.client(url)`, the command line calls the HTTP surface of a server.
 
 ## Read more
 

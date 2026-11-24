@@ -1,4 +1,4 @@
-/** The `initialize` handshake of earlier MCP revisions through HTTP (spec/bindings/mcp.md#earlier-revisions-through-http). */
+/** The `initialize` handshake of earlier MCP revisions through HTTP (spec/surfaces/mcp.md#earlier-revisions-through-http). */
 import { isJsonObject, MCP_EVENTS_EXTENSION, MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION_KEY, MCP_SERVER_CARD_MEDIA_TYPE, mcpDiscovered, mcpParamHeaders, mcpServerCardResponse, mcpServerUrlOfCardRequest, mcpWrappedRequest, readBounded } from "@acid-cat/spec-ts";
 import type { JsonObject } from "@acid-cat/spec-ts";
 
@@ -17,7 +17,7 @@ const CURRENT_ONLY_MEMBERS = new Set(["_meta", "resultType", "ttlMs", "cacheScop
 /**
  * A web handler that serves the `initialize` handshake of revisions 2025-11-25 and 2025-06-18, and gives all other
  * requests to `handler`. It adds these revisions to the `supportedProtocolVersions` of the Server Card of `handler`
- * (spec/bindings/mcp.md#server-card).
+ * (spec/surfaces/mcp.md#server-card).
  */
 export function mcpHandshake(handler: WebHandler, options: McpHandshakeOptions = {}): WebHandler {
   const maximumBytes = options.maximumBytes ?? 1_048_576;
@@ -89,7 +89,7 @@ function asCurrentRevisionRequest(request: Request, method: string, params: Json
 /**
  * The result of `initialize`, from the result of `server/discover`. The wrapper keeps no session, so it cannot send
  * `notifications/tools/list_changed`. The events extension is only for revision 2026-07-28, so the capabilities do not
- * have it (spec/bindings/mcp.md#events).
+ * have it (spec/surfaces/mcp.md#events).
  */
 function initializeResult(offered: unknown, discovered: JsonObject): JsonObject {
   const { name = "", version = "", instructions, capabilities = {} } = mcpDiscovered(discovered);

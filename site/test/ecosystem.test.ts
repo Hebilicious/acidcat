@@ -119,7 +119,7 @@ test("the check finds hand-written tabs, tables and titles", () => {
   assert.equal(handWrittenLists('<Tabs syncKey="cli-or-code">\n<TabItem label="Command line">x</TabItem>\n<TabItem label="TypeScript">y</TabItem>\n</Tabs>').length, 0);
   assert.equal(handWrittenLists("| Step | Pkl | Go |\n| --- | --- | --- |\n| a | b | c |").length, 1);
   assert.equal(handWrittenLists("| Core | Package |\n| --- | --- |\n| TypeScript | a |\n| Effect | b |\n").length, 1);
-  assert.equal(handWrittenLists("| Binding | Use |\n| --- | --- |\n| TypeScript | a |\n| WebMCP | b |\n").length, 0);
+  assert.equal(handWrittenLists("| Surface | Use |\n| --- | --- |\n| TypeScript | a |\n| WebMCP | b |\n").length, 0);
   assert.equal(handWrittenLists('```ts title="aircon.ts (part)"\nx\n```').length, 1);
   assert.equal(handWrittenLists('```ts title="aircon.ts"\nx\n```').length, 0);
   assert.equal(handWrittenLists("title: The catalog in five languages").length, 1);

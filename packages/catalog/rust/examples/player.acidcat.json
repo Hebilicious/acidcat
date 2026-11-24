@@ -4,19 +4,19 @@
   "description": "Play, pause and queue the music of one home speaker.",
   "targets": {
     "assistant": {
-      "bindings": [
+      "surfaces": [
         "mcp"
       ],
       "description": "Assistants, through an MCP server."
     },
     "desktop": {
-      "bindings": [
+      "surfaces": [
         "typescript"
       ],
       "description": "The desktop app, with a mini player in the menu bar."
     },
     "remote": {
-      "bindings": [
+      "surfaces": [
         "cli"
       ],
       "description": "Shell scripts and keyboard shortcuts.",

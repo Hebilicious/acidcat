@@ -28,14 +28,14 @@ for (const outcome of outcomes) {
 | `isJsonObject` | Tell whether a value is a JSON object: not `null` and not an array |
 | `CALL_FAILURE_KINDS`, `CallFailureError` | The call failure kinds, and the JavaScript error for one call failure |
 | `AVAILABLE`, `unavailable` | Make [availability](../../spec/invocation.md#availability) values |
-| `viewOf`, `bundle` | A target's [view](../../spec/catalog.md#views), and a schema together with its shared types |
+| `targetCatalog`, `bundle` | A target's [catalog](../../spec/catalog.md#the-catalog-of-a-target), and a schema together with its shared types |
 | `resolveType` | The type that a schema's `$ref` points to, whatever other keys the schema has |
 | `ownMember` | An object's member for a key, or `undefined`. Inherited names, such as `constructor`, are not members |
-| `mcpToolAnnotations` | A capability's MCP `annotations`: `readOnlyHint` from `readOnly`, plus `destructiveHint` and `idempotentHint` from `destructive` and `idempotent` when the capability has them. See [Tools](../../spec/bindings/mcp.md#tools) |
-| `cliAliases`, `cliAliasOfArgs`, `cliAliasUsage` | Check a target's [aliases](../../spec/bindings/cli.md#aliases), find the alias that the command-line arguments name, and write an alias's usage. See below |
+| `mcpToolAnnotations` | A capability's MCP `annotations`: `readOnlyHint` from `readOnly`, plus `destructiveHint` and `idempotentHint` from `destructive` and `idempotent` when the capability has them. See [Tools](../../spec/surfaces/mcp.md#tools) |
+| `cliAliases`, `cliAliasOfArgs`, `cliAliasUsage` | Check a target's [aliases](../../spec/surfaces/cli.md#aliases), find the alias that the command-line arguments name, and write an alias's usage. See below |
 | `byCodePoint` | Sort strings by Unicode code point, as the [canonical form](../../spec/catalog.md#canonical-form) sorts keys |
 
-The remaining exports give each [binding](../../spec/bindings/README.md)'s names, flags, exit codes and tool shapes.
+The remaining exports give each [surface](../../spec/surfaces/README.md)'s names, flags, exit codes and tool shapes.
 
 ### Aliases
 

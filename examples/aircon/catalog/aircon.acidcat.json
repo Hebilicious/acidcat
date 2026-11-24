@@ -4,13 +4,13 @@
   "description": "Control and monitor one split-unit air conditioner on the home network.",
   "targets": {
     "api": {
-      "bindings": [
+      "surfaces": [
         "http"
       ],
       "description": "Home-automation systems and scripts."
     },
     "app": {
-      "bindings": [
+      "surfaces": [
         "typescript",
         "rust",
         "webmcp",
@@ -20,7 +20,7 @@
       "description": "The phone, desktop and web apps that people use."
     },
     "cli": {
-      "bindings": [
+      "surfaces": [
         "cli"
       ],
       "options": {
@@ -68,13 +68,13 @@
       }
     },
     "mcp": {
-      "bindings": [
+      "surfaces": [
         "mcp"
       ],
       "description": "Agents, through an MCP server."
     },
     "taskbar": {
-      "bindings": [
+      "surfaces": [
         "typescript"
       ],
       "description": "A desktop taskbar widget showing the status and a power toggle."

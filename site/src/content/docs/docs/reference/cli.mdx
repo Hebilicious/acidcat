@@ -1,6 +1,6 @@
 ---
 title: The acid-cat command
-description: Reference for the acid-cat command line, from @acid-cat/cli. It checks, formats and views catalogs, and tests implementations.
+description: Reference for the acid-cat command line, from @acid-cat/cli. It checks and formats catalogs, prints the catalog of a target, and tests implementations.
 sidebar:
   order: 31
   label: acid-cat command
@@ -14,7 +14,7 @@ The `acid-cat` command comes from the npm package `@acid-cat/cli`. It checks cat
 ```sh
 acid-cat check [--strict] [--output json] <catalog.json ...>
 acid-cat format [--write] <catalog.json ...>
-acid-cat view <catalog.json> <target>
+acid-cat target <catalog.json> <target>
 acid-cat conform --mcp <url> [--mcp-handshake] --mcp-stdio "<command>" --http <url> --cli "<command>" --webmcp <url> \
   [--deadline <ms>] [--max-bytes <n>] [--output json] \
   [--poll-buffer <n>] [--poll-lease-mcp <url> --poll-lease-ms <ms>] \
@@ -32,7 +32,7 @@ acid-cat conform --mcp <url> [--mcp-handshake] --mcp-stdio "<command>" --http <u
 
 ## check
 
-Tests catalogs against the JSON Schema of catalogs, and against the [catalog rules](/spec/conformance/#catalog) that the schema cannot express. It also checks each alias in `options.cli` against the [alias rules](/spec/bindings/cli/#aliases).
+Tests catalogs against the JSON Schema of catalogs, and against the [catalog rules](/spec/conformance/#catalog) that the schema cannot express. It also checks each alias in `options.cli` against the [alias rules](/spec/surfaces/cli/#aliases).
 
 ```sh
 acid-cat check --strict aircon.acidcat.json
@@ -62,28 +62,28 @@ acid-cat format --write greenhouse.acidcat.json
 | --- | --- |
 | `--write` | Change the files in place |
 
-## view
+## target
 
-Writes the [view](/spec/catalog/#views) of one target: the capabilities, events and types that the target can use.
+Writes the [catalog of one target](/spec/catalog/#the-catalog-of-a-target): the capabilities, events and types that the target can use.
 
 ```sh
-acid-cat view aircon.acidcat.json mcp
+acid-cat target aircon.acidcat.json mcp
 ```
 
 ## conform
 
-Tests a running implementation of the [conformance fixture](/spec/conformance/#the-conformance-fixture) through its bindings. Give one or more bindings. Each AcidCat core runs it in its tests. [Test an implementation with acid-cat conform](/docs/guides/test-with-conform/) shows how to use it.
+Tests a running implementation of the [conformance fixture](/spec/conformance/#the-conformance-fixture) through its surfaces. Give one or more surfaces. Each AcidCat core runs it in its tests. [Test an implementation with acid-cat conform](/docs/guides/test-with-conform/) shows how to use it.
 
 | Flag | In code | What it does |
 | --- | --- | --- |
-| `--mcp <url>` | `mcp` | Test the MCP binding through HTTP |
+| `--mcp <url>` | `mcp` | Test the MCP surface through HTTP |
 | `--mcp-handshake` | `mcpHandshake: true` | Also test the `initialize` handshake of earlier revisions through HTTP |
-| `--mcp-stdio "<command>"` | `mcpStdio` | Test the MCP binding through stdio. Each check starts the server as a process |
-| `--http <url>` | `http` | Test the HTTP binding. The URL is the base URL, before `/capabilities` |
-| `--cli "<command>"` | `cli` | Test the CLI binding |
-| `--webmcp <url>` | `webmcp` | Test the WebMCP binding on a page that serves the `app` target. In code, `webmcp` can also be a function that installs the implementation on a host in the same process |
+| `--mcp-stdio "<command>"` | `mcpStdio` | Test the MCP surface through stdio. Each check starts the server as a process |
+| `--http <url>` | `http` | Test the HTTP surface. The URL is the base URL, before `/capabilities` |
+| `--cli "<command>"` | `cli` | Test the CLI surface |
+| `--webmcp <url>` | `webmcp` | Test the WebMCP surface on a page that serves the `app` target. In code, `webmcp` can also be a function that installs the implementation on a host in the same process |
 | `--deadline <ms>` | `deadline` | The deadline of each check. The default is 30 000 |
-| `--max-bytes <n>` | `maximumBytes` | The body limit of the remote bindings, in bytes. The default is 1 048 576 |
+| `--max-bytes <n>` | `maximumBytes` | The body limit of the remote surfaces, in bytes. The default is 1 048 576 |
 | `--poll-buffer <n>` | `poll.bufferLimit` | The poll buffer size of the deployment, from 1 to 97 |
 | `--poll-lease-mcp <url>`, `--poll-lease-ms <ms>` | `pollLease: { mcp, leaseMs }` | An MCP server through HTTP with a poll lease time shorter than the deadline, and that lease time. Give both together |
 | `--webhook-principal <name>`, `--webhook-cert <file>`, `--webhook-key <file>` | `webhook: { principal, cert, key }`, with the PEM text | Test webhook delivery. Give all three together |
@@ -136,7 +136,7 @@ console.log(report.errors, report.warnings);
 `acid-cat conform --output json --http http://127.0.0.1:3000/api` writes:
 
 ```json
-{ "passed": 0, "failed": 0, "warnings": 0, "checks": [{ "binding": "…", "name": "…", "rule": "…", "passed": true }] }
+{ "passed": 0, "failed": 0, "warnings": 0, "checks": [{ "surface": "…", "name": "…", "rule": "…", "passed": true }] }
 ```
 
 </TabItem>
@@ -146,7 +146,7 @@ console.log(report.errors, report.warnings);
 import { conform } from "@acid-cat/cli";
 
 const checks = await conform({ http: "http://127.0.0.1:3000/api" });
-for (const check of checks) console.log(check.binding, check.name, check.passed, check.detail);
+for (const check of checks) console.log(check.surface, check.name, check.passed, check.detail);
 ```
 
 </TabItem>

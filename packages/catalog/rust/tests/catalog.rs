@@ -35,7 +35,7 @@ fn writes_the_hints_of_a_capability_in_canonical_order() {
         .target(
             "agents",
             Target {
-                bindings: vec!["mcp".into()],
+                surfaces: vec!["mcp".into()],
                 ..Target::default()
             },
         )
@@ -64,7 +64,7 @@ fn reports_the_rules_a_catalog_breaks() {
         .target(
             "cli",
             Target {
-                bindings: vec!["cli".into()],
+                surfaces: vec!["cli".into()],
                 ..Target::default()
             },
         )
@@ -117,7 +117,7 @@ fn reports_the_rules_an_event_breaks() {
     catalog.target(
         "cli",
         Target {
-            bindings: vec!["cli".into()],
+            surfaces: vec!["cli".into()],
             ..Target::default()
         },
     );
@@ -180,7 +180,7 @@ fn reports_a_boolean_schema() {
     catalog.target(
         "cli",
         Target {
-            bindings: vec!["cli".into()],
+            surfaces: vec!["cli".into()],
             ..Target::default()
         },
     );

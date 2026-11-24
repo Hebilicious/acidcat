@@ -56,7 +56,7 @@ test("a failure is data with its type, and a call failure is an error with its k
   assert.deepEqual(offline.body, { data: { status: { __typename: "Offline", _tag: "Offline", since: null } } });
 });
 
-test("the HTTP binding is at /api, and a foreign origin is rejected", async () => {
+test("the HTTP surface is at /api, and a foreign origin is rejected", async () => {
   const api = graphqlApi({ unit: new Unit() });
   const listed = CapabilityList.parse(await (await api(new Request("http://localhost/api/capabilities"))).json());
   assert.deepEqual(listed.map((entry) => entry.id), ["aircon.status.get", "aircon.power.set", "aircon.mode.set", "aircon.temperature.set", "aircon.fan.set", "aircon.schedule.set"]);

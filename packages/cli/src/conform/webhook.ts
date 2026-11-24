@@ -10,7 +10,7 @@ import { Checks, expect, expectEqual, expectOccurrence, until } from "./check.ts
 import { count, eventRequests, httpChannel } from "./mcp.ts";
 import type { Channel, Message } from "./mcp.ts";
 
-const RULE = "spec/bindings/mcp.md#webhook";
+const RULE = "spec/surfaces/mcp.md#webhook";
 const REFRESH_BEFORE_PRECISION_MS = 1;
 
 export interface WebhookSettings {

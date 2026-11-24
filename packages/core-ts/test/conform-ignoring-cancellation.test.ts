@@ -35,7 +35,7 @@ test("acid-cat conform fails only the cancellation checks of an implementation t
       }),
     ]);
     const failed = runs.flat().filter((result) => !result.passed);
-    assert.deepEqual(failed.map((result) => `${result.binding}: ${result.name}`).sort(), [
+    assert.deepEqual(failed.map((result) => `${result.surface}: ${result.name}`).sort(), [
       "cli: an interrupt cancels the call with exit code 130",
       "http properties: cancelling a call affects only that call",
       "mcp properties: cancelling a call affects only that call",

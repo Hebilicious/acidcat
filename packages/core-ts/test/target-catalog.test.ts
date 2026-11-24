@@ -16,7 +16,7 @@ function countedToJsonSchema() {
   return { counts, toJsonSchema: counted };
 }
 
-test("a session and its handles open without writing JSON Schema, and the view is written one time for each application", async () => {
+test("a session and its handles open without writing JSON Schema, and the catalog of the target is written one time for each application", async () => {
   const { counts, toJsonSchema } = countedToJsonSchema();
   const session = createSession(fixture, { target: "app", ...options(), toJsonSchema });
   assert.equal(session.handles.get("fixture.echo")?.description, "Return the input text.");
@@ -24,18 +24,18 @@ test("a session and its handles open without writing JSON Schema, and the view i
   assert.deepEqual(await session.invoke("fixture.echo", { text: "hi" }), { ok: true, value: { text: "hi" } });
   assert.equal(counts.writes, 0);
 
-  assert.ok("fixture.echo" in session.view.capabilities);
+  assert.ok("fixture.echo" in session.catalog.capabilities);
   const written = counts.writes;
   assert.ok(written > 0);
-  assert.equal(session.view, session.view);
+  assert.equal(session.catalog, session.catalog);
 
   const other = createSession(fixture, { target: "mcp", ...options(), toJsonSchema });
-  assert.ok("fixture.echo" in other.view.capabilities);
+  assert.ok("fixture.echo" in other.catalog.capabilities);
   assert.equal(counts.writes, written);
   await Promise.all([session.dispose(), other.dispose()]);
 });
 
-test("an HTTP call and GET /capabilities write no JSON Schema, and GET /catalog writes the view", async () => {
+test("an HTTP call and GET /capabilities write no JSON Schema, and GET /catalog writes the catalog of the target", async () => {
   const { counts, toJsonSchema } = countedToJsonSchema();
   const handler = httpHandler(fixture, { allowedOrigins: [], ...options(), toJsonSchema });
   const call = await handler(

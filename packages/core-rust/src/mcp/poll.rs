@@ -16,7 +16,7 @@ use crate::session::{Session, SubscribeOptions};
 use crate::subscription::Occurrence;
 use acid_cat_catalog::canonical_json;
 
-/// The settings of poll delivery. Each one has the default of spec/bindings/mcp.md#poll.
+/// The settings of poll delivery. Each one has the default of spec/surfaces/mcp.md#poll.
 #[derive(Clone, Debug)]
 pub struct PollOptions {
     /// The time after the last poll at which a lease ends. The default is 5 minutes.

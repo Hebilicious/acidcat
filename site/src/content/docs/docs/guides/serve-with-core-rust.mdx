@@ -1,12 +1,12 @@
 ---
 title: Serve with the Rust core
-description: Write capabilities and events in Rust with acid-cat-core, and serve them through the MCP, HTTP and CLI bindings on Tokio.
+description: Write capabilities and events in Rust with acid-cat-core, and serve them through the MCP, HTTP and CLI surfaces on Tokio.
 sidebar:
   order: 24
   label: Rust core
 ---
 
-`acid-cat-core` is the core for Rust, on [Tokio](https://tokio.rs). It serves capabilities and events through the MCP, HTTP and CLI bindings, and passes every `acid-cat conform` check for these three bindings. You declare everything in code, and the core writes the catalog from it.
+`acid-cat-core` is the core for Rust, on [Tokio](https://tokio.rs). It serves capabilities and events through the MCP, HTTP and CLI surfaces, and passes every `acid-cat conform` check for these three surfaces. You declare everything in code, and the core writes the catalog from it.
 
 ```sh
 cargo add acid-cat-core
@@ -14,7 +14,7 @@ cargo add acid-cat-core
 
 Each input, value, failure and payload is a Rust type that derives `serde` and `schemars::JsonSchema`. The core checks each one against the schema of its type.
 
-The Rust core has no WebMCP binding, because WebMCP runs in a web page. It has no language binding either: Rust code in the same process opens a `Session` with `Session::open(&app, target, context)`.
+The Rust core has no WebMCP surface, because WebMCP runs in a web page. It has no language surface either: Rust code in the same process opens a `Session` with `Session::open(&app, target, context)`.
 
 ## A complete example
 
@@ -120,20 +120,20 @@ On cancellation, the core drops the future of the work and cancels `call.cancel_
 Some("catalog") => print!("{}", app.render_catalog()),
 ```
 
-## Serve each binding
+## Serve each surface
 
-| Binding | Function |
+| Surface | Function |
 | --- | --- |
-| MCP through HTTP | `mcp::McpBinding::new(app, context, McpOptions::new(name, version))` |
+| MCP through HTTP | `mcp::McpSurface::new(app, context, McpOptions::new(name, version))` |
 | MCP through stdio | `mcp::serve_stdio(app, context, McpStdioOptions::new(name, version))` |
-| HTTP | `http::HttpBinding::new(app, context, HttpOptions::default())` |
+| HTTP | `http::HttpSurface::new(app, context, HttpOptions::default())` |
 | CLI | `cli::cli_main(app, context, CliOptions::new(name, version))` |
 
-`McpBinding` and `HttpBinding` are handlers. `remote::serve(address, routes)` serves them by path prefix. The air conditioner serves the HTTP binding of its `cli` target this way, in this excerpt of `examples/aircon/core-rust/src/main.rs`:
+`McpSurface` and `HttpSurface` are handlers. `remote::serve(address, routes)` serves them by path prefix. The air conditioner serves the HTTP surface of its `cli` target this way, in this excerpt of `examples/aircon/core-rust/src/main.rs`:
 
 ```rust title="main.rs"
-use acid_cat_core::http::{HttpBinding, HttpOptions};
-let cli = HttpBinding::new(
+use acid_cat_core::http::{HttpSurface, HttpOptions};
+let cli = HttpSurface::new(
     app,
     unit,
     HttpOptions {
@@ -152,7 +152,7 @@ let served = acid_cat_core::remote::serve(
 println!("{}/cli", served.url());
 ```
 
-Each request gets its own session. `HttpBinding::with_request_context` and `McpBinding::with_request_context` build a context for each request, and can refuse a request with a `Refusal`, for example to authenticate callers.
+Each request gets its own session. `HttpSurface::with_request_context` and `McpSurface::with_request_context` build a context for each request, and can refuse a request with a `Refusal`, for example to authenticate callers.
 
 ## The command line
 
@@ -165,7 +165,7 @@ Each request gets its own session. `HttpBinding::with_request_context` and `McpB
 .alias("aircon power", &power_set) // the prefix default of `aircon power`
 ```
 
-`CliOptions::output(CliOutput::new()...)` adds a human form, and `CliOptions::remote(client)` makes the command line a client of the HTTP binding of a server.
+`CliOptions::output(CliOutput::new()...)` adds a human form, and `CliOptions::remote(client)` makes the command line a client of the HTTP surface of a server.
 
 Run the air conditioner on the Rust core from `examples/aircon`:
 

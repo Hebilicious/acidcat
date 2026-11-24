@@ -9,14 +9,14 @@ export function libraryCatalog(): Catalog {
   catalog
     .target("members", {
       description: "The web app that members use to find and borrow books.",
-      bindings: ["typescript"],
+      surfaces: ["typescript"],
     })
     .target("desk", {
       description: "The terminal at the front desk, for librarians.",
-      bindings: ["cli"],
+      surfaces: ["cli"],
       options: { command: "library", color: false },
     })
-    .target("agents", { description: "Assistants, through an MCP server.", bindings: ["mcp"] });
+    .target("agents", { description: "Assistants, through an MCP server.", surfaces: ["mcp"] });
 
   const isbn = { type: "string", pattern: "^97[89][0-9]{10}$" };
   const book = catalog.type("Book", {

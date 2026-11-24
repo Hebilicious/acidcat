@@ -31,7 +31,7 @@ test("handles give results, and reject call failures with their kind", async () 
   const marker = { write: () => Deferred.succeed(holding, undefined), remove: () => Effect.void };
   const session = await Handles.open(fixture, Layer.mergeAll(switchLayer, holdsLayer(marker), watchersLayer()), { target: "app" });
   try {
-    assert.deepEqual([...session.handles.keys()], Object.keys(session.view.capabilities));
+    assert.deepEqual([...session.handles.keys()], Object.keys(session.catalog.capabilities));
     const handle = (id: string) => handleOf(session.handles, id);
 
     assert.deepEqual(await handle("fixture.echo").execute({ text: "hi" }), { ok: true, value: { text: "hi" } });
@@ -136,7 +136,7 @@ test("an abort during input validation cancels the call, and the capability does
   );
   const Slow = Schema.String.pipe(Schema.decodeTo(Schema.String, SchemaTransformation.makeTransformation({ decode: decodeLater, encode: SchemaGetter.passthrough() })));
   const app = App.make({
-    targets: { app: { bindings: ["typescript"] } },
+    targets: { app: { surfaces: ["typescript"] } },
     capabilities: [
       Capability.make({
         id: "probe.slow",
@@ -177,7 +177,7 @@ test("handles need a state schema that encodes synchronously, a failed open rele
     ),
   );
   const app = App.make({
-    targets: { app: { bindings: ["typescript"] } },
+    targets: { app: { surfaces: ["typescript"] } },
     capabilities: [
       Capability.make({
         id: "probe.label.get",
@@ -233,7 +233,7 @@ test("session.handle gives a handle with the types of its capability", async () 
   }
 });
 
-test("session.handle gives an always unavailable handle for a capability outside the view, or for a capability object that the session does not serve", async () => {
+test("session.handle gives an always unavailable handle for a capability outside the target, or for a capability object that the session does not serve", async () => {
   const session = await Handles.open(lamp, lampLayer, { target: "remote" });
   try {
     const pairing = session.handle(pair);

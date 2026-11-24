@@ -11,7 +11,7 @@ const name = flag === "max-age-ms" ? "max-age-ms" : "cursor";
 const app = App.make({
   title: "Reserved",
   description: "An event with an input property that has the name of a flag of watch.",
-  targets: { cli: { bindings: ["cli"] } },
+  targets: { cli: { surfaces: ["cli"] } },
   capabilities: [],
   events: [
     Event.make({

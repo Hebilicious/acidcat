@@ -87,7 +87,7 @@ export class PollLeases {
     if (read.cursor === undefined) return this.#result([], this.#cursorOf(lease, lease.newest), false, false);
     if (position?.lease === lease.id) return this.#read(lease, position.position, maxEvents, read.cursor);
     // A cursor of another lease, while a lease with this key exists: the newest position, and the client can have missed
-    // occurrences (spec/bindings/mcp.md#poll).
+    // occurrences (spec/surfaces/mcp.md#poll).
     return this.#result([], this.#cursorOf(lease, lease.newest), true, false);
   }
 

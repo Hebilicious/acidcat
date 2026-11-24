@@ -52,7 +52,7 @@ func TestWritesGoIntegersAbove2To53AsFloats(t *testing.T) {
 
 func TestReportsTheRulesACatalogBreaks(t *testing.T) {
 	c := catalog.New("", "").
-		Target("cli", catalog.Target{Bindings: []string{"cli"}}).
+		Target("cli", catalog.Target{Surfaces: []string{"cli"}}).
 		Capability("Bad.Id", catalog.Capability{Description: "x"}).
 		Capability("a.b", catalog.Capability{Description: "y", Audience: []string{"clii"}}).
 		Capability("a.c", catalog.Capability{Description: "z", Input: catalog.Schema{"type": "string"}}).
@@ -72,7 +72,7 @@ func TestReportsTheRulesACatalogBreaks(t *testing.T) {
 }
 
 func TestReportsTheRulesAnEventBreaks(t *testing.T) {
-	c := catalog.New("", "").Target("cli", catalog.Target{Bindings: []string{"cli"}})
+	c := catalog.New("", "").Target("cli", catalog.Target{Surfaces: []string{"cli"}})
 	name := c.Type("Name", catalog.Schema{"type": "string"})
 	c.
 		Capability("a.b", catalog.Capability{Description: "x"}).
@@ -93,7 +93,7 @@ func TestReportsTheRulesAnEventBreaks(t *testing.T) {
 }
 
 func TestReportsATypeThatIsNotAnObject(t *testing.T) {
-	c := catalog.New("", "").Target("cli", catalog.Target{Bindings: []string{"cli"}})
+	c := catalog.New("", "").Target("cli", catalog.Target{Surfaces: []string{"cli"}})
 	c.Type("Nothing", nil)
 	c.Capability("a.d", catalog.Capability{Description: "z", Output: catalog.Schema{"type": "object", "additionalProperties": false, "items": true}})
 	want := []string{"the type Nothing is not a JSON object"}
@@ -104,7 +104,7 @@ func TestReportsATypeThatIsNotAnObject(t *testing.T) {
 
 func TestWritesTheHintsOfACapabilityInCanonicalOrder(t *testing.T) {
 	rendered, err := catalog.New("", "").
-		Target("agents", catalog.Target{Bindings: []string{"mcp"}}).
+		Target("agents", catalog.Target{Surfaces: []string{"mcp"}}).
 		Capability("notes.count.read", catalog.Capability{
 			State:       catalog.Schema{"type": "integer"},
 			Idempotent:  new(true),

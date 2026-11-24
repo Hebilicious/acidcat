@@ -179,7 +179,7 @@ fn through_mcp_over_http_with_the_handshake_poll_and_webhook_delivery() {
     assert!(
         checks
             .iter()
-            .any(|check| check["rule"] == "spec/bindings/mcp.md#server-card"),
+            .any(|check| check["rule"] == "spec/surfaces/mcp.md#server-card"),
         "the default Server Card is checked"
     );
 }

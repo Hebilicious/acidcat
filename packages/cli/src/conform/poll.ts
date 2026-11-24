@@ -8,7 +8,7 @@ import { Checks, expect, expectEqual, expectOccurrence, until } from "./check.ts
 import { eventRequests } from "./mcp.ts";
 import type { Channel, Message } from "./mcp.ts";
 
-const RULE = "spec/bindings/mcp.md#poll";
+const RULE = "spec/surfaces/mcp.md#poll";
 
 /**
  * The poll settings of the deployment that conform tests. Each one is optional. With a setting, conform also tests the

@@ -1,4 +1,4 @@
-//! The parts that the remote bindings share (spec/bindings/README.md#remote-bindings): the body types, the screening
+//! The parts that the remote surfaces share (spec/surfaces/README.md#remote-surfaces): the body types, the screening
 //! of a request, the bounded read of a body, and a server that serves handlers by path prefix.
 
 use std::convert::Infallible;
@@ -25,7 +25,7 @@ pub type RequestBody = UnsyncBoxBody<Bytes, BoxError>;
 
 pub type ResponseBody = UnsyncBoxBody<Bytes, Infallible>;
 
-/// The time with nothing sent on a stream after which a binding sends a keepalive or a heartbeat.
+/// The time with nothing sent on a stream after which a surface sends a keepalive or a heartbeat.
 pub const KEEPALIVE: Duration = Duration::from_millis(crate::facts_generated::KEEPALIVE_MS);
 
 pub const DEFAULT_MAXIMUM_BYTES: usize = 1_048_576;
@@ -42,7 +42,7 @@ where
     request.map(|body| body.map_err(Into::into).boxed_unsync())
 }
 
-/// The first rule of a remote binding that a request breaks.
+/// The first rule of a remote surface that a request breaks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Rejection {
     Method,

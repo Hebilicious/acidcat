@@ -11,13 +11,13 @@ export interface JsonRpcError {
   readonly data?: JsonObject;
 }
 
-export const servesEvents = (session: Session): boolean => Object.keys(session.view.events ?? {}).length > 0;
+export const servesEvents = (session: Session): boolean => Object.keys(session.catalog.events ?? {}).length > 0;
 
 export const eventCapabilities = (session: Session): JsonObject => (servesEvents(session) ? { extensions: { [MCP_EVENTS_EXTENSION]: {} } } : {});
 
 export function listEvents(session: Session, webhook = false): JsonObject[] {
-  const types = session.view.$defs ?? {};
-  return Object.entries(session.view.events ?? {}).map(([id, event]) =>
+  const types = session.catalog.$defs ?? {};
+  return Object.entries(session.catalog.events ?? {}).map(([id, event]) =>
     mcpEventEntry(
       id,
       event.description,
@@ -34,7 +34,7 @@ export const unsupportedWebhook: JsonRpcError = { code: MCP_EVENT_ERRORS.unsuppo
 export type RpcAnswer = { readonly result: JsonObject } | { readonly error: JsonRpcError };
 
 /**
- * A session of its own for a poll lease or a webhook subscription (spec/bindings/mcp.md#subscriptions-that-outlive-a-request).
+ * A session of its own for a poll lease or a webhook subscription (spec/surfaces/mcp.md#subscriptions-that-outlive-a-request).
  * `close` closes the session, and releases its context. A second call does nothing more.
  */
 export interface OwnSession {
@@ -46,7 +46,7 @@ export interface OwnSession {
 export type OpenSession = () => Promise<OwnSession>;
 
 /**
- * Webhook delivery (spec/bindings/mcp.md#webhook), as the MCP server through HTTP uses it. `webhookDelivery` of
+ * Webhook delivery (spec/surfaces/mcp.md#webhook), as the MCP server through HTTP uses it. `webhookDelivery` of
  * `@acid-cat/core-ts/node` makes one. The server checks the principal before it calls these functions.
  */
 export interface WebhookDelivery {

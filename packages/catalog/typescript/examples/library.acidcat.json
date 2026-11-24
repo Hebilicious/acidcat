@@ -4,13 +4,13 @@
   "description": "Find books, lend them to members and take them back.",
   "targets": {
     "agents": {
-      "bindings": [
+      "surfaces": [
         "mcp"
       ],
       "description": "Assistants, through an MCP server."
     },
     "desk": {
-      "bindings": [
+      "surfaces": [
         "cli"
       ],
       "description": "The terminal at the front desk, for librarians.",
@@ -20,7 +20,7 @@
       }
     },
     "members": {
-      "bindings": [
+      "surfaces": [
         "typescript"
       ],
       "description": "The web app that members use to find and borrow books."

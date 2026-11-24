@@ -54,7 +54,7 @@ export interface Output {
   /**
    * How the human form writes the outcomes of some capabilities and the occurrences of some events. Make each one with
    * `App.format`. Without a format, the human form writes the generic layout of the value. `command` throws if two
-   * formats have the same id, or if the id of a format is not in the view of `target`.
+   * formats have the same id, or if the id of a format is not in the target `target`.
    */
   readonly formats?: readonly App.Format[] | undefined;
 }
@@ -72,21 +72,21 @@ export interface Options<Commands extends ReadonlyArray<Command.Command.Any> = r
   /**
    * The commands of the application, beside the commands of the capabilities, `call`, `list` and `watch`. The name of
    * each one must not be `call`, `list`, `watch`, the name of another command of the application, the first word of a
-   * command alias, or the first word of the command of a capability (spec/bindings/cli.md#commands).
+   * command alias, or the first word of the command of a capability (spec/surfaces/cli.md#commands).
    */
   readonly commands?: Commands | undefined;
   /**
-   * The HTTP binding of the application on a server (spec/bindings/cli.md#server), from `Http.client`. With it, the
+   * The HTTP surface of the application on a server (spec/surfaces/cli.md#server), from `Http.client`. With it, the
    * command line sends each call, the availability of `list` and each subscription of `watch` to that server, and opens
-   * no session in this process. The commands still come from the view of `target` in this program. Serve the HTTP
-   * binding with the same target, so that both have the same view.
+   * no session in this process. The commands still come from the catalog of the target `target` in this program. Serve the HTTP
+   * surface with the same target, so that both have the same target catalog.
    */
   readonly remote?: Http.Client | undefined;
   /**
    * The human form of the output: its flags, its default and its formats. Without it, the command line writes JSON
    * only. `command` throws if the name of an output flag is not valid, is in two output flags, or is the name of
    * another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or a flag of the input of a
-   * capability or an event of the view.
+   * capability or an event of the target.
    */
   readonly output?: Output | undefined;
 }
@@ -142,7 +142,7 @@ interface AliasEntry {
 }
 
 /**
- * The help of a capability or an event, or the command list of a shared prefix (spec/bindings/cli.md#commands). The
+ * The help of a capability or an event, or the command list of a shared prefix (spec/surfaces/cli.md#commands). The
  * help formatter writes it in place of the help of `effect/cli`.
  */
 const HelpText = Context.Reference<string | undefined>("@acid-cat/core-effect/Cli/HelpText", { defaultValue: () => undefined });
@@ -201,7 +201,7 @@ const remote = (client: Http.Client): Provider => ({
 });
 
 /**
- * The command line as an Effect. Exit codes follow spec/bindings/cli.md. To run it as the main program of a Node.js
+ * The command line as an Effect. Exit codes follow spec/surfaces/cli.md. To run it as the main program of a Node.js
  * process, use `NodeCli.main` from `@acid-cat/core-effect/node`.
  */
 export const run = <R, const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(app: App.App<R>, options: Options<Commands>) =>
@@ -209,7 +209,7 @@ export const run = <R, const Commands extends ReadonlyArray<Command.Command.Any>
 
 /**
  * The default presenter of `effect/cli` writes the help of an invalid invocation to standard output, but standard
- * output must be empty for exit codes 2 and 3 (spec/bindings/cli.md#outcomes).
+ * output must be empty for exit codes 2 and 3 (spec/surfaces/cli.md#outcomes).
  */
 const usageErrorsOnStderr = (isSharedPrefix: (commandPath: readonly string[]) => boolean): CliOutput.Presenter => ({
   present: (event) =>
@@ -248,7 +248,7 @@ function parentUsageError(commandPath: readonly string[]): { readonly message: s
  * code with `exitCodeOf`. Other failures of the command stay in the error channel. Standard output carries only the
  * outcomes, so the logs and the usage errors go to standard error.
  *
- * When the first one or two arguments are the name of an alias (spec/bindings/cli.md#aliases), and do not start with
+ * When the first one or two arguments are the name of an alias (spec/surfaces/cli.md#aliases), and do not start with
  * the path of a command, the subcommand of the alias makes the call or the subscription, and `<alias> --help` writes
  * the usage of the alias. With a default alias, the program runs it when there is no argument, or when the first
  * argument starts with `--` and is not a flag alias or a global flag: then all the arguments are its flags. The help of
@@ -364,7 +364,7 @@ function startsApplicationCommand(command: Command.Command.Any, builtIns: BuiltI
 }
 
 /**
- * `effect/cli` reads a `--` as the end of the flags (spec/bindings/cli.md: after the first argument, it is an
+ * `effect/cli` reads a `--` as the end of the flags (spec/surfaces/cli.md: after the first argument, it is an
  * argument). A `--` after a long flag with no value becomes the value of the flag. For any other `--`, a second `--`
  * goes before it, so that `effect/cli` reads it as a positional argument.
  */
@@ -404,7 +404,7 @@ function withAliases(help: string, doc: { readonly annotations: Context.Context<
 }
 
 /**
- * The exit code for a usage error (spec/bindings/cli.md#exit-codes). `effect/cli` shows the help for each usage error,
+ * The exit code for a usage error (spec/surfaces/cli.md#exit-codes). `effect/cli` shows the help for each usage error,
  * and gives the errors in the `errors` of `ShowHelp`. Help with no errors is a request for help, or a command that only contains other commands with no subcommand.
  */
 export function exitCodeOf(error: CliError.CliError): number {
@@ -418,8 +418,8 @@ export function exitCodeOf(error: CliError.CliError): number {
 export type AppCommand<R, E = never> = Command.Command<string, {}, {}, E, R>;
 
 /**
- * The root command: one command for each capability in the view, `call`, `list`, `watch` with one command for each
- * event in the view, and the commands of the application. It throws if the name of a command of the application is not
+ * The root command: one command for each capability in the target, `call`, `list`, `watch` with one command for each
+ * event in the target, and the commands of the application. It throws if the name of a command of the application is not
  * allowed (see `Options.commands`), or if the path of a capability is the start of the path of another capability.
  */
 export function command<R, const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(
@@ -428,20 +428,20 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
 ): AppCommand<R | Command.Services<Commands[number]>, Command.Error<Commands[number]>> {
   const target = options.target ?? "cli";
   const client = options.remote;
-  const view: Effect.Effect<Provider, never, R | Scope.Scope> = client === undefined ? local(app, target) : Effect.succeed(remote(client));
+  const openProvider: Effect.Effect<Provider, never, R | Scope.Scope> = client === undefined ? local(app, target) : Effect.succeed(remote(client));
   const document = App.document(app);
-  const catalogView: CatalogDocument = {
+  const catalog: CatalogDocument = {
     ...document,
     capabilities: Object.fromEntries(Object.entries(document.capabilities).filter(([, c]) => (c.audience ?? []).includes(target))),
     events: Object.fromEntries(Object.entries(document.events ?? {}).filter(([, e]) => (e.audience ?? []).includes(target))),
   };
-  const types = catalogView.$defs ?? {};
+  const types = catalog.$defs ?? {};
 
   const formats = new Map<string, App.Format>();
   for (const format of options.output?.formats ?? []) {
     if (formats.has(format.id)) throw new Error(`There are two formats for ${format.id}.`);
-    const members = format.member === "event" ? (catalogView.events ?? {}) : catalogView.capabilities;
-    if (ownMember(members, format.id) === undefined) throw new Error(`The format of ${format.id} refers to a ${format.member} that is not in the view of the target ${target}.`);
+    const members = format.member === "event" ? (catalog.events ?? {}) : catalog.capabilities;
+    if (ownMember(members, format.id) === undefined) throw new Error(`The format of ${format.id} refers to a ${format.member} that is not in the target ${target}.`);
     formats.set(format.id, format);
   }
 
@@ -458,7 +458,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   const cancelledByInterrupt = Effect.onInterrupt(() => printFailure({ kind: "cancelled", message: "The call was cancelled." }, CLI_EXIT_CODES.cancelled));
 
   const invoke = (id: string, input: unknown) =>
-    Effect.scoped(Effect.flatMap(view, (provider) => provider.invoke(id, input))).pipe(
+    Effect.scoped(Effect.flatMap(openProvider, (provider) => provider.invoke(id, input))).pipe(
       Effect.flatMap((outcome) => print(id, outcome)),
       cancelledByInterrupt,
     );
@@ -475,9 +475,9 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   };
 
   const usageOf = (id: string, input: JsonObject | undefined) => cliUsage(options.name, id, input === undefined ? undefined : cliInputSchema(input, types));
-  const usages = Object.entries(catalogView.capabilities).map(([id, capability]) => ({ id, usage: usageOf(id, capability.input) }));
+  const usages = Object.entries(catalog.capabilities).map(([id, capability]) => ({ id, usage: usageOf(id, capability.input) }));
 
-  const leaves = Object.entries(catalogView.capabilities).map(([id, capability]) => {
+  const leaves = Object.entries(catalog.capabilities).map(([id, capability]) => {
     const flags = flagsOf(capability.input);
     const path = commandPath(id);
     const name = path.at(-1);
@@ -498,8 +498,8 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
         // The call failures of the id come before invalid-input (spec/invocation.md#call-failures).
         return Effect.scoped(
           Effect.gen(function* () {
-            if (ownMember(catalogView.capabilities, id) === undefined) return yield* print(id, { kind: "unknown-capability", message: `There is no capability ${id}.` });
-            const provider = yield* view;
+            if (ownMember(catalog.capabilities, id) === undefined) return yield* print(id, { kind: "unknown-capability", message: `There is no capability ${id}.` });
+            const provider = yield* openProvider;
             const availability = yield* Effect.result(provider.availability([id]));
             if (availability._tag === "Failure") return yield* print(id, availability.failure);
             const [state] = availability.success;
@@ -528,8 +528,8 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   const list = Command.make("list", {}, () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const provider = yield* view;
-        const capabilities = Object.entries(catalogView.capabilities);
+        const provider = yield* openProvider;
+        const capabilities = Object.entries(catalog.capabilities);
         const availability = yield* Effect.result(provider.availability(capabilities.map(([id]) => id)));
         if (availability._tag === "Failure") return yield* print("", availability.failure);
         if ((yield* Presentation).form === "human") {
@@ -538,7 +538,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
             const reason = state === undefined || state.available ? "" : ` (unavailable: ${state.reason})`;
             return [commandPath(id).join(" "), `${capability.description}${reason}`] as const;
           });
-          const events = Object.entries(catalogView.events ?? {}).map(([id, event]) => [`watch ${id}`, event.description] as const);
+          const events = Object.entries(catalog.events ?? {}).map(([id, event]) => [`watch ${id}`, event.description] as const);
           return yield* Console.log([...section("Capabilities", listed), ...(events.length === 0 ? [] : section("Events", events))].join("\n"));
         }
         const entries = [];
@@ -553,7 +553,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
             ...(aliases.length > 0 ? { aliases } : {}),
           });
         }
-        for (const [id, event] of Object.entries(catalogView.events ?? {})) {
+        for (const [id, event] of Object.entries(catalog.events ?? {})) {
           const usage = cliEventUsage(options.name, id, event.input === undefined ? undefined : cliInputSchema(event.input, types));
           const usages = aliasUsages("event", id);
           entries.push({ kind: "event", id, description: event.description, usage, ...(usages.length > 0 ? { aliases: usages } : {}) });
@@ -566,7 +566,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   const follow = (id: string, input: unknown, resume: Resume) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const provider = yield* view;
+        const provider = yield* openProvider;
         const started = yield* Effect.result(provider.subscribe(id, input, resume));
         if (started._tag === "Failure") return yield* printFailure(started.failure, CLI_EXIT_CODES[started.failure.kind]);
         const { form, ui } = yield* Presentation;
@@ -615,7 +615,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
           ),
         );
 
-  const watchers = Object.entries(catalogView.events ?? {}).map(([id, event]) => {
+  const watchers = Object.entries(catalog.events ?? {}).map(([id, event]) => {
     const schema = event.input === undefined ? undefined : cliInputSchema(event.input, types);
     const properties = schema === undefined ? {} : schemasIn(schema.properties);
     for (const name of CLI_RESUME_FLAGS) {
@@ -633,18 +633,18 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     Command.withSubcommands(watchers),
   );
 
-  const { aliases, default: defaultAlias, errors: aliasErrors } = cliAliases(catalogView, target);
+  const { aliases, default: defaultAlias, errors: aliasErrors } = cliAliases(catalog, target);
   if (aliasErrors.length > 0) throw new Error(aliasErrors.join("\n"));
   const aliasCommands = aliases.map((alias) => {
-    const described = alias.kind === "event" ? catalogView.events?.[alias.id] : catalogView.capabilities[alias.id];
-    if (described === undefined) throw new Error(`The alias ${alias.name} refers to ${alias.id}, which is not in the view.`);
-    const schema = cliAliasInput(catalogView, alias);
+    const described = alias.kind === "event" ? catalog.events?.[alias.id] : catalog.capabilities[alias.id];
+    if (described === undefined) throw new Error(`The alias ${alias.name} refers to ${alias.id}, which is not in the target.`);
+    const schema = cliAliasInput(catalog, alias);
     const entry: AliasEntry = {
       name: alias.name,
       usage: cliAliasUsage(options.name, alias, schema),
       description: described.description,
       default: alias.name === defaultAlias?.name,
-      flags: cliAliasFlagNames(catalogView, alias),
+      flags: cliAliasFlagNames(catalog, alias),
     };
     const finish: Finish = (made) => made.pipe(Command.withDescription(described.description), Command.unlisted);
     const name = aliasSubcommandName(alias.name);
@@ -665,7 +665,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     if (reserved.has(first)) throw new Error(filled(MESSAGES.genericCommand, { command: path.join(" ") }));
     taken.add(first);
   }
-  // A shared prefix is a command that only contains other commands (`spec/bindings/cli.md`), so the path of a capability
+  // A shared prefix is a command that only contains other commands (`spec/surfaces/cli.md`), so the path of a capability
   // must not be the start of the path of another capability.
   for (const { path } of leaves) {
     const longer = leaves.find((other) => other.path.length > path.length && path.every((word, index) => other.path[index] === word));
@@ -674,7 +674,7 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
     }
   }
   for (const { name } of aliases) taken.add(name.split(" ")[0] ?? name);
-  const errors = outputErrors(options.output?.flags ?? [], takenFlags(catalogView, aliases));
+  const errors = outputErrors(options.output?.flags ?? [], takenFlags(catalog, aliases));
   if (errors.length > 0) throw new Error(errors.join("\n"));
   for (const added of options.commands ?? []) {
     if (taken.has(added.name)) throw new Error(`The command ${added.name} of the application has the same name as another command.`);
@@ -698,17 +698,17 @@ export function command<R, const Commands extends ReadonlyArray<Command.Command.
   );
 }
 
-function takenFlags(view: CatalogDocument, aliases: ReadonlyArray<{ readonly name: string }>): ReadonlyMap<string, string> {
+function takenFlags(catalog: CatalogDocument, aliases: ReadonlyArray<{ readonly name: string }>): ReadonlyMap<string, string> {
   const taken = new Map<string, string>();
   const take = (name: string, what: string) => {
     if (!taken.has(name)) taken.set(name, what);
   };
   for (const [name, what] of RESERVED_FLAGS) take(name, what);
   for (const { name } of aliases) if (name.startsWith("--")) take(name, `the flag alias ${name}`);
-  const types = view.$defs ?? {};
+  const types = catalog.$defs ?? {};
   const members = [
-    ...Object.entries(view.capabilities).map(([id, { input }]) => ({ member: "capability", id, input })),
-    ...Object.entries(view.events ?? {}).map(([id, { input }]) => ({ member: "event", id, input })),
+    ...Object.entries(catalog.capabilities).map(([id, { input }]) => ({ member: "capability", id, input })),
+    ...Object.entries(catalog.events ?? {}).map(([id, { input }]) => ({ member: "event", id, input })),
   ];
   for (const { member, id, input } of members) {
     const properties = input === undefined ? {} : schemasIn(cliInputSchema(input, types).properties);

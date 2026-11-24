@@ -16,16 +16,16 @@ module cliAliasCases {
   pure val X_NOTE: Text = ["x", "-", "n", "o", "t", "e"]
 
   pure val CAPABILITIES: List[Entry] = [
-    { id: PROBE_READ, inView: true, input: Properties([PATH_PROPERTY, HELP_PROPERTY]) },
-    { id: PROBE_RAW, inView: true, input: NoProperties },
-    { id: PROBE_NONE, inView: true, input: NoSchema },
-    { id: HIDDEN_OP, inView: false, input: NoSchema },
+    { id: PROBE_READ, inTarget: true, input: Properties([PATH_PROPERTY, HELP_PROPERTY]) },
+    { id: PROBE_RAW, inTarget: true, input: NoProperties },
+    { id: PROBE_NONE, inTarget: true, input: NoSchema },
+    { id: HIDDEN_OP, inTarget: false, input: NoSchema },
   ]
 
   pure val EVENTS: List[Entry] = [
-    { id: PROBE_CHANGED, inView: true, input: Properties([PATH_PROPERTY]) },
-    { id: PROBE_GONE, inView: false, input: NoSchema },
-    { id: PROBE_TICKED, inView: true, input: NoSchema },
+    { id: PROBE_CHANGED, inTarget: true, input: Properties([PATH_PROPERTY]) },
+    { id: PROBE_GONE, inTarget: false, input: NoSchema },
+    { id: PROBE_TICKED, inTarget: true, input: NoSchema },
   ]
 
   pure def capabilityValue(id: Text, input: FixedInput): AliasValue = AliasObject({ capability: Id(id), event: Absent, input: input, others: [] })
@@ -88,7 +88,7 @@ module cliAliasCases {
   pure def defaultsFor(name: Text): List[DefaultSetting] = [NoDefault, DefaultNotText, DefaultName(name), DefaultName(UNDECLARED)]
 
   pure def declared(aliases: List[(Text, AliasValue)], fallback: DefaultSetting): Declared =
-    { cliBinding: true, settings: SettingsObject({ aliases: AliasMembers(aliases), default: fallback }) }
+    { cliSurface: true, settings: SettingsObject({ aliases: AliasMembers(aliases), default: fallback }) }
 
   pure val ONE_ALIAS: List[Declared] = NAMES.foldl([], (cases, name) => VALUES.foldl(cases, (byValue, value) =>
     defaultsFor(name).foldl(byValue, (more, fallback) => more.append(declared([(name, value)], fallback)))))
@@ -111,13 +111,13 @@ module cliAliasCases {
 
   pure val STATUS: Text = ["s", "t", "a", "t", "u", "s"]
 
-  pure val TARGET_CASES: List[Declared] = [true, false].foldl([], (cases, binding) => cases.concat([
-    { cliBinding: binding, settings: NoSettings },
-    { cliBinding: binding, settings: SettingsNotObject },
-    { cliBinding: binding, settings: SettingsObject({ aliases: AliasesAbsent, default: NoDefault }) },
-    { cliBinding: binding, settings: SettingsObject({ aliases: AliasesAbsent, default: DefaultName(STATUS) }) },
-    { cliBinding: binding, settings: SettingsObject({ aliases: AliasesNotObject, default: DefaultName(STATUS) }) },
-    { cliBinding: binding, settings: SettingsObject({ aliases: AliasMembers([(STATUS, capabilityValue(PROBE_RAW, NoFixedInput))]), default: DefaultName(STATUS) }) },
+  pure val TARGET_CASES: List[Declared] = [true, false].foldl([], (cases, surface) => cases.concat([
+    { cliSurface: surface, settings: NoSettings },
+    { cliSurface: surface, settings: SettingsNotObject },
+    { cliSurface: surface, settings: SettingsObject({ aliases: AliasesAbsent, default: NoDefault }) },
+    { cliSurface: surface, settings: SettingsObject({ aliases: AliasesAbsent, default: DefaultName(STATUS) }) },
+    { cliSurface: surface, settings: SettingsObject({ aliases: AliasesNotObject, default: DefaultName(STATUS) }) },
+    { cliSurface: surface, settings: SettingsObject({ aliases: AliasMembers([(STATUS, capabilityValue(PROBE_RAW, NoFixedInput))]), default: DefaultName(STATUS) }) },
   ]))
 
   var catalog: { capabilities: List[Entry], events: List[Entry] }

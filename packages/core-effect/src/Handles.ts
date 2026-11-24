@@ -20,7 +20,7 @@ export interface CallOptions {
 }
 
 /**
- * The handle of a capability (spec/bindings/typescript.md#handles). `Input`, `Value` and `Failure` are the types of
+ * The handle of a capability (spec/surfaces/typescript.md#handles). `Input`, `Value` and `Failure` are the types of
  * the schemas of the capability, and `State` is the JSON form of its state. `get` gives a handle with these types.
  */
 export interface Handle<Input = unknown, Value = unknown, Failure = unknown, State = unknown> {
@@ -54,7 +54,7 @@ export interface SubscribeOptions {
 }
 
 /**
- * The handle of an event (spec/bindings/typescript.md#event-handles). `Input` and `Payload` are the types of the
+ * The handle of an event (spec/surfaces/typescript.md#event-handles). `Input` and `Payload` are the types of the
  * schemas of the event. `event` gives a handle with these types.
  *
  * The promise of `subscribe` resolves when the subscription has started, and rejects with a `CallFailureError` before
@@ -109,7 +109,7 @@ function checked<T>(source: Observable<unknown>, is: (value: unknown) => value i
   };
 }
 
-function outsideView(capability: Capability.Any): Handle<never, never, never, never> {
+function outsideTarget(capability: Capability.Any): Handle<never, never, never, never> {
   const failure = callFailure("unknown-capability", `There is no capability ${capability.id}.`);
   const reject = () => Promise.reject(new CallFailureError(failure));
   return {
@@ -122,7 +122,7 @@ function outsideView(capability: Capability.Any): Handle<never, never, never, ne
   };
 }
 
-function eventOutsideView(event: { readonly id: string; readonly description: string }): EventHandle<never, never> {
+function eventOutsideTarget(event: { readonly id: string; readonly description: string }): EventHandle<never, never> {
   const reject = () => Promise.reject(new CallFailureError(callFailure("unknown-capability", `There is no event ${event.id}.`)));
   return { id: event.id, description: event.description, audience: [], subscribe: reject, subscribeExternal: reject };
 }
@@ -369,7 +369,7 @@ export interface OpenOptions {
  */
 export interface PromiseSession<R = never> {
   readonly target: string;
-  readonly view: Session.Session["view"];
+  readonly catalog: Session.Session["catalog"];
   readonly handles: ReadonlyMap<string, Handle>;
   /**
    * The handle of a capability, with the types of the capability. Only the capability object that the session serves
@@ -453,13 +453,13 @@ export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, opti
   };
   return {
     target: session.target,
-    get view() {
-      return session.view;
+    get catalog() {
+      return session.catalog;
     },
     handles,
     handle: (capability) => {
       const handle = handles.get(capability.id);
-      if (handle === undefined || !refs.serves(capability)) return outsideView(capability);
+      if (handle === undefined || !refs.serves(capability)) return outsideTarget(capability);
       return typedHandle(capability, handle, (input, callOptions) => run(resultOf(session.outcome(capability, input)), callOptions));
     },
     call: (capability, input, callOptions) =>
@@ -467,7 +467,7 @@ export async function open<R, E>(app: App.App<R>, layer: Layer.Layer<R, E>, opti
     events,
     event: (event) => {
       const handle = events.get(event.id);
-      if (handle === undefined || !refs.servesEvent(event)) return eventOutsideView(event);
+      if (handle === undefined || !refs.servesEvent(event)) return eventOutsideTarget(event);
       return {
         id: handle.id,
         description: handle.description,

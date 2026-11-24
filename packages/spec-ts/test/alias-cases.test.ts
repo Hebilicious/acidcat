@@ -26,7 +26,7 @@ const entries = (value: unknown, target: string) =>
       const input = member(entry, "input");
       return [
         text(member(entry, "id")),
-        { description: "", audience: member(entry, "inView") === true ? [target] : [], ...(isJsonObject(input) ? { input } : {}) },
+        { description: "", audience: member(entry, "inTarget") === true ? [target] : [], ...(isJsonObject(input) ? { input } : {}) },
       ];
     }),
   );
@@ -38,8 +38,8 @@ const events = entries(member(fixture, "events"), target);
 
 const catalogOf = (testCase: unknown): CatalogDocument => {
   const options: JsonObject = isJsonObject(testCase) && Object.hasOwn(testCase, "settings") ? { cli: testCase.settings } : {};
-  const bindings = member(testCase, "binding") === true ? ["cli"] : [];
-  return { acidcat: "0.1", targets: { [target]: { bindings, options } }, capabilities, events };
+  const surfaces = member(testCase, "surface") === true ? ["cli"] : [];
+  return { acidcat: "0.1", targets: { [target]: { surfaces, options } }, capabilities, events };
 };
 
 test("cliAliases gives the errors, the aliases and the default alias of the model in each case", () => {

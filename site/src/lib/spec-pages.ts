@@ -13,7 +13,7 @@ export interface SpecPage {
   readonly order: number;
 }
 
-const order = ["README.md", "catalog.md", "invocation.md", "events.md", "bindings/README.md", "bindings/programmatic.md", "bindings/typescript.md", "bindings/rust.md", "bindings/webmcp.md", "bindings/mcp.md", "bindings/cli.md", "bindings/http.md", "extensions/README.md", "extensions/attachments.md", "extensions/pagination.md", "conformance.md"];
+const order = ["README.md", "catalog.md", "invocation.md", "events.md", "surfaces/README.md", "surfaces/programmatic.md", "surfaces/typescript.md", "surfaces/rust.md", "surfaces/webmcp.md", "surfaces/mcp.md", "surfaces/cli.md", "surfaces/http.md", "extensions/README.md", "extensions/attachments.md", "extensions/pagination.md", "conformance.md"];
 
 const toPosix = (path: string): string => path.split(sep).join(posix.sep);
 
@@ -110,7 +110,7 @@ export const specSidebar = async (repositoryRoot: string): Promise<(SpecSidebarL
     const parts = page.id.split("/");
     const link = { label: page.id === "spec" ? "Overview" : page.title, link: `/${page.id}/` };
     if (parts.length < 3) {
-      if (parts.length === 2 && ["bindings", "extensions"].includes(parts[1] ?? "")) {
+      if (parts.length === 2 && ["surfaces", "extensions"].includes(parts[1] ?? "")) {
         const children: SpecSidebarLink[] = [{ label: "Overview", link: link.link }];
         groups.set(parts[1] ?? "", children);
         items.push({ label: page.title, items: children });

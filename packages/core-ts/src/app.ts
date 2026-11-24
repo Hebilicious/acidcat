@@ -261,7 +261,7 @@ export interface EventFactory<Context> {
 
 export const eventsFor = <Context>(): EventFactory<Context> => defineEvent;
 
-/** An alias of the command line (spec/bindings/cli.md#aliases). Make it with `cliAlias` or `cliAliasDefault`. */
+/** An alias of the command line (spec/surfaces/cli.md#aliases). Make it with `cliAlias` or `cliAliasDefault`. */
 export interface CliAlias {
   readonly member: "capability" | "event";
   readonly id: string;
@@ -283,7 +283,7 @@ export const cliAlias = <Encoded>(of: Aliased<Encoded>, input?: NoInfer<Partial<
 export const cliAliasDefault = <Encoded>(of: Aliased<Encoded>, input?: NoInfer<Partial<Encoded>>): CliAlias => aliasOf(of, input, true);
 
 export interface Target {
-  readonly bindings: readonly string[];
+  readonly surfaces: readonly string[];
   readonly description?: string | undefined;
   readonly options?: JsonObject | undefined;
   /** The aliases of the command line. The catalog writes them in `options.cli`. */
@@ -378,7 +378,7 @@ function write(app: App<never>, toJsonSchema: ToJsonSchema): CatalogDocument {
       Object.entries(app.targets).map(([name, target]) => [
         name,
         {
-          bindings: target.bindings,
+          surfaces: target.surfaces,
           ...(target.description === undefined ? {} : { description: target.description }),
           ...optionsOf(name, target),
         },
