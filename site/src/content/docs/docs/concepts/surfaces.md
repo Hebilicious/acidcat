@@ -5,12 +5,9 @@ sidebar:
   order: 15
 ---
 
-AcidCat serves one catalog through many **surfaces**. A surface is one way for clients to reach a target: MCP, WebMCP, the command line (CLI), HTTP, or a language such as TypeScript or Rust. The clients of the CLI surface use commands, the clients of the MCP surface use tools, and the clients of a language surface use handles in code. The specification tells how each surface serves the catalog of a target, and a core serves the surfaces by those rules. One surface works for every catalog. It gets everything from the definitions of the application, so a new capability or a new event needs no change to the surface.
+AcidCat serves one catalog through many **surfaces**: MCP, WebMCP, the command line (CLI), HTTP, and languages such as TypeScript and Rust. The clients of the CLI use commands, the clients of MCP use tools, and code uses handles. A core serves each surface by the rules of the [specification](/spec/surfaces/). A new capability or a new event needs no change to a surface.
 
-There are two kinds:
-
-- A **protocol surface** is on the network or in a terminal, for example MCP or the command line. Any language can implement it.
-- A **language surface** is in code, for example TypeScript or Rust. Applications use it in the same process. Each language surface follows the **programmatic surface**, the contract with no language.
+MCP, WebMCP, the CLI and HTTP are **protocol surfaces**: any language can implement them. TypeScript and Rust are **language surfaces**: code uses them in the same process, and each one maps the **programmatic surface** to its language.
 
 The specification defines these surfaces:
 
