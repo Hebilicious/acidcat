@@ -221,6 +221,8 @@ const snippets = await catalogSnippets();
   }
   .engine-stage { position: relative; }
   .engine-stage[data-engine="pending"] {
+    min-height: 0;
+    overflow: clip;
     aspect-ratio: 1200 / 624;
     margin-top: var(--spacing_fluid-space-2xl);
   }

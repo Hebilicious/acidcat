@@ -49,6 +49,17 @@ for (const viewport of [
     const still = await page.locator("[data-plate] img").boundingBox();
     assert.ok(still !== null && still.width >= viewport.width - 1, "with a software renderer, the still image fills the hero");
 
+    const pending = await page.locator(".engine-stage").evaluate((stage) => {
+      if (!(stage instanceof HTMLElement)) return { width: 0, height: 0 };
+      stage.dataset["engine"] = "pending";
+      stage.dataset["layout"] = innerWidth > 900 ? "wide" : "tall";
+      const box = stage.getBoundingClientRect();
+      delete stage.dataset["engine"];
+      return { width: box.width, height: box.height };
+    });
+    const machine = viewport.width > 900 ? 624 / 1200 : 1170 / 500;
+    assert.ok(Math.abs(pending.height - pending.width * machine) < 1, `while Fig. 1 loads, its stage has the height of the machine: ${pending.height} for ${pending.width}`);
+
     const docs = page.locator('a.button-acid[href="/docs/"]').first();
     await docs.click();
     await page.waitForURL(`${origin}/docs/`);
