@@ -34,6 +34,7 @@ export function testCertificate(): { readonly cert: string; readonly key: string
 
 export async function startReceiver(certificate: { readonly cert: string; readonly key: string }) {
   const received: Received[] = [];
+  let arrived = Promise.withResolvers<void>();
   let answer: (request: Received) => Answer | undefined = () => undefined;
   const server = createServer({ cert: certificate.cert, key: certificate.key }, (request, response) => {
     const chunks: Buffer[] = [];
@@ -43,10 +44,13 @@ export async function startReceiver(certificate: { readonly cert: string; readon
       const parsed: unknown = JSON.parse(text);
       const each: Received = { headers: request.headers, text, body: isJsonObject(parsed) ? parsed : {} };
       received.push(each);
+      arrived.resolve();
+      arrived = Promise.withResolvers<void>();
       const chosen = answer(each) ?? (each.body["type"] === "verification" ? { status: 200, body: JSON.stringify({ challenge: each.body["challenge"] }) } : { status: 200 });
       response.writeHead(chosen.status, { "Content-Type": "application/json" }).end(chosen.body ?? "");
     });
   });
+  const deliveries = () => received.filter((each) => each.body["type"] !== "verification");
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   const port = typeof address === "object" && address !== null ? address.port : 0;
@@ -54,7 +58,12 @@ export async function startReceiver(certificate: { readonly cert: string; readon
     port,
     url: `https://127.0.0.1:${port}/hook`,
     received,
-    deliveries: () => received.filter((each) => each.body["type"] !== "verification"),
+    deliveries,
+    /** The test timeout stops a wait that does not end. */
+    async waitForDeliveries(count: number): Promise<Received[]> {
+      while (deliveries().length < count) await arrived.promise;
+      return deliveries();
+    },
     answer: (choose: (request: Received) => Answer | undefined) => {
       answer = choose;
     },

@@ -1,7 +1,4 @@
-export async function until(condition: () => boolean | Promise<boolean>, deadlineMs = 1000): Promise<void> {
-  const end = Date.now() + deadlineMs;
-  while (!(await condition())) {
-    if (Date.now() > end) throw new Error(`The condition did not become true within ${deadlineMs} ms.`);
-    await new Promise((resolve) => setTimeout(resolve, 2));
-  }
+/** The test timeout stops a wait that does not end. */
+export async function until(condition: () => boolean | Promise<boolean>): Promise<void> {
+  while (!(await condition())) await new Promise((resolve) => setTimeout(resolve, 2));
 }

@@ -76,17 +76,7 @@ export async function startReceiver() {
     received,
     url: (path: string) => `https://localhost:${port}${path}`,
     respond: (next: Responder) => void (responder = next),
-    async count(count: number, timeoutMs = 5000): Promise<readonly Received[]> {
-      const deadline = Date.now() + timeoutMs;
-      while (received.length < count) {
-        if (Date.now() > deadline) throw new Error(`The endpoint got ${received.length} requests, not ${count}.`);
-        await new Promise<void>((resolve) => {
-          waiters.push(resolve);
-          setTimeout(resolve, 50);
-        });
-      }
-      return received.slice(0, count);
-    },
+    next: () => new Promise<void>((resolve) => waiters.push(resolve)),
     close: () =>
       new Promise<void>((resolve) => {
         server.closeAllConnections();

@@ -39,7 +39,7 @@ test("through HTTP, the same arguments in another key order poll the same lease,
     const again = await poll(handler, { arguments: { b: 2, a: 1 }, name: "feed.counted" });
     assert.equal(decodePollCursor(again.cursor)?.lease, decodePollCursor(started.cursor)?.lease);
     const params = { name: "feed.counted", arguments: { a: 1, b: 2 } };
-    const read = await eventually(() => poll(handler, { ...params, cursor: started.cursor }), (result) => result.events.length === 2, "the two occurrences");
+    const read = await eventually(() => poll(handler, { ...params, cursor: started.cursor }), (result) => result.events.length === 2);
     assert.deepEqual(read.events.map((each) => each.eventId), ["a", "b"]);
     const kept = await poll(handler, { ...params, cursor: read.cursor });
     assert.deepEqual(kept.events, []);
@@ -57,7 +57,7 @@ test("through HTTP, a lease that resumes after the cursor of the provider gives 
   const handler = pollHandler(feed);
   try {
     const resumed = await poll(handler, { name: "feed.resumed", cursor: encodePollCursor({ lease: "gone", position: 4, provider: "7" }), maxAgeMs: 1000 });
-    const read = await eventually(() => poll(handler, { name: "feed.resumed", cursor: resumed.cursor }), (result) => result.events.length === 1, "the occurrence");
+    const read = await eventually(() => poll(handler, { name: "feed.resumed", cursor: resumed.cursor }), (result) => result.events.length === 1);
     assert.deepEqual(read.events[0]?.data, { cursor: "7", maxAgeMs: 1000 });
   } finally {
     await handler.dispose();
@@ -74,7 +74,7 @@ test("through HTTP, each principal has its own leases", async () => {
     assert.notEqual(decodePollCursor(alice.cursor)?.lease, decodePollCursor(bob.cursor)?.lease);
     await feed.following(2);
     await feed.publish({ room: "a", count: 1 });
-    await eventually(() => poll(handler, { ...params, cursor: alice.cursor }, "alice"), (result) => result.events.length === 1, "the occurrence of alice");
+    await eventually(() => poll(handler, { ...params, cursor: alice.cursor }, "alice"), (result) => result.events.length === 1);
     const stolen = await poll(handler, { ...params, cursor: alice.cursor }, "bob");
     assert.deepEqual(stolen.events, []);
     assert.equal(stolen.truncated, true);
@@ -108,7 +108,7 @@ test("through HTTP with per-request services, a lease keeps the services of its 
     await feed.following(1);
     assert.equal(released, 1);
     await feed.following(0);
-    await eventually(async () => released, (count) => count === 2, "the release of the services of the lease");
+    await eventually(async () => released, (count) => count === 2);
   } finally {
     await handler.dispose();
   }

@@ -11,10 +11,8 @@ import type { WebhookOptions } from "../src/node.ts";
 import { sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
 import { startReceiver, testCertificate, testSigningKey } from "./webhook-receiver.ts";
 import type { Received } from "./webhook-receiver.ts";
-import { until as untilWithin } from "./until.ts";
+import { until } from "./until.ts";
 import { mcpHeaders } from "./mcp-headers.ts";
-
-const until = (condition: () => boolean | Promise<boolean>) => untilWithin(condition, 2000);
 
 const VERSION = "2026-07-28";
 const META = { "io.modelcontextprotocol/protocolVersion": VERSION };
@@ -113,7 +111,7 @@ test("webhook: a truncated occurrence before the first delivery comes after a ga
   sensors.emit("hall", 2, old);
   sensors.emit("hall", 3);
   assert.ok(isJsonObject((await subscribe({ cursor: "0", maxAgeMs: 1000 }))["result"]));
-  await until(() => receiver.deliveries().length === 2);
+  await receiver.waitForDeliveries(2);
   const [gap, occurrence] = receiver.deliveries();
   assert.deepEqual(gap?.body, { type: "gap", cursor: null });
   assert.equal(occurrence?.body["cursor"], "2");
@@ -180,8 +178,9 @@ test("webhook: a URL of the allowlist gets deliveries with no verification", asy
   assert.ok(isJsonObject((await subscribe({}))["result"]));
   await until(() => sensors.listeners === 1);
   sensors.emit("hall", 20);
-  await until(() => receiver.received.length === 1);
-  assert.equal(receiver.received[0]?.body["eventId"], "reading-0");
+  const [delivery] = await receiver.waitForDeliveries(1);
+  assert.equal(delivery?.body["eventId"], "reading-0");
+  assert.equal(receiver.received.length, 1);
   await handler.close();
 });
 
@@ -193,7 +192,7 @@ test("webhook: after a delivery that succeeds on a retry, the delivery status ha
   assert.ok(isJsonObject((await subscribe(params))["result"]));
   await until(() => sensors.listeners === 1);
   sensors.emit("hall", 20);
-  await until(() => receiver.deliveries().length === 3);
+  await receiver.waitForDeliveries(3);
   let status: JsonObject = {};
   await until(async () => {
     status = member(member(await subscribe(params), "result"), "deliveryStatus");
@@ -211,7 +210,7 @@ test("webhook: the server abandons a delivery after the last attempt, keeps the 
   assert.ok(isJsonObject((await subscribe(params))["result"]));
   await until(() => sensors.listeners === 1);
   sensors.emit("hall", 20);
-  await until(() => receiver.deliveries().length === 3);
+  await receiver.waitForDeliveries(3);
   let result: JsonObject = {};
   await until(async () => {
     result = member(await subscribe(params), "result");
@@ -219,7 +218,7 @@ test("webhook: the server abandons a delivery after the last attempt, keeps the 
   });
   assert.equal(member(result, "deliveryStatus")["lastError"], "http_5xx");
   sensors.emit("hall", 21);
-  await until(() => receiver.deliveries().length === 4);
+  await receiver.waitForDeliveries(4);
   assert.deepEqual(
     receiver.deliveries().map((each) => each.body["eventId"]),
     ["reading-0", "reading-0", "reading-0", "reading-1"],
@@ -234,7 +233,7 @@ test("webhook: after the grace time, the server signs only with the new secret",
   await subscribe({ secret: newer });
   await until(() => sensors.listeners === 1);
   sensors.emit("hall", 20);
-  await until(() => receiver.deliveries().length === 1);
+  await receiver.waitForDeliveries(1);
   await assertSigned(receiver.deliveries()[0], [newer]);
   await handler.close();
 });

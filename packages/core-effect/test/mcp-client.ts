@@ -47,11 +47,11 @@ export const decodePollResult = Schema.decodeUnknownSync(PollResult);
 
 export const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export async function eventually<A>(attempt: () => Promise<A>, done: (value: A) => boolean, what = "the condition"): Promise<A> {
-  for (let tries = 0; tries < 200; tries += 1) {
+/** The test timeout stops a wait that does not end. */
+export async function eventually<A>(attempt: () => Promise<A>, done: (value: A) => boolean): Promise<A> {
+  for (;;) {
     const value = await attempt();
     if (done(value)) return value;
     await delay(10);
   }
-  throw new Error(`Timed out while waiting for ${what}.`);
 }

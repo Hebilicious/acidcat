@@ -61,7 +61,10 @@ const subscription = (path: string, extra: Record<string, unknown> = {}) => ({
 
 const at = (path: string) => receiver.received.filter((each) => each.path === path);
 
-const waitAt = (path: string, count: number) => eventually(async () => at(path), (list) => list.length >= count, `${count} requests to ${path}`);
+async function waitAt(path: string, count: number): Promise<readonly Received[]> {
+  while (at(path).length < count) await receiver.next();
+  return at(path);
+}
 
 async function assertSigned(received: Received, secrets: readonly string[], subscriptionId: string) {
   const id = received.headers["webhook-id"] ?? "";
@@ -169,12 +172,12 @@ test("a 410 abandons a delivery with no retry and the delivery status tells it, 
     await statusOf(handler, "/retry");
     await feed.following(1);
     await feed.publish({ room: "/retry", count: 1 });
-    const abandoned = await eventually(() => statusOf(handler, "/retry"), (status) => status.cursor === "1", "the watermark of the abandoned delivery");
+    const abandoned = await eventually(() => statusOf(handler, "/retry"), (status) => status.cursor === "1");
     assert.equal(abandoned.deliveryStatus.lastError, "http_4xx");
     await feed.publish({ room: "/retry", count: 2 });
     const [, , next] = await waitAt("/retry", 3);
     assert.equal(bodyOf(next).cursor, "2");
-    const healthy = await eventually(() => statusOf(handler, "/retry"), (status) => status.cursor === "2", "the watermark of the next delivery");
+    const healthy = await eventually(() => statusOf(handler, "/retry"), (status) => status.cursor === "2");
     assert.equal(healthy.deliveryStatus.lastError, null);
     assert.notEqual(healthy.deliveryStatus.lastDeliveryAt, null);
   } finally {
@@ -191,7 +194,7 @@ test("a delivery that fails each time is abandoned after the maximum number of a
     await statusOf(handler, "/failing");
     await feed.following(1);
     await feed.publish({ room: "/failing", count: 1 });
-    const failed = await eventually(() => statusOf(handler, "/failing"), (status) => status.deliveryStatus.lastError !== null, "a failed delivery");
+    const failed = await eventually(() => statusOf(handler, "/failing"), (status) => status.deliveryStatus.lastError !== null);
     assert.equal(failed.deliveryStatus.lastError, "http_5xx");
     await feed.publish({ room: "/failing", count: 2 });
     const requests = await waitAt("/failing", 5);
@@ -336,7 +339,6 @@ test("a subscription ends after its terminated message", async () => {
     const missing = await eventually(
       async () => json(await handler(mcpRequest("events/unsubscribe", { name: "feed.crashing", arguments: {}, delivery: { url: receiver.url("/crash") } }, as("alice")))),
       (answer) => answer.error !== undefined,
-      "the end of the subscription",
     );
     assert.equal(missing.error?.code, -32023);
   } finally {
@@ -364,7 +366,7 @@ test("with per-request services, a webhook subscription keeps the services of it
     assert.deepEqual(counts, { built: 1, released: 0 });
     await json(await handler(mcpRequest("events/unsubscribe", { name: "feed.ticked", arguments: { room: "/services" }, delivery: { url: receiver.url("/services") } }, as("alice"))));
     await feed.following(0);
-    await eventually(async () => counts.released, (released) => released === 2, "the release of the services of the subscription");
+    await eventually(async () => counts.released, (released) => released === 2);
     assert.equal(counts.built, 2);
   } finally {
     await handler.dispose();
