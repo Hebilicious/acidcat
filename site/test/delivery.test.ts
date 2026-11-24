@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -96,6 +96,14 @@ test("the homepage loads no stylesheet, and the head names each script that it l
   const scripts = loaded.filter(({ type, file }) => type === "script" && file.startsWith("/assets/")).map(({ file }) => file);
   assert.ok(scripts.length > 0, "the homepage loads its scripts");
   assert.deepEqual(scripts.filter((file) => !preloaded.has(file)), []);
+});
+
+test("no script imports the chunk of a page, so a page that starts from its lean chunk runs each module once", async () => {
+  const scripts = (await readdir(join(dist, "assets"), { recursive: true })).filter((file) => file.endsWith(".js"));
+  const importsOfPages = await Promise.all(
+    scripts.map(async (file) => [...(await readFile(join(dist, "assets", file), "utf8")).matchAll(/from"([^"]+\.md\.[\w-]+\.js)"/g)].map(([, chunk]) => `${file} imports ${chunk}`)),
+  );
+  assert.deepEqual(importsOfPages.flat(), []);
 });
 
 test("the accessibility tree of each page passes the rules that agents rely on", async () => {
