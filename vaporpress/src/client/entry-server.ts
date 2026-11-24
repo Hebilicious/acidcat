@@ -1,4 +1,4 @@
-import appModule from "virtual:site-framework/app";
+import appModule from "virtual:vaporpress/app";
 import { createSSRApp } from "vue";
 import { renderToString } from "vue/server-renderer";
 import { createMemoryHistory } from "vue-router";

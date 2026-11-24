@@ -5,7 +5,7 @@ import type { RouteLocationNormalizedLoaded, RouteRecordRaw, Router, RouterHisto
 import type { Heading, PageData } from "../page.ts";
 import type { SiteDefinition } from "./site.ts";
 
-export const notFoundRoute = "site-framework:not-found";
+export const notFoundRoute = "vaporpress:not-found";
 
 const defaultScroll: RouterScrollBehavior = (to, _from, savedPosition) => {
   if (savedPosition !== null) return savedPosition;

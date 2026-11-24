@@ -1,5 +1,5 @@
 <script setup lang="ts" vapor>
-import { RouterView, usePage } from "acid-cat-site-framework/client";
+import { RouterView, usePage } from "vaporpress/client";
 
 const page = usePage();
 </script>

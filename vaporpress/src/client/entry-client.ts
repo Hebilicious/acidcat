@@ -1,4 +1,4 @@
-import appModule from "virtual:site-framework/app";
+import appModule from "virtual:vaporpress/app";
 import { createVaporApp, createVaporSSRApp } from "vue";
 import { createWebHistory } from "vue-router";
 import { handleHotUpdate, routes } from "vue-router/auto-routes";

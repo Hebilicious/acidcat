@@ -687,7 +687,7 @@ importers:
         specifier: 'catalog:'
         version: 8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)
 
-  site-framework:
+  vaporpress:
     dependencies:
       '@vitejs/plugin-vue':
         specifier: catalog:vapor

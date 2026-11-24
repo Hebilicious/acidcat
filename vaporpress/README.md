@@ -1,4 +1,4 @@
-# acid-cat-site-framework
+# vaporpress
 
 A framework for documentation sites. It is a set of packages and conventions, not a theme: a site owns its layout, its homepage, its components and its styles, and it imports the parts of the framework that it needs.
 
@@ -8,7 +8,7 @@ A framework for documentation sites. It is a set of packages and conventions, no
 - A static HTML file for each page, which hydrates in the browser.
 - Page changes in the browser, with no new document, and the pages of the links in view loaded ahead.
 
-The framework lives in the AcidCat repository while it grows, and the AcidCat site (`site/`) is its first user. It moves to a repository of its own later. The package is private and has a temporary name, `acid-cat-site-framework`, because the repository requires that each package name starts with `acid-cat`. A site imports it only in its Vite configuration and in its app module, so a new name changes those few imports.
+The framework lives in the AcidCat repository while it grows, and the AcidCat site (`site/`) is its first user. It moves to a repository of its own later. The package is private. Its name, `vaporpress`, is outside the names of the AcidCat packages (`acid-cat`, `@acid-cat/…`, `acid-cat-…`), because the package moves to a repository of its own.
 
 ## Use
 
@@ -33,16 +33,16 @@ my-site/
 // vite.config.ts
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
-import { siteFramework } from "acid-cat-site-framework/vite";
+import { vaporpress } from "vaporpress/vite";
 
 export default defineConfig({
-  plugins: siteFramework({ root: fileURLToPath(new URL(".", import.meta.url)), app: "src/app.ts" }),
+  plugins: vaporpress({ root: fileURLToPath(new URL(".", import.meta.url)), app: "src/app.ts" }),
 });
 ```
 
 ```ts
 // src/app.ts
-import { defineSite } from "acid-cat-site-framework/client";
+import { defineSite } from "vaporpress/client";
 import Layout from "./Layout.vue";
 
 export default defineSite({
@@ -55,7 +55,7 @@ export default defineSite({
 ```vue
 <!-- src/Layout.vue -->
 <script setup lang="ts" vapor>
-import { RouterView, usePage } from "acid-cat-site-framework/client";
+import { RouterView, usePage } from "vaporpress/client";
 
 const page = usePage();
 </script>
@@ -129,15 +129,15 @@ pnpm add the-tool
 
 | Import | Export | Use |
 | --- | --- | --- |
-| `acid-cat-site-framework/vite` | `siteFramework(options)` | The Vite plugins: Markdown pages, Vue in Vapor mode, routes from files, data modules, the dev server and the static build |
-| `acid-cat-site-framework/client` | `defineSite(site)` | The site: `layout`, `title`, `head`, `scrollBehavior` and `enhance({ app, router })` |
+| `vaporpress/vite` | `vaporpress(options)` | The Vite plugins: Markdown pages, Vue in Vapor mode, routes from files, data modules, the dev server and the static build |
+| `vaporpress/client` | `defineSite(site)` | The site: `layout`, `title`, `head`, `scrollBehavior` and `enhance({ app, router })` |
 | | `RouterView` | Shows the page of the current route. It is a Vapor component, so the site loads no virtual DOM renderer |
 | | `usePage()` | The data of the page on screen |
 | | `prefetchPage(router, path)` | Loads the chunk of a page before the reader goes to it |
-| `acid-cat-site-framework/data` | `defineLoader({ load, watch })`, `LoadedData` | A module of data that the build reads once |
-| `acid-cat-site-framework/markdown` | `compileMarkdown(source, file, options)`, `githubSlug` | The Markdown compiler, for tools that need the page of a file outside the build, such as a search index |
+| `vaporpress/data` | `defineLoader({ load, watch })`, `LoadedData` | A module of data that the build reads once |
+| `vaporpress/markdown` | `compileMarkdown(source, file, options)`, `githubSlug` | The Markdown compiler, for tools that need the page of a file outside the build, such as a search index |
 
-`siteFramework` options:
+`vaporpress` options:
 
 | Option | Default | Use |
 | --- | --- | --- |
@@ -162,7 +162,7 @@ The framework follows the page model of VitePress: each page is a component of o
 
 ### Build and render
 
-**Chosen: one Vite configuration, and a `buildApp` hook.** `siteFramework` returns the Vite plugins: the Markdown plugin, `vue-router/vite` for the routes, `@vitejs/plugin-vue` in Vapor mode, the data plugin, and the core plugin. `vite build` builds the client environment, then the ssr environment, then the hook renders each route with `renderToString` from Vue 3.6 and writes its HTML file (`src/prerender.ts`). The browser hydrates the page with `createVaporSSRApp`. In development, `vite` serves one HTML document for every page, and the browser renders it with `createVaporApp`. A site adds its own Vite plugins next to these.
+**Chosen: one Vite configuration, and a `buildApp` hook.** `vaporpress` returns the Vite plugins: the Markdown plugin, `vue-router/vite` for the routes, `@vitejs/plugin-vue` in Vapor mode, the data plugin, and the core plugin. `vite build` builds the client environment, then the ssr environment, then the hook renders each route with `renderToString` from Vue 3.6 and writes its HTML file (`src/prerender.ts`). The browser hydrates the page with `createVaporSSRApp`. In development, `vite` serves one HTML document for every page, and the browser renders it with `createVaporApp`. A site adds its own Vite plugins next to these.
 
 **Rejected: a command of its own that drives Vite twice, with its own configuration file (the shape of VitePress).** It gives a second configuration format to learn and to keep in step with Vite, and a site cannot simply add a Vite plugin.
 
@@ -191,7 +191,7 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 ## A second site
 
 1. Make a folder with `vite.config.ts`, `src/app.ts`, a layout and `pages/`, as [Use](#use) shows.
-2. Add `acid-cat-site-framework`, `vue` and `vite` to its dependencies.
+2. Add `vaporpress`, `vue` and `vite` to its dependencies.
 3. Write the layout and the homepage of the site as its own components. Import `RouterView` and `usePage` from the framework.
 4. Add the parts that the site needs: a highlighter in `markdown.highlight`, data modules, `extraPages`.
 5. Run `vite build`, and serve `dist/` from a static host. `404.html` is the page for unknown paths.
@@ -200,18 +200,18 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 
 ## Tests
 
-`moon run site-framework:test` runs `test/`:
+`moon run vaporpress:test` runs `test/`:
 
 - `markdown.test.ts`: the page data, the heading ids and the table of contents, components and `<script setup>` in Markdown, code that Vue does not compile, the highlighter, `transformSource`, and the lean copy of a component, which keeps the templates that hydration may not meet.
 - `site-definition.test.ts`: the checks of a site definition and of a component.
 - `site.test.ts`: builds `test/fixture/` and serves `dist/`. It checks the HTML, the head and the lean chunk of each page, and the data of a data module. In Chromium, it checks that hydration changes no element of the DOM and logs no mismatch, that components respond, that a click changes the page with no new document and updates the head, that the chunk of a link in view loads before the click and the chunk of a link under the pointer loads at once, that the scroll position comes back on Back and on Forward, that a hash goes to its heading, that the skip link moves the focus past the header, that a branch of `v-if`, `v-else` or `v-for` that the server did not render shows after hydration and after a page change, and that an unknown path shows the 404 page.
 - `dev.test.ts`: the dev server serves a page, and a click changes the page.
 
-`moon run site-framework:typecheck` type-checks the sources and the tests.
+`moon run vaporpress:typecheck` type-checks the sources and the tests.
 
 ## Roadmap
 
 - Move the AcidCat site onto the framework: the docs, the specification, the examples and the packages; the homepage; the files for agents; then remove VitePress.
 - Built-in features: search, the Markdown of each page and `llms.txt`, social cards, the subsets of the font faces, and the design tokens of cssforge.
 - A skill that gives the checklist of the verification loop for a site.
-- Move the framework to a repository of its own, and give it its own name.
+- Move the framework to a repository of its own.

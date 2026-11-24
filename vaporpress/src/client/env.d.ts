@@ -7,7 +7,7 @@ declare module "*.vue" {
   export default component;
 }
 
-declare module "virtual:site-framework/app" {
+declare module "virtual:vaporpress/app" {
   const site: unknown;
   export default site;
 }

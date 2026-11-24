@@ -22,7 +22,7 @@ const isLoader = (value: unknown): value is DataLoader<unknown> =>
 
 /** Replaces each `.data.ts` module with `export const data`, the JSON that its loader gives at build time. The browser gets the data, not the loader. */
 export const dataPlugin = (): Plugin => ({
-  name: "site-framework:data",
+  name: "vaporpress:data",
   enforce: "pre",
   async load(id) {
     if (!id.endsWith(".data.ts")) return undefined;

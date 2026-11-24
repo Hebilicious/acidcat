@@ -1,4 +1,4 @@
-import { defineSite } from "acid-cat-site-framework/client";
+import { defineSite } from "vaporpress/client";
 import Layout from "./Layout.vue";
 
 export default defineSite({

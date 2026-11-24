@@ -1,5 +1,5 @@
-import { defineLoader } from "acid-cat-site-framework/data";
-import type { LoadedData } from "acid-cat-site-framework/data";
+import { defineLoader } from "vaporpress/data";
+import type { LoadedData } from "vaporpress/data";
 
 const loader = defineLoader({ load: () => ({ numbers: [1, 2, 3], built: "at build time" }) });
 

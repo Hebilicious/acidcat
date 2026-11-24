@@ -2,7 +2,7 @@ language: "typescript"
 layer: "library"
 
 project:
-  title: "acid-cat-site-framework"
+  title: "vaporpress"
   description: "A framework for documentation sites: Markdown pages through Sätteri, Vue in Vapor mode, Vue Router, static pages that hydrate, and page changes in the browser."
 
 toolchains:

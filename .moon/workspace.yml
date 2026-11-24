@@ -14,7 +14,7 @@ projects:
   catalog-pkl: "packages/catalog/pkl"
   model: "model"
   site: "site"
-  site-framework: "site-framework"
+  vaporpress: "vaporpress"
 
 defaultProject: "acid-cat"
 telemetry: false

@@ -8,7 +8,7 @@ packages:
   - "examples/aircon"
   - "model"
   - "site"
-  - "site-framework"
+  - "vaporpress"
 
 allowBuilds:
   esbuild: true

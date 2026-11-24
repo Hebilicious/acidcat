@@ -12,7 +12,7 @@ import type { MarkdownOptions } from "./markdown.ts";
 import { prerender } from "./prerender.ts";
 import type { DocumentOptions } from "./prerender.ts";
 
-export interface SiteFrameworkOptions extends DocumentOptions {
+export interface VaporpressOptions extends DocumentOptions {
   /** The folder of the site. The default is the folder where Vite runs. */
   readonly root?: string;
   /** The module whose default export is the site, from `defineSite`. The path is relative to the root of Vite. */
@@ -35,9 +35,9 @@ export interface ExtraPage {
 
 const clientEntry = fileURLToPath(new URL("./client/entry-client.ts", import.meta.url));
 const serverEntry = fileURLToPath(new URL("./client/entry-server.ts", import.meta.url));
-const appModule = "virtual:site-framework/app";
+const appModule = "virtual:vaporpress/app";
 const resolvedAppModule = `\0${appModule}`;
-export const clientEntryName = "site-framework";
+export const clientEntryName = "vaporpress";
 const leanQuery = "?lean";
 
 const splitId = (id: string): { readonly file: string; readonly query: string } => {
@@ -59,7 +59,7 @@ const devDocument = (options: DocumentOptions): string =>
   ].join("");
 
 /** The Vite plugins of a site: Markdown pages, Vue in Vapor mode, routes from files, the dev server and the static build. */
-export const siteFramework = (options: SiteFrameworkOptions): PluginOption[] => {
+export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
   const siteRoot = resolve(options.root ?? process.cwd());
   const pagesDir = resolve(siteRoot, options.pages ?? "pages");
   const routeFiles = new Map<string, string>();
@@ -73,7 +73,7 @@ export const siteFramework = (options: SiteFrameworkOptions): PluginOption[] => 
   };
 
   const markdown: Plugin = {
-    name: "site-framework:markdown",
+    name: "vaporpress:markdown",
     enforce: "pre",
     async transform(code, id) {
       const { file, query } = splitId(id);
@@ -89,7 +89,7 @@ export const siteFramework = (options: SiteFrameworkOptions): PluginOption[] => 
   };
 
   const core: Plugin = {
-    name: "site-framework:core",
+    name: "vaporpress:core",
     sharedDuringBuild: true,
     config() {
       return {
@@ -101,7 +101,7 @@ export const siteFramework = (options: SiteFrameworkOptions): PluginOption[] => 
           client: { build: { manifest: true, rollupOptions: { input: { [clientEntryName]: clientEntry } } } },
           ssr: {
             build: {
-              outDir: join(siteRoot, "node_modules/.site-framework/server"),
+              outDir: join(siteRoot, "node_modules/.vaporpress/server"),
               emptyOutDir: true,
               copyPublicDir: false,
               rollupOptions: { input: { server: serverEntry } },

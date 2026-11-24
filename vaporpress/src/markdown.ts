@@ -65,7 +65,7 @@ const stringField = (frontmatter: Record<string, unknown>, key: string): string 
 
 /** Marks every element that Vue must not compile: code can hold `{{` and `<`, which are text. */
 const preserveCode = defineHastPlugin({
-  name: "site-framework:preserve-code",
+  name: "vaporpress:preserve-code",
   element: {
     filter: ["pre", "code"],
     visit(node, context) {
@@ -76,7 +76,7 @@ const preserveCode = defineHastPlugin({
 
 const highlightCode = (highlight: Highlight) =>
   defineHastPlugin({
-    name: "site-framework:highlight",
+    name: "vaporpress:highlight",
     element: {
       filter: ["pre"],
       async visit(node, context) {
@@ -94,7 +94,7 @@ const highlightCode = (highlight: Highlight) =>
 const collectHeadings = (slugify: (text: string) => string, levels: ReadonlySet<number>, headings: Heading[], title: { value: string | undefined }) => {
   const used = new Map<string, number>();
   return defineHastPlugin({
-    name: "site-framework:headings",
+    name: "vaporpress:headings",
     element: {
       filter: ["h1", "h2", "h3", "h4", "h5", "h6"],
       visit(node, context) {
