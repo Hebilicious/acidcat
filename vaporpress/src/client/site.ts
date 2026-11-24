@@ -4,7 +4,7 @@ import type { HeadDefinition } from "./head.ts";
 
 export interface SiteDefinition extends HeadDefinition {
   /** The root component: the layout of the site. It shows the page with `<RouterView />`. */
-  readonly layout: VaporComponent;
+  readonly layout: VaporComponent | Component;
   /** Changes the scroll position after a page change. The default keeps the position when only the query changes, restores the position of a page that the reader comes back to, goes to the heading of a hash, or goes to the top. */
   readonly scrollBehavior?: RouterScrollBehavior;
   /** Runs once in the browser and once for each page on the server, before the first render. */

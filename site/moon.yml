@@ -62,6 +62,21 @@ tasks:
       - "/packages/catalog/typescript/src/**/*.ts"
     outputs: ["dist/**/*"]
 
+  build-framework:
+    description: "Build the docs, the examples and the specification with vaporpress into .out/framework/. VitePress builds the deployed site until every part has moved."
+    command: "vite"
+    args: ["build", "--config", "framework.config.ts"]
+    inputs:
+      - "src/**/*"
+      - "content/**/*"
+      - "public/**/*"
+      - "framework.config.ts"
+      - "package.json"
+      - "/spec/**/*.md"
+      - "/examples/**/*"
+      - "/vaporpress/src/**/*"
+    outputs: [".out/framework/**/*"]
+
   catalog:
     description: "Write the catalog of the AcidCat app of the site, site.acidcat.json, from its code."
     command: "node"
@@ -96,17 +111,17 @@ tasks:
       runInCI: false
 
   test:
-    deps: ["build", "tokens-check"]
+    deps: ["build", "build-framework", "tokens-check"]
     description: "Test the geometry of the art, render the homepage in Chromium at desktop and phone widths, and call the AcidCat app of the site through the Worker, MCP, HTTP and WebMCP."
     command: "node"
     args: ["--test", "test/"]
-    inputs: ["src/**/*", "content/**/*", ".vitepress/**/*", "test/**/*.ts", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*"]
+    inputs: ["src/**/*", "content/**/*", ".vitepress/**/*", "framework.config.ts", "test/**/*.ts", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*", "/vaporpress/src/**/*"]
 
   typecheck:
     description: "Type-check the art geometry, the tests and the configuration."
     command: "tsc"
     args: ["-p", "."]
-    inputs: ["src/lib/**/*.ts", "test/**/*.ts", "worker/**/*.ts", "scripts/**/*.ts", ".vitepress/**/*.ts", "content/**/*.ts", "cssforge.config.ts", "cloudflare.config.ts", "tsconfig.json", "/tsconfig.base.json"]
+    inputs: ["src/lib/**/*.ts", "src/app/**/*.ts", "test/**/*.ts", "worker/**/*.ts", "scripts/**/*.ts", ".vitepress/**/*.ts", "content/**/*.ts", "cssforge.config.ts", "cloudflare.config.ts", "framework.config.ts", "tsconfig.json", "/tsconfig.base.json"]
 
   lighthouse:
     deps: ["build"]

@@ -11,6 +11,8 @@ export interface PageData {
   readonly description?: string;
   readonly frontmatter: Readonly<Record<string, unknown>>;
   readonly headings: readonly Heading[];
+  /** The source file of a Markdown page, relative to the root of the site. */
+  readonly file?: string;
 }
 
 export interface HeadTag {

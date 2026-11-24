@@ -11,9 +11,9 @@ export const builtPages = async (): Promise<string[]> => {
   return entries.filter((entry) => entry.isFile() && entry.name.endsWith(".html")).map((entry) => join(entry.parentPath, entry.name));
 };
 
-const resolveFile = async (url: string): Promise<string | undefined> => {
-  const path = normalize(join(dist, decodeURIComponent(new URL(url, "http://site").pathname)));
-  if (!path.startsWith(dist)) return undefined;
+const resolveFile = async (root: string, url: string): Promise<string | undefined> => {
+  const path = normalize(join(root, decodeURIComponent(new URL(url, "http://site").pathname)));
+  if (!path.startsWith(root)) return undefined;
   const info = await stat(path).catch(() => undefined);
   if (info?.isDirectory() === true) return join(path, "index.html");
   return info === undefined ? undefined : path;
@@ -24,9 +24,9 @@ export interface StaticServer {
   readonly close: () => Promise<void>;
 }
 
-export const serveDist = async (): Promise<StaticServer> => {
+export const serveDist = async (root = dist): Promise<StaticServer> => {
   const server = createServer((request, response) => {
-    resolveFile(request.url ?? "/")
+    resolveFile(root, request.url ?? "/")
       .then(async (path) => {
         if (path === undefined) throw new Error("not found");
         const body = await readFile(path);

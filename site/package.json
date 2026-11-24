@@ -27,7 +27,9 @@
     "three": "catalog:",
     "zod": "catalog:",
     "vitepress": "catalog:",
-    "vue": "catalog:"
+    "vue": "catalog:",
+    "vaporpress": "workspace:*",
+    "vue-router": "catalog:"
   },
   "devDependencies": {
     "@acid-cat/cli": "workspace:*",

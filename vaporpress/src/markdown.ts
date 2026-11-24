@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { defineHastPlugin, markdownToHtml } from "satteri";
 import type { HastNode, HastPluginList, MdastPluginList } from "satteri";
 import { parse as parseYaml } from "yaml";
@@ -19,6 +19,8 @@ export interface MarkdownOptions {
   readonly highlight?: Highlight;
   readonly mdastPlugins?: MdastPluginList;
   readonly hastPlugins?: HastPluginList;
+  /** The folder that `page.file` is relative to. */
+  readonly root?: string;
   /**
    * Imports each local image of the page with `?image`, so the image service of the Vite plugin converts it. A path
    * such as `diagram.png`, `./diagram.png` or `../diagram.png` is relative to the page, and `/diagram.png` is a file of
@@ -51,9 +53,9 @@ const splitBlocks = (source: string): { readonly markdown: string; readonly bloc
   return { markdown, blocks };
 };
 
-const textOf = (node: HastNode): string => {
+export const hastText = (node: HastNode): string => {
   if (node.type === "text") return node.value;
-  if ("children" in node) return node.children.map((child) => textOf(child)).join("");
+  if ("children" in node) return node.children.map((child) => hastText(child)).join("");
   return "";
 };
 
@@ -94,8 +96,8 @@ const highlightCode = (highlight: Highlight) =>
         const data = code.data;
         const language = isRecord(data) && typeof data["lang"] === "string" ? data["lang"] : "";
         const meta = isRecord(data) && typeof data["meta"] === "string" ? data["meta"] : "";
-        const html = await highlight(textOf(code), language, meta);
-        context.replaceNode(node, { type: "raw", value: html.replace(/^<pre\b/, "<pre v-pre") });
+        const html = await highlight(hastText(code), language, meta);
+        context.replaceNode(node, { type: "raw", value: html.replace(/^\s*<([a-zA-Z][\w-]*)/, "<$1 v-pre") });
       },
     },
   });
@@ -142,7 +144,7 @@ const collectHeadings = (slugify: (text: string) => string, levels: ReadonlySet<
       filter: ["h1", "h2", "h3", "h4", "h5", "h6"],
       visit(node, context) {
         const level = Number(node.tagName.slice(1));
-        const text = textOf(node).trim();
+        const text = hastText(node).trim();
         if (level === 1) title.value ??= text;
         const given = node.properties["id"];
         let slug = typeof given === "string" ? given : slugify(text);
@@ -195,6 +197,7 @@ export const compileMarkdown = async (source: string, file: string, options: Mar
     ...(description === undefined ? {} : { description }),
     frontmatter,
     headings,
+    file: options.root === undefined ? file : relative(options.root, file),
   };
   const scripts = blocks.filter((block) => block.startsWith("<script"));
   const styles = blocks.filter((block) => block.startsWith("<style"));
@@ -209,3 +212,4 @@ export const compileMarkdown = async (source: string, file: string, options: Mar
   ].join("\n");
   return { sfc, page };
 };
+export { defineHastPlugin, defineMdastPlugin } from "satteri";

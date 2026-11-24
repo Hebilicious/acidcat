@@ -10,6 +10,7 @@ test("a Markdown page gives its title, description, frontmatter and headings", a
   const { page, sfc } = await compileMarkdown(source, "guide.md");
   assert.equal(page.title, "Guide");
   assert.equal(page.description, "How it works.");
+  assert.equal(page.file, "guide.md");
   assert.deepEqual(page.frontmatter, { title: "Guide", description: "How it works.", order: 2 });
   assert.deepEqual(page.headings, [
     { level: 2, slug: "second-level", title: "Second level" },
@@ -49,6 +50,8 @@ test("the highlighter gets the code, the language and the meta of each block", a
   });
   assert.deepEqual(calls, [["const a = 1;\n", "ts", 'title="a.ts"']]);
   assert.match(sfc, /<pre v-pre class="shiki"><code>colored<\/code><\/pre>/);
+  const framed = await compileMarkdown("```txt\n{{ x }}\n```\n", "page.md", { highlight: (code) => `<figure class="frame"><pre><code>${code}</code></pre></figure>` });
+  assert.match(framed.sfc, /<figure v-pre class="frame">/, "The outer element of the highlighted HTML keeps Vue from compiling the code.");
 });
 
 test("a page can change its source before it is parsed", async () => {
