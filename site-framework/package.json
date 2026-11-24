@@ -1,0 +1,26 @@
+{
+  "name": "acid-cat-site-framework",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@vitejs/plugin-vue": "catalog:vapor",
+    "@vue/compiler-sfc": "catalog:vapor",
+    "satteri": "catalog:vapor",
+    "vue": "catalog:vapor",
+    "vue-router": "catalog:vapor",
+    "vite": "catalog:",
+    "yaml": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "playwright": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./vite": "./src/vite.ts",
+    "./client": "./src/client/index.ts",
+    "./markdown": "./src/markdown.ts",
+    "./data": "./src/data.ts"
+  }
+}

@@ -14,6 +14,7 @@ projects:
   catalog-pkl: "packages/catalog/pkl"
   model: "model"
   site: "site"
+  site-framework: "site-framework"
 
 defaultProject: "acid-cat"
 telemetry: false

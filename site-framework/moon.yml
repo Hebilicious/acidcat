@@ -1,0 +1,22 @@
+language: "typescript"
+layer: "library"
+
+project:
+  title: "acid-cat-site-framework"
+  description: "A framework for documentation sites: Markdown pages through Sätteri, Vue in Vapor mode, Vue Router, static pages that hydrate, and page changes in the browser."
+
+toolchains:
+  default: ["javascript", "node", "pnpm"]
+
+tasks:
+  test:
+    description: "Test the Markdown compiler and the lean copy of a component, build the fixture site, and drive it in Chromium: hydration, page changes, prefetch, the head, the scroll position and the 404 page."
+    command: "node"
+    args: ["--test", "--test-timeout=120000", "test/"]
+    inputs: ["src/**/*", "test/**/*", "!test/fixture/dist/**", "package.json"]
+
+  typecheck:
+    description: "Type-check the sources, the tests and the fixture site."
+    command: "tsc"
+    args: ["-p", "."]
+    inputs: ["src/**/*", "test/**/*.ts", "tsconfig.json", "/tsconfig.base.json"]
