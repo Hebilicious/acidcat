@@ -29,6 +29,7 @@
     "@types/node": "catalog:",
     "@types/subset-font": "catalog:",
     "@types/three": "catalog:",
+    "axe-core": "catalog:",
     "cf": "catalog:",
     "playwright": "catalog:",
     "typescript": "catalog:"

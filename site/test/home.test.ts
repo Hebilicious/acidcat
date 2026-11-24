@@ -46,6 +46,9 @@ for (const viewport of [
 
     assert.deepEqual(errors, []);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), viewport.width);
+    assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("-webkit-tap-highlight-color")), "rgba(0, 0, 0, 0)", "a tap does not flash the color of the browser");
+    const wide = await page.locator(".console-code").evaluateAll((blocks) => blocks.filter((block) => block.scrollWidth > block.clientWidth + 1).length);
+    assert.equal(wide, 0, "the code of Fig. 4 wraps, with no sideways scroll");
     await page.locator("[data-plate] canvas").waitFor({ state: "detached", timeout: 10000 });
     const still = await page.locator("[data-plate] img").boundingBox();
     assert.ok(still !== null && still.width >= viewport.width - 1, "with a software renderer, the still image fills the hero");
@@ -68,6 +71,25 @@ for (const viewport of [
     await page.close();
   });
 }
+
+test("at 960px, the hero shows the phone plate with the phone framing, as at 959px", async () => {
+  const hero = async (width: number) => {
+    if (browser === undefined) throw new Error("No browser.");
+    const page = await openPage(browser, { viewport: { width, height: 900 } });
+    await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+    const { plate, position } = await page.locator("[data-plate]").evaluate((root) => ({
+      plate: root.querySelector("img")?.currentSrc ?? "",
+      position: root instanceof HTMLElement ? root.style.getPropertyValue("--plate-position") : "",
+    }));
+    await page.close();
+    return { plate: new URL(plate).pathname, position };
+  };
+  const [narrow, edge, desktop] = [await hero(959), await hero(960), await hero(961)];
+  assert.match(edge.plate, /^\/_astro\/phone/);
+  assert.match(desktop.plate, /^\/_astro\/plate/);
+  assert.notEqual(edge.position, "");
+  assert.equal(edge.position, narrow.position);
+});
 
 test("reduced motion keeps the hero still and stops the animations", async () => {
   if (browser === undefined) throw new Error("No browser.");
@@ -94,11 +116,13 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   const bytes = new Map<string, number>();
   for (const { type, size } of loaded) bytes.set(type, (bytes.get(type) ?? 0) + size);
 
-  assert.ok(files.includes("/hero/plate.avif"), "the hero is AVIF");
-  assert.deepEqual(files.filter((file) => /^\/hero\/(clean|data)\./.test(file)), [], "a software renderer loads no texture of the hero");
+  const plates = files.filter((file) => /^\/_astro\/(phone|plate)[\w@-]*\./.test(file));
+  assert.equal(plates.length, 1, `the hero loads one plate, not ${plates.join(" and ")}`);
+  assert.match(plates[0] ?? "", /^\/_astro\/phone-840\.[\w-]+\.avif$/, "on a phone, the hero is the phone plate in AVIF");
+  assert.deepEqual(files.filter((file) => /^\/_astro\/(clean|data)\./.test(file)), [], "a software renderer loads no texture of the hero");
   assert.deepEqual(files.filter((file) => /catalog-engine|webgpu-pass/.test(file)), [], "no renderer loads before its figure is near");
   assert.deepEqual(files.filter((file) => file.endsWith(".woff2") && !/-core\.[\w-]+\.woff2$/.test(file)), [], "only the core of each font");
-  const budget: Record<string, number> = { image: 560_000, font: 180_000, script: 40_000, stylesheet: 70_000, document: 130_000, fetch: 1_000 };
+  const budget: Record<string, number> = { image: 560_000, font: 180_000, script: 40_000, document: 200_000, fetch: 1_000 };
   for (const [type, size] of bytes) assert.ok(size <= (budget[type] ?? 0), `${type}: ${size} bytes, budget ${budget[type] ?? 0}`);
   await page.close();
 });

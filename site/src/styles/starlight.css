@@ -47,8 +47,9 @@
 }
 
 body {
+  /* A software rasterizer draws an OKLab gradient slowly. This one fades one color to transparent, so sRGB looks the same. */
   background:
-    radial-gradient(ellipse 70% 40% at 80% 0%, color-mix(in oklch, var(--palette-acid-400) 4%, transparent), transparent 60%),
+    radial-gradient(ellipse 70% 40% at 80% 0% in srgb, color-mix(in oklch, var(--palette-acid-400) 4%, transparent), transparent 60%),
     var(--palette-ink-900);
 }
 
@@ -112,7 +113,6 @@ body {
 }
 
 header.header {
-  view-transition-name: site-header;
   padding-inline: var(--layout-gutter-inline);
   background: linear-gradient(color-mix(in oklch, var(--palette-ink-900) 94%, transparent), color-mix(in oklch, var(--palette-ink-900) 80%, transparent));
   backdrop-filter: blur(12px);
@@ -145,12 +145,6 @@ site-search button[data-open-modal] {
 
 .sl-menu-button {
   z-index: calc(var(--sl-z-index-navbar) + 2) !important;
-}
-
-@media (min-width: 50rem) {
-  .sidebar-pane {
-    view-transition-name: site-sidebar;
-  }
 }
 
 .sidebar-pane {
@@ -379,4 +373,10 @@ starlight-tabs [role="tab"][aria-selected="true"] {
   color: var(--palette-acid-200);
   border-color: var(--palette-acid-400);
   font-weight: var(--typography-weight-display-medium);
+}
+
+.sl-markdown-content .expressive-code,
+.sl-markdown-content starlight-tabs {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--spacing_fluid-space-3xl);
 }

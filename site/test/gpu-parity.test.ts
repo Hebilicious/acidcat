@@ -81,6 +81,15 @@ const missingHardware = async (page: Page): Promise<string | undefined> =>
     return undefined;
   });
 
+const hardwareProblem = async (): Promise<string | undefined> => {
+  if (browser === undefined || server === undefined) throw new Error("No browser.");
+  const probe = await openPage(browser);
+  await probe.goto(`${server.origin}/404`);
+  const missing = await missingHardware(probe);
+  await probe.close();
+  return missing;
+};
+
 const capture = async (origin: string, item: Case, backend: Backend): Promise<{ image: Buffer; backend: string | undefined }> => {
   if (browser === undefined) throw new Error("No browser.");
   const context = await browser.newContext({ viewport: item.viewport, reducedMotion: item.reducedMotion });
@@ -92,7 +101,7 @@ const capture = async (origin: string, item: Case, backend: Backend): Promise<{ 
   const plates: string[] = [];
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
-    if (path.startsWith("/hero/plate")) plates.push(path);
+    if (/^\/_astro\/(plate|phone)/.test(path)) plates.push(path);
   });
   if (item.reducedMotion === "no-preference") {
     await page.clock.install({ time: 0 });
@@ -163,11 +172,8 @@ const compare = async (first: Buffer, second: Buffer) => {
 };
 
 test("each renderer draws the same image with WebGPU and with WebGL 2", async (t) => {
-  if (browser === undefined || server === undefined) throw new Error("No browser.");
-  const probe = await openPage(browser);
-  await probe.goto(`${server.origin}/404`);
-  const missing = await missingHardware(probe);
-  await probe.close();
+  if (server === undefined) throw new Error("No server.");
+  const missing = await hardwareProblem();
   if (missing !== undefined) {
     t.skip(`This machine cannot compare the backends: ${missing}`);
     return;
@@ -186,5 +192,58 @@ test("each renderer draws the same image with WebGPU and with WebGL 2", async (t
       assert.ok(difference.mean <= tolerance.meanLimit, `mean difference ${difference.mean.toFixed(3)} > ${tolerance.meanLimit}`);
       assert.ok(difference.outliers <= tolerance.outlierLimit, `outliers ${(difference.outliers * 100).toFixed(3)}% > ${tolerance.outlierLimit * 100}%`);
     });
+  }
+});
+
+test("the hero keeps its animation after a resize across 960px", async (t) => {
+  if (browser === undefined || server === undefined) throw new Error("No browser.");
+  const missing = await hardwareProblem();
+  if (missing !== undefined) {
+    t.skip(`This machine has no hardware GPU: ${missing}`);
+    return;
+  }
+  const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(`${server.origin}/`);
+  await page.waitForFunction(() => document.querySelector<HTMLElement>("[data-plate]")?.dataset["gpu"] !== undefined, undefined, { timeout: 20000 });
+  for (const [width, plate] of [[390, "phone"], [1440, "plate"]] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.waitForFunction((name) => {
+      const still = document.querySelector<HTMLImageElement>("[data-plate] img");
+      return still !== null && still.complete && new URL(still.currentSrc).pathname.startsWith(`/_astro/${name}`);
+    }, plate);
+    await page.waitForTimeout(1000);
+    const canvas = page.locator("[data-plate].is-live canvas");
+    const first = await canvas.screenshot({ animations: "allow" });
+    await page.waitForTimeout(500);
+    const second = await canvas.screenshot({ animations: "allow" });
+    assert.notDeepEqual(first, second, `at ${width}px, the hero still moves`);
+  }
+  await page.close();
+  assert.deepEqual(errors, []);
+});
+
+test("the code of each language fits the catalog screen of Fig. 1, wide and tall", async (t) => {
+  if (browser === undefined || server === undefined) throw new Error("No browser.");
+  const missing = await hardwareProblem();
+  if (missing !== undefined) {
+    t.skip(`This machine has no hardware GPU: ${missing}`);
+    return;
+  }
+  for (const width of [390, 1440]) {
+    const page = await openPage(browser, { viewport: { width, height: 900 } });
+    await page.goto(`${server.origin}/`);
+    await page.locator(".engine-stage").evaluate((element) => element.scrollIntoView({ block: "center" }));
+    await page.waitForFunction(() => document.querySelector<HTMLElement>(".engine-stage")?.dataset["engine"] === "live", undefined, { timeout: 20000 });
+    for (const language of await page.locator("button[data-language]").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("data-language") ?? ""))) {
+      const overflow = await page.evaluate((id) => {
+        document.querySelector<HTMLButtonElement>(`button[data-language="${id}"]`)?.click();
+        const screen = document.querySelector<HTMLElement>("[data-catalog-screen]");
+        return screen === null ? -1 : screen.scrollHeight - screen.clientHeight;
+      }, language);
+      assert.ok(overflow === 0, `at ${width}px, the ${language} code overflows the catalog screen by ${overflow}px`);
+    }
+    await page.close();
   }
 });

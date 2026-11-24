@@ -7,9 +7,11 @@ import CoreScreens from "../components/CoreScreens.astro";
 import Surfaces from "../components/Surfaces.astro";
 import Mark from "../components/Mark.astro";
 import FontPreload from "../components/site/FontPreload.astro";
+import InstantNavigation from "../components/site/InstantNavigation.astro";
 import SiteNav from "../components/site/SiteNav.astro";
 import { siteUrl, socialImage } from "../lib/social.ts";
 import Schematic from "../components/Schematic.astro";
+import favicon from "../assets/favicon.svg?url";
 import { isExternal } from "../lib/external-links.ts";
 
 const repository = "https://github.com/Hebilicious/acidcat";
@@ -57,9 +59,10 @@ const newTab = (href: string) => (isExternal(href) ? { target: "_blank", rel: "n
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <FontPreload page="home" />
+    <InstantNavigation />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#0b0e14" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href={favicon} type="image/svg+xml" />
     <link rel="canonical" href={`${siteUrl}/`} />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="AcidCat" />
@@ -120,8 +123,8 @@ const newTab = (href: string) => (isExternal(href) ? { target: "_blank", rel: "n
       <div class="footer-rail" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
       <div class="footer-inner">
         <div class="footer-brand">
-          <Mark size={56} />
-          <p class="footer-name">AcidCat</p>
+          <Mark idSuffix="footer" size={56} />
+          <div class="footer-name">AcidCat</div>
           <p class="footer-expansion"><b>A</b>pplication <b>C</b>apability <b>Id</b>entification <b>Cat</b>alog</p>
           <p class="footer-status"><span class="footer-lamp" aria-hidden="true"></span>Specification 0.1 · Draft</p>
         </div>
@@ -146,7 +149,7 @@ const newTab = (href: string) => (isExternal(href) ? { target: "_blank", rel: "n
       const readStars = (body: unknown) =>
         typeof body === "object" && body !== null && "stargazers_count" in body && typeof body.stargazers_count === "number" ? body.stargazers_count : undefined;
       if (starCount) {
-        fetch("https://api.github.com/repos/Hebilicious/acidcat", { headers: { Accept: "application/vnd.github+json" } })
+        fetch("https://api.github.com/repos/Hebilicious/acidcat", { headers: { Accept: "application/vnd.github+json" }, priority: "low" })
           .then((response) => (response.ok ? response.json() : undefined))
           .then((body: unknown) => {
             const stars = readStars(body);

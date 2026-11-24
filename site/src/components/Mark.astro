@@ -1,11 +1,16 @@
 ---
-import CatHead from "../assets/mark.svg";
+import source from "../assets/mark.svg?raw";
 
 interface Props {
+  readonly idSuffix: string;
   readonly size?: number;
 }
 
-const { size = 36 } = Astro.props;
+const { idSuffix, size = 36 } = Astro.props;
+const svg = source
+  .replaceAll("acidcat-brass", `acidcat-brass-${idSuffix}`)
+  .replace(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" /, "<svg ")
+  .replace(' width="64" height="64">', ` width="${size}" height="${size}" class="mark" aria-hidden="true">`);
 ---
 
-<CatHead class="mark" width={size} height={size} aria-hidden="true" />
+<Fragment set:html={svg} />

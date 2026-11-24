@@ -157,10 +157,13 @@ const cores = [...official, yours].map((core) => ({ ...core, html: highlight(cor
     color: var(--palette-cyan-400);
   }
   .console-code {
-    overflow-x: auto;
     font-size: var(--typography_fluid-text-xs);
     line-height: 1.5;
     min-height: 31lh;
+  }
+  .console-code :global(pre) {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
   .console-source {
     display: inline-block;

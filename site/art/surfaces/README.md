@@ -18,6 +18,6 @@ From the repository root, use ImageMagick to write the transparent web icons.
 for id in cli mcp webmcp http ts; do
   magick "site/art/surfaces/$id.png" -trim +repage -resize 364x364 \
     -background none -gravity center -extent 384x384 -quality 83 \
-    "site/public/surfaces/$id.webp"
+    "site/src/assets/surfaces/$id.webp"
 done
 ```

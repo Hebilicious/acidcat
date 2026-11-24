@@ -10,7 +10,7 @@ The homepage, the documentation, the specification and the list of packages of A
 | `moon run site:tokens` | Write the design tokens from `cssforge.config.ts` into `.cssforge/output.css` |
 | `moon run site:tokens-check` | Check that `.cssforge/output.css` matches `cssforge.config.ts`. `site:test` runs it |
 | `moon run site:build` | Build the static site into `dist/` |
-| `moon run site:test` | Test the geometry of the logo, check that every design token in use exists, render the homepage in Chromium at desktop and phone widths, check that Fig. 1 keeps its height while it loads, compare the image of each GPU renderer with WebGPU and with WebGL 2, and check that the homepage stays in its budget of bytes on a phone (images, fonts, scripts, styles and HTML), with no texture of the hero on a software renderer and no renderer code before its figure is near |
+| `moon run site:test` | Test the geometry of the logo, check that every design token in use exists, render the homepage in Chromium at desktop and phone widths, check that Fig. 1 keeps its height while it loads, compare the image of each GPU renderer with WebGPU and with WebGL 2, and check that the homepage stays in its budget of bytes on a phone (images, fonts, scripts and HTML), with no texture of the hero on a software renderer and no renderer code before its figure is near. Check that each page loads only files with a hash in their name, that the homepage loads no stylesheet and preloads each of its scripts, that each page passes the accessibility rules of the Lighthouse audit "Accessibility tree is well-formed", that the homepage passes every rule of axe-core, and that the table of contents of the docs reads no layout when the page starts (`test/delivery.test.ts`). Check that the hero frames 960px as a phone, and, on a hardware GPU, that it keeps its animation after a resize across 960px |
 | `moon run site:deploy` | Build the site and deploy it to https://acidcat.hebilicious.workers.dev as an assets-only Worker, with the `cf` command. Set `CLOUDFLARE_ACCOUNT_ID` first |
 | `moon run site:typecheck` | Type-check the geometry, the tests and the configuration |
 
@@ -29,16 +29,17 @@ The homepage, the documentation, the specification and the list of packages of A
 | `src/components/Schematic.astro` | Fig. 1: one capability of the catalog, and the surface that each binding makes from it |
 | `src/lib/holo.ts`, `src/lib/catalog-engine.ts`, `src/lib/engine-hardware.ts`, `src/lib/engine-finish.ts`, `src/lib/engine-shader.ts`, `src/lib/nixie-scene.ts` | Fig. 1 in 3D: worn brass screens, glass pipes and a rail of Nixie bulbs in three.js, with the HTML of each screen drawn by HTML-in-Canvas. The custom materials are TSL node materials |
 | `src/components/Blueprint.astro`, `src/components/Exploded.astro` | Fig. 2: an animated blueprint of the flow Spec, Catalog, Runtime and Verify, and the key specifications on a blue screen |
-| `src/components/Surfaces.astro`, `public/surfaces/`, `art/surfaces/` | Fig. 3: the five surfaces in tabs, each with a render, an example from its binding and a gauge |
+| `src/components/Surfaces.astro`, `src/assets/surfaces/`, `art/surfaces/` | Fig. 3: the five surfaces in tabs, each with a render, an example from its binding and a gauge |
 | `src/components/CoreScreens.astro`, `src/lib/bluescreen.ts`, `src/lib/bluescreen-shader.ts` | Fig. 4: how to use each core, on a console drawn with HTML-in-Canvas |
 | `src/lib/snippets.ts` | Reads the code examples from `examples/aircon` and the READMEs of the cores at build time, and highlights them with Shiki |
 | `src/styles/code.css` | Maps the colors of the code to the palette |
-| `src/components/Mark.astro`, `src/assets/mark.svg`, `public/favicon.svg`, `art/logo/` | The logo (a brass cat in profile), the favicon, and the explorations behind them |
+| `src/components/Mark.astro`, `src/assets/mark.svg`, `src/assets/favicon.svg`, `art/logo/` | The logo (a brass cat in profile), the favicon, and the explorations behind them |
 | `src/lib/geometry.ts` | Pure functions that compute gears |
 | `src/content/docs/docs/` | The documentation, served under `/docs/` |
 | `src/lib/ecosystem.ts` | The one list of catalog languages and cores. Every page and component that shows them reads it, the build fails when one has no example, and `test/ecosystem.test.ts` fails when it disagrees with `packages/` |
 | `src/lib/catalog-examples.ts`, `src/components/docs/` | Read each definition of the aircon catalog from its five sources and its canonical JSON at build time, and show them in language tabs; tabs for the package managers of Node |
 | `src/components/site/` | The header and the font preloads that the homepage and the docs share. Each page preloads only the faces that it uses, so the browser lays out the text once |
+| `src/components/site/InstantNavigation.astro` | Speculation rules in each page: when the reader points at a link to another page of the site, Chromium renders that page in the background, so a click shows it at once. Other browsers fetch the page on hover (`prefetch` in `astro.config.ts`). A page change has no animation |
 | `src/lib/external-links.ts` | Tells which links go to another website. A Markdown plugin in `astro.config.ts` opens them in a new tab, and `test/pages.test.ts` fails when a built page has an external link that does not |
 | `src/route-middleware.ts` | Gives `/docs/` and `/spec/` their own sidebar |
 | `src/lib/spec-diagrams.ts` | The SVG diagram that replaces the ASCII diagram of the specification |
@@ -46,11 +47,13 @@ The homepage, the documentation, the specification and the list of packages of A
 | `src/pages/packages/index.astro`, `src/lib/packages.ts` | The list of published packages, served under `/packages/` |
 | `src/lib/code-theme.ts`, `src/styles/starlight.css`, `src/components/starlight/` | The palette of the site in the docs: colors, fonts, code blocks, and the dark theme only |
 | `cloudflare.config.ts` | The Worker that serves the site: its name, and the 404 page for unknown paths |
-| `public/_headers` | The cache headers of the Worker. The files in `/_astro/` have a hash in their name, so the browser keeps them for a year. The hero textures and the surface renders have no hash, so the browser keeps them for a day |
+| `public/_headers` | The cache headers of the Worker. The files in `/_astro/` have a hash in their name, so the browser keeps them for a year. Each file that a page loads is in `/_astro/`: the images, the favicon and the fonts are imports, not files in `public/` |
+| `src/lib/table-of-contents.ts` | The table of contents of the docs. It takes the place of the element of Starlight, with the same markup and behavior, and reads the sizes of the header and of the viewport only after layout. A Vite plugin in `astro.config.ts` gives it to the components of Starlight |
+| `src/lib/module-preload.ts` | Adds a `modulepreload` link at the top of the head of each page for each script that the page loads at once, and for each module that the script imports |
 | `cssforge.config.ts` | The design tokens: colors, fluid type and spacing scales, font families, tracking, radii and layout widths. [cssforge](https://github.com/Hebilicious/cssforge) writes them as CSS variables into `.cssforge/output.css`, which is committed |
 | `src/styles/tokens.css` | Imports the design tokens and the fonts that the homepage and the documentation share |
 | `src/lib/fonts.ts` | Splits each font face into a small core file and the rest at build time, and writes their `@font-face` rules into `.fonts/` |
-| `public/hero/` | The hero textures. `art/pack.sh` writes them |
+| `src/assets/hero/`, `src/lib/plate-crop.ts` | The hero textures, and the columns of the key art that the phone plates keep. `art/pack.sh` writes the textures |
 | `src/lib/social.ts`, `public/og/`, `art/og/build.sh` | The Open Graph and Twitter card of each section (home, docs, spec, packages). `art/og/build.sh` writes the 1200 by 630 images from the key art, the logo and the Monaspace fonts; `test/pages.test.ts` fails when a page has no card |
 | `art/` | The sources of the hero art, and the scripts that make the textures |
 
@@ -72,7 +75,7 @@ The CSS uses only the design tokens: colors (`--palette-*`, in OKLCH), sizes (`-
 
 The fonts are from [Monaspace](https://monaspace.githubnext.com/): Xenon for headings, Radon for the accent words in headings, Argon for text, Krypton for labels and Neon for code. Texture healing (`calt`) is on. cssforge has no Vite plugin, so `site:dev` runs `cssforge --watch` next to Astro.
 
-`src/lib/fonts.ts` splits each face of Monaspace in two files when the build starts, and writes them with their `@font-face` rules into `.fonts/` (not in git). The core file has ASCII and the few other characters that the site uses, with all the OpenType features, at about half the size of the full face. The full face serves the other characters, with a `unicode-range`, so the browser downloads it only for a page that has one of them. `test/fonts.test.ts` fails when a page has a character outside the core: add it to `coreRanges`.
+`src/lib/fonts.ts` splits each face of Monaspace in two files when the build starts, and writes them with their `@font-face` rules into `.fonts/` (not in git). The core file has ASCII and the few other characters that the site uses, with all the OpenType features, at about half the size of the full face. The full face serves the other characters, with a `unicode-range`, so the browser downloads it only for a page that has one of them. `test/fonts.test.ts` fails when a page has a character outside the core: add it to `coreRanges`. It checks the text of each built page, and in Chromium it also checks the characters that the browser draws beside the text: list markers (a bullet is a character of the font), generated content, and the text that scripts write, such as the command key of the search button on macOS.
 
 ## The hero
 
@@ -88,15 +91,27 @@ The fonts are from [Monaspace](https://monaspace.githubnext.com/): Xenon for hea
 | `matte-wide.png` | The cat, the pedestal and the brass bands | `derive.py` on `key-art.png` (BiRefNet, MIT), padded to the wide size |
 | `plate-wide@2x.png` | The wide key art at twice the size | `derive.py` (Swin2SR, Apache-2.0) |
 
-`uv run --script art/derive.py art/key-art-wide.png <directory>` writes the depth map, the matte and the large plate. It needs an NVIDIA GPU to run in a few minutes. `art/pack.sh` packs the depth, the matte and the cut mask into `public/hero/data.webp` (lossless WebP), and writes the plates as AVIF and WebP. It needs ImageMagick and `avifenc`.
+`uv run --script art/derive.py art/key-art-wide.png <directory>` writes the depth map, the matte and the large plate. It needs an NVIDIA GPU to run in a few minutes. `art/pack.sh` packs the depth, the matte and the cut mask into `src/assets/hero/data.webp` (lossless WebP), and writes the plates as AVIF and WebP. It needs ImageMagick and `avifenc`.
 
-The plates are AVIF with full color resolution (4:4:4). At less than half the bytes, they are closer to the source than the WebP plates, which keep only a quarter of the color resolution (4:2:0). The still image is the LCP element. A `<picture>` gives it as AVIF, and as WebP to browsers without AVIF. The renderer loads the file that the browser chose for the still image from the `srcset`, so the browser downloads the plate once. It starts after the still image has loaded, so its textures do not take bandwidth from the LCP image.
+The plates are AVIF with full color resolution (4:4:4). At less than half the bytes, they are closer to the source than the WebP plates, which keep only a quarter of the color resolution (4:2:0). The still image is the LCP element. A `<picture>` gives it as AVIF, and as WebP to browsers without AVIF.
+
+At 960px and below, the hero has a fixed aspect ratio, so it always shows the same columns of the key art. There, the `<picture>` gives a phone plate: the columns of `phoneCrop` in `src/lib/plate-crop.ts`, with a margin for the parallax, at 840, 1052 and 2104 pixels wide. The browser downloads less than half the bytes of the full plate, at the same resolution. The renderer maps the phone plate onto the key art with the uniform `uPlateRect`. When a resize across 960px gives the still image the other plate, the renderer draws from that plate and its columns, and the animation continues. At exactly 960px, the hero is a phone hero. The renderer loads the file that the browser chose for the still image from the `srcset`, so the browser downloads the plate once. It starts after the still image has loaded, so its textures do not take bandwidth from the LCP image.
 
 The shader shifts the cat against the background with the depth map, as the pointer moves. Where the cat moves away, the clean plate shows. It also makes the eyes and the chest reactor pulse, sends light around the holographic rings, floats the brass bands, flickers the Nixie tubes, sparks the fibre optics, moves the plasma, steam and dust, and lights the brass where the pointer is. When the camera is still, the output is the key art.
 
 The renderer uses WebGPU when the browser gives a hardware adapter, and WebGL 2 otherwise. It lowers its resolution when frames are slow. The still image stays when the browser renders in software, when neither WebGPU nor WebGL 2 is available, and when the reader asks for reduced motion. In these cases the page does not download the other textures of the hero.
 
 The renderer checks the GPU before it downloads the textures. It decodes each texture into an `ImageBitmap` off the main thread, and it uploads the next texture only when the GPU has taken the one before it, so no upload blocks the main thread. The canvas has its final size before the renderer makes its context, so the drawing buffer is allocated once.
+
+## Loading
+
+- **Styles.** Astro writes the CSS of each page into its HTML (`build.inlineStylesheets`), so no stylesheet blocks the first render. Expressive Code writes the styles of the code blocks into the page too (`emitExternalStylesheet: false`).
+- **Scripts.** `src/lib/module-preload.ts` adds a `modulepreload` link for each script that a page loads at once, and for each module that the script imports. The browser fetches them all together with the HTML, and not one after the other.
+- **Layout.** The sections under the hero, and the footer, have `content-visibility: auto`. The browser computes their style and their layout only when they come near the viewport, so the first layout of the page is short. Each section has an estimate of its height (`contain-intrinsic-size`), and the browser keeps its real height after the first layout. On a docs page, each code block and each group of tabs has `content-visibility: auto` too, because the code blocks hold most of the elements of the page.
+- **Fonts.** Each font stack ends with the generic `monospace` and names no local font. The browser looks up each local font that a stack names during the first layout, and on a system that does not have it, such as Linux with `ui-monospace`, `SFMono-Regular` or `Menlo`, the lookup makes the first layout several times longer.
+- **Raster.** A gradient that fades one color to transparent names `in srgb`. Between colors of CSS Color 4, a gradient interpolates in OKLab by default, and a software rasterizer draws that slowly. In sRGB, such a gradient gives the same pixels. A gradient between two hues keeps OKLab.
+- **Requests to other websites.** The number of stars on GitHub and the latest versions on the packages page load at low priority, so they do not take bandwidth from the page.
+- **Cache.** Each file that a page loads has a hash in its name, so the browser keeps it for a year. The files of the search index that have a hash in their name (`/pagefind/fragment/`, `/pagefind/index/` and the `.pf_meta` file) have the same lifetime.
 
 ## The GPU renderers
 

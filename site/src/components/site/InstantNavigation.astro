@@ -1,0 +1,12 @@
+---
+const rules = {
+  prerender: [
+    {
+      where: { and: [{ href_matches: "/*" }, { not: { selector_matches: "[target=_blank], [download]" } }] },
+      eagerness: "moderate",
+    },
+  ],
+};
+---
+
+<script is:inline type="speculationrules" set:html={JSON.stringify(rules)} />
