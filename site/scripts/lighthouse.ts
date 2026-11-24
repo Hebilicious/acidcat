@@ -1,9 +1,9 @@
-import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { extname, join, normalize } from "node:path";
-import { parseArgs } from "node:util";
-import { brotliCompressSync } from "node:zlib";
+import { extname, join, relative } from "node:path";
+import { parseArgs, promisify } from "node:util";
+import { brotliCompress } from "node:zlib";
 import lighthouse from "lighthouse";
 import type { Result } from "lighthouse";
 import { chromium } from "playwright";
@@ -40,30 +40,53 @@ const types: Readonly<Record<string, string>> = {
 };
 const compressible = new Set([".html", ".css", ".js", ".json", ".svg", ".txt", ".md", ".xml"]);
 
-const resolveFile = async (pathname: string): Promise<string | undefined> => {
-  const path = normalize(join(dist, decodeURIComponent(pathname)));
-  if (!path.startsWith(dist)) return undefined;
-  const info = await stat(path).catch(() => undefined);
-  if (info?.isDirectory() === true) return join(path, "index.html");
-  return info === undefined ? undefined : path;
+interface Asset {
+  readonly body: Buffer;
+  readonly brotli: Buffer | undefined;
+}
+
+const brotli = promisify(brotliCompress);
+
+/** Reads every file of `dist/` once, and compresses each text file with Brotli, as Cloudflare serves it from its cache. */
+const readAssets = async (): Promise<ReadonlyMap<string, Asset>> => {
+  const files = await readdir(dist, { recursive: true, withFileTypes: true });
+  const entries = await Promise.all(
+    files
+      .filter((file) => file.isFile())
+      .map(async (file): Promise<[string, Asset]> => {
+        const path = join(file.parentPath, file.name);
+        const body = await readFile(path);
+        return [`/${relative(dist, path)}`, { body, brotli: compressible.has(extname(path)) ? await brotli(body) : undefined }];
+      }),
+  );
+  return new Map(entries);
 };
 
-/** Serves `dist/` as the Worker does for these pages: Brotli for text, and the cache headers of `public/_headers`. */
+const lookup = (assets: ReadonlyMap<string, Asset>, pathname: string): [string, Asset] | undefined => {
+  const path = decodeURIComponent(pathname);
+  for (const candidate of [path, `${path.replace(/\/$/, "")}/index.html`]) {
+    const asset = assets.get(candidate);
+    if (asset !== undefined) return [candidate, asset];
+  }
+  return undefined;
+};
+
+/** Serves `dist/` from memory as the Worker does for these pages: Brotli for text, and the cache headers of `public/_headers`. */
 const serve = async (): Promise<{ origin: string; close: () => Promise<void> }> => {
+  const assets = await readAssets();
+  const notFound = assets.get("/404.html");
+  if (notFound === undefined) throw new Error("dist/ has no 404.html.");
   const server = createServer((request, response) => {
     const { pathname } = new URL(request.url ?? "/", "http://site");
-    void resolveFile(pathname).then(async (found) => {
-      const path = found ?? join(dist, "404.html");
-      const extension = extname(path);
-      const body = await readFile(path);
-      const brotli = compressible.has(extension) && (request.headers["accept-encoding"] ?? "").includes("br");
-      response.writeHead(found === undefined ? 404 : 200, {
-        "Content-Type": types[extension] ?? "application/octet-stream",
-        "Cache-Control": pathname.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "public, max-age=0, must-revalidate",
-        ...(brotli ? { "Content-Encoding": "br", Vary: "Accept-Encoding" } : {}),
-      });
-      response.end(brotli ? brotliCompressSync(body) : body);
+    const found = lookup(assets, pathname);
+    const [path, asset] = found ?? ["/404.html", notFound];
+    const encoded = asset.brotli !== undefined && (request.headers["accept-encoding"] ?? "").includes("br") ? asset.brotli : undefined;
+    response.writeHead(found === undefined ? 404 : 200, {
+      "Content-Type": types[extname(path)] ?? "application/octet-stream",
+      "Cache-Control": pathname.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "public, max-age=0, must-revalidate",
+      ...(encoded === undefined ? {} : { "Content-Encoding": "br", Vary: "Accept-Encoding" }),
     });
+    response.end(encoded ?? asset.body);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address: AddressInfo | string | null = server.address();

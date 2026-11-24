@@ -2,8 +2,22 @@ name: Lighthouse
 
 on:
   pull_request:
+    # The inputs of the built site, as the build of Workers Builds watches them, and this workflow.
     paths:
       - "site/**"
+      - "spec/**"
+      - "schemas/**"
+      - "examples/**"
+      - "packages/**"
+      - "skills/**"
+      - "release-please-config.json"
+      - ".release-please-manifest.json"
+      - ".prototools"
+      - ".moon/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
       - ".github/workflows/lighthouse.yml"
   workflow_dispatch:
 
