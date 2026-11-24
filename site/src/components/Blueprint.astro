@@ -138,21 +138,17 @@ const specs = [
 
 <script>
   import { createBluescreen, supportsHtmlInCanvas } from "../lib/bluescreen.ts";
+  import type { Bluescreen } from "../lib/bluescreen.ts";
 
   const panel = document.querySelector<HTMLElement>(".spec-sheet");
   const motion = matchMedia("(prefers-reduced-motion: reduce)");
-  if (panel && typeof WebGL2RenderingContext !== "undefined" && supportsHtmlInCanvas()) {
-    let screen = motion.matches ? undefined : createBluescreen(panel);
+  if (panel && supportsHtmlInCanvas()) {
+    let screen: Promise<Bluescreen | undefined> = createBluescreen(panel, { still: motion.matches });
     motion.addEventListener("change", () => {
-      if (motion.matches && screen) {
-        screen.destroy();
-        const canvas = panel.parentElement;
-        canvas?.replaceWith(panel);
-        panel.removeAttribute("drawable");
-        screen = undefined;
-      } else if (!motion.matches && !screen) {
-        screen = createBluescreen(panel);
-      }
+      screen = screen.then((previous) => {
+        previous?.destroy();
+        return createBluescreen(panel, { still: motion.matches });
+      });
     });
   }
 </script>

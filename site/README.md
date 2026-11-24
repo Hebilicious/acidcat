@@ -23,13 +23,14 @@ The homepage, the documentation, the specification and the list of packages of A
 | Path | Contents |
 | --- | --- |
 | `src/pages/index.astro` | The homepage. It does not use the Starlight layout |
-| `src/components/LivingPlate.astro` | The hero: the key art as a still image, and a WebGL canvas that brings it to life |
-| `src/lib/plate-renderer.ts`, `src/lib/plate-shader.ts` | The WebGL 2 renderer and its shader |
+| `src/components/LivingPlate.astro` | The hero: the key art as a still image, and a canvas that brings it to life |
+| `src/lib/plate-renderer.ts`, `src/lib/plate-shader.ts` | The renderer of the hero and its shader |
+| `src/lib/gpu/` | A full-screen shader pass for the hero and the blue screens. It draws with WebGPU when the browser gives a hardware adapter, and with WebGL 2 otherwise. Each shader is written once, in a subset of GLSL ES 3.00 that `shader.ts` translates to WGSL, so both backends draw the same image |
 | `src/components/Schematic.astro` | Fig. 1: one capability of the catalog, and the surface that each binding makes from it |
 | `src/lib/holo.ts`, `src/lib/catalog-engine.ts`, `src/lib/engine-hardware.ts`, `src/lib/engine-finish.ts`, `src/lib/nixie-scene.ts` | Fig. 1 in 3D: worn brass screens, glass pipes and a rail of Nixie bulbs in three.js, with the HTML of each screen drawn by HTML-in-Canvas |
 | `src/components/Blueprint.astro`, `src/components/Exploded.astro` | Fig. 2: an animated blueprint of the flow Spec, Catalog, Runtime and Verify, and the key specifications on a blue screen |
 | `src/components/Surfaces.astro`, `public/surfaces/`, `art/surfaces/` | Fig. 3: the five surfaces in tabs, each with a render, an example from its binding and a gauge |
-| `src/components/CoreScreens.astro`, `src/lib/bluescreen.ts` | Fig. 4: how to use each core, on a console drawn with HTML-in-Canvas |
+| `src/components/CoreScreens.astro`, `src/lib/bluescreen.ts`, `src/lib/bluescreen-shader.ts` | Fig. 4: how to use each core, on a console drawn with HTML-in-Canvas |
 | `src/lib/snippets.ts` | Reads the code examples from `examples/aircon` and the READMEs of the cores at build time, and highlights them with Shiki |
 | `src/styles/code.css` | Maps the colors of the code to the palette |
 | `src/components/Mark.astro`, `src/assets/mark.svg`, `public/favicon.svg`, `art/logo/` | The logo (a brass cat in profile), the favicon, and the explorations behind them |
@@ -87,7 +88,7 @@ The fonts are from [Monaspace](https://monaspace.githubnext.com/): Xenon for hea
 
 The shader shifts the cat against the background with the depth map, as the pointer moves. Where the cat moves away, the clean plate shows. It also makes the eyes and the chest reactor pulse, sends light around the holographic rings, floats the brass bands, flickers the Nixie tubes, sparks the fibre optics, moves the plasma, steam and dust, and lights the brass where the pointer is. When the camera is still, the output is the key art.
 
-The renderer lowers its resolution when frames are slow, and shows a still frame when the device cannot keep up or renders WebGL in software. The still image shows when WebGL 2 is not available, and when the reader asks for reduced motion.
+The renderer uses WebGPU when the browser gives a hardware adapter, and WebGL 2 otherwise. It lowers its resolution when frames are slow, and shows a still frame when the device cannot keep up or renders in software. The still image shows when neither WebGPU nor WebGL 2 is available, and when the reader asks for reduced motion.
 
 ## The specification
 
@@ -100,9 +101,9 @@ The site does not copy the specification. At build time, `spec-pages.ts` reads e
 ## The sections
 
 - **Fig. 1.** In browsers that support [HTML-in-Canvas](https://github.com/WICG/html-in-canvas), `holo.ts` loads three.js and builds a machine of worn brass: the catalog screen, five surface screens, glass pipes with flowing acid, and a rail of five Nixie bulbs above the catalog screen. The text of each screen is live HTML in a `<canvas content="drawable">`. On each `paint` event, `texElementSubImage2D` copies the HTML of each screen into its texture, and a CRT shader draws it with its syntax colors. A click on a bulb shows the definition of `aircon.power.set` in that language (TypeScript, Python, Go, Rust or Pkl), with the helper that it uses, so that each language visibly sets the same input, failures and hints, highlighted by Shiki. The bulbs are buttons in a tab list, so the keyboard and the plain HTML fallback can change the language too. `updateElementGeometry` keeps hit testing on the HTML, so the reader can hover a surface screen to light its pipe. While three.js loads, the stage keeps its size and shows a soft glow, so the plain HTML does not flash before the machine appears. Above 900px the machine is wide: the catalog screen on the left, the surface screens on the right. On narrower screens the same machine stands tall: the bulbs and the catalog screen on top, the surface screens stacked below, and the code wraps. Other browsers, software renderers and reduced motion show the plain HTML.
-- **Fig. 2.** An SVG blueprint of the flow: Spec, Catalog, Runtime and Verify. It draws itself, and the parts move apart along their axis when it comes into view. Beside it, `bluescreen.ts` draws the key specifications as a blue screen.
+- **Fig. 2.** An SVG blueprint of the flow: Spec, Catalog, Runtime and Verify. It draws itself, and the parts move apart along their axis when it comes into view. Beside it, `bluescreen.ts` draws the key specifications as a blue screen, with WebGPU or WebGL 2. When the reader asks for reduced motion, the blue screen is a still frame, drawn again only when its content changes or under the pointer. Browsers without HTML-in-Canvas, and software renderers, show the plain HTML.
 - **Fig. 3.** A tab for each surface: the command line, the MCP server, WebMCP, the HTTP API and programmatic access. The selected tab shows a render of the surface, who uses it, what it does, an example from its binding and a link to the binding. Glass gauges fill and bubble when a tab is selected or under the pointer. Without JavaScript, all five panels show.
-- **Fig. 4.** A console with a vertical tab for each core: TypeScript, Effect, Rust, and "Your own core", which shows how `acid-cat conform` tests a core in any other language. The code comes from the README of each core. On wide screens with HTML-in-Canvas, `bluescreen.ts` draws the console as a calm blue screen that builds up from noise, and builds up again quickly when the reader changes the tab. Other browsers show the plain console.
+- **Fig. 4.** A console with a vertical tab for each core: TypeScript, Effect, Rust, and "Your own core", which shows how `acid-cat conform` tests a core in any other language. The code comes from the README of each core. With HTML-in-Canvas, `bluescreen.ts` draws the console as a calm blue screen that builds up from noise, and builds up again quickly when the reader changes the tab. The console keeps the width of the screen, so the text keeps its proportions at every width. With reduced motion, the screen is a still frame that changes with the tab. Other browsers and software renderers show the plain console.
 
 ## The hero buttons and the footer
 

@@ -79,6 +79,7 @@ const alt = "A mechanical brass cat with glowing acid-green eyes sits on a brass
       (plate) => {
         plate.render({ reveal: 0 });
         root.classList.add("is-live");
+        root.dataset["gpu"] = plate.backend;
         if (plate.software) return;
         let visible = true;
         const sync = () => (visible && document.visibilityState === "visible" ? plate.start() : plate.stop());

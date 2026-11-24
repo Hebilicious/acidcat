@@ -1,4 +1,6 @@
-import { fragmentSource, vertexSource } from "./plate-shader.ts";
+import { createPass } from "./gpu/pass.ts";
+import type { Backend } from "./gpu/pass.ts";
+import { plateShader } from "./plate-shader.ts";
 
 export interface PlateSources {
   readonly artPad: number;
@@ -21,6 +23,7 @@ export interface PlateState {
 }
 
 export interface PlateHandle {
+  readonly backend: Backend;
   readonly software: boolean;
   readonly render: (state?: PlateState) => void;
   readonly start: () => void;
@@ -38,45 +41,6 @@ const loadImage = async (source: string): Promise<HTMLImageElement> => {
   return image;
 };
 
-const compile = (gl: WebGL2RenderingContext, type: GLenum, source: string): WebGLShader => {
-  const shader = gl.createShader(type);
-  if (shader === null) throw new Error("WebGL cannot create a shader.");
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) !== true) {
-    throw new Error(gl.getShaderInfoLog(shader) ?? "The shader does not compile.");
-  }
-  return shader;
-};
-
-const link = (gl: WebGL2RenderingContext): WebGLProgram => {
-  const program = gl.createProgram();
-  gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, vertexSource));
-  gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, fragmentSource));
-  gl.linkProgram(program);
-  if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
-    throw new Error(gl.getProgramInfoLog(program) ?? "The program does not link.");
-  }
-  return program;
-};
-
-const upload = (gl: WebGL2RenderingContext, unit: number, image: HTMLImageElement, mipmaps: boolean): WebGLTexture => {
-  const texture = gl.createTexture();
-  gl.activeTexture(gl.TEXTURE0 + unit);
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  if (mipmaps) {
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-  } else {
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  }
-  return texture;
-};
-
 export const framingSpan = (width: number, height: number, framing: PlateFraming): { span: [number, number]; center: [number, number] } => {
   const viewAspect = width / height;
   const span: [number, number] = viewAspect > framing.aspect ? [1, framing.aspect / viewAspect] : [viewAspect / framing.aspect, 1];
@@ -88,46 +52,16 @@ export const framingSpan = (width: number, height: number, framing: PlateFraming
 };
 
 export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSources, framing: () => PlateFraming): Promise<PlateHandle> => {
-  const gl = canvas.getContext("webgl2", { antialias: false, alpha: false, powerPreference: "high-performance", preserveDrawingBuffer: true });
-  if (gl === null) throw new Error("WebGL 2 is not available.");
-
-  const debug = gl.getExtension("WEBGL_debug_renderer_info");
-  const renderer = String(gl.getParameter(debug === null ? gl.RENDERER : debug.UNMASKED_RENDERER_WEBGL));
-  const software = /swiftshader|llvmpipe|softpipe|software/i.test(renderer);
-
-  const [plate, clean, data] = await Promise.all([loadImage(sources.plate), loadImage(sources.clean), loadImage(sources.data)]);
-
-  const program = link(gl);
-  gl.useProgram(program);
-
-  const buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-  const position = gl.getAttribLocation(program, "aPosition");
-  gl.enableVertexAttribArray(position);
-  gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-
-  upload(gl, 0, plate, true);
-  upload(gl, 1, clean, false);
-  upload(gl, 2, data, false);
-
-  const uniform = (name: string) => gl.getUniformLocation(program, name);
-  gl.uniform1i(uniform("uPlate"), 0);
-  gl.uniform1i(uniform("uClean"), 1);
-  gl.uniform1i(uniform("uData"), 2);
-  gl.uniform1f(uniform("uFocus"), FOCUS_DEPTH);
-  gl.uniform2f(uniform("uImageSize"), data.naturalWidth, data.naturalHeight);
-  gl.uniform1f(uniform("uArtPad"), sources.artPad);
-  const locations = {
-    resolution: uniform("uResolution"),
-    span: uniform("uSpan"),
-    center: uniform("uCenter"),
-    camera: uniform("uCamera"),
-    light: uniform("uLight"),
-    time: uniform("uTime"),
-    reveal: uniform("uReveal"),
-    active: uniform("uActive"),
-  };
+  const [pass, plate, clean, data] = await Promise.all([
+    createPass(canvas, plateShader, { alpha: false, preserveDrawingBuffer: true }),
+    loadImage(sources.plate),
+    loadImage(sources.clean),
+    loadImage(sources.data),
+  ]);
+  pass.setImage("uPlate", plate);
+  pass.setImage("uClean", clean);
+  pass.setImage("uData", data);
+  const imageSize = [data.naturalWidth, data.naturalHeight] as const;
 
   const pointer = { x: 0, y: 0, active: 0 };
   const eased = { x: 0, y: 0, active: 0 };
@@ -152,20 +86,23 @@ export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSourc
 
   const render = (state: PlateState = {}) => {
     resize();
-    gl.viewport(0, 0, canvas.width, canvas.height);
     const { span, center } = framingSpan(canvas.width, canvas.height, framing());
     const elapsed = (performance.now() - started) / 1000;
     const time = state.time ?? elapsed;
-    const camera = state.camera ?? [eased.x + Math.sin(time * 0.31) * 0.22, eased.y + Math.cos(time * 0.23) * 0.12];
-    gl.uniform2f(locations.resolution, canvas.width, canvas.height);
-    gl.uniform2f(locations.span, span[0], span[1]);
-    gl.uniform2f(locations.center, center[0], center[1]);
-    gl.uniform2f(locations.camera, camera[0], camera[1]);
-    gl.uniform2f(locations.light, eased.x * 1.4, -eased.y * 1.4 + 0.3);
-    gl.uniform1f(locations.time, time);
-    gl.uniform1f(locations.reveal, state.reveal ?? Math.min(1, elapsed / 2.4));
-    gl.uniform1f(locations.active, eased.active);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const camera: readonly [number, number] = state.camera ?? [eased.x + Math.sin(time * 0.31) * 0.22, eased.y + Math.cos(time * 0.23) * 0.12];
+    pass.draw({
+      uResolution: [canvas.width, canvas.height],
+      uSpan: span,
+      uCenter: center,
+      uCamera: camera,
+      uLight: [eased.x * 1.4, -eased.y * 1.4 + 0.3],
+      uTime: time,
+      uReveal: state.reveal ?? Math.min(1, elapsed / 2.4),
+      uFocus: FOCUS_DEPTH,
+      uActive: eased.active,
+      uImageSize: imageSize,
+      uArtPad: sources.artPad,
+    });
   };
 
   const measure = (now: number) => {
@@ -208,7 +145,8 @@ export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSourc
   }
 
   return {
-    software,
+    backend: pass.backend,
+    software: pass.software,
     render,
     start: () => {
       if (running) return;

@@ -137,6 +137,7 @@ const cores = [...official, yours].map((core) => ({ ...core, html: highlight(cor
       0 30px 80px -30px color-mix(in oklch, var(--palette-cyan-400) 35%, transparent);
   }
   .console-screen {
+    width: 100%;
     background: radial-gradient(circle at 20% 0%, var(--palette-blueprint-800), var(--palette-ink-925) 70%);
   }
   :global(.bluescreen-canvas) {
@@ -206,9 +207,8 @@ const cores = [...official, yours].map((core) => ({ ...core, html: highlight(cor
 
   const screen = document.querySelector<HTMLElement>("[data-console-screen]");
   const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-core-tab]"));
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const wide = window.matchMedia("(min-width: 761px)").matches;
-  const bluescreen = screen !== null && !reduced && wide && supportsHtmlInCanvas() ? createBluescreen(screen, { intensity: 0.45, revealMs: 900, replayMs: 380 }) : undefined;
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const bluescreen = screen !== null && supportsHtmlInCanvas() ? createBluescreen(screen, { intensity: 0.45, revealMs: 900, replayMs: 380, still }) : undefined;
 
   const select = (tab: HTMLButtonElement) => {
     for (const other of tabs) {
@@ -218,7 +218,7 @@ const cores = [...official, yours].map((core) => ({ ...core, html: highlight(cor
       const panel = document.getElementById(other.getAttribute("aria-controls") ?? "");
       if (panel !== null) panel.hidden = !selected;
     }
-    bluescreen?.replay();
+    void bluescreen?.then((created) => created?.replay());
   };
 
   for (const [index, tab] of tabs.entries()) {

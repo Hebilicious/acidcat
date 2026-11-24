@@ -1,34 +1,25 @@
-export const vertexSource = `#version 300 es
-in vec2 aPosition;
-out vec2 vScreen;
-void main() {
-  vScreen = aPosition * 0.5 + 0.5;
-  gl_Position = vec4(aPosition, 0.0, 1.0);
-}
-`;
+import type { ShaderSource } from "./gpu/shader.ts";
 
-export const fragmentSource = `#version 300 es
-precision highp float;
-
-uniform sampler2D uPlate;
-uniform sampler2D uClean;
-uniform sampler2D uData;
-uniform vec2 uResolution;
-uniform vec2 uSpan;
-uniform vec2 uCenter;
-uniform vec2 uCamera;
-uniform vec2 uLight;
-uniform float uTime;
-uniform float uReveal;
-uniform float uFocus;
-uniform float uActive;
-uniform vec2 uImageSize;
-uniform float uArtPad;
-
-in vec2 vScreen;
-out vec4 outColor;
-
-const float ASPECT = 1672.0 / 941.0;
+export const plateShader: ShaderSource = {
+  uniforms: {
+    uResolution: "vec2",
+    uSpan: "vec2",
+    uCenter: "vec2",
+    uCamera: "vec2",
+    uLight: "vec2",
+    uTime: "float",
+    uReveal: "float",
+    uFocus: "float",
+    uActive: "float",
+    uImageSize: "vec2",
+    uArtPad: "float",
+  },
+  textures: [
+    { name: "uPlate", mipmaps: true },
+    { name: "uClean", mipmaps: false },
+    { name: "uData", mipmaps: false },
+  ],
+  body: `const float ASPECT = 1672.0 / 941.0;
 const vec2 EYE = vec2(0.580, 0.135);
 const vec2 REACTOR = vec2(0.615, 0.385);
 
@@ -103,7 +94,7 @@ vec4 data(vec2 uv) {
 
 vec2 parallax(vec2 uv, vec2 shift) {
   vec2 p = uv;
-  for (int step = 0; step < 4; step++) {
+  for (int iteration = 0; iteration < 4; iteration++) {
     float depth = data(p).r;
     p = uv - shift * (depth - uFocus);
   }
@@ -111,7 +102,7 @@ vec2 parallax(vec2 uv, vec2 shift) {
 }
 
 void main() {
-  vec2 screen = vScreen;
+  vec2 screen = vUv;
   vec2 base = toImage(screen);
   float t = uTime;
 
@@ -174,8 +165,8 @@ void main() {
   vec2 ringB = (art - vec2(0.48, 0.485)) * vec2(1.0 / 0.28, 1.0 / 0.085);
   float bandA = 1.0 - smoothstep(0.12, 0.3, abs(length(ringA) - 1.0));
   float bandB = 1.0 - smoothstep(0.12, 0.3, abs(length(ringB) - 1.0));
-  float sweepA = pow(0.5 + 0.5 * cos(atan(ringA.y, ringA.x) - t * 1.15), 10.0) + pow(0.5 + 0.5 * cos(atan(ringA.y, ringA.x) - t * 1.15 + 3.14159), 18.0) * 0.6;
-  float sweepB = pow(0.5 + 0.5 * cos(atan(ringB.y, ringB.x) + t * 0.85), 10.0) + pow(0.5 + 0.5 * cos(atan(ringB.y, ringB.x) + t * 0.85 + 2.2), 16.0) * 0.5;
+  float sweepA = pow(0.5 + 0.5 * cos(atan2(ringA.y, ringA.x) - t * 1.15), 10.0) + pow(0.5 + 0.5 * cos(atan2(ringA.y, ringA.x) - t * 1.15 + 3.14159), 18.0) * 0.6;
+  float sweepB = pow(0.5 + 0.5 * cos(atan2(ringB.y, ringB.x) + t * 0.85), 10.0) + pow(0.5 + 0.5 * cos(atan2(ringB.y, ringB.x) + t * 0.85 + 2.2), 16.0) * 0.5;
   float ringLight = (bandA * sweepA + bandB * sweepB) * (acid + cyan * 1.2);
 
   float eye = disc(art, EYE, 0.022, 0.012);
@@ -245,17 +236,15 @@ void main() {
       float d = length(local - offset * 0.7);
       float size = 0.04 + 0.06 * hash(cell + 1.9);
       float twinkleMote = 0.5 + 0.5 * sin(t * (1.0 + seed * 3.0) + seed * 40.0);
-      vec3 tint = seed > 0.96 ? vec3(0.35, 0.9, 1.0) : vec3(0.75, 1.0, 0.35);
+      vec3 tint = mix(vec3(0.75, 1.0, 0.35), vec3(0.35, 0.9, 1.0), step(0.96, seed));
       motes += tint * smoothstep(size, 0.0, d) * twinkleMote * (0.5 - fl * 0.12);
     }
   }
   lit += motes * 0.55;
 
-  float grain = hash(screen * uResolution + fract(t) * 100.0) - 0.5;
-  lit += grain * 0.0;
-
   lit = mix(color, lit, smoothstep(0.0, 1.0, uReveal));
 
   outColor = vec4(lit, 1.0);
 }
-`;
+`,
+};
