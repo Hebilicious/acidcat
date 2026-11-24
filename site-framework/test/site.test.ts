@@ -42,6 +42,15 @@ const open = async (path: string, prepare?: (page: Page) => void): Promise<{ rea
   return { page, problems };
 };
 
+/** The URL of the chunk that a page change loads for the page in a file. */
+const chunkUrl = async (file: string): Promise<string> => {
+  const manifest: unknown = JSON.parse(await readDist(".vite/manifest.json"));
+  const chunk: unknown = typeof manifest === "object" && manifest !== null ? Reflect.get(manifest, file) : undefined;
+  const chunkFile: unknown = typeof chunk === "object" && chunk !== null ? Reflect.get(chunk, "file") : undefined;
+  assert.equal(typeof chunkFile, "string");
+  return `${origin}/${String(chunkFile)}`;
+};
+
 const markDocument = (page: Page): Promise<void> => page.evaluate(() => document.documentElement.setAttribute("data-same-document", ""));
 const sameDocument = (page: Page): Promise<boolean> => page.evaluate(() => document.documentElement.hasAttribute("data-same-document"));
 
@@ -158,13 +167,10 @@ describe("in the browser", () => {
   });
 
   test("loads the page of a link in view before the click", async () => {
-    const manifest: unknown = JSON.parse(await readDist(".vite/manifest.json"));
-    const chunk: unknown = typeof manifest === "object" && manifest !== null ? Reflect.get(manifest, "pages/guide/long.md") : undefined;
-    const file: unknown = typeof chunk === "object" && chunk !== null ? Reflect.get(chunk, "file") : undefined;
-    assert.equal(typeof file, "string");
+    const file = await chunkUrl("pages/guide/long.md");
     let prefetched: Promise<unknown> = Promise.resolve();
     const { page, problems } = await open("/", (page) => {
-      prefetched = page.waitForResponse((response) => response.url() === `${origin}/${String(file)}`);
+      prefetched = page.waitForResponse((response) => response.url() === file);
     });
     await prefetched;
     const requested: string[] = [];
@@ -172,6 +178,55 @@ describe("in the browser", () => {
     await page.click("header a[href='/guide/long/']");
     await page.waitForSelector("#section-12");
     assert.deepEqual(requested.filter((url) => url.endsWith(".js")), [], "The page change loads no script: the chunk is already there.");
+    assert.deepEqual(problems, []);
+    await page.close();
+  });
+
+  test("loads the page of a link under the pointer at once, before it is in view", async () => {
+    const inView = await chunkUrl("pages/guide/branches.md");
+    const belowTheFold = await chunkUrl("content/outside.md");
+    const requested: string[] = [];
+    let prefetched: Promise<unknown> = Promise.resolve();
+    const { page, problems } = await open("/guide/long/", (page) => {
+      page.on("request", (request) => requested.push(request.url()));
+      prefetched = page.waitForResponse((response) => response.url() === inView);
+    });
+    await prefetched;
+    assert.equal(requested.includes(belowTheFold), false, "The links in view load together, and the link below the fold is not in view.");
+    const hovered = page.waitForResponse((response) => response.url() === belowTheFold);
+    await page.evaluate(() => document.querySelector("a[href='/more/outside/']")?.dispatchEvent(new PointerEvent("pointerover", { bubbles: true })));
+    await hovered;
+    assert.deepEqual(problems, []);
+    await page.close();
+  });
+
+  test("moves the focus to the target of a link in the page, so the skip link skips the header", async () => {
+    const { page, problems } = await open("/guide/");
+    await page.keyboard.press("Tab");
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Skip to content");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.activeElement?.id === "content");
+    await page.keyboard.press("Tab");
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), "link to the long page");
+    await page.focus(".skip-link");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.activeElement?.id === "content");
+    assert.deepEqual(problems, []);
+    await page.close();
+  });
+
+  test("restores the scroll position on the way forward", async () => {
+    const { page, problems } = await open("/guide/");
+    await page.click("text=link to the long page");
+    await page.waitForSelector("#section-12");
+    await page.evaluate(() => window.scrollTo(0, 1500));
+    await page.waitForFunction(() => window.scrollY === 1500);
+    await page.goBack();
+    await page.waitForSelector("#the-guide");
+    await page.waitForFunction(() => window.scrollY === 0);
+    await page.goForward();
+    await page.waitForSelector("#section-12");
+    await page.waitForFunction(() => window.scrollY === 1500);
     assert.deepEqual(problems, []);
     await page.close();
   });
@@ -201,6 +256,42 @@ describe("in the browser", () => {
     await page.waitForFunction(() => Math.abs(document.querySelector("#section-9")?.getBoundingClientRect().top ?? -1) < 2);
     assert.deepEqual(problems, []);
     await page.close();
+  });
+
+  const toggleBranches = async (page: Page): Promise<void> => {
+    assert.equal(await page.locator(".when-false").count(), 1);
+    await page.click(".toggle");
+    await page.waitForSelector(".when-true");
+    assert.equal(await page.textContent(".when-true"), "Shown after a click.Static text.");
+    await page.click(".toggle");
+    await page.waitForSelector(".when-false");
+    assert.equal(await page.textContent(".when-false"), "Shown at first.Static text.");
+    await page.click(".grow");
+    await page.click(".grow");
+    assert.deepEqual(await page.locator(".items li").allTextContents(), ["An item.Static text.", "An item.Static text.", "An item.Static text."]);
+  };
+
+  test("renders a branch of v-if, v-else and v-for that the server did not render, after hydration", async () => {
+    const { page, problems } = await open("/guide/branches/");
+    await toggleBranches(page);
+    assert.deepEqual(problems, []);
+    await page.close();
+  });
+
+  test("renders a branch that the server did not render, after a page change to the page and back to it", async () => {
+    const { page, problems } = await open("/");
+    await page.click("header a[href='/guide/branches/']");
+    await page.waitForSelector(".when-false");
+    await toggleBranches(page);
+    const { page: first } = await open("/guide/branches/");
+    await first.click("header a[href='/']");
+    await first.waitForSelector(".home-title");
+    await first.click("header a[href='/guide/branches/']");
+    await first.waitForSelector(".when-false");
+    await toggleBranches(first);
+    assert.deepEqual(problems, []);
+    await page.close();
+    await first.close();
   });
 
   test("hydrates a page whose file is outside the folder of the pages", async () => {

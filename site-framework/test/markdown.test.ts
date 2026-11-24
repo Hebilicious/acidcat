@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { compileScript, parse } from "@vue/compiler-sfc";
 import { leanTemplates } from "../src/lean.ts";
 import { compileMarkdown, githubSlug } from "../src/markdown.ts";
 
@@ -65,7 +66,29 @@ test("the slug of a heading is the slug that GitHub writes", () => {
   assert.equal(githubSlug("Catalog & core"), "catalog--core");
 });
 
-test("the lean copy of a component empties only its static templates", () => {
-  const code = ['const t0 = _template("<h1>Static", 2)', 'const t1 = _template("<div><!><p>x", 1)', 'const t2 = _template("<svg><path d=\\"M0\\"></path>", 3, 1)'].join("\n");
-  assert.equal(leanTemplates(code), ['const t0 = _template("", 2)', 'const t1 = _template("<div><!><p>x", 1)', 'const t2 = _template("", 3, 1)'].join("\n"));
+const vaporModule = (template: string): string => {
+  const source = `<script setup vapor>\nimport { ref } from "vue";\nconst show = ref(false);\nconst items = ref([1]);\n</script>\n<template>${template}</template>`;
+  const { descriptor } = parse(source, { filename: "page.vue" });
+  return compileScript(descriptor, { id: "page", inlineTemplate: true, vapor: true }).content;
+};
+
+const templatesOf = (code: string): string[] => [...code.matchAll(/_template\("((?:[^"\\]|\\.)*)"/g)].map((match) => match[1] ?? "");
+
+test("the lean copy of a component empties the static templates that it always renders", () => {
+  const code = vaporModule('<div><p>Always</p><p>here</p></div><svg><path d="M0"></path><path d="M1"></path></svg>');
+  assert.deepEqual(templatesOf(code).length, 2);
+  assert.deepEqual(templatesOf(leanTemplates(code)), ["", ""]);
+});
+
+test("the lean copy keeps each template that hydration may not meet", () => {
+  const branches = [
+    '<section v-if="show"><p>When true</p><p>x</p></section><div v-else><p>When false</p><p>x</p></div>',
+    '<ul><li v-for="item in items" :key="item"><p>An item</p><p>x</p></li></ul>',
+    "<Counter><div><p>In a slot</p><p>x</p></div></Counter>",
+    '<Teleport to="body"><div><p>Teleported</p><p>x</p></div></Teleport>',
+  ];
+  for (const template of branches) {
+    const code = vaporModule(template);
+    assert.deepEqual(templatesOf(leanTemplates(code)), templatesOf(code), template);
+  }
 });

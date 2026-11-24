@@ -1,12 +1,95 @@
+import { parseAst } from "vite";
+
 /** The flag of a Vapor template that has no dynamic part. */
 const staticFlag = 2;
 
-const templateCall = /\b(_?template)\("((?:[^"\\]|\\.)*)", (\d+)(?=[,)])/g;
+type AstNode = { readonly type: string; readonly start: number; readonly end: number } & Readonly<Record<string, unknown>>;
+
+const isAstNode = (value: unknown): value is AstNode =>
+  typeof value === "object" && value !== null && typeof Reflect.get(value, "type") === "string" && typeof Reflect.get(value, "start") === "number" && typeof Reflect.get(value, "end") === "number";
+
+const nodeList = (value: unknown): AstNode[] => (Array.isArray(value) ? value.filter((item) => isAstNode(item)) : []);
+
+const childrenOf = (node: AstNode): AstNode[] => Object.values(node).flatMap((value) => (isAstNode(value) ? [value] : nodeList(value)));
+
+const isFunction = (node: AstNode): boolean => node.type === "FunctionExpression" || node.type === "ArrowFunctionExpression" || node.type === "FunctionDeclaration";
+
+const branching: ReadonlySet<string> = new Set([
+  "IfStatement",
+  "ConditionalExpression",
+  "LogicalExpression",
+  "SwitchStatement",
+  "ForStatement",
+  "ForInStatement",
+  "ForOfStatement",
+  "WhileStatement",
+  "DoWhileStatement",
+  "TryStatement",
+  "ChainExpression",
+]);
+
+const nameOf = (node: unknown): string | undefined => (isAstNode(node) && node.type === "Identifier" && typeof node["name"] === "string" ? node["name"] : undefined);
+
+interface StaticTemplate {
+  /** The string of HTML, as the first argument of the call. */
+  readonly html: AstNode;
+}
+
+/** The module-level `const tN = _template("…", flags)` declarations whose flags mark a template with no dynamic part. */
+const staticTemplates = (program: AstNode): Map<string, StaticTemplate> => {
+  const templates = new Map<string, StaticTemplate>();
+  for (const statement of childrenOf(program)) {
+    if (statement.type !== "VariableDeclaration") continue;
+    for (const declarator of childrenOf(statement)) {
+      const init = declarator["init"];
+      const name = nameOf(declarator["id"]);
+      if (name === undefined || !isAstNode(init) || init.type !== "CallExpression") continue;
+      const callee = nameOf(init["callee"]);
+      if (callee !== "template" && callee !== "_template") continue;
+      const [html, flags] = nodeList(init["arguments"]);
+      if (!isAstNode(html) || typeof html["value"] !== "string" || !isAstNode(flags) || typeof flags["value"] !== "number") continue;
+      if ((flags["value"] & staticFlag) !== 0) templates.set(name, { html });
+    }
+  }
+  return templates;
+};
 
 /**
- * Empties the HTML of each static template of a component that the Vapor compiler wrote. While it hydrates, Vapor
- * takes a static template from the DOM when its HTML is empty, so the lean copy of a page hydrates the same and
- * leaves the static HTML of the page out of its script.
+ * The names of the templates that are called only where the component always renders them: in the body of its `setup`
+ * or `render` function, out of each callback (a branch of `v-if`, an item of `v-for`, a slot) and out of each condition.
  */
-export const leanTemplates = (code: string): string =>
-  code.replace(templateCall, (call, name: string, _html: string, flags: string) => (Number(flags) & staticFlag ? `${name}("", ${flags}` : call));
+const alwaysRendered = (program: AstNode, templates: ReadonlyMap<string, StaticTemplate>): Set<string> => {
+  const sure = new Set<string>();
+  const unsure = new Set<string>();
+  const visit = (node: AstNode, ancestors: readonly AstNode[]): void => {
+    const name = node.type === "CallExpression" ? nameOf(node["callee"]) : undefined;
+    if (name !== undefined && templates.has(name)) {
+      const functions = ancestors.filter((ancestor) => isFunction(ancestor));
+      const [body] = functions;
+      const owner = body === undefined ? undefined : ancestors[ancestors.indexOf(body) - 1];
+      const ownerKey = owner?.type === "Property" ? nameOf(owner["key"]) : undefined;
+      const inBranch = ancestors.slice(body === undefined ? 0 : ancestors.indexOf(body)).some((ancestor) => branching.has(ancestor.type));
+      if (functions.length === 1 && (ownerKey === "setup" || ownerKey === "render") && !inBranch) sure.add(name);
+      else unsure.add(name);
+    }
+    for (const child of childrenOf(node)) visit(child, [...ancestors, node]);
+  };
+  visit(program, []);
+  return new Set([...sure].filter((name) => !unsure.has(name)));
+};
+
+/**
+ * Empties the HTML of each static template that a component always renders. While it hydrates, Vapor takes a static
+ * template from the DOM when its HTML is empty, and keeps a copy for the next render. So the lean copy of a page
+ * hydrates the same and leaves most of its static HTML out of its script. A template that hydration may not meet, such
+ * as a branch of `v-if` that is false on the server, an item of `v-for` that comes later, or a slot, keeps its HTML.
+ */
+export const leanTemplates = (code: string): string => {
+  const program: unknown = parseAst(code);
+  if (!isAstNode(program)) return code;
+  const templates = staticTemplates(program);
+  const lean = [...alwaysRendered(program, templates)].map((name) => templates.get(name)?.html).filter((html) => html !== undefined);
+  return lean
+    .sort((a, b) => b.start - a.start)
+    .reduce((result, html) => `${result.slice(0, html.start)}""${result.slice(html.end)}`, code);
+};

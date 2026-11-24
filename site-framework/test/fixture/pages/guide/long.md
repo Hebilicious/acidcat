@@ -180,3 +180,5 @@ Paragraph 3 of section 12. Words to fill the page. Words to fill the page. Words
 
 [Back to the guide](/guide/)
 
+
+[A page from another folder](/more/outside/)

@@ -1,5 +1,6 @@
 import type { Router } from "vue-router";
 import { anchorOf, pageHref } from "./links.ts";
+import { isComponent } from "./site.ts";
 
 type Loader = () => Promise<unknown>;
 
@@ -15,7 +16,7 @@ export const prefetchPage = async (router: Router, path: string): Promise<void> 
     if (components === undefined || components === null || !isLoader(component)) continue;
     const loaded = await component();
     const resolved: unknown = hasDefault(loaded) ? loaded.default : loaded;
-    if (typeof resolved === "object" && resolved !== null) components["default"] = resolved;
+    if (isComponent(resolved)) components["default"] = resolved;
   }
 };
 

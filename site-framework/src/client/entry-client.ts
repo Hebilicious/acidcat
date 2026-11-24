@@ -3,7 +3,7 @@ import { createVaporApp, createVaporSSRApp } from "vue";
 import { createWebHistory } from "vue-router";
 import { handleHotUpdate, routes } from "vue-router/auto-routes";
 import { updateHead } from "./head.ts";
-import { readSite } from "./site.ts";
+import { isComponent, readSite } from "./site.ts";
 import { interceptLinks } from "./links.ts";
 import { startPrefetch } from "./prefetch.ts";
 import { createSiteRouter, pageOf } from "./router.ts";
@@ -21,7 +21,7 @@ const pageChunk = document.querySelector(`link[${leanPageChunkMarker}]`);
 if (pageChunk instanceof HTMLLinkElement) {
   const components = router.resolve(location.pathname).matched.at(-1)?.components;
   const loaded: unknown = await import(/* @vite-ignore */ pageChunk.href);
-  if (components !== undefined && components !== null && hasDefault(loaded) && typeof loaded.default === "object" && loaded.default !== null) {
+  if (components !== undefined && components !== null && hasDefault(loaded) && isComponent(loaded.default)) {
     components["default"] = loaded.default;
   }
 }

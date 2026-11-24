@@ -1,4 +1,4 @@
-import type { App, VaporComponent } from "vue";
+import type { App, Component, VaporComponent } from "vue";
 import type { Router, RouterScrollBehavior } from "vue-router";
 import type { HeadDefinition } from "./head.ts";
 
@@ -15,13 +15,22 @@ export const defineSite = (site: SiteDefinition): SiteDefinition => site;
 
 const isOptionalFunction = (value: unknown): boolean => value === undefined || typeof value === "function";
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+
+const renderFunctions = ["setup", "render", "ssrRender"];
+
+const hasRenderFunction = (value: unknown): boolean =>
+  typeof value === "function" ||
+  (isRecord(value) && renderFunctions.every((key) => isOptionalFunction(value[key])) && renderFunctions.some((key) => typeof value[key] === "function"));
+
+/** A component in Vapor mode, as the Vue compiler writes it for the browser: a function, or an object with a `setup` or a `render` function. */
+export const isVaporComponent = (value: unknown): value is VaporComponent => hasRenderFunction(value);
+
+/** A component as the router and the server renderer take it: a function, or an object with a `setup`, a `render` or an `ssrRender` function. */
+export const isComponent = (value: unknown): value is Component => hasRenderFunction(value);
+
 const isSiteDefinition = (value: unknown): value is SiteDefinition =>
-  typeof value === "object" &&
-  value !== null &&
-  "layout" in value &&
-  (typeof value.layout === "object" || typeof value.layout === "function") &&
-  value.layout !== null &&
-  ["title", "head", "scrollBehavior", "enhance"].every((key) => isOptionalFunction(Reflect.get(value, key)));
+  isRecord(value) && hasRenderFunction(value["layout"]) && ["title", "head", "scrollBehavior", "enhance"].every((key) => isOptionalFunction(value[key]));
 
 export const readSite = (value: unknown): SiteDefinition => {
   if (!isSiteDefinition(value)) throw new Error("The app module of the site must export the result of defineSite as its default export.");
