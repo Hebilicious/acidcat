@@ -6,7 +6,7 @@ import plateAvif from "../assets/hero/plate.avif?url";
 import plate2xAvif from "../assets/hero/plate@2x.avif?url";
 import plateWebp from "../assets/hero/plate.webp?url";
 import plate2xWebp from "../assets/hero/plate@2x.webp?url";
-import { art, phoneCrop } from "../lib/plate-crop.ts";
+import { art, phoneCrop, phoneMedia } from "../lib/plate-crop.ts";
 
 const alt = "A mechanical brass cat with glowing acid-green eyes sits on a brass pedestal in a dark workshop of the future, with holographic rings around it.";
 const phoneWidth = (scale: number) => Math.round(phoneCrop.width * scale);
@@ -18,7 +18,7 @@ const phoneSizes = `${Math.ceil(102 * (phoneCrop.width / art.height))}vw`;
   <picture>
     <source
       type="image/avif"
-      media="(max-width: 960px)"
+      media={phoneMedia}
       srcset={`${phone840} 840w, ${phone} ${phoneWidth(1)}w, ${phone2x} ${phoneWidth(2)}w`}
       sizes={phoneSizes}
       data-phone
@@ -75,18 +75,18 @@ const phoneSizes = `${Math.ceil(102 * (phoneCrop.width / art.height))}vw`;
   import cleanAvif from "../assets/hero/clean.avif?url";
   import cleanWebp from "../assets/hero/clean.webp?url";
   import data from "../assets/hero/data.webp?url";
-  import { art, phoneCrop } from "../lib/plate-crop.ts";
+  import { art, phoneCrop, phoneMedia } from "../lib/plate-crop.ts";
   import { createPlate, framingSpan } from "../lib/plate-renderer.ts";
   import type { PlateFraming } from "../lib/plate-renderer.ts";
 
   const catX = (art.pad + 0.555 * 1672) / art.width;
   const wide = window.matchMedia("(min-width: 1200px)");
-  const medium = window.matchMedia("(min-width: 960px)");
+  const phone = window.matchMedia(phoneMedia);
   const fullRect = [0, 1] as const;
   const phoneRect = [phoneCrop.x / art.width, phoneCrop.width / art.width] as const;
 
   const framing = (): PlateFraming => {
-    const targetX = wide.matches ? 0.76 : medium.matches ? 0.7 : 0.5;
+    const targetX = wide.matches ? 0.76 : phone.matches ? 0.5 : 0.7;
     return { aspect: art.width / art.height, focusX: catX, targetX, zoom: 1 };
   };
 
@@ -121,9 +121,11 @@ const phoneSizes = `${Math.ceil(102 * (phoneCrop.width / art.height))}vw`;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (reduced.matches) continue;
 
+    let shown = "";
     const sources = () => {
-      const avif = still.currentSrc.endsWith(".avif");
-      return { artPad: art.pad, plate: still.currentSrc, plateRect: plateRect(), clean: avif ? cleanAvif : cleanWebp, data };
+      shown = still.currentSrc;
+      const avif = shown.endsWith(".avif");
+      return { artPad: art.pad, plate: shown, plateRect: plateRect(), clean: avif ? cleanAvif : cleanWebp, data };
     };
     still.decode().catch(() => undefined).then(() => createPlate(canvas, sources(), framing)).then(
       (plate) => {
@@ -134,17 +136,25 @@ const phoneSizes = `${Math.ceil(102 * (phoneCrop.width / art.height))}vw`;
         root.classList.add("is-live");
         root.dataset["gpu"] = plate.backend;
         let visible = true;
-        let current = true;
-        const sync = () => (current && visible && document.visibilityState === "visible" ? plate.start() : plate.stop());
-        const rect = plateRect();
-        // A resize across 960px swaps the plate of the still image for one with other columns. The canvas has only the first.
-        still.addEventListener("load", () => {
-          if (plateRect() === rect) return;
-          current = false;
-          sync();
-          canvas.remove();
-          root.classList.remove("is-live");
-        });
+        const sync = () => (visible && document.visibilityState === "visible" ? plate.start() : plate.stop());
+        // A resize across 960px gives the still image a plate with other columns. The canvas draws from the same file.
+        let swap = Promise.resolve();
+        const follow = () => {
+          const source = still.currentSrc;
+          const rect = plateRect();
+          swap = swap.then(async () => {
+            if (source === shown || !still.complete) return;
+            shown = source;
+            await plate.setPlate(source, rect);
+          });
+          swap.catch(() => {
+            plate.stop();
+            canvas.remove();
+            root.classList.remove("is-live");
+          });
+        };
+        still.addEventListener("load", follow);
+        follow();
         new IntersectionObserver(([entry]) => {
           visible = entry?.isIntersecting ?? false;
           sync();

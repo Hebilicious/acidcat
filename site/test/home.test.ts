@@ -69,6 +69,25 @@ for (const viewport of [
   });
 }
 
+test("at 960px, the hero shows the phone plate with the phone framing, as at 959px", async () => {
+  const hero = async (width: number) => {
+    if (browser === undefined) throw new Error("No browser.");
+    const page = await openPage(browser, { viewport: { width, height: 900 } });
+    await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+    const { plate, position } = await page.locator("[data-plate]").evaluate((root) => ({
+      plate: root.querySelector("img")?.currentSrc ?? "",
+      position: root instanceof HTMLElement ? root.style.getPropertyValue("--plate-position") : "",
+    }));
+    await page.close();
+    return { plate: new URL(plate).pathname, position };
+  };
+  const [narrow, edge, desktop] = [await hero(959), await hero(960), await hero(961)];
+  assert.match(edge.plate, /^\/_astro\/phone/);
+  assert.match(desktop.plate, /^\/_astro\/plate/);
+  assert.notEqual(edge.position, "");
+  assert.equal(edge.position, narrow.position);
+});
+
 test("reduced motion keeps the hero still and stops the animations", async () => {
   if (browser === undefined) throw new Error("No browser.");
   const page = await openPage(browser, { reducedMotion: "reduce" });

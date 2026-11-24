@@ -31,6 +31,8 @@ export interface PlateHandle {
   readonly start: () => void;
   readonly stop: () => void;
   readonly setActive: (active: boolean) => void;
+  /** Draws from another plate: the file, and the columns of the key art that it holds. */
+  readonly setPlate: (plate: string, rect: readonly [number, number]) => Promise<void>;
 }
 
 const FOCUS_DEPTH = 0.64;
@@ -74,6 +76,7 @@ export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSourc
 
   const [pass, plate, clean, data] = await Promise.all([createPass(canvas, plateShader, { alpha: false }), loadImage(sources.plate), loadImage(sources.clean), loadImage(sources.data)]);
   if (pass === undefined) return undefined;
+  let plateRect = sources.plateRect;
   const imageSize = [data.width, data.height] as const;
   // Each texture waits until the GPU has taken the one before it. Otherwise its upload blocks the main thread.
   for (const [name, image] of [["uClean", clean], ["uData", data], ["uPlate", plate]] as const) {
@@ -110,7 +113,7 @@ export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSourc
       uActive: eased.active,
       uImageSize: imageSize,
       uArtPad: sources.artPad,
-      uPlateRect: sources.plateRect,
+      uPlateRect: plateRect,
     });
   };
 
@@ -170,6 +173,13 @@ export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSourc
     },
     setActive: (active) => {
       pointer.active = active ? 1 : 0;
+    },
+    setPlate: async (source, rect) => {
+      const image = await loadImage(source);
+      pass.setImage("uPlate", image);
+      image.close();
+      plateRect = rect;
+      await pass.idle();
     },
   };
 };
