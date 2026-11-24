@@ -143,6 +143,11 @@ site-search button[data-open-modal] {
   font-family: var(--font-family-sans);
 }
 
+/* The accessible name of the button is "Search". A visible shortcut hint would not be in it; aria-keyshortcuts still announces the shortcut. */
+site-search button[data-open-modal] > kbd {
+  display: none;
+}
+
 .sl-menu-button {
   z-index: calc(var(--sl-z-index-navbar) + 2) !important;
 }
