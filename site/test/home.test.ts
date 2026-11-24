@@ -128,8 +128,8 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   const vueVitePressAndHomepage = 195_000;
   const homepageWithItsCss = 176_000;
   const starCount = 1_000;
-  const prefetchOfEachSectionInTheHeader = 110_000;
-  const budget: Record<string, number> = { image: phonePlate, font: fontCores, script: vueVitePressAndHomepage, document: homepageWithItsCss, fetch: starCount, other: prefetchOfEachSectionInTheHeader };
+  const prefetchOfEachSectionInTheHeaderAndItsCss = 150_000;
+  const budget: Record<string, number> = { image: phonePlate, font: fontCores, script: vueVitePressAndHomepage, document: homepageWithItsCss, fetch: starCount, other: prefetchOfEachSectionInTheHeaderAndItsCss };
   for (const [type, size] of bytes) assert.ok(size <= (budget[type] ?? 0), `${type}: ${size} bytes, budget ${budget[type] ?? 0}`);
   await page.close();
 });

@@ -44,7 +44,6 @@ export const prefetchRouteStyles = (route: Route): void => {
   prefetched.add(route);
   const link = document.createElement("link");
   link.rel = "prefetch";
-  link.as = "style";
   link.href = href;
   document.head.append(link);
 };
@@ -58,11 +57,28 @@ const intent = (event: Event): void => {
   if (route === "home") preloadPlate();
 };
 
+const prefetchLinkedRoutes = (): void => {
+  const current = routeOfPage(location.pathname);
+  for (const link of document.querySelectorAll<HTMLAnchorElement>("#app a[href]")) {
+    if (link.origin !== location.origin) continue;
+    const route = routeOfPage(link.pathname);
+    if (route !== current) prefetchRouteStyles(route);
+  }
+};
+
 /**
- * Gives each page change the stylesheet of the next route before the page renders, and fetches it ahead when the reader
- * points at, focuses or touches a link to another route.
+ * Loads the stylesheet of the next route while VitePress loads the script of the page, and renders the page when both
+ * are there. When the browser is idle after the
+ * load, it fetches ahead the stylesheet of each other route that a link of the page leads to, as VitePress does for the
+ * scripts of the pages. When the reader points at a link to the homepage, it also preloads the still image of the hero.
  */
 export const useRouteStyles = (router: Router): void => {
-  router.onBeforePageLoad = (to) => loadRouteStyles(routeOfPage(new URL(to, location.href).pathname));
+  let pending: Promise<void> = Promise.resolve();
+  router.onBeforePageLoad = (to) => {
+    pending = loadRouteStyles(routeOfPage(new URL(to, location.href).pathname));
+  };
+  router.onAfterPageLoad = () => pending;
   for (const type of ["pointerover", "focusin", "touchstart"]) document.addEventListener(type, intent, { passive: true });
+  if (document.readyState === "complete") requestIdleCallback(prefetchLinkedRoutes);
+  else addEventListener("load", () => requestIdleCallback(prefetchLinkedRoutes), { once: true });
 };
