@@ -224,6 +224,9 @@ catalogs:
     astro:
       specifier: 7.4.7
       version: 7.4.7
+    axe-core:
+      specifier: 4.14.0
+      version: 4.14.0
     capnweb:
       specifier: 0.12.0
       version: 0.12.0
@@ -589,6 +592,9 @@ importers:
       '@types/three':
         specifier: 'catalog:'
         version: 0.187.0
+      axe-core:
+        specifier: 'catalog:'
+        version: 4.14.0
       cf:
         specifier: 'catalog:'
         version: 1.0.0-rc.4(@types/node@26.6.6)
@@ -2241,6 +2247,10 @@ packages:
     peerDependenciesMeta:
       '@astrojs/markdown-remark':
         optional: true
+
+  axe-core@4.14.0:
+    resolution: {integrity: sha512-9WTZxEjsZ7b13TH8JPmbV2z8CHbl80/2hm3XPEG4JgNdQLK81IBRXmSxHfMAOkSqQeRxT/0dwNDz2GOm3zzpcQ==}
+    engines: {node: '>=4'}
 
   axobject-query@4.1.0:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
@@ -4999,6 +5009,8 @@ snapshots:
       - tsx
       - uploadthing
       - yaml
+
+  axe-core@4.14.0: {}
 
   axobject-query@4.1.0: {}
 

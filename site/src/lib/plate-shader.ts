@@ -13,6 +13,7 @@ export const plateShader: ShaderSource = {
     uActive: "float",
     uImageSize: "vec2",
     uArtPad: "float",
+    uPlateRect: "vec2",
   },
   textures: [
     { name: "uPlate", mipmaps: true },
@@ -88,6 +89,10 @@ vec2 toImage(vec2 screen) {
   return (uv - 0.5) * uSpan + uCenter;
 }
 
+vec2 plateUv(vec2 uv) {
+  return vec2((uv.x - uPlateRect.x) / uPlateRect.y, uv.y);
+}
+
 vec4 data(vec2 uv) {
   return texture(uData, uv);
 }
@@ -129,7 +134,7 @@ void main() {
   float cut = data(bgUv).b;
 
   vec2 midUv = hazed - shift * (0.62 - uFocus) * 0.8;
-  vec3 mid = texture(uPlate, midUv).rgb;
+  vec3 mid = texture(uPlate, plateUv(midUv)).rgb;
   float lift = luma(mid) - luma(texture(uClean, midUv).rgb);
   vec2 px = 1.0 / uImageSize;
   float matteWide = data(midUv).g;
@@ -139,8 +144,8 @@ void main() {
   }
   float ringAlpha = smoothstep(0.015, 0.16, lift) * data(midUv).b * (1.0 - matteWide);
 
-  vec3 fg = texture(uPlate, fgUv).rgb;
-  vec3 plateBg = texture(uPlate, bgUv).rgb;
+  vec3 fg = texture(uPlate, plateUv(fgUv)).rgb;
+  vec3 plateBg = texture(uPlate, plateUv(bgUv)).rgb;
   vec3 cleanBg = texture(uClean, bgUv).rgb;
   vec3 bg = mix(plateBg, cleanBg, cut);
   bg = mix(bg, mid, ringAlpha);
@@ -150,8 +155,8 @@ void main() {
   vec3 color = mix(bg, fg, front);
   vec2 uv = mix(mix(bgUv, midUv, ringAlpha), fgUv, front);
 
-  vec3 glowLow = textureLod(uPlate, uv, 4.5).rgb;
-  vec3 glowWide = textureLod(uPlate, uv, 6.5).rgb;
+  vec3 glowLow = textureLod(uPlate, plateUv(uv), 4.5).rgb;
+  vec3 glowWide = textureLod(uPlate, plateUv(uv), 6.5).rgb;
 
   float pulse = 0.5 + 0.5 * sin(t * 2.1);
   float slow = 0.5 + 0.5 * sin(t * 0.9 + 1.3);

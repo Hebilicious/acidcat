@@ -1,6 +1,13 @@
 ---
 import { highlight } from "../lib/snippets.ts";
 
+const renders = import.meta.glob<string>("../assets/surfaces/*.webp", { query: "?url", import: "default", eager: true });
+const render = (id: string) => {
+  const url = renders[`../assets/surfaces/${id}.webp`];
+  if (url === undefined) throw new Error(`No render for the surface ${id}.`);
+  return url;
+};
+
 const surfaces = [
   {
     id: "cli",
@@ -66,8 +73,8 @@ const surfaces = [
   </div>
   <div class="panels">
     {surfaces.map((surface) => (
-      <article class="surface-panel" id={`surface-${surface.id}`} aria-labelledby={`name-${surface.id}`}>
-        <div class="specimen"><img src={`/surfaces/${surface.id}.webp`} alt="" width="384" height="384" loading="lazy" /></div>
+      <section class="surface-panel" id={`surface-${surface.id}`} aria-labelledby={`name-${surface.id}`}>
+        <div class="specimen"><img src={render(surface.id)} alt="" width="384" height="384" loading="lazy" /></div>
         <div class="surface-copy">
           <header class="surface-heading">
             <p class="audience">{surface.who}</p>
@@ -77,7 +84,7 @@ const surfaces = [
           <div class="sample" set:html={surface.html} />
           <a href={`/${surface.spec.replace(/\.md$/, "")}/`}>Read the binding <span aria-hidden="true">→</span></a>
         </div>
-      </article>
+      </section>
     ))}
   </div>
 </section>

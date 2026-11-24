@@ -10,6 +10,7 @@ import FontPreload from "../components/site/FontPreload.astro";
 import SiteNav from "../components/site/SiteNav.astro";
 import { siteUrl, socialImage } from "../lib/social.ts";
 import Schematic from "../components/Schematic.astro";
+import favicon from "../assets/favicon.svg?url";
 import { isExternal } from "../lib/external-links.ts";
 
 const repository = "https://github.com/Hebilicious/acidcat";
@@ -59,7 +60,7 @@ const newTab = (href: string) => (isExternal(href) ? { target: "_blank", rel: "n
     <FontPreload page="home" />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#0b0e14" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href={favicon} type="image/svg+xml" />
     <link rel="canonical" href={`${siteUrl}/`} />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="AcidCat" />
@@ -146,7 +147,7 @@ const newTab = (href: string) => (isExternal(href) ? { target: "_blank", rel: "n
       const readStars = (body: unknown) =>
         typeof body === "object" && body !== null && "stargazers_count" in body && typeof body.stargazers_count === "number" ? body.stargazers_count : undefined;
       if (starCount) {
-        fetch("https://api.github.com/repos/Hebilicious/acidcat", { headers: { Accept: "application/vnd.github+json" } })
+        fetch("https://api.github.com/repos/Hebilicious/acidcat", { headers: { Accept: "application/vnd.github+json" }, priority: "low" })
           .then((response) => (response.ok ? response.json() : undefined))
           .then((body: unknown) => {
             const stars = readStars(body);

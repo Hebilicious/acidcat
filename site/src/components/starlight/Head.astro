@@ -1,6 +1,11 @@
 ---
 import Default from "@astrojs/starlight/components/Head.astro";
+import favicon from "../../assets/favicon.svg?url";
 import FontPreload from "../site/FontPreload.astro";
+
+for (const entry of Astro.locals.starlightRoute.head) {
+  if (entry.tag === "link" && entry.attrs?.["rel"] === "shortcut icon") entry.attrs["href"] = favicon;
+}
 ---
 
 <FontPreload page="docs" />

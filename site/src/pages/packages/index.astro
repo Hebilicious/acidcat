@@ -241,7 +241,7 @@ const headings = groups
     const label = card.querySelector<HTMLElement>("[data-live-version]");
     const status = card.querySelector<HTMLElement>("[data-live-status]");
     if (url === undefined || label === null || status === null) continue;
-    fetch(url, { headers: { Accept: "application/json" } })
+    fetch(url, { headers: { Accept: "application/json" }, priority: "low" })
       .then(async (response) => (response.ok ? latestVersion(registry, await response.json()) : undefined))
       .then((latest) => {
         if (latest === undefined) return;

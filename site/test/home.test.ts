@@ -94,11 +94,13 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   const bytes = new Map<string, number>();
   for (const { type, size } of loaded) bytes.set(type, (bytes.get(type) ?? 0) + size);
 
-  assert.ok(files.includes("/hero/plate.avif"), "the hero is AVIF");
-  assert.deepEqual(files.filter((file) => /^\/hero\/(clean|data)\./.test(file)), [], "a software renderer loads no texture of the hero");
+  const plates = files.filter((file) => /^\/_astro\/(phone|plate)[\w@-]*\./.test(file));
+  assert.equal(plates.length, 1, `the hero loads one plate, not ${plates.join(" and ")}`);
+  assert.match(plates[0] ?? "", /^\/_astro\/phone-840\.[\w-]+\.avif$/, "on a phone, the hero is the phone plate in AVIF");
+  assert.deepEqual(files.filter((file) => /^\/_astro\/(clean|data)\./.test(file)), [], "a software renderer loads no texture of the hero");
   assert.deepEqual(files.filter((file) => /catalog-engine|webgpu-pass/.test(file)), [], "no renderer loads before its figure is near");
   assert.deepEqual(files.filter((file) => file.endsWith(".woff2") && !/-core\.[\w-]+\.woff2$/.test(file)), [], "only the core of each font");
-  const budget: Record<string, number> = { image: 560_000, font: 180_000, script: 40_000, stylesheet: 70_000, document: 130_000, fetch: 1_000 };
+  const budget: Record<string, number> = { image: 560_000, font: 180_000, script: 40_000, document: 200_000, fetch: 1_000 };
   for (const [type, size] of bytes) assert.ok(size <= (budget[type] ?? 0), `${type}: ${size} bytes, budget ${budget[type] ?? 0}`);
   await page.close();
 });

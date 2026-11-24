@@ -1,14 +1,33 @@
 ---
+import phone840 from "../assets/hero/phone-840.avif?url";
+import phone from "../assets/hero/phone.avif?url";
+import phone2x from "../assets/hero/phone@2x.avif?url";
+import plateAvif from "../assets/hero/plate.avif?url";
+import plate2xAvif from "../assets/hero/plate@2x.avif?url";
+import plateWebp from "../assets/hero/plate.webp?url";
+import plate2xWebp from "../assets/hero/plate@2x.webp?url";
+import { art, phoneCrop } from "../lib/plate-crop.ts";
+
 const alt = "A mechanical brass cat with glowing acid-green eyes sits on a brass pedestal in a dark workshop of the future, with holographic rings around it.";
+const phoneWidth = (scale: number) => Math.round(phoneCrop.width * scale);
+// At 960px and below the hero is 1.02 times as tall as it is wide, and the plate covers it by its height.
+const phoneSizes = `${Math.ceil(102 * (phoneCrop.width / art.height))}vw`;
 ---
 
 <div class="plate" data-plate>
   <picture>
-    <source type="image/avif" srcset="/hero/plate.avif 1672w, /hero/plate@2x.webp 3344w" sizes="100vw" />
+    <source
+      type="image/avif"
+      media="(max-width: 960px)"
+      srcset={`${phone840} 840w, ${phone} ${phoneWidth(1)}w, ${phone2x} ${phoneWidth(2)}w`}
+      sizes={phoneSizes}
+      data-phone
+    />
+    <source type="image/avif" srcset={`${plateAvif} 1672w, ${plate2xAvif} 3344w`} sizes="100vw" />
     <img
       class="plate-still"
-      src="/hero/plate.webp"
-      srcset="/hero/plate.webp 1672w, /hero/plate@2x.webp 3344w"
+      src={plateWebp}
+      srcset={`${plateWebp} 1672w, ${plate2xWebp} 3344w`}
       sizes="100vw"
       width="1672"
       height="941"
@@ -21,10 +40,16 @@ const alt = "A mechanical brass cat with glowing acid-green eyes sits on a brass
 
 <style>
   .plate {
+    --plate-position: 60% 50%;
     position: absolute;
     inset: 0;
     overflow: hidden;
     background: var(--palette-ink-950);
+  }
+  @media (max-width: 960px) {
+    .plate {
+      --plate-position: 50% 50%;
+    }
   }
   .plate-still,
   .plate-canvas {
@@ -35,7 +60,7 @@ const alt = "A mechanical brass cat with glowing acid-green eyes sits on a brass
   }
   .plate-still {
     object-fit: cover;
-    object-position: var(--plate-position, 60% 50%);
+    object-position: var(--plate-position);
   }
   .plate-canvas {
     opacity: 0;
@@ -47,37 +72,59 @@ const alt = "A mechanical brass cat with glowing acid-green eyes sits on a brass
 </style>
 
 <script>
+  import cleanAvif from "../assets/hero/clean.avif?url";
+  import cleanWebp from "../assets/hero/clean.webp?url";
+  import data from "../assets/hero/data.webp?url";
+  import { art, phoneCrop } from "../lib/plate-crop.ts";
   import { createPlate, framingSpan } from "../lib/plate-renderer.ts";
   import type { PlateFraming } from "../lib/plate-renderer.ts";
 
-  const art = { width: 2400, height: 941, pad: 728 };
   const catX = (art.pad + 0.555 * 1672) / art.width;
+  const wide = window.matchMedia("(min-width: 1200px)");
+  const medium = window.matchMedia("(min-width: 960px)");
+  const fullRect = [0, 1] as const;
+  const phoneRect = [phoneCrop.x / art.width, phoneCrop.width / art.width] as const;
 
   const framing = (): PlateFraming => {
-    const width = window.innerWidth;
-    const targetX = width >= 1200 ? 0.76 : width >= 960 ? 0.7 : 0.5;
+    const targetX = wide.matches ? 0.76 : medium.matches ? 0.7 : 0.5;
     return { aspect: art.width / art.height, focusX: catX, targetX, zoom: 1 };
   };
 
   for (const root of document.querySelectorAll<HTMLElement>("[data-plate]")) {
     const canvas = root.querySelector("canvas");
     const still = root.querySelector("img");
-    if (canvas === null || still === null) continue;
+    const phoneSource = root.querySelector<HTMLSourceElement>("source[data-phone]");
+    if (canvas === null || still === null || phoneSource === null) continue;
 
+    const phonePlates = new Set(phoneSource.srcset.split(",").map((candidate) => new URL(candidate.trim().split(" ")[0] ?? "", document.baseURI).href));
+    const plateRect = () => (phonePlates.has(still.currentSrc) ? phoneRect : fullRect);
+
+    let size = { width: 0, height: 0 };
     const place = () => {
-      const { span, center } = framingSpan(root.clientWidth, root.clientHeight, framing());
-      const x = span[0] < 1 ? (center[0] - span[0] / 2) / (1 - span[0]) : 0.5;
+      if (size.width === 0 || size.height === 0) return;
+      const { span, center } = framingSpan(size.width, size.height, framing());
+      const [start, width] = plateRect();
+      const spanX = span[0] / width;
+      const centerX = (center[0] - start) / width;
+      const x = spanX < 1 ? Math.min(1, Math.max(0, (centerX - spanX / 2) / (1 - spanX))) : 0.5;
       const y = span[1] < 1 ? (center[1] - span[1] / 2) / (1 - span[1]) : 0.5;
       root.style.setProperty("--plate-position", `${(x * 100).toFixed(2)}% ${(y * 100).toFixed(2)}%`);
     };
-    place();
-    window.addEventListener("resize", place, { passive: true });
+    // The observer gives the size after layout, so reading it forces no layout.
+    new ResizeObserver(([entry]) => {
+      if (entry === undefined) return;
+      size = { width: entry.contentRect.width, height: entry.contentRect.height };
+      place();
+    }).observe(root);
+    still.addEventListener("load", place);
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (reduced.matches) continue;
 
-    const format = () => (still.currentSrc.endsWith(".avif") ? "avif" : "webp");
-    const sources = () => ({ artPad: art.pad, plate: still.currentSrc, clean: `/hero/clean.${format()}`, data: "/hero/data.webp" });
+    const sources = () => {
+      const avif = still.currentSrc.endsWith(".avif");
+      return { artPad: art.pad, plate: still.currentSrc, plateRect: plateRect(), clean: avif ? cleanAvif : cleanWebp, data };
+    };
     still.decode().catch(() => undefined).then(() => createPlate(canvas, sources(), framing)).then(
       (plate) => {
         if (plate === undefined) {
@@ -87,7 +134,17 @@ const alt = "A mechanical brass cat with glowing acid-green eyes sits on a brass
         root.classList.add("is-live");
         root.dataset["gpu"] = plate.backend;
         let visible = true;
-        const sync = () => (visible && document.visibilityState === "visible" ? plate.start() : plate.stop());
+        let current = true;
+        const sync = () => (current && visible && document.visibilityState === "visible" ? plate.start() : plate.stop());
+        const rect = plateRect();
+        // A resize across 960px swaps the plate of the still image for one with other columns. The canvas has only the first.
+        still.addEventListener("load", () => {
+          if (plateRect() === rect) return;
+          current = false;
+          sync();
+          canvas.remove();
+          root.classList.remove("is-live");
+        });
         new IntersectionObserver(([entry]) => {
           visible = entry?.isIntersecting ?? false;
           sync();

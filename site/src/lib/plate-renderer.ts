@@ -6,6 +6,8 @@ import { plateShader } from "./plate-shader.ts";
 export interface PlateSources {
   readonly artPad: number;
   readonly plate: string;
+  /** The columns of the key art that the plate holds: the start and the width, as fractions of the width of the art. */
+  readonly plateRect: readonly [number, number];
   readonly clean: string;
   readonly data: string;
 }
@@ -108,6 +110,7 @@ export const createPlate = async (canvas: HTMLCanvasElement, sources: PlateSourc
       uActive: eased.active,
       uImageSize: imageSize,
       uArtPad: sources.artPad,
+      uPlateRect: sources.plateRect,
     });
   };
 

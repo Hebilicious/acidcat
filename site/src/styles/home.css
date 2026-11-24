@@ -378,6 +378,23 @@ h2 em {
 }
 
 
+main > :not(.hero),
+.footer {
+  content-visibility: auto;
+}
+.blueprint-zone {
+  contain-intrinsic-size: auto 2600px;
+}
+.surfaces {
+  contain-intrinsic-size: auto 1080px;
+}
+.cores {
+  contain-intrinsic-size: auto 1350px;
+}
+.footer {
+  contain-intrinsic-size: auto 620px;
+}
+
 .blueprint-zone {
   position: relative;
   isolation: isolate;
