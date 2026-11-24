@@ -1,3 +1,5 @@
+import type { ThemeRegistration } from "shiki";
+
 const color = {
   ink: "#05070b",
   inkPanel: "#0b0e14",
@@ -10,7 +12,7 @@ const color = {
   nixie: "#ff8a3d",
 } as const;
 
-export const codeTheme = {
+export const codeTheme: ThemeRegistration = {
   name: "acidcat",
   type: "dark",
   colors: {

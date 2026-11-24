@@ -1,0 +1,145 @@
+---
+import type { TreeNode } from "../../lib/example-files.ts";
+
+interface Props {
+  readonly nodes: readonly TreeNode[];
+  readonly selected: string;
+  readonly depth: number;
+}
+
+const { nodes, selected, depth } = Astro.props;
+const indent = `--depth: ${depth}`;
+---
+
+{
+  nodes.map((node) =>
+    node.kind === "folder" ? (
+      <li role="treeitem" aria-expanded={selected.startsWith(`${node.path}/`) ? "true" : "false"} data-path={node.path} tabindex="-1">
+        <span class="row" style={indent}>
+          <svg class="folder" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M1.5 3.5h4.5l1.5 1.5h7v8h-13z" />
+          </svg>
+          <span class="name">{node.name}</span>
+        </span>
+        <ul role="group">
+          <Astro.self nodes={node.children} selected={selected} depth={depth + 1} />
+        </ul>
+      </li>
+    ) : (
+      <li role="treeitem" aria-selected={node.path === selected ? "true" : "false"} data-path={node.path} data-file tabindex={node.path === selected ? "0" : "-1"}>
+        <span class="row" style={indent}>
+          <span class="icon" data-icon={node.icon} aria-hidden="true">
+            {node.icon}
+          </span>
+          <span class="name">{node.name}</span>
+        </span>
+      </li>
+    ),
+  )
+}
+
+<style>
+  li {
+    margin: 0;
+    list-style: none;
+    outline: none;
+  }
+
+  ul {
+    margin: 0;
+    padding: 0;
+  }
+
+  li[aria-expanded="false"] > ul {
+    display: none;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing_fluid-space-2xs);
+    min-block-size: 2rem;
+    padding-inline: calc(var(--spacing_fluid-space-xs) + var(--depth) * var(--spacing_fluid-space-s)) var(--spacing_fluid-space-xs);
+    border-inline-start: 2px solid transparent;
+    color: var(--palette-cream-400);
+    font-family: var(--font-family-label);
+    font-size: var(--typography_fluid-text-s);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .row:hover {
+    background: color-mix(in oklch, var(--palette-brass-400) 8%, transparent);
+    color: var(--palette-cream-100);
+  }
+
+  li:focus-visible > .row {
+    outline: 2px solid var(--palette-acid-400);
+    outline-offset: -2px;
+  }
+
+  li[aria-selected="true"] > .row {
+    border-inline-start-color: var(--palette-acid-400);
+    background: color-mix(in oklch, var(--palette-acid-400) 10%, transparent);
+    color: var(--palette-acid-200);
+  }
+
+  .folder {
+    flex: none;
+    inline-size: 1rem;
+    block-size: 1rem;
+    fill: color-mix(in oklch, var(--palette-brass-400) 30%, transparent);
+    stroke: var(--palette-brass-400);
+    stroke-width: 1.2;
+    stroke-linejoin: round;
+  }
+
+  li[aria-expanded="true"] > .row .folder {
+    fill: var(--palette-brass-400);
+  }
+
+  .icon {
+    flex: none;
+    display: grid;
+    place-items: center;
+    inline-size: 2.5rem;
+    block-size: 1rem;
+    border: 1px solid currentColor;
+    border-radius: var(--radius-size-s);
+    color: var(--palette-cream-400);
+    font-family: var(--font-family-mono);
+    font-size: calc(var(--typography_fluid-text-xs) * 0.8);
+    font-weight: 700;
+    letter-spacing: var(--font-tracking-label);
+    text-transform: uppercase;
+  }
+
+  .icon[data-icon="ts"],
+  .icon[data-icon="go"] {
+    color: var(--palette-cyan-400);
+  }
+
+  .icon[data-icon="rs"],
+  .icon[data-icon="toml"] {
+    color: var(--palette-copper-300);
+  }
+
+  .icon[data-icon="py"],
+  .icon[data-icon="yml"] {
+    color: var(--palette-brass-300);
+  }
+
+  .icon[data-icon="pkl"] {
+    color: var(--palette-acid-400);
+  }
+
+  .icon[data-icon="json"],
+  .icon[data-icon="gql"] {
+    color: var(--palette-nixie-400);
+  }
+</style>

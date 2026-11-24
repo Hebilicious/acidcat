@@ -12,6 +12,7 @@ export const builtPages = async (): Promise<string[]> => {
 const types: Record<string, string> = {
   ".html": "text/html",
   ".css": "text/css",
+  ".json": "application/json",
   ".js": "text/javascript",
   ".svg": "image/svg+xml",
   ".woff2": "font/woff2",

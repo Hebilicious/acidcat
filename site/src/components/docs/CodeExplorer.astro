@@ -1,0 +1,276 @@
+---
+import { exampleFiles, fileTree, fragmentDirectory, githubUrl, requireExampleFile, sourcePath } from "../../lib/example-files.ts";
+import type { TreeNode } from "../../lib/example-files.ts";
+import { highlightExampleFile } from "../../lib/example-highlight.ts";
+import ExplorerTree from "./ExplorerTree.astro";
+
+interface Props {
+  readonly example?: string;
+  readonly open: string;
+}
+
+const { example = "aircon", open } = Astro.props;
+const selected = requireExampleFile(example, open, Astro.url.pathname);
+const tree: TreeNode[] = fileTree(exampleFiles(example));
+const html = await highlightExampleFile(example, selected);
+const id = `explorer-${example}`;
+const prefix = sourcePath(example, "");
+---
+
+<figure class="explorer not-content" data-explorer data-tree="auto" data-open={selected} data-fragments={fragmentDirectory(example)} data-github={githubUrl(example, "")} data-prefix={prefix}>
+  <div class="bar">
+    <button type="button" class="tool" data-tree-toggle aria-controls={`${id}-files`} aria-expanded="true">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M2 8h12M2 13h12M6 3v10" /></svg>
+      <span class="sr-only">Show or hide the files</span>
+    </button>
+    <span class="tab" aria-current="true">Code explorer</span>
+    <a class="tab github" data-github-link href={githubUrl(example, selected)} target="_blank" rel="noopener noreferrer">
+      Open on GitHub
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3H3v10h10v-3M9 2h5v5M14 2 7 9" /></svg>
+    </a>
+    <button type="button" class="tool fullscreen" data-fullscreen aria-pressed="false">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" /></svg>
+      <span class="sr-only">Full screen</span>
+    </button>
+  </div>
+  <div class="body">
+    <nav class="files" id={`${id}-files`} aria-label={`Files of ${prefix.slice(0, -1)}`}>
+      <ul role="tree" aria-label={prefix.slice(0, -1)} data-tree>
+        <ExplorerTree nodes={tree} selected={selected} depth={0} />
+      </ul>
+    </nav>
+    <section class="code" aria-label="Source">
+      <p class="path" data-current-path>{sourcePath(example, selected)}</p>
+      <div class="source" data-source aria-busy="false"><Fragment set:html={html} /></div>
+    </section>
+  </div>
+</figure>
+
+<script>
+  import { initExplorer } from "../../lib/code-explorer.ts";
+
+  for (const root of document.querySelectorAll("[data-explorer]")) {
+    if (root instanceof HTMLElement) initExplorer(root);
+  }
+</script>
+
+<style>
+  .explorer {
+    --explorer-tree-width: 15rem;
+    --explorer-height: min(40rem, 75vh);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    margin-block: var(--spacing_fluid-space-m);
+    border: 1px solid color-mix(in oklch, var(--palette-brass-400) 35%, transparent);
+    border-radius: var(--radius-size-m);
+    background: var(--palette-ink-950);
+    overflow: hidden;
+  }
+
+  @media (min-width: 50em) {
+    .explorer {
+      --explorer-width: max(100%, min(72rem, 100vw - var(--sl-sidebar-width) - 2 * var(--sl-content-pad-x) - 1rem));
+      inline-size: var(--explorer-width);
+      margin-inline-start: calc((100% - var(--explorer-width)) / 2);
+    }
+  }
+
+  .explorer:fullscreen,
+  .explorer[data-expanded] {
+    --explorer-height: 100%;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    inline-size: auto;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .bar {
+    display: flex;
+    align-items: stretch;
+    gap: var(--spacing_fluid-space-2xs);
+    padding-inline: var(--spacing_fluid-space-2xs);
+    border-block-end: 1px solid color-mix(in oklch, var(--palette-brass-400) 22%, transparent);
+    background: var(--palette-ink-900);
+    font-family: var(--font-family-label);
+    font-size: var(--typography_fluid-text-s);
+  }
+
+  .tool {
+    display: grid;
+    place-items: center;
+    inline-size: 2.75rem;
+    min-block-size: 2.75rem;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-size-s);
+    background: none;
+    color: var(--palette-cream-400);
+    cursor: pointer;
+  }
+
+  .tool:hover,
+  .tool:focus-visible,
+  .tool[aria-pressed="true"] {
+    color: var(--palette-acid-400);
+  }
+
+  .tool svg,
+  .tab svg {
+    inline-size: 1rem;
+    block-size: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .fullscreen {
+    margin-inline-start: auto;
+  }
+
+  .tab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing_fluid-space-3xs);
+    padding-inline: var(--spacing_fluid-space-xs);
+    border-block-end: 2px solid transparent;
+    color: var(--palette-cream-400);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .tab[aria-current="true"] {
+    border-block-end-color: var(--palette-acid-400);
+    color: var(--palette-cream-100);
+  }
+
+  .github:hover,
+  .github:focus-visible {
+    color: var(--palette-cyan-400);
+  }
+
+  .body {
+    position: relative;
+    display: flex;
+    block-size: var(--explorer-height);
+  }
+
+  .explorer:fullscreen .body,
+  .explorer[data-expanded] .body {
+    flex: 1;
+    min-block-size: 0;
+  }
+
+  .files {
+    flex: 0 0 var(--explorer-tree-width);
+    overflow: auto;
+    padding-block: var(--spacing_fluid-space-2xs);
+    border-inline-end: 1px solid color-mix(in oklch, var(--palette-brass-400) 22%, transparent);
+    background: var(--palette-ink-925);
+  }
+
+  .explorer[data-tree="closed"] .files {
+    display: none;
+  }
+
+  [role="tree"] {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .code {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .path {
+    margin: 0;
+    padding: var(--spacing_fluid-space-3xs) var(--spacing_fluid-space-s);
+    border-block-end: 1px solid color-mix(in oklch, var(--palette-brass-400) 14%, transparent);
+    color: var(--palette-brass-300);
+    font-family: var(--font-family-mono);
+    font-size: var(--typography_fluid-text-xs);
+    overflow-wrap: anywhere;
+  }
+
+  .source {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-block-size: 0;
+    transition: opacity 120ms;
+  }
+
+  .source[aria-busy="true"] {
+    opacity: 0.6;
+  }
+
+  .source :global(pre) {
+    flex: 1;
+    min-block-size: 0;
+    margin: 0;
+    padding-block: var(--spacing_fluid-space-xs);
+    overflow: auto;
+    font-family: var(--font-family-mono);
+    font-size: var(--typography_fluid-text-s);
+    line-height: 1.6;
+    font-feature-settings: "calt" 1, "liga" 1;
+  }
+
+  .source :global(pre:focus-visible) {
+    outline: 2px solid var(--palette-acid-400);
+    outline-offset: -2px;
+  }
+
+  .source :global(code) {
+    display: block;
+    inline-size: max-content;
+    min-inline-size: 100%;
+    counter-reset: line;
+  }
+
+  .source :global(.line) {
+    padding-inline-end: var(--spacing_fluid-space-s);
+  }
+
+  .source :global(.line::before) {
+    content: counter(line);
+    counter-increment: line;
+    display: inline-block;
+    inline-size: 4ch;
+    margin-inline-end: 2ch;
+    color: color-mix(in oklch, var(--palette-cream-400) 45%, transparent);
+    text-align: end;
+    user-select: none;
+  }
+
+  @media (max-width: 50rem) {
+    .explorer {
+      --explorer-height: min(32rem, 70vh);
+    }
+
+    .files {
+      position: absolute;
+      inset-block: 0;
+      inset-inline-start: 0;
+      z-index: 1;
+      inline-size: min(var(--explorer-tree-width), 85%);
+      box-shadow: 0 0 2rem var(--palette-ink-950);
+    }
+
+    .explorer:not([data-tree="open"]) .files {
+      display: none;
+    }
+
+    .tab {
+      padding-inline: var(--spacing_fluid-space-3xs);
+    }
+  }
+</style>
