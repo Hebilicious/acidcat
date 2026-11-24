@@ -1,0 +1,36 @@
+{
+  "name": "acid-cat-site",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The AcidCat site: a homepage and the documentation, built with Astro Starlight.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/markdown-satteri": "catalog:",
+    "@astrojs/starlight": "catalog:",
+    "@fontsource/monaspace-argon": "catalog:",
+    "@fontsource/monaspace-krypton": "catalog:",
+    "@fontsource/monaspace-neon": "catalog:",
+    "@fontsource/monaspace-radon": "catalog:",
+    "@fontsource/monaspace-xenon": "catalog:",
+    "astro": "catalog:",
+    "sharp": "catalog:",
+    "shiki": "catalog:",
+    "subset-font": "catalog:",
+    "three": "catalog:"
+  },
+  "devDependencies": {
+    "@hebilicious/cssforge": "catalog:",
+    "@types/node": "catalog:",
+    "@types/subset-font": "catalog:",
+    "@types/three": "catalog:",
+    "cf": "catalog:",
+    "playwright": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -1,0 +1,39 @@
+---
+import Default from "@astrojs/starlight/components/Sidebar.astro";
+
+const path = Astro.url.pathname;
+const section = path.startsWith("/spec/")
+  ? { title: "Specification", note: "Version 0.1, draft", href: "/spec/" }
+  : { title: "Documentation", note: "Guides and concepts", href: "/docs/" };
+---
+
+<a class="sidebar-section" href={section.href}>
+  <span class="sidebar-section-title">{section.title}</span>
+  <span class="sidebar-section-note">{section.note}</span>
+</a>
+<Default />
+
+<style>
+  .sidebar-section {
+    display: grid;
+    gap: var(--spacing_fluid-space-3xs);
+    margin: 0 0 var(--spacing_fluid-space-s);
+    padding: var(--spacing_fluid-space-xs) var(--spacing_fluid-space-xs) var(--spacing_fluid-space-s);
+    border-bottom: 1px solid color-mix(in oklch, var(--palette-brass-400) 22%, transparent);
+    text-decoration: none;
+  }
+  .sidebar-section-title {
+    font-family: var(--font-family-display);
+    font-size: var(--typography_fluid-display-s);
+    font-weight: var(--typography-weight-display-bold);
+    color: var(--palette-cream-100);
+  }
+  .sidebar-section-note {
+    font-family: var(--font-family-label);
+    font-size: var(--typography_fluid-text-xs);
+    color: var(--palette-acid-400);
+  }
+  .sidebar-section:hover .sidebar-section-title {
+    color: var(--palette-acid-200);
+  }
+</style>

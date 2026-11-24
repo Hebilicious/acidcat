@@ -1,0 +1,20 @@
+:root {
+  --code-foreground: var(--palette-cream-100);
+  --code-background: transparent;
+  --code-token-constant: var(--palette-nixie-400);
+  --code-token-string: var(--palette-acid-400);
+  --code-token-string-expression: var(--palette-acid-400);
+  --code-token-comment: color-mix(in oklch, var(--palette-cream-400) 70%, transparent);
+  --code-token-keyword: var(--palette-brass-300);
+  --code-token-parameter: var(--palette-copper-300);
+  --code-token-function: var(--palette-cyan-400);
+  --code-token-punctuation: var(--palette-cream-400);
+  --code-token-link: var(--palette-cyan-400);
+}
+
+.shiki {
+  margin: 0;
+  background: transparent !important;
+  font-family: var(--font-family-mono);
+  font-feature-settings: "calt" 1, "liga" 1;
+}

@@ -1,0 +1,176 @@
+---
+import "../styles/tokens.css";
+import "../styles/home.css";
+import LivingPlate from "../components/LivingPlate.astro";
+import Blueprint from "../components/Blueprint.astro";
+import CoreScreens from "../components/CoreScreens.astro";
+import Surfaces from "../components/Surfaces.astro";
+import Mark from "../components/Mark.astro";
+import FontPreload from "../components/site/FontPreload.astro";
+import SiteNav from "../components/site/SiteNav.astro";
+import { siteUrl, socialImage } from "../lib/social.ts";
+import Schematic from "../components/Schematic.astro";
+import { isExternal } from "../lib/external-links.ts";
+
+const repository = "https://github.com/Hebilicious/acidcat";
+const title = "AcidCat — Application Capability Identification Catalog";
+const description = "Describe what your application can do once. Serve it as a CLI, an MCP server, an HTTP API and typed client code.";
+const footerColumns = [
+  {
+    heading: "Docs",
+    links: [
+      { label: "Introduction", href: "/docs/" },
+      { label: "Quick start", href: "/docs/quick-start/" },
+      { label: "Concepts", href: "/docs/concepts/catalog/" },
+      { label: "Guides", href: "/docs/guides/write-a-catalog/" },
+      { label: "Reference", href: "/docs/reference/cli/" },
+    ],
+  },
+  {
+    heading: "Spec",
+    links: [
+      { label: "Catalog", href: "/spec/catalog/" },
+      { label: "Invocation", href: "/spec/invocation/" },
+      { label: "Events", href: "/spec/events/" },
+      { label: "Bindings", href: "/spec/bindings/" },
+      { label: "Conformance", href: "/spec/conformance/" },
+    ],
+  },
+  {
+    heading: "Project",
+    links: [
+      { label: "Packages", href: "/packages/" },
+      { label: "Source code", href: repository },
+      { label: "Releases", href: `${repository}/releases` },
+      { label: "Issues", href: `${repository}/issues` },
+      { label: "License", href: `${repository}/blob/main/LICENSE` },
+    ],
+  },
+];
+const newTab = (href: string) => (isExternal(href) ? { target: "_blank", rel: "noopener noreferrer" } : {});
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <FontPreload page="home" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#0b0e14" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="canonical" href={`${siteUrl}/`} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="AcidCat" />
+    <meta property="og:url" content={`${siteUrl}/`} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:locale" content="en" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    {socialImage("home").map((attrs) => <meta {...attrs} />)}
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="nav">
+      <SiteNav />
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-stage">
+          <LivingPlate />
+        </div>
+        <div class="hero-copy">
+          <p class="eyebrow reveal">An open specification · 0.1 draft</p>
+          <h1 id="hero-title" class="reveal">AcidCat</h1>
+          <p class="hero-expansion reveal"><b>A</b>pplication <b>C</b>apability <b>Id</b>entification <b>Cat</b>alog</p>
+          <p class="hero-lede reveal">Describe what your application can do once. Serve it as a command line, an MCP server, an HTTP API and typed code.</p>
+          <div class="actions reveal">
+            <a class="button button-acid" href="/docs/"><span class="button-face"><span class="button-text">Get started</span><i class="shine" aria-hidden="true"></i></span></a>
+            <a class="button button-brass button-star" href={repository} target="_blank" rel="noopener noreferrer"><span class="button-face"><span class="button-text"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.8 2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z" /></svg>Star on GitHub</span><i class="shine" aria-hidden="true"></i></span><span class="star-count" data-star-count hidden></span></a>
+          </div>
+        </div>
+      </section>
+
+      <div class="blueprint-zone">
+      <Schematic />
+
+      <section class="flow" aria-labelledby="flow-title">
+        <div class="flow-inner">
+          <header class="section-head">
+            <p class="eyebrow">Fig. 2 — How the parts fit</p>
+            <h2 id="flow-title">Spec, catalog, <em>runtime, verify</em></h2>
+            <p class="lede">The specification defines the catalog and the bindings. A catalog lists the capabilities of one application. A core runs them, and <code>acid-cat conform</code> tests the result from outside.</p>
+          </header>
+          <Blueprint />
+        </div>
+      </section>
+      </div>
+
+      <Surfaces />
+
+      <CoreScreens />
+
+    </main>
+
+    <footer class="footer">
+      <div class="footer-rail" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <Mark size={56} />
+          <p class="footer-name">AcidCat</p>
+          <p class="footer-expansion"><b>A</b>pplication <b>C</b>apability <b>Id</b>entification <b>Cat</b>alog</p>
+          <p class="footer-status"><span class="footer-lamp" aria-hidden="true"></span>Specification 0.1 · Draft</p>
+        </div>
+        <nav class="footer-columns" aria-label="Footer">
+          {footerColumns.map((column) => (
+            <div>
+              <p class="footer-heading">{column.heading}</p>
+              <ul>
+                {column.links.map((link) => (
+                  <li><a href={link.href} {...newTab(link.href)}>{link.label}</a></li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+      </div>
+      <p class="footer-watermark" aria-hidden="true">AcidCat</p>
+    </footer>
+
+    <script>
+      const starCount = document.querySelector<HTMLElement>("[data-star-count]");
+      const readStars = (body: unknown) =>
+        typeof body === "object" && body !== null && "stargazers_count" in body && typeof body.stargazers_count === "number" ? body.stargazers_count : undefined;
+      if (starCount) {
+        fetch("https://api.github.com/repos/Hebilicious/acidcat", { headers: { Accept: "application/vnd.github+json" } })
+          .then((response) => (response.ok ? response.json() : undefined))
+          .then((body: unknown) => {
+            const stars = readStars(body);
+            if (stars === undefined) return;
+            starCount.textContent = new Intl.NumberFormat("en", { notation: "compact" }).format(stars);
+            starCount.setAttribute("aria-label", `${stars} stars`);
+            starCount.hidden = false;
+          })
+          .catch(() => undefined);
+      }
+      const reveal = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            entry.target.classList.add("is-visible");
+            reveal.unobserve(entry.target);
+          }
+        },
+        { threshold: 0.15 },
+      );
+      for (const element of document.querySelectorAll(".section-head, .surface, .machine:not([drawable]), .blueprint, .spec-sheet")) {
+        element.classList.add("will-reveal");
+        reveal.observe(element);
+      }
+    </script>
+  </body>
+</html>

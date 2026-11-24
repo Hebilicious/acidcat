@@ -1,0 +1,11 @@
+---
+import CatHead from "../assets/mark.svg";
+
+interface Props {
+  readonly size?: number;
+}
+
+const { size = 36 } = Astro.props;
+---
+
+<CatHead class="mark" width={size} height={size} aria-hidden="true" />

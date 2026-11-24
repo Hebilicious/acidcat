@@ -1,0 +1,16 @@
+@import "../../.cssforge/output.css";
+@import "./code.css";
+@import "../../.fonts/fonts.css";
+
+:root {
+  font-feature-settings: "calt" 1, "liga" 1;
+}
+
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.18s;
+}

@@ -1,0 +1,78 @@
+language: "typescript"
+layer: "application"
+
+project:
+  title: "AcidCat site"
+  description: "The homepage and the documentation of AcidCat, built with Astro Starlight."
+
+toolchains:
+  default: ["javascript", "node", "pnpm"]
+
+tasks:
+  tokens:
+    description: "Write the design tokens from cssforge.config.ts into .cssforge/output.css."
+    command: "cssforge"
+    args: ["--mode", "css"]
+    inputs: ["cssforge.config.ts"]
+    outputs: [".cssforge/output.css"]
+
+  tokens-watch:
+    description: "Write the design tokens again each time cssforge.config.ts changes."
+    command: "cssforge"
+    args: ["--mode", "css", "--watch"]
+    preset: "server"
+
+  dev:
+    deps: ["tokens-watch"]
+    description: "Serve the site with live reload at http://localhost:4321, and write the design tokens on each change."
+    command: "astro"
+    args: ["dev"]
+    preset: "server"
+
+  tokens-check:
+    description: "Check that .cssforge/output.css matches cssforge.config.ts."
+    script: "cssforge --mode css --css .tmp-tokens.css >/dev/null && diff -q .tmp-tokens.css .cssforge/output.css; status=$?; rm -f .tmp-tokens.css; exit $status"
+    inputs: ["cssforge.config.ts", ".cssforge/output.css"]
+
+  build:
+    description: "Build the static site into dist/."
+    command: "astro"
+    args: ["build"]
+    inputs:
+      - "src/**/*"
+      - "public/**/*"
+      - "astro.config.ts"
+      - "cssforge.config.ts"
+      - "package.json"
+      - "/spec/**/*.md"
+      - "/release-please-config.json"
+      - "/.release-please-manifest.json"
+      - "/packages/README.md"
+      - "/packages/**/package.json"
+      - "/packages/**/Cargo.toml"
+      - "/packages/**/pyproject.toml"
+      - "/packages/core-*/README.md"
+      - "/examples/aircon/catalog/**/*"
+    outputs: ["dist/**/*"]
+
+  deploy:
+    deps: ["build"]
+    description: "Deploy dist/ as an assets-only Worker, with the cf command. Set CLOUDFLARE_ACCOUNT_ID first."
+    command: "cf"
+    args: ["deploy", "dist"]
+    options:
+      cache: false
+      runInCI: false
+
+  test:
+    deps: ["build", "tokens-check"]
+    description: "Test the geometry of the art, and render the homepage in Chromium at desktop and phone widths."
+    command: "node"
+    args: ["--test", "test/"]
+    inputs: ["src/**/*", "test/**/*.ts"]
+
+  typecheck:
+    description: "Type-check the art geometry, the tests and the configuration."
+    command: "tsc"
+    args: ["-p", "."]
+    inputs: ["src/lib/**/*.ts", "test/**/*.ts", "astro.config.ts", "cssforge.config.ts", "tsconfig.json", "/tsconfig.base.json"]
