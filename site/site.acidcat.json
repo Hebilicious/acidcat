@@ -1,0 +1,273 @@
+{
+  "acidcat": "0.1",
+  "title": "AcidCat site",
+  "description": "Read the documentation, the specification and the packages of AcidCat.",
+  "targets": {
+    "agents": {
+      "bindings": [
+        "http",
+        "mcp",
+        "webmcp"
+      ],
+      "description": "Agents that read the site: MCP clients, HTTP clients and WebMCP hosts in a browser."
+    }
+  },
+  "$defs": {
+    "Package": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "install": {
+          "description": "The command that installs the package.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "registry": {
+          "enum": [
+            "npm",
+            "crates.io",
+            "PyPI",
+            "Go",
+            "Pkl"
+          ],
+          "type": "string"
+        },
+        "url": {
+          "description": "The page of the package on its registry.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The released version in the repository.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "registry",
+        "version",
+        "description",
+        "install",
+        "url"
+      ],
+      "type": "object"
+    },
+    "PageSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "path": {
+          "description": "The path of the page on the site, for example /docs/quick-start/.",
+          "type": "string"
+        },
+        "section": {
+          "$ref": "#/$defs/Section"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "title",
+        "description",
+        "section"
+      ],
+      "type": "object"
+    },
+    "Section": {
+      "enum": [
+        "home",
+        "docs",
+        "spec",
+        "packages"
+      ],
+      "type": "string"
+    }
+  },
+  "capabilities": {
+    "site.packages.list": {
+      "description": "List the packages that AcidCat publishes, with their registry, their version and the command that installs them.",
+      "audience": [
+        "agents"
+      ],
+      "output": {
+        "additionalProperties": false,
+        "properties": {
+          "packages": {
+            "items": {
+              "$ref": "#/$defs/Package"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "packages"
+        ],
+        "type": "object"
+      },
+      "readOnly": true,
+      "idempotent": true
+    },
+    "site.pages.list": {
+      "description": "List the pages of the site, or the pages of one section.",
+      "audience": [
+        "agents"
+      ],
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "section": {
+            "$ref": "#/$defs/Section",
+            "description": "Only the pages of this section."
+          }
+        },
+        "type": "object"
+      },
+      "output": {
+        "additionalProperties": false,
+        "properties": {
+          "pages": {
+            "items": {
+              "$ref": "#/$defs/PageSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "pages"
+        ],
+        "type": "object"
+      },
+      "readOnly": true,
+      "idempotent": true
+    },
+    "site.pages.read": {
+      "description": "Give the content of one page of the site as Markdown.",
+      "audience": [
+        "agents"
+      ],
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "description": "The path or the URL of the page, for example /spec/catalog/.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "additionalProperties": false,
+        "properties": {
+          "markdown": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "markdown"
+        ],
+        "type": "object"
+      },
+      "failures": {
+        "NotFound": {
+          "additionalProperties": false,
+          "properties": {
+            "_tag": {
+              "const": "NotFound",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "type": "object"
+        }
+      },
+      "readOnly": true,
+      "idempotent": true
+    },
+    "site.pages.search": {
+      "description": "Find the pages of the site that contain each word of a query.",
+      "audience": [
+        "agents"
+      ],
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "description": "The maximum number of results. The default is 5.",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "One or more words.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "additionalProperties": false,
+        "properties": {
+          "results": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "excerpt": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "title",
+                "excerpt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "type": "object"
+      },
+      "readOnly": true,
+      "idempotent": true
+    }
+  }
+}

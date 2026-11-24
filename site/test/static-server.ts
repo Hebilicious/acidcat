@@ -18,6 +18,9 @@ const types: Record<string, string> = {
   ".webp": "image/webp",
   ".png": "image/png",
   ".avif": "image/avif",
+  ".json": "application/json",
+  ".md": "text/markdown; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
 };
 
 const resolveFile = async (url: string): Promise<string | undefined> => {

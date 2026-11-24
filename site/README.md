@@ -10,13 +10,19 @@ The homepage, the documentation, the specification and the list of packages of A
 | `moon run site:tokens` | Write the design tokens from `cssforge.config.ts` into `.cssforge/output.css` |
 | `moon run site:tokens-check` | Check that `.cssforge/output.css` matches `cssforge.config.ts`. `site:test` runs it |
 | `moon run site:build` | Build the static site into `dist/` |
-| `moon run site:test` | Test the geometry of the logo, check that every design token in use exists, render the homepage in Chromium at desktop and phone widths, check that Fig. 1 keeps its height while it loads, compare the image of each GPU renderer with WebGPU and with WebGL 2, and check that the homepage stays in its budget of bytes on a phone (images, fonts, scripts and HTML), with no texture of the hero on a software renderer and no renderer code before its figure is near. Check that each page loads only files with a hash in their name, that the homepage loads no stylesheet and preloads each of its scripts, that each page passes the accessibility rules of the Lighthouse audit "Accessibility tree is well-formed", that the homepage passes every rule of axe-core, and that the table of contents of the docs reads no layout when the page starts (`test/delivery.test.ts`). Check that the hero frames 960px as a phone, and, on a hardware GPU, that it keeps its animation after a resize across 960px |
-| `moon run site:deploy` | Build the site and deploy it to https://acidcat.hebilicious.workers.dev as an assets-only Worker, with the `cf` command. Set `CLOUDFLARE_ACCOUNT_ID` first |
-| `moon run site:typecheck` | Type-check the geometry, the tests and the configuration |
+| `moon run site:test` | Test the geometry of the logo, check that every design token in use exists, render the homepage in Chromium at desktop and phone widths, check that Fig. 1 keeps its height while it loads, compare the image of each GPU renderer with WebGPU and with WebGL 2, and check that the homepage stays in its budget of bytes on a phone (images, fonts, scripts and HTML), with no texture of the hero on a software renderer and no renderer code before its figure is near. Check that each page loads only files with a hash in their name, that the homepage loads no stylesheet and preloads each of its scripts, that each page passes the accessibility rules of the Lighthouse audit "Accessibility tree is well-formed", that the homepage passes every rule of axe-core, and that the table of contents of the docs reads no layout when the page starts (`test/delivery.test.ts`). Check that the hero frames 960px as a phone, and, on a hardware GPU, that it keeps its animation after a resize across 960px. Call the [AcidCat app of the site](#agents) through the Worker, an MCP client, the HTTP API and WebMCP in Chromium |
+| `moon run site:catalog` | Write `site.acidcat.json`, the catalog of the AcidCat app of the site, from its code |
+| `moon run site:deploy` | Build the site, bundle the Worker, and deploy both to https://acidcat.hebilicious.workers.dev with the `cf` command. Set `CLOUDFLARE_ACCOUNT_ID` first |
+| `moon run site:preview` | Build the site and the Worker, and deploy them as a Worker Preview named after the Git branch, at `https://<branch>-acidcat.hebilicious.workers.dev`. Production does not change. Set `CLOUDFLARE_ACCOUNT_ID` first |
+| `moon run site:typecheck` | Type-check the geometry, the AcidCat app, the Worker, the tests and the configuration |
 
 ## Deployment
 
 [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) deploys the site when a commit reaches `main`. It is connected to the Worker `acidcat`, and it runs `bash site/scripts/cloudflare.sh build`, then `bash site/scripts/cloudflare.sh deploy`, from the root of the repository. The script installs proto, then Node, pnpm and Moon from `.prototools`, and runs `site:build` or `site:deploy`. Workers Builds gives `site:deploy` the account and the token. A build starts only when a commit changes a file that the build reads: `site/`, `spec/`, the release files, the package manifests and READMEs, the aircon catalog, and the files of the toolchain and the workspace.
+
+The Worker has code and assets. `cf` builds a project with a Worker entrypoint through the framework's own command, and Astro writes only static files. So `site:deploy` runs `astro build`, then `scripts/worker-output.ts`, which bundles `worker/index.ts` with esbuild and writes the [Build Output](https://developers.cloudflare.com/cf/projects/#deploy-a-prebuilt-build) in `.cloudflare/output/v1/`: the bundle, `dist/` as the assets, and the settings of `cloudflare.config.ts`. Then `cf deploy --prebuilt` uploads it. `site:preview` does the same with `cf previews deploy --prebuilt`.
+
+The Worker runs first only for the paths in `workerPaths` of `cloudflare.config.ts`: the pages, `/mcp`, `/api/` and the well-known documents that it writes. Other files, such as `/_astro/*` and `/hero/*`, go to the assets directly.
 
 ## Structure
 
@@ -46,10 +52,17 @@ The homepage, the documentation, the specification and the list of packages of A
 | `src/lib/spec-pages.ts`, `src/content.config.ts` | Load each file of `spec/` into the docs collection at build time, served under `/spec/` |
 | `src/pages/packages/index.astro`, `src/lib/packages.ts` | The list of published packages, served under `/packages/` |
 | `src/lib/code-theme.ts`, `src/styles/starlight.css`, `src/components/starlight/` | The palette of the site in the docs: colors, fonts, code blocks, and the dark theme only |
-| `cloudflare.config.ts` | The Worker that serves the site: its name, and the 404 page for unknown paths |
-| `public/_headers` | The cache headers of the Worker. The files in `/_astro/` have a hash in their name, so the browser keeps them for a year. Each file that a page loads is in `/_astro/`: the images, the favicon and the fonts are imports, not files in `public/` |
+| `cloudflare.config.ts` | The Worker that serves the site: its name, its entrypoint, the paths that run the Worker first, the assets binding, and the 404 page for unknown paths |
+| `worker/index.ts`, `worker/discovery.ts` | The Worker. It serves the MCP server and the HTTP API of the AcidCat app, the well-known documents, Markdown to a client that asks for it, and the `Link` header of each page. Everything else comes from the assets |
+| `scripts/worker-output.ts` | Bundles the Worker, and writes the Build Output that `cf` uploads |
+| `src/lib/agent/` | The AcidCat app of the site (`app.ts`), the content that it reads (`content.ts`), its WebMCP tools in the page (`page.ts`), the Markdown of the homepage (`home.md`), and the files for agents that the build writes (`files.ts`) |
+| `site.acidcat.json` | The catalog of the AcidCat app of the site. `site:catalog` writes it from `src/lib/agent/app.ts`, and `test/agent.test.ts` fails when it is stale |
+| `src/lib/page-markdown.ts` | Converts the HTML of a built page into Markdown: the content of the page, each panel of a tab group under the label of its tab, and each code block with its language |
+| `src/components/site/WebMcp.astro` | Loads the WebMCP tools in a browser that has `document.modelContext` or `navigator.modelContext`. Other browsers load none of their code |
+| `public/robots.txt` | The crawl rules: every crawler, and each AI crawler by name, can read every page. It gives the Content Signals of the site and the sitemap |
 | `src/lib/table-of-contents.ts` | The table of contents of the docs. It takes the place of the element of Starlight, with the same markup and behavior, and reads the sizes of the header and of the viewport only after layout. A Vite plugin in `astro.config.ts` gives it to the components of Starlight |
 | `src/lib/module-preload.ts` | Adds a `modulepreload` link at the top of the head of each page for each script that the page loads at once, and for each module that the script imports |
+| `public/_headers` | The cache headers of the Worker. The files in `/_astro/` have a hash in their name, so the browser keeps them for a year. Each file that a page loads is in `/_astro/`: the images, the favicon and the fonts are imports, not files in `public/` |
 | `cssforge.config.ts` | The design tokens: colors, fluid type and spacing scales, font families, tracking, radii and layout widths. [cssforge](https://github.com/Hebilicious/cssforge) writes them as CSS variables into `.cssforge/output.css`, which is committed |
 | `src/styles/tokens.css` | Imports the design tokens and the fonts that the homepage and the documentation share |
 | `src/lib/fonts.ts` | Splits each font face into a small core file and the rest at build time, and writes their `@font-face` rules into `.fonts/` |
@@ -146,6 +159,34 @@ The site does not copy the specification. At build time, `spec-pages.ts` reads e
 "Get started" goes to `/docs/`. "Star on GitHub" goes to the repository. In the browser, it asks the GitHub API for the number of stars, and shows it in a badge on the button. When the request fails, the badge does not show.
 
 The footer has one link column for each section of the header: Docs, Spec and Project. Each column has five links. Under the links, the large word AcidCat has a gradient of brass, acid green, cyan and Nixie amber.
+
+## Agents
+
+The site serves its own content to agents through AcidCat. `src/lib/agent/app.ts` defines an app with four read-only capabilities, all for the target `agents`:
+
+| Capability | What it does |
+| --- | --- |
+| `site.pages.list` | List the pages of the site, or the pages of one section |
+| `site.pages.read` | Give the content of one page of the site as Markdown |
+| `site.pages.search` | Find the pages of the site that contain each word of a query |
+| `site.packages.list` | List the packages that AcidCat publishes |
+
+The capabilities read `/content.json`, which the build writes: each page with its Markdown, and each package. The Worker reads it through the assets binding, and the page reads it with `fetch`, so the Worker bundle has no content of the site.
+
+| URL | What it serves |
+| --- | --- |
+| `/mcp` | The MCP server of the app, through `mcpHandler` and `mcpHandshake` of `@acid-cat/core-ts`. Its Server Card is at `/mcp/server-card` |
+| `/api/` | The HTTP binding of the app: `GET /api/capabilities`, `POST /api/capabilities/{id}` and `GET /api/catalog` |
+| Each page | WebMCP tools, through `installWebMcp` of `@acid-cat/core-ts`, in a browser with WebMCP. Chromium has WebMCP with `--enable-features=WebMCP` |
+| Each page, with `Accept: text/markdown` | The Markdown of the page, with `Content-Type: text/markdown` and `Vary: Accept`. A browser gets the HTML. Each page also has its Markdown at `<path>/index.md` |
+| Each page | A `Link` header (RFC 8288) to the API Catalog, the catalog of the HTTP API, the Server Card, the docs, `llms.txt`, the agent skills, the sitemap and the Markdown of the page |
+| `/llms.txt`, `/llms-full.txt` | An index of the pages for language models, and the Markdown of every page in one file |
+| `/.well-known/api-catalog` | The API Catalog of RFC 9727: the HTTP API and the MCP server, with their descriptions and docs |
+| `/.well-known/mcp/server-card.json` | The Server Card of `/mcp/server-card` |
+| `/.well-known/ai-catalog.json` | The AI Catalog of Agentic Resource Discovery: the MCP server and the agent skill |
+| `/.well-known/agent-skills/index.json` | The Agent Skills Discovery index (0.2.0). It lists the skill `skills/acid-cat` of the repository as a `.tar.gz` archive, with its SHA-256 digest. The build makes the archive from the files of the skill |
+
+`src/lib/agent/files.ts` writes the Markdown of each page, `/content.json`, `llms.txt`, `llms-full.txt` and the agent skills after `astro build`. The Markdown of each page comes from its built HTML, so the components of the docs, such as the language tabs, keep their content. The homepage has its own Markdown, `src/lib/agent/home.md`.
 
 ## Roadmap
 

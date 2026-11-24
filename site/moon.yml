@@ -53,26 +53,47 @@ tasks:
       - "/packages/**/pyproject.toml"
       - "/packages/core-*/README.md"
       - "/examples/aircon/catalog/**/*"
+      - "/skills/**/*"
+      - "/packages/core-ts/src/**/*.ts"
+      - "/packages/spec-ts/src/**/*.ts"
+      - "/packages/mcp-handshake/src/**/*.ts"
+      - "/packages/catalog/typescript/src/**/*.ts"
     outputs: ["dist/**/*"]
+
+  catalog:
+    description: "Write the catalog of the AcidCat app of the site, site.acidcat.json, from its code."
+    command: "node"
+    args: ["src/lib/agent/write-catalog.ts"]
+    inputs: ["src/lib/agent/app.ts", "src/lib/agent/content.ts"]
+    outputs: ["site.acidcat.json"]
+    options:
+      runInCI: false
 
   deploy:
     deps: ["build"]
-    description: "Deploy dist/ as an assets-only Worker, with the cf command. Set CLOUDFLARE_ACCOUNT_ID first."
-    command: "cf"
-    args: ["deploy", "dist"]
+    description: "Bundle the Worker, and deploy it with dist/ as its assets, with the cf command. Set CLOUDFLARE_ACCOUNT_ID first."
+    script: "node scripts/worker-output.ts && cf deploy --prebuilt"
+    options:
+      cache: false
+      runInCI: false
+
+  preview:
+    deps: ["build"]
+    description: "Bundle the Worker, and deploy it with dist/ as a Worker Preview named after the Git branch. Production does not change. Set CLOUDFLARE_ACCOUNT_ID first."
+    script: "node scripts/worker-output.ts --preview && cf previews deploy --prebuilt"
     options:
       cache: false
       runInCI: false
 
   test:
     deps: ["build", "tokens-check"]
-    description: "Test the geometry of the art, and render the homepage in Chromium at desktop and phone widths."
+    description: "Test the geometry of the art, render the homepage in Chromium at desktop and phone widths, and call the AcidCat app of the site through the Worker, MCP, HTTP and WebMCP."
     command: "node"
     args: ["--test", "test/"]
-    inputs: ["src/**/*", "test/**/*.ts"]
+    inputs: ["src/**/*", "test/**/*.ts", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*"]
 
   typecheck:
     description: "Type-check the art geometry, the tests and the configuration."
     command: "tsc"
     args: ["-p", "."]
-    inputs: ["src/lib/**/*.ts", "test/**/*.ts", "astro.config.ts", "cssforge.config.ts", "tsconfig.json", "/tsconfig.base.json"]
+    inputs: ["src/lib/**/*.ts", "test/**/*.ts", "worker/**/*.ts", "scripts/**/*.ts", "astro.config.ts", "cssforge.config.ts", "cloudflare.config.ts", "tsconfig.json", "/tsconfig.base.json"]

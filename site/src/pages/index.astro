@@ -8,6 +8,7 @@ import Surfaces from "../components/Surfaces.astro";
 import Mark from "../components/Mark.astro";
 import FontPreload from "../components/site/FontPreload.astro";
 import InstantNavigation from "../components/site/InstantNavigation.astro";
+import WebMcp from "../components/site/WebMcp.astro";
 import SiteNav from "../components/site/SiteNav.astro";
 import { siteUrl, socialImage } from "../lib/social.ts";
 import Schematic from "../components/Schematic.astro";
@@ -74,6 +75,7 @@ const newTab = (href: string) => (isExternal(href) ? { target: "_blank", rel: "n
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     {socialImage("home").map((attrs) => <meta {...attrs} />)}
+    <WebMcp />
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
