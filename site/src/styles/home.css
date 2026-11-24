@@ -233,6 +233,9 @@ h2 em {
 .button-text {
   position: relative;
   z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing_fluid-space-2xs);
   text-shadow: 0 1px 0 color-mix(in oklch, var(--palette-neutral-white) 35%, transparent);
 }
 .button .shine {
@@ -313,6 +316,27 @@ h2 em {
 .button-brass:hover .button-text,
 .button-brass:focus-visible .button-text {
   text-shadow: 0 1px 0 color-mix(in oklch, var(--palette-neutral-white) 35%, transparent);
+}
+.button-icon {
+  flex: none;
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+}
+.star-count {
+  position: absolute;
+  top: calc(-1 * var(--spacing_fluid-space-xs));
+  right: var(--cut);
+  z-index: 3;
+  padding: 0 var(--spacing_fluid-space-2xs);
+  border: 1px solid var(--palette-brass-500);
+  border-radius: var(--radius-size-s);
+  background: var(--palette-ink-900);
+  color: var(--palette-nixie-400);
+  font-family: var(--font-family-label);
+  font-size: var(--typography_fluid-text-xs);
+  line-height: 1.5;
+  text-shadow: 0 0 8px color-mix(in oklch, var(--palette-nixie-400) 60%, transparent);
 }
 
 .reveal {
