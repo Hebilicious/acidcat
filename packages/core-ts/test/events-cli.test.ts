@@ -40,7 +40,7 @@ test("in a process, a command line that breaks a rule stops when it starts, with
 
 test("watch --cursor and --max-age-ms resume the subscription", async (t) => {
   const sensors = new Sensors();
-  const old = new Date(Date.now() - 60_000).toISOString();
+  const old = sensors.ago(60_000);
   sensors.emit("kitchen", 18, old);
   sensors.emit("kitchen", 19);
   sensors.emit("hall", 25);

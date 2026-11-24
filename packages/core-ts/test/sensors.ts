@@ -9,8 +9,14 @@ export type Reading = z.infer<typeof Reading>;
 export class Sensors {
   readonly #listeners = new Set<(reading: Emitted<Reading>) => void>();
   readonly history: Emitted<Reading>[] = [];
+  /** The clock of the sensors stands still, so the age of a reading does not depend on the speed of the test. */
+  readonly now = Date.parse("2026-11-10T09:00:00.000Z");
 
-  emit(room: string, celsius: number, timestamp = new Date().toISOString()): void {
+  ago(ms: number): string {
+    return new Date(this.now - ms).toISOString();
+  }
+
+  emit(room: string, celsius: number, timestamp = this.ago(0)): void {
     const emitted = { data: { room, celsius }, eventId: `reading-${this.history.length}`, timestamp, cursor: String(this.history.length) };
     this.history.push(emitted);
     this.#listeners.forEach((listener) => listener(emitted));
@@ -81,7 +87,7 @@ export const readingChanged = event({
   async *subscribe({ room }, { context, signal, cursor, maxAgeMs }) {
     if (cursor !== undefined) {
       const after = Number(cursor);
-      const oldest = maxAgeMs === undefined ? 0 : Date.now() - maxAgeMs;
+      const oldest = maxAgeMs === undefined ? 0 : context.sensors.now - maxAgeMs;
       let skipped = false;
       for (const reading of context.sensors.history.slice(after + 1)) {
         if (Date.parse(reading.timestamp ?? "") < oldest) {

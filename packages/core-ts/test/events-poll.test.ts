@@ -111,7 +111,7 @@ test("poll: a cursor that is not a string, or a maxAgeMs that is not an integer 
 
 test("poll: maxAgeMs bounds the replay of a lease that resumes", async (t) => {
   const { handler, poll, sensors } = httpServer();
-  const old = new Date(Date.now() - 60_000).toISOString();
+  const old = sensors.ago(60_000);
   sensors.emit("hall", 0, old);
   sensors.emit("hall", 1, old);
   sensors.emit("hall", 2);

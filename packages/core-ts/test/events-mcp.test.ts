@@ -91,7 +91,7 @@ test("MCP through HTTP: a cursor that is not a string, or a maxAgeMs that is not
 
 test("MCP through HTTP: maxAgeMs reaches the provider, and an idle stream gets heartbeats", async () => {
   const sensors = new Sensors();
-  const old = new Date(Date.now() - 60_000).toISOString();
+  const old = sensors.ago(60_000);
   sensors.emit("hall", 1, old);
   sensors.emit("hall", 2, old);
   sensors.emit("hall", 3);

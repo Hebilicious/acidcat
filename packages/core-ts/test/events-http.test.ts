@@ -65,7 +65,7 @@ test("maxAgeMs that is not an integer of 0 or more is invalid-input, but an unkn
 
 test("maxAgeMs reaches the provider", async () => {
   const sensors = new Sensors();
-  const old = new Date(Date.now() - 60_000).toISOString();
+  const old = sensors.ago(60_000);
   sensors.emit("hall", 1, old);
   sensors.emit("hall", 2, old);
   sensors.emit("hall", 3);
