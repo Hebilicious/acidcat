@@ -254,7 +254,7 @@ listenToTabs({
 | `extraPages` | none | A function that returns the pages whose files are in other folders |
 | `markdown` | — | See [Markdown pages](#markdown-pages) |
 | `lang`, `headHtml` | `"en"`, none | The language of each page, and the HTML that the head of every page has |
-| `transformHtml(html, page)` | none | Changes the HTML file of each page before the build writes it |
+| `transformHtml(html, page, { files })` | none | Changes the HTML file of each page before the build writes it. `files` lists the path of each file of the client build, for example to preload a font |
 | `images` | `{}` | The widths and the quality of the image service, or `false` to keep each image as it is. See [Images](#images) |
 | `afterBuild(outDir)` | none | Runs after the build has written every page, for example to write more files |
 | `vue` | — | Options for `@vitejs/plugin-vue` |

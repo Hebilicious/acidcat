@@ -28,9 +28,17 @@ export interface ComponentContext {
   readonly content: string;
   /** Counts the tab groups of the page, so that each tab and each panel has its own id. */
   readonly ids: { next: number };
+  /**
+   * Writes `role` beside `data-role`. VitePress leaves the static HTML of a page out of its script only when each
+   * attribute is a known HTML attribute, and `role` is not one, so its build adds the roles to the built pages
+   * (`src/lib/server-roles.ts`). A build that keeps `role` in its templates sets this.
+   */
+  readonly roles?: boolean;
 }
 
 type Component = (attributes: Attributes, inner: string | undefined, context: ComponentContext) => string | Promise<string>;
+
+const role = (name: string, context: ComponentContext): string => (context.roles === true ? `data-role="${name}" role="${name}"` : `data-role="${name}"`);
 
 const escapeHtml = (text: string): string => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
@@ -63,14 +71,14 @@ const tabs = (syncKey: string | undefined, panels: readonly Tab[], context: Comp
   const items = panels
     .map(
       (panel, index) =>
-        `<li class="tab" data-role="presentation"><a data-role="tab" href="#${id("panel", index)}" id="${id("tab", index)}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}">${escapeHtml(panel.label)}</a></li>`,
+        `<li class="tab" ${role("presentation", context)}><a ${role("tab", context)} href="#${id("panel", index)}" id="${id("tab", index)}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}">${escapeHtml(panel.label)}</a></li>`,
     )
     .join("");
   return [
     `<div class="tabs"${syncKey === undefined ? "" : ` data-sync-key="${syncKey}"`}>`,
-    `<div class="tablist-wrapper"><ul data-role="tablist">${items}</ul></div>`,
+    `<div class="tablist-wrapper"><ul ${role("tablist", context)}>${items}</ul></div>`,
     "",
-    ...panels.map((panel, index) => `<div data-role="tabpanel" id="${id("panel", index)}" aria-labelledby="${id("tab", index)}"${index === 0 ? "" : " hidden"}>\n\n${panel.body}\n\n</div>\n`),
+    ...panels.map((panel, index) => `<div ${role("tabpanel", context)} id="${id("panel", index)}" aria-labelledby="${id("tab", index)}"${index === 0 ? "" : " hidden"}>\n\n${panel.body}\n\n</div>\n`),
     "</div>",
   ].join("\n");
 };
@@ -102,18 +110,18 @@ const ecosystemOf = (attributes: Attributes, component: string, context: Compone
   return of;
 };
 
-const treeItems = (nodes: readonly TreeNode[], selected: string, depth: number): string =>
+const treeItems = (nodes: readonly TreeNode[], selected: string, depth: number, context: ComponentContext): string =>
   nodes
     .map((node) => {
       const row = (inner: string) => `<span class="row" style="--depth: ${depth}">${inner}<span class="name">${escapeHtml(node.name)}</span></span>`;
       if (node.kind === "folder") {
         const open = selected.startsWith(`${node.path}/`);
         const folder = '<svg class="folder" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h4.5l1.5 1.5h7v8h-13z" /></svg>';
-        return `<li data-role="treeitem" aria-expanded="${open}" data-path="${escapeHtml(node.path)}" tabindex="-1">${row(folder)}<ul data-role="group">${treeItems(node.children, selected, depth + 1)}</ul></li>`;
+        return `<li ${role("treeitem", context)} aria-expanded="${open}" data-path="${escapeHtml(node.path)}" tabindex="-1">${row(folder)}<ul ${role("group", context)}>${treeItems(node.children, selected, depth + 1, context)}</ul></li>`;
       }
       const current = node.path === selected;
       const icon = `<span class="icon" data-icon="${node.icon}" aria-hidden="true">${node.icon}</span>`;
-      return `<li data-role="treeitem" aria-selected="${current}" data-path="${escapeHtml(node.path)}" data-file tabindex="${current ? 0 : -1}">${row(icon)}</li>`;
+      return `<li ${role("treeitem", context)} aria-selected="${current}" data-path="${escapeHtml(node.path)}" data-file tabindex="${current ? 0 : -1}">${row(icon)}</li>`;
     })
     .join("");
 
@@ -138,7 +146,7 @@ const codeExplorer: Component = (attributes, _inner, context) => {
     `<button type="button" class="tool fullscreen" data-fullscreen aria-pressed="false">${icon.fullscreen}<span class="sr-only">Full screen</span></button>`,
     "</div>",
     '<div class="body">',
-    `<nav class="files" id="${id}-files" aria-label="Files of ${name}"><ul data-role="tree" aria-label="${name}" data-tree>${treeItems(fileTree(exampleFiles(example, context.repositoryRoot)), selected, 0)}</ul></nav>`,
+    `<nav class="files" id="${id}-files" aria-label="Files of ${name}"><ul ${role("tree", context)} aria-label="${name}" data-tree>${treeItems(fileTree(exampleFiles(example, context.repositoryRoot)), selected, 0, context)}</ul></nav>`,
     `<section class="code" aria-label="Source"><p class="path" data-current-path>${escapeHtml(sourcePath(example, selected))}</p>${explorerSource(example, selected)}</section>`,
     "</div>",
     "</figure>",

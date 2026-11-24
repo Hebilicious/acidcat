@@ -5,7 +5,7 @@ import { writeAgentFiles } from "../src/lib/agent/files.ts";
 import { readFavicon } from "../src/lib/favicon.ts";
 import { codeTheme } from "../src/lib/code-theme.ts";
 import { docsSidebar, examplesSidebar } from "../src/lib/docs-sidebar.ts";
-import { fontPreloads, writeFonts } from "../src/lib/fonts.ts";
+import { fontPreloads } from "../src/lib/fonts.ts";
 import { headingAnchor, headingSlug } from "../src/lib/heading-slug.ts";
 import { markdownSetup, searchRender } from "../src/lib/markdown/setup.ts";
 import { applyRouteParams, pageHead } from "../src/lib/page-head.ts";
@@ -25,7 +25,6 @@ import type { SiteTheme } from "../src/theme/site-theme.ts";
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 const content = fileURLToPath(new URL("../content", import.meta.url));
 
-await writeFonts(fileURLToPath(new URL("../.fonts", import.meta.url)));
 const specPages = await readSpecPages(repositoryRoot);
 const packages = await readPublishedPackages(repositoryRoot);
 const favicon = await readFavicon();
@@ -70,7 +69,7 @@ export default defineConfig<SiteTheme>({
   transformPageData(pageData) {
     applyRouteParams(pageData);
     if (pageData.relativePath === "packages/index.md") pageData.headers = packageHeaders(packages);
-    pageData.frontmatter["head"] = pageHead(pageData, siteUrl);
+    pageData.frontmatter["head"] = pageHead(pageData);
   },
   transformHtml: async (html, _id, { siteConfig }) => writeExplorerSources(await startScriptsAfterFirstPaint(writeRoles(html), siteConfig.outDir), repositoryRoot),
   transformHead: ({ pageData, assets }): HeadConfig[] => fontPreloads(pageData.relativePath === "index.md" ? "home" : "docs", assets),

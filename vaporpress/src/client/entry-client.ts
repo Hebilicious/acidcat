@@ -1,10 +1,9 @@
 import appModule from "virtual:vaporpress/app";
 import { createVaporApp, createVaporSSRApp } from "vue";
-import type { VaporComponent } from "vue";
 import { createWebHistory, START_LOCATION } from "vue-router";
 import { handleHotUpdate, routes } from "vue-router/auto-routes";
 import { updateHead } from "./head.ts";
-import { isComponent, readSite } from "./site.ts";
+import { isComponent, isVaporComponent, readSite } from "./site.ts";
 import { interceptLinks } from "./links.ts";
 import { startPrefetch } from "./prefetch.ts";
 import { createSiteRouter, pageOf } from "./router.ts";
@@ -13,9 +12,6 @@ import { leanPageChunkMarker } from "./markers.ts";
 const site = readSite(appModule);
 
 const hasDefault = (value: unknown): value is { readonly default: unknown } => typeof value === "object" && value !== null && "default" in value;
-
-/** The framework compiles every component in Vapor mode, so the layout of the site is a Vapor component. */
-const isVaporComponent = (value: unknown): value is VaporComponent => (typeof value === "object" && value !== null) || typeof value === "function";
 
 const layout: unknown = site.layout;
 if (!isVaporComponent(layout)) throw new Error("The layout of the site is not a component.");

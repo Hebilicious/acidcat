@@ -1,5 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { leanPageChunkMarker } from "./client/markers.ts";
 import type { PageData } from "./page.ts";
@@ -10,7 +10,12 @@ export interface DocumentOptions {
   /** HTML for the head of every page, such as the icon and the theme color. */
   readonly headHtml?: string;
   /** Changes the HTML of each page after the render, before it is written. */
-  readonly transformHtml?: (html: string, page: PageData) => string | Promise<string>;
+  readonly transformHtml?: (html: string, page: PageData, build: BuildFiles) => string | Promise<string>;
+}
+
+export interface BuildFiles {
+  /** The path from the root of the site of each file of the client build, such as `/assets/font-a1b2c3.woff2`. */
+  readonly files: readonly string[];
 }
 
 interface ManifestChunk {
@@ -83,6 +88,9 @@ export const prerender = async (input: PrerenderInput): Promise<void> => {
   const server: unknown = await import(pathToFileURL(input.serverEntry).href);
   if (!isServerEntry(server)) throw new Error("The server build does not export paths and render.");
   const base = "/";
+  const entries = await readdir(input.outDir, { withFileTypes: true, recursive: true });
+  const files = entries.filter((entry) => entry.isFile()).map((entry) => relative(input.outDir, join(entry.parentPath, entry.name)));
+  const build: BuildFiles = { files: files.filter((file) => !file.startsWith(".vite/")).map((file) => `${base}${file}`) };
   for (const path of server.paths()) {
     const { html, head, page } = await server.render(pageUrl(path));
     const scripts = new Set<string>();
@@ -111,6 +119,6 @@ export const prerender = async (input: PrerenderInput): Promise<void> => {
     ].join("");
     const output = outputFile(input.outDir, path);
     await mkdir(dirname(output), { recursive: true });
-    await writeFile(output, input.options.transformHtml === undefined ? document : await input.options.transformHtml(document, page));
+    await writeFile(output, input.options.transformHtml === undefined ? document : await input.options.transformHtml(document, page, build));
   }
 };

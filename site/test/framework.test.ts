@@ -5,6 +5,7 @@ import { after, before, describe, test } from "node:test";
 import { chromium } from "playwright";
 import sharp from "sharp";
 import type { Browser, Page } from "playwright";
+import { checkRolesWithScriptsBlocked } from "./axe.ts";
 import { openPage, waitForHydration } from "./github.ts";
 import { dist, serveDist } from "./static-server.ts";
 import type { StaticServer } from "./static-server.ts";
@@ -60,9 +61,8 @@ interface Box {
   readonly height: number;
 }
 
-/** A screenshot of the whole page, taken in parts, since one image of a long page at full height needs gigabytes of memory. */
-/** Chromium can shade the edge of a rotated shape a few levels apart from one render to the next. */
-const shadingTolerance = 16;
+/** The most that a channel of a pixel may differ, for the antialiasing of the GPU. */
+const tolerance = 1;
 
 const pixels = async (images: readonly Buffer[]): Promise<Buffer> => Buffer.concat(await Promise.all(images.map((image) => sharp(image).raw().toBuffer())));
 
@@ -70,22 +70,40 @@ const differentPixels = (expected: Buffer, actual: Buffer): number => {
   if (expected.length !== actual.length) return Math.max(expected.length, actual.length);
   let count = 0;
   for (let index = 0; index < expected.length; index += 1) {
-    if (Math.abs((expected[index] ?? 0) - (actual[index] ?? 0)) > shadingTolerance) count += 1;
+    if (Math.abs((expected[index] ?? 0) - (actual[index] ?? 0)) > tolerance) count += 1;
   }
   return count;
 };
 
-const segments = async (page: Page, width: number, hidden: Box): Promise<readonly Buffer[]> => {
-  await page.evaluate((box) => {
-    const cover = document.createElement("div");
-    cover.id = "hidden-region";
-    Object.assign(cover.style, { position: "absolute", left: `${box.x}px`, top: `${box.y}px`, width: `${box.width}px`, height: `${box.height}px` });
-    document.body.append(cover);
+/**
+ * The regions that the comparison leaves out: the search box, which has not moved, and the diamond under the header,
+ * a square that CSS turns by 45 degrees, whose edges Chromium shades a few levels apart from one render to the next.
+ */
+const hiddenRegions = (page: Page): Promise<readonly Box[]> =>
+  page.evaluate(() => {
+    const boxes = [...document.querySelectorAll(".site-search, .site-search *")].map((element) => element.getBoundingClientRect());
+    const left = Math.min(...boxes.map((box) => box.left));
+    const top = Math.min(...boxes.map((box) => box.top));
+    const search = { x: left + scrollX, y: top + scrollY, width: Math.max(...boxes.map((box) => box.right)) - left, height: Math.max(...boxes.map((box) => box.bottom)) - top };
+    const header = document.querySelector(".page > .header")?.getBoundingClientRect();
+    const diamond = header === undefined ? [] : [{ x: header.left + header.width / 2 - 8 + scrollX, y: header.bottom - 8 + scrollY, width: 16, height: 16 }];
+    return [search, ...diamond];
+  });
+
+/** A screenshot of the whole page, taken in parts, since one image of a long page at full height needs gigabytes of memory. */
+const segments = async (page: Page, width: number, hidden: readonly Box[]): Promise<readonly Buffer[]> => {
+  await page.evaluate((boxes) => {
+    for (const box of boxes) {
+      const cover = document.createElement("div");
+      cover.className = "hidden-region";
+      Object.assign(cover.style, { position: "absolute", left: `${box.x}px`, top: `${box.y}px`, width: `${box.width}px`, height: `${box.height}px` });
+      document.body.append(cover);
+    }
   }, hidden);
   const height = await page.evaluate(() => document.documentElement.scrollHeight);
   const parts: Buffer[] = [];
   for (let y = 0; y < height; y += 2000) {
-    parts.push(await page.screenshot({ fullPage: true, clip: { x: 0, y, width, height: Math.min(2000, height - y) }, mask: [page.locator("#hidden-region")], animations: "disabled" }));
+    parts.push(await page.screenshot({ fullPage: true, clip: { x: 0, y, width, height: Math.min(2000, height - y) }, mask: [page.locator(".hidden-region")], animations: "disabled" }));
   }
   return parts;
 };
@@ -116,20 +134,12 @@ describe("the docs on vaporpress", () => {
       assert.ok(site && vitepress);
       for (const path of ["/docs/quick-start/", "/examples/core-ts/", "/spec/catalog/"]) {
         const shots: (readonly Buffer[])[] = [];
-        let search: Box | undefined;
+        let hidden: readonly Box[] | undefined;
         for (const origin of [vitepress.origin, site.origin]) {
           const { page } = await open(origin, path, viewport);
           await page.evaluate(() => document.fonts.ready);
-          search ??= await page.evaluate(() => {
-            const boxes = [...document.querySelectorAll(".site-search, .site-search *")].map((element) => element.getBoundingClientRect());
-            const left = Math.min(...boxes.map((box) => box.left));
-            const top = Math.min(...boxes.map((box) => box.top));
-            const right = Math.max(...boxes.map((box) => box.right));
-            const bottom = Math.max(...boxes.map((box) => box.bottom));
-            return { x: left + scrollX, y: top + scrollY, width: right - left, height: bottom - top };
-          });
-          assert.ok(search, "The VitePress page has a search box.");
-          shots.push(await segments(page, viewport.width, search));
+          hidden ??= await hiddenRegions(page);
+          shots.push(await segments(page, viewport.width, hidden));
           await page.close();
         }
         assert.equal(shots.length, 2);
@@ -139,6 +149,11 @@ describe("the docs on vaporpress", () => {
       }
     });
   }
+
+  test("with their scripts blocked, have the roles of their tabs and code explorers in their HTML", async () => {
+    assert.ok(browser && site);
+    await checkRolesWithScriptsBlocked(browser, site.origin);
+  });
 
   test("link Edit page to the source of the page, and Report issue to a new issue", async () => {
     assert.ok(site);

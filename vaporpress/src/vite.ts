@@ -15,6 +15,8 @@ import type { MarkdownOptions } from "./markdown.ts";
 import { prerender } from "./prerender.ts";
 import type { DocumentOptions } from "./prerender.ts";
 
+export type { BuildFiles } from "./prerender.ts";
+
 export interface VaporpressOptions extends DocumentOptions {
   /** The folder of the site. The default is the folder where Vite runs. */
   readonly root?: string;

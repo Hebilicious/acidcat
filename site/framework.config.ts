@@ -3,6 +3,7 @@ import { relative } from "node:path";
 import { defineConfig } from "vite";
 import { vaporpress } from "vaporpress/vite";
 import { writeExampleFragments } from "./src/lib/example-fragments.ts";
+import { fontPreloadHtml } from "./src/lib/fonts.ts";
 import { writeExplorerSources } from "./src/lib/example-highlight.ts";
 import { expandComponents } from "./src/lib/markdown/components.ts";
 import { highlightBlock, headingAnchors, externalLinks } from "./src/app/markdown.ts";
@@ -34,12 +35,12 @@ export default defineConfig({
     extraPages: () => specPages.map((page) => ({ path: `/${page.id}`, file: fileURLToPath(new URL(`../${page.source}`, import.meta.url)) })),
     headHtml: '<meta name="theme-color" content="#0b0e14">',
     markdown: {
-      transformSource: (source, file) => expandComponents(specMarkdown(file) ?? source, { page: relative(repositoryRoot, file), repositoryRoot, content }),
+      transformSource: (source, file) => expandComponents(specMarkdown(file) ?? source, { page: relative(repositoryRoot, file), repositoryRoot, content, roles: true }),
       slugify: headingSlug,
       highlight: highlightBlock,
       hastPlugins: [headingAnchors, externalLinks],
     },
-    transformHtml: (html) => writeExplorerSources(html, repositoryRoot),
+    transformHtml: (html, _page, { files }) => writeExplorerSources(html.replace("<link rel=\"stylesheet\"", `${fontPreloadHtml("docs", files)}<link rel="stylesheet"`), repositoryRoot),
     afterBuild: (outDir) => writeExampleFragments(outDir, repositoryRoot),
   }),
 });

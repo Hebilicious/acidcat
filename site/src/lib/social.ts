@@ -30,3 +30,29 @@ export const socialImage = (section: Section): Record<string, string>[] => {
     { name: "twitter:image:alt", content: alt[section] },
   ];
 };
+
+export interface CardPage {
+  readonly path: string;
+  readonly title: string;
+  readonly description: string;
+}
+
+/** The canonical URL of a page, and the meta elements of its Open Graph and Twitter cards with its social image. */
+export const pageCard = (page: CardPage): { readonly url: string; readonly meta: Record<string, string>[] } => {
+  const url = `${siteUrl}${page.path}`;
+  return {
+    url,
+    meta: [
+      { property: "og:type", content: page.path === "/" ? "website" : "article" },
+      { property: "og:site_name", content: "AcidCat" },
+      { property: "og:url", content: url },
+      { property: "og:title", content: page.title },
+      { property: "og:description", content: page.description },
+      { property: "og:locale", content: "en" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: page.title },
+      { name: "twitter:description", content: page.description },
+      ...socialImage(sectionOf(page.path)),
+    ],
+  };
+};
