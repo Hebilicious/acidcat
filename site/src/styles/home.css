@@ -17,9 +17,11 @@ body {
   font-size: var(--typography_fluid-text-m);
   line-height: 1.6;
   color: var(--palette-cream-100);
+  /* A gradient between colors of CSS Color 4 interpolates in OKLab, and a software rasterizer draws that slowly. A
+     gradient that fades one color to transparent looks the same in sRGB. */
   background:
-    radial-gradient(ellipse 80% 60% at 75% 10%, color-mix(in oklch, var(--palette-acid-400) 7%, transparent), transparent 60%),
-    radial-gradient(ellipse 60% 50% at 10% 30%, color-mix(in oklch, var(--palette-cyan-400) 6%, transparent), transparent 60%),
+    radial-gradient(ellipse 80% 60% at 75% 10% in srgb, color-mix(in oklch, var(--palette-acid-400) 7%, transparent), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 10% 30% in srgb, color-mix(in oklch, var(--palette-cyan-400) 6%, transparent), transparent 60%),
     var(--palette-ink-900);
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
@@ -106,7 +108,7 @@ h2 em {
   height: 4rem;
   padding: 0 var(--layout-gutter-inline);
   view-transition-name: site-header;
-  background: linear-gradient(color-mix(in oklch, var(--palette-ink-900) 92%, transparent), color-mix(in oklch, var(--palette-ink-900) 70%, transparent));
+  background: linear-gradient(in srgb, color-mix(in oklch, var(--palette-ink-900) 92%, transparent), color-mix(in oklch, var(--palette-ink-900) 70%, transparent));
   backdrop-filter: blur(12px);
   border-bottom: 1px solid color-mix(in oklch, var(--palette-brass-400) 28%, transparent);
 }
@@ -140,8 +142,8 @@ h2 em {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(90deg, color-mix(in oklch, var(--palette-ink-950) 92%, transparent) 0, color-mix(in oklch, var(--palette-ink-950) 82%, transparent) calc(var(--copy-end) - 10rem), color-mix(in oklch, var(--palette-ink-950) 40%, transparent) var(--copy-end), transparent calc(var(--copy-end) + 7rem)),
-    linear-gradient(180deg, transparent 72%, var(--palette-ink-900) 100%);
+    linear-gradient(90deg in srgb, color-mix(in oklch, var(--palette-ink-950) 92%, transparent) 0, color-mix(in oklch, var(--palette-ink-950) 82%, transparent) calc(var(--copy-end) - 10rem), color-mix(in oklch, var(--palette-ink-950) 40%, transparent) var(--copy-end), transparent calc(var(--copy-end) + 7rem)),
+    linear-gradient(180deg in srgb, transparent 72%, var(--palette-ink-900) 100%);
 }
 .hero-copy {
   width: min(var(--layout-width-wide), 100%);
@@ -405,13 +407,13 @@ main > :not(.hero),
   inset: 0;
   z-index: -1;
   background:
-    linear-gradient(color-mix(in oklch, var(--palette-cyan-400) 6%, transparent) 1px, transparent 1px) 0 0 / 32px 32px,
-    linear-gradient(90deg, color-mix(in oklch, var(--palette-cyan-400) 6%, transparent) 1px, transparent 1px) 0 0 / 32px 32px,
-    linear-gradient(color-mix(in oklch, var(--palette-cyan-400) 10%, transparent) 1px, transparent 1px) 0 0 / 160px 160px,
-    linear-gradient(90deg, color-mix(in oklch, var(--palette-cyan-400) 10%, transparent) 1px, transparent 1px) 0 0 / 160px 160px,
-    radial-gradient(ellipse 70% 40% at 35% 20%, var(--palette-blueprint-900), transparent 70%),
-    radial-gradient(ellipse 60% 35% at 70% 75%, color-mix(in oklch, var(--palette-blueprint-900) 70%, transparent), transparent 70%);
-  mask: linear-gradient(transparent, var(--palette-neutral-black) 12%, var(--palette-neutral-black) 85%, transparent);
+    linear-gradient(in srgb, color-mix(in oklch, var(--palette-cyan-400) 6%, transparent) 1px, transparent 1px) 0 0 / 32px 32px,
+    linear-gradient(90deg in srgb, color-mix(in oklch, var(--palette-cyan-400) 6%, transparent) 1px, transparent 1px) 0 0 / 32px 32px,
+    linear-gradient(in srgb, color-mix(in oklch, var(--palette-cyan-400) 10%, transparent) 1px, transparent 1px) 0 0 / 160px 160px,
+    linear-gradient(90deg in srgb, color-mix(in oklch, var(--palette-cyan-400) 10%, transparent) 1px, transparent 1px) 0 0 / 160px 160px,
+    radial-gradient(ellipse 70% 40% at 35% 20% in srgb, var(--palette-blueprint-900), transparent 70%),
+    radial-gradient(ellipse 60% 35% at 70% 75% in srgb, color-mix(in oklch, var(--palette-blueprint-900) 70%, transparent), transparent 70%);
+  mask: linear-gradient(in srgb, transparent, var(--palette-neutral-black) 12%, var(--palette-neutral-black) 85%, transparent);
 }
 .flow {
   position: relative;
@@ -426,7 +428,7 @@ main > :not(.hero),
   overflow: hidden;
   padding: 0 var(--layout-gutter-inline);
   background:
-    radial-gradient(ellipse 60% 80% at 15% 100%, color-mix(in oklch, var(--palette-acid-400) 7%, transparent), transparent 70%),
+    radial-gradient(ellipse 60% 80% at 15% 100% in srgb, color-mix(in oklch, var(--palette-acid-400) 7%, transparent), transparent 70%),
     linear-gradient(180deg, var(--palette-ink-950), var(--palette-ink-925));
   color: var(--palette-cream-400);
   font-size: var(--typography_fluid-text-s);
@@ -543,7 +545,7 @@ main > :not(.hero),
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-stroke: 1px color-mix(in oklch, var(--palette-brass-300) 28%, transparent);
-  mask-image: linear-gradient(180deg, var(--palette-neutral-black) 15%, transparent 85%);
+  mask-image: linear-gradient(180deg in srgb, var(--palette-neutral-black) 15%, transparent 85%);
   pointer-events: none;
   white-space: nowrap;
 }
@@ -562,7 +564,7 @@ main > :not(.hero),
     aspect-ratio: 1 / 1.02;
   }
   .hero-stage::after {
-    background: linear-gradient(180deg, transparent 60%, var(--palette-ink-900) 100%);
+    background: linear-gradient(180deg in srgb, transparent 60%, var(--palette-ink-900) 100%);
   }
   .hero-copy {
     margin-top: calc(-1 * var(--spacing_fluid-space-xl));

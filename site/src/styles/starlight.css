@@ -47,8 +47,9 @@
 }
 
 body {
+  /* A software rasterizer draws an OKLab gradient slowly. This one fades one color to transparent, so sRGB looks the same. */
   background:
-    radial-gradient(ellipse 70% 40% at 80% 0%, color-mix(in oklch, var(--palette-acid-400) 4%, transparent), transparent 60%),
+    radial-gradient(ellipse 70% 40% at 80% 0% in srgb, color-mix(in oklch, var(--palette-acid-400) 4%, transparent), transparent 60%),
     var(--palette-ink-900);
 }
 

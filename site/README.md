@@ -106,6 +106,7 @@ The renderer checks the GPU before it downloads the textures. It decodes each te
 - **Styles.** Astro writes the CSS of each page into its HTML (`build.inlineStylesheets`), so no stylesheet blocks the first render.
 - **Scripts.** `src/lib/module-preload.ts` adds a `modulepreload` link for each script that a page loads at once, and for each module that the script imports. The browser fetches them all together with the HTML, and not one after the other.
 - **Layout.** The sections under the hero, and the footer, have `content-visibility: auto`. The browser computes their style and their layout only when they come near the viewport, so the first layout of the page is short. Each section has an estimate of its height (`contain-intrinsic-size`), and the browser keeps its real height after the first layout.
+- **Raster.** A gradient that fades one color to transparent names `in srgb`. Between colors of CSS Color 4, a gradient interpolates in OKLab by default, and a software rasterizer draws that slowly. In sRGB, such a gradient gives the same pixels. A gradient between two hues keeps OKLab.
 - **Requests to other websites.** The number of stars on GitHub and the latest versions on the packages page load at low priority, so they do not take bandwidth from the page.
 - **Cache.** Each file that a page loads has a hash in its name, so the browser keeps it for a year.
 
