@@ -600,9 +600,6 @@ importers:
       '@fontsource/monaspace-xenon':
         specifier: 'catalog:'
         version: 5.3.0
-      acid-cat-site-framework:
-        specifier: workspace:*
-        version: link:../site-framework
       hast-util-from-html:
         specifier: 'catalog:'
         version: 2.0.3
@@ -627,6 +624,9 @@ importers:
       three:
         specifier: 'catalog:'
         version: 0.187.0
+      vaporpress:
+        specifier: workspace:*
+        version: link:../vaporpress
       vitepress:
         specifier: 'catalog:'
         version: 2.0.0-alpha.21(@types/node@26.6.6)(esbuild@0.28.2)(postcss@8.5.33)(typescript@7.0.2)(yaml@2.9.1)
