@@ -122,6 +122,7 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   assert.equal(plates.length, 1, `the hero loads one plate, not ${plates.join(" and ")}`);
   assert.match(plates[0] ?? "", /^\/assets\/phone-840\.[\w-]+\.avif$/, "on a phone, the hero is the phone plate in AVIF");
   assert.deepEqual(files.filter((file) => /^\/assets\/(clean|data)\./.test(file)), [], "a software renderer loads no texture of the hero");
+  assert.deepEqual(files.filter((file) => /plate-renderer/.test(file)), [], "a software renderer loads no renderer of the hero");
   assert.deepEqual(files.filter((file) => /catalog-engine|webgpu-pass/.test(file)), [], "no renderer loads before its figure is near");
   assert.deepEqual(files.filter((file) => file.endsWith(".woff2") && !/-core\.[\w-]+\.woff2$/.test(file)), [], "only the core of each font");
   const phonePlate = 88_000;

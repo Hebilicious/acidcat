@@ -1,9 +1,10 @@
 import cleanAvif from "../assets/hero/clean.avif?url";
 import cleanWebp from "../assets/hero/clean.webp?url";
 import data from "../assets/hero/data.webp?url";
+import { hardwareGpu } from "./gpu/support.ts";
 import { art, phoneCrop, phoneMedia } from "./plate-crop.ts";
-import { createPlate, framingSpan } from "./plate-renderer.ts";
-import type { PlateFraming } from "./plate-renderer.ts";
+import { framingSpan } from "./plate-framing.ts";
+import type { PlateFraming } from "./plate-framing.ts";
 
 const catX = (art.pad + 0.555 * 1672) / art.width;
 const fullRect = [0, 1] as const;
@@ -58,7 +59,11 @@ export const mountPlate = (root: HTMLElement, signal: AbortSignal): void => {
   still
     .decode()
     .catch(() => undefined)
-    .then(() => (signal.aborted ? undefined : createPlate(canvas, sources(), framing, signal)))
+    .then(async () => {
+      if (signal.aborted || !(await hardwareGpu())) return undefined;
+      const { createPlate } = await import("./plate-renderer.ts");
+      return createPlate(canvas, sources(), framing, signal);
+    })
     .then(
       (plate) => {
         if (plate === undefined) {

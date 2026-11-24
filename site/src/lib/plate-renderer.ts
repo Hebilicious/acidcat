@@ -1,6 +1,8 @@
 import { createPass } from "./gpu/pass.ts";
 import { hardwareGpu } from "./gpu/support.ts";
 import type { Backend } from "./gpu/pass.ts";
+import { framingSpan } from "./plate-framing.ts";
+import type { PlateFraming } from "./plate-framing.ts";
 import { plateShader } from "./plate-shader.ts";
 
 export interface PlateSources {
@@ -10,13 +12,6 @@ export interface PlateSources {
   readonly plateRect: readonly [number, number];
   readonly clean: string;
   readonly data: string;
-}
-
-export interface PlateFraming {
-  readonly aspect: number;
-  readonly focusX: number;
-  readonly targetX: number;
-  readonly zoom: number;
 }
 
 export interface PlateState {
@@ -41,16 +36,6 @@ const loadImage = async (source: string): Promise<ImageBitmap> => {
   const response = await fetch(source);
   if (!response.ok) throw new Error(`${source}: ${response.status}`);
   return createImageBitmap(await response.blob(), { premultiplyAlpha: "none" });
-};
-
-export const framingSpan = (width: number, height: number, framing: PlateFraming): { span: [number, number]; center: [number, number] } => {
-  const viewAspect = width / height;
-  const span: [number, number] = viewAspect > framing.aspect ? [1, framing.aspect / viewAspect] : [viewAspect / framing.aspect, 1];
-  span[0] /= framing.zoom;
-  span[1] /= framing.zoom;
-  const clamp = (value: number, size: number) => Math.min(1 - size / 2, Math.max(size / 2, value));
-  const centerX = clamp(framing.focusX - (framing.targetX - 0.5) * span[0], span[0]);
-  return { span, center: [centerX, clamp(0.5, span[1])] };
 };
 
 /**
