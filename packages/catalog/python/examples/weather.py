@@ -15,15 +15,15 @@ def weather_catalog() -> Catalog:
     catalog.target(
         "dashboard",
         description="The wall screen in the kitchen that shows the weather now.",
-        bindings=["typescript"],
+        surfaces=["typescript"],
     )
     catalog.target(
         "logger",
         description="Scripts that store readings for later study.",
-        bindings=["http"],
+        surfaces=["http"],
         options={"http": {"basePath": "/station", "rateLimit": {"perMinute": 30}}},
     )
-    catalog.target("agents", description="Assistants, through an MCP server.", bindings=["mcp"])
+    catalog.target("agents", description="Assistants, through an MCP server.", surfaces=["mcp"])
 
     sensor = catalog.type("Sensor", {"enum": ["thermometer", "hygrometer", "barometer", "anemometer"]})
     reading = catalog.type(

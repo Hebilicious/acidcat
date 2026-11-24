@@ -50,3 +50,14 @@ test("every page asks the browser to prerender the pages of the site that a read
   }
   assert.deepEqual(offenders, []);
 });
+
+test("each redirect leads to a page of the build", async () => {
+  const rules = (await readFile(join(dist, "_redirects"), "utf8")).split("\n").filter((line) => line.trim() !== "");
+  const missing: string[] = [];
+  for (const rule of rules) {
+    const [, to = ""] = rule.split(/\s+/);
+    const page = to.replace(/:splat$/, "");
+    await readFile(join(dist, page, "index.html")).catch(() => missing.push(rule));
+  }
+  assert.deepEqual(missing, []);
+});

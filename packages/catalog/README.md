@@ -17,7 +17,7 @@ Use these libraries at build time to write `acidcat.catalog.json`. An applicatio
 | Step | Pkl | TypeScript | Python | Go | Rust |
 | --- | --- | --- | --- | --- | --- |
 | Start | `amends "Catalog.pkl"` | `new Catalog({ title })` | `Catalog(title=…)` | `catalog.New(title, description)` | `Catalog::new(title, description)` |
-| Declare a target | `targets { ["cli"] { bindings { "cli" } } }` | `.target("cli", { bindings: ["cli"] })` | `.target("cli", bindings=["cli"])` | `.Target("cli", catalog.Target{…})` | `.target("cli", Target { … })` |
+| Declare a target | `targets { ["cli"] { surfaces { "cli" } } }` | `.target("cli", { surfaces: ["cli"] })` | `.target("cli", surfaces=["cli"])` | `.Target("cli", catalog.Target{…})` | `.target("cli", Target { … })` |
 | Share a type | `types { ["Status"] { … } }`, then `module.ref("Status")` | `const status = c.type("Status", {…})` | `status = c.type("Status", {…})` | `status := c.Type("Status", …)` | `let status = c.r#type("Status", json!({…}))` |
 | Declare a capability | `capabilities { ["aircon.power.set"] { … } }` | `.capability(id, { description, audience, … })` | `.capability(id, description=…, …)` | `.Capability(id, catalog.Capability{…})` | `.capability(id, Capability { … })` |
 | Declare an event | `events { ["aircon.status.changed"] { … } }` | `.event(id, { description, audience, input, payload })` | `.event(id, description=…, payload=…)` | `.Event(id, catalog.Event{…})` | `.event(id, Event { … })` |

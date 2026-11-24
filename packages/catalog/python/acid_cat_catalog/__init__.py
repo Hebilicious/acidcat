@@ -34,14 +34,14 @@ class Catalog:
     def target(
         self,
         name: str,
-        bindings: Sequence[str],
+        surfaces: Sequence[str],
         description: str | None = None,
         options: Mapping[str, Any] | None = None,
     ) -> Catalog:
-        """Declare a target, served by `bindings` such as "typescript" and "webmcp"."""
+        """Declare a target, served by `surfaces` such as "typescript" and "webmcp"."""
         if name in self._targets:
             raise CatalogError(f"The target {name} is declared twice")
-        self._targets[name] = {"bindings": list(bindings), "description": description, "options": options}
+        self._targets[name] = {"surfaces": list(surfaces), "description": description, "options": options}
         return self
 
     def type(self, name: str, schema: Schema) -> Schema:
@@ -98,14 +98,14 @@ class Catalog:
         """The catalog rules this catalog breaks. Empty when it conforms."""
         problems: list[str] = []
         for name, target in self._targets.items():
-            bindings = target["bindings"]
+            surfaces = target["surfaces"]
             if not _NAME.fullmatch(name):
                 problems.append(f"the target name {name} is malformed")
-            if not bindings:
-                problems.append(f"the target {name} has no bindings")
-            if len(set(bindings)) != len(bindings):
-                problems.append(f"the target {name} repeats a binding")
-            problems += [f"the target {name} names the malformed binding {b}" for b in bindings if not _NAME.fullmatch(b)]
+            if not surfaces:
+                problems.append(f"the target {name} has no surfaces")
+            if len(set(surfaces)) != len(surfaces):
+                problems.append(f"the target {name} repeats a surface")
+            problems += [f"the target {name} names the malformed surface {b}" for b in surfaces if not _NAME.fullmatch(b)]
         for name, schema in self._types.items():
             if not _TYPE_NAME.fullmatch(name):
                 problems.append(f"the type name {name} is malformed")

@@ -26,7 +26,7 @@ export const powerSet = capability({
 });
 
 export const aircon = defineApp<{ unit: Unit }>({
-  targets: { cli: { bindings: ["cli"] }, mcp: { bindings: ["mcp"] } },
+  targets: { cli: { surfaces: ["cli"] }, mcp: { surfaces: ["mcp"] } },
   capabilities: [powerSet],
 });
 
@@ -83,7 +83,7 @@ export const powerSet = Capability.make({
 });
 
 export const aircon = App.make({
-  targets: { cli: { bindings: ["cli"] }, mcp: { bindings: ["mcp"] } },
+  targets: { cli: { surfaces: ["cli"] }, mcp: { surfaces: ["mcp"] } },
   capabilities: [powerSet],
 });
 
@@ -179,8 +179,8 @@ let aircon = App::new()
 - With no `input`, the work gets `()`. With no `output`, it gives `()`, and the value is `null`.
 - An `Option` field is an optional property. Add `#[serde(skip_serializing_if = "Option::is_none")]` to the fields of a value, because a value must agree with the output schema.
 - When a call is cancelled, the core drops the future of the work. Release resources in `Drop`, not after an `await`.
-- `call.target()` and `subscription.target()` give the target of the session. For the caller, make a context for each request: `HttpBinding::with_request_context` and `McpBinding::with_request_context` take a function of the head of the request that gives the context, or a `Refusal` (for example `401`) that answers the request. It is the place to authenticate. The context is dropped when the session of the request ends; a poll lease or a webhook subscription keeps it until it ends.
+- `call.target()` and `subscription.target()` give the target of the session. For the caller, make a context for each request: `HttpSurface::with_request_context` and `McpSurface::with_request_context` take a function of the head of the request that gives the context, or a `Refusal` (for example `401`) that answers the request. It is the place to authenticate. The context is dropped when the session of the request ends; a poll lease or a webhook subscription keeps it until it ends.
 - The provider of an event gives a `Stream` of `Result<Emitted<P>, Defect>`. The end of the stream is complete. An `Err` is `internal`. When the client cancels, the core drops the stream.
 - `state(|unit| unit.status.subscribe())` gives the state of a capability from a `tokio::sync::watch::Receiver`. Use a `broadcast` channel, not a `watch`, for an event that must give each change: a `watch` keeps only the last value.
 - `build()` checks the application and gives `Arc<Application<C>>`. `render_catalog()` gives the catalog in canonical form. A type with a `title` used in two or more places becomes a shared type in `$defs`.
-- Bindings: `mcp::McpBinding` (MCP through HTTP, with the handshake, poll, and webhooks with `McpOptions::webhooks` and `principal`), `mcp::serve_stdio`, `http::HttpBinding`, `cli::cli_main` (with `CliOptions::remote(HttpClient)`, the command line calls the HTTP binding of a server). `remote::serve(address, routes)` serves the remote bindings with hyper. The core has no WebMCP binding. Rust code in the same process uses the [Rust binding](https://github.com/Hebilicious/acidcat/blob/main/spec/bindings/rust.md): `Session::open`, then `invoke` (an `Outcome`), `subscribe` (`Occurrences`), `availability`, `availability_changes`, `state` and `close`.
+- Surfaces: `mcp::McpSurface` (MCP through HTTP, with the handshake, poll, and webhooks with `McpOptions::webhooks` and `principal`), `mcp::serve_stdio`, `http::HttpSurface`, `cli::cli_main` (with `CliOptions::remote(HttpClient)`, the command line calls the HTTP surface of a server). `remote::serve(address, routes)` serves the remote surfaces with hyper. The core has no WebMCP surface. Rust code in the same process uses the [Rust surface](https://github.com/Hebilicious/acidcat/blob/main/spec/surfaces/rust.md): `Session::open`, then `invoke` (an `Outcome`), `subscribe` (`Occurrences`), `availability`, `availability_changes`, `state` and `close`.

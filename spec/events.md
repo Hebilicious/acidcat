@@ -14,14 +14,14 @@ The client gives the id of the event and an input. It can also give a cursor (se
   | Kind | When |
   | --- | --- |
   | `cancelled` | The client, the session or the provider stopped the subscription before it started |
-  | `unknown-capability` | The id is not an event in the view of the target |
+  | `unknown-capability` | The id is not an event in the catalog of the target |
   | `invalid-input` | The input does not agree with the input schema of the event, or `maxAgeMs` is not valid |
   | `internal` | All other problems |
 
   If more than one kind applies, use the first kind in the table. The rules for the messages of call failures apply.
 
 - An `unknown-capability` failure MUST NOT show if the event exists for a different target.
-- Events have no availability. An event in the view can always start a subscription.
+- Events have no availability. An event in the target can always start a subscription.
 
 ## Occurrences
 
@@ -34,10 +34,10 @@ The client gives the id of the event and an input. It can also give a cursor (se
 | `cursor` | No | The position of the subscription after this occurrence. See [Resuming](#resuming) |
 | `truncated` | No | `true` if the provider skipped occurrences before this one |
 
-[`schemas/occurrence.schema.json`](../schemas/occurrence.schema.json) defines this JSON form. A binding MAY show an occurrence in its own form. The client MUST be able to read each member.
+[`schemas/occurrence.schema.json`](../schemas/occurrence.schema.json) defines this JSON form. A surface MAY show an occurrence in its own form. The client MUST be able to read each member.
 
-- The provider SHOULD give the `eventId` of the source of the event, if the source has one. If the provider gives none, the binding makes one that is unique in the subscription.
-- If the provider gives no `timestamp`, the binding uses the time at which it sends the occurrence.
+- The provider SHOULD give the `eventId` of the source of the event, if the source has one. If the provider gives none, the surface makes one that is unique in the subscription.
+- If the provider gives no `timestamp`, the surface uses the time at which it sends the occurrence.
 - In one subscription, the occurrences come in the order in which the provider gives them. There is no order between two subscriptions.
 
 ## Ending
@@ -47,7 +47,7 @@ A subscription ends exactly one time, in one of these ways:
 | End | When | The client sees |
 | --- | --- | --- |
 | Complete | The provider has no more occurrences, or the session closes | The normal end of the stream |
-| Cancelled | The client stops the subscription | Nothing more. The binding does not have to tell the client |
+| Cancelled | The client stops the subscription | Nothing more. The surface does not have to tell the client |
 | Call failure | The provider fails during the subscription, or it gives an occurrence that does not agree with the payload schema | The call failure `internal`, after the occurrences before it |
 
 - When a subscription ends, the provider stops its work for that subscription, and releases the resources.
@@ -64,8 +64,8 @@ A subscription ends exactly one time, in one of these ways:
 
 A client can read occurrences slower than the provider gives them.
 
-- The binding keeps the occurrences that the client has not read, up to a limit of the deployment.
-- When the limit is full, the binding removes the oldest occurrences. The next occurrence that the client reads has `"truncated": true`.
+- The surface keeps the occurrences that the client has not read, up to a limit of the deployment.
+- When the limit is full, the surface removes the oldest occurrences. The next occurrence that the client reads has `"truncated": true`.
 
 ## Resuming
 
@@ -83,5 +83,5 @@ A **cursor** is a string that tells a position in the occurrences of an event. O
 
 - **Why events are not capabilities.** A capability gives one outcome. An event gives a stream of occurrences that only the client or the end of the session stops. The two have different surfaces in most protocols: a tool and an event stream in MCP, a request and a stream of server-sent events in HTTP, a mutation and a subscription in GraphQL.
 - **Why the session closes subscriptions as complete.** A GraphQL subscription ends with "complete" when the server ends it. A client then knows that the stream is done, and does not report an error.
-- **Why the members of an occurrence.** They are the members of an event occurrence in the MCP events extension. Thus the MCP binding sends the occurrence without change, and all bindings use one form.
+- **Why the members of an occurrence.** They are the members of an event occurrence in the MCP events extension. Thus the MCP surface sends the occurrence without change, and all surfaces use one form.
 - **Why no failures.** A thing that went wrong in the source is an occurrence too. Put it in the payload, for example as a union with a `_tag`. A call failure is only for problems with the subscription itself.

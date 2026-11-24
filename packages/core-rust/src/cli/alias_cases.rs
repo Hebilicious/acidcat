@@ -4,12 +4,12 @@ use super::{AliasKind, cli_aliases};
 
 const CASES: &str = include_str!("../../tests/fixtures/cli_alias_cases.json");
 
-fn view_entries(entries: &Value) -> Map<String, Value> {
+fn target_entries(entries: &Value) -> Map<String, Value> {
     entries
         .as_array()
         .expect("a list of entries")
         .iter()
-        .filter(|entry| entry["inView"] == Value::Bool(true))
+        .filter(|entry| entry["inTarget"] == Value::Bool(true))
         .map(|entry| {
             let id = entry["id"].as_str().expect("an id").to_owned();
             let input = &entry["input"];
@@ -26,12 +26,12 @@ fn view_entries(entries: &Value) -> Map<String, Value> {
 fn the_aliases_give_the_errors_the_aliases_and_the_default_of_the_model_in_each_case() {
     let fixture: Value = serde_json::from_str(CASES).expect("the cases of the model are JSON");
     let target = fixture["target"].as_str().expect("a target");
-    let capabilities = view_entries(&fixture["capabilities"]);
-    let events = view_entries(&fixture["events"]);
+    let capabilities = target_entries(&fixture["capabilities"]);
+    let events = target_entries(&fixture["events"]);
     let cases = fixture["cases"].as_array().expect("a list of cases");
     assert!(!cases.is_empty());
     for case in cases {
-        let bindings: Vec<&str> = if case["binding"] == Value::Bool(true) {
+        let surfaces: Vec<&str> = if case["surface"] == Value::Bool(true) {
             vec!["cli"]
         } else {
             Vec::new()
@@ -39,12 +39,12 @@ fn the_aliases_give_the_errors_the_aliases_and_the_default_of_the_model_in_each_
         let options = case
             .get("settings")
             .map_or_else(|| json!({}), |settings| json!({ "cli": settings }));
-        let view = json!({
-            "targets": { target: { "bindings": bindings, "options": options } },
+        let catalog = json!({
+            "targets": { target: { "surfaces": surfaces, "options": options } },
             "capabilities": capabilities,
             "events": events,
         });
-        let result = cli_aliases(&view, target);
+        let result = cli_aliases(&catalog, target);
         let aliases: Vec<Value> = result
             .aliases
             .iter()

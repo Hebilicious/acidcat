@@ -12,10 +12,10 @@ export interface ApiOptions {
 export const openSession = (options: ApiOptions): Session<Context> =>
   createSession(aircon, { target: "api", context: { unit: options.unit }, toJsonSchema });
 
-export const httpBinding = (options: ApiOptions, base: string) =>
+export const httpSurface = (options: ApiOptions, base: string) =>
   httpHandler(aircon, { allowedOrigins: options.allowedOrigins ?? [], context: { unit: options.unit }, toJsonSchema, base });
 
-/** True if the request comes from an origin that the API does not allow (spec/bindings/README.md#remote-bindings). */
+/** True if the request comes from an origin that the API does not allow (spec/surfaces/README.md#remote-surfaces). */
 export function foreignOrigin(request: Request, options: ApiOptions): boolean {
   const origin = request.headers.get("Origin");
   return origin !== null && !(options.allowedOrigins ?? []).includes(origin);

@@ -28,7 +28,7 @@ Run the commands below from `examples/aircon` unless a section says otherwise. B
 
 ## The command line
 
-Each core serves one command for each capability in the view of the `cli` target. The rules are in the [CLI binding](../../spec/bindings/cli.md#commands).
+Each core serves one command for each capability in the target of the `cli` target. The rules are in the [CLI surface](../../spec/surfaces/cli.md#commands).
 
 ```sh
 node core-ts/cli.ts aircon power set --on
@@ -61,7 +61,7 @@ off · cool · fan auto · target 22°C · room 25°C
 
 ### Aliases
 
-The `cli` target defines eight [aliases](../../spec/bindings/cli.md#aliases) in `options.cli`:
+The `cli` target defines eight [aliases](../../spec/surfaces/cli.md#aliases) in `options.cli`:
 
 | Alias | Runs |
 | --- | --- |
@@ -84,7 +84,7 @@ cargo run --manifest-path core-rust/Cargo.toml -- cli --off
 
 ### Control a unit in another process
 
-Each core can serve the [HTTP binding](../../spec/bindings/cli.md#server) of the `cli` target and prints its URL. With `AIRCON_URL` set, the command line sends every call and subscription to that server. Start each server in its own terminal:
+Each core can serve the [HTTP surface](../../spec/surfaces/cli.md#server) of the `cli` target and prints its URL. With `AIRCON_URL` set, the command line sends every call and subscription to that server. Start each server in its own terminal:
 
 ```sh
 node core-ts/serve.ts 0.0.0.0:8080
@@ -107,7 +107,7 @@ The MCP servers, WebMCP and the APIs fail with `unknown-capability`. The remote 
 
 ## MCP server through stdio
 
-Each application has an [MCP server through stdio](../../spec/bindings/mcp.md#stdio) for the `mcp` target. Give your MCP client one of these commands, with the repository root as its working directory:
+Each application has an [MCP server through stdio](../../spec/surfaces/mcp.md#stdio) for the `mcp` target. Give your MCP client one of these commands, with the repository root as its working directory:
 
 ```sh
 node examples/aircon/core-ts/mcp-stdio.ts
@@ -121,7 +121,7 @@ Look at the tool annotations. The setters, such as `aircon.power.set`, have the 
 
 ## WebMCP
 
-Each TypeScript core has a web page for the `app` target, with the [WebMCP binding](../../spec/bindings/webmcp.md). It shows the unit's status, has controls for power, mode, temperature, fan speed and firmware update, and a check box that takes the unit offline.
+Each TypeScript core has a web page for the `app` target, with the [WebMCP surface](../../spec/surfaces/webmcp.md). It shows the unit's status, has controls for power, mode, temperature, fan speed and firmware update, and a check box that takes the unit offline.
 
 | Page | Session | WebMCP |
 | --- | --- | --- |
@@ -143,33 +143,33 @@ What to look at:
 - A temperature of 40 rejects with an `Error` whose `kind` is `invalid-input`. `Offline` comes back as a result.
 - `aircon.firmware.update` is available only while the unit is online. The page removes the tool when the unit goes offline and registers it again when it comes back.
 - The controls and the tools share one session, so a person and an agent see each other's changes.
-- The page shows the binding status. It is the installation's `status` in core-ts and its `status` ref in core-effect.
+- The page shows the surface status. It is the installation's `status` in core-ts and its `status` ref in core-effect.
 
-The Rust core has no WebMCP, because it runs as a process, not in a page. Its catalog still has the WebMCP binding on `app`, so the catalog is the same in every language. Rust code uses the `app` target through the [Rust binding](../../spec/bindings/rust.md): the tests in [`core-rust/src/main.rs`](core-rust/src/main.rs) open `Session::open(&app, "app", unit)`, then call `invoke`, `subscribe` and `state`.
+The Rust core has no WebMCP, because it runs as a process, not in a page. Its catalog still has the WebMCP surface on `app`, so the catalog is the same in every language. Rust code uses the `app` target through the [Rust surface](../../spec/surfaces/rust.md): the tests in [`core-rust/src/main.rs`](core-rust/src/main.rs) open `Session::open(&app, "app", unit)`, then call `invoke`, `subscribe` and `state`.
 
 [`test/webmcp-page.test.ts`](test/webmcp-page.test.ts) opens each page in Chromium through Playwright with a test WebMCP host.
 
 ## APIs
 
-The HTTP and MCP bindings give one route or tool per capability. For an API with your own design, write it as application code on a session, with any library, and serve a binding beside it.
+The HTTP and MCP surfaces give one route or tool per capability. For an API with your own design, write it as application code on a session, with any library, and serve a surface beside it.
 
 | File | Library | API | Failures |
 | --- | --- | --- | --- |
 | [`apis/graphql.ts`](apis/graphql.ts) | [Pothos](https://pothos-graphql.dev), [GraphQL Yoga](https://the-guild.dev/graphql/yoga-server), [graphql-ws](https://the-guild.dev/graphql/ws) | `query { status }`, mutations that return the new status, and `subscription { statusChanged }` through server-sent events and WebSockets ([`ws`](https://github.com/websockets/ws)). Schema: [`apis/schema.graphql`](apis/schema.graphql). | A union of `Status` and the failures, for example `Status \| Offline \| PoweredOff` |
 | [`apis/capnweb.ts`](apis/capnweb.ts) | [Cap'n Web](https://github.com/cloudflare/capnweb) | A class with typed methods, batched over HTTP or called over WebSockets. `followStatus(listener)` calls the client's function with each new status until the client disposes the result. | `{ ok: false, error }` |
-| [`apis/elysia.ts`](apis/elysia.ts) | [Elysia](https://elysiajs.com) on `@elysiajs/node` | `GET /status`, `PATCH /status` (several settings at once), `GET /status/changes` (server-sent events) and the WebSocket `/status/follow`. The HTTP binding is mounted with `.mount("/api", …)`. | Status 409 with the failure |
-| [`apis/mcp.ts`](apis/mcp.ts) | [Effect](https://effect.website) `effect/ai` | Tools at `/mcp`: `get_status` (`readOnlyHint`) and `set_controls` (`destructiveHint`, `idempotentHint`). `Mcp.withEvents` from `@acid-cat/core-effect` adds the [MCP events extension](../../spec/bindings/mcp.md#events) for `aircon.status.changed`. | A tool error with the failure |
+| [`apis/elysia.ts`](apis/elysia.ts) | [Elysia](https://elysiajs.com) on `@elysiajs/node` | `GET /status`, `PATCH /status` (several settings at once), `GET /status/changes` (server-sent events) and the WebSocket `/status/follow`. The HTTP surface is mounted with `.mount("/api", …)`. | Status 409 with the failure |
+| [`apis/mcp.ts`](apis/mcp.ts) | [Effect](https://effect.website) `effect/ai` | Tools at `/mcp`: `get_status` (`readOnlyHint`) and `set_controls` (`destructiveHint`, `idempotentHint`). `Mcp.withEvents` from `@acid-cat/core-effect` adds the [MCP events extension](../../spec/surfaces/mcp.md#events) for `aircon.status.changed`. | A tool error with the failure |
 
-The first three use the `@acid-cat/core-ts` application, share [`apis/shared.ts`](apis/shared.ts), and serve the HTTP binding at `/api`. The MCP API uses the `@acid-cat/core-effect` application and serves the MCP binding at two URLs:
+The first three use the `@acid-cat/core-ts` application, share [`apis/shared.ts`](apis/shared.ts), and serve the HTTP surface at `/api`. The MCP API uses the `@acid-cat/core-effect` application and serves the MCP surface at two URLs:
 
 | URL | Handler | For |
 | --- | --- | --- |
 | `/capabilities/mcp` | `Mcp.toWebHandler(…)` | Clients of revision `2026-07-28`. |
-| `/capabilities/mcp-legacy` | `Mcp.withHandshake(Mcp.toWebHandler(…))` | Clients that open with the [`initialize` handshake](../../spec/bindings/mcp.md#earlier-revisions-through-http) of `2025-11-25` or `2025-06-18`. It keeps no session, so it sends no `notifications/tools/list_changed`. |
+| `/capabilities/mcp-legacy` | `Mcp.withHandshake(Mcp.toWebHandler(…))` | Clients that open with the [`initialize` handshake](../../spec/surfaces/mcp.md#earlier-revisions-through-http) of `2025-11-25` or `2025-06-18`. It keeps no session, so it sends no `notifications/tools/list_changed`. |
 
-Each MCP URL serves an MCP [Server Card](../../spec/bindings/mcp.md#server-card) named `dev.acid-cat/aircon`, at `/mcp/server-card`, `/capabilities/mcp/server-card` and `/capabilities/mcp-legacy/server-card`. The card gives the URL of the server, and the revisions that it serves: `2026-07-28`, and also `2025-11-25` and `2025-06-18` at the legacy URL. At `/mcp`, `Mcp.withEvents` asks the server of the application for `server/discover` and takes the version of the card from its answer, so the card always has the version of that server. Without `serverCard`, each server would serve a card with a default name, such as `local/aircon` at `127.0.0.1`. The other applications serve MCP only through stdio, which has no Server Card.
+Each MCP URL serves an MCP [Server Card](../../spec/surfaces/mcp.md#server-card) named `dev.acid-cat/aircon`, at `/mcp/server-card`, `/capabilities/mcp/server-card` and `/capabilities/mcp-legacy/server-card`. The card gives the URL of the server, and the revisions that it serves: `2026-07-28`, and also `2025-11-25` and `2025-06-18` at the legacy URL. At `/mcp`, `Mcp.withEvents` asks the server of the application for `server/discover` and takes the version of the card from its answer, so the card always has the version of that server. Without `serverCard`, each server would serve a card with a default name, such as `local/aircon` at `127.0.0.1`. The other applications serve MCP only through stdio, which has no Server Card.
 
-The input property `on` of `aircon.power.set` has `"x-mcp-header": "On"` in the catalog, and each catalog source and core writes it. Through HTTP, a call of `aircon.power.set` must send the header `Mcp-Param-On: true` or `Mcp-Param-On: false`, with the same value as `on`, or it gets 400 and `-32020` ([Headers](../../spec/bindings/mcp.md#headers)). The official MCP client, and `Mcp.withHandshake` for a client of an earlier revision, send it. Through stdio, the tool gives the annotation, and no header exists.
+The input property `on` of `aircon.power.set` has `"x-mcp-header": "On"` in the catalog, and each catalog source and core writes it. Through HTTP, a call of `aircon.power.set` must send the header `Mcp-Param-On: true` or `Mcp-Param-On: false`, with the same value as `on`, or it gets 400 and `-32020` ([Headers](../../spec/surfaces/mcp.md#headers)). The official MCP client, and `Mcp.withHandshake` for a client of an earlier revision, send it. Through stdio, the tool gives the annotation, and no header exists.
 
 Every API rejects origins it does not allow.
 
@@ -182,7 +182,7 @@ Every API rejects origins it does not allow.
   - GraphQL returns the subscription as the resolver's iterator; GraphQL calls `return()` when the client ends it.
   - Cap'n Web aborts the signal when the client disposes the `Following` object, the connection breaks, or the listener throws.
   - Elysia's `GET /status/changes` uses the request's signal and sends `retry: 1000` first so the response starts at once. `/status/follow` sends `{ "event": "following" }`, then `{ "event": "aircon.status.changed", "data": <status> }` per change. A WebSocket upgrade from a foreign origin gets 403.
-  - MCP: `effect/ai` cannot add methods, so `Mcp.withEvents(aircon, unit, application.handler, options)` answers the events requests before the server sees them, and the server declares `extensions: Mcp.eventsExtensions`. A poll lease also ends when `dispose` runs. See [Push](../../spec/bindings/mcp.md#push) and [Poll](../../spec/bindings/mcp.md#poll).
+  - MCP: `effect/ai` cannot add methods, so `Mcp.withEvents(aircon, unit, application.handler, options)` answers the events requests before the server sees them, and the server declares `extensions: Mcp.eventsExtensions`. A poll lease also ends when `dispose` runs. See [Push](../../spec/surfaces/mcp.md#push) and [Poll](../../spec/surfaces/mcp.md#poll).
 
 ### Run an API
 
@@ -211,7 +211,7 @@ curl -N http://127.0.0.1:3000/mcp -H 'Accept: application/json, text/event-strea
   -d '{"jsonrpc":"2.0","id":1,"method":"events/stream","params":{"name":"aircon.status.changed","arguments":{},"heartbeatMs":30000,"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
 
-The MCP stream starts with `notifications/events/active`, which grants the suggested `heartbeatMs: 30000`. With no `heartbeatMs`, the grant is 15000. The server sends `notifications/events/heartbeat` each time the stream is idle for that interval ([Push](../../spec/bindings/mcp.md#push)).
+The MCP stream starts with `notifications/events/active`, which grants the suggested `heartbeatMs: 30000`. With no `heartbeatMs`, the grant is 15000. The server sends `notifications/events/heartbeat` each time the stream is idle for that interval ([Push](../../spec/surfaces/mcp.md#push)).
 
 A Cap'n Web client:
 

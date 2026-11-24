@@ -10,7 +10,7 @@ The AcidCat catalog module for [Pkl](https://pkl-lang.org), published as the Pkl
 amends "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@0.3.1#/Catalog.pkl"
 
 targets {
-  ["panel"] { bindings { "typescript" } }
+  ["panel"] { surfaces { "typescript" } }
 }
 
 capabilities {
@@ -47,13 +47,13 @@ The full example, a greenhouse, is [`examples/greenhouse.pkl`](examples/greenhou
 
 - `readOnly`, `destructive` and `idempotent` on a capability are its [hints](../../../spec/catalog.md#capabilities) for clients.
 - `events` declares the [events](../../../spec/events.md) that clients can subscribe to. The module checks that each audience names a target, that each input and payload is an object or a reference, and that no event id is also a capability id.
-- `cli` on a target gives the options of the [command line](../../../spec/bindings/cli.md#aliases) and renders as `options.cli`. The classes `CliOptions` and `CliAlias` reject a misspelled member name. `acid-cat check` checks the alias rules.
+- `cli` on a target gives the options of the [command line](../../../spec/surfaces/cli.md#aliases) and renders as `options.cli`. The classes `CliOptions` and `CliAlias` reject a misspelled member name. `acid-cat check` checks the alias rules.
 
 A target with two aliases and a default:
 
 ```pkl
 ["cli"] {
-  bindings { "cli" }
+  surfaces { "cli" }
   cli {
     aliases {
       ["vents"] { capability = "greenhouse.vents.set" }

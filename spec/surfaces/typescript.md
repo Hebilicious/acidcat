@@ -1,6 +1,6 @@
-# TypeScript binding
+# TypeScript surface
 
-The language binding for TypeScript and JavaScript. It maps the [programmatic binding](programmatic.md) to TypeScript. The rules of the programmatic binding apply. This document tells only the TypeScript forms. Protocol bindings, such as WebMCP, MCP and the command line, use the same handles.
+The language surface for TypeScript and JavaScript. It maps the [programmatic surface](programmatic.md) to TypeScript. The rules of the programmatic surface apply. This document tells only the TypeScript forms. Protocol surfaces, such as WebMCP, MCP and the command line, use the same handles.
 
 ## Handles
 
@@ -80,6 +80,6 @@ A GraphQL server can use an event handle as the source of a subscription. The `s
 ## Sessions
 
 - **Opening.** A function of the core opens a session for one target, and gives the session object. It is `createSession` in `@acid-cat/core-ts` and `Handles.open` in `@acid-cat/core-effect`.
-- **Handles.** `handles` is a `ReadonlyMap` of the handles, by id. The session also has a `ReadonlyMap` of the event handles, by id: `eventHandles` in `@acid-cat/core-ts`, and `events` in `@acid-cat/core-effect`. `view` is the view of the target, as a catalog document.
+- **Handles.** `handles` is a `ReadonlyMap` of the handles, by id. The session also has a `ReadonlyMap` of the event handles, by id: `eventHandles` in `@acid-cat/core-ts`, and `events` in `@acid-cat/core-effect`. `catalog` is the catalog of the target, as a catalog document.
 - **Closing.** `dispose(): Promise<void>` closes a session.
 - **Signal.** The session has its own `signal`, an `AbortSignal`. It aborts when the session starts to close, and it cancels all the work of the session.

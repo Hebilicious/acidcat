@@ -80,7 +80,7 @@ test("watch takes the resume flags after JSON text, and rejects a negative or em
 test("the command line stops with an error when an input of an event has a property cursor or max-age-ms", async () => {
   for (const name of ["cursor", "max-age-ms"]) {
     const app = defineApp({
-      targets: { cli: { bindings: ["cli"] } },
+      targets: { cli: { surfaces: ["cli"] } },
       capabilities: [],
       events: [defineEvent({ id: "probe.changed", description: "A probe event.", audience: ["cli"], input: z.object({ [name]: z.string() }), async *subscribe() {} })],
     });

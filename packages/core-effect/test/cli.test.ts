@@ -241,7 +241,7 @@ test("a command of the application must not have the name of another command", (
 test("App.alias writes options.cli, with one default command alias at most", () => {
   const ping = Capability.make({ id: "probe.ping", description: "Ping.", audience: ["cli"], run: () => Effect.succeed(null) });
   const write = (aliases: { readonly [name: string]: App.Alias }) =>
-    App.document(App.make({ targets: { cli: { bindings: ["cli"], cli: { aliases } } }, capabilities: [ping] })).targets.cli?.options;
+    App.document(App.make({ targets: { cli: { surfaces: ["cli"], cli: { aliases } } }, capabilities: [ping] })).targets.cli?.options;
   assert.deepEqual(write({ ping: App.aliasDefault(ping), "--ping": App.alias(ping) }), {
     cli: { aliases: { ping: { capability: "probe.ping" }, "--ping": { capability: "probe.ping" } }, default: "ping" },
   });
@@ -252,7 +252,7 @@ test("App.alias writes options.cli, with one default command alias at most", () 
 test("the command line stops when it starts if an alias breaks a rule", () => {
   const ping = Capability.make({ id: "probe.ping", description: "Ping.", audience: ["cli"], run: () => Effect.succeed(null) });
   const appOf = (aliases: { readonly [name: string]: unknown }) =>
-    App.make({ targets: { cli: { bindings: ["cli"], options: { cli: { aliases } } } }, capabilities: [ping] });
+    App.make({ targets: { cli: { surfaces: ["cli"], options: { cli: { aliases } } } }, capabilities: [ping] });
   const options = { name: "probe", version: "0.0.0" };
   assert.throws(() => Cli.command(appOf({ list: { capability: "probe.ping" } }), options), /the alias list has the name of a command/);
   assert.throws(() => Cli.command(appOf({ "probe ping": { capability: "probe.ping" } }), options), /the alias probe ping has the path of the command of a capability/);
@@ -266,7 +266,7 @@ test("the command line stops when it starts if a flag alias, or a flag of the de
   const ping = Capability.make({ id: "probe.ping", description: "Ping.", audience: ["cli"], input: Input, run: () => Effect.succeed(null) });
   const switchFlag = GlobalFlag.Setting("switch")({ flag: Flag.Boolean("switch") });
   const start = (cli: { readonly aliases: { readonly [name: string]: { readonly capability: string } }; readonly default?: string }) => {
-    const app = App.make({ targets: { cli: { bindings: ["cli"], options: { cli } } }, capabilities: [ping] });
+    const app = App.make({ targets: { cli: { surfaces: ["cli"], options: { cli } } }, capabilities: [ping] });
     const command = Cli.command(app, { name: "probe", version: "0.0.0" }).pipe(Command.withGlobalFlags([switchFlag]));
     return Effect.runPromiseExit(Cli.runCommand(command, { version: "0.0.0" }).pipe(Effect.provide(NodeServices.layer)));
   };
@@ -282,7 +282,7 @@ test("the command line stops when it starts if a flag alias, or a flag of the de
 
 test("the path of a capability must not be the start of the path of another capability", () => {
   const capability = (id: string) => Capability.make({ id, description: id, audience: ["cli"], run: () => Effect.succeed(null) });
-  const appOf = (...ids: string[]) => App.make({ targets: { cli: { bindings: ["cli"] } }, capabilities: ids.map(capability) });
+  const appOf = (...ids: string[]) => App.make({ targets: { cli: { surfaces: ["cli"] } }, capabilities: ids.map(capability) });
   const options = { name: "aircon", version: "0.0.0" };
   assert.throws(() => Cli.command(appOf("aircon.status", "aircon.status.get"), options), /The command aircon status is also the start of the command aircon status get/);
   assert.throws(() => Cli.command(appOf("aircon.status.get", "aircon"), options), /The command aircon is also the start of the command aircon status get/);

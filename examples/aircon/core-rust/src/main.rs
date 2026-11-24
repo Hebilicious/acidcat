@@ -216,11 +216,11 @@ type Event = acid_cat_core::Event<Unit>;
 const EVERYWHERE: [&str; 5] = ["app", "taskbar", "cli", "mcp", "api"];
 const CONTROLS: [&str; 4] = ["app", "cli", "mcp", "api"];
 
-fn target(description: &str, bindings: &[&str]) -> Target {
+fn target(description: &str, surfaces: &[&str]) -> Target {
     Target {
-        bindings: bindings
+        surfaces: surfaces
             .iter()
-            .map(|binding| (*binding).to_owned())
+            .map(|surface| (*surface).to_owned())
             .collect(),
         description: Some(description.into()),
         options: None,
@@ -501,8 +501,8 @@ async fn main() {
             std::process::exit(run_cli_process(app, unit, options, args[1..].to_vec()).await);
         }
         Some("serve") => {
-            use acid_cat_core::http::{HttpBinding, HttpOptions};
-            let cli = HttpBinding::new(
+            use acid_cat_core::http::{HttpOptions, HttpSurface};
+            let cli = HttpSurface::new(
                 app,
                 unit,
                 HttpOptions {

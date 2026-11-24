@@ -13,7 +13,7 @@ use crate::app::{Application, ServedCapability, ServedEvent, StateWatch, call, s
 use crate::outcome::{Availability, CallFailure, Defect, Kind, Outcome};
 use crate::subscription::{INTERNAL_MESSAGE, Occurrences, Parts, prepare};
 
-/// The number of occurrences that each subscription keeps for a client that reads slowly, if the binding gives no
+/// The number of occurrences that each subscription keeps for a client that reads slowly, if the surface gives no
 /// limit (spec/events.md#slow-clients).
 pub const DEFAULT_BUFFER_LIMIT: usize = 256;
 
@@ -67,7 +67,7 @@ struct Inner<C> {
     app: Arc<Application<C>>,
     target: Arc<str>,
     context: Arc<C>,
-    view: Arc<Value>,
+    catalog: Arc<Value>,
     closing: CancellationToken,
     capabilities: HashMap<String, Served<C>>,
     events: HashMap<String, Arc<ServedEvent<C>>>,
@@ -143,7 +143,7 @@ impl<C: Send + Sync + 'static> Session<C> {
         }
         Session {
             inner: Arc::new(Inner {
-                view: app.view(target),
+                catalog: app.target_catalog(target),
                 app: app.clone(),
                 target: Arc::from(target),
                 context,
@@ -161,21 +161,21 @@ impl<C: Send + Sync + 'static> Session<C> {
         &self.inner.target
     }
 
-    /// The view of the target. Bindings take names, descriptions and schemas from it.
-    pub fn view(&self) -> &Value {
-        &self.inner.view
+    /// The catalog of the target. Surfaces take names, descriptions and schemas from it.
+    pub fn catalog(&self) -> &Value {
+        &self.inner.catalog
     }
 
     pub fn application(&self) -> &Arc<Application<C>> {
         &self.inner.app
     }
 
-    /// The ids of the capabilities in the view, in the order of the catalog.
+    /// The ids of the capabilities in the target, in the order of the catalog.
     pub fn capability_ids(&self) -> &[String] {
         &self.inner.capability_ids
     }
 
-    /// The ids of the events in the view, in the order of the catalog.
+    /// The ids of the events in the target, in the order of the catalog.
     pub fn event_ids(&self) -> &[String] {
         &self.inner.event_ids
     }
@@ -184,7 +184,7 @@ impl<C: Send + Sync + 'static> Session<C> {
         self.inner.events.contains_key(id)
     }
 
-    /// The availability of a capability now, or `None` when it is not in the view.
+    /// The availability of a capability now, or `None` when it is not in the target.
     pub fn availability(&self, id: &str) -> Option<Availability> {
         let served = self.inner.capabilities.get(id)?;
         Some(
@@ -197,7 +197,7 @@ impl<C: Send + Sync + 'static> Session<C> {
         )
     }
 
-    /// The state of a capability, or `None` when the capability has no state or is not in the view
+    /// The state of a capability, or `None` when the capability has no state or is not in the target
     /// (spec/invocation.md#state).
     pub fn state(&self, id: &str) -> Option<StateWatch> {
         let served = self.inner.capabilities.get(id)?;

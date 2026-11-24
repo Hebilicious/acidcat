@@ -11,8 +11,8 @@ A **catalog** is a JSON document. It tells what an application can do, which eve
   "acidcat": "0.1",
   "title": "Living-room air conditioner",
   "targets": {
-    "app": { "bindings": ["typescript"] },
-    "mcp": { "bindings": ["mcp"] }
+    "app": { "surfaces": ["typescript"] },
+    "mcp": { "surfaces": ["mcp"] }
   },
   "capabilities": {
     "aircon.temperature.set": {
@@ -39,7 +39,7 @@ The catalog is a build-time file. Keep it with the source code of the applicatio
 - generate code;
 - test the application against the catalog.
 
-An implementation does not read the catalog at run time. It uses its own code. That code can come from the catalog, or the catalog can come from that code. The behavior of each binding MUST agree with the catalog. A binding MAY load a precomputed part of the catalog at run time, if this is faster.
+An implementation does not read the catalog at run time. It uses its own code. That code can come from the catalog, or the catalog can come from that code. The behavior of each surface MUST agree with the catalog. A surface MAY load a precomputed part of the catalog at run time, if this is faster.
 
 ## Writing a catalog
 
@@ -53,7 +53,7 @@ When no code writes the catalog, use Pkl. Pkl finds errors before it writes the 
 
 You can also write the JSON document by hand. A JSON document is a catalog when it conforms, however it was written. Then run `acid-cat check` after each change, and `acid-cat format --write` to keep the canonical form.
 
-A source is better than JSON by hand because the JSON document is long, and it has rules that a text editor does not check: canonical form, references, views. A source finds these errors, shares types, and gives the same bytes each time. When a source writes the JSON, commit the two together, change only the source, and check in the build that the JSON is the output of the source.
+A source is better than JSON by hand because the JSON document is long, and it has rules that a text editor does not check: canonical form, references, the catalog of each target. A source finds these errors, shares types, and gives the same bytes each time. When a source writes the JSON, commit the two together, change only the source, and check in the build that the JSON is the output of the source.
 
 ## Document
 
@@ -73,13 +73,13 @@ A **target** is a group of clients that can use a set of capabilities, for examp
 
 | Member | Required | Value |
 | --- | --- | --- |
-| `bindings` | Yes | The bindings that serve the target, for example `["typescript", "webmcp"]` |
+| `surfaces` | Yes | The surfaces that serve the target, for example `["typescript", "webmcp"]` |
 | `description` | No | The clients of the target |
-| `options` | No | Settings for the bindings. Each binding defines its settings, and keeps them in a member with the name of the binding, for example the [aliases](bindings/cli.md#aliases) of the CLI binding in `options.cli` |
+| `options` | No | Settings for the surfaces. Each surface defines its settings, and keeps them in a member with the name of the surface, for example the [aliases](surfaces/cli.md#aliases) of the CLI surface in `options.cli` |
 
 - A target name matches `[a-z][a-z0-9-]*`. It can have a second part after a colon, as in `acme:panel`.
 - The application chooses its target names. This specification reserves no target name.
-- A binding name is a name from [Bindings](bindings/README.md#bindings-in-this-specification), or a name that the application chooses. Give a new binding a name with a prefix, as in `acme:swift`.
+- A surface name is a name from [Surfaces](surfaces/README.md#surfaces-in-this-specification), or a name that the application chooses. Give a new surface a name with a prefix, as in `acme:swift`.
 
 ## Capabilities
 
@@ -129,7 +129,7 @@ The first segment is the **namespace** of the capability or the event.
 
 Capabilities and events share one set of ids. An id MUST NOT be both the id of a capability and the id of an event.
 
-Each binding makes its surface names from the id. For example, `aircon.power.set` becomes the command `aircon power set` and the HTTP route `POST /capabilities/aircon.power.set`.
+Each surface makes its names from the id. For example, `aircon.power.set` becomes the command `aircon power set` and the HTTP route `POST /capabilities/aircon.power.set`.
 
 ## Failures
 
@@ -173,18 +173,18 @@ Some surfaces need a schema that has no references to other locations. An MCP to
 
 After bundling, each `$ref` has the same form and refers to the same type.
 
-## Views
+## The catalog of a target
 
-The **view** of a target is the part of the catalog that the target can see. A view is a catalog that contains:
+The **catalog of a target** is the part of the catalog that the target can use. It is itself a catalog, and it contains:
 
 - only that target in `targets`;
 - only the capabilities and the events whose audience includes that target;
 - only that target in the audience of each capability and each event;
 - only the types that these capabilities and events use.
 
-If no event is in the view, the view has no `events` member.
+If the target has no event, its catalog has no `events` member.
 
-A binding serves the view of its target. A client MUST NOT get information about a capability or an event that is not in its view. A call to such a capability fails as a call to an unknown id ([Invocation](invocation.md#call-failures)). A subscription to such an event fails in the same way ([Events](events.md#subscribing)).
+A surface serves the catalog of its target. A client MUST NOT get information about a capability or an event that is not in the catalog of its target. A call to such a capability fails as a call to an unknown id ([Invocation](invocation.md#call-failures)). A subscription to such an event fails in the same way ([Events](events.md#subscribing)).
 
 ## Changes
 
@@ -198,14 +198,14 @@ The `acidcat` member is the version of this specification. It is not the version
 
 The **canonical form** is the one correct text for a catalog. All tools and catalog libraries write the same bytes for the same catalog. A committed catalog SHOULD be in canonical form. `acid-cat format` writes this form.
 
-- **Member order.** The catalog: `acidcat`, `title`, `description`, `targets`, `$defs`, `capabilities`, `events`. A target: `bindings`, `description`, `options`. A capability: `description`, `audience`, `input`, `output`, `failures`, `readOnly`, `destructive`, `idempotent`, `state`. An event: `description`, `audience`, `input`, `payload`. Other members come after these members, in sorted order.
+- **Member order.** The catalog: `acidcat`, `title`, `description`, `targets`, `$defs`, `capabilities`, `events`. A target: `surfaces`, `description`, `options`. A capability: `description`, `audience`, `input`, `output`, `failures`, `readOnly`, `destructive`, `idempotent`, `state`. An event: `description`, `audience`, `input`, `payload`. Other members come after these members, in sorted order.
 - **Sorted keys.** Sort the keys of `targets`, `$defs`, `capabilities`, `events` and `failures`. Sort the keys of all objects in schemas and in `options`, at all levels. Sort by Unicode code point. Do not sort arrays.
 - **Values.** Write strings and numbers as `JSON.stringify` in ECMAScript writes them. For example: `16`, `0.5`, `1e-7`, `1e+21`. Escape only `"`, `\` and control characters.
 - **Layout.** Use UTF-8. Indent with two spaces. Put each member and each item on its own line. Write an empty object as `{}` and an empty array as `[]`. End the text with one line feed.
 
 ## Extensions
 
-A tool ignores members that it does not know. A member that this specification does not define SHOULD start with `x-`, as in `x-icon`. A binding can give rules for an extension member, as the MCP binding does for [`x-mcp-header`](bindings/mcp.md#header-annotations). [Extensions](extensions/README.md) give optional conventions.
+A tool ignores members that it does not know. A member that this specification does not define SHOULD start with `x-`, as in `x-icon`. A surface can give rules for an extension member, as the MCP surface does for [`x-mcp-header`](surfaces/mcp.md#header-annotations). [Extensions](extensions/README.md) give optional conventions.
 
 ## Design notes
 

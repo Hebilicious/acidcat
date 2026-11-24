@@ -31,7 +31,7 @@ const targeted = Event.make({
 const app = App.make({
   title: "Who",
   description: "Tell the caller and the target of each call.",
-  targets: { app: { bindings: ["typescript"] }, api: { bindings: ["http"] }, mcp: { bindings: ["mcp"] } },
+  targets: { app: { surfaces: ["typescript"] }, api: { surfaces: ["http"] }, mcp: { surfaces: ["mcp"] } },
   capabilities: [who],
   events: [targeted],
 });

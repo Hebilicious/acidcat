@@ -16,7 +16,7 @@ const surfaces = [
     text: "The words of the id become the command, and each input property becomes a flag. The catalog can give short aliases. In a pipe, the program writes each result as one line of JSON.",
     language: "shellscript",
     code: "$ home aircon power set --on\n$ home --on\n$ home list",
-    spec: "spec/bindings/cli.md",
+    spec: "spec/surfaces/cli.md",
   },
   {
     id: "mcp",
@@ -25,7 +25,7 @@ const surfaces = [
     text: "tools/list gives one tool for each available capability. The name of the tool is the id. destructive and idempotent become hints, so an agent knows when to ask first.",
     language: "json",
     code: '{\n  "name": "aircon.power.set",\n  "description": "Turn the unit on or off.",\n  "annotations": { "destructiveHint": true, "idempotentHint": true }\n}',
-    spec: "spec/bindings/mcp.md",
+    spec: "spec/surfaces/mcp.md",
   },
   {
     id: "webmcp",
@@ -34,7 +34,7 @@ const surfaces = [
     text: "The page registers a tool for each available capability with registerTool. A browser agent calls it with the session of the signed-in user.",
     language: "json",
     code: '{\n  "name": "aircon.power.set",\n  "inputSchema": {\n    "type": "object",\n    "properties": { "on": { "type": "boolean" } },\n    "required": ["on"]\n  }\n}',
-    spec: "spec/bindings/webmcp.md",
+    spec: "spec/surfaces/webmcp.md",
   },
   {
     id: "http",
@@ -43,7 +43,7 @@ const surfaces = [
     text: "A POST to /capabilities/{id} with the input as the body gives the outcome. A POST to /events/{id} streams the occurrences as server-sent events.",
     language: "http",
     code: 'POST /capabilities/aircon.power.set\nContent-Type: application/json\n\n{ "on": true }',
-    spec: "spec/bindings/http.md",
+    spec: "spec/surfaces/http.md",
   },
   {
     id: "ts",
@@ -52,7 +52,7 @@ const surfaces = [
     text: "A session gives a handle for each capability. execute returns a result: the value, or a failure with its tag. An AbortSignal cancels the call.",
     language: "typescript",
     code: 'const result = await handle.execute({ on: true });\nif (!result.ok && result.error._tag === "Offline") {\n  showOffline();\n}',
-    spec: "spec/bindings/programmatic.md",
+    spec: "spec/surfaces/programmatic.md",
   },
 ].map((surface) => ({ ...surface, html: highlight(surface.code, surface.language) }));
 ---
@@ -82,7 +82,7 @@ const surfaces = [
           </header>
           <p class="description">{surface.text}</p>
           <div class="sample" set:html={surface.html} />
-          <a href={`/${surface.spec.replace(/\.md$/, "")}/`}>Read the binding <span aria-hidden="true">→</span></a>
+          <a href={`/${surface.spec.replace(/\.md$/, "")}/`}>Read the specification <span aria-hidden="true">→</span></a>
         </div>
       </section>
     ))}

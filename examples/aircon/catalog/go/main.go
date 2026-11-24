@@ -18,13 +18,13 @@ func airconCatalog() *catalog.Catalog {
 	c.
 		Target("app", catalog.Target{
 			Description: "The phone, desktop and web apps that people use.",
-			Bindings:    []string{"typescript", "rust", "webmcp", "acme:swift", "acme:kotlin"},
+			Surfaces:    []string{"typescript", "rust", "webmcp", "acme:swift", "acme:kotlin"},
 		}).
 		Target("taskbar", catalog.Target{
 			Description: "A desktop taskbar widget showing the status and a power toggle.",
-			Bindings:    []string{"typescript"},
+			Surfaces:    []string{"typescript"},
 		}).
-		Target("cli", catalog.Target{Bindings: []string{"cli"}, Options: schema{
+		Target("cli", catalog.Target{Surfaces: []string{"cli"}, Options: schema{
 			"cli": schema{"aliases": schema{
 				"status":       schema{"capability": "aircon.status.get"},
 				"--on":         schema{"capability": "aircon.power.set", "input": schema{"on": true}},
@@ -36,8 +36,8 @@ func airconCatalog() *catalog.Catalog {
 				"fan high":     schema{"capability": "aircon.fan.set", "input": schema{"speed": "high"}},
 			}, "default": "status"},
 		}}).
-		Target("mcp", catalog.Target{Description: "Agents, through an MCP server.", Bindings: []string{"mcp"}}).
-		Target("api", catalog.Target{Description: "Home-automation systems and scripts.", Bindings: []string{"http"}})
+		Target("mcp", catalog.Target{Description: "Agents, through an MCP server.", Surfaces: []string{"mcp"}}).
+		Target("api", catalog.Target{Description: "Home-automation systems and scripts.", Surfaces: []string{"http"}})
 
 	mode := c.Type("Mode", schema{"enum": []any{"cool", "heat", "dry", "fan", "auto"}})
 	fanSpeed := c.Type("FanSpeed", schema{"enum": []any{"auto", "low", "medium", "high"}})

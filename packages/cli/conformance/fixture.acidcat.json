@@ -4,18 +4,18 @@
   "description": "One capability or event for each behavior that acid-cat conform tests.",
   "targets": {
     "api": {
-      "bindings": [
+      "surfaces": [
         "http"
       ]
     },
     "app": {
-      "bindings": [
+      "surfaces": [
         "typescript",
         "webmcp"
       ]
     },
     "cli": {
-      "bindings": [
+      "surfaces": [
         "cli"
       ],
       "options": {
@@ -90,7 +90,7 @@
       }
     },
     "mcp": {
-      "bindings": [
+      "surfaces": [
         "mcp"
       ]
     }

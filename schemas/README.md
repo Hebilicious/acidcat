@@ -4,7 +4,7 @@ These JSON Schema 2020-12 documents are normative, together with the prose of th
 
 | Schema | Validates |
 | --- | --- |
-| [`catalog.schema.json`](catalog.schema.json) | A catalog or a view (see [Catalog](../spec/catalog.md)) |
+| [`catalog.schema.json`](catalog.schema.json) | A catalog, or the catalog of a target (see [Catalog](../spec/catalog.md)) |
 | [`outcome.schema.json`](outcome.schema.json) | The JSON form of an outcome (see [Invocation](../spec/invocation.md#outcomes)) |
 | [`occurrence.schema.json`](occurrence.schema.json) | The JSON form of an occurrence (see [Events](../spec/events.md#occurrences)) |
 

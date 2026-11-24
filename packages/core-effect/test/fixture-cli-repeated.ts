@@ -8,7 +8,7 @@ const Day = Schema.Literals(["mon", "tue"]).annotate({ identifier: "Day" });
 const Plan = Schema.Struct({ days: Schema.Array(Day), hours: Schema.optionalKey(Schema.Array(Schema.Int)) });
 
 const app = App.make({
-  targets: { cli: { bindings: ["cli"] } },
+  targets: { cli: { surfaces: ["cli"] } },
   capabilities: [
     Capability.make({
       id: "probe.plan",

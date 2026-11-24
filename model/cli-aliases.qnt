@@ -1,4 +1,4 @@
-// The checks of the aliases of a target, in options.cli of the target (spec/bindings/cli.md#aliases).
+// The checks of the aliases of a target, in options.cli of the target (spec/surfaces/cli.md#aliases).
 // A name, an id or a property is a list of characters. A problem has the key of its template in ALIAS_MESSAGES, and
 // the parts that fill the template, except {where}: the generator writes "target <name>".
 module cliAliases {
@@ -15,7 +15,7 @@ module cliAliases {
 
   type Schema = NoSchema | NoProperties | Properties(List[Text])
 
-  type Entry = { id: Text, inView: bool, input: Schema }
+  type Entry = { id: Text, inTarget: bool, input: Schema }
 
   type DefaultSetting = NoDefault | DefaultNotText | DefaultName(Text)
 
@@ -23,7 +23,7 @@ module cliAliases {
 
   type Settings = NoSettings | SettingsNotObject | SettingsObject({ aliases: AliasSet, default: DefaultSetting })
 
-  type Declared = { cliBinding: bool, settings: Settings }
+  type Declared = { cliSurface: bool, settings: Settings }
 
   type AliasProblem = { key: str, parts: List[(str, Text)] }
 
@@ -60,7 +60,7 @@ module cliAliases {
   pure def isReserved(name: Text): bool =
     if (startsWithDoubleDash(name)) PROGRAM_FLAGS.includes(name) else CLI_GENERIC_COMMANDS.includes(name)
 
-  pure def entryOf(entries: List[Entry], id: Text): List[Entry] = entries.select(entry => entry.inView and entry.id == id)
+  pure def entryOf(entries: List[Entry], id: Text): List[Entry] = entries.select(entry => entry.inTarget and entry.id == id)
 
   pure def propertiesOf(schema: Schema): List[Text] = match schema {
     | Properties(names) => names
@@ -76,7 +76,7 @@ module cliAliases {
   type Checked = Rejected(AliasProblem) | Accepted(Alias)
 
   pure def checkAlias(capabilities: List[Entry], events: List[Entry], name: Text, value: AliasValue): Checked = {
-    val paths = capabilities.select(entry => entry.inView).foldl([], (found, entry) => found.append(pathOf(entry.id)))
+    val paths = capabilities.select(entry => entry.inTarget).foldl([], (found, entry) => found.append(pathOf(entry.id)))
     val leading = leadingWord(name)
     if (not(isAliasName(name))) Rejected(problem("badName", name, []))
     else if (isReserved(leading)) Rejected(problem(if (isTwoWords(name)) "reservedFirstWord" else "reservedName", name, []))
@@ -93,7 +93,7 @@ module cliAliases {
           val kind = if (alias.event != Absent) EventAlias else CapabilityAlias
           val found = entryOf(if (kind == EventAlias) events else capabilities, id)
           if (unknown != []) Rejected(problem("unknownMember", name, [("members", joinedWith(unknown, MEMBER_SEPARATOR))]))
-          else if (found == []) Rejected(problem("notInView", name, [("id", id), ("kind", if (kind == EventAlias) AN_EVENT else A_CAPABILITY)]))
+          else if (found == []) Rejected(problem("notInTarget", name, [("id", id), ("kind", if (kind == EventAlias) AN_EVENT else A_CAPABILITY)]))
           else match alias.input {
             | NoFixedInput => Accepted({ name: name, kind: kind, id: id, input: NoFixedInput })
             | FixedNotObject => Rejected(problem("inputNotObject", name, []))
@@ -138,13 +138,13 @@ module cliAliases {
     | NoSettings => NO_RESULT
     | SettingsNotObject => { ...NO_RESULT, problems: [{ key: "settingsNotObject", parts: [] }] }
     | SettingsObject(settings) => {
-      val binding = if (declared.cliBinding) [] else [{ key: "noCliBinding", parts: [] }]
+      val surface = if (declared.cliSurface) [] else [{ key: "noCliSurface", parts: [] }]
       val members = match settings.aliases { | AliasMembers(members) => [members] | AliasesAbsent => [[]] | AliasesNotObject => [] }
-      if (members == []) { ...NO_RESULT, problems: binding.append({ key: "aliasesNotObject", parts: [] }) }
+      if (members == []) { ...NO_RESULT, problems: surface.append({ key: "aliasesNotObject", parts: [] }) }
       else {
         val sorted = inCodePointOrder(members[0], member => member._1)
         val names = sorted.foldl([], (found, member) => found.append(member._1))
-        val checked = sorted.foldl({ problems: binding, aliases: [] }, (state, member) => match checkAlias(capabilities, events, member._1, member._2) {
+        val checked = sorted.foldl({ problems: surface, aliases: [] }, (state, member) => match checkAlias(capabilities, events, member._1, member._2) {
           | Rejected(found) => { ...state, problems: state.problems.append(found) }
           | Accepted(alias) => { ...state, aliases: state.aliases.append(alias) }
         })
@@ -172,7 +172,7 @@ module cliAliases {
   pure val READ: Text = ["p", "r", "o", "b", "e", ".", "r", "e", "a", "d"]
   pure val PATH: Text = ["p", "a", "t", "h"]
   pure val HELP: Text = ["h", "e", "l", "p"]
-  pure val TEST_CAPABILITIES: List[Entry] = [{ id: READ, inView: true, input: Properties([PATH, HELP]) }]
+  pure val TEST_CAPABILITIES: List[Entry] = [{ id: READ, inTarget: true, input: Properties([PATH, HELP]) }]
 
   pure def capabilityAlias(id: Text, input: FixedInput): AliasValue =
     AliasObject({ capability: Id(id), event: Absent, input: input, others: [] })
@@ -196,12 +196,12 @@ module cliAliases {
   }
 
   pure def declaredWith(aliases: List[(Text, AliasValue)], fallback: DefaultSetting): Declared =
-    { cliBinding: true, settings: SettingsObject({ aliases: AliasMembers(aliases), default: fallback }) }
+    { cliSurface: true, settings: SettingsObject({ aliases: AliasMembers(aliases), default: fallback }) }
 
   run aliasesTest = {
     val status = ["s", "t", "a", "t", "u", "s"]
     all {
-      assert(aliasesOf(TEST_CAPABILITIES, [], { cliBinding: true, settings: NoSettings }) == NO_RESULT),
+      assert(aliasesOf(TEST_CAPABILITIES, [], { cliSurface: true, settings: NoSettings }) == NO_RESULT),
       assert(aliasesOf(TEST_CAPABILITIES, [], declaredWith([(status, capabilityAlias(READ, NoFixedInput))], DefaultName(status))) == {
         problems: [{ key: "defaultHasReservedFlag", parts: [("name", status), ("flag", ["-", "-", "h", "e", "l", "p"])] }],
         aliases: [{ name: status, kind: CapabilityAlias, id: READ, input: NoFixedInput }],

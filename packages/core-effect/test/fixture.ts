@@ -187,10 +187,10 @@ export const fixture = App.make({
   title: "Fixture",
   description: "One capability or event for each behavior that acid-cat conform tests.",
   targets: {
-    app: { bindings: ["typescript", "webmcp"] },
-    mcp: { bindings: ["mcp"] },
+    app: { surfaces: ["typescript", "webmcp"] },
+    mcp: { surfaces: ["mcp"] },
     cli: {
-      bindings: ["cli"],
+      surfaces: ["cli"],
       options: {
         cli: {
           aliases: {
@@ -213,7 +213,7 @@ export const fixture = App.make({
         },
       },
     },
-    api: { bindings: ["http"] },
+    api: { surfaces: ["http"] },
   },
   capabilities: [
     echo,
@@ -371,7 +371,7 @@ export function heldApp() {
   const started = Deferred.makeUnsafe<void>();
   const interrupted = Deferred.makeUnsafe<void>();
   const app = App.make({
-    targets: { mcp: { bindings: ["mcp"] }, api: { bindings: ["http"] } },
+    targets: { mcp: { surfaces: ["mcp"] }, api: { surfaces: ["http"] } },
     capabilities: [
       Capability.make({
         id: "held.wait",
@@ -391,7 +391,7 @@ export function heldApp() {
 export function recordingApp() {
   const record = { ran: false };
   const app = App.make({
-    targets: { mcp: { bindings: ["mcp"] }, api: { bindings: ["http"] } },
+    targets: { mcp: { surfaces: ["mcp"] }, api: { surfaces: ["http"] } },
     capabilities: [
       Capability.make({
         id: "recorded.run",

@@ -13,14 +13,14 @@ func Catalog() *catalog.Catalog {
 	c.
 		Target("phone", catalog.Target{
 			Description: "The phone app of the people who live in the house.",
-			Bindings:    []string{"typescript", "acme:swift"},
+			Surfaces:    []string{"typescript", "acme:swift"},
 		}).
 		Target("keypad", catalog.Target{
 			Description: "The keypad on the outside wall.",
-			Bindings:    []string{"acme:keypad"},
+			Surfaces:    []string{"acme:keypad"},
 			Options:     schema{"digits": 6, "backlight": true},
 		}).
-		Target("assistant", catalog.Target{Description: "A voice assistant, through an MCP server.", Bindings: []string{"mcp"}})
+		Target("assistant", catalog.Target{Description: "A voice assistant, through an MCP server.", Surfaces: []string{"mcp"}})
 
 	position := c.Type("Position", schema{"enum": []any{"open", "closed", "opening", "closing", "stopped"}})
 	door := c.Type("Door", schema{

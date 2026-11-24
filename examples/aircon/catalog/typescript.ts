@@ -9,14 +9,14 @@ export function airconCatalog(): Catalog {
   catalog
     .target("app", {
       description: "The phone, desktop and web apps that people use.",
-      bindings: ["typescript", "rust", "webmcp", "acme:swift", "acme:kotlin"],
+      surfaces: ["typescript", "rust", "webmcp", "acme:swift", "acme:kotlin"],
     })
     .target("taskbar", {
       description: "A desktop taskbar widget showing the status and a power toggle.",
-      bindings: ["typescript"],
+      surfaces: ["typescript"],
     })
     .target("cli", {
-      bindings: ["cli"],
+      surfaces: ["cli"],
       options: {
         cli: {
           aliases: {
@@ -33,8 +33,8 @@ export function airconCatalog(): Catalog {
         },
       },
     })
-    .target("mcp", { description: "Agents, through an MCP server.", bindings: ["mcp"] })
-    .target("api", { description: "Home-automation systems and scripts.", bindings: ["http"] });
+    .target("mcp", { description: "Agents, through an MCP server.", surfaces: ["mcp"] })
+    .target("api", { description: "Home-automation systems and scripts.", surfaces: ["http"] });
 
   const mode = catalog.type("Mode", { enum: ["cool", "heat", "dry", "fan", "auto"] });
   const fanSpeed = catalog.type("FanSpeed", { enum: ["auto", "low", "medium", "high"] });

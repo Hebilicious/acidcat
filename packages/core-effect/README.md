@@ -1,6 +1,6 @@
 # @acid-cat/core-effect
 
-An AcidCat core for [Effect](https://effect.website) users. You declare capabilities and events in TypeScript, the package writes the catalog from them, and serves them through every binding: TypeScript handles, MCP, HTTP, CLI and WebMCP.
+An AcidCat core for [Effect](https://effect.website) users. You declare capabilities and events in TypeScript, the package writes the catalog from them, and serves them through every surface: TypeScript handles, MCP, HTTP, CLI and WebMCP.
 
 A capability is an Effect program with Effect Schema types, an event is a `Stream`, a session is a scope, services are layers, and a cancellation interrupts a fiber. Without Effect, use [`@acid-cat/core-ts`](../core-ts). This package is one implementation of the [specification](../../spec/README.md); every core has the same features and passes `acid-cat conform`.
 
@@ -30,7 +30,7 @@ const greet = Capability.make({
 
 export const greeter = App.make({
   title: "Greeter",
-  targets: { cli: { bindings: ["cli"] } },
+  targets: { cli: { surfaces: ["cli"] } },
   capabilities: [greet],
 });
 
@@ -44,7 +44,7 @@ $ node greeter.ts greeting say --name Ada
 }
 ```
 
-To serve the same capability through MCP or HTTP, add a target with that binding and use a module from [Serve the capabilities](#serve-the-capabilities).
+To serve the same capability through MCP or HTTP, add a target with that surface and use a module from [Serve the capabilities](#serve-the-capabilities).
 
 ## Write capabilities
 
@@ -56,7 +56,7 @@ const Offline = Schema.TaggedStruct("Offline", {});
 
 export const aircon = App.make({
   title: "Living-room air conditioner",
-  targets: { cli: { bindings: ["cli"] }, mcp: { bindings: ["mcp"] } },
+  targets: { cli: { surfaces: ["cli"] }, mcp: { surfaces: ["mcp"] } },
   capabilities: [
     Capability.make({
       id: "aircon.power.set",
@@ -172,15 +172,15 @@ await writeFile("acidcat.catalog.json", App.render(aircon)); // canonical form
 
 ## Serve the capabilities
 
-| Module | Binding | Entry point |
+| Module | Surface | Entry point |
 | --- | --- | --- |
 | `Session` | [Invocation](../../spec/invocation.md), [Events](../../spec/events.md) | `Session.make(app, { target })` gives a `Session<R>`, where `R` is the application's services. It has `invoke` for untrusted input by id, [typed calls](#typed-calls) and [subscriptions](#follow-events) |
-| `Handles` | [TypeScript](../../spec/bindings/typescript.md), which maps the [programmatic binding](../../spec/bindings/programmatic.md) | For code that does not use Effect, such as a user interface. `Handles.make(app, session)` gives handles with promises and observables. `Handles.makeEvents(app, session)` gives event handles with async iterables. `Handles.open(app, layer, { target, webmcp })` opens a session (see [Handles](#handles-for-code-without-effect)) |
-| `Mcp` | [MCP](../../spec/bindings/mcp.md) | Through HTTP: `Mcp.toWebHandler(app, layer, options)`, or `Mcp.makeHandle(app, options)` for a host that builds the services itself. `Mcp.withHandshake(handler)` also serves the [`initialize` handshake of earlier revisions](../../spec/bindings/mcp.md#earlier-revisions-through-http), from [`@acid-cat/mcp-handshake`](../mcp-handshake). Through stdio: `Mcp.serveStdio(app, options)`, and `NodeMcp.main(app, layer, options)` from `@acid-cat/core-effect/node` (see [MCP through stdio](#mcp-through-stdio)). Both run on `effect/ai/McpServer` |
-| `Http` | [HTTP](../../spec/bindings/http.md) | `Http.toWebHandler(app, layer, options)`. `Http.client(base, options)` is a client of the binding, for a [command line that calls a server](#command-line-that-calls-a-server) |
-| `Remote` | [Remote bindings](../../spec/bindings/README.md#remote-bindings) | `Remote.IncomingRequest` (the request head, for per-request services) and `Remote.refuse(status, message, headers)`. See [Services for each request](#services-for-each-request) |
-| `Cli` | [CLI](../../spec/bindings/cli.md) | `Cli.run(app, options)`, on `effect/cli`. `NodeCli.main(app, layer, options, args?)` from `@acid-cat/core-effect/node` runs it as a Node.js process's main program. `args` defaults to `process.argv.slice(2)` |
-| `WebMcp` | [WebMCP](../../spec/bindings/webmcp.md) | `WebMcp.install(session)`. WebMCP serves no events |
+| `Handles` | [TypeScript](../../spec/surfaces/typescript.md), which maps the [programmatic surface](../../spec/surfaces/programmatic.md) | For code that does not use Effect, such as a user interface. `Handles.make(app, session)` gives handles with promises and observables. `Handles.makeEvents(app, session)` gives event handles with async iterables. `Handles.open(app, layer, { target, webmcp })` opens a session (see [Handles](#handles-for-code-without-effect)) |
+| `Mcp` | [MCP](../../spec/surfaces/mcp.md) | Through HTTP: `Mcp.toWebHandler(app, layer, options)`, or `Mcp.makeHandle(app, options)` for a host that builds the services itself. `Mcp.withHandshake(handler)` also serves the [`initialize` handshake of earlier revisions](../../spec/surfaces/mcp.md#earlier-revisions-through-http), from [`@acid-cat/mcp-handshake`](../mcp-handshake). Through stdio: `Mcp.serveStdio(app, options)`, and `NodeMcp.main(app, layer, options)` from `@acid-cat/core-effect/node` (see [MCP through stdio](#mcp-through-stdio)). Both run on `effect/ai/McpServer` |
+| `Http` | [HTTP](../../spec/surfaces/http.md) | `Http.toWebHandler(app, layer, options)`. `Http.client(base, options)` is a client of the surface, for a [command line that calls a server](#command-line-that-calls-a-server) |
+| `Remote` | [Remote surfaces](../../spec/surfaces/README.md#remote-surfaces) | `Remote.IncomingRequest` (the request head, for per-request services) and `Remote.refuse(status, message, headers)`. See [Services for each request](#services-for-each-request) |
+| `Cli` | [CLI](../../spec/surfaces/cli.md) | `Cli.run(app, options)`, on `effect/cli`. `NodeCli.main(app, layer, options, args?)` from `@acid-cat/core-effect/node` runs it as a Node.js process's main program. `args` defaults to `process.argv.slice(2)` |
+| `WebMcp` | [WebMCP](../../spec/surfaces/webmcp.md) | `WebMcp.install(session)`. WebMCP serves no events |
 | `NodeServer` | MCP and HTTP | `NodeServer.serve(handler, options)` and `NodeServer.layer(handler, options)` serve web handlers on Node.js. See [Serve on Node.js](#serve-on-nodejs) |
 | `NodeWebhook` | MCP | `NodeWebhook.sender(options)` sends webhook delivery requests from Node.js. See [Webhook delivery](#webhook-delivery) |
 
@@ -225,7 +225,7 @@ import { NodeMcp } from "@acid-cat/core-effect/node";
 NodeMcp.main(aircon, unitLayer, { name: "aircon", version: "1.0.0" });
 ```
 
-The [stdio transport](../../spec/bindings/mcp.md#stdio) defines sessions, revisions, `notifications/tools/list_changed` and cancellation. Package specifics:
+The [stdio transport](../../spec/surfaces/mcp.md#stdio) defines sessions, revisions, `notifications/tools/list_changed` and cancellation. Package specifics:
 
 - `Mcp.serveStdio(app, options)` runs on the `effect` `Stdio` service, for any runtime, and completes when standard input ends. `Mcp.layerStdio(app, options)` is the same server as a layer.
 - Effect logs go to standard error. Do not write to standard output from a capability.
@@ -254,11 +254,11 @@ const program = Effect.scoped(
 
 ### Handles for code without Effect
 
-`Handles.open` gives a promise-based session with the same method names ([TypeScript binding](../../spec/bindings/typescript.md#handles)):
+`Handles.open` gives a promise-based session with the same method names ([TypeScript surface](../../spec/surfaces/typescript.md#handles)):
 
 - `session.call(capability, input)` decodes untrusted input and gives `Promise<Result<Value, Failure>>`. A call failure rejects with a `CallFailureError`.
 - `session.handle(capability)` gives a typed handle. `execute` takes decoded input; `snapshot` gives the state in JSON form.
-- `session.handles` gives the untyped handles by id, for bindings.
+- `session.handles` gives the untyped handles by id, for surfaces.
 - `await using` or `session.dispose()` closes the session.
 
 ```ts
@@ -272,9 +272,9 @@ await power.execute({ on: true }); // Result<null, typeof Offline.Type>
 
 With the `webmcp` option (a WebMCP host, for example `WebMcp.findHost()`), the session registers its tools on that host until it closes. Otherwise `session.webmcp` is `undefined`.
 
-- `session.webmcp.status` observes the [status](../../spec/bindings/webmcp.md#status).
+- `session.webmcp.status` observes the [status](../../spec/surfaces/webmcp.md#status).
 - `session.webmcp.retry()` queues the last failed update again; watch `status` for the result.
-- `session.webmcp.remove()` removes the tools while the session stays open ([Removal](../../spec/bindings/webmcp.md#tools)). Calls in progress continue, so a capability can call it during its own call. `status` is `closing` until they end, then `disposed`. The `remove` effect of `WebMcp.install` is the same operation.
+- `session.webmcp.remove()` removes the tools while the session stays open ([Removal](../../spec/surfaces/webmcp.md#tools)). Calls in progress continue, so a capability can call it during its own call. `status` is `closing` until they end, then `disposed`. The `remove` effect of `WebMcp.install` is the same operation.
 
 ```ts
 import { Handles, WebMcp } from "@acid-cat/core-effect";
@@ -308,7 +308,7 @@ The `eventBuffer` option (`Session.make`, `Handles.open`, the web handlers; defa
 
 #### Event handles
 
-`session.events` gives the [event handles](../../spec/bindings/typescript.md#event-handles) by id, and `session.event(event)` gives one typed handle. `subscribe` resolves once the subscription has started; `subscribeExternal` validates untrusted input. A GraphQL `subscribe` resolver can return the promise directly (graphql-ws, GraphQL Yoga, graphql-sse):
+`session.events` gives the [event handles](../../spec/surfaces/typescript.md#event-handles) by id, and `session.event(event)` gives one typed handle. `subscribe` resolves once the subscription has started; `subscribeExternal` validates untrusted input. A GraphQL `subscribe` resolver can return the promise directly (graphql-ws, GraphQL Yoga, graphql-sse):
 
 ```ts
 const handle = session.event(statusChanged);
@@ -326,19 +326,19 @@ const Subscription = new GraphQLObjectType({
 
 #### Events over HTTP
 
-`POST {base}/events/{id}` streams server-sent events, as the [HTTP binding](../../spec/bindings/http.md#events) defines. The `keepaliveMs` option (default 15 000) sets the keepalive interval.
+`POST {base}/events/{id}` streams server-sent events, as the [HTTP surface](../../spec/surfaces/http.md#events) defines. The `keepaliveMs` option (default 15 000) sets the keepalive interval.
 
 #### Events over MCP
 
-When the view has events, the MCP binding serves the [events extension](../../spec/bindings/mcp.md#events) to `2026-07-28` clients: push (`events/stream`) through HTTP and stdio, [poll](#poll-delivery) through HTTP and stdio, and [webhook](#webhook-delivery) through HTTP when the `webhooks` option is set. The `heartbeatMs` option (default 15 000) sets the push heartbeat interval when the client suggests none. A client that suggests `heartbeatMs` in `events/stream` gets a grant from 1 000 to 60 000 ([Push](../../spec/bindings/mcp.md#push)).
+When the target has events, the MCP surface serves the [events extension](../../spec/surfaces/mcp.md#events) to `2026-07-28` clients: push (`events/stream`) through HTTP and stdio, [poll](#poll-delivery) through HTTP and stdio, and [webhook](#webhook-delivery) through HTTP when the `webhooks` option is set. The `heartbeatMs` option (default 15 000) sets the push heartbeat interval when the client suggests none. A client that suggests `heartbeatMs` in `events/stream` gets a grant from 1 000 to 60 000 ([Push](../../spec/surfaces/mcp.md#push)).
 
 #### MCP headers
 
-Through HTTP, the MCP binding checks the [headers](../../spec/bindings/mcp.md#headers) of each request of revision `2026-07-28` against its body: `Mcp-Method`, `Mcp-Name`, and an `Mcp-Param-*` header for each property of the input schema of the tool or the event that has `x-mcp-header`. A mismatch gets 400 and `-32020`. `effect/ai` checks the tools, and the binding checks the events. To annotate a property, give its schema the annotation: `Schema.String.annotate({ "x-mcp-header": "Region" })`. The catalog keeps each annotation whose key starts with `x-`. Annotate the schema before a check such as `Schema.isBetween`: Effect writes the annotation of a checked schema in an `allOf`, where the [header annotation rules](../../spec/bindings/mcp.md#header-annotations) forbid it. `Schema.Int` already has a check, so annotate an integer before `Schema.isInt`: `Schema.Number.annotate({ "x-mcp-header": "Count" }).check(Schema.isInt())`. An annotation of a `Schema.NullOr` member is in an `anyOf`, which the rules also forbid. `acid-cat check` rejects a catalog with an annotation at such a location.
+Through HTTP, the MCP surface checks the [headers](../../spec/surfaces/mcp.md#headers) of each request of revision `2026-07-28` against its body: `Mcp-Method`, `Mcp-Name`, and an `Mcp-Param-*` header for each property of the input schema of the tool or the event that has `x-mcp-header`. A mismatch gets 400 and `-32020`. `effect/ai` checks the tools, and the surface checks the events. To annotate a property, give its schema the annotation: `Schema.String.annotate({ "x-mcp-header": "Region" })`. The catalog keeps each annotation whose key starts with `x-`. Annotate the schema before a check such as `Schema.isBetween`: Effect writes the annotation of a checked schema in an `allOf`, where the [header annotation rules](../../spec/surfaces/mcp.md#header-annotations) forbid it. `Schema.Int` already has a check, so annotate an integer before `Schema.isInt`: `Schema.Number.annotate({ "x-mcp-header": "Count" }).check(Schema.isInt())`. An annotation of a `Schema.NullOr` member is in an `anyOf`, which the rules also forbid. `acid-cat check` rejects a catalog with an annotation at such a location.
 
 #### Poll delivery
 
-[Poll](../../spec/bindings/mcp.md#poll) defines leases and cursors. The `poll` option sets the lease limits:
+[Poll](../../spec/surfaces/mcp.md#poll) defines leases and cursors. The `poll` option sets the lease limits:
 
 | `poll` option | Default | Use |
 | --- | --- | --- |
@@ -357,7 +357,7 @@ Leases live in process memory and are lost on restart:
 
 #### Webhook delivery
 
-The `webhooks` option turns on [webhook delivery](../../spec/bindings/mcp.md#webhook), through HTTP only. It needs the `principal` option; a request with no principal gets `Forbidden`.
+The `webhooks` option turns on [webhook delivery](../../spec/surfaces/mcp.md#webhook), through HTTP only. It needs the `principal` option; a request with no principal gets `Forbidden`.
 
 ```ts
 import * as NodeWebhook from "@acid-cat/core-effect/NodeWebhook";
@@ -383,10 +383,10 @@ The specification defines subscription, verification, signing, retries and netwo
 | `retryDelays` | 5 s, then 4 times longer each time | A `Schedule` of the waits between attempts |
 | `timeoutMs` | `5000` | How long the server waits for each answer |
 | `rotationGraceMs` | `300000` | How long after a secret change the server signs with both secrets |
-| `signingKeys` | None | Ed25519 keys, as private JWKs, that also [sign each request](../../spec/bindings/mcp.md#webhook). To change keys, give the new key beside the old one |
+| `signingKeys` | None | Ed25519 keys, as private JWKs, that also [sign each request](../../spec/surfaces/mcp.md#webhook). To change keys, give the new key beside the old one |
 | `egressIpRanges` | None | The IP ranges from which the server sends, as CIDR text, for the Server Card |
 
-A signing key or an egress range that breaks the rules of [webhook delivery](../../spec/bindings/mcp.md#webhook) makes the server fail when it starts.
+A signing key or an egress range that breaks the rules of [webhook delivery](../../spec/surfaces/mcp.md#webhook) makes the server fail when it starts.
 
 `NodeWebhook.sender` follows the spec's network safety rules: it resolves the host for each request, connects only to globally routable addresses (pinned, with the host name in `Host` and TLS), follows no redirects, and reads at most `maxResponseBytes`.
 
@@ -400,15 +400,15 @@ Subscriptions, verifications and limit counts live in process memory and are los
 
 #### Server Card
 
-`Mcp.toWebHandler`, `Mcp.makeHandle` and `Mcp.handle` serve an MCP [Server Card](../../spec/bindings/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. It is on by default. `serverCard: false` turns it off.
+`Mcp.toWebHandler`, `Mcp.makeHandle` and `Mcp.handle` serve an MCP [Server Card](../../spec/surfaces/mcp.md#server-card) at the URL of the server and `/server-card`, for example `/mcp/server-card`. It is on by default. `serverCard: false` turns it off.
 
 | Option | Default | Use |
 | --- | --- | --- |
-| `serverCard.name` | From the host of the URL and `name` ([Default name](../../spec/bindings/mcp.md#default-name)) | The name of the server in a registry. `name` stays the name that `server/discover` gives |
-| `serverCard.description` | The description of the catalog, else `instructions`, else `name` ([Default description](../../spec/bindings/mcp.md#default-description)) | |
+| `serverCard.name` | From the host of the URL and `name` ([Default name](../../spec/surfaces/mcp.md#default-name)) | The name of the server in a registry. `name` stays the name that `server/discover` gives |
+| `serverCard.description` | The description of the catalog, else `instructions`, else `name` ([Default description](../../spec/surfaces/mcp.md#default-description)) | |
 | `serverCard.url` | The URL of the request, without `/server-card` | Give the `https` URL when a platform in front of the server ends TLS |
 
-With webhook delivery, the card also gives the public keys of `signingKeys` and the `egressIpRanges`. `Mcp.withHandshake` adds its revisions to the card. A setting that breaks the [startup rules of the card](../../spec/bindings/mcp.md#server-card), such as a `version` range with the card on, makes the server fail when it starts. The defaults never make it fail.
+With webhook delivery, the card also gives the public keys of `signingKeys` and the `egressIpRanges`. `Mcp.withHandshake` adds its revisions to the card. A setting that breaks the [startup rules of the card](../../spec/surfaces/mcp.md#server-card), such as a `version` range with the card on, makes the server fail when it starts. The defaults never make it fail.
 
 ```ts
 const mcp = Mcp.withHandshake(
@@ -420,7 +420,7 @@ const mcp = Mcp.withHandshake(
 );
 ```
 
-`Mcp.withEvents` also serves a card, for your own server, with the same `serverCard` option. For each `GET` request of the card, it sends `server/discover` of revision `2026-07-28` to your server, with no `Origin` and no credentials. The card takes the version, the revisions, the default name and the default description from that result, so it always agrees with your server. When the result cannot give a card, the request of the card gets 502 Bad Gateway, as the [binding](../../spec/bindings/mcp.md#server-card) tells. A server that requires credentials answers `server/discover` with an error, so give it `serverCard: false`. `signingKeys` and `egressIpRanges` work with `Mcp.withEvents` too.
+`Mcp.withEvents` also serves a card, for your own server, with the same `serverCard` option. For each `GET` request of the card, it sends `server/discover` of revision `2026-07-28` to your server, with no `Origin` and no credentials. The card takes the version, the revisions, the default name and the default description from that result, so it always agrees with your server. When the result cannot give a card, the request of the card gets 502 Bad Gateway, as the [surface](../../spec/surfaces/mcp.md#server-card) tells. A server that requires credentials answers `server/discover` with an error, so give it `serverCard: false`. `signingKeys` and `egressIpRanges` work with `Mcp.withEvents` too.
 
 #### Events beside your own MCP server
 
@@ -438,7 +438,7 @@ const mcp = Mcp.withEvents(aircon, unit, application.handler, { allowedOrigins: 
 
 Options: `allowedOrigins`, `target`, `maximumBytes`, `services`, `heartbeatMs`, `eventBuffer`, `principal`, `poll`, `webhooks` and `serverCard` ([Server Card](#server-card)). `mcp.dispose()` ends leases and webhook subscriptions, not your server.
 
-#### Events in other bindings
+#### Events in other surfaces
 
 The command line follows events with `watch <id>` ([Follow an event](#follow-an-event)). WebMCP serves no events; the page uses the event handles.
 
@@ -476,7 +476,7 @@ A poll lease or webhook subscription keeps the services, and so the caller, of t
 
 ### Command line
 
-The command line serves the `cli` target's view as the [CLI binding](../../spec/bindings/cli.md#commands) defines: command paths, flags, repeated flags, `call`, `list`, usage, help and exit codes. Effect logs go to standard error.
+The command line serves the catalog of the `cli` target as the [CLI surface](../../spec/surfaces/cli.md#commands) defines: command paths, flags, repeated flags, `call`, `list`, usage, help and exit codes. Effect logs go to standard error.
 
 For example, with the air conditioner's command line in [`examples/aircon/core-effect/cli.ts`](../../examples/aircon/core-effect/cli.ts):
 
@@ -492,13 +492,13 @@ node cli.ts aircon status --help                                             # C
 
 Package specifics:
 
-- A command line that breaks a binding rule (a capability path that is a prefix of another, a duplicate path) fails at startup: `Cli.command` throws, `Cli.run` and `Cli.runCommand` die, and `NodeCli.main` and `NodeCli.runCommand` write the message to standard error and exit with 5.
-- The binding's help replaces the `effect/cli` help for capability commands, aliases, events and shared prefixes. The root command, `call`, `list` and `watch` keep the `effect/cli` help.
+- A command line that breaks a surface rule (a capability path that is a prefix of another, a duplicate path) fails at startup: `Cli.command` throws, `Cli.run` and `Cli.runCommand` die, and `NodeCli.main` and `NodeCli.runCommand` write the message to standard error and exit with 5.
+- The surface's help replaces the `effect/cli` help for capability commands, aliases, events and shared prefixes. The root command, `call`, `list` and `watch` keep the `effect/cli` help.
 - On `SIGINT`, `NodeCli` interrupts the fiber of the call or subscription. If it has not ended after `INTERRUPT_GRACE_MS` (1 second, from `@acid-cat/spec-ts`), the process exits with 130 and writes nothing more. A second interrupt exits at once.
 
 #### Follow an event
 
-`watch <id>` subscribes and writes each occurrence as one line of JSON. `--cursor` and `--max-age-ms` resume; see [Events](../../spec/bindings/cli.md#events) for the rules and exit codes.
+`watch <id>` subscribes and writes each occurrence as one line of JSON. `--cursor` and `--max-age-ms` resume; see [Events](../../spec/surfaces/cli.md#events) for the rules and exit codes.
 
 ```sh
 node cli.ts watch aircon.status.changed | jq .data.celsius
@@ -507,12 +507,12 @@ node cli.ts watch aircon.status.changed --cursor "$(tail -n 1 status.jsonl | jq 
 
 #### Aliases
 
-The `cli` target's `cli` member declares [aliases](../../spec/bindings/cli.md#aliases). `App.alias(capabilityOrEvent, fixedInput?)` makes one; the fixed input has the encoded type of the input schema. `App.aliasDefault` also makes it the default alias. The catalog writes them in `options.cli`:
+The `cli` target's `cli` member declares [aliases](../../spec/surfaces/cli.md#aliases). `App.alias(capabilityOrEvent, fixedInput?)` makes one; the fixed input has the encoded type of the input schema. `App.aliasDefault` also makes it the default alias. The catalog writes them in `options.cli`:
 
 ```ts
 targets: {
   cli: {
-    bindings: ["cli"],
+    surfaces: ["cli"],
     cli: {
       aliases: {
         status: App.aliasDefault(statusGet),
@@ -544,7 +544,7 @@ The specification gives the naming, group, prefix default and dispatch rules. An
 
 The command line writes JSON. A result, a failure and the output of `list` are one line of JSON when standard output is not a terminal, and have an indent of 2 on a terminal. The layout follows the `Cli.Terminal` reference, also without the `output` option.
 
-The `output` option (a `Cli.Output`) adds a human form, which the [spec](../../spec/bindings/cli.md#outcomes) leaves to each core. Without it, output is always JSON and there are no output flags.
+The `output` option (a `Cli.Output`) adds a human form, which the [spec](../../spec/surfaces/cli.md#outcomes) leaves to each core. Without it, output is always JSON and there are no output flags.
 
 - `flags`: the output flags. Each has `names` (`--word`, or `-x` with one letter or digit), and either `form` for a switch (`{ names: ["--json"], form: "json" }`) or `values` for a flag with a value (`{ names: ["--format", "-f"], values: { text: "human", json: "json" } }`).
   - An output flag can be anywhere before a later `--`; `runCommand` removes it before `effect/cli` parses. For an application command, it must come before the command name, and the command reads the choice with `Cli.outputForm`.
@@ -554,7 +554,7 @@ The `output` option (a `Cli.Output`) adds a human form, which the [spec](../../s
 
 The root help lists the output flags under `OUTPUT FLAGS`. An output flag may be named `-h`; `--help` still writes the help.
 
-`Cli.command` throws at startup when an output flag's name is invalid, duplicated, or taken (`--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, an input flag in the view). `runCommand` stops with a defect when it clashes with an `effect/cli` flag (such as `--log-level`) or an application global flag.
+`Cli.command` throws at startup when an output flag's name is invalid, duplicated, or taken (`--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, an input flag in the target). `runCommand` stops with a defect when it clashes with an `effect/cli` flag (such as `--log-level`) or an application global flag.
 
 In the human form, exit codes and streams stay the same. Text has color only on a terminal without `NO_COLOR`. A call failure is `error (<kind>): <message>` on standard error, `list` is a table, and `watch` writes one block per occurrence. Help, `--version` and usage errors do not change.
 
@@ -590,11 +590,11 @@ node cli.ts status --json           # {"power": false, "mode": "cool", …}
 
 - `App.format(capability, { value, failures })` takes optional formatters for the value and each failure tag; `App.format(capability, value)` and `App.format(event, payload)` take one. TypeScript checks the tags and types.
 - A `null` value writes nothing. If decoding or the formatter fails, the generic layout is written, with the same exit code.
-- `Cli.command` throws at startup on two formats for one id, or a format for an id outside the view.
+- `Cli.command` throws at startup on two formats for one id, or a format for an id outside the target.
 
 #### Command line that calls a server
 
-With the `remote` option, the command line is a client of a server's HTTP binding, as [Server](../../spec/bindings/cli.md#server) defines. `Http.client(base, options)` makes the client:
+With the `remote` option, the command line is a client of a server's HTTP surface, as [Server](../../spec/surfaces/cli.md#server) defines. `Http.client(base, options)` makes the client:
 
 ```ts
 import { Http } from "@acid-cat/core-effect";
@@ -612,7 +612,7 @@ NodeCli.main(aircon, unitLayer, {
 - `Http.client` throws when `base` is not an `http` or `https` URL or a header is invalid. The message contains no header value.
 - No session opens in the process, but `NodeCli.main` still builds the services layer.
 
-On the server, serve the HTTP binding with the command line's target, so both have the same view:
+On the server, serve the HTTP surface with the command line's target, so both have the same target catalog:
 
 ```ts
 const cli = Http.toWebHandler(aircon, unitLayer, { allowedOrigins: [], base: "/cli", target: "cli" });
@@ -623,7 +623,7 @@ yield* NodeServer.serve({ "/cli": cli }, { hostname: "0.0.0.0", port: 8080 });
 
 #### Application flags
 
-`Cli.command(app, options)` gives the `effect/cli` command. Add flags with `effect/cli`, then run it with `Cli.runCommand` or `NodeCli.runCommand`, which set the binding's exit codes. `Cli.exitCodeOf(error)` gives a usage error's exit code.
+`Cli.command(app, options)` gives the `effect/cli` command. Add flags with `effect/cli`, then run it with `Cli.runCommand` or `NodeCli.runCommand`, which set the surface's exit codes. `Cli.exitCodeOf(error)` gives a usage error's exit code.
 
 ```ts
 import { Cli } from "@acid-cat/core-effect";
@@ -646,7 +646,7 @@ NodeCli.runCommand(command, { version: "0.1.0" });
 
 #### Application commands
 
-The `commands` option adds `effect/cli` commands. `Cli.command` throws at startup on a name that the [binding forbids](../../spec/bindings/cli.md#commands). The `description` option sets the top of the help; it defaults to the application's description, then its title, then the program name.
+The `commands` option adds `effect/cli` commands. `Cli.command` throws at startup on a name that the [surface forbids](../../spec/surfaces/cli.md#commands). The `description` option sets the top of the help; it defaults to the application's description, then its title, then the program name.
 
 ```ts
 import { NodeCli } from "@acid-cat/core-effect/node";
@@ -670,8 +670,8 @@ The package runs everywhere, browsers included; only `/node` and `/NodeServer` n
 
 ## Examples and tests
 
-- [`examples/aircon/core-effect`](../../examples/aircon/README.md): an air conditioner with its command line. [`examples/aircon/apis/mcp.ts`](../../examples/aircon/apis/mcp.ts) adds its own MCP tools beside the binding.
-- `moon run core-effect:test` tests sessions, handles and every binding, and runs `acid-cat conform` against each protocol binding, with the apps in [`test/`](test/):
+- [`examples/aircon/core-effect`](../../examples/aircon/README.md): an air conditioner with its command line. [`examples/aircon/apis/mcp.ts`](../../examples/aircon/apis/mcp.ts) adds its own MCP tools beside the surface.
+- `moon run core-effect:test` tests sessions, handles and every surface, and runs `acid-cat conform` against each protocol surface, with the apps in [`test/`](test/):
   - [`test/fixture.ts`](test/fixture.ts): one capability per `acid-cat conform` behavior. CLIs: [`test/fixture-cli.ts`](test/fixture-cli.ts), [`test/fixture-cli-remote.ts`](test/fixture-cli-remote.ts) (calls a server).
-  - [`test/events-fixture.ts`](test/events-fixture.ts): one event per subscription behavior (filters, cursors, a defect, a bad payload, an event outside the view). CLI: [`test/events-cli.ts`](test/events-cli.ts).
+  - [`test/events-fixture.ts`](test/events-fixture.ts): one event per subscription behavior (filters, cursors, a defect, a bad payload, an event outside the target). CLI: [`test/events-cli.ts`](test/events-cli.ts).
   - [`test/lamp.ts`](test/lamp.ts): a smart lamp with shared types, failures, state and availability. CLI: [`test/lamp-cli.ts`](test/lamp-cli.ts), run as a separate process.

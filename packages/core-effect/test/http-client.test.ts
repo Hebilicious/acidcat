@@ -47,7 +47,7 @@ const badLists: Record<string, unknown> = {
   "reason-not-text": [{ id: "fixture.toggle", available: false, reason: 1 }],
 };
 
-test("an answer that the HTTP binding does not give is internal, also an item of GET /capabilities without an id, a boolean available, or a reason when it is not available", async (context) => {
+test("an answer that the HTTP surface does not give is internal, also an item of GET /capabilities without an id, a boolean available, or a reason when it is not available", async (context) => {
   const server = await serve((request) => {
     const path = new URL(request.url).pathname;
     if (path === "/not-json/capabilities/fixture.echo") return new Response("<html></html>", { status: 200 });
@@ -144,7 +144,7 @@ test("the reader of server-sent events reads comments, line ends, split chunks a
 
 test("the command line that calls a server never writes its headers", async (context) => {
   const down = await closedUrl();
-  const garbage = await serve(() => new Response("not the HTTP binding", { status: 200 }));
+  const garbage = await serve(() => new Response("not the HTTP surface", { status: 200 }));
   context.after(garbage.close);
   const withToken = (url: string, ...args: string[]) => runWith({ FIXTURE_AUTHORIZATION: TOKEN }, remoteCli, url, ...args);
   const [unavailable, internal, list] = await Promise.all([

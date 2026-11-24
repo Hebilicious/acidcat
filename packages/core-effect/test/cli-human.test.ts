@@ -30,7 +30,7 @@ const fill = Capability.make({
 
 const tick = Event.make({ id: "probe.tick", description: "Give one tick, then end.", audience: ["cli"], subscribe: () => Stream.make({ data: {} }) });
 
-const probe = App.make({ targets: { cli: { bindings: ["cli"], cli: { aliases: { "--now": App.alias(level) } } } }, capabilities: [level, fill], events: [tick] });
+const probe = App.make({ targets: { cli: { surfaces: ["cli"], cli: { aliases: { "--now": App.alias(level) } } } }, capabilities: [level, fill], events: [tick] });
 
 const runWith = <const Commands extends ReadonlyArray<Command.Command.Any> = readonly []>(
   output: Cli.Output | undefined,
@@ -95,12 +95,12 @@ test("the formatter of an event with no payload schema gets an empty object, and
   assert.deepEqual(empty, { code: 0, stdout: "", stderr: "" });
 });
 
-test("the command line stops when it starts if two formats have one id, or a format is not in the view", () => {
+test("the command line stops when it starts if two formats have one id, or a format is not in the target", () => {
   const options = (formats: readonly App.Format[]) => ({ name: "probe", version: "0.0.0", output: { formats } });
   const format = App.format(level, ({ level }) => String(level));
   assert.throws(() => Cli.command(probe, options([format, format])), /There are two formats for probe.level/);
   const hidden = Capability.make({ id: "probe.hidden", description: "Hide.", audience: ["mcp"], run: () => Effect.succeed(null) });
-  assert.throws(() => Cli.command(probe, options([App.format(hidden, () => "")])), /probe.hidden refers to a capability that is not in the view/);
+  assert.throws(() => Cli.command(probe, options([App.format(hidden, () => "")])), /probe.hidden refers to a capability that is not in the target/);
   assert.throws(() => App.format(level, { failures: Object.fromEntries([["Bogus", () => "x"]]) }), /The capability probe.level has no failure Bogus\./);
 });
 

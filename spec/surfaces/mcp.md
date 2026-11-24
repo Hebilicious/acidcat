@@ -1,8 +1,8 @@
-# MCP binding
+# MCP surface
 
-A protocol binding that serves a view as a Model Context Protocol (MCP) server. The binding has two transports:
+A protocol surface that serves the catalog of a target as a Model Context Protocol (MCP) server. The surface has two transports:
 
-- [HTTP](#http): a server on the network. It follows the rules for [remote bindings](README.md#remote-bindings).
+- [HTTP](#http): a server on the network. It follows the rules for [remote surfaces](README.md#remote-surfaces).
 - [Stdio](#stdio): a local process. The client starts the server as a process, and they exchange messages through the standard input and the standard output of that process.
 
 A server serves one transport or both. The rules for the [server](#server) and the [tools](#tools) apply to both transports.
@@ -14,7 +14,7 @@ A server serves one transport or both. The rules for the [server](#server) and t
 
 ## Tools
 
-- **Names and listing.** `tools/list` gives one tool for each available capability in the view. An unavailable capability is not listed. A call to it gets the same answer as a call to an unknown tool. The `name` of the tool is the id. Its `description` is the description of the capability. Its `inputSchema` is the [bundled](../catalog.md#bundling) input schema. A property of the input schema can have the member `x-mcp-header` (see [Header annotations](#header-annotations)). The tool gives it unchanged, and the server checks the header that it names through [HTTP](#headers).
+- **Names and listing.** `tools/list` gives one tool for each available capability in the target. An unavailable capability is not listed. A call to it gets the same answer as a call to an unknown tool. The `name` of the tool is the id. Its `description` is the description of the capability. Its `inputSchema` is the [bundled](../catalog.md#bundling) input schema. A property of the input schema can have the member `x-mcp-header` (see [Header annotations](#header-annotations)). The tool gives it unchanged, and the server checks the header that it names through [HTTP](#headers).
 - **Output schema.** If the bundled output schema has `"type": "object"`, the tool gives it as `outputSchema`. If not, the tool has no `outputSchema`.
 - **Hints.** For a `readOnly` capability, `annotations.readOnlyHint` is `true`. If the capability has `destructive`, `annotations.destructiveHint` has the same value. If the capability has `idempotent`, `annotations.idempotentHint` has the same value. If the capability does not have one of these two members, the tool has no annotation for it, or the default value of MCP: `destructiveHint: true` and `idempotentHint: false`. A client cannot see a difference between the two forms. MCP gives these two annotations a meaning only when `readOnlyHint` is `false`.
 - **Cancellation.** When the client cancels the request of a call, the call is cancelled. Each transport tells how the client cancels a request. The server does not have to answer a cancelled call.
@@ -40,10 +40,10 @@ The member `x-mcp-header` of a property of an input schema names the header `Mcp
 
 ## Events
 
-The server serves events through the MCP events extension, `io.modelcontextprotocol/events`. It serves the extension only in revision `2026-07-28`, and only if the view has events. The extension is the Final text of SEP-3415, at commit `6a4bf07`. The rules of the extension apply, with the choices below. The server serves [push](#push) delivery. It SHOULD serve [poll](#poll) delivery. It serves [webhook](#webhook) delivery if the deployment turns it on. A server that keeps no state between requests serves push only.
+The server serves events through the MCP events extension, `io.modelcontextprotocol/events`. It serves the extension only in revision `2026-07-28`, and only if the target has events. The extension is the Final text of SEP-3415, at commit `6a4bf07`. The rules of the extension apply, with the choices below. The server serves [push](#push) delivery. It SHOULD serve [poll](#poll) delivery. It serves [webhook](#webhook) delivery if the deployment turns it on. A server that keeps no state between requests serves push only.
 
 - **Capabilities.** The result of `server/discover` has `"extensions": { "io.modelcontextprotocol/events": {} }` in its capabilities. The server sends no `notifications/events/list_changed`.
-- **Listing.** `events/list` gives one entry for each event in the view. Its `name` is the id. Its `description` is the description of the event. Its `delivery` lists the modes that the server serves, in the order `push`, `poll`, `webhook`. Its `inputSchema` is the [bundled](../catalog.md#bundling) input schema, and its `payloadSchema` is the bundled payload schema, or `{ "type": "object" }` if the event has no payload schema. The result has `resultType: "complete"`, and no `nextCursor`.
+- **Listing.** `events/list` gives one entry for each event in the target. Its `name` is the id. Its `description` is the description of the event. Its `delivery` lists the modes that the server serves, in the order `push`, `poll`, `webhook`. Its `inputSchema` is the [bundled](../catalog.md#bundling) input schema, and its `payloadSchema` is the bundled payload schema, or `{ "type": "object" }` if the event has no payload schema. The result has `resultType: "complete"`, and no `nextCursor`.
 - **Subscription parameters.** In `events/stream`, `events/poll` and `events/subscribe`, `params.name` is the id, `params.arguments` is the input, and `params.cursor` and `params.maxAgeMs` are the cursor and `maxAgeMs`. An absent cursor and a `null` cursor are the same.
 - **Headers.** The `inputSchema` of an event gives each `x-mcp-header` member of the input schema unchanged. Through HTTP, the server checks the headers of `events/stream`, `events/poll`, `events/subscribe` and `events/unsubscribe` as for `tools/call` (see [Headers](#headers)), with the input schema of the event.
 - **Failures before the first occurrence.**
@@ -115,7 +115,7 @@ The server sends occurrences in HTTP `POST` requests to a URL of the client. Web
   - The URL MUST use `https`. The secret MUST be `whsec_` and the base64 of 24 to 64 bytes. If not, the error is `-32602`.
   - If no subscription has the key, the server verifies the URL (see below), starts the subscription, and answers.
   - If a subscription has the key, the server renews it: it grants a new lifetime, and replaces the secret. The cursor of the request changes nothing. For 5 minutes after the secret changes, the server signs with the old secret and the new secret.
-  - The result is `{ "resultType": "complete", "id", "refreshBefore", "cursor", "truncated": false, "deliveryStatus" }`. `id` is the subscription id. `refreshBefore` is the time at which the subscription ends, as an RFC 3339 date and time. `cursor` is the [watermark](#watermark), or `null`. `deliveryStatus` has `active: true`, `lastDeliveryAt`, and `lastError`, which is `null` after a delivery that succeeds.
+  - The result is `{ "resultType": "complete", "id", "refreshBefore", "cursor", "truncated": false, "deliveryStatus" }`. `id` is the subscription id. `refreshBefore` is the time at which the subscription ends, as an RFC 3339 date and time. `cursor` is the watermark (see **Watermark** below), or `null`. `deliveryStatus` has `active: true`, `lastDeliveryAt`, and `lastError`, which is `null` after a delivery that succeeds.
 - **Lifetime.** The grant is `ttlMs`, but not more than the maximum lifetime and not less than the minimum lifetime of the deployment. The defaults are 1 hour and 1 minute. With no `ttlMs`, or with `ttlMs: null`, the grant is the maximum lifetime. The server grants no subscription with no expiry. When the lifetime ends with no renewal, the subscription is cancelled.
 - **Limit.** The deployment sets the maximum number of webhook subscriptions for one principal. The default is 100. A new subscription over the limit gets the error `ResourceExhausted` (`-32025`), with `data: { "limit": "subscriptions", "max" }`. A new subscription counts for the limit from the moment that the server accepts the request, also while the server verifies the URL.
 - **Verification.** The server sends nothing to a URL until the endpoint agrees to get deliveries, for each pair of principal and URL. The URL is `params.delivery.url` as the client sent it. The URL agrees if it matches the allowlist of the deployment, or if the endpoint answers a verification. To verify, the server sends the control message `{ "type": "verification", "challenge": <random text> }`, with the headers of a delivery. The endpoint agrees if it answers with a `2xx` status and the JSON `{ "challenge": <the same text> }`. The server compares the two texts in constant time. If the endpoint does not agree, the error is `CallbackEndpointError` (`-32027`) with `data: { "reason" }`: `challenge_failed`, `connection_refused`, `timeout`, `tls_error`, `http_4xx` or `http_5xx`. A `3xx` status is `http_4xx` for a delivery, and `challenge_failed` for a verification. A failure to resolve the host name, or an address that is not allowed, is `connection_refused`. The server keeps each verification while the process runs.
@@ -137,7 +137,7 @@ The canonical JSON of a value is its JSON text with no spaces, with the keys of 
 
 - The server uses one URL. It SHOULD be `/mcp` on the origin of the application.
 - The server uses MCP revision `2026-07-28`. This revision keeps no state on the server between requests. The server rejects revisions that keep state. Poll leases and webhook subscriptions are the only state that the server keeps between requests (see [Subscriptions that outlive a request](#subscriptions-that-outlive-a-request)).
-- The server answers `server/discover`, `tools/list` and `tools/call`. If the view has events, it also answers `events/list`, `events/stream`, `events/poll`, `events/subscribe` and `events/unsubscribe`.
+- The server answers `server/discover`, `tools/list` and `tools/call`. If the target has events, it also answers `events/list`, `events/stream`, `events/poll`, `events/subscribe` and `events/unsubscribe`.
 - Each request has its own session. The session closes when the response is complete.
 - When the client closes the request of a call, the call is cancelled.
 - The server accepts requests that have no `Origin` header.
@@ -220,7 +220,7 @@ The client starts the server as a process. The client writes JSON-RPC messages t
 - **One session.** The process is one session. The session opens when the process starts. When standard input ends, the session closes: the server cancels the calls in progress, and the process exits. The server does not have to answer the requests that it did not answer before.
 - **Revisions.** The server MUST serve MCP revision `2026-07-28`, and the `initialize` handshake of revision `2025-11-25`. It MAY serve the `initialize` handshake of earlier revisions. A request of revision `2026-07-28` gives its revision in `params._meta["io.modelcontextprotocol/protocolVersion"]`. A client of an earlier revision opens the session with `initialize`.
 - **Version negotiation.** `server/discover` gives each revision that the server serves in `supportedVersions`. `initialize` gives the revision of the client if the server serves it. If not, it gives the latest revision that the server serves with that handshake.
-- **Methods.** The server serves `server/discover`, `subscriptions/listen`, `initialize`, `ping`, `tools/list` and `tools/call`. If the view has events, it also serves `events/list`, `events/stream`, `events/poll`, `events/subscribe` and `events/unsubscribe` in revision `2026-07-28`.
+- **Methods.** The server serves `server/discover`, `subscriptions/listen`, `initialize`, `ping`, `tools/list` and `tools/call`. If the target has events, it also serves `events/list`, `events/stream`, `events/poll`, `events/subscribe` and `events/unsubscribe` in revision `2026-07-28`.
 - **Changes of the tools.** The server declares `"tools": { "listChanged": true }` in its capabilities. When the set of available capabilities changes, the server MUST send `notifications/tools/list_changed`:
   - after an `initialize` handshake, to the client;
   - in revision `2026-07-28`, on each `subscriptions/listen` request that asks for `toolsListChanged`.
@@ -238,4 +238,4 @@ Many MCP clients start a local server as a process and open the session with `in
 
 ## Roadmap
 
-- Remove [Earlier revisions through HTTP](#earlier-revisions-through-http) when the official MCP SDKs use revision `2026-07-28` by default. The default of the official TypeScript client is the `initialize` handshake of revision `2025-11-25`. The test of the MCP binding in the aircon example uses this default. It fails when the default changes.
+- Remove [Earlier revisions through HTTP](#earlier-revisions-through-http) when the official MCP SDKs use revision `2026-07-28` by default. The default of the official TypeScript client is the `initialize` handshake of revision `2025-11-25`. The test of the MCP surface in the aircon example uses this default. It fails when the default changes.

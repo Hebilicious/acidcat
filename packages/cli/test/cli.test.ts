@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { check, viewOf, type Catalog } from "../src/catalog.ts";
+import { check, targetCatalog, type Catalog } from "../src/catalog.ts";
 import { bundledProgram } from "./bundled-program.ts";
 
 const isCatalog = (value: unknown): value is Catalog => check(value).errors.length === 0;
@@ -16,14 +16,14 @@ const bakery: Catalog = (() => {
   return parsed;
 })();
 
-test("the view of each target conforms", () => {
-  for (const target of Object.keys(bakery.targets)) assert.deepEqual(check(viewOf(bakery, target)), { errors: [], warnings: [] }, target);
+test("the catalog of each target conforms", () => {
+  for (const target of Object.keys(bakery.targets)) assert.deepEqual(check(targetCatalog(bakery, target)), { errors: [], warnings: [] }, target);
 });
 
 const rejected: Readonly<Record<string, readonly string[]>> = {
   "cli-alias.json": [
     "target shop: the alias --buy has the fixed input count, which is not a property of the input of shop.item.buy",
-    "target shop: the alias gone refers to shop.item.gone, which is not a capability in the view of the target",
+    "target shop: the alias gone refers to shop.item.gone, which is not a capability in the catalog of the target",
     "target shop: the alias list has the name of a command or a flag of the command line",
     "target shop: the first word of the alias list x is the name of a command of the command line",
     "target shop: the alias odd has the unknown member extra",
@@ -67,10 +67,10 @@ for (const [file, errors] of Object.entries(rejected)) {
   });
 }
 
-test("view rejects a target name that only an object inherits, such as constructor", () => {
+test("target rejects a target name that only an object inherits, such as constructor", () => {
   const main = bundledProgram("src/main.ts");
   const fixture = fileURLToPath(new URL("./fixtures/bakery.acidcat.json", import.meta.url));
-  const result = spawnSync(process.execPath, [main, "view", fixture, "constructor"], { encoding: "utf-8" });
+  const result = spawnSync(process.execPath, [main, "target", fixture, "constructor"], { encoding: "utf-8" });
   assert.equal(result.status, 1);
   assert.equal(result.stdout, "");
   assert.match(result.stderr, /there is no target constructor/);

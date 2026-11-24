@@ -14,10 +14,10 @@ import (
 type Schema = map[string]any
 
 type Target struct {
-	// Bindings serve the target, such as "typescript" and "webmcp".
-	Bindings    []string
+	// Surfaces serve the target, such as "typescript" and "webmcp".
+	Surfaces    []string
 	Description string
-	// Options are settings for the bindings, in a form each binding defines.
+	// Options are settings for the surfaces, in a form each surface defines.
 	Options Schema
 }
 
@@ -126,15 +126,15 @@ func (c *Catalog) Validate() []string {
 		if !namePattern.MatchString(t.name) {
 			problems = append(problems, fmt.Sprintf("the target name %s is malformed", t.name))
 		}
-		if len(t.value.Bindings) == 0 {
-			problems = append(problems, fmt.Sprintf("the target %s has no bindings", t.name))
+		if len(t.value.Surfaces) == 0 {
+			problems = append(problems, fmt.Sprintf("the target %s has no surfaces", t.name))
 		}
-		if hasRepeat(t.value.Bindings) {
-			problems = append(problems, fmt.Sprintf("the target %s repeats a binding", t.name))
+		if hasRepeat(t.value.Surfaces) {
+			problems = append(problems, fmt.Sprintf("the target %s repeats a surface", t.name))
 		}
-		for _, binding := range t.value.Bindings {
-			if !namePattern.MatchString(binding) {
-				problems = append(problems, fmt.Sprintf("the target %s names the malformed binding %s", t.name, binding))
+		for _, surface := range t.value.Surfaces {
+			if !namePattern.MatchString(surface) {
+				problems = append(problems, fmt.Sprintf("the target %s names the malformed surface %s", t.name, surface))
 			}
 		}
 	}
@@ -225,7 +225,7 @@ func (c *Catalog) Render() (string, error) {
 
 	targets := map[string]any{}
 	for _, t := range c.targets {
-		target := map[string]any{"bindings": t.value.Bindings}
+		target := map[string]any{"surfaces": t.value.Surfaces}
 		if t.value.Description != "" {
 			target["description"] = t.value.Description
 		}

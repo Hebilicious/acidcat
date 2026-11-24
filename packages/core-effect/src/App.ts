@@ -8,7 +8,7 @@ import type { AnySchema } from "./Capability.ts";
 import type * as Event from "./Event.ts";
 import type { Ui } from "./internal/human.ts";
 
-/** An alias of the command line (spec/bindings/cli.md#aliases). Make it with `App.alias` or `App.aliasDefault`. */
+/** An alias of the command line (spec/surfaces/cli.md#aliases). Make it with `App.alias` or `App.aliasDefault`. */
 export interface Alias {
   readonly member: "capability" | "event";
   readonly id: string;
@@ -88,8 +88,8 @@ export function format(of: Formatted<AnySchema, AnySchema> | FormattedEvent<AnyS
 }
 
 export interface Target {
-  /** The bindings that serve the target, for example `["mcp"]`. */
-  readonly bindings: readonly string[];
+  /** The surfaces that serve the target, for example `["mcp"]`. */
+  readonly surfaces: readonly string[];
   readonly description?: string | undefined;
   readonly options?: JsonObject | undefined;
   /** The aliases of the command line. The catalog writes them in `options.cli`. */
@@ -196,7 +196,7 @@ function write(app: App<unknown>): CatalogDocument {
       Object.entries(app.targets).map(([name, target]) => [
         name,
         {
-          bindings: target.bindings,
+          surfaces: target.surfaces,
           ...(target.description === undefined ? {} : { description: target.description }),
           ...optionsOf(name, target),
         },

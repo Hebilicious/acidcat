@@ -1,4 +1,4 @@
-import { AVAILABLE, callFailure, occurrenceOf, viewOf } from "@acid-cat/spec-ts";
+import { AVAILABLE, callFailure, occurrenceOf, targetCatalog } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CatalogDocument, Occurrence, Outcome, Resume } from "@acid-cat/spec-ts";
 import { Cause, Context, Data, Effect, Exit, Fiber, FiberSet, Queue, Ref, Schema, Scope, Stream, SubscriptionRef } from "effect";
 
@@ -58,10 +58,10 @@ export const DEFAULT_EVENT_BUFFER = 1024;
 export interface Session<R = never> {
   readonly target: string;
   /**
-   * The view of the target (spec/catalog.md#views). Bindings take names, descriptions and schemas from it. The
-   * session writes the view when it is first read.
+   * The catalog of the target (spec/catalog.md#the-catalog-of-a-target). Surfaces take names, descriptions and schemas from it. The
+   * session writes it when it is first read.
    */
-  readonly view: CatalogDocument;
+  readonly catalog: CatalogDocument;
   readonly availability: (id: string) => Effect.Effect<Availability>;
   /**
    * An event each time the availability of a capability changes, after the stream starts. The stream follows the
@@ -71,7 +71,7 @@ export interface Session<R = never> {
   /**
    * The state of a capability (spec/invocation.md#state), in its JSON form: the current value, then each change.
    * The stream follows the state ref only while it runs. It is empty for a capability with no state, or outside the
-   * view.
+   * target.
    */
   readonly state: (id: string) => Stream.Stream<unknown>;
   /** A call with an input that is not trusted. The outcome is in its JSON form. This effect never fails. */
@@ -96,7 +96,7 @@ export interface Session<R = never> {
   /**
    * Subscribe to an event with an input that is not trusted. Each `data` is in its JSON form. The effect succeeds when
    * the subscription has started. It fails with a call failure before the first occurrence: `cancelled` when the
-   * session is closing, `unknown-capability` when the event is not in the view, and `invalid-input` when the input
+   * session is closing, `unknown-capability` when the event is not in the target, and `invalid-input` when the input
    * does not decode or `maxAgeMs` is not an integer that is 0 or more. The scope is the lifetime of the subscription:
    * when it closes, the subscription is cancelled.
    */
@@ -120,7 +120,7 @@ interface Served<R> {
 }
 
 /**
- * Open a session for a target. The session gets the availability and state refs of the capabilities in the view one
+ * Open a session for a target. The session gets the availability and state refs of the capabilities in the target one
  * time, and starts no fiber. The session closes with its scope.
  */
 export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Session<R>, never, R | Scope.Scope> =>
@@ -272,12 +272,12 @@ export const make = <R>(app: App.App<R>, options: Options): Effect.Effect<Sessio
       ),
     ).pipe(Stream.as(undefined));
 
-    let view: CatalogDocument | undefined;
+    let catalog: CatalogDocument | undefined;
 
     const session: Session<R> = {
       target: options.target,
-      get view() {
-        return (view ??= viewOf(App.document(app), options.target));
+      get catalog() {
+        return (catalog ??= targetCatalog(App.document(app), options.target));
       },
       availability: availabilityOf,
       changes,

@@ -114,7 +114,7 @@ module facts {
 
   pure val ALIAS_MESSAGES: List[(str, str)] = [
     ("settingsNotObject", "{where}: options.cli must be an object"),
-    ("noCliBinding", "{where}: has options.cli, but not the binding cli"),
+    ("noCliSurface", "{where}: has options.cli, but not the surface cli"),
     ("aliasesNotObject", "{where}: options.cli.aliases must be an object"),
     ("badName", "{where}: the alias {name} must be one word, two words with one space between them, or -- and one word, with the letters a-z, the digits 0-9 and single hyphens in each word"),
     ("reservedName", "{where}: the alias {name} has the name of a command or a flag of the command line"),
@@ -122,7 +122,7 @@ module facts {
     ("commandPath", "{where}: the alias {name} has the path of the command of a capability"),
     ("badTarget", "{where}: the alias {name} must be an object with the id of a capability in capability, or the id of an event in event"),
     ("unknownMember", "{where}: the alias {name} has the unknown member {members}"),
-    ("notInView", "{where}: the alias {name} refers to {id}, which is not {kind} in the view of the target"),
+    ("notInTarget", "{where}: the alias {name} refers to {id}, which is not {kind} in the catalog of the target"),
     ("inputNotObject", "{where}: the alias {name} must have an object as its input"),
     ("noProperties", "{where}: the alias {name} has a fixed input, but the input schema of {id} has no properties"),
     ("notAProperty", "{where}: the alias {name} has the fixed input {members}, which is not a property of the input of {id}"),

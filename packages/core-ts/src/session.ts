@@ -1,4 +1,4 @@
-import { AVAILABLE, CallFailureError, callFailure, isCallFailure, viewOf } from "@acid-cat/spec-ts";
+import { AVAILABLE, CallFailureError, callFailure, isCallFailure, targetCatalog } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, CatalogDocument, Emitted, Outcome, Result } from "@acid-cat/spec-ts";
 
 import { catalogOf } from "./app.ts";
@@ -30,7 +30,7 @@ export interface SubscribeOptions {
 }
 
 /**
- * The handle of an event (spec/bindings/typescript.md#event-handles). `session.eventHandle` gives a handle with the
+ * The handle of an event (spec/surfaces/typescript.md#event-handles). `session.eventHandle` gives a handle with the
  * types of the event. A handle of `session.eventHandles` has the input type `never`: only `subscribeExternal` can
  * subscribe with it, because it decodes the input.
  */
@@ -50,13 +50,13 @@ type InputOf<D extends { readonly input?: StandardSchemaV1 | undefined }> = Stan
 
 export type EventHandleOf<E extends AnyEventDefinition> = [E] extends [EventParts<infer Payload, string>] ? EventHandle<InputOf<E>, Payload> : never;
 
-function eventOutsideView<Input, Payload>(event: { readonly id: string; readonly description: string }): EventHandle<Input, Payload> {
+function eventOutsideTarget<Input, Payload>(event: { readonly id: string; readonly description: string }): EventHandle<Input, Payload> {
   const reject = () => Promise.reject(new CallFailureError(callFailure("unknown-capability", `There is no event ${event.id}.`)));
   return { id: event.id, description: event.description, audience: [], subscribe: reject, subscribeExternal: reject };
 }
 
 /**
- * The handle of a capability (spec/bindings/typescript.md#handles). `Input`, `Value`, `Failure` and `State` are the
+ * The handle of a capability (spec/surfaces/typescript.md#handles). `Input`, `Value`, `Failure` and `State` are the
  * types of the schemas of the capability. `session.handle` gives a handle with these types. A handle of
  * `session.handles` has the input type `never`: only `invokeExternal` can call it, because it decodes the input.
  */
@@ -76,7 +76,7 @@ export interface Handle<Input = never, Value = unknown, Failure = unknown, State
 export type HandleOf<C extends AnyCapability> =
   [C] extends [CapabilityParts<never, infer Value, infer Failures, infer State, string>] ? Handle<InputOf<C>, Value, FailureOf<Failures>, State> : never;
 
-function outsideView<Input, Value, Failure, State>(capability: { readonly id: string; readonly description: string }): Handle<Input, Value, Failure, State> {
+function outsideTarget<Input, Value, Failure, State>(capability: { readonly id: string; readonly description: string }): Handle<Input, Value, Failure, State> {
   const failure = callFailure("unknown-capability", `There is no capability ${capability.id}.`);
   const unavailable: Availability = { available: false, reason: failure.message };
   const reject = () => Promise.reject(new CallFailureError(failure));
@@ -94,10 +94,10 @@ function outsideView<Input, Value, Failure, State>(capability: { readonly id: st
 export interface Session<Context = unknown> {
   readonly target: string;
   /**
-   * The view of the target. Bindings take names, descriptions and schemas from it. The session writes the view when it
+   * The catalog of the target. Surfaces take names, descriptions and schemas from it. The session writes it when it
    * is first read.
    */
-  readonly view: CatalogDocument;
+  readonly catalog: CatalogDocument;
   readonly handles: ReadonlyMap<string, Handle>;
   /**
    * The handle of a capability, with the types of the capability. Only the capability object that the session serves
@@ -174,7 +174,7 @@ const isMaxAgeMs = (maxAgeMs: number | undefined): boolean => maxAgeMs === undef
 
 const INVALID_MAX_AGE = "maxAgeMs must be an integer that is 0 or more.";
 
-/** The `maxAgeMs` of a subscription request, as a binding reads it. */
+/** The `maxAgeMs` of a subscription request, as a surface reads it. */
 export type MaxAge = { readonly kind: "absent" } | { readonly kind: "valid"; readonly ms: number } | { readonly kind: "invalid" };
 
 /** Read the `maxAgeMs` of a JSON request. `null` is absent. */
@@ -190,7 +190,7 @@ export function maxAgeOfText(text: string | null): MaxAge {
 }
 
 /**
- * Subscribe with the `maxAgeMs` that a binding read. An invalid `maxAgeMs` gives the failures of `session.subscribe`
+ * Subscribe with the `maxAgeMs` that a surface read. An invalid `maxAgeMs` gives the failures of `session.subscribe`
  * in the same order: `cancelled`, then `unknown-capability`, then `invalid-input` (spec/events.md#subscribing).
  */
 export function subscribeWithMaxAge(
@@ -295,7 +295,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     capability: Capability<Context, Input, Value, Failures, State, Id>,
   ): Handle<Input, Value, FailureOf<Failures>, State> {
     const entry = served.get(capability.id);
-    if (entry === undefined || entry.capability !== capability) return outsideView(capability);
+    if (entry === undefined || entry.capability !== capability) return outsideTarget(capability);
     const state = capability.state?.source(options.context);
     const run = (input: Input, call: Call<Context>) => (capability.input === undefined ? capability.run({}, call) : capability.run(input, call));
     return {
@@ -426,7 +426,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
   };
 
   function eventHandle<Input, Payload, Id extends string>(event: EventDefinition<Context, Input, Payload, Id>): EventHandle<Input, Payload> {
-    if (servedEvents.get(event.id) !== event) return eventOutsideView(event);
+    if (servedEvents.get(event.id) !== event) return eventOutsideTarget(event);
     const source = (input: Input, subscription: Subscription<Context>) => (event.input === undefined ? event.subscribe({}, subscription) : event.subscribe(input, subscription));
     const check = (data: Payload): Promise<Payload> => checkPayload(event.payload, data, () => data);
     return {
@@ -454,7 +454,7 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
     subscriptions = [];
   };
 
-  let view: CatalogDocument | undefined;
+  let catalog: CatalogDocument | undefined;
 
   async function dispose() {
     lifetime.abort();
@@ -465,8 +465,8 @@ export function createSession<Context>(app: App<Context>, options: SessionOption
 
   return {
     target: options.target,
-    get view() {
-      return (view ??= viewOf(catalogOf(app, { toJsonSchema: options.toJsonSchema }), options.target));
+    get catalog() {
+      return (catalog ??= targetCatalog(catalogOf(app, { toJsonSchema: options.toJsonSchema }), options.target));
     },
     handles,
     handle,

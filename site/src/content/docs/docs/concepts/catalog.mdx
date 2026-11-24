@@ -11,7 +11,7 @@ The **catalog** is the contract of an application. It is one JSON document that 
 
 - the **capabilities**: the operations that a client can do;
 - the **events**: the things that happen, which clients can follow;
-- the **targets**: the groups of clients, and the bindings that serve each group.
+- the **targets**: the groups of clients, and the surfaces that serve each group.
 
 Each application has one catalog. Every surface comes from it.
 
@@ -63,7 +63,7 @@ Each schema in a catalog is JSON Schema 2020-12.
 
 ## Build time, not run time
 
-The catalog is a build-time file. Keep it with the source code, and check it in your build with `acid-cat check`. A program does not read the catalog at run time: it uses its own code. Each binding must agree with the catalog.
+The catalog is a build-time file. Keep it with the source code, and check it in your build with `acid-cat check`. A program does not read the catalog at run time: it uses its own code. Each surface must agree with the catalog.
 
 ## Write a source, not JSON
 
@@ -77,5 +77,5 @@ Every tool writes the same bytes for the same catalog: the **canonical form**. [
 
 ## Read more
 
-- [Catalog](/spec/catalog/) in the specification: every rule, views, bundling and the canonical form.
-- [Capabilities](/docs/concepts/capabilities/), [Targets and views](/docs/concepts/targets-and-views/) and [Events](/docs/concepts/events/).
+- [Catalog](/spec/catalog/) in the specification: every rule, the catalog of a target, bundling and the canonical form.
+- [Capabilities](/docs/concepts/capabilities/), [Targets](/docs/concepts/targets/) and [Events](/docs/concepts/events/).

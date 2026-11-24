@@ -29,7 +29,7 @@ use acid_cat_catalog::canonical_json;
 /// Tells if a URL is in the allowlist of the deployment.
 pub type Allow = Arc<dyn Fn(&Uri) -> bool + Send + Sync>;
 
-/// The settings of webhook delivery. Each limit has the default of spec/bindings/mcp.md#webhook.
+/// The settings of webhook delivery. Each limit has the default of spec/surfaces/mcp.md#webhook.
 #[derive(Clone)]
 pub struct WebhookOptions {
     /// The allowlist: a URL for which this function gives `true` gets deliveries with no verification.

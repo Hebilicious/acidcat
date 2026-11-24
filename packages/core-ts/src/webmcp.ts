@@ -59,13 +59,13 @@ export function installWebMcp(session: Session, options: { readonly host?: Model
   const lifetime = new AbortController();
   const registered = new Map<string, AbortController>();
   const calls = new Set<Promise<unknown>>();
-  const types = session.view.$defs ?? {};
+  const types = session.catalog.$defs ?? {};
   let updating = false;
   let requestedDuringUpdate = false;
 
   const toolFor = (id: string): ModelContextTool => {
-    const capability = session.view.capabilities[id];
-    if (capability === undefined) throw new Error(`The view of the session has no capability ${id}.`);
+    const capability = session.catalog.capabilities[id];
+    if (capability === undefined) throw new Error(`The catalog of the session has no capability ${id}.`);
     return {
       name: id,
       description: capability.description,

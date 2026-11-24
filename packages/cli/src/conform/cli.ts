@@ -10,7 +10,7 @@ import type { JsonObject } from "../json.ts";
 import { abortable, Checks, eventIdsOf, expect, expectEqual, expectOccurrence, idsOf, sorted, until } from "./check.ts";
 import type { Define } from "./check.ts";
 
-const RULE = "spec/bindings/cli.md";
+const RULE = "spec/surfaces/cli.md";
 
 const USAGES: { readonly [id: string]: string } = {
   "fixture.crash": "fixture crash",
@@ -135,8 +135,8 @@ export async function checkCli(command: readonly string[], options: { readonly d
       ["the first word of two-word aliases alone, with no one-word alias, has exit code 2", ["shout"], 2],
       ["an unknown second word after the first word of two-word aliases has exit code 2", ["shout", "nope"], 2],
       ["an unknown second word after a one-word alias with two-word aliases has exit code 2", ["notes", "nope"], 2],
-      ["a capability outside the view has exit code 2", ["call", "fixture.hidden"], 2],
-      ["a capability outside the view with input that is not JSON has exit code 2", ["call", "fixture.hidden", "{bad"], 2],
+      ["a capability outside the target has exit code 2", ["call", "fixture.hidden"], 2],
+      ["a capability outside the target with input that is not JSON has exit code 2", ["call", "fixture.hidden", "{bad"], 2],
       ["a missing required flag has exit code 3", ["fixture", "echo"], 3],
       ["an unknown flag has exit code 3", ["fixture", "echo", "--text", "hello", "--nope", "x"], 3],
       ["a flag that is not valid has exit code 3", ["fixture", "flags", "--mode", "fast", "--ratio", "soon"], 3],
@@ -195,7 +195,7 @@ export async function checkCli(command: readonly string[], options: { readonly d
       expectEqual(result.code, 0, "exit code");
       expectEqual(parseJson(result.stdout), { text: "hello" }, "standard output");
     });
-    check("list gives the view: the capabilities, then the events", `${RULE}#commands`, async (signal) => {
+    check("list gives the capabilities of the target, then its events", `${RULE}#commands`, async (signal) => {
       const entries = await listed(signal);
       const ids = (kind: string) => entries.filter((entry) => entry.kind === kind).map((entry) => entry.id);
       expectEqual(sorted(ids("capability")), idsOf("cli"), "the ids of the items with kind: capability");
@@ -456,7 +456,7 @@ function checkWatch(check: Define, command: readonly string[]): void {
     ["watch with invalid input has exit code 3", ["watch", "fixture.ticks", "--count", "101"], 3],
     ["watch with a missing required flag has exit code 3", ["watch", "fixture.ticks"], 3],
     ["watch with an unknown flag has exit code 3", ["watch", "fixture.ticks", "--count", "1", "--nope", "x"], 3],
-    ["watch of an event outside the view has exit code 2", ["watch", "fixture.secret"], 2],
+    ["watch of an event outside the target has exit code 2", ["watch", "fixture.secret"], 2],
     ["watch with a --max-age-ms that is not an integer has exit code 3", ["watch", "fixture.ticks", "--count", "1", "--max-age-ms", "soon"], 3],
     ["watch with a --max-age-ms that is a fraction has exit code 3", ["watch", "fixture.ticks", "--count", "1", "--max-age-ms", "1.5"], 3],
   ] as const) {

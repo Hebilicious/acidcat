@@ -203,7 +203,7 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     const body = JSON.stringify({ type: "verification", challenge });
     const posted = await postToAcceptedAddressWithoutRedirects(url, await headersOf({ id, secrets: [secret] }, webhookIdOf("verification"), body), body, network);
     if ("failure" in posted) return posted.failure;
-    // A 3xx status is http_4xx for a delivery, but challenge_failed for a verification (spec/bindings/mcp.md#webhook).
+    // A 3xx status is http_4xx for a delivery, but challenge_failed for a verification (spec/surfaces/mcp.md#webhook).
     if (posted.status >= 300 && posted.status < 400) return "challenge_failed";
     if (posted.status < 200 || posted.status >= 300) return statusError(posted.status);
     if (!constantTimeEquals(challengeOf(posted.text), challenge)) return "challenge_failed";
@@ -301,7 +301,7 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
       const read = readSubscribe(params);
       if ("error" in read) return read;
       const { url, secret } = read;
-      // The key has the URL as the client sent it, not the parsed URL (spec/bindings/mcp.md#webhook).
+      // The key has the URL as the client sent it, not the parsed URL (spec/surfaces/mcp.md#webhook).
       const key = subscriptionKey(principal, read.rawUrl, read.name, read.input);
       for (let pending = starting.get(key); pending !== undefined; pending = starting.get(key)) await pending.catch(() => undefined);
       const existing = subscriptions.get(key);

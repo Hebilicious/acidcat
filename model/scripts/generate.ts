@@ -257,7 +257,7 @@ const schema = (value: unknown): { readonly type: "object"; readonly properties?
 };
 
 const entries = (value: unknown) =>
-  list(value).map((each) => ({ id: text(field(each, "id")), inView: boolean(field(each, "inView")), input: schema(field(each, "input")) }));
+  list(value).map((each) => ({ id: text(field(each, "id")), inTarget: boolean(field(each, "inTarget")), input: schema(field(each, "input")) }));
 
 const member = (value: unknown): string | number | null | undefined => {
   const { tag, value: id } = variant(value, ["Absent", "Null", "NotText", "Id"]);
@@ -329,7 +329,7 @@ const aliasCases = {
     const settings = aliasSettings(field(declared, "settings"));
     const fallback = variant(field(result, "default"), ["NoDefaultAlias", "DefaultAlias"]);
     return {
-      binding: boolean(field(declared, "cliBinding")),
+      surface: boolean(field(declared, "cliSurface")),
       ...(settings === undefined ? {} : { settings }),
       errors: list(field(result, "problems")).map(aliasProblem),
       aliases: list(field(result, "aliases")).map(acceptedAlias),
@@ -555,7 +555,7 @@ const rustFacts = [
   "    }",
   "}",
   "",
-  "/// The exit codes of the outcomes (spec/bindings/cli.md#outcomes).",
+  "/// The exit codes of the outcomes (spec/surfaces/cli.md#outcomes).",
   "pub mod exit {",
   ...exitCodes.map(([name, code]) => `    pub const ${screaming(name)}: i32 = ${code};`),
   "}",

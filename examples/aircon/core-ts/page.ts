@@ -10,7 +10,7 @@ const session = createSession(aircon, { target: "app", context: { unit }, toJson
 
 const outcome = (call: Promise<Result<unknown, unknown>>): Promise<Outcome<unknown, unknown>> => call.catch(callFailureOf);
 
-const view = bindPage("@acid-cat/core-ts", {
+const controls = bindPage("@acid-cat/core-ts", {
   power: (on) => outcome(session.call(powerSet, { on })),
   mode: (mode) => outcome(session.call(modeSet, { mode })),
   temperature: (celsius) => outcome(session.call(temperatureSet, { celsius })),
@@ -21,12 +21,12 @@ const view = bindPage("@acid-cat/core-ts", {
 
 const status = session.handle(statusGet).snapshot;
 if (status !== undefined) {
-  view.showStatus(status.getSnapshot());
-  status.subscribe(view.showStatus);
+  controls.showStatus(status.getSnapshot());
+  status.subscribe(controls.showStatus);
 }
 
 const showTools = () =>
-  view.showTools(
+  controls.showTools(
     [...session.handles.values()].map((handle) => {
       const availability = handle.availability.getSnapshot();
       return { id: handle.id, available: availability.available, reason: availability.available ? undefined : availability.reason };
@@ -36,5 +36,5 @@ showTools();
 session.onChange(showTools);
 
 const webmcp = installWebMcp(session);
-view.showToolStatus(webmcp?.status.getSnapshot());
-webmcp?.status.subscribe(view.showToolStatus);
+controls.showToolStatus(webmcp?.status.getSnapshot());
+webmcp?.status.subscribe(controls.showToolStatus);

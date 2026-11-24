@@ -6,9 +6,9 @@ import type { PublishedPackage } from "../../lib/packages.ts";
 
 const packages = await readPublishedPackages(join(process.cwd(), ".."));
 const groups: { kind: PublishedPackage["kind"]; title: string; text: string }[] = [
-  { kind: "tool", title: "Tools", text: "Check, format and view catalogs, and test any implementation from outside." },
+  { kind: "tool", title: "Tools", text: "Check and format catalogs, and test any implementation from outside." },
   { kind: "catalog", title: "Catalog libraries", text: "Write a catalog in the language of your choice. Every library writes the same canonical JSON." },
-  { kind: "core", title: "Cores", text: "Run the capabilities and serve the bindings. Each core passes acid-cat conform." },
+  { kind: "core", title: "Cores", text: "Run the capabilities and serve the surfaces. Each core passes acid-cat conform." },
   { kind: "library", title: "Libraries", text: "Shared pieces of the TypeScript reference implementation." },
 ];
 const repository = "https://github.com/Hebilicious/acidcat";

@@ -101,15 +101,15 @@ A problem in the source of the event is not a call failure. Put it in the payloa
 
 ## Events on each surface
 
-| Binding | How a client follows an event |
+| Surface | How a client follows an event |
 | --- | --- |
 | CLI | `watch <id>` writes one line of JSON for each occurrence. In the air conditioner, the alias `follow` does the same |
 | MCP | The MCP events extension: push, poll and webhook delivery |
 | HTTP | `POST {base}/events/{id}` gives a stream of server-sent events |
 | TypeScript | An event handle gives an async iterable |
-| WebMCP | None. The page follows events through the TypeScript binding |
+| WebMCP | None. The page follows events through the TypeScript surface |
 
 ## Read more
 
 - [Events](/spec/events/) in the specification: subscribing, ending, slow clients and resuming.
-- The events section of each binding: [CLI](/spec/bindings/cli/#events), [MCP](/spec/bindings/mcp/#events), [HTTP](/spec/bindings/http/#events), [programmatic](/spec/bindings/programmatic/#event-handles), [TypeScript](/spec/bindings/typescript/#event-handles), [Rust](/spec/bindings/rust/#event-handles).
+- The events section of each surface: [CLI](/spec/surfaces/cli/#events), [MCP](/spec/surfaces/mcp/#events), [HTTP](/spec/surfaces/http/#events), [programmatic](/spec/surfaces/programmatic/#event-handles), [TypeScript](/spec/surfaces/typescript/#event-handles), [Rust](/spec/surfaces/rust/#event-handles).

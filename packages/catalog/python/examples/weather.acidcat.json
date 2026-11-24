@@ -4,19 +4,19 @@
   "description": "Read the sensors of one outdoor weather station and keep them accurate.",
   "targets": {
     "agents": {
-      "bindings": [
+      "surfaces": [
         "mcp"
       ],
       "description": "Assistants, through an MCP server."
     },
     "dashboard": {
-      "bindings": [
+      "surfaces": [
         "typescript"
       ],
       "description": "The wall screen in the kitchen that shows the weather now."
     },
     "logger": {
-      "bindings": [
+      "surfaces": [
         "http"
       ],
       "description": "Scripts that store readings for later study.",

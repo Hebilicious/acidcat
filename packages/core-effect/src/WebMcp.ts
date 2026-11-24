@@ -45,14 +45,14 @@ const property = (value: unknown, name: string): unknown => (Predicate.hasProper
 
 /**
  * `true` if the value has a `registerTool` function. JavaScript cannot check the parameters of a function, so the
- * check stops there, as in the specification of the host (spec/bindings/webmcp.md#host).
+ * check stops there, as in the specification of the host (spec/surfaces/webmcp.md#host).
  */
 const isModelContext = (value: unknown): value is ModelContext =>
   Predicate.hasProperty(value, "registerTool") && typeof value.registerTool === "function";
 
 /**
  * Register the capabilities of a session as tools. If there is no host, do nothing and return `None`. The tools are
- * removed when the scope closes. The binding serves no events (`spec/bindings/webmcp.md#events`): the page follows them
+ * removed when the scope closes. The surface serves no events (`spec/surfaces/webmcp.md#events`): the page follows them
  * through the event handles of `Handles`.
  */
 export const install = (session: Session.Session, options: { readonly host?: ModelContext | undefined } = {}) =>
@@ -68,11 +68,11 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
     const registered = new Map<string, AbortController>();
     const calls = new Set<Promise<unknown>>();
     const requests = yield* Queue.sliding<void>(1);
-    const types = session.view.$defs ?? {};
+    const types = session.catalog.$defs ?? {};
 
     const toolFor = (id: string): ModelContextTool => {
-      const capability = session.view.capabilities[id];
-      if (capability === undefined) throw new Error(`The view has no capability ${id}.`);
+      const capability = session.catalog.capabilities[id];
+      if (capability === undefined) throw new Error(`The catalog of the session has no capability ${id}.`);
       return {
         name: id,
         description: capability.description,
@@ -98,7 +98,7 @@ export const install = (session: Session.Session, options: { readonly host?: Mod
 
     const pass = Effect.gen(function* () {
       const wanted = new Set<string>();
-      for (const id of Object.keys(session.view.capabilities)) {
+      for (const id of Object.keys(session.catalog.capabilities)) {
         if ((yield* session.availability(id)).available) wanted.add(id);
       }
       const added = new Map<string, AbortController>();

@@ -24,8 +24,8 @@ export function firstLine(child: ChildProcessByStdio<null, Readable, Readable | 
 }
 
 /**
- * A proxy in front of the server at `url`, which counts the subscriptions that have started. The HTTP binding answers a
- * subscription with the status 200 only when it has started (spec/bindings/http.md).
+ * A proxy in front of the server at `url`, which counts the subscriptions that have started. The HTTP surface answers a
+ * subscription with the status 200 only when it has started (spec/surfaces/http.md).
  */
 export async function subscriptionProxy(context: TestContext, url: string): Promise<{ readonly url: string; readonly started: (count: number) => Promise<void> }> {
   const target = new URL(url);

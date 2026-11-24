@@ -120,10 +120,10 @@ export const kettle = defineApp<Context>({
   title: "Electric kettle",
   description: "Boil water, and keep it warm for a drink.",
   targets: {
-    app: { description: "The phone app of the kettle.", bindings: ["typescript"] },
-    panel: { description: "The buttons and the display on the base of the kettle.", bindings: ["typescript"] },
-    cli: { bindings: ["cli"] },
-    mcp: { description: "Agents, through an MCP server.", bindings: ["mcp"] },
+    app: { description: "The phone app of the kettle.", surfaces: ["typescript"] },
+    panel: { description: "The buttons and the display on the base of the kettle.", surfaces: ["typescript"] },
+    cli: { surfaces: ["cli"] },
+    mcp: { description: "Agents, through an MCP server.", surfaces: ["mcp"] },
   },
   capabilities: [statusGet, fill, boil, warmSet, descale],
 });

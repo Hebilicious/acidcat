@@ -155,7 +155,7 @@ export const cores: readonly Core[] = [
     readme: "packages/core-rust/README.md",
     example: "examples/aircon/core-rust",
     guide: "/docs/guides/serve-with-core-rust/",
-    note: "Rust on Tokio. It serves the MCP, HTTP and CLI bindings.",
+    note: "Rust on Tokio. It serves the MCP, HTTP and CLI surfaces.",
     requires: ["Rust 1.85 or later, with Cargo."],
     install: [
       {
@@ -173,7 +173,7 @@ export const ownCore: OwnCore = {
   label: "Your own core",
   note: "Any language. A core that follows the specification and passes acid-cat conform is an implementation.",
   source: "spec/conformance.md",
-  steps: ["Follow the specification: spec/README.md", "Serve the conformance fixture: packages/cli/conformance/fixture.pkl", "Test each binding from outside:"],
+  steps: ["Follow the specification: spec/README.md", "Serve the conformance fixture: packages/cli/conformance/fixture.pkl", "Test each surface from outside:"],
   conform: ["npx @acid-cat/cli conform \\", "  --http http://localhost:8080 \\", "  --mcp http://localhost:8080/mcp \\", '  --cli "./your-program"'].join("\n"),
 };
 

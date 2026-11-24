@@ -32,7 +32,7 @@ test("the application writes a catalog that conforms, with the members of the co
 test("an input that is a union of objects is an object schema, and the catalog conforms", () => {
   const ById = z.object({ id: z.number().int() }).meta({ id: "ById" });
   const app = defineApp({
-    targets: { mcp: { bindings: ["mcp"] } },
+    targets: { mcp: { surfaces: ["mcp"] } },
     capabilities: [
       defineCapability({
         id: "probe.find",
@@ -64,7 +64,7 @@ test("a call gives a value, a failure or a call failure", async () => {
   await session.dispose();
 });
 
-test("handles follow the TypeScript binding", async () => {
+test("handles follow the TypeScript surface", async () => {
   const session = createSession(fixture, { target: "app", ...options() });
   const echo = session.handles.get("fixture.echo");
   const crash = session.handles.get("fixture.crash");
@@ -106,7 +106,7 @@ test("availability, cancellation and closing", async () => {
 test("an input schema that throws is internal, with no internal data, and the call does not reject", async () => {
   const defects: string[] = [];
   const app = defineApp({
-    targets: { mcp: { bindings: ["mcp"] } },
+    targets: { mcp: { surfaces: ["mcp"] } },
     capabilities: [
       defineCapability({
         id: "probe.throws",
@@ -131,7 +131,7 @@ test("an abort during input validation cancels the call, and the provider does n
   let finishValidation = () => {};
   const finished = new Promise<void>((resolve) => (finishValidation = resolve));
   const app = defineApp({
-    targets: { mcp: { bindings: ["mcp"] } },
+    targets: { mcp: { surfaces: ["mcp"] } },
     capabilities: [
       defineCapability({
         id: "probe.slow",
@@ -164,7 +164,7 @@ test("an abort while the session reads the availability cancels the call", async
   const controller = new AbortController();
   let abortedInRun: boolean | undefined;
   const app = defineApp({
-    targets: { mcp: { bindings: ["mcp"] } },
+    targets: { mcp: { surfaces: ["mcp"] } },
     capabilities: [
       defineCapability({
         id: "probe.aborts",
@@ -337,7 +337,7 @@ test("call with input that is not JSON gives unknown-capability, then unavailabl
 test("a required repeated flag must occur, an empty JSON array gives no items, and the usage gives the enum of a $ref item", async () => {
   const Day = z.enum(["mon", "tue"]).meta({ id: "Day" });
   const app = defineApp({
-    targets: { cli: { bindings: ["cli"] } },
+    targets: { cli: { surfaces: ["cli"] } },
     capabilities: [
       defineCapability({
         id: "probe.plan",
@@ -386,7 +386,7 @@ test("a command of the application must not have the name of another command", a
     await assert.rejects(run([named(name)]), new RegExp(`The command ${name} of the application`));
   }
   await assert.rejects(run([named("report"), named("report")]), /The command report of the application/);
-  const watchCapability = defineApp({ targets: { cli: { bindings: ["cli"] } }, capabilities: [defineCapability({ id: "watch.start", description: "Start.", audience: ["cli"], run: () => ok(null) })] });
+  const watchCapability = defineApp({ targets: { cli: { surfaces: ["cli"] } }, capabilities: [defineCapability({ id: "watch.start", description: "Start.", audience: ["cli"], run: () => ok(null) })] });
   await assert.rejects(commandLine(watchCapability, { name: "probe", version: "0.0.0", ...options() }, "list"), /watch start/);
 });
 
@@ -400,7 +400,7 @@ test("the help lists the aliases, and only the name of a flag alias selects it",
 test("a flag is a property of the input itself, not a name that every object inherits", async () => {
   const calls: unknown[] = [];
   const app = defineApp<Context>({
-    targets: { cli: { bindings: ["cli"], options: { cli: { aliases: { go: { capability: "probe.name", input: { constructor: "fixed" } } } } } } },
+    targets: { cli: { surfaces: ["cli"], options: { cli: { aliases: { go: { capability: "probe.name", input: { constructor: "fixed" } } } } } } },
     capabilities: [
       defineCapability({
         id: "probe.name",
@@ -426,7 +426,7 @@ test("a flag is a property of the input itself, not a name that every object inh
 test("the command line stops when it starts if an alias breaks a rule", async () => {
   const app = (aliases: { readonly [name: string]: unknown }) =>
     defineApp<Context>({
-      targets: { cli: { bindings: ["cli"], options: { cli: { aliases } } } },
+      targets: { cli: { surfaces: ["cli"], options: { cli: { aliases } } } },
       capabilities: [defineCapability({ id: "probe.ping", description: "Ping.", audience: ["cli"], run: () => ok(null) })],
     });
   const run = (aliases: { readonly [name: string]: unknown }) => commandLine(app(aliases), { name: "probe", version: "0.0.0", ...options() }, "list");
@@ -440,7 +440,7 @@ test("the command line stops when it starts if an alias breaks a rule", async ()
 test("cliAlias writes options.cli, with one default command alias at most", () => {
   const ping = defineCapability({ id: "probe.ping", description: "Ping.", audience: ["cli"], run: () => ok(null) });
   const write = (aliases: Record<string, CliAlias>) =>
-    catalogOf(defineApp({ targets: { cli: { bindings: ["cli"], cli: { aliases } } }, capabilities: [ping] }), { toJsonSchema }).targets.cli?.options;
+    catalogOf(defineApp({ targets: { cli: { surfaces: ["cli"], cli: { aliases } } }, capabilities: [ping] }), { toJsonSchema }).targets.cli?.options;
   assert.deepEqual(write({ ping: cliAliasDefault(ping), "--ping": cliAlias(ping) }), {
     cli: { aliases: { ping: { capability: "probe.ping" }, "--ping": { capability: "probe.ping" } }, default: "ping" },
   });
@@ -450,7 +450,7 @@ test("cliAlias writes options.cli, with one default command alias at most", () =
 
 test("the command line stops when it starts if the path of a capability is the start of the path of another", async () => {
   const probe = (id: string) => defineCapability({ id, description: "A probe.", audience: ["cli"], run: () => ok(null) });
-  const app = (...ids: string[]) => defineApp<Context>({ targets: { cli: { bindings: ["cli"] } }, capabilities: ids.map(probe) });
+  const app = (...ids: string[]) => defineApp<Context>({ targets: { cli: { surfaces: ["cli"] } }, capabilities: ids.map(probe) });
   const run = (...ids: string[]) => commandLine(app(...ids), { name: "probe", version: "0.0.0", ...options() }, "list");
   await assert.rejects(run("aircon.status", "aircon.status.get"), {
     message: "The command aircon status is also the start of the command aircon status get. A shared prefix only contains other commands.",

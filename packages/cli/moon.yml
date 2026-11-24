@@ -3,7 +3,7 @@ layer: "library"
 
 project:
   title: "@acid-cat/cli"
-  description: "The acid-cat command: check, format and view catalogs. Published to npm as @acid-cat/cli."
+  description: "The acid-cat command: check and format catalogs, and print the catalog of a target. Published to npm as @acid-cat/cli."
 
 toolchains:
   default: ["javascript", "node", "pnpm"]
@@ -25,7 +25,7 @@ tasks:
 
   test:
     deps: ["test-programs"]
-    description: "Test canonical form, views, bundling and the catalog rules."
+    description: "Test canonical form, the catalog of a target, bundling and the catalog rules."
     command: "node"
     args: ["--test", "test/"]
     inputs: ["src/**/*.ts", "test/**/*.ts", "test/fixtures/**/*.json", "/schemas/**/*.json", "/packages/catalog/typescript/src/**/*.ts"]

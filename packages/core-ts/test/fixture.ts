@@ -215,10 +215,10 @@ export const fixture = defineApp<Context>({
   title: "AcidCat conformance fixture",
   description: "One capability or event for each behavior that acid-cat conform tests.",
   targets: {
-    app: { bindings: ["typescript", "webmcp"] },
-    mcp: { bindings: ["mcp"] },
+    app: { surfaces: ["typescript", "webmcp"] },
+    mcp: { surfaces: ["mcp"] },
     cli: {
-      bindings: ["cli"],
+      surfaces: ["cli"],
       options: {
         cli: {
           aliases: {
@@ -241,7 +241,7 @@ export const fixture = defineApp<Context>({
         },
       },
     },
-    api: { bindings: ["http"] },
+    api: { surfaces: ["http"] },
   },
   capabilities: [
     defineCapability({

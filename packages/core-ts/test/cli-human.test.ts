@@ -30,7 +30,7 @@ const tick = defineEvent({
   },
 });
 
-const app = defineApp({ targets: { cli: { bindings: ["cli"], cli: { aliases: { "--now": cliAlias(clock) } } } }, capabilities: [read, clock], events: [tick] });
+const app = defineApp({ targets: { cli: { surfaces: ["cli"], cli: { aliases: { "--now": cliAlias(clock) } } } }, capabilities: [read, clock], events: [tick] });
 
 const toJsonSchema: ToJsonSchema = (schema) => {
   if (!(schema instanceof z.ZodType)) throw new Error("The probe has only Zod schemas.");

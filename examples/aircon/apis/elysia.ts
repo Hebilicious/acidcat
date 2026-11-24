@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { fanSet, FanSpeed, Mode, modeSet, powerSet, statusChanged, statusGet, temperatureSet } from "../core-ts/aircon.ts";
 import type { Context, Offline, PoweredOff } from "../core-ts/aircon.ts";
-import { forbidden, foreignOrigin, httpBinding, openSession } from "./shared.ts";
+import { forbidden, foreignOrigin, httpSurface, openSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
 
 const Settings = z.object({
@@ -47,7 +47,7 @@ export function elysiaApi(options: ApiOptions, adapter?: ElysiaConfig<"">["adapt
       set.status = HTTP_STATUS[error.kind];
       return { kind: error.kind, message: error.message };
     })
-    .mount("/api", httpBinding(options, ""))
+    .mount("/api", httpSurface(options, ""))
     .get("/status", async ({ status }) => {
       await using session = openSession(options);
       const result = await session.call(statusGet, {});

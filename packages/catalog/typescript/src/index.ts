@@ -6,10 +6,10 @@ export { canonicalText } from "./canonical.ts";
 export type Schema = { readonly [keyword: string]: unknown };
 
 export interface TargetOptions {
-  /** The bindings that serve the target, such as `"typescript"` and `"webmcp"`. */
-  readonly bindings: readonly string[];
+  /** The surfaces that serve the target, such as `"typescript"` and `"webmcp"`. */
+  readonly surfaces: readonly string[];
   readonly description?: string;
-  /** Settings for the bindings, in a form each binding defines. */
+  /** Settings for the surfaces, in a form each surface defines. */
   readonly options?: Schema;
 }
 
@@ -93,10 +93,10 @@ export class Catalog {
     const problems: string[] = [];
     for (const [name, target] of this.#targets) {
       if (!NAME.test(name)) problems.push(`the target name ${name} is malformed`);
-      if (target.bindings.length === 0) problems.push(`the target ${name} has no bindings`);
-      if (new Set(target.bindings).size !== target.bindings.length) problems.push(`the target ${name} repeats a binding`);
-      for (const binding of target.bindings) {
-        if (!NAME.test(binding)) problems.push(`the target ${name} names the malformed binding ${binding}`);
+      if (target.surfaces.length === 0) problems.push(`the target ${name} has no surfaces`);
+      if (new Set(target.surfaces).size !== target.surfaces.length) problems.push(`the target ${name} repeats a surface`);
+      for (const surface of target.surfaces) {
+        if (!NAME.test(surface)) problems.push(`the target ${name} names the malformed surface ${surface}`);
       }
     }
     for (const [name, schema] of this.#types) {
@@ -157,7 +157,7 @@ export class Catalog {
       targets: Object.fromEntries(
         [...this.#targets].map(([name, target]) => [
           name,
-          compact({ bindings: target.bindings, description: target.description, options: target.options }),
+          compact({ surfaces: target.surfaces, description: target.description, options: target.options }),
         ]),
       ),
       $defs: this.#types.size === 0 ? undefined : Object.fromEntries(this.#types),

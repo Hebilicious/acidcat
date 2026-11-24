@@ -55,9 +55,9 @@ test("MCP through HTTP: events/subscribe and events/unsubscribe are Unsupported 
   assert.deepEqual((await rpc("events/unsubscribe", { name: "sensor.ticks" }))["error"], { code: -32026, message: "Unsupported", data: { feature: "deliveryMode", value: "webhook" } });
 });
 
-test("MCP through HTTP: a server whose view has no events serves no events methods and no extension", async () => {
+test("MCP through HTTP: a server whose target has no events serves no events methods and no extension", async () => {
   const app = defineApp({
-    targets: { mcp: { bindings: ["mcp"] } },
+    targets: { mcp: { surfaces: ["mcp"] } },
     capabilities: [defineCapability({ id: "probe.ping", description: "Ping.", audience: ["mcp"], run: () => ok(null) })],
   });
   const handler = mcpHandler(app, { name: "probe", version: "0.0.0", allowedOrigins: [], toJsonSchema, context: undefined });

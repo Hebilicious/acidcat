@@ -9,7 +9,7 @@ import { expect, expectEqual } from "./check.ts";
 import type { Checks } from "./check.ts";
 import type { Channel } from "./mcp.ts";
 
-const RULE = "spec/bindings/mcp.md#server-card";
+const RULE = "spec/surfaces/mcp.md#server-card";
 
 const decodeCard = (() => {
   const definitions: JsonSchema.Definitions = cardJsonSchema.$defs;

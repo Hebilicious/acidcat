@@ -2,7 +2,7 @@
   "acidcat": "0.1",
   "targets": {
     "shop": {
-      "bindings": [
+      "surfaces": [
         "cli"
       ],
       "options": {

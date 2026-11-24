@@ -1,13 +1,13 @@
-# Rust binding
+# Rust surface
 
-The language binding for Rust. It maps the [programmatic binding](programmatic.md) to async Rust on Tokio. The rules of the programmatic binding apply. This document tells only the Rust forms.
+The language surface for Rust. It maps the [programmatic surface](programmatic.md) to async Rust on Tokio. The rules of the programmatic surface apply. This document tells only the Rust forms.
 
 ## Sessions
 
 ```rust
 impl<C: Send + Sync + 'static> Session<C> {
     pub fn open(app: &Arc<Application<C>>, target: &str, context: Arc<C>) -> Self;
-    pub fn view(&self) -> &serde_json::Value;
+    pub fn catalog(&self) -> &serde_json::Value;
     pub fn capability_ids(&self) -> &[String];
     pub fn event_ids(&self) -> &[String];
     pub fn availability(&self, id: &str) -> Option<Availability>;
@@ -48,10 +48,10 @@ pub enum Availability {
 }
 ```
 
-- **Input.** `invoke` is the external call. The binding gives no typed call. A provider that panics, also before it gives its future, fails as `internal`.
+- **Input.** `invoke` is the external call. The surface gives no typed call. A provider that panics, also before it gives its future, fails as `internal`.
 - **Outcomes.** `invoke` gives an `Outcome`. `Value` and `Failure` are the results, in their JSON form. `CallFailure` is the call failure. Each variant of `Kind` is one kind of call failure, in the order of [Call failures](../invocation.md#call-failures).
-- **Availability.** `availability` gives the latest availability, or `None` for an id that is not in the view. After the availability of a capability of the session changes, the receiver of `availability_changes` gets a message. One message can stand for more than one change, so read `availability` again. The receiver gives `None` when no more changes can come: the session closes, or no availability of the session can change.
-- **State.** `state` gives a `StateWatch`, or `None` when the capability has no state or is not in the view. `StateWatch::snapshot` gives the snapshot in its JSON form. `StateWatch::changed` waits until the value changes, and gives `false` when no more values come. Then `snapshot` gives the latest value. Values between two reads can be lost.
+- **Availability.** `availability` gives the latest availability, or `None` for an id that is not in the target. After the availability of a capability of the session changes, the receiver of `availability_changes` gets a message. One message can stand for more than one change, so read `availability` again. The receiver gives `None` when no more changes can come: the session closes, or no availability of the session can change.
+- **State.** `state` gives a `StateWatch`, or `None` when the capability has no state or is not in the target. `StateWatch::snapshot` gives the snapshot in its JSON form. `StateWatch::changed` waits until the value changes, and gives `false` when no more values come. Then `snapshot` gives the latest value. Values between two reads can be lost.
 - **Cancellation.** `cancel` cancels one call. Dropping the future of `invoke` also cancels the call.
 
 ## Event handles
@@ -78,7 +78,7 @@ impl Occurrences {
 }
 ```
 
-- **Subscribing.** `subscribe` is the external subscription. The binding gives no typed subscription. It gives `Ok` when the subscription has started, or `Err` with the call failure before the first occurrence. A provider that panics before it gives its stream fails as `internal`. `options.cancel` cancels the subscription before it starts.
+- **Subscribing.** `subscribe` is the external subscription. The surface gives no typed subscription. It gives `Ok` when the subscription has started, or `Err` with the call failure before the first occurrence. A provider that panics before it gives its stream fails as `internal`. `options.cancel` cancels the subscription before it starts.
 - **Occurrences.** Each `Some(Ok(occurrence))` of `next` is an occurrence. Its `data` is in its JSON form.
 - **Ending.**
 

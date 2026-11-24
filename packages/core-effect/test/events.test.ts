@@ -13,13 +13,13 @@ const run = <A, E>(program: Effect.Effect<A, E, Feed | Scope.Scope>) => Effect.r
 const startFailure = <A>(start: Effect.Effect<A, Session.CallFailed, Scope.Scope>) =>
   Effect.flip(start).pipe(Effect.map(({ kind, message }) => ({ kind, message })));
 
-test("an event with no payload schema has no payload in the catalog, the events come after the capabilities, and a view narrows the audience", () => {
+test("an event with no payload schema has no payload in the catalog, the events come after the capabilities, and a catalog narrows the audience", () => {
   assert.equal(App.document(events).events?.["feed.crashing"]?.payload, undefined);
   const text = App.render(events);
   assert.ok(text.indexOf('"capabilities"') < text.indexOf('"events"'));
-  const view = Effect.runSync(Session.make(events, { target: "mcp" }).pipe(Effect.scoped, Effect.provide(feedLayer))).view;
-  assert.equal(view.events?.["feed.hidden"], undefined);
-  assert.deepEqual(view.events?.["feed.ticked"]?.audience, ["mcp"]);
+  const catalog = Effect.runSync(Session.make(events, { target: "mcp" }).pipe(Effect.scoped, Effect.provide(feedLayer))).catalog;
+  assert.equal(catalog.events?.["feed.hidden"], undefined);
+  assert.deepEqual(catalog.events?.["feed.ticked"]?.audience, ["mcp"]);
 });
 
 test("an id that is both a capability and an event, and a payload that is not an object, stop the catalog", () => {
@@ -181,7 +181,7 @@ test("a slow client loses the oldest occurrences, and the next one it reads has 
             Stream.map((count) => ({ data: { count } })),
           ),
       });
-      const app = App.make({ targets: { app: { bindings: ["typescript"] } }, capabilities: [], events: [counts] });
+      const app = App.make({ targets: { app: { surfaces: ["typescript"] } }, capabilities: [], events: [counts] });
       const session = yield* Session.make(app, { target: "app", eventBuffer: 2 });
       const stream = yield* session.follow(counts, {});
       yield* Deferred.await(buffered);
@@ -216,7 +216,7 @@ test("a defect of the provider, a provider that throws when it starts, or a payl
     audience: ["app"],
     subscribe: () => Stream.make({ data: Object.defineProperty({}, "secret", { value: 1, enumerable: true }) }),
   });
-  const probes = App.make({ targets: { app: { bindings: ["typescript"] } }, capabilities: [], events: [crashing, disagreeing, throwing, filled] });
+  const probes = App.make({ targets: { app: { surfaces: ["typescript"] } }, capabilities: [], events: [crashing, disagreeing, throwing, filled] });
   const outcome = (id: string) =>
     run(
       Effect.gen(function* () {
@@ -257,7 +257,7 @@ test("event handles give occurrences as an async iterable, and reject start fail
   const feed = feedForPromises();
   const session = await Handles.open(events, feed.layer, { target: "app" });
   try {
-    assert.deepEqual([...session.events.keys()].sort(), Object.keys(session.view.events ?? {}).sort());
+    assert.deepEqual([...session.events.keys()].sort(), Object.keys(session.catalog.events ?? {}).sort());
     const typed = session.event(ticked);
     const iterable = await typed.subscribe({ room: "a" });
     const iterator = iterable[Symbol.asyncIterator]();

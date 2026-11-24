@@ -4,10 +4,10 @@ title = "AcidCat conformance fixture"
 description = "One capability or event for each behavior that acid-cat conform tests."
 
 targets {
-  ["app"] { bindings { "typescript"; "webmcp" } }
-  ["mcp"] { bindings { "mcp" } }
+  ["app"] { surfaces { "typescript"; "webmcp" } }
+  ["mcp"] { surfaces { "mcp" } }
   ["cli"] {
-    bindings { "cli" }
+    surfaces { "cli" }
     cli {
       aliases {
         ["say"] { capability = "fixture.echo" }
@@ -28,7 +28,7 @@ targets {
       default = "quick"
     }
   }
-  ["api"] { bindings { "http" } }
+  ["api"] { surfaces { "http" } }
 }
 
 local allTargets = new Listing { "app"; "mcp"; "cli"; "api" }

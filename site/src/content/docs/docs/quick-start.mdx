@@ -110,10 +110,10 @@ export const powerSet = defineCapability({
 export const aircon = defineApp({
   title: "Air conditioner",
   targets: {
-    app: { bindings: ["typescript", "webmcp"] },
-    cli: { bindings: ["cli"] },
-    mcp: { bindings: ["mcp"] },
-    api: { bindings: ["http"] },
+    app: { surfaces: ["typescript", "webmcp"] },
+    cli: { surfaces: ["cli"] },
+    mcp: { surfaces: ["mcp"] },
+    api: { surfaces: ["http"] },
   },
   capabilities: [powerSet],
 });
@@ -175,10 +175,10 @@ export const powerSet = Capability.make({
 export const aircon = App.make({
   title: "Air conditioner",
   targets: {
-    app: { bindings: ["typescript", "webmcp"] },
-    cli: { bindings: ["cli"] },
-    mcp: { bindings: ["mcp"] },
-    api: { bindings: ["http"] },
+    app: { surfaces: ["typescript", "webmcp"] },
+    cli: { surfaces: ["cli"] },
+    mcp: { surfaces: ["mcp"] },
+    api: { surfaces: ["http"] },
   },
   capabilities: [powerSet],
 });
@@ -304,13 +304,13 @@ The catalog conforms.
 </Fragment>
 </EcosystemTabs>
 
-- `targets` names four groups of clients. Each target lists the bindings that serve it. The `app` target is for code in the same process and for the WebMCP tools of a web page.
+- `targets` names four groups of clients. Each target lists the surfaces that serve it. The `app` target is for code in the same process and for the WebMCP tools of a web page.
 - `audience` gives the targets that can use the capability. A target that is not in the audience does not see the capability.
 - `destructive` and `idempotent` are hints. MCP clients get them as `destructiveHint` and `idempotentHint`, so an agent knows to ask before it turns the unit off.
 
 ## 4. Serve the surfaces
 
-Each binding serves the view of one target: the capabilities that the target can use.
+Each surface serves the catalog of one target: the capabilities that the target can use.
 
 ### Command line
 
@@ -380,7 +380,7 @@ Turn the unit on or off.
 </Fragment>
 </EcosystemTabs>
 
-The command line has one command for each capability in the view of the `cli` target. The segments of the id give the path of the command. The capability has no output schema, so its value is `null`. The command `list` lists every command.
+The command line has one command for each capability in the target of the `cli` target. The segments of the id give the path of the command. The capability has no output schema, so its value is `null`. The command `list` lists every command.
 
 ### MCP server through stdio
 
@@ -434,7 +434,7 @@ Standard output carries only MCP messages. Never write to standard output from a
 
 ### HTTP API and MCP through HTTP
 
-The HTTP binding serves the `api` target, and the MCP binding serves the `mcp` target. One server serves both, by path prefix.
+The HTTP surface serves the `api` target, and the MCP surface serves the `mcp` target. One server serves both, by path prefix.
 
 <EcosystemTabs of="cores">
 <Fragment slot="core-ts">
@@ -485,14 +485,14 @@ Start it with `node serve.ts`.
 </Fragment>
 <Fragment slot="core-rust">
 
-`HttpBinding` and `McpBinding` are handlers. `remote::serve` serves them by path prefix. Add this arm to the `match` in `main`:
+`HttpSurface` and `McpSurface` are handlers. `remote::serve` serves them by path prefix. Add this arm to the `match` in `main`:
 
 ```rust
 Some("serve") => {
-    use acid_cat_core::http::{HttpBinding, HttpOptions};
-    use acid_cat_core::mcp::{McpBinding, McpOptions};
-    let mcp = McpBinding::new(app.clone(), unit.clone(), McpOptions::new("home", "0.1.0"));
-    let http = HttpBinding::new(app, unit, HttpOptions::default());
+    use acid_cat_core::http::{HttpSurface, HttpOptions};
+    use acid_cat_core::mcp::{McpSurface, McpOptions};
+    let mcp = McpSurface::new(app.clone(), unit.clone(), McpOptions::new("home", "0.1.0"));
+    let http = HttpSurface::new(app, unit, HttpOptions::default());
     let server = acid_cat_core::remote::serve(
         "127.0.0.1:3000".parse().expect("an address"),
         vec![("/mcp".into(), Arc::new(mcp)), ("/".into(), Arc::new(http))],
@@ -523,7 +523,7 @@ The server listens on `127.0.0.1` with plain HTTP. For clients on the network, e
 
 ### WebMCP tools in a web page
 
-The [WebMCP binding](/spec/bindings/webmcp/) registers each capability in the view of a target as a tool of the browser, so an agent in the browser can call it. The session uses the `app` target, which has the `webmcp` binding.
+The [WebMCP surface](/spec/surfaces/webmcp/) registers each capability in the catalog of a target as a tool of the browser, so an agent in the browser can call it. The session uses the `app` target, which has the `webmcp` surface.
 
 <EcosystemTabs of="cores">
 <Fragment slot="core-ts">
@@ -571,7 +571,7 @@ The installation also has `retry`, for the last failed update, and `remove`, whi
 </Fragment>
 <Fragment slot="core-rust">
 
-The Rust core has no WebMCP binding, because WebMCP runs in a web page and the Rust core runs as a process. Its catalog can still list the `webmcp` binding, so a page on a TypeScript core can serve the same target.
+The Rust core has no WebMCP surface, because WebMCP runs in a web page and the Rust core runs as a process. Its catalog can still list the `webmcp` surface, so a page on a TypeScript core can serve the same target.
 
 </Fragment>
 </EcosystemTabs>
@@ -580,7 +580,7 @@ Bundle `page.ts` for the browser with your bundler, and load it in the page. In 
 
 ### Typed calls in the same process
 
-The [TypeScript binding](/spec/bindings/typescript/) gives code in the same process typed calls, for example a user interface or your own API. The session uses the `app` target, which has the `typescript` binding.
+The [TypeScript surface](/spec/surfaces/typescript/) gives code in the same process typed calls, for example a user interface or your own API. The session uses the `app` target, which has the `typescript` surface.
 
 <EcosystemTabs of="cores">
 <Fragment slot="core-ts">
@@ -622,7 +622,7 @@ $ node call.ts
 </Fragment>
 <Fragment slot="core-rust">
 
-The TypeScript binding is for TypeScript code, so the Rust core does not serve it. Rust code in the same process opens a session with `Session::open(&app, target, context)`, and calls `invoke` and `subscribe`.
+The TypeScript surface is for TypeScript code, so the Rust core does not serve it. Rust code in the same process opens a session with `Session::open(&app, target, context)`, and calls `invoke` and `subscribe`.
 
 </Fragment>
 </EcosystemTabs>
@@ -637,6 +637,6 @@ The TypeScript binding is for TypeScript code, so the Rust core does not serve i
 
 ## Next steps
 
-- Learn the parts: [Catalog](/docs/concepts/catalog/), [Capabilities](/docs/concepts/capabilities/) and [Targets and views](/docs/concepts/targets-and-views/).
+- Learn the parts: [Catalog](/docs/concepts/catalog/), [Capabilities](/docs/concepts/capabilities/) and [Targets](/docs/concepts/targets/).
 - Add events, aliases, state and services: <CoreGuides />.
 - See the complete air conditioner, with every surface, on each core: [Examples](/docs/examples/).

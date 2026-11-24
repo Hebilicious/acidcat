@@ -71,7 +71,7 @@
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?$"
     },
-    "bindingName": {
+    "surfaceName": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?$"
     },
@@ -82,13 +82,13 @@
     "target": {
       "type": "object",
       "required": [
-        "bindings"
+        "surfaces"
       ],
       "properties": {
-        "bindings": {
+        "surfaces": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/bindingName"
+            "$ref": "#/$defs/surfaceName"
           },
           "minItems": 1,
           "uniqueItems": true
@@ -107,7 +107,7 @@
       }
     },
     "cliOptions": {
-      "description": "The settings of the CLI binding. See spec/bindings/cli.md#aliases.",
+      "description": "The settings of the CLI surface. See spec/surfaces/cli.md#aliases.",
       "type": "object",
       "properties": {
         "aliases": {

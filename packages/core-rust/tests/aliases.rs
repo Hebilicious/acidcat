@@ -37,7 +37,7 @@ fn probe_with(
     let mut app = App::new().title("Probe").target_with(
         "cli",
         Target {
-            bindings: vec!["cli".into()],
+            surfaces: vec!["cli".into()],
             options: Some(json!({ "cli": settings })),
             ..Target::default()
         },

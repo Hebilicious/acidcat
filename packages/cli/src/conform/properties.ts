@@ -145,8 +145,8 @@ async function cancelSome(invoke: Invoke, flags: readonly boolean[], signal: Abo
 
 const cancellations = fc.array(fc.boolean(), { minLength: 2, maxLength: 5 }).filter((flags) => flags.includes(true) && flags.includes(false));
 
-export async function checkProperties(binding: string, invoke: Invoke, deadline: number): Promise<Checks> {
-  const checks = new Checks(`${binding} properties`, deadline);
+export async function checkProperties(surface: string, invoke: Invoke, deadline: number): Promise<Checks> {
+  const checks = new Checks(`${surface} properties`, deadline);
 
   await checks.run("concurrent calls each get exactly their own outcome", RULE, async (signal) => {
     await fc.assert(

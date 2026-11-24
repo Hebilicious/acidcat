@@ -9,7 +9,7 @@ import type { z } from "zod";
 
 import { fanSet, FanSpeed, Mode, modeSet, powerSet, statusChanged, statusGet, temperatureSet } from "../core-ts/aircon.ts";
 import type { Context as AirconContext, Offline, PoweredOff, Status } from "../core-ts/aircon.ts";
-import { forbidden, foreignOrigin, httpBinding, openSession } from "./shared.ts";
+import { forbidden, foreignOrigin, httpSurface, openSession } from "./shared.ts";
 import type { ApiOptions } from "./shared.ts";
 
 interface Context {
@@ -162,7 +162,7 @@ function closingSession(response: Response, session: Session<AirconContext>): Re
 }
 
 export function graphqlApi(options: ApiOptions): (request: Request) => Promise<Response> {
-  const http = httpBinding(options, "/api");
+  const http = httpSurface(options, "/api");
   return async (request) => {
     if (foreignOrigin(request, options)) return forbidden();
     if (new URL(request.url).pathname.startsWith("/api/")) return http(request);

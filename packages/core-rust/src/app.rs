@@ -16,7 +16,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::cli::CliAliases;
 use crate::outcome::{Availability, Defect, NoFailure, RunError, RunResult};
-use crate::schema::{Validator, schema_of, view_of};
+use crate::schema::{Validator, schema_of, target_catalog};
 
 /// What a capability gets for one call: the services of the application, the target of the session, and the signal of
 /// the call.
@@ -88,7 +88,7 @@ impl<C> Subscription<C> {
     }
 }
 
-/// One occurrence that a provider gives. The binding adds the `name`, and makes the `eventId` and the `timestamp` if
+/// One occurrence that a provider gives. The surface adds the `name`, and makes the `eventId` and the `timestamp` if
 /// the provider gives none (spec/events.md#occurrences).
 #[derive(Clone, Debug)]
 pub struct Emitted<P> {
@@ -726,24 +726,24 @@ impl<C: Send + Sync + 'static> App<C> {
         self
     }
 
-    /// A target, and the bindings that serve it.
+    /// A target, and the surfaces that serve it.
     pub fn target<S: Into<String>>(
         mut self,
         name: impl Into<String>,
-        bindings: impl IntoIterator<Item = S>,
+        surfaces: impl IntoIterator<Item = S>,
     ) -> Self {
-        let bindings = bindings.into_iter().map(Into::into).collect();
+        let surfaces = surfaces.into_iter().map(Into::into).collect();
         self.targets.push((
             name.into(),
             Target {
-                bindings,
+                surfaces,
                 ..Target::default()
             },
         ));
         self
     }
 
-    /// A target with all its members: its bindings, a description of its clients, and the options of its bindings.
+    /// A target with all its members: its surfaces, a description of its clients, and the options of its surfaces.
     pub fn target_with(mut self, name: impl Into<String>, target: Target) -> Self {
         self.targets.push((name.into(), target));
         self
@@ -936,10 +936,10 @@ impl<C: Send + Sync + 'static> App<C> {
         if !problems.is_empty() {
             return Err(problems);
         }
-        let views = self
+        let target_catalogs = self
             .targets
             .iter()
-            .map(|(name, _)| (name.clone(), Arc::new(view_of(&json, name))))
+            .map(|(name, _)| (name.clone(), Arc::new(target_catalog(&json, name))))
             .collect();
         let on_defect = self.on_defect.unwrap_or_else(|| {
             Arc::new(|id: &str, defect: &Defect| {
@@ -948,7 +948,7 @@ impl<C: Send + Sync + 'static> App<C> {
         });
         Ok(Arc::new(Application {
             catalog: json,
-            views,
+            target_catalogs,
             capabilities,
             events,
             on_defect,
@@ -956,10 +956,10 @@ impl<C: Send + Sync + 'static> App<C> {
     }
 }
 
-/// An application, checked and ready to serve. Sessions and bindings serve it.
+/// An application, checked and ready to serve. Sessions and surfaces serve it.
 pub struct Application<C> {
     catalog: Value,
-    views: HashMap<String, Arc<Value>>,
+    target_catalogs: HashMap<String, Arc<Value>>,
     pub(crate) capabilities: Vec<Arc<ServedCapability<C>>>,
     pub(crate) events: Vec<Arc<ServedEvent<C>>>,
     pub(crate) on_defect: OnDefect,
@@ -975,12 +975,12 @@ impl<C> Application<C> {
         catalog::canonical_text(&self.catalog)
     }
 
-    /// The view of a target (spec/catalog.md#views).
-    pub fn view(&self, target: &str) -> Arc<Value> {
-        self.views
+    /// The catalog of a target (spec/catalog.md#the-catalog-of-a-target).
+    pub fn target_catalog(&self, target: &str) -> Arc<Value> {
+        self.target_catalogs
             .get(target)
             .cloned()
-            .unwrap_or_else(|| Arc::new(view_of(&self.catalog, target)))
+            .unwrap_or_else(|| Arc::new(target_catalog(&self.catalog, target)))
     }
 
     /// The description of the application, which is the default MCP instructions.

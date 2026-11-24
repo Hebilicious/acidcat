@@ -68,7 +68,7 @@ export const site = defineApp<SiteContext>({
   title: "AcidCat site",
   description: "Read the documentation, the specification and the packages of AcidCat.",
   targets: {
-    [TARGET]: { bindings: ["http", "mcp", "webmcp"], description: "Agents that read the site: MCP clients, HTTP clients and WebMCP hosts in a browser." },
+    [TARGET]: { surfaces: ["http", "mcp", "webmcp"], description: "Agents that read the site: MCP clients, HTTP clients and WebMCP hosts in a browser." },
   },
   capabilities: [pagesList, pageRead, pagesSearch, packagesList],
 });

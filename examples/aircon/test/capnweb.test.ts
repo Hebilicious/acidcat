@@ -37,7 +37,7 @@ test("a call failure rejects", async () => {
   await assert.rejects(async () => await client().setTemperature(40), (error: Error) => error.message.includes("celsius"));
 });
 
-test("the HTTP binding is at /api", async () => {
+test("the HTTP surface is at /api", async () => {
   const response = await fetch(`${served.url}/api/capabilities/aircon.fan.set`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

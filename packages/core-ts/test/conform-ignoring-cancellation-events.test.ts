@@ -23,7 +23,7 @@ test("acid-cat conform fails only the cancellation checks of events of an implem
       conform({ cli: [process.execPath, bundledProgram("test/fixture-cli-watch-ignoring-cancellation.ts")], deadline }),
     ]);
     const failed = runs.flat().filter((result) => !result.passed);
-    assert.deepEqual(failed.map((result) => `${result.binding}: ${result.name}`).sort(), [
+    assert.deepEqual(failed.map((result) => `${result.surface}: ${result.name}`).sort(), [
       "cli: an interrupt cancels watch with exit code 130",
       "http: each subscription gets the things that happen, and closing one stream cancels only its subscription",
       "mcp-stdio events: two subscriptions at the same time each get their own messages, and cancelling one leaves the other",

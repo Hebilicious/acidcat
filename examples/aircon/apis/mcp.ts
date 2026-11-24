@@ -97,7 +97,7 @@ export function mcpApi(options: McpApiOptions = {}) {
   const application = HttpRouter.toWebHandler(server, { disableLogger: true });
   const serverCard = { name: "dev.acid-cat/aircon" };
   const withEvents = Mcp.withEvents(aircon, unit, application.handler, { allowedOrigins, serverCard });
-  const binding = Mcp.toWebHandler(aircon, unit, { name: "aircon", version: "0.1.0", allowedOrigins, path: "/capabilities/mcp", serverCard });
+  const surface = Mcp.toWebHandler(aircon, unit, { name: "aircon", version: "0.1.0", allowedOrigins, path: "/capabilities/mcp", serverCard });
   // For clients that still open the session with the `initialize` handshake of revision 2025-11-25 or 2025-06-18.
   const legacy = Mcp.withHandshake(
     Mcp.toWebHandler(aircon, unit, { name: "aircon", version: "0.1.0", allowedOrigins, path: "/capabilities/mcp-legacy", serverCard }),
@@ -107,7 +107,7 @@ export function mcpApi(options: McpApiOptions = {}) {
     handler: (request: Request): Promise<Response> => {
       const path = new URL(request.url).pathname;
       if (path === "/capabilities/mcp-legacy" || path.startsWith("/capabilities/mcp-legacy/")) return legacy(request);
-      return path.startsWith("/capabilities/") ? binding(request) : withEvents(request);
+      return path.startsWith("/capabilities/") ? surface(request) : withEvents(request);
     },
     statusListeners: () => SubscriptionRef.getUnsafe(Context.get(built, Unit).statusListeners),
     dispose: async () => {

@@ -5,7 +5,7 @@ The AcidCat command line, published on npm as `@acid-cat/cli`. It gives the `aci
 ```sh
 acid-cat check [--strict] [--output json] <catalog.json ...>  # check catalogs
 acid-cat format [--write] <catalog.json ...>  # write catalogs in canonical form
-acid-cat view <catalog.json> <target>         # write the view of one target
+acid-cat target <catalog.json> <target>       # write the catalog of one target
 acid-cat conform --mcp <url> [--mcp-handshake] --mcp-stdio "<command>" --http <url> --cli "<command>" --webmcp <url> [--deadline <ms>] [--max-bytes <n>] [--output json]  # test an implementation
   [--poll-buffer <n>] [--poll-lease-mcp <url> --poll-lease-ms <ms>] [--webhook-principal <name> --webhook-cert <file> --webhook-key <file>]
   [--webhook-other-principal <name>] [--webhook-min-ttl-ms <ms>] [--webhook-max-ttl-ms <ms>] [--webhook-max-subscriptions <n>]
@@ -28,9 +28,9 @@ It needs Node.js 24 or later. `acid-cat conform --webmcp <url>` also needs [Play
 `check` and `conform` take `--output human` (the default) or `--output json`. Human output is text for a person. JSON output is one JSON document on standard output, for a script or an agent, and nothing on standard error. The exit code is the same in both modes.
 
 - `check`: `{ "conforms": boolean, "catalogs": [{ "file", "errors": [string], "warnings": [string] }] }`. `conforms` is `false` when the exit code is 1. A file that cannot be read, or that is not JSON, is a catalog with one error.
-- `conform`: `{ "passed": number, "failed": number, "warnings": number, "checks": [{ "binding", "name", "rule", "passed", "warning"?, "detail"? }] }`. A check with a warning has `"passed": true` and `"warning": true`, and counts in both `passed` and `warnings`.
+- `conform`: `{ "passed": number, "failed": number, "warnings": number, "checks": [{ "surface", "name", "rule", "passed", "warning"?, "detail"? }] }`. A check with a warning has `"passed": true` and `"warning": true`, and counts in both `passed` and `warnings`.
 
-You get the JSON document only when the options are correct. With incorrect options, the exit code is 1, and standard output can hold the help text. `conform` writes one line of text to standard error, and nothing to standard output, when it gets no binding, only some of the `--webhook-*` options, or a certificate file that it cannot read.
+You get the JSON document only when the options are correct. With incorrect options, the exit code is 1, and standard output can hold the help text. `conform` writes one line of text to standard error, and nothing to standard output, when it gets no surface, only some of the `--webhook-*` options, or a certificate file that it cannot read.
 
 ## check
 
@@ -39,7 +39,7 @@ You get the JSON document only when the options are correct. With incorrect opti
 - An **error** is a broken rule. Examples: an audience that names an unknown target, an event payload that is not an object, or an id that is both a capability and an event.
 - A **warning** is a broken recommendation. Examples: a file that is not in [canonical form](../../spec/catalog.md#canonical-form), or a member with no `x-` prefix.
 
-It also checks each alias in `options.cli` against the [alias rules](../../spec/bindings/cli.md#aliases), and each `x-mcp-header` member in an input schema against the [header annotation rules](../../spec/bindings/mcp.md#header-annotations) of MCP. An error about `x-mcp-header` names the capability or the event, and the location of the member as a JSON pointer into the bundled input schema.
+It also checks each alias in `options.cli` against the [alias rules](../../spec/surfaces/cli.md#aliases), and each `x-mcp-header` member in an input schema against the [header annotation rules](../../spec/surfaces/mcp.md#header-annotations) of MCP. An error about `x-mcp-header` names the capability or the event, and the location of the member as a JSON pointer into the bundled input schema.
 
 The exit code is 1 with errors, and 0 otherwise. With `--strict`, warnings also give exit code 1.
 
@@ -47,28 +47,28 @@ The exit code is 1 with errors, and 0 otherwise. With `--strict`, warnings also 
 
 `format` writes a catalog in [canonical form](../../spec/catalog.md#canonical-form). Use it for catalogs that no catalog library wrote: Pkl output, generated files, or files you edit by hand. `--write` changes the files in place.
 
-## view
+## target
 
-`view` writes the [view](../../spec/catalog.md#views) of one target: the capabilities, events and types that the target can use.
+`target` writes the [catalog of one target](../../spec/catalog.md#the-catalog-of-a-target): the capabilities, events and types that the target can use.
 
 ## conform
 
-`conform` tests a running implementation of the [conformance fixture](conformance/fixture.pkl) through its bindings. Each AcidCat core runs it in its tests.
+`conform` tests a running implementation of the [conformance fixture](conformance/fixture.pkl) through its surfaces. Each AcidCat core runs it in its tests.
 
 ### Options
 
-Each flag has an equivalent option for `conform()` in code. Give one or more bindings.
+Each flag has an equivalent option for `conform()` in code. Give one or more surfaces.
 
 | Flag | In code | What it does |
 | --- | --- | --- |
-| `--mcp <url>` | `mcp` | Test the MCP binding through HTTP |
-| `--mcp-handshake` | `mcpHandshake: true` | Also test the [`initialize` handshake of earlier revisions](../../spec/bindings/mcp.md#earlier-revisions-through-http) through HTTP |
-| `--mcp-stdio "<command>"` | `mcpStdio` | Test the MCP binding through stdio. Each check starts the server as a process |
-| `--http <url>` | `http` | Test the HTTP binding. The URL is the base URL, before `/capabilities` |
-| `--cli "<command>"` | `cli` | Test the CLI binding |
-| `--webmcp <url>` | `webmcp` | Test the WebMCP binding on a page that serves the `app` target. In code, `webmcp` can also be a function that installs the implementation on a host in the same process |
+| `--mcp <url>` | `mcp` | Test the MCP surface through HTTP |
+| `--mcp-handshake` | `mcpHandshake: true` | Also test the [`initialize` handshake of earlier revisions](../../spec/surfaces/mcp.md#earlier-revisions-through-http) through HTTP |
+| `--mcp-stdio "<command>"` | `mcpStdio` | Test the MCP surface through stdio. Each check starts the server as a process |
+| `--http <url>` | `http` | Test the HTTP surface. The URL is the base URL, before `/capabilities` |
+| `--cli "<command>"` | `cli` | Test the CLI surface |
+| `--webmcp <url>` | `webmcp` | Test the WebMCP surface on a page that serves the `app` target. In code, `webmcp` can also be a function that installs the implementation on a host in the same process |
 | `--deadline <ms>` | `deadline` | The deadline of each check. The default is 30 000 |
-| `--max-bytes <n>` | `maximumBytes` | The body limit of the remote bindings, in bytes. The default is 1 048 576 |
+| `--max-bytes <n>` | `maximumBytes` | The body limit of the remote surfaces, in bytes. The default is 1 048 576 |
 | `--poll-buffer <n>` | `poll.bufferLimit` | The deployment's poll buffer size, from 1 to 97 |
 | `--poll-lease-mcp <url>`, `--poll-lease-ms <ms>` | `pollLease: { mcp, leaseMs }` | An MCP server through HTTP with a poll lease time shorter than the deadline, and that lease time. Give both together |
 | `--webhook-principal <name>`, `--webhook-cert <file>`, `--webhook-key <file>` | `webhook: { principal, cert, key }`, with the PEM text | Test webhook delivery. Give all three together |
@@ -85,12 +85,12 @@ Each flag has an equivalent option for `conform()` in code. Give one or more bin
 - HTTP and CLI: Each outcome, each kind of call failure, availability and rejections. For the CLI: each kind of flag, usage lines, help, shared prefixes, aliases, interrupts with exit code 130, and `watch --cursor`.
 - WebMCP: The checks act as the host: they open the page in Chromium through [Playwright](https://playwright.dev) with a test `modelContext`. Install it first: `pnpm add -D playwright`, then `pnpm exec playwright install chromium`.
 - Events: Through HTTP, MCP and the CLI: the list of events, failures before the first occurrence, each occurrence against `schemas/occurrence.schema.json` and its payload schema, order, `truncated`, the cursor, each end, and cancellation. Through WebMCP, no event is a tool.
-- [Poll delivery](../../spec/bindings/mcp.md#poll): Through MCP, when `events/list` gives `poll`. Otherwise the check gives a warning and `events/poll` must answer `Unsupported`. `--poll-buffer` adds a cursor older than the buffer. The lease time of `--mcp` and `--mcp-stdio` must be longer than the deadline, because a check uses a lease for its whole time. `--poll-lease-mcp` with `--poll-lease-ms` adds the end of an unused lease. Serve it from a second MCP server with a lease time shorter than the deadline, for example 1000.
-- [Webhook delivery](../../spec/bindings/mcp.md#webhook): Through MCP over HTTP, with the three `--webhook-*` options. The checks run an HTTPS receiver on `127.0.0.1` with that certificate. Configure the deployment to trust the certificate, allow deliveries to private addresses, and give the principal `<name>` to a request with `Authorization: Bearer <name>`. The deadline must be longer than the deployment's first retry wait, and the maximum lifetime must be longer than the deadline. Give `--webhook-other-principal` with `--webhook-max-subscriptions`: the limit check then fills a principal that no other check uses. Without the webhook options, a server that does not list `webhook` must answer `Unsupported`.
-- [Server Card](../../spec/bindings/mcp.md#server-card): Through MCP over HTTP, when `<mcp>/server-card` gives 200. The card must pass the JSON Schema of the Server Card extension, have one remote with the URL of `--mcp`, the version of `server/discover` and the revisions that the server serves, the CORS and cache headers, 304 for its `ETag`, 204 for `OPTIONS`, public signing keys only, and egress ranges in CIDR text. With the webhook options and signing keys in the card, each webhook request must have one `v1a,` signature for each key, and each must verify. The JSON Schema is `conformance/server-card.schema.json`, from commit `28db12c` of [ext-server-card](https://github.com/modelcontextprotocol/ext-server-card), under the Apache License 2.0 in `conformance/server-card.LICENSE`.
-- [Hints](../../spec/bindings/mcp.md#tools): Each MCP tool's annotations match its capability's hints.
-- [Heartbeat](../../spec/bindings/mcp.md#push): Through MCP with each transport, each `notifications/events/active` grants a `heartbeatMs`. A suggestion is clamped between 1000 and 60 000, a heartbeat comes after the grant, and a suggestion that is not valid gets `-32602`.
-- [Headers](../../spec/bindings/mcp.md#headers): Through MCP over HTTP, a missing or wrong `Mcp-Method`, `Mcp-Name` or `Mcp-Param-*` header on `tools/call` and `events/stream` gets 400 and `-32020`, and a value in the base64 form is decoded, with a leading U+FEFF kept. Every request of conform mirrors the annotated arguments of the fixture (`fixture.switch.set` and `fixture.ticks`) into their headers.
+- [Poll delivery](../../spec/surfaces/mcp.md#poll): Through MCP, when `events/list` gives `poll`. Otherwise the check gives a warning and `events/poll` must answer `Unsupported`. `--poll-buffer` adds a cursor older than the buffer. The lease time of `--mcp` and `--mcp-stdio` must be longer than the deadline, because a check uses a lease for its whole time. `--poll-lease-mcp` with `--poll-lease-ms` adds the end of an unused lease. Serve it from a second MCP server with a lease time shorter than the deadline, for example 1000.
+- [Webhook delivery](../../spec/surfaces/mcp.md#webhook): Through MCP over HTTP, with the three `--webhook-*` options. The checks run an HTTPS receiver on `127.0.0.1` with that certificate. Configure the deployment to trust the certificate, allow deliveries to private addresses, and give the principal `<name>` to a request with `Authorization: Bearer <name>`. The deadline must be longer than the deployment's first retry wait, and the maximum lifetime must be longer than the deadline. Give `--webhook-other-principal` with `--webhook-max-subscriptions`: the limit check then fills a principal that no other check uses. Without the webhook options, a server that does not list `webhook` must answer `Unsupported`.
+- [Server Card](../../spec/surfaces/mcp.md#server-card): Through MCP over HTTP, when `<mcp>/server-card` gives 200. The card must pass the JSON Schema of the Server Card extension, have one remote with the URL of `--mcp`, the version of `server/discover` and the revisions that the server serves, the CORS and cache headers, 304 for its `ETag`, 204 for `OPTIONS`, public signing keys only, and egress ranges in CIDR text. With the webhook options and signing keys in the card, each webhook request must have one `v1a,` signature for each key, and each must verify. The JSON Schema is `conformance/server-card.schema.json`, from commit `28db12c` of [ext-server-card](https://github.com/modelcontextprotocol/ext-server-card), under the Apache License 2.0 in `conformance/server-card.LICENSE`.
+- [Hints](../../spec/surfaces/mcp.md#tools): Each MCP tool's annotations match its capability's hints.
+- [Heartbeat](../../spec/surfaces/mcp.md#push): Through MCP with each transport, each `notifications/events/active` grants a `heartbeatMs`. A suggestion is clamped between 1000 and 60 000, a heartbeat comes after the grant, and a suggestion that is not valid gets `-32602`.
+- [Headers](../../spec/surfaces/mcp.md#headers): Through MCP over HTTP, a missing or wrong `Mcp-Method`, `Mcp-Name` or `Mcp-Param-*` header on `tools/call` and `events/stream` gets 400 and `-32020`, and a value in the base64 form is decoded, with a leading U+FEFF kept. Every request of conform mirrors the annotated arguments of the fixture (`fixture.switch.set` and `fixture.ticks`) into their headers.
 - Properties: With fast-check, through MCP and HTTP: concurrent calls each get their own outcome, and a cancellation changes only its own call.
 
 Each poll check uses a new key, so leases from an earlier run do not change the result.
@@ -113,7 +113,7 @@ The command line is an [Effect](https://effect.website) program built on `effect
 
 | File | Contents |
 | --- | --- |
-| `src/catalog.ts` | The catalog rules, views and bundling |
+| `src/catalog.ts` | The catalog rules, the catalog of a target, and bundling |
 | `src/main.ts` | The commands |
 | `src/conform/` | The conformance checks, and `serve`, which serves web handlers on a local port for the tests |
 | `conformance/` | The conformance fixture, in Pkl and in JSON |

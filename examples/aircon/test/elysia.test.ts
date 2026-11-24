@@ -41,7 +41,7 @@ test("a failure gives 409, a call failure its status, and a bad body 422", async
   assert.equal((await app.handle(request("/status", { method: "PATCH", body: { mode: "warm" } }))).status, 422);
 });
 
-test("the HTTP binding is mounted at /api, and a foreign origin is rejected", async () => {
+test("the HTTP surface is mounted at /api, and a foreign origin is rejected", async () => {
   const unit = new Unit();
   const app = elysiaApi({ unit });
   const response = await app.handle(request("/api/capabilities/aircon.power.set", { method: "POST", body: { on: true } }));

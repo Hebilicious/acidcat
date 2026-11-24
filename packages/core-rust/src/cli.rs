@@ -1,4 +1,4 @@
-//! The CLI binding (spec/bindings/cli.md): a command line made from the view of a target.
+//! The CLI surface (spec/surfaces/cli.md): a command line made from the catalog of a target.
 
 use std::io::{IsTerminal, Write};
 use std::sync::Arc;
@@ -37,8 +37,8 @@ pub use crate::facts_generated::exit;
 use crate::facts_generated::{
     ALIASES_NOT_OBJECT_MESSAGE, BAD_DEFAULT_MESSAGE, BAD_NAME_MESSAGE, BAD_TARGET_MESSAGE,
     COMMAND_PATH_MESSAGE, DEFAULT_HAS_RESERVED_FLAG_MESSAGE, FLAG_OF_DEFAULT_MESSAGE,
-    GENERIC_COMMANDS, INPUT_NOT_OBJECT_MESSAGE, INTERRUPT_GRACE_MS, NO_CLI_BINDING_MESSAGE,
-    NO_PROPERTIES_MESSAGE, NOT_A_PROPERTY_MESSAGE, NOT_IN_VIEW_MESSAGE,
+    GENERIC_COMMANDS, INPUT_NOT_OBJECT_MESSAGE, INTERRUPT_GRACE_MS, NO_CLI_SURFACE_MESSAGE,
+    NO_PROPERTIES_MESSAGE, NOT_A_PROPERTY_MESSAGE, NOT_IN_TARGET_MESSAGE,
     RESERVED_FIRST_WORD_MESSAGE, RESERVED_NAME_MESSAGE, SETTINGS_NOT_OBJECT_MESSAGE,
     UNKNOWN_MEMBER_MESSAGE,
 };
@@ -79,7 +79,7 @@ impl<C, X, P> Aliased for EventDefinition<C, X, P> {
     }
 }
 
-/// The aliases of the command line of a target (spec/bindings/cli.md#aliases). Give them to
+/// The aliases of the command line of a target (spec/surfaces/cli.md#aliases). Give them to
 /// [`App::cli_aliases`](crate::App::cli_aliases), which writes them in `options.cli` of the target.
 #[derive(Clone, Debug, Default)]
 pub struct CliAliases {
@@ -288,15 +288,15 @@ pub struct CliOptions<C> {
     /// another command of the application, the first word of a command alias, or the first word of the command of a
     /// capability.
     pub commands: Vec<CliCommand<C>>,
-    /// The HTTP binding of the application in another process or on another machine. With it, the command line
-    /// sends each call and each subscription to that server. The commands still come from the view of `target` in
-    /// this program. Serve the HTTP binding with a target whose view has the same capabilities and events, for
+    /// The HTTP surface of the application in another process or on another machine. With it, the command line
+    /// sends each call and each subscription to that server. The commands still come from the catalog of the target `target` in
+    /// this program. Serve the HTTP surface with a target that has the same capabilities and events, for
     /// example the target `cli`.
     pub remote: Option<HttpClient>,
     /// The human form of the output: its flags, its default and its formats. With `None`, the command line writes
     /// JSON only. [`run_cli`] gives an error if the name of an output flag is not valid, is in two output flags, or is
     /// the name of another flag: `--help`, `--version`, `--cursor`, `--max-age-ms`, a flag alias, or a flag of the
-    /// input of a capability or an event of the view.
+    /// input of a capability or an event of the target.
     pub output: Option<CliOutput>,
     /// The form that [`OutputDefault::Auto`] gives. With `None`, [`run_cli`] gives JSON, and [`cli_main`] and
     /// [`run_cli_process`] choose with [`output_form`] from standard output and the environment.
@@ -332,7 +332,7 @@ impl<C> CliOptions<C> {
         self
     }
 
-    /// Send each call and each subscription to the HTTP binding of a server.
+    /// Send each call and each subscription to the HTTP surface of a server.
     pub fn remote(mut self, client: HttpClient) -> Self {
         self.remote = Some(client);
         self
@@ -522,7 +522,7 @@ fn usage_error(message: impl Into<String>, code: i32) -> UsageError {
     }
 }
 
-/// Run the command line with arguments. The result is the exit code (spec/bindings/cli.md#outcomes), or a rule of
+/// Run the command line with arguments. The result is the exit code (spec/surfaces/cli.md#outcomes), or a rule of
 /// the commands that the application breaks.
 pub async fn run_cli<C: Send + Sync + 'static>(
     app: &Arc<Application<C>>,
@@ -531,7 +531,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
     args: &[String],
     io: &mut CliIo,
 ) -> Result<i32, String> {
-    let view = app.view(&options.target);
+    let catalog = app.target_catalog(&options.target);
     let provider = match &options.remote {
         None => Provider::Local(Session::open(app, &options.target, context.clone())),
         Some(client) => Provider::Remote(client.clone()),
@@ -546,14 +546,15 @@ pub async fn run_cli<C: Send + Sync + 'static>(
         }
     });
     let ids_of = |member: &str| -> Vec<String> {
-        view.get(member)
+        catalog
+            .get(member)
             .and_then(Value::as_object)
             .map(|entries| entries.keys().cloned().collect())
             .unwrap_or_default()
     };
     let capability_ids = ids_of("capabilities");
     let event_ids = ids_of("events");
-    let types = view
+    let types = catalog
         .get("$defs")
         .and_then(Value::as_object)
         .cloned()
@@ -581,7 +582,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
         }
     }
     for id in &event_ids {
-        let input = view
+        let input = catalog
             .pointer(&format!("/events/{id}/input"))
             .map(|input| cli_input_schema(input, &types));
         if let Some(flag) = resume_words().find(|flag| {
@@ -601,7 +602,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
         aliases,
         default: default_alias,
         errors: alias_errors,
-    } = cli_aliases(&view, &options.target);
+    } = cli_aliases(&catalog, &options.target);
     if !alias_errors.is_empty() {
         return Err(alias_errors.join("\n"));
     }
@@ -615,7 +616,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
         return Err(format_errors.join("\n"));
     }
     if let Some(output) = &options.output {
-        let output_errors = output.problems(&taken_flags(&view, &aliases));
+        let output_errors = output.problems(&taken_flags(&catalog, &aliases));
         if !output_errors.is_empty() {
             return Err(output_errors.join("\n"));
         }
@@ -641,7 +642,8 @@ pub async fn run_cli<C: Send + Sync + 'static>(
     }
 
     let capability = |id: &str| {
-        view.get("capabilities")
+        catalog
+            .get("capabilities")
             .and_then(|capabilities| capabilities.get(id))
             .cloned()
             .unwrap_or_else(|| json!({}))
@@ -653,7 +655,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
     };
     let usage_of = |id: &str| usage(&options.name, id, schema_of(&capability(id)).as_ref());
     let alias_usage_of =
-        |alias: &Alias| alias_usage(&options.name, alias, alias_input(&view, alias).as_ref());
+        |alias: &Alias| alias_usage(&options.name, alias, alias_input(&catalog, alias).as_ref());
     let alias_usages = |kind: AliasKind, id: &str| -> Vec<String> {
         aliases
             .iter()
@@ -783,7 +785,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                     entries.push(Value::Object(item));
                 }
                 for id in &event_ids {
-                    let event = view
+                    let event = catalog
                         .get("events")
                         .and_then(|events| events.get(id.as_str()))
                         .cloned()
@@ -858,7 +860,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 watch(
                     &provider,
                     printer,
-                    &view,
+                    &catalog,
                     &types,
                     &options.name,
                     &args[1..],
@@ -882,7 +884,7 @@ pub async fn run_cli<C: Send + Sync + 'static>(
                 run_alias(
                     &provider,
                     printer,
-                    &view,
+                    &catalog,
                     alias,
                     &options.name,
                     &args[words..],
@@ -963,18 +965,18 @@ pub async fn run_cli<C: Send + Sync + 'static>(
 async fn run_alias<C: Send + Sync + 'static>(
     provider: &Provider<C>,
     printer: &Printer<'_>,
-    view: &Value,
+    catalog: &Value,
     alias: &Alias,
     program: &str,
     args: &[String],
     io: &mut CliIo,
 ) -> Result<i32, UsageError> {
-    let entry = view
+    let entry = catalog
         .get(alias.kind.catalog_member())
         .and_then(|entries| entries.get(alias.id.as_str()))
         .cloned()
         .unwrap_or_default();
-    let schema = alias_input(view, alias);
+    let schema = alias_input(catalog, alias);
     if is_help(args) {
         let usage = alias_usage(program, alias, schema.as_ref());
         (io.stdout)(&help(&usage, description_of(&entry)));
@@ -1046,7 +1048,7 @@ async fn run_alias<C: Send + Sync + 'static>(
 async fn watch<C: Send + Sync + 'static>(
     provider: &Provider<C>,
     printer: &Printer<'_>,
-    view: &Value,
+    catalog: &Value,
     types: &Map<String, Value>,
     program: &str,
     args: &[String],
@@ -1061,7 +1063,7 @@ async fn watch<C: Send + Sync + 'static>(
         return Err(usage_error("Give the id of an event.", exit::INVALID_INPUT));
     };
     let mut input = json!({});
-    if let Some(event) = view
+    if let Some(event) = catalog
         .get("events")
         .and_then(|events| events.get(id.as_str()))
     {
@@ -1244,7 +1246,7 @@ fn human_list(capabilities: &[[String; 2]], events: &[[String; 2]]) -> String {
     lines.join("\n")
 }
 
-fn taken_flags(view: &Value, aliases: &[Alias]) -> Vec<(String, String)> {
+fn taken_flags(catalog: &Value, aliases: &[Alias]) -> Vec<(String, String)> {
     let mut taken: Vec<(String, String)> = Vec::new();
     let mut take = |name: String, what: String| {
         if !taken.iter().any(|(each, _)| *each == name) {
@@ -1257,9 +1259,9 @@ fn taken_flags(view: &Value, aliases: &[Alias]) -> Vec<(String, String)> {
     for alias in aliases.iter().filter(|alias| alias.name.starts_with("--")) {
         take(alias.name.clone(), format!("the flag alias {}", alias.name));
     }
-    let types = object_at(view, "$defs");
+    let types = object_at(catalog, "$defs");
     for (member, kind) in [("capabilities", "capability"), ("events", "event")] {
-        let entries = view
+        let entries = catalog
             .get(member)
             .and_then(Value::as_object)
             .cloned()
@@ -1493,13 +1495,16 @@ fn is_alias_name(name: &str) -> bool {
     }
 }
 
-fn cli_aliases(view: &Value, target: &str) -> Aliases {
+fn cli_aliases(catalog: &Value, target: &str) -> Aliases {
     let mut result = Aliases {
         aliases: Vec::new(),
         default: None,
         errors: Vec::new(),
     };
-    let Some(declared) = view.get("targets").and_then(|targets| targets.get(target)) else {
+    let Some(declared) = catalog
+        .get("targets")
+        .and_then(|targets| targets.get(target))
+    else {
         return result;
     };
     let Some(settings) = declared
@@ -1518,11 +1523,11 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
     };
     let errors = &mut result.errors;
     let has_cli = declared
-        .get("bindings")
+        .get("surfaces")
         .and_then(Value::as_array)
-        .is_some_and(|bindings| bindings.iter().any(|binding| binding == "cli"));
+        .is_some_and(|surfaces| surfaces.iter().any(|surface| surface == "cli"));
     if !has_cli {
-        errors.push(filled(NO_CLI_BINDING_MESSAGE, &[("where", &place)]));
+        errors.push(filled(NO_CLI_SURFACE_MESSAGE, &[("where", &place)]));
     }
     let empty = json!({});
     let Some(members) = settings.get("aliases").unwrap_or(&empty).as_object() else {
@@ -1530,9 +1535,9 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
         return result;
     };
 
-    let types = object_at(view, "$defs");
-    let capabilities = object_at(view, "capabilities");
-    let events = object_at(view, "events");
+    let types = object_at(catalog, "$defs");
+    let capabilities = object_at(catalog, "capabilities");
+    let events = object_at(catalog, "events");
     let paths: Vec<String> = capabilities.keys().map(|id| id.replace('.', " ")).collect();
     let mut names: Vec<&String> = members.keys().collect();
     names.sort();
@@ -1596,7 +1601,7 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
             (AliasKind::Capability, capabilities, "a capability")
         };
         let Some(entry) = entries.get(id) else {
-            problem(NOT_IN_VIEW_MESSAGE, &[("id", id), ("kind", what)]);
+            problem(NOT_IN_TARGET_MESSAGE, &[("id", id), ("kind", what)]);
             continue;
         };
         let Some(fixed) = value.get("input") else {
@@ -1659,7 +1664,7 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
     let Some(fallback) = fallback else {
         return result;
     };
-    let flags = alias_flag_names(view, &fallback);
+    let flags = alias_flag_names(catalog, &fallback);
     for reserved in PROGRAM_FLAGS {
         if flags.iter().any(|flag| *flag == reserved[2..]) {
             result.errors.push(filled(
@@ -1692,17 +1697,17 @@ fn cli_aliases(view: &Value, target: &str) -> Aliases {
     result
 }
 
-fn alias_input(view: &Value, alias: &Alias) -> Option<Value> {
-    let input = view
+fn alias_input(catalog: &Value, alias: &Alias) -> Option<Value> {
+    let input = catalog
         .get(alias.kind.catalog_member())
         .and_then(|entries| entries.get(alias.id.as_str()))
         .and_then(|entry| entry.get("input"))?;
-    let input = cli_input_schema(input, object_at(view, "$defs"));
+    let input = cli_input_schema(input, object_at(catalog, "$defs"));
     Some(alias_schema(&input, alias.fixed_input.as_ref()))
 }
 
-fn alias_flag_names(view: &Value, alias: &Alias) -> Vec<String> {
-    let properties = alias_input(view, alias)
+fn alias_flag_names(catalog: &Value, alias: &Alias) -> Vec<String> {
+    let properties = alias_input(catalog, alias)
         .as_ref()
         .map(|input| {
             object_at(input, "properties")

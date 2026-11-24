@@ -23,13 +23,13 @@ export interface HttpSubscribeOptions {
 }
 
 /**
- * A client of an HTTP binding at a base URL. No method rejects: a server that does not answer is the call failure
- * `unavailable`, an answer that the HTTP binding does not give is `internal`, and an abort is `cancelled`.
+ * A client of an HTTP surface at a base URL. No method rejects: a server that does not answer is the call failure
+ * `unavailable`, an answer that the HTTP surface does not give is `internal`, and an abort is `cancelled`.
  */
 export interface HttpClient {
   /** The base URL, without its last `/`. */
   readonly base: string;
-  /** The capabilities of the view of the server, by id, with their availability: `GET {base}/capabilities`. */
+  /** The capabilities of the target of the server, by id, with their availability: `GET {base}/capabilities`. */
   capabilities(options?: { readonly signal?: AbortSignal | undefined }): Promise<ReadonlyMap<string, Availability> | CallFailure>;
   /** Call a capability: `POST {base}/capabilities/{id}`. Abort the signal to close the request: the server then cancels the call. */
   invoke(id: string, input: unknown, options?: { readonly signal?: AbortSignal | undefined }): Promise<Outcome<unknown, unknown>>;
@@ -42,7 +42,7 @@ export interface HttpClient {
 }
 
 /**
- * A client of the HTTP binding at `url`, an `http` or `https` URL, for example `http://pi.local:8080/cli`. It throws
+ * A client of the HTTP surface at `url`, an `http` or `https` URL, for example `http://pi.local:8080/cli`. It throws
  * when the URL or a header is not valid. The error does not contain the value of a header.
  */
 export function httpClient(url: string, options: HttpClientOptions = {}): HttpClient {
@@ -155,7 +155,7 @@ const aborted = (signal: AbortSignal | undefined): boolean => signal?.aborted ==
 
 const cancelled = () => callFailure("cancelled", "The call was cancelled.");
 
-const notAnAnswer = () => callFailure("internal", "The server gave an answer that the HTTP binding does not give.");
+const notAnAnswer = () => callFailure("internal", "The server gave an answer that the HTTP surface does not give.");
 
 const broken = () => callFailure("internal", "The connection to the server broke.");
 
@@ -236,7 +236,7 @@ export class SseParser {
       const empty = this.#data.length === 0;
       this.#event = "";
       this.#data = [];
-      // Server-sent events dispatch no message without data, but the `complete` message of the HTTP binding has none.
+      // Server-sent events dispatch no message without data, but the `complete` message of the HTTP surface has none.
       return empty && message.event !== "complete" ? undefined : message;
     }
     if (line.startsWith(":")) return undefined;

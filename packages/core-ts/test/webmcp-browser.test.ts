@@ -26,7 +26,7 @@ test("the TypeScript core passes acid-cat conform through WebMCP in Chromium", a
   try {
     const results = await conform({ webmcp: `${served.url}/page` });
     const failed = results.filter((result) => !result.passed);
-    assert.deepEqual(failed, [], failed.map((result) => `${result.binding}: ${result.name}: ${result.detail}`).join("\n"));
+    assert.deepEqual(failed, [], failed.map((result) => `${result.surface}: ${result.name}: ${result.detail}`).join("\n"));
     assert.ok(results.length >= 8);
   } finally {
     await served.close();

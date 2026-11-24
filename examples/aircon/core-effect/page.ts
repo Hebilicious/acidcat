@@ -11,7 +11,7 @@ const program = Effect.gen(function* () {
   const session = yield* Session.make(aircon, { target: "app" });
   const run = yield* FiberSet.makeRuntimePromise<never>();
 
-  const view = bindPage("@acid-cat/core-effect", {
+  const controls = bindPage("@acid-cat/core-effect", {
     power: (on) => run(session.invoke(powerSet.id, { on })),
     mode: (mode) => run(session.invoke(modeSet.id, { mode })),
     temperature: (celsius) => run(session.invoke(temperatureSet.id, { celsius })),
@@ -22,11 +22,11 @@ const program = Effect.gen(function* () {
 
   yield* session.state(statusGet.id).pipe(
     Stream.mapEffect((value) => Schema.decodeUnknownEffect(Status)(value)),
-    Stream.runForEach((status) => Effect.sync(() => view.showStatus(status))),
+    Stream.runForEach((status) => Effect.sync(() => controls.showStatus(status))),
     Effect.forkScoped,
   );
 
-  const ids = Object.keys(session.view.capabilities);
+  const ids = Object.keys(session.catalog.capabilities);
   const showTools = Effect.gen(function* () {
     const tools = yield* Effect.forEach(ids, (id) =>
       Effect.map(session.availability(id), (availability) => ({
@@ -35,17 +35,17 @@ const program = Effect.gen(function* () {
         reason: availability.available ? undefined : availability.reason,
       })),
     );
-    view.showTools(tools);
+    controls.showTools(tools);
   });
   yield* showTools;
   yield* session.changes.pipe(Stream.runForEach(() => showTools), Effect.forkScoped);
 
   const installation = yield* WebMcp.install(session);
   if (Option.isNone(installation)) {
-    view.showToolStatus(undefined);
+    controls.showToolStatus(undefined);
   } else {
     yield* SubscriptionRef.changes(installation.value.status).pipe(
-      Stream.runForEach((status) => Effect.sync(() => view.showToolStatus(status))),
+      Stream.runForEach((status) => Effect.sync(() => controls.showToolStatus(status))),
       Effect.forkScoped,
     );
   }

@@ -12,7 +12,7 @@ const CATALOG_ORDER: [&str; 7] = [
     "capabilities",
     "events",
 ];
-const TARGET_ORDER: [&str; 3] = ["bindings", "description", "options"];
+const TARGET_ORDER: [&str; 3] = ["surfaces", "description", "options"];
 const CAPABILITY_ORDER: [&str; 9] = [
     "description",
     "audience",
@@ -33,7 +33,7 @@ pub fn canonical_text(catalog: &Value) -> String {
     out
 }
 
-/// The canonical JSON of a value (spec/bindings/mcp.md#canonical-json): no spaces, the keys of each object sorted by
+/// The canonical JSON of a value (spec/surfaces/mcp.md#canonical-json): no spaces, the keys of each object sorted by
 /// code point, and strings and numbers as the canonical form writes them.
 pub fn canonical_json(value: &Value) -> String {
     let mut out = String::new();

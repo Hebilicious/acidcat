@@ -1,6 +1,6 @@
 # Extensions
 
-An extension is an optional convention built only from members that the specification defines. A catalog that uses no extension is complete. Each binding document tells which extensions the binding supports.
+An extension is an optional convention built only from members that the specification defines. A catalog that uses no extension is complete. Each surface document tells which extensions the surface supports.
 
 | Extension | Use |
 | --- | --- |

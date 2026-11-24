@@ -1,4 +1,4 @@
-//! The MCP binding (spec/bindings/mcp.md): tools, and events through the MCP events extension. The HTTP and the
+//! The MCP surface (spec/surfaces/mcp.md): tools, and events through the MCP events extension. The HTTP and the
 //! stdio transports share this module.
 
 mod card;
@@ -21,15 +21,15 @@ use crate::session::{Session, SubscribeOptions, is_max_age_ms};
 use crate::subscription::Occurrences;
 
 pub use card::ServerCard;
-pub use http::{McpBinding, McpOptions, Principal};
+pub use http::{McpOptions, McpSurface, Principal};
 pub use poll::PollOptions;
 pub use stdio::{McpStdioOptions, run_stdio, serve_stdio};
 pub use webhook::{Allow, WebhookOptions};
 
-/// The revision of MCP that the binding serves.
+/// The revision of MCP that the surface serves.
 pub const PROTOCOL_VERSION: &str = crate::facts_generated::MCP_PROTOCOL_VERSION;
 
-/// The revisions with an `initialize` handshake that the binding serves, the latest first.
+/// The revisions with an `initialize` handshake that the surface serves, the latest first.
 pub const HANDSHAKE_VERSIONS: [&str; 2] = ["2025-11-25", "2025-06-18"];
 
 pub(crate) const PROTOCOL_VERSION_KEY: &str = crate::facts_generated::MCP_PROTOCOL_VERSION_KEY;
@@ -147,8 +147,8 @@ fn lock_gates<L>(gates: &KeyGates<L>) -> std::sync::MutexGuard<'_, HashMap<Strin
 
 pub(crate) fn list_tools<C: Send + Sync + 'static>(session: &Session<C>) -> Vec<Value> {
     let empty = Map::new();
-    let view = session.view();
-    let types = view
+    let catalog = session.catalog();
+    let types = catalog
         .get("$defs")
         .and_then(Value::as_object)
         .unwrap_or(&empty);
@@ -161,7 +161,7 @@ pub(crate) fn list_tools<C: Send + Sync + 'static>(session: &Session<C>) -> Vec<
                 .is_some_and(|availability| availability.is_available())
         })
         .filter_map(|id| {
-            let capability = view.get("capabilities")?.get(id.as_str())?;
+            let capability = catalog.get("capabilities")?.get(id.as_str())?;
             let mut tool = json!({
                 "name": id,
                 "description": capability.get("description").cloned().unwrap_or(Value::Null),
@@ -199,9 +199,9 @@ pub(crate) fn input_schema<C: Send + Sync + 'static>(
     params: &Map<String, Value>,
 ) -> Option<Value> {
     let name = params.get("name").and_then(Value::as_str)?;
-    let view = session.view();
+    let catalog = session.catalog();
     let empty = Map::new();
-    let types = view
+    let types = catalog
         .get("$defs")
         .and_then(Value::as_object)
         .unwrap_or(&empty);
@@ -212,28 +212,29 @@ pub(crate) fn input_schema<C: Send + Sync + 'static>(
         {
             return None;
         }
-        let capability = view.get("capabilities")?.get(name)?;
+        let capability = catalog.get("capabilities")?.get(name)?;
         return Some(tool_input_schema(capability, types));
     }
     if !method.starts_with("events/") || !serves_events(session) {
         return None;
     }
-    let input = view.get("events")?.get(name)?.get("input")?;
+    let input = catalog.get("events")?.get(name)?.get("input")?;
     Some(bundle(input, types))
 }
 
 pub(crate) fn has_object_output<C: Send + Sync + 'static>(session: &Session<C>, id: &str) -> bool {
     let empty = Map::new();
-    let view = session.view();
-    let types = view
+    let catalog = session.catalog();
+    let types = catalog
         .get("$defs")
         .and_then(Value::as_object)
         .unwrap_or(&empty);
-    view.pointer(&format!(
-        "/capabilities/{}/output",
-        id.replace('~', "~0").replace('/', "~1")
-    ))
-    .is_some_and(|output| bundle(output, types).get("type") == Some(&json!("object")))
+    catalog
+        .pointer(&format!(
+            "/capabilities/{}/output",
+            id.replace('~', "~0").replace('/', "~1")
+        ))
+        .is_some_and(|output| bundle(output, types).get("type") == Some(&json!("object")))
 }
 
 pub(crate) fn tool_result(outcome: &Outcome, has_output_schema: bool) -> Value {
@@ -298,8 +299,8 @@ pub(crate) fn list_events<C: Send + Sync + 'static>(
     webhook: bool,
 ) -> Vec<Value> {
     let empty = Map::new();
-    let view = session.view();
-    let types = view
+    let catalog = session.catalog();
+    let types = catalog
         .get("$defs")
         .and_then(Value::as_object)
         .unwrap_or(&empty);
@@ -308,7 +309,7 @@ pub(crate) fn list_events<C: Send + Sync + 'static>(
         .event_ids()
         .iter()
         .filter_map(|id| {
-            let event = view.get("events")?.get(id.as_str())?;
+            let event = catalog.get("events")?.get(id.as_str())?;
             Some(json!({
                 "name": id,
                 "description": event.get("description").cloned().unwrap_or(Value::Null),

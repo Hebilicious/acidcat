@@ -4,19 +4,19 @@
   "description": "Watch the climate of one greenhouse, open its vents and water its beds.",
   "targets": {
     "assistant": {
-      "bindings": [
+      "surfaces": [
         "mcp"
       ],
       "description": "Assistants, through an MCP server."
     },
     "automation": {
-      "bindings": [
+      "surfaces": [
         "http"
       ],
       "description": "Rules that run on the home server."
     },
     "panel": {
-      "bindings": [
+      "surfaces": [
         "typescript"
       ],
       "description": "The touch panel at the greenhouse door.",

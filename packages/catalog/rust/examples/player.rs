@@ -12,7 +12,7 @@ pub fn player_catalog() -> Catalog {
             "desktop",
             Target {
                 description: Some("The desktop app, with a mini player in the menu bar.".into()),
-                bindings: strings(&["typescript"]),
+                surfaces: strings(&["typescript"]),
                 ..Target::default()
             },
         )
@@ -20,7 +20,7 @@ pub fn player_catalog() -> Catalog {
             "remote",
             Target {
                 description: Some("Shell scripts and keyboard shortcuts.".into()),
-                bindings: strings(&["cli"]),
+                surfaces: strings(&["cli"]),
                 options: Some(json!({ "aliases": { "next": "skip" } })),
             },
         )
@@ -28,7 +28,7 @@ pub fn player_catalog() -> Catalog {
             "assistant",
             Target {
                 description: Some("Assistants, through an MCP server.".into()),
-                bindings: strings(&["mcp"]),
+                surfaces: strings(&["mcp"]),
                 ..Target::default()
             },
         );

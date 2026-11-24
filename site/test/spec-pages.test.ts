@@ -11,14 +11,14 @@ const dist = new URL("../dist/", import.meta.url).pathname;
 test("each specification file has a route under /spec", () => {
   assert.equal(pageId("README.md"), "spec");
   assert.equal(pageId("catalog.md"), "spec/catalog");
-  assert.equal(pageId("bindings/README.md"), "spec/bindings");
-  assert.equal(pageId("bindings/mcp.md"), "spec/bindings/mcp");
+  assert.equal(pageId("surfaces/README.md"), "spec/surfaces");
+  assert.equal(pageId("surfaces/mcp.md"), "spec/surfaces/mcp");
 });
 
 test("links between specification files stay on the site, and other links go to GitHub", () => {
   assert.equal(rewriteLink("events.md", "catalog.md", "spec"), "/spec/events/");
-  assert.equal(rewriteLink("../catalog.md#bundling", "bindings/mcp.md", "spec"), "/spec/catalog/#bundling");
-  assert.equal(rewriteLink("README.md#remote-bindings", "bindings/mcp.md", "spec"), "/spec/bindings/#remote-bindings");
+  assert.equal(rewriteLink("../catalog.md#bundling", "surfaces/mcp.md", "spec"), "/spec/catalog/#bundling");
+  assert.equal(rewriteLink("README.md#remote-surfaces", "surfaces/mcp.md", "spec"), "/spec/surfaces/#remote-surfaces");
   assert.equal(rewriteLink("#outcomes", "invocation.md", "spec"), "#outcomes");
   assert.equal(rewriteLink("../schemas/catalog.schema.json", "catalog.md", "spec"), "https://github.com/Hebilicious/acidcat/blob/main/schemas/catalog.schema.json");
   assert.equal(rewriteLink("../schemas", "README.md", "spec"), "https://github.com/Hebilicious/acidcat/tree/main/schemas");

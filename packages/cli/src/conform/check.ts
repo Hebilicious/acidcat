@@ -2,7 +2,7 @@ import { availableParallelism } from "node:os";
 import { setTimeout as pause } from "node:timers/promises";
 
 import fixtureJson from "../../conformance/fixture.acidcat.json" with { type: "json" };
-import { CALL_FAILURE_KINDS, isOccurrence, viewOf } from "@acid-cat/spec-ts";
+import { CALL_FAILURE_KINDS, isOccurrence, targetCatalog } from "@acid-cat/spec-ts";
 import type { CatalogDocument, Occurrence, Outcome } from "@acid-cat/spec-ts";
 import { Schema, SchemaRepresentation } from "effect";
 import type { JsonSchema } from "effect";
@@ -10,9 +10,9 @@ import type { JsonSchema } from "effect";
 import { isObject } from "../json.ts";
 
 export interface Check {
-  readonly binding: string;
+  readonly surface: string;
   readonly name: string;
-  /** The part of the specification that the check tests, for example `spec/bindings/mcp.md#tools`. */
+  /** The part of the specification that the check tests, for example `spec/surfaces/mcp.md#tools`. */
   readonly rule: string;
   readonly passed: boolean;
   /** `true` when the check tests a recommendation (SHOULD) that the implementation does not follow. The check still passes. */
@@ -30,9 +30,9 @@ export const isOutcome = (value: unknown): value is Outcome<unknown, unknown> =>
   return !("ok" in value) && CALL_FAILURE_KINDS.some((kind) => kind === value.kind) && typeof value.message === "string";
 };
 
-export const idsOf = (target: string): string[] => Object.keys(viewOf(fixture, target).capabilities).sort();
+export const idsOf = (target: string): string[] => Object.keys(targetCatalog(fixture, target).capabilities).sort();
 
-export const eventIdsOf = (target: string): string[] => Object.keys(viewOf(fixture, target).events ?? {}).sort();
+export const eventIdsOf = (target: string): string[] => Object.keys(targetCatalog(fixture, target).events ?? {}).sort();
 
 const payloadChecks = new Map<string, (data: unknown) => boolean>();
 
@@ -67,11 +67,11 @@ export type Define = (name: string, rule: string, body: Body) => void;
 
 export class Checks {
   readonly results: Check[] = [];
-  readonly binding: string;
+  readonly surface: string;
   readonly deadline: number;
 
-  constructor(binding: string, deadline: number) {
-    this.binding = binding;
+  constructor(surface: string, deadline: number) {
+    this.surface = surface;
     this.deadline = deadline;
   }
 
@@ -92,12 +92,12 @@ export class Checks {
   }
 
   #result(name: string, rule: string, failure: string | undefined): Check {
-    return failure === undefined ? { binding: this.binding, name, rule, passed: true } : { binding: this.binding, name, rule, passed: false, detail: failure };
+    return failure === undefined ? { surface: this.surface, name, rule, passed: true } : { surface: this.surface, name, rule, passed: false, detail: failure };
   }
 
   async should(name: string, rule: string, body: Body): Promise<void> {
     const failure = await this.#settle(body);
-    this.results.push(failure === undefined ? { binding: this.binding, name, rule, passed: true } : { binding: this.binding, name, rule, passed: true, warning: true, detail: failure });
+    this.results.push(failure === undefined ? { surface: this.surface, name, rule, passed: true } : { surface: this.surface, name, rule, passed: true, warning: true, detail: failure });
   }
 
   async #settle(body: Body): Promise<string | undefined> {

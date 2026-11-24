@@ -61,7 +61,7 @@
     }
   },
   "targets": {
-    "shell": { "bindings": ["cli"] }
+    "shell": { "surfaces": ["cli"] }
   },
   "acidcat": "0.1"
 }

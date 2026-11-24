@@ -32,9 +32,9 @@ test("a path that is not under base is an unknown route", async () => {
   assert.equal(call.status, 404);
 });
 
-test("GET /catalog gives the view", async () => {
-  const view = await decodeBody(CatalogShape, await handler(new Request(`${ORIGIN}/api/catalog`)));
-  assert.deepEqual(Object.keys(view.targets), ["api"]);
+test("GET /catalog gives the catalog of the target", async () => {
+  const catalog = await decodeBody(CatalogShape, await handler(new Request(`${ORIGIN}/api/catalog`)));
+  assert.deepEqual(Object.keys(catalog.targets), ["api"]);
 });
 
 test("with per-request services, each request that passes the screening has its own services", async () => {

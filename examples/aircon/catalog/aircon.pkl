@@ -6,14 +6,14 @@ description = "Control and monitor one split-unit air conditioner on the home ne
 targets {
   ["app"] {
     description = "The phone, desktop and web apps that people use."
-    bindings { "typescript"; "rust"; "webmcp"; "acme:swift"; "acme:kotlin" }
+    surfaces { "typescript"; "rust"; "webmcp"; "acme:swift"; "acme:kotlin" }
   }
   ["taskbar"] {
     description = "A desktop taskbar widget showing the status and a power toggle."
-    bindings { "typescript" }
+    surfaces { "typescript" }
   }
   ["cli"] {
-    bindings { "cli" }
+    surfaces { "cli" }
     cli {
       aliases {
         ["status"] { capability = "aircon.status.get" }
@@ -30,11 +30,11 @@ targets {
   }
   ["mcp"] {
     description = "Agents, through an MCP server."
-    bindings { "mcp" }
+    surfaces { "mcp" }
   }
   ["api"] {
     description = "Home-automation systems and scripts."
-    bindings { "http" }
+    surfaces { "http" }
   }
 }
 

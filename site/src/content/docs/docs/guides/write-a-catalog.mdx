@@ -47,7 +47,7 @@ import { writeFile } from "node:fs/promises";
 import { Catalog } from "@acid-cat/catalog";
 
 const catalog = new Catalog({ title: "Neighbourhood lending library" });
-catalog.target("desk", { bindings: ["cli"] });
+catalog.target("desk", { surfaces: ["cli"] });
 const notFound = catalog.type("NotFound", { type: "object" });
 catalog.capability("library.loan.return", {
   description: "Take a book back from a member.",
@@ -76,7 +76,7 @@ from pathlib import Path
 from acid_cat_catalog import Catalog
 
 catalog = Catalog(title="Hilltop weather station")
-catalog.target("logger", bindings=["http"])
+catalog.target("logger", surfaces=["http"])
 fault = catalog.type("SensorFault", {"type": "object"})
 catalog.capability(
     "weather.sensor.calibrate",
@@ -105,7 +105,7 @@ The Go package is named `catalog`. Import it with `import "github.com/Hebiliciou
 
 ```go title="garage.go"
 c := catalog.New("Garage door", "")
-c.Target("phone", catalog.Target{Bindings: []string{"typescript"}})
+c.Target("phone", catalog.Target{Surfaces: []string{"typescript"}})
 obstructed := c.Type("Obstructed", catalog.Schema{"type": "object"})
 c.Capability("garage.door.open", catalog.Capability{
 	Description: "Open the door.",
@@ -135,7 +135,7 @@ use acid_cat_catalog::{Capability, Catalog, Event, Target};
 use serde_json::json;
 
 let mut catalog = Catalog::new(Some("Music player"), None);
-catalog.target("remote", Target { bindings: vec!["cli".into()], ..Target::default() });
+catalog.target("remote", Target { surfaces: vec!["cli".into()], ..Target::default() });
 let unknown = catalog.r#type("UnknownTrack", json!({ "type": "object" }));
 catalog.capability("player.track.play", Capability {
     description: "Play a track now.".into(),
@@ -165,7 +165,7 @@ The first line amends the published package. Replace `<version>` with the versio
 amends "package://pkg.pkl-lang.org/github.com/Hebilicious/acidcat/acid-cat-catalog@<version>#/Catalog.pkl"
 
 targets {
-  ["panel"] { bindings { "typescript" } }
+  ["panel"] { surfaces { "typescript" } }
 }
 
 capabilities {
