@@ -3,17 +3,19 @@ const alt = "A mechanical brass cat with glowing acid-green eyes sits on a brass
 ---
 
 <div class="plate" data-plate>
-  <img
-    class="plate-still"
-    src="/hero/plate.webp"
-    srcset="/hero/plate.webp 1672w, /hero/plate@2x.webp 3344w"
-    sizes="100vw"
-    width="1672"
-    height="941"
-    alt={alt}
-    fetchpriority="high"
-    decoding="async"
-  />
+  <picture>
+    <source type="image/avif" srcset="/hero/plate.avif 1672w, /hero/plate@2x.webp 3344w" sizes="100vw" />
+    <img
+      class="plate-still"
+      src="/hero/plate.webp"
+      srcset="/hero/plate.webp 1672w, /hero/plate@2x.webp 3344w"
+      sizes="100vw"
+      width="1672"
+      height="941"
+      alt={alt}
+      fetchpriority="high"
+    />
+  </picture>
   <canvas class="plate-canvas" aria-hidden="true"></canvas>
 </div>
 
@@ -75,7 +77,9 @@ const alt = "A mechanical brass cat with glowing acid-green eyes sits on a brass
     if (reduced.matches) continue;
 
     const large = root.clientWidth * Math.min(window.devicePixelRatio, 1.75) > 1900;
-    createPlate(canvas, { artPad: art.pad, plate: large ? "/hero/plate@2x.webp" : "/hero/plate.webp", clean: "/hero/clean.webp", data: "/hero/data.png" }, framing).then(
+    const format = () => (still.currentSrc.endsWith(".avif") ? "avif" : "webp");
+    const sources = () => ({ artPad: art.pad, plate: large ? "/hero/plate@2x.webp" : `/hero/plate.${format()}`, clean: `/hero/clean.${format()}`, data: "/hero/data.webp" });
+    still.decode().catch(() => undefined).then(() => createPlate(canvas, sources(), framing)).then(
       (plate) => {
         plate.render({ reveal: 0 });
         root.classList.add("is-live");

@@ -84,7 +84,9 @@ The fonts are from [Monaspace](https://monaspace.githubnext.com/): Xenon for hea
 | `matte-wide.png` | The cat, the pedestal and the brass bands | `derive.py` on `key-art.png` (BiRefNet, MIT), padded to the wide size |
 | `plate-wide@2x.png` | The wide key art at twice the size. Not in git | `derive.py` (Swin2SR, Apache-2.0) |
 
-`uv run --script art/derive.py art/key-art-wide.png <directory>` writes the depth map, the matte and the large plate. It needs an NVIDIA GPU to run in a few minutes. `art/pack.sh` packs the depth, the matte and the cut mask into `public/hero/data.png`, and writes the plates as WebP.
+`uv run --script art/derive.py art/key-art-wide.png <directory>` writes the depth map, the matte and the large plate. It needs an NVIDIA GPU to run in a few minutes. `art/pack.sh` packs the depth, the matte and the cut mask into `public/hero/data.webp` (lossless WebP), and writes the plates as AVIF and WebP. It needs ImageMagick and `avifenc`.
+
+The plates are AVIF with full color resolution (4:4:4). At less than half the bytes, they are closer to the source than the WebP plates, which keep only a quarter of the color resolution (4:2:0). The still image is the LCP element. A `<picture>` gives it as AVIF, and as WebP to browsers without AVIF. The renderer loads the same format as the still image, so the browser downloads the plate once. It starts after the still image has loaded, so its textures do not take bandwidth from the LCP image.
 
 The shader shifts the cat against the background with the depth map, as the pointer moves. Where the cat moves away, the clean plate shows. It also makes the eyes and the chest reactor pulse, sends light around the holographic rings, floats the brass bands, flickers the Nixie tubes, sparks the fibre optics, moves the plasma, steam and dust, and lights the brass where the pointer is. When the camera is still, the output is the key art.
 

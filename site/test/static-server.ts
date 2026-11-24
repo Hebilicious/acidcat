@@ -12,6 +12,7 @@ const types: Record<string, string> = {
   ".woff2": "font/woff2",
   ".webp": "image/webp",
   ".png": "image/png",
+  ".avif": "image/avif",
 };
 
 const resolveFile = async (url: string): Promise<string | undefined> => {
