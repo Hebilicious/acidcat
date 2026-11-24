@@ -14,6 +14,10 @@ The homepage, the documentation, the specification and the list of packages of A
 | `moon run site:deploy` | Build the site and deploy it to https://acidcat.hebilicious.workers.dev as an assets-only Worker, with the `cf` command. Set `CLOUDFLARE_ACCOUNT_ID` first |
 | `moon run site:typecheck` | Type-check the geometry, the tests and the configuration |
 
+## Deployment
+
+[Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) deploys the site when a commit reaches `main`. It is connected to the Worker `acidcat`, and it runs `bash site/scripts/cloudflare.sh build`, then `bash site/scripts/cloudflare.sh deploy`, from the root of the repository. The script installs proto, then Node, pnpm and Moon from `.prototools`, and runs `site:build` or `site:deploy`. Workers Builds gives `site:deploy` the account and the token. A build starts only when a commit changes a file that the build reads: `site/`, `spec/`, the release files, the package manifests and READMEs, the aircon catalog, and the files of the toolchain and the workspace.
+
 ## Structure
 
 | Path | Contents |
