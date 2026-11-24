@@ -7,7 +7,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { z } from "zod";
 
 import { mcpApi } from "../apis/mcp.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 
 let served: Served;
 let api: ReturnType<typeof mcpApi>;
@@ -194,8 +194,8 @@ test("events/stream on the server of the application grants the suggested heartb
 
 test("events/poll on the server of the application reads aircon.status.changed from a lease", async (t) => {
   const client = await connect("/mcp");
-  const poll = async (cursor?: string) => {
-    const message = Message.parse(await (await eventsRequest("p", "events/poll", { name: "aircon.status.changed", arguments: {}, ...(cursor === undefined ? {} : { cursor }) })).json());
+  const poll = async (cursor?: string, signal?: AbortSignal) => {
+    const message = Message.parse(await (await eventsRequest("p", "events/poll", { name: "aircon.status.changed", arguments: {}, ...(cursor === undefined ? {} : { cursor }) }, signal)).json());
     return z.object({ events: z.array(z.looseObject({ data: z.looseObject({ fan: z.string() }) })), cursor: z.string() }).parse(message.result);
   };
   const before = api.statusListeners();
@@ -203,7 +203,7 @@ test("events/poll on the server of the application reads aircon.status.changed f
   assert.deepEqual(started.events, []);
   assert.equal(api.statusListeners(), before + 1, "the lease listens to the unit");
   await client.callTool({ name: "set_controls", arguments: { power: true, fan: "medium" } });
-  const polled = await until(t, () => poll(started.cursor), (seen) => seen.events.length > 0);
+  const polled = await until(t, (signal) => poll(started.cursor, signal), (seen) => seen.events.length > 0);
   assert.deepEqual(polled.events.map((each) => each.data.fan), ["medium"]);
   await client.close();
 });

@@ -10,7 +10,7 @@ import { z } from "zod";
 
 import { Status, Unit } from "../core-ts/aircon.ts";
 import { elysiaApi } from "../apis/elysia.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 
 const request = (path: string, init: { method?: string; body?: unknown; origin?: string } = {}) =>
   new Request(`http://localhost${path}`, {

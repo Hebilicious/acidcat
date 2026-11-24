@@ -12,7 +12,7 @@ import { Unit } from "../core-ts/aircon.ts";
 import type { Status } from "../core-ts/aircon.ts";
 import { capnwebApi, capnwebWebSocket } from "../apis/capnweb.ts";
 import type { AirconApi } from "../apis/capnweb.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 
 const unit = new Unit();
 let served: Served;

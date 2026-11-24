@@ -13,8 +13,8 @@ import { z } from "zod";
 import { statusGet, Unit } from "../core-ts/aircon.ts";
 import { graphqlApi, graphqlWebSocket, schema, yoga } from "../apis/graphql.ts";
 import { openSession } from "../apis/shared.ts";
-import { until } from "./until.ts";
-import type { Waiter } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
+import type { Waiter } from "../../../test-support/until.ts";
 
 const GraphQLResponse = z.object({
   data: z.unknown().optional(),
