@@ -8,7 +8,7 @@ import { serve } from "../src/node.ts";
 import type { WebHandler } from "../src/node.ts";
 import { fixture, options } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 
 const SECRET = "Bearer s3cr3t-t0k3n";
 

@@ -8,8 +8,9 @@ import { App, Event, Mcp } from "../src/index.ts";
 import * as NodeWebhook from "../src/NodeWebhook.ts";
 import { events, Feed, feedForPromises } from "./events-fixture.ts";
 import { json, mcpRequest, ORIGIN } from "./mcp-client.ts";
-import { until } from "./until.ts";
-import type { Waiter } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
+import type { Waiter } from "../../../test-support/until.ts";
+import { testClock } from "./test-clock.ts";
 import { agree, startReceiver, testSigningKey } from "./webhook-receiver.ts";
 import type { Received } from "./webhook-receiver.ts";
 
@@ -42,14 +43,28 @@ function webhookOptions(webhooks: Partial<Mcp.WebhookOptions> = {}) {
     principal: (request: Request) => Effect.succeed(Option.fromNullOr(request.headers.get("X-User"))),
     webhooks: {
       sender: NodeWebhook.sender({ allowPrivateNetworks: true, ca: receiver.cert }),
-      retryDelays: Schedule.spaced("20 millis"),
+      retryDelays: Schedule.spaced(0),
       ...webhooks,
     },
   };
 }
 
+/**
+ * Serve with a `TestClock`: the lifetimes, the retries and the wait for each answer move only when the test adjusts the
+ * clock, and the retries of the tests wait 0 ms.
+ */
+function withTestClock(serve: (clock: ReturnType<typeof testClock>["layer"]) => Mcp.WebHandler) {
+  const clock = testClock();
+  const handler = serve(clock.layer);
+  const dispose = async () => {
+    await handler.dispose();
+    await clock.close();
+  };
+  return Object.assign((request: Request) => handler(request), { dispose, adjust: clock.adjust });
+}
+
 function webhookHandler(feed: ReturnType<typeof feedForPromises>, webhooks: Partial<Mcp.WebhookOptions> = {}) {
-  return Mcp.toWebHandler(events, feed.layer, webhookOptions(webhooks));
+  return withTestClock((clock) => Mcp.toWebHandler(events, Layer.merge(feed.layer, clock), webhookOptions(webhooks)));
 }
 
 const as = (user: string) => ({ headers: { "X-User": user } });
@@ -69,7 +84,7 @@ async function assertSigned(received: Received, secrets: readonly string[], subs
   const timestamp = Number(received.headers["webhook-timestamp"]);
   assert.equal(received.headers["content-type"], "application/json");
   assert.equal(received.headers["x-mcp-subscription-id"], subscriptionId);
-  assert.ok(Math.abs(timestamp - Date.now() / 1000) < 60);
+  assert.equal(timestamp, 0, "the timestamp is the time of the TestClock, which stands at 0");
   assert.equal(received.headers["webhook-signature"], await webhookSignature(secrets, id, timestamp, received.body));
 }
 
@@ -123,8 +138,7 @@ test("a new subscription has the id of its key, no cursor, an empty delivery sta
     const result = decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", subscription("/hooks"), as("alice"))))).result);
     const id = await webhookSubscriptionId("alice", receiver.url("/hooks"), "feed.ticked", { room: "/hooks" });
     assert.deepEqual({ ...result, refreshBefore: "" }, { resultType: "complete", id, refreshBefore: "", cursor: null, truncated: false, deliveryStatus: { active: true, lastDeliveryAt: null, lastError: null } });
-    const lifetime = Date.parse(result.refreshBefore) - Date.now();
-    assert.ok(lifetime > 3_590_000 && lifetime <= 3_600_000, `${lifetime}`);
+    assert.equal(Date.parse(result.refreshBefore), 3_600_000, "the default lifetime from the time of the TestClock, which stands at 0");
     assert.equal(at("/hooks").length, 1);
     await json(await handler(mcpRequest("events/subscribe", subscription("/hooks"), as("bob"))));
     assert.deepEqual(at("/hooks").map((each) => bodyOf(each).type), ["verification", "verification"]);
@@ -145,6 +159,31 @@ test("a verification that gets 3xx is challenge_failed, 4xx is http_4xx and 5xx 
     assert.deepEqual(reasons, { "/moved": { reason: "challenge_failed" }, "/gone": { reason: "http_4xx" }, "/down": { reason: "http_5xx" } });
     await feed.following(0);
   } finally {
+    receiver.respond(agree);
+    await handler.dispose();
+  }
+});
+
+test("the wait for each answer runs on the clock of the deployment, and when it ends the reason is timeout", async (t) => {
+  const feed = feedForPromises();
+  const handler = webhookHandler(feed, { timeoutMs: 1 });
+  const held = Promise.withResolvers<void>();
+  try {
+    receiver.respond(async (received) => {
+      if (received.path === "/slow") await held.promise;
+      if (received.path === "/late") await new Promise(() => {});
+      return agree(received);
+    });
+    const slow = handler(mcpRequest("events/subscribe", subscription("/slow"), as("alice")));
+    await waitAt(t, "/slow", 1);
+    held.resolve();
+    decodeSubscribeResult((await json(await slow)).result);
+    const late = handler(mcpRequest("events/subscribe", subscription("/late"), as("alice")));
+    await waitAt(t, "/late", 1);
+    await handler.adjust(1);
+    assert.deepEqual((await json(await late)).error?.data, { reason: "timeout" });
+  } finally {
+    held.resolve();
     receiver.respond(agree);
     await handler.dispose();
   }
@@ -227,7 +266,7 @@ test("a gap message comes before an occurrence with truncated: true", async (t) 
       ),
   });
   const app = App.make({ targets: { mcp: { surfaces: ["mcp"] } }, capabilities: [], events: [counts] });
-  const handler = Mcp.toWebHandler(app, Layer.empty, { ...webhookOptions(), eventBuffer: 1 });
+  const handler = withTestClock((clock) => Mcp.toWebHandler(app, clock, { ...webhookOptions(), eventBuffer: 1 }));
   const held = Promise.withResolvers<void>();
   try {
     receiver.respond(async (received) => {
@@ -284,7 +323,7 @@ test("withEvents: with signing keys, each webhook request has a v1a signature fo
   const feed = feedForPromises();
   const egressIpRanges = ["203.0.113.0/24", "2001:db8::/32"];
   const path = "/signed";
-  const handler = Mcp.withEvents(events, feed.layer, discoveringServer, webhookOptions({ signingKeys: [testSigningKey("first"), testSigningKey("second")], egressIpRanges }));
+  const handler = withTestClock((clock) => Mcp.withEvents(events, Layer.merge(feed.layer, clock), discoveringServer, webhookOptions({ signingKeys: [testSigningKey("first"), testSigningKey("second")], egressIpRanges })));
   try {
     await statusOf(handler, path);
     await feed.following(1);
@@ -346,14 +385,18 @@ test("a subscription ends after its terminated message", async (t) => {
   const handler = webhookHandler(feed);
   try {
     await json(await handler(mcpRequest("events/subscribe", { ...subscription("/crash"), name: "feed.crashing", arguments: {} }, as("alice"))));
-    const [, , terminated] = await waitAt(t, "/crash", 3);
-    assert.equal(bodyOf(terminated).type, "terminated");
+    await waitAt(t, "/crash", 3);
     const missing = await until(
       t,
       async () => json(await handler(mcpRequest("events/unsubscribe", { name: "feed.crashing", arguments: {}, delivery: { url: receiver.url("/crash") } }, as("alice")))),
       (answer) => answer.error !== undefined,
     );
     assert.equal(missing.error?.code, -32023);
+    await handler.dispose();
+    assert.deepEqual(
+      at("/crash").map((each) => bodyOf(each).type ?? bodyOf(each).name),
+      ["verification", "feed.crashing", "terminated"],
+    );
   } finally {
     await handler.dispose();
   }
@@ -372,7 +415,7 @@ test("with per-request services, a webhook subscription keeps the services of it
       () => Effect.sync(() => counts.released++),
     ),
   ).pipe(Layer.provide(feed.layer));
-  const handler = Mcp.toWebHandler(events, layer, { ...webhookOptions(), services: "per-request" });
+  const handler = withTestClock((clock) => Mcp.toWebHandler(events, Layer.merge(layer, clock), { ...webhookOptions(), services: "per-request" }));
   try {
     await json(await handler(mcpRequest("events/subscribe", subscription("/services"), as("alice"))));
     await feed.following(1);

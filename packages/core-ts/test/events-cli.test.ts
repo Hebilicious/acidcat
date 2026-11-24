@@ -8,7 +8,7 @@ import { z } from "zod";
 import { defineApp, defineEvent, runCli } from "../src/index.ts";
 import { sensorOptions, Sensors, sensorsApp, toJsonSchema } from "./sensors.ts";
 import { bundledProgram } from "./bundled-program.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 
 function memberOf(text: string, key: string): unknown {
   const value: unknown = JSON.parse(text);

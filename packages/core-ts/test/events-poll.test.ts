@@ -8,7 +8,7 @@ import { mcpHandler, runMcpStdio } from "../src/index.ts";
 import type { PollOptions } from "../src/index.ts";
 import { ManualClock } from "./manual-clock.ts";
 import { sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 import { mcpHeaders } from "./mcp-headers.ts";
 
 const VERSION = "2026-07-28";
@@ -57,13 +57,13 @@ function httpServer(options: { readonly poll?: PollOptions } = {}) {
     principal: (request) => request.headers.get("X-Principal") ?? undefined,
     ...(options.poll === undefined ? {} : { poll: options.poll }),
   });
-  const rpc = async (method: string, params: object, principal?: string) => {
+  const rpc = async (method: string, params: object, principal?: string, signal?: AbortSignal) => {
     const headers: Record<string, string> = { "Content-Type": "application/json", ...mcpHeaders(method, params), "MCP-Protocol-Version": VERSION };
     if (principal !== undefined) headers["X-Principal"] = principal;
-    const response = await handler(new Request("https://sensors.example/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: META } }) }));
+    const response = await handler(new Request("https://sensors.example/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: META } }), ...(signal === undefined ? {} : { signal }) }));
     return objectOf(await response.text());
   };
-  const poll = async (params: object, principal?: string) => pollResult(await rpc("events/poll", params, principal));
+  const poll = async (params: object, principal?: string, signal?: AbortSignal) => pollResult(await rpc("events/poll", params, principal, signal));
   return { handler, rpc, poll, sensors, clock };
 }
 
@@ -82,7 +82,7 @@ test("poll: the maxEvents of the server limits a poll with no maxEvents, and has
   const start = await poll(READINGS);
   await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   for (let reading = 0; reading < 5; reading += 1) sensors.emit("hall", reading);
-  await until(t, async () => positionOf((await poll(READINGS)).cursor).position, (position) => position === 5);
+  await until(t, async (signal) => positionOf((await poll(READINGS, undefined, signal)).cursor).position, (position) => position === 5);
   const first = await poll({ ...READINGS, cursor: start.cursor });
   assert.deepEqual(celsius(first.events), [0, 1, 2]);
   assert.equal(first.hasMore, true);
@@ -116,7 +116,7 @@ test("poll: maxAgeMs bounds the replay of a lease that resumes", async (t) => {
   sensors.emit("hall", 1, old);
   sensors.emit("hall", 2);
   const resumed = await poll({ ...READINGS, cursor: encodePollCursor({ lease: "gone", position: 0, provider: "0" }), maxAgeMs: 1000 });
-  await until(t, async () => (await poll({ ...READINGS, cursor: resumed.cursor })).events, (events) => events.length === 1);
+  await until(t, async (signal) => (await poll({ ...READINGS, cursor: resumed.cursor }, undefined, signal)).events, (events) => events.length === 1);
   const read = await poll({ ...READINGS, cursor: resumed.cursor });
   assert.deepEqual(celsius(read.events), [2]);
   assert.equal(read.truncated, true);

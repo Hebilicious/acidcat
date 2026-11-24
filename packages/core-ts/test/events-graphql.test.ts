@@ -7,7 +7,7 @@ import { createSession } from "../src/index.ts";
 import type { Occurrence } from "../src/index.ts";
 import { readingChanged, sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
 import type { Reading } from "./sensors.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 
 const ReadingType = new GraphQLObjectType<Reading>({
   name: "Reading",

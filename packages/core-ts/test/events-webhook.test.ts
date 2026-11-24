@@ -12,8 +12,9 @@ import type { WebhookOptions } from "../src/node.ts";
 import { sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
 import { startReceiver, testCertificate, testSigningKey } from "./webhook-receiver.ts";
 import type { Received } from "./webhook-receiver.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 import { mcpHeaders } from "./mcp-headers.ts";
+import { ManualClock } from "./manual-clock.ts";
 
 const VERSION = "2026-07-28";
 const META = { "io.modelcontextprotocol/protocolVersion": VERSION };
@@ -58,7 +59,8 @@ function server(t: TestContext, options: WebhookOptions = {}, serverCard?: { rea
   const sensors = new Sensors();
   receiver.received.length = 0;
   receiver.answer(() => undefined);
-  const webhooks = webhookDelivery({ allowPrivateNetworks: true, ca: certificate.cert, retryDelayMs: () => 5, ...options });
+  const clock = new ManualClock();
+  const webhooks = webhookDelivery({ allowPrivateNetworks: true, ca: certificate.cert, clock, retryDelayMs: () => 0, ...options });
   const handler = mcpHandler(sensorsApp, {
     name: "sensors",
     version: "0.0.0",
@@ -69,18 +71,19 @@ function server(t: TestContext, options: WebhookOptions = {}, serverCard?: { rea
     serverCard,
   });
   t.after(() => handler.close());
-  const rpc = async (method: string, params: object, principal: string | null = "alice") => {
+  const rpc = async (method: string, params: object, principal: string | null = "alice", signal?: AbortSignal) => {
     const headers: Record<string, string> = { "Content-Type": "application/json", ...mcpHeaders(method, params), "MCP-Protocol-Version": VERSION };
     if (principal !== null) headers["X-Principal"] = principal;
-    const response = await handler(new Request("https://sensors.example/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: META } }) }));
+    const response = await handler(new Request("https://sensors.example/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: META } }), ...(signal === undefined ? {} : { signal }) }));
     return objectOf(await response.text());
   };
-  const subscribe = (params: { readonly name?: string; readonly arguments?: object; readonly url?: string; readonly secret?: string; readonly [key: string]: unknown }, principal = "alice") => {
+  const subscribe = (params: { readonly name?: string; readonly arguments?: object; readonly url?: string; readonly secret?: string; readonly [key: string]: unknown }, principal = "alice", signal?: AbortSignal) => {
     const { url = receiver.url, secret, ...rest } = params;
-    return rpc("events/subscribe", { name: "sensor.reading.changed", ...rest, delivery: { mode: "webhook", url, secret: secret ?? newSecret() } }, principal);
+    return rpc("events/subscribe", { name: "sensor.reading.changed", ...rest, delivery: { mode: "webhook", url, secret: secret ?? newSecret() } }, principal, signal);
   };
-  return { handler, rpc, subscribe, sensors };
+  return { handler, rpc, subscribe, sensors, clock };
 }
+
 
 test("webhook: parameters that are not valid get -32602, and an unknown event gets NotFound, with no request to the receiver", async (t) => {
   const { rpc, subscribe } = server(t);
@@ -127,6 +130,22 @@ test("webhook: the reason of CallbackEndpointError tells the status of the answe
   receiver.answer(() => ({ status: 404 }));
   assert.deepEqual(member(member(await subscribe({}), "error"), "data"), { reason: "http_4xx" });
   assert.equal(sensors.listeners, 0);
+});
+
+test("webhook: the wait for each answer runs on the clock of the deployment, and when it ends the reason is timeout", async (t) => {
+  const { subscribe, sensors, clock } = server(t, { timeoutMs: 1 });
+  const held = Promise.withResolvers<undefined>();
+  receiver.answer(() => held.promise);
+  const slow = subscribe({ arguments: { room: "slow" } });
+  await receiver.waitForRequests(t, 1);
+  held.resolve(undefined);
+  assert.ok(isJsonObject((await slow)["result"]));
+  receiver.answer(() => new Promise(() => {}));
+  const late = subscribe({ arguments: { room: "late" }, url: `${receiver.url}?late` });
+  await receiver.waitForRequests(t, 2);
+  clock.advance(1);
+  assert.deepEqual(member(member(await late, "error"), "data"), { reason: "timeout" });
+  assert.equal(sensors.listeners, 1);
 });
 
 test("webhook: the subscription id and key use delivery.url as the client sent it, not the parsed URL", async (t) => {
@@ -190,7 +209,7 @@ test("webhook: after a delivery that succeeds on a retry, the delivery status ha
   await receiver.waitForDeliveries(t, 3);
   const status = await until(
     t,
-    async () => member(member(await subscribe(params), "result"), "deliveryStatus"),
+    async (signal) => member(member(await subscribe(params, "alice", signal), "result"), "deliveryStatus"),
     (seen) => seen["lastDeliveryAt"] !== null,
   );
   assert.equal(status["lastError"], null);
@@ -210,7 +229,7 @@ test("webhook: the server abandons a delivery after the last attempt, keeps the 
   await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   sensors.emit("hall", 20);
   await receiver.waitForDeliveries(t, 3);
-  const result = await until(t, async () => member(await subscribe(params), "result"), (seen) => seen["cursor"] === "0");
+  const result = await until(t, async (signal) => member(await subscribe(params, "alice", signal), "result"), (seen) => seen["cursor"] === "0");
   assert.equal(member(result, "deliveryStatus")["lastError"], "http_5xx");
   sensors.emit("hall", 21);
   await receiver.waitForDeliveries(t, 4);
@@ -270,7 +289,7 @@ test("webhook: events/unsubscribe of the subscription of another principal gives
 test("webhook: a complete subscription ends with no message", async (t) => {
   const { subscribe } = server(t, { maxSubscriptions: 1 });
   assert.ok(isJsonObject((await subscribe({ name: "sensor.ticks" }))["result"]));
-  const firstEnded = async () => isJsonObject((await subscribe({}))["result"]);
+  const firstEnded = async (signal: AbortSignal) => isJsonObject((await subscribe({}, "alice", signal))["result"]);
   await until(t, firstEnded);
   assert.equal(receiver.deliveries().length, 3);
 });

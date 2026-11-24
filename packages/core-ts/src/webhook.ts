@@ -64,7 +64,7 @@ export interface WebhookOptions {
    * The default is 10 seconds, multiplied by 3 for each attempt: 10 s, 30 s, 90 s and 270 s.
    */
   readonly retryDelayMs?: ((attempt: number) => number) | undefined;
-  /** The clock of lifetimes and retries. The default is the clock of the system. */
+  /** The clock of lifetimes, retries and the wait for each answer. The default is the clock of the system. */
   readonly clock?: Clock | undefined;
   /**
    * Ed25519 keys that sign each request with a `v1a,` signature beside the `v1,` signatures, as private JWKs with a
@@ -117,6 +117,7 @@ export function webhookDelivery(options: WebhookOptions = {}): WebhookDelivery {
     allowPrivateNetworks: options.allowPrivateNetworks === true,
     secureContext: options.ca === undefined ? undefined : createSecureContext({ ca: [...rootCertificates, ...(typeof options.ca === "string" || Buffer.isBuffer(options.ca) ? [options.ca] : options.ca)] }),
     timeoutMs: settings.timeoutMs,
+    clock,
   };
   const subscriptions = new Map<string, Subscription>();
   const starting = new Map<string, Promise<unknown>>();
@@ -400,6 +401,7 @@ interface Network {
   readonly allowPrivateNetworks: boolean;
   readonly secureContext: SecureContext | undefined;
   readonly timeoutMs: number;
+  readonly clock: Clock;
 }
 
 const MAXIMUM_ANSWER_BYTES = 65_536;
@@ -416,10 +418,11 @@ function postToAcceptedAddressWithoutRedirects(url: URL, headers: Record<string,
 
   return new Promise((resolve) => {
     let settled = false;
+    let cancelTimer = () => {};
     const settle = (posted: Posted) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      cancelTimer();
       resolve(posted);
     };
     const request = httpsRequest(
@@ -454,7 +457,7 @@ function postToAcceptedAddressWithoutRedirects(url: URL, headers: Record<string,
         response.on("error", () => settle({ status: response.statusCode ?? 0, text: "" }));
       },
     );
-    const timer = setTimeout(() => {
+    cancelTimer = network.clock.schedule(() => {
       settle({ failure: "timeout" });
       request.destroy();
     }, network.timeoutMs);

@@ -7,7 +7,7 @@ import { z } from "zod";
 import { CallFailureError, catalogOf, createSession, defineApp, defineCapability, defineEvent, ok, renderCatalog } from "../src/index.ts";
 import type { Occurrences } from "../src/index.ts";
 import { broken, clock, failing, hidden, read, readingChanged, sensorOptions, Sensors, sensorsApp, ticks, toJsonSchema } from "./sensors.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 
 async function nextOf<Payload>(occurrences: Occurrences<Payload>) {
   const step = await occurrences.next();

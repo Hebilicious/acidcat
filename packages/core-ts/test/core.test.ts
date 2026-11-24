@@ -10,7 +10,7 @@ import { AVAILABLE, CallFailureError, catalogOf, cliAlias, cliAliasDefault, crea
 import type { App, CliAlias, CliCommand, CliOptions, ModelContextTool, Outcome } from "../src/index.ts";
 import { fixture, Holds, options, readJson, Switch, toJsonSchema, Watchers } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 
 const SCHEMA_MEMBERS = new Set(["input", "output", "failures", "state", "payload"]);
 

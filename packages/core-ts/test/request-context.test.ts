@@ -10,7 +10,7 @@ import { readJson, toJsonSchema } from "./fixture.ts";
 import { ManualClock } from "./manual-clock.ts";
 import { sseReader } from "./sse.ts";
 import { startReceiver, testCertificate } from "./webhook-receiver.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 import { mcpHeaders } from "./mcp-headers.ts";
 
 interface Services {

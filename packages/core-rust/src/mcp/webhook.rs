@@ -988,6 +988,35 @@ mod tests {
         assert!(lock(&webhooks.registry).subscriptions.is_empty());
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn the_wait_for_an_answer_runs_on_the_clock_of_tokio_and_ends_with_timeout() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("the listener binds");
+        let port = listener
+            .local_addr()
+            .expect("the listener has an address")
+            .port();
+        let silent = tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((stream, _)) = listener.accept().await {
+                held.push(stream);
+            }
+        });
+        let webhooks = Webhooks::new(WebhookOptions {
+            allow_private_networks: true,
+            ..WebhookOptions::default()
+        });
+        let url: Uri = format!("https://127.0.0.1:{port}/hook")
+            .parse()
+            .expect("the URL parses");
+        let started = Instant::now();
+        let answer = webhooks.post(&url, &[], "{}").await;
+        assert_eq!(answer, Err("timeout"));
+        assert_eq!(started.elapsed(), webhooks.options.timeout);
+        silent.abort();
+    }
+
     #[test]
     fn a_subscription_that_starts_counts_for_the_limit_until_it_ends() {
         let webhooks = Webhooks::new(WebhookOptions {

@@ -8,7 +8,7 @@ import { TestClock } from "effect/testing";
 import { Mcp } from "../src/index.ts";
 import { events, Feed, feedForPromises, feedLayer, following, publish } from "./events-fixture.ts";
 import { decodeMessage, decodePollResult, json, mcpRequest, meta, ORIGIN } from "./mcp-client.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 import type { Message } from "./mcp-client.ts";
 
 const base = { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN] };

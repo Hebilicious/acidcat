@@ -7,7 +7,7 @@ import { httpHandler } from "../src/index.ts";
 import { serve } from "../src/node.ts";
 import { sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
 import { sseReader } from "./sse.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 
 function memberOf(text: string, key: string): unknown {
   const value: unknown = JSON.parse(text);
