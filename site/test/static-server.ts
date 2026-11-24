@@ -1,27 +1,14 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { extname, join, normalize } from "node:path";
+import { join, normalize } from "node:path";
+import { contentType } from "../src/lib/content-types.ts";
 
 export const dist = new URL("../dist/", import.meta.url).pathname;
 
 export const builtPages = async (): Promise<string[]> => {
   const entries = await readdir(dist, { withFileTypes: true, recursive: true });
   return entries.filter((entry) => entry.isFile() && entry.name.endsWith(".html")).map((entry) => join(entry.parentPath, entry.name));
-};
-const types: Record<string, string> = {
-  ".html": "text/html",
-  ".css": "text/css",
-  ".json": "application/json",
-  ".js": "text/javascript",
-  ".svg": "image/svg+xml",
-  ".woff2": "font/woff2",
-  ".webp": "image/webp",
-  ".png": "image/png",
-  ".avif": "image/avif",
-  ".md": "text/markdown; charset=utf-8",
-  ".txt": "text/plain; charset=utf-8",
-  ".gz": "application/gzip",
 };
 
 const resolveFile = async (url: string): Promise<string | undefined> => {
@@ -43,7 +30,7 @@ export const serveDist = async (): Promise<StaticServer> => {
       .then(async (path) => {
         if (path === undefined) throw new Error("not found");
         const body = await readFile(path);
-        response.writeHead(200, { "content-type": types[extname(path)] ?? "application/octet-stream" });
+        response.writeHead(200, { "content-type": contentType(path) ?? "application/octet-stream" });
         response.end(body);
       })
       .catch(() => {

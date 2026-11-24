@@ -67,6 +67,7 @@ The Worker runs first only for the paths in `workerPaths` of `cloudflare.config.
 | `src/lib/page-chunks.ts` | Puts the modules that only one page imports in a chunk of their own, when that page also imports a module dynamically, so that each module runs once. See [Loading](#loading) |
 | `src/lib/preload-scripts.ts` | Names each script that a page loads at once as a preload link of its head, and starts the scripts after the first paint. See [Loading](#loading) |
 | `src/lib/server-roles.ts` | Adds `role` to each element that has `data-role` in the built HTML. See [Loading](#loading) |
+| `src/lib/content-types.ts` | The media type of each kind of file in the build, as Cloudflare serves it. The server of the tests and the server of the Lighthouse run send each file with it, and `test/pages.test.ts` fails when a file of the build has no type in it |
 | `src/lib/sitemap.ts` | Writes `/sitemap-index.xml` and `/sitemap-0.xml` |
 | `cloudflare.config.ts` | The Worker that serves the site: its name, its entrypoint, the paths that run the Worker first, the assets binding, and the 404 page for unknown paths |
 | `worker/index.ts`, `worker/discovery.ts` | The Worker. It serves the MCP server and the HTTP API of the AcidCat app, the well-known documents, Markdown to a client that asks for it, and the `Link` header of each page. Everything else comes from the assets |
@@ -150,7 +151,7 @@ The renderer checks the GPU before it downloads the textures. It decodes each te
 
 ## Lighthouse
 
-`moon run site:lighthouse` builds the site, and serves `dist/` from memory as the Worker does: it compresses each text file with Brotli once when it starts, as Cloudflare serves a compressed file from its cache, and it sends the cache headers of `public/_headers`. It runs [Lighthouse](https://developer.chrome.com/docs/lighthouse) on mobile (simulated throttling) on `/` and `/docs/quick-start/`, five times each, in the Chromium of Playwright. It writes each report as HTML and JSON, and a summary table, into `.tmp/lighthouse/`. It fails when one of these budgets does not hold:
+`moon run site:lighthouse` builds the site, and serves `dist/` from memory as the Worker does: it compresses each text file with Brotli once when it starts, as Cloudflare serves a compressed file from its cache, and it sends the cache headers of `public/_headers` and the media type of each file from `src/lib/content-types.ts`. It runs [Lighthouse](https://developer.chrome.com/docs/lighthouse) on mobile (simulated throttling) on `/` and `/docs/quick-start/`, five times each, in the Chromium of Playwright. It writes each report as HTML and JSON, and a summary table, into `.tmp/lighthouse/`. It fails when one of these budgets does not hold:
 
 - Each run of each page passes the audits that pass or fail: "Network dependency tree", "Forced reflow", "Improve image delivery", "Render blocking requests", "Layout shift culprits", "Cumulative Layout Shift" and "Accessibility tree is well-formed" (Agentic Browsing).
 - The median score of each category is at least its budget in `scripts/lighthouse.ts`.

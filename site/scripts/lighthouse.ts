@@ -7,6 +7,7 @@ import { brotliCompress } from "node:zlib";
 import lighthouse from "lighthouse";
 import type { Result } from "lighthouse";
 import { chromium } from "playwright";
+import { contentType } from "../src/lib/content-types.ts";
 
 const { values } = parseArgs({ options: { runs: { type: "string", default: "5" }, out: { type: "string", default: ".tmp/lighthouse" } } });
 const runs = Number(values.runs);
@@ -23,21 +24,6 @@ const categoryBudgets: Readonly<Record<keyof typeof pages, Readonly<Record<strin
   "quick-start": { performance: 95, accessibility: 100, "best-practices": 100, seo: 100 },
 };
 
-const types: Readonly<Record<string, string>> = {
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css",
-  ".js": "text/javascript",
-  ".json": "application/json",
-  ".svg": "image/svg+xml",
-  ".woff2": "font/woff2",
-  ".webp": "image/webp",
-  ".avif": "image/avif",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".txt": "text/plain; charset=utf-8",
-  ".md": "text/markdown; charset=utf-8",
-  ".xml": "application/xml",
-};
 const compressible = new Set([".html", ".css", ".js", ".json", ".svg", ".txt", ".md", ".xml"]);
 
 interface Asset {
@@ -82,7 +68,7 @@ const serve = async (): Promise<{ origin: string; close: () => Promise<void> }> 
     const [path, asset] = found ?? ["/404.html", notFound];
     const encoded = asset.brotli !== undefined && (request.headers["accept-encoding"] ?? "").includes("br") ? asset.brotli : undefined;
     response.writeHead(found === undefined ? 404 : 200, {
-      "Content-Type": types[extname(path)] ?? "application/octet-stream",
+      "Content-Type": contentType(path) ?? "application/octet-stream",
       "Cache-Control": pathname.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "public, max-age=0, must-revalidate",
       ...(encoded === undefined ? {} : { "Content-Encoding": "br", Vary: "Accept-Encoding" }),
     });

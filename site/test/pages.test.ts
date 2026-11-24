@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
+import { configFiles, contentType } from "../src/lib/content-types.ts";
 import { siteUrl as site } from "../src/lib/social.ts";
 import { builtPages, dist } from "./static-server.ts";
 
@@ -55,4 +56,9 @@ test("every page declares the icon of the site, and /favicon.ico leads to it", a
     if (!(await readFile(file, "utf8")).includes(`<link rel="icon" type="image/svg+xml" href="${icon}">`)) offenders.push(file.slice(dist.length));
   }
   assert.deepEqual(offenders, []);
+});
+
+test("each file of the build has its media type in the table of the servers", async () => {
+  const files = (await readdir(dist, { recursive: true, withFileTypes: true })).filter((file) => file.isFile() && !configFiles.includes(file.name));
+  assert.deepEqual(files.map((file) => join(file.parentPath, file.name).slice(dist.length)).filter((path) => contentType(path) === undefined), []);
 });
