@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { monitorEventLoopDelay } from "node:perf_hooks";
 
 import { bundle, encodeMcpHeaderValue, MCP_EVENTS_EXTENSION, MCP_HEADER_MISMATCH, MCP_HEARTBEAT_MAX_MS, MCP_HEARTBEAT_MIN_MS, MCP_PROTOCOL_VERSION_KEY, MCP_SUBSCRIPTION_ID, mcpParamHeaders, targetCatalog } from "@acid-cat/spec-ts";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
@@ -17,6 +18,31 @@ const RULE = "spec/surfaces/mcp.md";
 
 /** Runtimes measure the idle time of a stream with timers of 1 ms resolution, so a heartbeat can come 1 ms early. */
 const TIMER_RESOLUTION_MS = 1;
+
+/**
+ * Measures how long a stream was silent before a message, as far as a client can observe it. A client sees when it
+ * reads each message, not when the server sent it. It reads a message late when its own process does not run, for
+ * example on a busy computer, and such a pause also delays the timers of its event loop. So the silence starts at the
+ * read of the last message less the longest delay of the event loop, but never before the request. The time that a
+ * message spends in transit, and a proxy that holds messages back, are not visible to a client.
+ */
+function silenceMeter() {
+  const delay = monitorEventLoopDelay({ resolution: TIMER_RESOLUTION_MS });
+  delay.enable();
+  const requested = performance.now();
+  let lastRead = requested;
+  return {
+    /** Mark that the client read a message of the stream now. */
+    read: () => void (lastRead = performance.now()),
+    /** The silence before the message that the client read just now, in milliseconds. */
+    silence: () => {
+      const now = performance.now();
+      const paused = delay.max / 1e6 + TIMER_RESOLUTION_MS;
+      return Math.round(now - Math.max(requested, lastRead - paused));
+    },
+    stop: () => delay.disable(),
+  };
+}
 
 type ToolResult = Awaited<ReturnType<Client["callTool"]>>;
 
@@ -516,16 +542,21 @@ export async function checkEvents(checks: Checks, channel: Channel, options: Eve
     const name = `events/stream with heartbeatMs: ${suggested} grants heartbeatMs: ${granted} on notifications/events/active${granted === MCP_HEARTBEAT_MIN_MS ? ", then sends heartbeats at that interval" : ""}`;
     await checks.run(name, `${RULE}#push`, async (signal) => {
       const id = streamId();
-      const requested = performance.now();
-      const stream = await channel.stream(id, { name: "fixture.watch", arguments: { key: randomUUID() }, heartbeatMs: suggested }, signal);
+      const meter = silenceMeter();
       try {
-        await active(stream, id, granted);
-        if (granted !== MCP_HEARTBEAT_MIN_MS) return;
-        expectEqual(paramsOf(await notification(stream, id, "notifications/events/heartbeat")), { cursor: null }, "the params of notifications/events/heartbeat");
-        const waited = Math.round(performance.now() - requested);
-        expect(waited >= granted - TIMER_RESOLUTION_MS, `the heartbeat must come when the stream was idle for ${granted} ms, but it came ${waited} ms after the request`);
+        const stream = await channel.stream(id, { name: "fixture.watch", arguments: { key: randomUUID() }, heartbeatMs: suggested }, signal);
+        try {
+          await active(stream, id, granted);
+          meter.read();
+          if (granted !== MCP_HEARTBEAT_MIN_MS) return;
+          expectEqual(paramsOf(await notification(stream, id, "notifications/events/heartbeat")), { cursor: null }, "the params of notifications/events/heartbeat");
+          const silence = meter.silence();
+          expect(silence >= granted - TIMER_RESOLUTION_MS, `the heartbeat must come when the stream was idle for ${granted} ms, but it came ${silence} ms after notifications/events/active`);
+        } finally {
+          await stream.cancel();
+        }
       } finally {
-        await stream.cancel();
+        meter.stop();
       }
     });
   }

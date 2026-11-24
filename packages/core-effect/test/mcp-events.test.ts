@@ -6,6 +6,7 @@ import { Cause, Effect, Fiber, Layer, Queue, Schema, Sink, Stdio, Stream } from 
 import { Mcp } from "../src/index.ts";
 import { events, feedForPromises, feedLayer } from "./events-fixture.ts";
 import { recordingApp } from "./fixture.ts";
+import { testClock } from "./test-clock.ts";
 
 const ORIGIN = "https://fixture.example";
 const SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId";
@@ -151,6 +152,40 @@ test("through HTTP, a stream with nothing to send gets heartbeats with the last 
   assert.deepEqual(heartbeat?.params, { cursor: "4", _meta: { [SUBSCRIPTION_ID]: 1 } });
   controller.abort();
   await feed.following(0);
+});
+
+async function isPending(promise: Promise<unknown>): Promise<boolean> {
+  const pending = Symbol("pending");
+  return (await Promise.race([promise, new Promise((resolve) => setImmediate(() => resolve(pending)))])) === pending;
+}
+
+test("through HTTP, the heartbeat comes when the stream has sent nothing for heartbeatMs on the clock of the server, counted from the last message", async () => {
+  const feed = feedForPromises();
+  const clock = testClock();
+  const handler = Mcp.toWebHandler(events, Layer.merge(feed.layer, clock.layer), { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN] });
+  const controller = new AbortController();
+  try {
+    const next = sseMessages(await handler(mcpRequest("events/stream", { name: "feed.ticked", heartbeatMs: 1000 }, { signal: controller.signal })));
+    assert.equal((await next())?.method, "notifications/events/active");
+    const first = next();
+    await clock.adjust(999);
+    assert.equal(await isPending(first), true);
+    await clock.adjust(1);
+    assert.equal((await first)?.method, "notifications/events/heartbeat");
+    await feed.following(1);
+    await clock.adjust(400);
+    await feed.publish({ room: "a", count: 1 });
+    assert.equal((await next())?.method, "notifications/events/event");
+    const second = next();
+    await clock.adjust(999);
+    assert.equal(await isPending(second), true);
+    await clock.adjust(1);
+    assert.equal((await second)?.method, "notifications/events/heartbeat");
+  } finally {
+    controller.abort();
+    await handler.dispose();
+    await clock.close();
+  }
 });
 
 test("through HTTP, notifications/events/active grants the heartbeatMs of the deployment when the request suggests none, and an invalid suggestion is the error -32602", async () => {

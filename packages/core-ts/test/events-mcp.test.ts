@@ -8,7 +8,9 @@ import { defineApp, mcpHandler, mcpHandshake, ok, defineCapability, runMcpStdio 
 import { sensorOptions, Sensors, sensorsApp, toJsonSchema } from "./sensors.ts";
 import { mcpHeaders } from "./mcp-headers.ts";
 import { sseReader } from "./sse.ts";
-import { until } from "./until.ts";
+import type { SseMessage } from "./sse.ts";
+import { until } from "../../../test-support/until.ts";
+import { ManualClock } from "./manual-clock.ts";
 
 const VERSION = "2026-07-28";
 const META = { "io.modelcontextprotocol/protocolVersion": VERSION };
@@ -27,8 +29,8 @@ function member(value: unknown, key: string): JsonObject {
   return inner;
 }
 
-function httpServer(sensors = new Sensors(), heartbeatMs?: number) {
-  const handler = mcpHandler(sensorsApp, { name: "sensors", version: "0.0.0", allowedOrigins: [], ...sensorOptions(sensors), ...(heartbeatMs === undefined ? {} : { heartbeatMs }) });
+function httpServer(sensors = new Sensors(), heartbeatMs?: number, clock?: ManualClock) {
+  const handler = mcpHandler(sensorsApp, { name: "sensors", version: "0.0.0", allowedOrigins: [], ...sensorOptions(sensors), ...(heartbeatMs === undefined ? {} : { heartbeatMs }), ...(clock === undefined ? {} : { clock }) });
   const request = (method: string, params: object = {}, signal?: AbortSignal, id: number | string = 1) =>
     new Request("https://sensors.example/mcp", {
       method: "POST",
@@ -101,6 +103,41 @@ test("MCP through HTTP: maxAgeMs reaches the provider, and an idle stream gets h
   await read();
   assert.deepEqual(await read(), { jsonrpc: "2.0", method: "notifications/events/heartbeat", params: { cursor: "2", _meta: sub(1) } });
   await reader.cancel();
+});
+
+async function isPending(promise: Promise<unknown>): Promise<boolean> {
+  const pending = Symbol("pending");
+  return (await Promise.race([promise, new Promise((resolve) => setImmediate(() => resolve(pending)))])) === pending;
+}
+
+test("MCP through HTTP: the heartbeat comes when the stream has sent nothing for heartbeatMs on the clock of the server, counted from the last message", async (t) => {
+  const clock = new ManualClock();
+  const { handler, request, sensors } = httpServer(new Sensors(), undefined, clock);
+  const reader = sseReader(await handler(request("events/stream", { name: "sensor.reading.changed", heartbeatMs: 1000 })));
+  const method = async (read: Promise<SseMessage | undefined>) => objectOf((await read)?.data ?? "null")["method"];
+  const timerStarted = () => until(t, () => clock.pending, (pending) => pending === 1);
+  try {
+    assert.equal(await method(reader.next()), "notifications/events/active");
+    const first = reader.next();
+    await timerStarted();
+    clock.advance(999);
+    assert.equal(await isPending(first), true);
+    clock.advance(1);
+    assert.equal(await method(first), "notifications/events/heartbeat");
+    const event = reader.next();
+    await timerStarted();
+    clock.advance(400);
+    sensors.emit("hall", 20);
+    assert.equal(await method(event), "notifications/events/event");
+    const second = reader.next();
+    await timerStarted();
+    clock.advance(999);
+    assert.equal(await isPending(second), true);
+    clock.advance(1);
+    assert.equal(await method(second), "notifications/events/heartbeat");
+  } finally {
+    await reader.cancel();
+  }
 });
 
 test("MCP through HTTP: notifications/events/active grants the heartbeatMs of the deployment when the request suggests none, and an invalid suggestion is the error -32602", async () => {
