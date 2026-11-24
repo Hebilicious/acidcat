@@ -4,6 +4,7 @@ import { chromium } from "playwright";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { serveDist } from "./static-server.ts";
 import type { StaticServer } from "./static-server.ts";
+import { openPage, stubGitHub } from "./github.ts";
 
 const gpuFlags = [
   "--enable-gpu",
@@ -83,6 +84,7 @@ const capture = async (origin: string, item: Case, backend: Backend): Promise<{ 
   if (browser === undefined) throw new Error("No browser.");
   const context = await browser.newContext({ viewport: item.viewport, reducedMotion: item.reducedMotion });
   if (backend === "webgl2") await hideWebgpu(context);
+  await stubGitHub(context);
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -109,7 +111,7 @@ const capture = async (origin: string, item: Case, backend: Backend): Promise<{ 
 
 const compare = async (first: Buffer, second: Buffer) => {
   if (browser === undefined) throw new Error("No browser.");
-  const page = await browser.newPage();
+  const page = await openPage(browser);
   const result = await page.evaluate(
     async ([a, b, delta]) => {
       const decode = async (base64: string) => {
@@ -150,7 +152,7 @@ const compare = async (first: Buffer, second: Buffer) => {
 
 test("each renderer draws the same image with WebGPU and with WebGL 2", async (t) => {
   if (browser === undefined || server === undefined) throw new Error("No browser.");
-  const probe = await browser.newPage();
+  const probe = await openPage(browser);
   await probe.goto(`${server.origin}/404`);
   const missing = await missingHardware(probe);
   await probe.close();

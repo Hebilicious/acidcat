@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
 import type { Browser, Page } from "playwright";
+import { openPage } from "./github.ts";
 import { dist, serveDist } from "./static-server.ts";
 import type { StaticServer } from "./static-server.ts";
 
@@ -35,7 +36,7 @@ for (const viewport of [
 ]) {
   test(`the homepage renders at ${viewport.width}px with no errors and no sideways scroll`, async () => {
     if (browser === undefined) throw new Error("No browser.");
-    const page = await browser.newPage({ viewport });
+    const page = await openPage(browser, { viewport });
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("console", (message) => {
@@ -70,7 +71,7 @@ for (const viewport of [
 
 test("reduced motion keeps the hero still and stops the animations", async () => {
   if (browser === undefined) throw new Error("No browser.");
-  const page = await browser.newPage({ reducedMotion: "reduce" });
+  const page = await openPage(browser, { reducedMotion: "reduce" });
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
   assert.equal(await page.locator("[data-plate].is-live").count(), 0);
   assert.ok(await page.locator("[data-plate] img").isVisible());
@@ -81,12 +82,11 @@ test("reduced motion keeps the hero still and stops the animations", async () =>
 
 test("on a phone, the homepage loads less than its budget of bytes before the reader acts", async () => {
   if (browser === undefined) throw new Error("No browser.");
-  const page = await browser.newPage({ viewport: { width: 400, height: 860 } });
+  const page = await openPage(browser, { viewport: { width: 400, height: 860 } });
   const requests: Promise<{ file: string; type: string; size: number }>[] = [];
   page.on("requestfinished", (request) => {
     requests.push(request.sizes().then(({ responseBodySize }) => ({ file: new URL(request.url()).pathname, type: request.resourceType(), size: responseBodySize })));
   });
-  await page.route("https://api.github.com/**", (route) => route.fulfill({ json: { stargazers_count: 2 } }));
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
   await page.locator("[data-plate] canvas").waitFor({ state: "detached", timeout: 10000 });
   const loaded = await Promise.all(requests);
@@ -106,7 +106,7 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
 test("each page preloads every font face that it loads, and the homepage preloads no other", async () => {
   if (browser === undefined) throw new Error("No browser.");
   for (const path of ["/", "/docs/", "/spec/catalog/", "/packages/"]) {
-    const page: Page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    const page: Page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
     const loaded = new Set<string>();
     page.on("requestfinished", (request) => {
       const file = new URL(request.url()).pathname;
