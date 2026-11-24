@@ -14,15 +14,16 @@ The homepage, the documentation, the specification and the list of packages of A
 | `moon run site:catalog` | Write `site.acidcat.json`, the catalog of the AcidCat app of the site, from its code |
 | `moon run site:deploy` | Build the site, bundle the Worker, and deploy both to https://acidcat.hebilicious.workers.dev with the `cf` command. Set `CLOUDFLARE_ACCOUNT_ID` first |
 | `moon run site:preview` | Build the site and the Worker, and deploy them as a Worker Preview named after the Git branch, at `https://<branch>-acidcat.hebilicious.workers.dev`. Production does not change. Set `CLOUDFLARE_ACCOUNT_ID` first |
+| `moon run site:advertised -- <origin>` | Fetch each URL that `llms.txt`, the well-known documents and the `Link` header of the homepage list, from `<origin>`. The command replaces the production origin with `<origin>`, so it checks a Worker Preview before the merge. It fails when a URL does not answer 200, or when a `.md`, `.txt` or `.tar.gz` file does not have its media type. `test/agent.test.ts` runs the same check against `dist/` and the Worker, with no network |
 | `moon run site:typecheck` | Type-check the geometry, the AcidCat app, the Worker, the tests and the configuration |
 
 ## Deployment
 
-[Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) deploys the site when a commit reaches `main`. It is connected to the Worker `acidcat`, and it runs `bash site/scripts/cloudflare.sh build`, then `bash site/scripts/cloudflare.sh deploy`, from the root of the repository. The script installs proto, then Node, pnpm and Moon from `.prototools`, and runs `site:build` or `site:deploy`. Workers Builds gives `site:deploy` the account and the token. A build starts only when a commit changes a file that the build reads: `site/`, `spec/`, `schemas/`, `examples/`, `packages/`, `skills/`, the release files, and the files of the toolchain and the workspace.
+[Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) deploys the site when a commit reaches `main`. It is connected to the Worker `acidcat`, and it runs `bash site/scripts/cloudflare.sh build`, then `bash site/scripts/cloudflare.sh deploy`, from the root of the repository. The script installs proto, then Node, pnpm and Moon from `.prototools`, then the dependencies with `pnpm install --frozen-lockfile`, and runs `site:build` or `site:deploy`. Workers Builds gives `site:deploy` the account and the token. A build starts only when a commit changes a file that the build reads: `site/`, `spec/`, `schemas/`, `examples/`, `packages/`, `skills/`, the release files, and the files of the toolchain and the workspace.
 
 The Worker has code and assets. `cf` builds a project with a Worker entrypoint through the framework's own command, and Astro writes only static files. So `site:deploy` runs `astro build`, then `scripts/worker-output.ts`, which bundles `worker/index.ts` with esbuild and writes the [Build Output](https://developers.cloudflare.com/cf/projects/#deploy-a-prebuilt-build) in `.cloudflare/output/v1/`: the bundle, `dist/` as the assets, and the settings of `cloudflare.config.ts`. Then `cf deploy --prebuilt` uploads it. `site:preview` does the same with `cf previews deploy --prebuilt`.
 
-The Worker runs first only for the paths in `workerPaths` of `cloudflare.config.ts`: the pages, `/mcp`, `/api/` and the well-known documents that it writes. Other files, such as `/_astro/*` and `/hero/*`, go to the assets directly.
+The Worker runs first only for the paths in `workerPaths` of `cloudflare.config.ts`: the pages, `/mcp`, `/api` and the well-known documents that it writes. For a page, the Worker reads the file from the assets binding and adds the headers. It makes the MCP server and the HTTP API only when a request for them comes. Other files, such as `/_astro/*` and `/hero/*`, go to the assets directly.
 
 ## Structure
 
@@ -55,6 +56,7 @@ The Worker runs first only for the paths in `workerPaths` of `cloudflare.config.
 | `cloudflare.config.ts` | The Worker that serves the site: its name, its entrypoint, the paths that run the Worker first, the assets binding, and the 404 page for unknown paths |
 | `worker/index.ts`, `worker/discovery.ts` | The Worker. It serves the MCP server and the HTTP API of the AcidCat app, the well-known documents, Markdown to a client that asks for it, and the `Link` header of each page. Everything else comes from the assets |
 | `scripts/worker-output.ts` | Bundles the Worker, and writes the Build Output that `cf` uploads |
+| `scripts/advertised.ts`, `scripts/check-advertised.ts` | Find each URL that the documents for agents list, and fetch it as an agent does. `site:advertised` and `test/agent.test.ts` use them |
 | `src/lib/agent/` | The AcidCat app of the site (`app.ts`), the content that it reads (`content.ts`), its WebMCP tools in the page (`page.ts`), the Markdown of the homepage (`home.md`), and the files for agents that the build writes (`files.ts`) |
 | `site.acidcat.json` | The catalog of the AcidCat app of the site. `site:catalog` writes it from `src/lib/agent/app.ts`, and `test/agent.test.ts` fails when it is stale |
 | `src/lib/page-markdown.ts` | Converts the HTML of a built page into Markdown: the content of the page, each panel of a tab group under the label of its tab, and each code block with its language |
@@ -176,14 +178,14 @@ The capabilities read `/content.json`, which the build writes: each page with it
 | URL | What it serves |
 | --- | --- |
 | `/mcp` | The MCP server of the app, through `mcpHandler` and `mcpHandshake` of `@acid-cat/core-ts`. Its Server Card is at `/mcp/server-card` |
-| `/api/` | The HTTP binding of the app: `GET /api/capabilities`, `POST /api/capabilities/{id}` and `GET /api/catalog` |
+| `/api/` | The HTTP binding of the app: `GET /api/capabilities`, `POST /api/capabilities/{id}` and `GET /api/catalog`. `GET /api`, the anchor of the API Catalog, redirects to `/api/capabilities` |
 | Each page | WebMCP tools, through `installWebMcp` of `@acid-cat/core-ts`, in a browser with WebMCP. Chromium has WebMCP with `--enable-features=WebMCP` |
 | Each page, with `Accept: text/markdown` | The Markdown of the page, with `Content-Type: text/markdown` and `Vary: Accept`. A browser gets the HTML. Each page also has its Markdown at `<path>/index.md` |
-| Each page | A `Link` header (RFC 8288) to the API Catalog, the catalog of the HTTP API, the Server Card, the docs, `llms.txt`, the agent skills, the sitemap and the Markdown of the page |
+| Each page that exists | A `Link` header (RFC 8288) to the API Catalog, the catalog of the HTTP API, the Server Card, the docs, `llms.txt`, the agent skills, the sitemap and the Markdown of the page |
 | `/llms.txt`, `/llms-full.txt` | An index of the pages for language models, and the Markdown of every page in one file |
 | `/.well-known/api-catalog` | The API Catalog of RFC 9727: the HTTP API and the MCP server, with their descriptions and docs |
 | `/.well-known/mcp/server-card.json` | The Server Card of `/mcp/server-card` |
-| `/.well-known/ai-catalog.json` | The AI Catalog of Agentic Resource Discovery: the MCP server and the agent skill |
+| `/.well-known/ai-catalog.json` | The AI Catalog of Agentic Resource Discovery: the MCP server and the agent skill. The identifier of the host is the origin of the site. The type of the skill is `application/gzip`, the media type that the Agent Skills Discovery RFC gives to a `.tar.gz` archive |
 | `/.well-known/agent-skills/index.json` | The Agent Skills Discovery index (0.2.0). It lists the skill `skills/acid-cat` of the repository as a `.tar.gz` archive, with its SHA-256 digest. The build makes the archive from the files of the skill |
 
 `src/lib/agent/files.ts` writes the Markdown of each page, `/content.json`, `llms.txt`, `llms-full.txt` and the agent skills after `astro build`. The Markdown of each page comes from its built HTML, so the components of the docs, such as the language tabs, keep their content. The homepage has its own Markdown, `src/lib/agent/home.md`.

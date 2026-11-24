@@ -21,6 +21,7 @@ const types: Record<string, string> = {
   ".json": "application/json",
   ".md": "text/markdown; charset=utf-8",
   ".txt": "text/plain; charset=utf-8",
+  ".gz": "application/gzip",
 };
 
 const resolveFile = async (url: string): Promise<string | undefined> => {

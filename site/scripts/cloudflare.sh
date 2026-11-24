@@ -21,4 +21,5 @@ if ! command -v proto >/dev/null 2>&1; then
 fi
 
 for tool in node pnpm moon; do proto install "$tool"; done
+pnpm install --frozen-lockfile
 moon exec --ci false --ignore-ci-checks --force "$task"

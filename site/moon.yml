@@ -85,6 +85,14 @@ tasks:
       cache: false
       runInCI: false
 
+  advertised:
+    description: "Fetch each URL that llms.txt, the well-known documents and the Link header list, from the origin that follows --, and fail when one does not answer 200 with the type that it needs."
+    command: "node"
+    args: ["scripts/check-advertised.ts"]
+    options:
+      cache: false
+      runInCI: false
+
   test:
     deps: ["build", "tokens-check"]
     description: "Test the geometry of the art, render the homepage in Chromium at desktop and phone widths, and call the AcidCat app of the site through the Worker, MCP, HTTP and WebMCP."

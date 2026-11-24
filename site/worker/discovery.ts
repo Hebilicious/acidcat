@@ -58,7 +58,7 @@ export const aiCatalog = (origin: string): object => {
   const host = new URL(origin).hostname;
   return {
     specVersion: "1.0",
-    host: { displayName: "AcidCat", identifier: `did:web:${host}` },
+    host: { displayName: "AcidCat", identifier: origin },
     entries: [
       {
         identifier: `urn:air:${host}:server:acidcat-site`,
@@ -72,7 +72,7 @@ export const aiCatalog = (origin: string): object => {
         identifier: `urn:air:${host}:skill:acid-cat`,
         displayName: "acid-cat agent skill",
         description: "Tells a coding agent how to build an application with AcidCat.",
-        type: "application/agent-skills+gzip",
+        type: "application/gzip",
         url: `${origin}/.well-known/agent-skills/acid-cat.tar.gz`,
         representativeQueries: ["Add a capability to an AcidCat catalog", "Expose my application to agents through MCP and WebMCP"],
       },

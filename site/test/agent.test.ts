@@ -12,6 +12,7 @@ import { chromium } from "playwright";
 import { site, toJsonSchema } from "../src/lib/agent/app.ts";
 import { siteContext, SiteContent } from "../src/lib/agent/content.ts";
 import { catalogPath } from "../src/lib/agent/write-catalog.ts";
+import { checkAdvertised } from "../scripts/advertised.ts";
 import { handle, siteHandlers } from "../worker/index.ts";
 import { builtPages, dist, serveDist } from "./static-server.ts";
 import type { StaticServer } from "./static-server.ts";
@@ -28,7 +29,7 @@ before(async () => {
     return fetch(`${files.origin}${url.pathname}`, { method: request.method });
   };
   const context = siteContext((path) => fromDist(new Request(new URL(path, files.origin))));
-  worker = await serve(handle(siteHandlers(context), { fetch: fromDist }), { port: 0 });
+  worker = await serve(handle(() => siteHandlers(context), { fetch: fromDist }), { port: 0 });
   origin = worker.url;
 });
 
@@ -91,6 +92,12 @@ test("a page answers with Markdown to a client that prefers it, and with HTML an
   for (const relation of ['rel="api-catalog"', 'rel="service-desc"', 'rel="service-doc"', 'rel="describedby"', '</index.md>; rel="alternate"; type="text/markdown"']) {
     assert.ok(links.includes(relation), `the Link header has ${relation}`);
   }
+
+  for (const accept of ["text/html", "text/markdown"]) {
+    const missing = await fetch(`${origin}/docs/no-such-page/`, { headers: { Accept: accept } });
+    assert.equal(missing.status, 404);
+    assert.equal(missing.headers.get("Link"), null, `a missing page has no Link header for ${accept}`);
+  }
 });
 
 test("the well-known documents point at the MCP server and the HTTP API of the site", async () => {
@@ -105,10 +112,26 @@ test("the well-known documents point at the MCP server and the HTTP API of the s
   assert.equal(ai.response.headers.get("Access-Control-Allow-Origin"), "*");
   const entries = Array.isArray(ai.body["entries"]) ? ai.body["entries"] : [];
   assert.ok(entries.length > 0 && entries.every((entry: unknown) => isRecord(entry) && ("url" in entry) !== ("data" in entry)), "each entry has exactly one of url and data");
+  assert.ok(isRecord(ai.body["host"]) && ai.body["host"]["identifier"] === origin, "the host identifier is the origin of the site");
+  for (const entry of entries) {
+    if (!isRecord(entry) || typeof entry["url"] !== "string" || typeof entry["type"] !== "string") throw new Error("An entry has no url or type.");
+    const artifact = await fetch(entry["url"]);
+    await artifact.body?.cancel();
+    assert.ok((artifact.headers.get("Content-Type") ?? "").startsWith(entry["type"]), `${entry["url"]} is served as ${entry["type"]}`);
+  }
 
   const wellKnown = await getJson("/.well-known/mcp/server-card.json");
   const card = await getJson("/mcp/server-card");
   assert.deepEqual(wellKnown.body, card.body);
+});
+
+test("each URL that the documents for agents and the Link header list answers with the type that it needs", async () => {
+  const results = await checkAdvertised(origin, (input, init) => fetch(input, init));
+  assert.ok(results.some((result) => result.path === "/api") && results.some((result) => result.path.endsWith(".tar.gz")) && results.some((result) => result.path.endsWith("index.md")));
+  assert.deepEqual(
+    results.filter((result) => result.problem !== undefined).map((result) => `${result.path}: ${result.problem}`),
+    [],
+  );
 });
 
 test("an MCP client lists and calls the tools of the site", async () => {
