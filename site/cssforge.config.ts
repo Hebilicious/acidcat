@@ -51,11 +51,11 @@ export default defineConfig({
       value: {
         family: {
           value: {
-            display: '"Monaspace Xenon", ui-monospace, "SFMono-Regular", Menlo, monospace',
-            accent: '"Monaspace Radon", "Monaspace Xenon", ui-monospace, monospace',
-            sans: '"Monaspace Argon", ui-monospace, "SFMono-Regular", Menlo, monospace',
-            label: '"Monaspace Krypton", ui-monospace, "SFMono-Regular", Menlo, monospace',
-            mono: '"Monaspace Neon", ui-monospace, "SFMono-Regular", Menlo, monospace',
+            display: '"Monaspace Xenon", monospace',
+            accent: '"Monaspace Radon", "Monaspace Xenon", monospace',
+            sans: '"Monaspace Argon", monospace',
+            label: '"Monaspace Krypton", monospace',
+            mono: '"Monaspace Neon", monospace',
           },
         },
         tracking: {
