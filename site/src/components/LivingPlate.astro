@@ -76,9 +76,8 @@ const alt = "A mechanical brass cat with glowing acid-green eyes sits on a brass
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (reduced.matches) continue;
 
-    const large = root.clientWidth * Math.min(window.devicePixelRatio, 1.75) > 1900;
     const format = () => (still.currentSrc.endsWith(".avif") ? "avif" : "webp");
-    const sources = () => ({ artPad: art.pad, plate: large ? "/hero/plate@2x.webp" : `/hero/plate.${format()}`, clean: `/hero/clean.${format()}`, data: "/hero/data.webp" });
+    const sources = () => ({ artPad: art.pad, plate: still.currentSrc, clean: `/hero/clean.${format()}`, data: "/hero/data.webp" });
     still.decode().catch(() => undefined).then(() => createPlate(canvas, sources(), framing)).then(
       (plate) => {
         if (plate === undefined) {

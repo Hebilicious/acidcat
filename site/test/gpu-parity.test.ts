@@ -37,6 +37,7 @@ interface Case {
 
 const cases: readonly Case[] = [
   { name: "the hero at 1440px, after three seconds", viewport: { width: 1440, height: 900 }, reducedMotion: "no-preference", region: "[data-plate] canvas", backendOf: "[data-plate]" },
+  { name: "the hero at 1800px, from the plate at twice the resolution", viewport: { width: 1800, height: 900 }, reducedMotion: "no-preference", region: "[data-plate] canvas", backendOf: "[data-plate]" },
   { name: "the hero at 390px, after three seconds", viewport: { width: 390, height: 844 }, reducedMotion: "no-preference", region: "[data-plate] canvas", backendOf: "[data-plate]" },
   { name: "the wide Fig. 1 at 1440px, still", viewport: { width: 1440, height: 900 }, reducedMotion: "reduce", region: ".holo-canvas", backendOf: ".engine-stage", scroll: ".engine-stage" },
   { name: "the tall Fig. 1 at 390px, still", viewport: { width: 390, height: 844 }, reducedMotion: "reduce", region: ".holo-canvas", backendOf: ".engine-stage", scroll: ".engine-stage" },
@@ -88,6 +89,11 @@ const capture = async (origin: string, item: Case, backend: Backend): Promise<{ 
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  const plates: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/hero/plate")) plates.push(path);
+  });
   if (item.reducedMotion === "no-preference") {
     await page.clock.install({ time: 0 });
     await page.clock.pauseAt(1000);
@@ -104,8 +110,13 @@ const capture = async (origin: string, item: Case, backend: Backend): Promise<{ 
   await page.waitForTimeout(1500);
   const image = await page.locator(item.region).first().screenshot({ animations: "allow" });
   const used = await page.locator(item.backendOf).first().evaluate((element) => (element instanceof HTMLElement ? element.dataset["gpu"] : undefined));
+  const region = await page.locator(item.region).first().boundingBox();
   await context.close();
   assert.deepEqual(errors, []);
+  if (item.backendOf === "[data-plate]") {
+    assert.deepEqual([...new Set(plates)].length, 1, `the hero loads one plate, not ${[...new Set(plates)].join(" and ")}`);
+    assert.ok(region !== null && region.width >= item.viewport.width - 1, "the live hero fills the width");
+  }
   return { image, backend: used };
 };
 
