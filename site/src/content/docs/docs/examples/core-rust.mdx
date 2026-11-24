@@ -7,25 +7,23 @@ sidebar:
 tableOfContents: false
 ---
 
+import ExampleBlock from "../../../../components/docs/ExampleBlock.astro";
 import CodeExplorer from "../../../../components/docs/CodeExplorer.astro";
 import FileLink from "../../../../components/docs/FileLink.astro";
 
 <FileLink file="core-rust/src/main.rs" /> defines the application with `acid-cat-core` and serves it as one program. Its tests open the `app` target through the Rust binding.
 
-Build the program, then run it from `examples/aircon`:
+Run it from `examples/aircon`. `cargo run` builds the program first:
 
-```sh
-cargo build --manifest-path core-rust/Cargo.toml
-core-rust/target/debug/aircon cli aircon fan set --speed high
-core-rust/target/debug/aircon serve 0.0.0.0:8082
-AIRCON_URL=http://localhost:8082/cli core-rust/target/debug/aircon cli aircon power set --on
-```
+<ExampleBlock section="The command line" match="core-rust/" />
+
+Build the program once with `cargo build --manifest-path core-rust/Cargo.toml`. Then serve the command line to another process, and send a call to it:
+
+<ExampleBlock section="Control a unit in another process" match="8082" />
 
 Give this command to an MCP client, with the root of the repository as its working directory:
 
-```sh
-examples/aircon/core-rust/target/debug/aircon mcp-stdio
-```
+<ExampleBlock section="MCP server through stdio" match="core-rust/" />
 
 <CodeExplorer open="core-rust/src/main.rs" />
 

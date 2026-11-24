@@ -7,6 +7,7 @@ sidebar:
 tableOfContents: false
 ---
 
+import ExampleBlock from "../../../../components/docs/ExampleBlock.astro";
 import CodeExplorer from "../../../../components/docs/CodeExplorer.astro";
 import FileLink from "../../../../components/docs/FileLink.astro";
 
@@ -16,10 +17,7 @@ The page shows the status of the unit, with controls for each setting. It regist
 
 Serve a page from `examples/aircon`, and open the URL that it prints:
 
-```sh
-node core-ts/serve-page.ts
-node core-effect/serve-page.ts
-```
+<ExampleBlock section="WebMCP" />
 
 Without WebMCP in the browser, the controls work and the status reads `no host`.
 

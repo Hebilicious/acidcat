@@ -1,5 +1,5 @@
 ---
-import { highlight } from "../lib/snippets.ts";
+import { highlight } from "../lib/highlight.ts";
 
 const renders = import.meta.glob<string>("../assets/surfaces/*.webp", { query: "?url", import: "default", eager: true });
 const render = (id: string) => {

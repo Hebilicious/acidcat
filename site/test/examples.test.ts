@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
@@ -7,6 +7,7 @@ import type { Browser, Page } from "playwright";
 import { catalogLanguages, cores } from "../src/lib/ecosystem.ts";
 import { exampleFiles, exampleNames, fileTree, fragmentUrl, requireExampleFile } from "../src/lib/example-files.ts";
 import type { TreeNode } from "../src/lib/example-files.ts";
+import { fences, pickFence } from "../src/lib/markdown-fences.ts";
 import { builtPages, dist, serveDist } from "./static-server.ts";
 import type { StaticServer } from "./static-server.ts";
 
@@ -72,6 +73,23 @@ test("the example files come from git, without build output, dependencies or loc
   );
 });
 
+test("the Examples pages copy no code block of the example README, and read it instead", async () => {
+  const readme = await readFile(join(repository, "examples/aircon/README.md"), "utf8");
+  const readmeLines = new Set(fences(readme).flatMap((fence) => fence.code.split("\n").map((line) => line.trim()).filter((line) => line !== "")));
+  const copies: string[] = [];
+  const directory = new URL("../src/content/docs/docs/examples/", import.meta.url).pathname;
+  for (const name of await readdir(directory)) {
+    for (const fence of fences(await readFile(join(directory, name), "utf8"))) {
+      for (const line of fence.code.split("\n")) if (readmeLines.has(line.trim())) copies.push(`${name}: ${line}`);
+    }
+  }
+  assert.deepEqual(copies, [], "Use <ExampleBlock> to show a code block of the README.");
+  const markdown = "## Run\n\n```sh\ncurl -N a \\\n  -d b\ncurl c\nnode d\n```\n";
+  assert.equal(pickFence(markdown, { section: "Run", match: "curl" }, "x").code, "curl -N a \\\n  -d b\ncurl c");
+  assert.throws(() => pickFence(markdown, { section: "Other" }, "x"), /heading "Other"/);
+  assert.throws(() => pickFence(markdown, { section: "Run", match: "missing" }, "x"), /"missing"/);
+});
+
 test("every file that an Examples page points to exists, and has its fragment in the build", async () => {
   const pages = await examplePages();
   assert.ok(pages.length > 1);
@@ -121,6 +139,24 @@ test("selecting a file shows its code, its GitHub link and its deep link", async
   await close(page);
 });
 
+test("a file that failed to load loads when the reader selects it again", async () => {
+  const page = await open("/docs/examples/core-ts/");
+  const url = `${origin}${fragmentUrl("aircon", "apis/graphql.ts")}`;
+  let requests = 0;
+  await page.route(url, (route) => {
+    requests += 1;
+    return requests === 1 ? route.abort() : route.continue();
+  });
+  const item = page.locator('[role="treeitem"][data-path="apis/graphql.ts"]');
+  await page.locator('[role="treeitem"][data-path="apis"] > .row').click();
+  await item.click();
+  await page.waitForFunction(() => document.querySelector("[data-source]")?.textContent?.startsWith("Could not load") === true);
+  await item.click();
+  await page.waitForFunction(() => document.querySelector("[data-source] code")?.textContent?.includes("graphql") === true);
+  assert.equal(requests, 2);
+  await close(page);
+});
+
 test("a deep link to a file survives a reload", async () => {
   const page = await open("/docs/examples/catalog/#file=core-rust/src/main.rs");
   const item = page.locator('[role="treeitem"][data-path="core-rust/src/main.rs"]');
@@ -133,6 +169,25 @@ test("a deep link to a file survives a reload", async () => {
   await close(page);
 });
 
+test("long lines wrap under the code, with the line number on the first row", async () => {
+  for (const width of [390, 1440]) {
+    const page = await open("/docs/examples/core-ts/", { width, height: 900 });
+    const layout = await page.locator("[data-source] .line").evaluateAll((lines) => {
+      const wrapped = lines.find((line) => line.getClientRects().length === 1 && line.getBoundingClientRect().height > 1.5 * Number.parseFloat(getComputedStyle(line).lineHeight));
+      if (wrapped === undefined) return undefined;
+      const range = document.createRange();
+      range.selectNodeContents(wrapped);
+      const rows = [...range.getClientRects()].filter((rect) => rect.width > 0);
+      const first = rows[0];
+      return { lineTop: wrapped.getBoundingClientRect().top, lineHeight: Number.parseFloat(getComputedStyle(wrapped).lineHeight), firstTop: first?.top ?? Number.NaN, codeLeft: first?.left ?? Number.NaN, minLeft: Math.min(...rows.map((rect) => rect.left)) };
+    });
+    assert.ok(layout !== undefined, `${width}: a line wraps`);
+    assert.ok(layout.firstTop - layout.lineTop < layout.lineHeight / 2, `${width}: the number and the code start on the same row`);
+    assert.ok(layout.minLeft >= layout.codeLeft - 1, `${width}: the wrapped rows start under the code`);
+    await close(page);
+  }
+});
+
 test("the tree follows the keyboard pattern of a WAI-ARIA tree", async () => {
   const page = await open("/docs/examples/core-ts/");
   const focused = (): Promise<string | undefined> => page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.dataset["path"] : undefined));
@@ -140,7 +195,9 @@ test("the tree follows the keyboard pattern of a WAI-ARIA tree", async () => {
   await page.locator('[role="treeitem"][data-path="core-ts/aircon.ts"]').focus();
   await page.keyboard.press("ArrowDown");
   assert.equal(await focused(), "core-ts/cli.ts");
-  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  assert.equal(await focused(), "core-ts/aircon.ts", "focus returns to the selected item");
   await page.keyboard.press("ArrowLeft");
   assert.equal(await focused(), "core-ts");
   await page.keyboard.press("ArrowLeft");
@@ -178,6 +235,7 @@ test("the Examples pages have no sideways scroll at 390px, with the drawer of fi
   for (const path of ["/docs/examples/", "/docs/examples/core-ts/", "/docs/examples/catalog/", "/docs/examples/graphql/"]) {
     const page = await open(path, { width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390, path);
+    assert.equal(await page.locator("[data-source] pre").evaluate((pre) => pre.scrollWidth - pre.clientWidth), 0, `${path}: the code does not scroll sideways`);
     assert.equal(await page.locator('[role="tree"]').isVisible(), false, path);
     await page.locator("[data-tree-toggle]").click();
     assert.equal(await page.locator('[role="tree"]').isVisible(), true, path);

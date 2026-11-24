@@ -7,26 +7,18 @@ sidebar:
 tableOfContents: false
 ---
 
+import ExampleBlock from "../../../../components/docs/ExampleBlock.astro";
 import CodeExplorer from "../../../../components/docs/CodeExplorer.astro";
 import FileLink from "../../../../components/docs/FileLink.astro";
 
 <FileLink file="apis/capnweb.ts" /> is a class with typed methods. `followStatus(listener)` calls the function of the client with each new status, until the client disposes the result. A failure is `{ ok: false, error }`.
 
-Run it from `examples/aircon`. It listens on `http://127.0.0.1:3000`, and on `ws://127.0.0.1:3001/rpc`:
+Run it from `examples/aircon` with the name `capnweb`. It listens on `http://127.0.0.1:3000`, and on `ws://127.0.0.1:3001/rpc`:
 
-```sh
-node apis/main.ts capnweb
-```
+<ExampleBlock section="Run an API" match="apis/main.ts" />
 
 A client:
 
-```ts
-import { newWebSocketRpcSession } from "capnweb";
-import type { AirconApi } from "./apis/capnweb.ts";
-
-using api = newWebSocketRpcSession<AirconApi>("ws://127.0.0.1:3001/rpc");
-using following = await api.followStatus((status) => console.log(status));
-await api.setPower(true);
-```
+<ExampleBlock section="Run an API" language="ts" />
 
 <CodeExplorer open="apis/capnweb.ts" />

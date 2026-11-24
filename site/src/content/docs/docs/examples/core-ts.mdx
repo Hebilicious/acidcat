@@ -7,6 +7,7 @@ sidebar:
 tableOfContents: false
 ---
 
+import ExampleBlock from "../../../../components/docs/ExampleBlock.astro";
 import CodeExplorer from "../../../../components/docs/CodeExplorer.astro";
 import FileLink from "../../../../components/docs/FileLink.astro";
 
@@ -14,18 +15,15 @@ import FileLink from "../../../../components/docs/FileLink.astro";
 
 Run it from `examples/aircon`:
 
-```sh
-node core-ts/cli.ts aircon power set --on
-node core-ts/cli.ts list
-node core-ts/serve.ts 0.0.0.0:8080
-AIRCON_URL=http://localhost:8080/cli node core-ts/cli.ts aircon status get
-```
+<ExampleBlock section="The command line" match="core-ts/" />
+
+Serve the command line to another process, and send a call to it:
+
+<ExampleBlock section="Control a unit in another process" match="8080" />
 
 Give this command to an MCP client, with the root of the repository as its working directory:
 
-```sh
-node examples/aircon/core-ts/mcp-stdio.ts
-```
+<ExampleBlock section="MCP server through stdio" match="core-ts/" />
 
 <CodeExplorer open="core-ts/aircon.ts" />
 

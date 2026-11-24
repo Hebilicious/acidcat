@@ -7,15 +7,18 @@ sidebar:
 tableOfContents: false
 ---
 
+import ExampleBlock from "../../../../components/docs/ExampleBlock.astro";
 import CodeExplorer from "../../../../components/docs/CodeExplorer.astro";
 import FileLink from "../../../../components/docs/FileLink.astro";
 
 <FileLink file="apis/mcp.ts" /> serves two tools at `/mcp`: `get_status` and `set_controls`. `Mcp.withEvents` from `@acid-cat/core-effect` adds the [MCP events extension](/spec/bindings/mcp/#events) for `aircon.status.changed`. The API also serves the MCP binding at `/capabilities/mcp` and `/capabilities/mcp-legacy`.
 
-Run it from `examples/aircon`. It listens on `http://127.0.0.1:3000`:
+Run it from `examples/aircon` with the name `mcp`. It listens on `http://127.0.0.1:3000`:
 
-```sh
-node apis/main.ts mcp
-```
+<ExampleBlock section="Run an API" match="apis/main.ts" />
+
+Follow `aircon.status.changed` through `events/stream`:
+
+<ExampleBlock section="Run an API" match="3000/mcp" />
 
 <CodeExplorer open="apis/mcp.ts" />
