@@ -94,6 +94,7 @@ export default defineConfig({
             { label: "Concepts", items: [{ autogenerate: { directory: "docs/concepts" } }] },
             { label: "Guides", items: [{ autogenerate: { directory: "docs/guides" } }] },
             { label: "Reference", items: [{ autogenerate: { directory: "docs/reference" } }] },
+            { label: "Examples", items: [{ autogenerate: { directory: "docs/examples" } }] },
           ],
         },
         { label: "Specification", items: specItems },

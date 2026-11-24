@@ -1,0 +1,27 @@
+---
+import { catalogLanguages } from "../../lib/ecosystem.ts";
+import { requireExampleFile } from "../../lib/example-files.ts";
+
+const prefix = "examples/aircon/";
+const rows = catalogLanguages.map((language) => {
+  if (!language.example.startsWith(prefix)) throw new Error(`site/src/lib/ecosystem.ts gives ${language.example} for ${language.label}, which is not in ${prefix}.`);
+  return { language, file: requireExampleFile("aircon", language.example.slice(prefix.length), Astro.url.pathname) };
+});
+---
+
+<table>
+  <thead>
+    <tr><th>Language</th><th>Source</th><th>Write the JSON, from <code>catalog/</code></th></tr>
+  </thead>
+  <tbody>
+    {
+      rows.map(({ language, file }) => (
+        <tr>
+          <td>{language.label}</td>
+          <td><a href={`#file=${file}`} data-file-link><code>{file}</code></a></td>
+          <td>{language.write.map((command) => <code>{command}</code>)}</td>
+        </tr>
+      ))
+    }
+  </tbody>
+</table>

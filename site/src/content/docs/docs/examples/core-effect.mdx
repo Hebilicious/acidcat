@@ -1,0 +1,32 @@
+---
+title: The air conditioner on the Effect core
+description: The air conditioner on @acid-cat/core-effect, written in Effect. A command line, an MCP server through stdio, a remote command-line server and a web page.
+sidebar:
+  order: 3
+  label: Effect core
+tableOfContents: false
+---
+
+import CodeExplorer from "../../../../components/docs/CodeExplorer.astro";
+import FileLink from "../../../../components/docs/FileLink.astro";
+
+<FileLink file="core-effect/aircon.ts" /> defines the same application as the TypeScript core, with `@acid-cat/core-effect` and Effect Schema. Capabilities are Effect programs, and the unit is a service. <FileLink file="core-effect/output.ts" /> formats the human output of the command line.
+
+Run it from `examples/aircon`:
+
+```sh
+node core-effect/cli.ts aircon mode set --mode heat
+node core-effect/cli.ts status --json
+node core-effect/serve.ts 0.0.0.0:8081
+AIRCON_URL=http://localhost:8081/cli node core-effect/cli.ts aircon power set --on
+```
+
+Give this command to an MCP client, with the root of the repository as its working directory:
+
+```sh
+node examples/aircon/core-effect/mcp-stdio.ts
+```
+
+<CodeExplorer open="core-effect/aircon.ts" />
+
+See [Serve with the Effect core](/docs/guides/serve-with-core-effect/).

@@ -1,0 +1,32 @@
+---
+title: The air conditioner on the Rust core
+description: The air conditioner on acid-cat-core, as one Rust program with the subcommands cli, mcp-stdio and serve.
+sidebar:
+  order: 4
+  label: Rust core
+tableOfContents: false
+---
+
+import CodeExplorer from "../../../../components/docs/CodeExplorer.astro";
+import FileLink from "../../../../components/docs/FileLink.astro";
+
+<FileLink file="core-rust/src/main.rs" /> defines the application with `acid-cat-core` and serves it as one program. Its tests open the `app` target through the Rust binding.
+
+Build the program, then run it from `examples/aircon`:
+
+```sh
+cargo build --manifest-path core-rust/Cargo.toml
+core-rust/target/debug/aircon cli aircon fan set --speed high
+core-rust/target/debug/aircon serve 0.0.0.0:8082
+AIRCON_URL=http://localhost:8082/cli core-rust/target/debug/aircon cli aircon power set --on
+```
+
+Give this command to an MCP client, with the root of the repository as its working directory:
+
+```sh
+examples/aircon/core-rust/target/debug/aircon mcp-stdio
+```
+
+<CodeExplorer open="core-rust/src/main.rs" />
+
+See [Serve with the Rust core](/docs/guides/serve-with-core-rust/).
