@@ -10,7 +10,8 @@ const viewport = { width: 1350, height: 940 } as const;
 export type Navigation = "same document" | "new document" | "back/forward cache";
 
 export type InteractionMetrics = {
-  readonly ready: number | undefined;
+  readonly tabResponds: number | undefined;
+  readonly searchResponds: number | undefined;
   readonly tabSwitch: number | undefined;
   readonly searchOpen: number | undefined;
   readonly changeCold: number | undefined;
@@ -20,16 +21,25 @@ export type InteractionMetrics = {
   readonly backNavigation: Navigation | undefined;
 };
 
+/** From the start of the navigation, the probe clicks `click` every 50 ms until `done` matches a visible element. */
+interface Repeat {
+  readonly click: string;
+  readonly done: string;
+  /** `click`: the time of the click after which `done` matched. `paint`: the time of the first paint that shows `done`. */
+  readonly time: "click" | "paint";
+  readonly key: string;
+}
+
 interface ProbeConfig {
-  readonly readyTab: string | undefined;
-  readonly readySelected: string | undefined;
+  readonly repeat: Repeat | undefined;
 }
 
 /**
  * Runs in each document before its own scripts. It records the time of each real pointer press, and it watches for
  * the element that a measure waits for. Both go to sessionStorage, which lives on through a page change that loads a
- * new document. With `readyTab`, it clicks that tab every 50 ms until a click selects it: the page then responds to a
- * click. The probe sends the events of a real click, and keeps a link from following its `href` while no script does.
+ * new document. With `repeat`, it clicks an element every 50 ms until another element shows: a tab until it is selected,
+ * or the search button until the search field shows. The probe sends the events of a real click, and keeps a link from
+ * following its `href` while no script does.
  */
 const probe = (config: ProbeConfig): void => {
   const now = (): number => performance.timeOrigin + performance.now();
@@ -60,18 +70,19 @@ const probe = (config: ProbeConfig): void => {
   addEventListener("pageshow", watch);
   watch();
 
-  const { readyTab, readySelected } = config;
-  if (readyTab === undefined || readySelected === undefined) return;
+  const { repeat } = config;
+  if (repeat === undefined) return;
   addEventListener("click", (event) => {
     if (event instanceof MouseEvent && event.detail === -1 && event.target instanceof Element && event.target.closest("a") !== null) event.preventDefault();
   });
   let lastClick = 0;
   const tick = (): void => {
-    if (document.querySelector(readySelected) !== null && lastClick > 0) {
-      store("bench:ready", lastClick);
+    if (lastClick > 0 && visible(repeat.done, undefined)) {
+      if (repeat.time === "click") store(repeat.key, lastClick);
+      else afterPaint(() => store(repeat.key, performance.now()));
       return;
     }
-    const tab = document.querySelector(readyTab);
+    const tab = document.querySelector(repeat.click);
     if (tab !== null) {
       lastClick = performance.now();
       const options = { bubbles: true, cancelable: true, composed: true, button: 0, detail: -1, view: window };
@@ -159,11 +170,23 @@ const clickAndMeasure = async (page: Page, click: string, selector: string, text
   return elapsed(page, done, "bench:input");
 };
 
-const firstVisit = async (browser: Browser, origin: string, target: Target): Promise<Pick<InteractionMetrics, "ready" | "tabSwitch" | "searchOpen">> => {
-  const { context, page } = await open(browser, { readyTab: target.tabs.tab(2), readySelected: target.tabs.selected(2) });
+/** From the start of the navigation, a click on the search button every 50 ms, until the first paint with the search field. The button needs the scripts of the framework in each app. */
+const searchResponds = async (browser: Browser, origin: string, target: Target): Promise<number | undefined> => {
+  if (target.search === undefined) return undefined;
+  const { context, page } = await open(browser, { repeat: { click: target.search.button, done: target.search.input, time: "paint", key: "bench:search-responds" } });
+  try {
+    await page.goto(`${origin}${target.search.path}`);
+    return await waitForKey(page, "bench:search-responds");
+  } finally {
+    await context.close();
+  }
+};
+
+const firstVisit = async (browser: Browser, origin: string, target: Target): Promise<Pick<InteractionMetrics, "tabResponds" | "tabSwitch" | "searchOpen">> => {
+  const { context, page } = await open(browser, { repeat: { click: target.tabs.tab(2), done: target.tabs.selected(2), time: "click", key: "bench:tab-responds" } });
   try {
     await page.goto(`${origin}${target.tabs.path}`);
-    const ready = await waitForKey(page, "bench:ready");
+    const tabResponds = await waitForKey(page, "bench:tab-responds");
     await page.waitForLoadState("load");
     await delay(2000);
     const tabSwitch = await clickAndMeasure(page, target.tabs.tab(3), target.tabs.selected(3));
@@ -175,7 +198,7 @@ const firstVisit = async (browser: Browser, origin: string, target: Target): Pro
       }
       searchOpen = await clickAndMeasure(page, target.search.button, target.search.input);
     }
-    return { ready, tabSwitch, searchOpen };
+    return { tabResponds, tabSwitch, searchOpen };
   } finally {
     await context.close();
   }
@@ -187,7 +210,7 @@ const firstVisit = async (browser: Browser, origin: string, target: Target): Pro
  * click comes 2 s later. After the prefetched change, Back, from the call to the first paint of the first page.
  */
 const pageChange = async (browser: Browser, origin: string, target: Target, prefetched: boolean): Promise<{ readonly change: number | undefined; readonly navigation: Navigation; readonly back?: number | undefined; readonly backNavigation?: Navigation }> => {
-  const { context, page } = await open(browser, { readyTab: undefined, readySelected: undefined });
+  const { context, page } = await open(browser, { repeat: undefined });
   try {
     await page.goto(`${origin}${target.change.from}`, { waitUntil: "load" });
     const link = page.locator(target.change.link).first();
@@ -217,10 +240,12 @@ const pageChange = async (browser: Browser, origin: string, target: Target, pref
 
 export const measureInteractions = async (browser: Browser, origin: string, target: Target): Promise<InteractionMetrics> => {
   const visit = await firstVisit(browser, origin, target);
+  const search = await searchResponds(browser, origin, target);
   const cold = await pageChange(browser, origin, target, false);
   const warm = await pageChange(browser, origin, target, true);
   return {
     ...visit,
+    searchResponds: search,
     changeCold: cold.change,
     changePrefetched: warm.change,
     back: warm.back,

@@ -5,6 +5,8 @@ export type LighthouseMetrics = {
   readonly score: number;
   readonly fcp: number;
   readonly lcp: number;
+  readonly observedFcp: number;
+  readonly observedLcp: number;
   readonly cls: number;
   readonly tbt: number;
   readonly speedIndex: number;
@@ -33,6 +35,15 @@ const numeric = (result: Result, id: string): number => {
   return value;
 };
 
+/** A value that Lighthouse measured in the trace of the load, with no simulation: the runner loads the page with no throttling. */
+const observed = (result: Result, key: "observedFirstContentfulPaint" | "observedLargestContentfulPaint"): number => {
+  const details: unknown = result.audits["metrics"]?.details;
+  const item: unknown = isRecord(details) && Array.isArray(details["items"]) ? details["items"][0] : undefined;
+  const value: unknown = isRecord(item) ? item[key] : undefined;
+  if (typeof value !== "number") throw new Error(`Lighthouse gave no value for ${key}.`);
+  return value;
+};
+
 export const networkRequests = (result: Result): readonly NetworkRequest[] => {
   const details: unknown = result.audits["network-requests"]?.details;
   const items = isRecord(details) && Array.isArray(details["items"]) ? details["items"] : [];
@@ -47,6 +58,8 @@ export const metricsOf = (result: Result, origin: string): LighthouseMetrics => 
     score: Math.round((result.categories["performance"]?.score ?? 0) * 100),
     fcp: numeric(result, "first-contentful-paint"),
     lcp: numeric(result, "largest-contentful-paint"),
+    observedFcp: observed(result, "observedFirstContentfulPaint"),
+    observedLcp: observed(result, "observedLargestContentfulPaint"),
     cls: numeric(result, "cumulative-layout-shift"),
     tbt: numeric(result, "total-blocking-time"),
     speedIndex: numeric(result, "speed-index"),

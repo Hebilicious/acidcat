@@ -53,11 +53,13 @@ interface Metric {
 
 export const lighthouseMetrics: readonly Metric[] = [
   { id: "score", label: "Performance score", unit: "score", better: "higher" },
-  { id: "fcp", label: "First Contentful Paint", unit: "ms", better: "lower" },
-  { id: "lcp", label: "Largest Contentful Paint", unit: "ms", better: "lower" },
+  { id: "fcp", label: "First Contentful Paint, simulated", unit: "ms", better: "lower" },
+  { id: "lcp", label: "Largest Contentful Paint, simulated", unit: "ms", better: "lower" },
+  { id: "observedFcp", label: "First Contentful Paint, observed", unit: "ms", better: "lower" },
+  { id: "observedLcp", label: "Largest Contentful Paint, observed", unit: "ms", better: "lower" },
   { id: "cls", label: "Cumulative Layout Shift", unit: "cls", better: "lower" },
-  { id: "tbt", label: "Total Blocking Time", unit: "ms", better: "lower" },
-  { id: "speedIndex", label: "Speed Index", unit: "ms", better: "lower" },
+  { id: "tbt", label: "Total Blocking Time, simulated", unit: "ms", better: "lower" },
+  { id: "speedIndex", label: "Speed Index, simulated", unit: "ms", better: "lower" },
   { id: "jsTransfer", label: "JavaScript transferred (Brotli)", unit: "kB", better: "lower" },
   { id: "jsDecoded", label: "JavaScript decoded", unit: "kB", better: "lower" },
   { id: "totalTransfer", label: "Total transferred", unit: "kB", better: "lower" },
@@ -66,7 +68,8 @@ export const lighthouseMetrics: readonly Metric[] = [
 ];
 
 export const interactionMetrics: readonly Metric[] = [
-  { id: "ready", label: "Ready: first click handled, from navigation start", unit: "ms", better: "lower" },
+  { id: "tabResponds", label: "Tab responds: navigation start to the first click that selects a tab", unit: "ms", better: "lower" },
+  { id: "searchResponds", label: "Search button responds: navigation start to the search field on screen, with a click every 50 ms", unit: "ms", better: "lower" },
   { id: "tabSwitch", label: "Tab switch: press to paint", unit: "ms", better: "lower" },
   { id: "searchOpen", label: "Search: press to search field on screen", unit: "ms", better: "lower" },
   { id: "changeCold", label: "Page change, cold: press to new page on screen", unit: "ms", better: "lower" },
@@ -127,6 +130,8 @@ export const summarize = (results: readonly RunResult[]): string => {
     `## ${first.title}`,
     "",
     `${results.length} jobs × ${first.runs} runs = ${runs} samples for each cell: the median, and the first to the third quartile. Lighthouse ${first.lighthouseVersion}, Chromium ${first.chromium}. The best median of each row is in bold.`,
+    "",
+    "A simulated value is what Lighthouse computes for a slow phone (slow 4G, 4× CPU) from the trace of the load. An observed value is in the trace itself: the runner loads the page with no throttling.",
     "",
   ];
   for (const page of pages) lines.push(`### First visit: \`${page}\`, Lighthouse on mobile`, "", ...metricTable(samples, targets, page, lighthouseMetrics), "");

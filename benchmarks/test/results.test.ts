@@ -30,7 +30,7 @@ const result = (job: string, framework: number, other: number): RunResult => ({
 test("the summary pools the jobs, and marks the best median of each row", () => {
   const text = summarize([result("1", 900, 1500), result("2", 1100, 1700), result("3", 1000, 1600)]);
   assert.match(text, /3 jobs × 1 runs = 3 samples/);
-  assert.match(text, /\| Largest Contentful Paint \(ms\) \| \*\*1000 \(950–1050\)\*\* \| 1600 \(1550–1650\) \|/);
+  assert.match(text, /\| Largest Contentful Paint, simulated \(ms\) \| \*\*1000 \(950–1050\)\*\* \| 1600 \(1550–1650\) \|/);
   assert.match(text, /\| Page change loads \| same document \(3\/3\) \| new document \(3\/3\) \|/);
 });
 
