@@ -75,7 +75,7 @@ const toggle = (stdout: string) =>
     .flatMap((entry) => (entry.kind === "capability" ? [entry] : []))
     .find((entry) => entry.id === "fixture.toggle");
 
-describe("the command line of an application", { concurrency: true }, () => {
+describe("the command line of an application", () => {
   test("a required repeated flag must occur, an empty JSON array gives no items, and the usage marks the repeated flags", async (t) => {
     const [missing, empty, list] = await Promise.all([
       cliWithRepeated(t, "probe", "plan"),
