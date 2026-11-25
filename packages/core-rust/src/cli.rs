@@ -20,6 +20,8 @@ use crate::subscription::Occurrence;
 #[cfg(test)]
 mod alias_cases;
 mod human;
+#[cfg(unix)]
+mod interrupts;
 mod output;
 mod output_generated;
 
@@ -444,8 +446,8 @@ pub async fn cli_main<C: Send + Sync + 'static>(
 
 /// Run the command line with arguments, on standard output and standard error. An interrupt (`SIGINT`) cancels the
 /// call or the subscription. If the process has not exited [`INTERRUPT_GRACE`] after the interrupt, or at a second
-/// interrupt, it exits with code 130. When the function returns with no interrupt, it no longer listens for interrupts.
-/// The result is the exit code.
+/// interrupt, it exits with code 130. When the function returns with no interrupt, it no longer listens for interrupts,
+/// and an interrupt acts on the process as it did before the call. The result is the exit code.
 pub async fn run_cli_process<C: Send + Sync + 'static>(
     app: Arc<Application<C>>,
     context: Arc<C>,
@@ -479,68 +481,96 @@ pub async fn run_cli_process<C: Send + Sync + 'static>(
 struct InterruptListener {
     interrupted: CancellationToken,
     stop: CancellationToken,
-    thread: Option<std::thread::JoinHandle<()>>,
+    #[cfg(unix)]
+    thread: Option<InterruptThread>,
+}
+
+/// A thread, so that a call or a subscription that blocks every thread of the runtime of the command line cannot hold
+/// back an interrupt.
+#[cfg(unix)]
+struct InterruptThread {
+    interrupts: interrupts::Interrupts,
+    reader: std::os::unix::net::UnixStream,
+    thread: std::thread::JoinHandle<()>,
 }
 
 impl Drop for InterruptListener {
     fn drop(&mut self) {
+        #[cfg(unix)]
+        let thread = self.thread.take();
         if self.interrupted.is_cancelled() {
+            #[cfg(unix)]
+            std::mem::forget(thread);
             return;
         }
         self.stop.cancel();
-        if let Some(thread) = self.thread.take() {
+        #[cfg(unix)]
+        if let Some(InterruptThread {
+            interrupts,
+            reader,
+            thread,
+        }) = thread
+        {
+            // A write to a socket whose reader has shut down raises `SIGPIPE`, so the interrupts stop first.
+            drop(interrupts);
+            let _ = reader.shutdown(std::net::Shutdown::Read);
             let _ = thread.join();
         }
     }
 }
 
+#[cfg(unix)]
+fn interrupt_thread(cancel: CancellationToken) -> Option<InterruptThread> {
+    use std::io::Read;
+    let (mut reader, writer) = std::os::unix::net::UnixStream::pair().ok()?;
+    let stop = reader.try_clone().ok()?;
+    let interrupts = interrupts::Interrupts::start(writer).ok()?;
+    let thread = std::thread::Builder::new()
+        .name("acid-cat-interrupts".to_owned())
+        .spawn(move || {
+            let mut interrupt = [0];
+            if !matches!(reader.read(&mut interrupt), Ok(1)) {
+                return;
+            }
+            cancel.cancel();
+            if !a_second_interrupt_came_during_the_cancellation(&mut reader) {
+                start_grace_period();
+                if !matches!(reader.read(&mut interrupt), Ok(1)) {
+                    return;
+                }
+            }
+            std::process::exit(exit::CANCELLED);
+        })
+        .ok()?;
+    Some(InterruptThread {
+        interrupts,
+        reader: stop,
+        thread,
+    })
+}
+
+#[cfg(unix)]
+fn a_second_interrupt_came_during_the_cancellation(
+    reader: &mut std::os::unix::net::UnixStream,
+) -> bool {
+    use std::io::Read;
+    let came = reader
+        .set_nonblocking(true)
+        .and_then(|()| reader.read(&mut [0]))
+        .is_ok_and(|read| read == 1);
+    let _ = reader.set_nonblocking(false);
+    came
+}
+
 fn listen_for_interrupt(cancel: CancellationToken) -> InterruptListener {
     let stop = CancellationToken::new();
     #[cfg(unix)]
-    {
-        // A thread with its own runtime, so that a call or a subscription that blocks every thread of the runtime of the
-        // command line cannot hold back an interrupt.
-        let (listening, listens) = std::sync::mpsc::channel();
-        let cancelled = cancel.clone();
-        let stopped = stop.clone();
-        let started = std::thread::Builder::new()
-            .name("acid-cat-interrupts".to_owned())
-            .spawn(move || {
-                use tokio::signal::unix::{SignalKind, signal};
-                let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                else {
-                    return;
-                };
-                runtime.block_on(stopped.run_until_cancelled_owned(async move {
-                    let Ok(mut interrupts) = signal(SignalKind::interrupt()) else {
-                        return;
-                    };
-                    let _ = listening.send(());
-                    if interrupts.recv().await.is_some() {
-                        cancelled.cancel();
-                        // A second interrupt that came while the cancellation ran exits at once, before the grace
-                        // period starts.
-                        if interrupts.recv().now_or_never().flatten().is_none() {
-                            start_grace_period();
-                            if interrupts.recv().await.is_none() {
-                                return;
-                            }
-                        }
-                        std::process::exit(exit::CANCELLED);
-                    }
-                }));
-            });
-        if let Ok(thread) = started
-            && listens.recv().is_ok()
-        {
-            return InterruptListener {
-                interrupted: cancel,
-                stop,
-                thread: Some(thread),
-            };
-        }
+    if let Some(thread) = interrupt_thread(cancel.clone()) {
+        return InterruptListener {
+            interrupted: cancel,
+            stop,
+            thread: Some(thread),
+        };
     }
     // `ctrl_c` puts its handler in place when it is first polled. Poll it once here, so that it is in place now.
     let mut interrupt = Box::pin(tokio::signal::ctrl_c());
@@ -561,6 +591,7 @@ fn listen_for_interrupt(cancel: CancellationToken) -> InterruptListener {
     InterruptListener {
         interrupted,
         stop,
+        #[cfg(unix)]
         thread: None,
     }
 }

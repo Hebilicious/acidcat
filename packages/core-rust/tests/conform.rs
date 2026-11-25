@@ -336,12 +336,19 @@ fn a_subscription_that_blocks_exits_with_130_after_the_grace_period_or_at_once_a
     ]);
 }
 
-/// Run `fixture echo` with `run_cli_process`, then go on as a host that counts interrupts and exits with 0 when its
-/// standard input ends. Give it two interrupts after the call returned. The result is the exit code and standard error.
 #[cfg(unix)]
-fn interrupted_after_the_call() -> (Option<i32>, String) {
+#[derive(Debug, PartialEq)]
+struct HostExit {
+    code: Option<i32>,
+    signal: Option<i32>,
+    stderr: String,
+}
+
+#[cfg(unix)]
+fn interrupted_after_the_call(mode: &str) -> HostExit {
+    use std::os::unix::process::ExitStatusExt;
     let mut child = Command::new(fixture())
-        .args(["cli-then-host", "fixture", "echo", "--text", "hi"])
+        .args([mode, "fixture", "echo", "--text", "hi"])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -374,7 +381,10 @@ fn interrupted_after_the_call() -> (Option<i32>, String) {
     let mut ended = false;
     if wait_for("returned") {
         interrupt();
-        if wait_for("interrupt 1") {
+        if mode == "cli-then-host-with-no-handler" {
+            drop(child.stdin.take());
+            ended = true;
+        } else if wait_for("interrupt 1") {
             interrupt();
             if wait_for("interrupt 2") {
                 drop(child.stdin.take());
@@ -390,18 +400,53 @@ fn interrupted_after_the_call() -> (Option<i32>, String) {
         written.push_str(&text);
         written.push('\n');
     }
-    (status.code(), written)
+    HostExit {
+        code: status.code(),
+        signal: status.signal(),
+        stderr: written,
+    }
 }
+
+#[cfg(unix)]
+const HOST_STILL_RUNNING: &str = "returned\ninterrupt 1\ninterrupt 2\nstill running\n";
 
 #[cfg(unix)]
 #[test]
 fn after_run_cli_process_returns_an_interrupt_does_not_exit_the_process() {
     assert_eq!(
-        interrupted_after_the_call(),
-        (
-            Some(0),
-            "returned\ninterrupt 1\ninterrupt 2\nstill running\n".to_owned()
-        )
+        interrupted_after_the_call("cli-then-host"),
+        HostExit {
+            code: Some(0),
+            signal: None,
+            stderr: HOST_STILL_RUNNING.to_owned()
+        }
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn after_run_cli_process_returns_an_interrupt_reaches_the_handler_that_the_host_had_before_the_call()
+ {
+    assert_eq!(
+        interrupted_after_the_call("host-then-cli"),
+        HostExit {
+            code: Some(0),
+            signal: None,
+            stderr: HOST_STILL_RUNNING.to_owned()
+        }
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn after_run_cli_process_returns_an_interrupt_ends_a_host_with_no_handler() {
+    assert_eq!(
+        interrupted_after_the_call("cli-then-host-with-no-handler"),
+        HostExit {
+            code: None,
+            signal: Some(libc::SIGINT),
+            stderr: "returned\n".to_owned()
+        }
     );
 }
 
