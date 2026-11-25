@@ -9,6 +9,7 @@
     "framework": "workspace:vaporpress@*",
     "shiki": "catalog:",
     "vite": "catalog:",
+    "vue-router": "catalog:",
     "vue": "catalog:"
   }
 }

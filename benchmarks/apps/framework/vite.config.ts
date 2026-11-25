@@ -9,6 +9,7 @@ export default defineConfig({
   plugins: vaporpress({
     root: fileURLToPath(new URL(".", import.meta.url)),
     app: "src/app.ts",
+    search: true,
     markdown: {
       highlight: (code, language) => highlighter.codeToHtml(code.replace(/\n$/, ""), { lang: language === "" ? "text" : language, themes: { light: "github-light", dark: "github-dark" } }),
     },

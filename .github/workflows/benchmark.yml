@@ -40,7 +40,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: moon run benchmarks:build site:build-framework
+      - run: moon run benchmarks:build site:build
 
       - id: main
         name: Build the VitePress site of main
@@ -71,7 +71,7 @@ jobs:
             benchmarks/apps/vitepress/.vitepress/dist/
             benchmarks/apps/starlight/dist/
             benchmarks/apps/nuxt/.output/public/
-            site/.out/framework/
+            site/dist/
             .tmp/site-vitepress/
             .tmp/site-astro/
 
@@ -114,7 +114,7 @@ jobs:
         working-directory: benchmarks
         run: >-
           node src/run.ts --suite ${{ matrix.suite }} --job ${{ matrix.job }} --runs ${{ inputs.runs || '5' }} --out results
-          --site-framework ../site/.out/framework --site-vitepress ../.tmp/site-vitepress --site-astro ../.tmp/site-astro
+          --site-framework ../site/dist --site-vitepress ../.tmp/site-vitepress --site-astro ../.tmp/site-astro
 
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -151,7 +151,7 @@ jobs:
           {
             echo "# Benchmark"
             echo
-            echo "Framework: ${HEAD_SHA::8}. VitePress site: main at ${MAIN_SHA::8}. Astro site: ${ASTRO_COMMIT::8}. No Nuxt build of the AcidCat site exists."
+            echo "vaporpress: ${HEAD_SHA::8}. VitePress site: main at ${MAIN_SHA::8}. Astro site: ${ASTRO_COMMIT::8}. No Nuxt build of the AcidCat site exists."
             echo
           } >> "$GITHUB_STEP_SUMMARY"
           node src/summarize.ts --results results --out results/summary.md

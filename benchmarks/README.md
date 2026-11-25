@@ -3,7 +3,7 @@
 This project measures what a reader sees on a documentation site. It compares vaporpress with VitePress, Astro Starlight and Nuxt Docus, in two suites:
 
 - **fixture**: the same small docs site in each framework. It shows the defaults of each framework.
-- **site**: the docs pages of the AcidCat site, in its three builds: the framework (`moon run site:build-framework`), VitePress (`main`, the site in production), and Astro Starlight (commit `fe26e301`). No Nuxt build of the AcidCat site exists.
+- **site**: the homepage and two docs pages of the AcidCat site, in its three builds: vaporpress (`moon run site:build`), VitePress (`main`, the site in production), and Astro Starlight (commit `fe26e301`). No Nuxt build of the AcidCat site exists.
 
 The workflow [`benchmark.yml`](../.github/workflows/benchmark.yml) runs both suites on GitHub's runners. It writes the tables to the summary of the run, and uploads the raw results.
 
@@ -22,7 +22,7 @@ The workflow [`benchmark.yml`](../.github/workflows/benchmark.yml) runs both sui
 | Total transferred, requests | The full cost of the first visit on a metered connection | The same requests. Requests to other origins are counted apart |
 | Ready | The time until a click works | From the start of the navigation, a probe clicks the second tab every 50 ms. The time of the first click that selects it. A click before that does nothing, so the probe does not change the page |
 | Tab switch | The delay of a click on a tab | A real click on the third tab, from the press to the first paint that shows it selected |
-| Search | The delay until the search field shows | A real click on the search button, from the press to the first paint that shows the field. The framework has no search yet, so it has no value |
+| Search | The delay until the search field shows | A real click on the search button, from the press to the first paint that shows the field |
 | Page change, cold | A click on a sidebar link, as soon as the page has loaded | From the press to the first paint with the `h1` of the new page. Only what the framework loaded before the click helps |
 | Page change, prefetched | The same click, after the pointer rested on the link for 2 s | The framework had the time to load the next page ahead |
 | Back | The Back button after the page change | From `history.back()` to the first paint with the `h1` of the first page |
@@ -39,12 +39,12 @@ Each table cell is the median of all the runs of all the jobs, and between brack
 
   | App | Setup | Tabs | Search |
   | --- | --- | --- | --- |
-  | [`apps/framework`](apps/framework/) | vaporpress, with a layout written for the benchmark (sidebar, table of contents), Shiki for code | Static HTML from Markdown, made interactive with `onPageUpdated` | None yet |
+  | [`apps/framework`](apps/framework/) | vaporpress, with a layout written for the benchmark (sidebar, table of contents, a search dialog), Shiki for code | Static HTML from Markdown, made interactive with `onPageUpdated` | The index and the engine of vaporpress, in a dialog that loads on the first click |
   | [`apps/vitepress`](apps/vitepress/) | VitePress 2 with its default theme | `::: code-group` | Local search |
   | [`apps/starlight`](apps/starlight/) | Astro and Starlight | `<Tabs>` in MDX | Pagefind |
   | [`apps/nuxt`](apps/nuxt/) | Nuxt, Nuxt Content and the Docus theme, statically generated with `nuxt generate` | `::code-group` | Docus search |
 
-  The framework has no theme. Its app has a smaller layout than the three themes: no dark mode switch, no mobile menu, no search, no copy button on code blocks. Read its numbers with this in mind.
+  The framework has no theme. Its app has a smaller layout than the three themes: no dark mode switch, no mobile menu, no copy button on code blocks, and a search dialog with only a field and a list of titles. Read its numbers with this in mind.
 - **Pinned versions.** The pnpm catalog pins each version. The Nuxt app uses the stable Vue and the `rolldown` that Nuxt asks for, from the catalog `nuxt`. One build-only fix applies: an override gives Starlight satteri 0.11, the version that Astro uses. Without it, the build of a page with tabs crashes. The pages that it writes do not change.
 - **One server.** [`src/server.ts`](src/server.ts) serves each build from memory in the same way: Brotli at quality 11 for text, compressed once before the first request; an ETag on each file; a year of cache for the hashed assets of the framework, and a check on each load for the rest. It is HTTP/1.1 on localhost.
 - **One runner for each job.** Each job measures every build of its suite on the same runner, in turns: run 1 starts with the first build, run 2 with the second, and so on. Each Lighthouse run and each probe starts in a new browser context, with an empty cache. The `build` job builds once, and each measure job downloads the same files.

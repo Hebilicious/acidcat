@@ -36,12 +36,12 @@ export const fixtureSuite: Suite = {
   title: "The same fixture in each framework",
   targets: [
     {
-      name: "framework",
+      name: "vaporpress",
       root: app("framework/dist"),
       immutable: ["/assets/"],
       pages: fixturePages("/"),
       tabs: { path: "/guide/installation/", tab: (n) => `.tabs [role="tab"]:nth-child(${n})`, selected: (n) => `.tabs [role="tab"]:nth-child(${n})[aria-selected="true"]` },
-      search: undefined,
+      search: { path: "/guide/installation/", button: "button.search-button", input: "dialog.search[open] input" },
       change: fixtureChange("nav.sidebar", "/"),
     },
     {
@@ -91,19 +91,19 @@ const siteChange = {
   backTitle: "Quick start",
 };
 
-const sitePages = { "quick-start": "/docs/quick-start/", catalog: "/docs/concepts/catalog/" };
+const sitePages = { home: "/", "quick-start": "/docs/quick-start/", catalog: "/docs/concepts/catalog/" };
 
 export const siteSuite = (roots: { readonly framework: string; readonly vitepress: string; readonly astro: string }): Suite => ({
   name: "site",
-  title: "The docs pages of the AcidCat site",
+  title: "The AcidCat site",
   targets: [
     {
-      name: "framework (#227)",
+      name: "vaporpress",
       root: roots.framework,
       immutable: ["/assets/"],
       pages: sitePages,
       tabs: siteTabs("/docs/quick-start/", ".tabs"),
-      search: undefined,
+      search: { path: "/docs/quick-start/", button: "button.search-button", input: "dialog.search-dialog[open] input" },
       change: siteChange,
     },
     {
