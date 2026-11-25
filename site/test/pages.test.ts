@@ -6,6 +6,12 @@ import { configFiles, contentType } from "../src/lib/content-types.ts";
 import { siteUrl as site } from "../src/lib/social.ts";
 import { builtPages, dist } from "./static-server.ts";
 
+test("the build writes the page of each URL in test/routes.txt, and no other page", async () => {
+  const expected = (await readFile(new URL("routes.txt", import.meta.url), "utf8")).split("\n").filter((line) => line !== "");
+  const built = (await builtPages()).map((file) => `/${file.slice(dist.length).replace(/index\.html$/, "")}`).sort();
+  assert.deepEqual(built, expected, "A page is gone, or a new page is not in test/routes.txt yet.");
+});
+
 test("every link to another website opens in a new tab", async () => {
   const offenders: string[] = [];
   for (const file of await builtPages()) {

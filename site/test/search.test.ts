@@ -102,8 +102,6 @@ test("the search marks the words that match, Enter goes to the selected result w
   await page.close();
 });
 
-const vaporpressOnly = { skip: process.env["SITE_BUILD"] === "framework" ? false : "the search of VitePress is its own" };
-
 const searchIndexRequests = (page: Page): string[] => {
   const requests: string[] = [];
   page.on("request", (request) => {
@@ -125,7 +123,7 @@ const openDocsPage = async (path = "/docs/quick-start/"): Promise<{ readonly pag
 
 const afterTwoFrames = (page: Page): Promise<void> => page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 
-test("the open search is an entry of the history: Back closes only the search and keeps the scroll, and a result replaces the entry", vaporpressOnly, async () => {
+test("the open search is an entry of the history: Back closes only the search and keeps the scroll, and a result replaces the entry", async () => {
   const { page, problems } = await openDocsPage();
   await page.evaluate(() => window.scrollTo(0, 600));
   await page.waitForFunction(() => window.scrollY === 600);
@@ -161,7 +159,7 @@ test("the open search is an entry of the history: Back closes only the search an
   await page.close();
 });
 
-test("/ opens the search, but not in a text field", vaporpressOnly, async () => {
+test("/ opens the search, but not in a text field", async () => {
   const { page, problems } = await openDocsPage();
   await page.evaluate(() => {
     const field = document.createElement("input");
@@ -180,7 +178,7 @@ test("/ opens the search, but not in a text field", vaporpressOnly, async () => 
   await page.close();
 });
 
-test("the page loads the search index only when the search opens", vaporpressOnly, async () => {
+test("the page loads the search index only when the search opens", async () => {
   const { page, problems, indexRequests } = await openDocsPage();
   await page.hover(".search-button");
   await page.focus(".search-button");
@@ -198,7 +196,7 @@ for (const viewport of [
   { width: 1440, height: 900 },
   { width: 390, height: 844 },
 ]) {
-  test(`at ${viewport.width}px, the open search with results passes every rule of axe-core`, vaporpressOnly, async () => {
+  test(`at ${viewport.width}px, the open search with results passes every rule of axe-core`, async () => {
     if (browser === undefined) throw new Error("No browser.");
     const page = await openPage(browser, { viewport });
     await page.goto(`${origin}/docs/quick-start/`, { waitUntil: "networkidle" });

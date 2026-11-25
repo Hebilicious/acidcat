@@ -107,7 +107,7 @@ tasks:
     description: "Test the geometry of the art, render the homepage in Chromium at desktop and phone widths, and call the AcidCat app of the site through the Worker, MCP, HTTP and WebMCP."
     command: "node"
     args: ["--test", "test/"]
-    inputs: ["src/**/*", "content/**/*", "vite.config.ts", "test/**/*.ts", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*", "/vaporpress/src/**/*"]
+    inputs: ["src/**/*", "content/**/*", "vite.config.ts", "test/**/*.ts", "test/routes.txt", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*", "/vaporpress/src/**/*"]
 
   typecheck:
     description: "Type-check the art geometry, the tests and the configuration."
