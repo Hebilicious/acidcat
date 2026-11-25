@@ -45,6 +45,7 @@ Each core is complete in its own style, and neither wraps the other. Both serve 
 | MCP server | `effect/ai/McpServer` | Built in |
 | Command line | `effect/cli` | Built in |
 | Node.js server | `NodeServer`, which serves in a scope | `serve` from `@acid-cat/core-ts/node` |
+| Client through a Unix socket | `NodeHttpClient.layerUndiciOptions` of `@effect/platform-node` | `unixSocketFetch` from `@acid-cat/core-ts/node` |
 | Availability and state | A `SubscriptionRef` | An observable source |
 | Handles for code without Effect | `Handles.make`, `Handles.open` | `createSession` |
 

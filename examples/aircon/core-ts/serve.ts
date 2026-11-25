@@ -11,5 +11,6 @@ if (match === null) {
 }
 const [, hostname = "", port = "0"] = match;
 const cli = httpHandler(aircon, { allowedOrigins: [], target: "cli", base: "/cli", context: { unit: new Unit() }, toJsonSchema });
-const served = await serve({ "/cli": cli }, { hostname: hostname.replace(/^\[(.*)\]$/, "$1"), port: Number(port) });
+const socket = process.env.AIRCON_SOCKET;
+const served = await serve({ "/cli": cli }, socket === undefined ? { hostname: hostname.replace(/^\[(.*)\]$/, "$1"), port: Number(port) } : { path: socket });
 process.stdout.write(`${served.url}/cli\n`);

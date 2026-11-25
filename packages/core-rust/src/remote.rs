@@ -299,8 +299,7 @@ impl<C: Send + Sync + 'static> Contexts<C> {
 pub struct Served {
     /// The address of the server, for example `127.0.0.1:40123`.
     pub address: SocketAddr,
-    stop: CancellationToken,
-    task: tokio::task::JoinHandle<()>,
+    running: Running,
 }
 
 impl Served {
@@ -310,6 +309,36 @@ impl Served {
     }
 
     pub async fn close(self) {
+        self.running.close().await;
+    }
+}
+
+/// A server that serves handlers on a Unix socket. `close` stops it and removes the socket file.
+pub struct UnixServed {
+    pub path: std::path::PathBuf,
+    running: Running,
+}
+
+impl UnixServed {
+    /// The base URL to give with the path of the socket, `http://localhost`. Each request uses it for its path and its
+    /// `Host` header.
+    pub fn url(&self) -> String {
+        "http://localhost".to_owned()
+    }
+
+    pub async fn close(self) {
+        self.running.close().await;
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+struct Running {
+    stop: CancellationToken,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl Running {
+    async fn close(self) {
         self.stop.cancel();
         let _ = self.task.await;
     }
@@ -323,6 +352,67 @@ pub type Routes = Vec<(String, Arc<dyn Handler>)>;
 pub async fn serve(address: SocketAddr, routes: Routes) -> std::io::Result<Served> {
     let listener = TcpListener::bind(address).await?;
     let address = listener.local_addr()?;
+    Ok(Served {
+        address,
+        running: run(listener, routes),
+    })
+}
+
+/// Serve handlers by path prefix on a new Unix socket at `path`. It fails when a file is at `path`. Give the client
+/// the path and the base URL `http://localhost`. On a system that is not Unix, it fails with an error of kind
+/// `Unsupported`.
+pub async fn serve_unix(
+    path: impl Into<std::path::PathBuf>,
+    routes: Routes,
+) -> std::io::Result<UnixServed> {
+    let path = path.into();
+    let running = run_unix(&path, routes)?;
+    Ok(UnixServed { path, running })
+}
+
+#[cfg(unix)]
+fn run_unix(path: &std::path::Path, routes: Routes) -> std::io::Result<Running> {
+    Ok(run(tokio::net::UnixListener::bind(path)?, routes))
+}
+
+#[cfg(not(unix))]
+fn run_unix(_path: &std::path::Path, _routes: Routes) -> std::io::Result<Running> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "Unix sockets are not available on this system.",
+    ))
+}
+
+trait Listener: Send + 'static {
+    type Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static;
+
+    fn accept(&self) -> impl Future<Output = std::io::Result<Self::Stream>> + Send;
+}
+
+impl Listener for TcpListener {
+    type Stream = tokio::net::TcpStream;
+
+    async fn accept(&self) -> std::io::Result<Self::Stream> {
+        let (stream, _) = TcpListener::accept(self).await?;
+        // With Nagle's algorithm, the kernel holds a small message of a stream, such as an MCP notification, until
+        // the client acknowledges the last one, which can take 40 ms.
+        let _ = stream.set_nodelay(true);
+        Ok(stream)
+    }
+}
+
+#[cfg(unix)]
+impl Listener for tokio::net::UnixListener {
+    type Stream = tokio::net::UnixStream;
+
+    async fn accept(&self) -> std::io::Result<Self::Stream> {
+        tokio::net::UnixListener::accept(self)
+            .await
+            .map(|(stream, _)| stream)
+    }
+}
+
+fn run(listener: impl Listener, routes: Routes) -> Running {
     let mut routes = routes;
     routes.sort_by_key(|(prefix, _)| std::cmp::Reverse(prefix.len()));
     let routes = Arc::new(routes);
@@ -334,10 +424,7 @@ pub async fn serve(address: SocketAddr, routes: Routes) -> std::io::Result<Serve
                 () = stopped.cancelled() => return,
                 accepted = listener.accept() => accepted,
             };
-            let Ok((stream, _)) = accepted else { continue };
-            // With Nagle's algorithm, the kernel holds a small message of a stream, such as an MCP notification, until
-            // the client acknowledges the last one, which can take 40 ms.
-            let _ = stream.set_nodelay(true);
+            let Ok(stream) = accepted else { continue };
             let routes = routes.clone();
             let stopped = stopped.clone();
             tokio::spawn(async move {
@@ -357,11 +444,7 @@ pub async fn serve(address: SocketAddr, routes: Routes) -> std::io::Result<Serve
             });
         }
     });
-    Ok(Served {
-        address,
-        stop,
-        task,
-    })
+    Running { stop, task }
 }
 
 fn route(

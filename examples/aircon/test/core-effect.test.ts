@@ -19,7 +19,7 @@ import { bundledProgram } from "./bundled-program.ts";
 import { assertHelp } from "./help.ts";
 import { OFFLINE, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import { endsWith, run } from "./run.ts";
-import { firstLine, startServer, subscriptionProxy } from "./server.ts";
+import { assertUnixSocketCli, firstLine, startServer, subscriptionProxy } from "./server.ts";
 import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
 
@@ -172,6 +172,10 @@ test("the command line controls the unit of a server, and watch and follow write
   const exited = new Promise<number | null>((resolve) => watch.on("close", resolve));
   watch.kill("SIGINT");
   assert.equal(await exited, 130);
+});
+
+test("the command line reaches a server on a Unix socket", async (context) => {
+  await assertUnixSocketCli(context, [process.execPath, bundledProgram("core-effect/serve.ts")], [process.execPath, cliPath]);
 });
 
 test("aircon.status.export writes a file through the command line", async (context) => {

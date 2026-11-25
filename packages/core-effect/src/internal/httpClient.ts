@@ -1,6 +1,6 @@
 import { CALL_FAILURE_KINDS, callFailure, isOccurrence, SSE_MEDIA_TYPE } from "@acid-cat/spec-ts";
 import type { Availability, CallFailure, Occurrence, Outcome, Resume } from "@acid-cat/spec-ts";
-import { Effect, Layer, Option, Result, Schema, Scope, Stream } from "effect";
+import { Context, Effect, Layer, Option, Result, Schema, Scope, Stream } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import type { HttpClientResponse } from "effect/http";
 
@@ -41,7 +41,9 @@ export interface ClientOptions {
   readonly headers?: Readonly<Record<string, string>> | undefined;
   /**
    * The HTTP client that sends the requests. The default is `FetchHttpClient.layer` of `effect/http`, which uses
-   * `globalThis.fetch`. Give another layer for another transport, for example to trust the certificate of a server.
+   * `globalThis.fetch`. Give another layer for another transport, for example to trust the certificate of a server, or
+   * `NodeHttpClient.layerUndiciOptions({ connect: { socketPath } })` of `@effect/platform-node` to reach a server on a
+   * Unix socket. The client builds the layer for each request, and keeps it until the response is read.
    */
   readonly layer?: Layer.Layer<HttpClient.HttpClient> | undefined;
 }
@@ -66,13 +68,13 @@ export function make(base: string, options: ClientOptions = {}): Client {
 
   const send = (method: "GET" | "POST", path: string, body: unknown, extra: Readonly<Record<string, string>> = {}) =>
     Effect.gen(function* () {
-      const http = HttpClient.withScope(yield* HttpClient.HttpClient);
+      const http = HttpClient.withScope(Context.get(yield* Layer.build(layer), HttpClient.HttpClient));
       let request = HttpClientRequest.make(method)(`${root}${path}`, {
         headers: { ...Object.fromEntries(headers), Accept: `application/json, ${SSE_MEDIA_TYPE}`, ...extra },
       });
       if (method === "POST") request = HttpClientRequest.bodyText(request, JSON.stringify(body), "application/json");
       return yield* http.execute(request).pipe(Effect.mapError(() => new CallFailed(unreachable)));
-    }).pipe(Effect.provide(layer));
+    });
 
   const capabilities = Effect.scoped(
     Effect.gen(function* () {

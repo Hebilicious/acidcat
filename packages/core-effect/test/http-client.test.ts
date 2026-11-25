@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { Effect, Exit, Schema, Scope, Stream } from "effect";
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
+import { Effect, Exit, Fiber, Option, Schema, Scope, Stream } from "effect";
 
 import { Http } from "../src/index.ts";
 import { occurrences } from "../src/internal/httpClient.ts";
 import * as NodeServer from "../src/NodeServer.ts";
 import { decodeText } from "./decode.ts";
+import { events, feedForPromises } from "./events-fixture.ts";
 import { runWith } from "./run.ts";
 import { bundledProgram } from "./bundled-program.ts";
 
@@ -266,4 +271,35 @@ test("a 200 answer to a subscription that is not a stream of server-sent events 
   const failure = await Effect.runPromise(Effect.scoped(Effect.flip(Http.client(server.url).subscribe("fixture.watch", {}))), { signal: context.signal });
   assert.equal(failure.kind, "internal");
   await closed.promise;
+});
+
+test("a client with the Undici layer of a socket path reaches a server on a Unix socket, and a missing socket is unavailable", async (context) => {
+  const folder = await mkdtemp(join(tmpdir(), "acid-cat-"));
+  context.after(() => rm(folder, { recursive: true, force: true }));
+  const path = join(folder, "server.sock");
+  const feed = feedForPromises();
+  const handler = Http.toWebHandler(events, feed.layer, { allowedOrigins: [], base: "/api" });
+  const scope = Effect.runSync(Scope.make());
+  context.after(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  const served = await Effect.runPromise(NodeServer.serve({ "/api": handler }, { path }).pipe(Scope.provide(scope)));
+  assert.deepEqual(served, { url: "http://localhost", path });
+  const client = Http.client(`${served.url}/api`, { layer: NodeHttpClient.layerUndiciOptions({ connect: { socketPath: path } }) });
+
+  const listed = await Effect.runPromise(client.capabilities);
+  assert.deepEqual(listed, [{ id: "feed.publish", available: true }]);
+  assert.deepEqual(await Effect.runPromise(client.invoke("feed.publish", { room: "hall", count: 0 })), { ok: true, value: null });
+  const first = Effect.scoped(
+    Effect.gen(function* () {
+      const stream = yield* client.subscribe("feed.ticked", {});
+      const taken = yield* Effect.forkScoped(Stream.runHead(stream));
+      yield* Effect.promise(() => feed.following(1));
+      yield* Effect.promise(() => feed.publish({ room: "hall", count: 1 }));
+      return yield* Fiber.join(taken);
+    }),
+  );
+  assert.deepEqual(Option.getOrThrow(await Effect.runPromise(first, { signal: context.signal })).data, { room: "hall", count: 1 });
+  await feed.following(0);
+
+  const missing = Http.client("http://localhost/api", { layer: NodeHttpClient.layerUndiciOptions({ connect: { socketPath: join(folder, "missing.sock") } }) });
+  assert.equal((await Effect.runPromise(Effect.flip(missing.capabilities))).kind, "unavailable");
 });

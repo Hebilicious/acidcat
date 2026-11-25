@@ -15,7 +15,7 @@ import { catalogOf, createSession, renderCatalog, runCli } from "@acid-cat/core-
 import { OFFLINE, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import { bundledProgram } from "./bundled-program.ts";
 import { endsWith, run } from "./run.ts";
-import { firstLine, startServer, subscriptionProxy } from "./server.ts";
+import { assertUnixSocketCli, firstLine, startServer, subscriptionProxy } from "./server.ts";
 import { assertHelp } from "./help.ts";
 import { shape, writtenText } from "./shape.ts";
 
@@ -191,6 +191,10 @@ test("the TypeScript command line controls the unit of a server, and watch follo
   const exited = new Promise<number | null>((resolve) => watch.on("close", resolve));
   watch.kill("SIGINT");
   assert.equal(await exited, 130);
+});
+
+test("the TypeScript command line reaches a server on a Unix socket", async (context) => {
+  await assertUnixSocketCli(context, [process.execPath, bundledProgram("core-ts/serve.ts")], [process.execPath, program]);
 });
 
 test("aircon.status.export writes a file through the command line", async (context) => {

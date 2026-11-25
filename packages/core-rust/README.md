@@ -171,6 +171,8 @@ The card gives `McpOptions::version`, and the revisions of the `initialize` hand
 
 `McpSurface` and `HttpSurface` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. Like the Node.js servers of the TypeScript cores, it closes no idle connection and sends no `Keep-Alive` header, so a client never sends a request on a connection while the server closes it. The client or the proxy in front closes an idle connection. It sends each message of a stream at once (`TCP_NODELAY`). `close()` of the server stops it from accepting connections and ends each open connection at once, also one whose response is not complete, so the client of a stream gets no more of it. The Node.js servers of the TypeScript cores end each connection at their close only when both its request and its response are complete. To use another server, pass each request through `remote::request_body`, then to `handle`.
 
+`remote::serve_unix(path, routes)` serves the handlers on a new Unix socket at `path`, for example in a private data folder, so that only the users who can open the folder can connect. It fails when a file is at `path`. `close` stops the server and removes the socket file. The function exists on each system. On a system that is not Unix, it fails with an `io::Error` of kind `Unsupported`. Windows named pipes are not supported.
+
 Each request gets its own session. With `new`, requests share one context.
 
 ### A context for each request
@@ -289,6 +291,7 @@ cli_main(app, context, CliOptions::new("aircon", "1.0.0").remote(client)).await;
 - Build the program and the server from one application, so they share a catalog.
 - Serve the HTTP surface with the same target: `HttpOptions { target: "cli".into(), base: "/cli".into(), .. }`.
 - `HttpClient::trust_certificate(pem)` trusts a self-signed certificate for an `https` URL.
+- `HttpClient::unix_socket(path)` connects to a server on a Unix socket, with plain HTTP/1.1. The base URL still gives the path and the `Host` header of each request: `HttpClient::new("http://localhost/cli")?.unix_socket("/var/lib/aircon/aircon.sock")`. A socket that does not exist gives the call failure `unavailable`, as a server that does not answer. The method exists on each system. On a system that is not Unix, each call gives `unavailable`.
 
 ## Tests
 

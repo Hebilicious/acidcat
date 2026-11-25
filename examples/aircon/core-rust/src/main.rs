@@ -491,7 +491,12 @@ async fn main() {
             let mut options = CliOptions::new("aircon", "0.1.0").output(output);
             if let Ok(url) = std::env::var("AIRCON_URL") {
                 match HttpClient::new(&url) {
-                    Ok(client) => options = options.remote(client),
+                    Ok(client) => {
+                        options = options.remote(match std::env::var_os("AIRCON_SOCKET") {
+                            Some(socket) => client.unix_socket(socket),
+                            None => client,
+                        })
+                    }
                     Err(problem) => {
                         eprintln!("AIRCON_URL: {problem}");
                         std::process::exit(2);
@@ -502,6 +507,7 @@ async fn main() {
         }
         Some("serve") => {
             use acid_cat_core::http::{HttpOptions, HttpSurface};
+            use acid_cat_core::remote::{Routes, serve, serve_unix};
             let cli = HttpSurface::new(
                 app,
                 unit,
@@ -512,13 +518,18 @@ async fn main() {
                 },
             );
             let address = args.get(1).map_or("127.0.0.1:0", String::as_str);
-            let served = acid_cat_core::remote::serve(
-                address.parse().expect("an address such as 0.0.0.0:8080"),
-                vec![("/cli".into(), Arc::new(cli))],
-            )
-            .await
+            let routes: Routes = vec![("/cli".into(), Arc::new(cli))];
+            let url = match std::env::var_os("AIRCON_SOCKET") {
+                Some(socket) => serve_unix(socket, routes).await.map(|served| served.url()),
+                None => serve(
+                    address.parse().expect("an address such as 0.0.0.0:8080"),
+                    routes,
+                )
+                .await
+                .map(|served| served.url()),
+            }
             .expect("the server starts");
-            println!("{}/cli", served.url());
+            println!("{url}/cli");
             std::future::pending::<()>().await;
         }
         Some("mcp-stdio") => {
