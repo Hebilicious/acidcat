@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { conform, serve } from "@acid-cat/cli";
 import { build } from "esbuild";
 
-test("the TypeScript core passes acid-cat conform through WebMCP in Chromium", async () => {
+test("the TypeScript core passes acid-cat conform through WebMCP in Chromium", async (t) => {
   const bundled = await build({
     entryPoints: [new URL("./fixture-page.ts", import.meta.url).pathname],
     bundle: true,
@@ -24,7 +24,7 @@ test("the TypeScript core passes acid-cat conform through WebMCP in Chromium", a
           }),
   });
   try {
-    const results = await conform({ webmcp: `${served.url}/page` });
+    const results = await conform({ signal: t.signal, webmcp: `${served.url}/page` });
     const failed = results.filter((result) => !result.passed);
     assert.deepEqual(failed, [], failed.map((result) => `${result.surface}: ${result.name}: ${result.detail}`).join("\n"));
     assert.ok(results.length >= 8);

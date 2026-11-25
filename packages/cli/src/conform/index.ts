@@ -1,4 +1,4 @@
-import { Checks, DEADLINE } from "./check.ts";
+import { Checks, DEADLINE, orStop } from "./check.ts";
 import type { Check } from "./check.ts";
 import { checkCli } from "./cli.ts";
 import { checkHttp } from "./http.ts";
@@ -65,6 +65,11 @@ export interface ConformOptions {
    * default is `DEADLINE`, 30 seconds.
    */
   readonly deadline?: number | undefined;
+  /**
+   * When it aborts, conform stops: each check that runs stops as at its deadline and cleans up, no other check starts,
+   * and the promise resolves soon after. A test gives its own signal, so that conform ends with the test.
+   */
+  readonly signal?: AbortSignal | undefined;
 }
 
 /** Run all checks for the surfaces that the options give. */
@@ -72,32 +77,33 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
   const maximumBytes = options.maximumBytes ?? 1_048_576;
   const deadline = options.deadline ?? DEADLINE;
   const poll = options.poll ?? {};
+  const { signal } = options;
   const results: Check[] = [];
   if (options.mcp !== undefined) {
-    results.push(...(await checkMcp(options.mcp, { maximumBytes, deadline, handshake: options.mcpHandshake === true, poll, webhook: options.webhook })).results);
-    const mcp = await mcpInvoke(options.mcp, AbortSignal.timeout(deadline)).catch(() => undefined);
+    results.push(...(await checkMcp(options.mcp, { maximumBytes, deadline, signal, handshake: options.mcpHandshake === true, poll, webhook: options.webhook })).results);
+    const mcp = await mcpInvoke(options.mcp, orStop(AbortSignal.timeout(deadline), signal)).catch(() => undefined);
     if (mcp !== undefined) {
-      results.push(...(await checkProperties("mcp", mcp.invoke, deadline)).results);
+      results.push(...(await checkProperties("mcp", mcp.invoke, deadline, signal)).results);
       await mcp.close();
     }
   }
   if (options.pollLease !== undefined) {
-    const checks = new Checks("mcp", deadline);
+    const checks = new Checks("mcp", deadline, signal);
     await checkPollLease(checks, httpChannel(options.pollLease.mcp), options.pollLease.leaseMs);
     results.push(...checks.results);
   }
   if (options.mcpStdio !== undefined) {
-    for (const checks of await checkMcpStdio(options.mcpStdio, { deadline, poll })) results.push(...checks.results);
+    for (const checks of await checkMcpStdio(options.mcpStdio, { deadline, signal, poll })) results.push(...checks.results);
   }
   if (options.http !== undefined) {
-    results.push(...(await checkHttp(options.http, { maximumBytes, deadline })).results);
-    results.push(...(await checkProperties("http", httpInvoke(options.http), deadline)).results);
+    results.push(...(await checkHttp(options.http, { maximumBytes, deadline, signal })).results);
+    results.push(...(await checkProperties("http", httpInvoke(options.http), deadline, signal)).results);
   }
-  if (options.cli !== undefined) results.push(...(await checkCli(options.cli, { deadline })).results);
+  if (options.cli !== undefined) results.push(...(await checkCli(options.cli, { deadline, signal })).results);
   if (options.webmcp !== undefined) {
     const driver = typeof options.webmcp === "string" ? await browserDriver(options.webmcp) : await processDriver(options.webmcp);
     try {
-      results.push(...(await checkWebMcp(driver, { deadline })).results);
+      results.push(...(await checkWebMcp(driver, { deadline, signal })).results);
     } finally {
       await driver.close();
     }

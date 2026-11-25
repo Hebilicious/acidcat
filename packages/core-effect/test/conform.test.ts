@@ -71,30 +71,31 @@ after(async () => {
 });
 
 describe("the Effect core passes acid-cat conform", { concurrency: true }, () => {
-  test("through MCP over HTTP, with the handshake, poll and webhook delivery", { timeout: CONFORM_TIMEOUT }, async () => {
-    const results = await conform({ mcp: `${url}/mcp`, mcpHandshake: true, poll: POLL, pollLease: { mcp: `${url}/mcp-lease`, leaseMs: POLL_LEASE_MS }, webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS } });
+  test("through MCP over HTTP, with the handshake, poll and webhook delivery", { timeout: CONFORM_TIMEOUT }, async (t) => {
+    const results = await conform({ signal: t.signal, mcp: `${url}/mcp`, mcpHandshake: true, poll: POLL, pollLease: { mcp: `${url}/mcp-lease`, leaseMs: POLL_LEASE_MS }, webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS } });
     assertConforms(results, 60);
     assert.ok(results.some((result) => result.rule === "spec/surfaces/mcp.md#server-card"), "the default Server Card is checked");
   });
 
-  test("through MCP over stdio", { timeout: CONFORM_TIMEOUT }, async () => {
-    assertConforms(await conform({ mcpStdio: [process.execPath, bundledProgram("test/fixture-mcp-stdio.ts")], poll: POLL }), 50);
+  test("through MCP over stdio", { timeout: CONFORM_TIMEOUT }, async (t) => {
+    assertConforms(await conform({ signal: t.signal, mcpStdio: [process.execPath, bundledProgram("test/fixture-mcp-stdio.ts")], poll: POLL }), 50);
   });
 
-  test("through HTTP", { timeout: CONFORM_TIMEOUT }, async () => {
-    assertConforms(await conform({ http: `${url}/api` }), 20);
+  test("through HTTP", { timeout: CONFORM_TIMEOUT }, async (t) => {
+    assertConforms(await conform({ signal: t.signal, http: `${url}/api` }), 20);
   });
 
-  test("through the command line", { timeout: CONFORM_TIMEOUT }, async () => {
-    assertConforms(await conform({ cli: [process.execPath, bundledProgram("test/fixture-cli.ts")] }), 20);
+  test("through the command line", { timeout: CONFORM_TIMEOUT }, async (t) => {
+    assertConforms(await conform({ signal: t.signal, cli: [process.execPath, bundledProgram("test/fixture-cli.ts")] }), 20);
   });
 
-  test("through the command line that calls a server", { timeout: CONFORM_TIMEOUT }, async () => {
-    assertConforms(await conform({ cli: [process.execPath, bundledProgram("test/fixture-cli-remote.ts"), `${url}/cli`] }), 20);
+  test("through the command line that calls a server", { timeout: CONFORM_TIMEOUT }, async (t) => {
+    assertConforms(await conform({ signal: t.signal, cli: [process.execPath, bundledProgram("test/fixture-cli-remote.ts"), `${url}/cli`] }), 20);
   });
 
-  test("through WebMCP, on a model context in Node.js", { timeout: CONFORM_TIMEOUT }, async () => {
+  test("through WebMCP, on a model context in Node.js", { timeout: CONFORM_TIMEOUT }, async (t) => {
     const results = await conform({
+      signal: t.signal,
       webmcp: async (modelContext) => {
         const scope = Effect.runSync(Scope.make());
         await Effect.runPromise(

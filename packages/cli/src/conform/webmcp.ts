@@ -208,8 +208,8 @@ async function heldKeys(driver: WebMcpDriver, signal: AbortSignal): Promise<read
   return keys;
 }
 
-export async function checkWebMcp(driver: WebMcpDriver, options: { readonly deadline: number }): Promise<Checks> {
-  const checks = new Checks("webmcp", options.deadline);
+export async function checkWebMcp(driver: WebMcpDriver, options: { readonly deadline: number; readonly signal?: AbortSignal | undefined }): Promise<Checks> {
+  const checks = new Checks("webmcp", options.deadline, options.signal);
   const capabilities = fixture.capabilities;
   const expected = idsOf(TARGET);
 

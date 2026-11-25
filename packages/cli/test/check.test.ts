@@ -36,3 +36,25 @@ test("the end of a check stops the work that it started, also when one part of i
     [["fails", false, "refused"]],
   );
 });
+
+test("when the signal of conform aborts, the check that runs stops, and no other check starts", async () => {
+  const stop = new AbortController();
+  const checks = new Checks("cli", 60_000, stop.signal);
+  let later = false;
+  await checks.run("runs", "rule", async (signal) => {
+    stop.abort();
+    assert.equal(signal.aborted, true, "the signal of the check aborts with the signal of conform");
+    throw new Error("aborted");
+  });
+  await checks.run("later", "rule", () => {
+    later = true;
+  });
+  assert.equal(later, false);
+  assert.deepEqual(
+    checks.results.map(({ name, passed, detail }) => [name, passed, detail]),
+    [
+      ["runs", false, "conform stopped during the check: aborted"],
+      ["later", false, "conform stopped before the check"],
+    ],
+  );
+});

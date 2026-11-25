@@ -34,13 +34,14 @@ const textOf = (result: ToolResult): unknown => {
 export interface McpCheckOptions {
   readonly maximumBytes: number;
   readonly deadline: number;
+  readonly signal?: AbortSignal | undefined;
   readonly handshake: boolean;
   readonly poll: PollSettings;
   readonly webhook: WebhookSettings | undefined;
 }
 
 export async function checkMcp(url: string, options: McpCheckOptions): Promise<Checks> {
-  const checks = new Checks("mcp", options.deadline);
+  const checks = new Checks("mcp", options.deadline, options.signal);
   let client: Client | undefined;
 
   await checks.run("an MCP client connects with revision 2026-07-28", `${RULE}#http`, async (signal) => {
@@ -174,7 +175,7 @@ async function checkHeaders(checks: Checks, url: string): Promise<void> {
 const ANCHOR = `${RULE}#earlier-revisions-through-http`;
 
 async function checkHandshake(checks: Checks, url: string, deadline: number): Promise<void> {
-  const handshakeChecks = new Checks("mcp 2025-11-25", deadline);
+  const handshakeChecks = new Checks("mcp 2025-11-25", deadline, checks.signal);
   let client: Client | undefined;
   await handshakeChecks.run("an MCP client connects with the initialize handshake of revision 2025-11-25", ANCHOR, async (signal) => {
     client = await mcpClient(url, signal, true);

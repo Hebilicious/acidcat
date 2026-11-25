@@ -17,8 +17,8 @@ async function entriesOf(response: Response): Promise<readonly Entry[]> {
   return list;
 }
 
-export async function checkHttp(base: string, options: { readonly maximumBytes: number; readonly deadline: number }): Promise<Checks> {
-  const checks = new Checks("http", options.deadline);
+export async function checkHttp(base: string, options: { readonly maximumBytes: number; readonly deadline: number; readonly signal?: AbortSignal | undefined }): Promise<Checks> {
+  const checks = new Checks("http", options.deadline, options.signal);
   const post = (signal: AbortSignal, id: string, body: unknown, headers: Record<string, string> = {}) =>
     fetch(`${base}/capabilities/${id}`, {
       method: "POST",

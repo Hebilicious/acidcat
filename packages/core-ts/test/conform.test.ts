@@ -50,30 +50,31 @@ describe("the TypeScript core passes acid-cat conform", { concurrency: true }, (
     await mcpLease?.close();
   });
 
-  test("through MCP over HTTP, with the handshake, poll and webhook delivery", { timeout }, async () => {
-    const results = await conform({ mcp: `${url}/mcp`, mcpHandshake: true, poll: POLL, pollLease: { mcp: `${url}/mcp-lease`, leaseMs: POLL_LEASE_MS }, webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS } });
+  test("through MCP over HTTP, with the handshake, poll and webhook delivery", { timeout }, async (t) => {
+    const results = await conform({ signal: t.signal, mcp: `${url}/mcp`, mcpHandshake: true, poll: POLL, pollLease: { mcp: `${url}/mcp-lease`, leaseMs: POLL_LEASE_MS }, webhook: { principal: "conform", otherPrincipal: "conform-other", ...certificate, ...WEBHOOK_LIMITS } });
     assertConforms(results, 60);
     assert.ok(results.some((result) => result.rule === "spec/surfaces/mcp.md#server-card"), "the default Server Card is checked");
   });
 
-  test("through MCP over stdio", { timeout }, async () => {
-    assertConforms(await conform({ mcpStdio: [process.execPath, bundledProgram("test/fixture-mcp-stdio.ts")], poll: POLL }), 50);
+  test("through MCP over stdio", { timeout }, async (t) => {
+    assertConforms(await conform({ signal: t.signal, mcpStdio: [process.execPath, bundledProgram("test/fixture-mcp-stdio.ts")], poll: POLL }), 50);
   });
 
-  test("through HTTP", { timeout }, async () => {
-    assertConforms(await conform({ http: `${url}/api` }), 20);
+  test("through HTTP", { timeout }, async (t) => {
+    assertConforms(await conform({ signal: t.signal, http: `${url}/api` }), 20);
   });
 
-  test("through the command line", { timeout }, async () => {
-    assertConforms(await conform({ cli: [process.execPath, bundledProgram("test/fixture-cli.ts")] }), 20);
+  test("through the command line", { timeout }, async (t) => {
+    assertConforms(await conform({ signal: t.signal, cli: [process.execPath, bundledProgram("test/fixture-cli.ts")] }), 20);
   });
 
-  test("through the command line that calls a server", { timeout }, async () => {
-    assertConforms(await conform({ cli: [process.execPath, bundledProgram("test/fixture-cli-remote.ts"), `${url}/cli`] }), 20);
+  test("through the command line that calls a server", { timeout }, async (t) => {
+    assertConforms(await conform({ signal: t.signal, cli: [process.execPath, bundledProgram("test/fixture-cli-remote.ts"), `${url}/cli`] }), 20);
   });
 
-  test("through WebMCP, on a model context in Node.js", { timeout }, async () => {
+  test("through WebMCP, on a model context in Node.js", { timeout }, async (t) => {
     const results = await conform({
+      signal: t.signal,
       webmcp: (modelContext) => {
         const session = createSession(fixture, { target: "app", ...options() });
         const installation = installWebMcp(session, { host: modelContext });
