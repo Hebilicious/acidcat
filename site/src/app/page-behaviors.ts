@@ -1,9 +1,22 @@
+import { copyCodeOnClick } from "vaporpress/behaviors";
 import { onPageUpdated } from "vaporpress/client";
 import { onUnmounted } from "vue";
 import { restoreTabChoices, selectTabsOnInput } from "./tabs.ts";
 
+let copying = false;
+
+/** Only the pages of the docs have code blocks with a copy button, so the homepage does not load this code. */
+const copyCode = (): void => {
+  if (copying) return;
+  copying = true;
+  copyCodeOnClick({ button: "[data-copy-code]", code: (button) => button.closest("figure")?.querySelector("pre code") });
+};
+
 export const usePageBehaviors = (): void => {
-  if (!import.meta.env.SSR) selectTabsOnInput();
+  if (!import.meta.env.SSR) {
+    selectTabsOnInput();
+    copyCode();
+  }
   let page = new AbortController();
   onPageUpdated(() => {
     page.abort();

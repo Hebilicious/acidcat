@@ -1,3 +1,5 @@
+import { listenToTabs, selectTab } from "vaporpress/behaviors";
+
 const storageKey = (syncKey: string) => `acidcat-tabs:${syncKey}`;
 
 const readChoice = (syncKey: string): string | null => {
@@ -18,15 +20,7 @@ const saveChoice = (syncKey: string, label: string): void => {
 
 const tabsOf = (group: Element): HTMLAnchorElement[] => [...group.querySelectorAll<HTMLAnchorElement>(':scope > .tablist-wrapper [role="tab"]')];
 
-const select = (group: Element, chosen: HTMLAnchorElement): void => {
-  for (const tab of tabsOf(group)) {
-    const selected = tab === chosen;
-    tab.setAttribute("aria-selected", String(selected));
-    tab.tabIndex = selected ? 0 : -1;
-    const panel = group.querySelector<HTMLElement>(`:scope > #${tab.getAttribute("href")?.slice(1) ?? ""}`);
-    if (panel !== null) panel.hidden = !selected;
-  }
-};
+const select = (group: Element, chosen: HTMLElement): void => selectTab(tabsOf(group), chosen, (tab) => group.querySelector<HTMLElement>(`:scope > #${tab.getAttribute("href")?.slice(1) ?? ""}`));
 
 const selectLabel = (group: Element, label: string): void => {
   const tab = tabsOf(group).find((candidate) => candidate.textContent === label);
@@ -41,7 +35,7 @@ export const restoreTabChoices = (root: HTMLElement): void => {
   }
 };
 
-const choose = (group: HTMLElement, tab: HTMLAnchorElement): void => {
+const choose = (group: HTMLElement, tab: HTMLElement): void => {
   const syncKey = group.dataset["syncKey"];
   const label = tab.textContent;
   if (syncKey === undefined) {
@@ -50,12 +44,6 @@ const choose = (group: HTMLElement, tab: HTMLAnchorElement): void => {
   }
   saveChoice(syncKey, label);
   for (const other of document.querySelectorAll<HTMLElement>(".tabs[data-sync-key]")) if (other.dataset["syncKey"] === syncKey) selectLabel(other, label);
-};
-
-const tabOf = (event: Event): { readonly tab: HTMLAnchorElement; readonly group: HTMLElement } | undefined => {
-  const tab = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('.tabs [role="tab"]') : null;
-  const group = tab?.closest<HTMLElement>(".tabs");
-  return tab === null || tab === undefined || group === null || group === undefined ? undefined : { tab, group };
 };
 
 /**
@@ -69,22 +57,5 @@ export const selectTabsOnInput = (): void => {
   const root = document.documentElement;
   if (root.hasAttribute("data-tab-input")) return;
   root.setAttribute("data-tab-input", "");
-  document.addEventListener("click", (event) => {
-    const found = tabOf(event);
-    if (found === undefined) return;
-    event.preventDefault();
-    choose(found.group, found.tab);
-  });
-  document.addEventListener("keydown", (event) => {
-    const found = tabOf(event);
-    if (found === undefined) return;
-    const tabs = tabsOf(found.group);
-    const index = tabs.indexOf(found.tab);
-    const targets: Readonly<Record<string, number>> = { ArrowRight: (index + 1) % tabs.length, ArrowLeft: (index + tabs.length - 1) % tabs.length, Home: 0, End: tabs.length - 1 };
-    const target = tabs[targets[event.key] ?? -1];
-    if (target === undefined) return;
-    event.preventDefault();
-    choose(found.group, target);
-    target.focus();
-  });
+  listenToTabs({ tab: '.tabs [role="tab"]', group: ".tabs", tabsOf, choose });
 };

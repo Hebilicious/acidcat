@@ -1,5 +1,6 @@
 <script setup lang="ts" vapor>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
+import { onListboxKey, openModal } from "vaporpress/behaviors";
 import { loadExcerpt, loadSearch, markTerms, markText } from "vaporpress/search";
 import type { SearchResult, SiteSearch } from "vaporpress/search";
 
@@ -77,10 +78,8 @@ const showSelected = async (): Promise<void> => {
   await nextTick();
   dialog.value?.querySelector(".result.selected")?.scrollIntoView({ block: "nearest" });
 };
-const move = (step: number): void => {
-  const count = results.value.length;
-  if (count === 0) return;
-  selected.value = (selected.value + step + count) % count;
+const select = (index: number): void => {
+  selected.value = index;
   pointerMoved.value = false;
   void showSelected();
 };
@@ -94,15 +93,8 @@ const keydown = (event: KeyboardEvent): void => {
   if (event.key === "Escape") {
     event.preventDefault();
     close();
-  } else if (event.key === "ArrowDown") {
-    event.preventDefault();
-    move(1);
-  } else if (event.key === "ArrowUp") {
-    event.preventDefault();
-    move(-1);
-  } else if (event.key === "Enter" && !event.isComposing && event.target instanceof HTMLInputElement) {
-    event.preventDefault();
-    go(results.value[selected.value]);
+  } else if (event.key !== "Enter" || event.target instanceof HTMLInputElement) {
+    onListboxKey(event, { count: results.value.length, selected: selected.value, select, open: (index) => go(results.value[index]) });
   }
 };
 
@@ -124,12 +116,11 @@ const toggleDetails = (): void => {
   detailed.value = !detailed.value;
 };
 
-let returnFocus: Element | null = null;
+let closeModal: (() => void) | undefined;
 
 onMounted(() => {
-  returnFocus = document.activeElement;
   document.documentElement.dataset["searchOpen"] = "";
-  dialog.value?.showModal();
+  if (dialog.value !== null) closeModal = openModal(dialog.value);
   input.value?.focus();
   input.value?.select();
   loadSearch().then(
@@ -144,9 +135,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  dialog.value?.close();
   delete document.documentElement.dataset["searchOpen"];
-  if (returnFocus instanceof HTMLElement) returnFocus.focus();
+  closeModal?.();
 });
 </script>
 
