@@ -7,6 +7,7 @@
     "@vitejs/plugin-vue": "catalog:vapor",
     "@vue/compiler-sfc": "catalog:vapor",
     "satteri": "catalog:vapor",
+    "sharp": "catalog:",
     "vue": "catalog:vapor",
     "vue-router": "catalog:vapor",
     "vite": "catalog:",
@@ -21,6 +22,7 @@
     "./vite": "./src/vite.ts",
     "./client": "./src/client/index.ts",
     "./markdown": "./src/markdown.ts",
-    "./data": "./src/data.ts"
+    "./data": "./src/data.ts",
+    "./image": "./src/image-module.d.ts"
   }
 }

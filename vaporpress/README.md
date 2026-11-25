@@ -80,6 +80,7 @@ const page = usePage();
 | Page data | `usePage()` gives the page on screen: `path`, `title`, `description`, `frontmatter` and `headings`. A Markdown page gets them from its frontmatter and its headings. A `.vue` page gives its own with `defineOptions({ __page: { title, description, frontmatter, headings } })` |
 | Data at build time | A module whose name ends with `.data.ts` exports a loader as its default export, from `defineLoader`. The build runs the loader and gives the importer `data`, the JSON result. The browser gets the data, not the loader or what it imports |
 | Head | `title(page)` and `head(page)` of `defineSite` write the title and the elements of the head that change with the page. The server writes them in each HTML file, and the browser replaces them after each page change. `headHtml` adds HTML that every page has, such as the icon |
+| Images | An image in Markdown with a relative path, such as `![A diagram](./diagram.png)`, gets WebP files at several widths in `srcset`, and its `width` and `height`. A component imports an image with `?image`. See [Images](#images) |
 | Components | Every `.vue` file compiles in Vapor mode, with or without the `vapor` attribute. The router registers no global component: import `RouterView` from `vaporpress/client`, and write plain links. The `RouterLink` and `RouterView` of Vue Router render virtual DOM, so the framework removes their registration from `app.use(router)` |
 
 ### Markdown pages
@@ -115,6 +116,35 @@ pnpm add the-tool
 - `{{ expression }}` in the text of a page is a Vue interpolation.
 - A plain `<script>` block can export names, but it cannot have a default export.
 
+### Images
+
+The build converts each PNG, JPEG, WebP, AVIF and TIFF image that a page uses, with [sharp](https://sharp.pixelplumbing.com):
+
+- It writes WebP files at the widths 480, 800, 1200, 1600 and 2400 pixels that are smaller than the image, and one at the width of the image. The `srcset` of the image lists them, so the browser loads the smallest file that fills the space on the screen.
+- It writes the `width` and the `height` of the image, so the page keeps the space of the image before the image loads, and the content does not move.
+- `sizes` is `(min-width: <width>px) <width>px, 100vw`: the image is never wider than its own width, or than the window.
+- In Markdown, an image whose path is relative to the page gets these attributes. The first image of a page loads at once, because it can be the largest element on the screen. Each other image has `loading="lazy"`, and loads when it comes near the screen. Every image has `decoding="async"`. An image with an absolute path or a URL, an SVG file and a GIF file keep their `src`.
+- A component imports an image with `?image`. The import gives the attributes of the `<img>` element:
+
+```vue
+<script setup lang="ts">
+import hero from "./hero.png?image"; // { src, srcset, sizes, width, height }
+</script>
+
+<template>
+  <img v-bind="hero" alt="The hero" fetchpriority="high" />
+</template>
+```
+
+For the type of the import, add `/// <reference types="vaporpress/image" />` to a declaration file of the site.
+
+The files go to `node_modules/.vaporpress/images/`, under a name from the content of the image and the options, so a second build converts only the new images. The dev server converts them too. The option `images` of the Vite plugin sets the widths and the quality, or turns the conversion off:
+
+| Option | Default | Use |
+| --- | --- | --- |
+| `widths` | `[480, 800, 1200, 1600, 2400]` | The widths of the WebP files, in pixels |
+| `quality` | `80` | The quality of the WebP files, from 1 to 100 |
+
 `markdown` options:
 
 | Option | Use |
@@ -135,6 +165,7 @@ pnpm add the-tool
 | | `usePage()` | The data of the page on screen |
 | | `prefetchPage(router, path)` | Loads the chunk of a page before the reader goes to it |
 | `vaporpress/data` | `defineLoader({ load, watch })`, `LoadedData` | A module of data that the build reads once |
+| `vaporpress/image` | — | The type of an import with `?image`, for a declaration file of the site |
 | `vaporpress/markdown` | `compileMarkdown(source, file, options)`, `githubSlug` | The Markdown compiler, for tools that need the page of a file outside the build, such as a search index |
 
 `vaporpress` options:
@@ -148,6 +179,7 @@ pnpm add the-tool
 | `markdown` | — | See [Markdown pages](#markdown-pages) |
 | `lang`, `headHtml` | `"en"`, none | The language of each page, and the HTML that the head of every page has |
 | `transformHtml(html, page)` | none | Changes the HTML file of each page before the build writes it |
+| `images` | `{}` | The widths and the quality of the image service, or `false` to keep each image as it is. See [Images](#images) |
 | `vue` | — | Options for `@vitejs/plugin-vue` |
 
 ## Design
@@ -204,7 +236,7 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 
 - `markdown.test.ts`: the page data, the heading ids and the table of contents, components and `<script setup>` in Markdown, code that Vue does not compile, the highlighter, `transformSource`, and the lean copy of a component, which keeps the templates that hydration may not meet.
 - `site-definition.test.ts`: the checks of a site definition and of a component.
-- `site.test.ts`: builds `test/fixture/` and serves `dist/`. It checks the HTML, the head and the lean chunk of each page, and the data of a data module. In Chromium, it checks that hydration changes no element of the DOM and logs no mismatch, that components respond, that a click changes the page with no new document and updates the head, that the chunk of a link in view loads before the click and the chunk of a link under the pointer loads at once, that the scroll position comes back on Back and on Forward, that a hash goes to its heading, that the skip link moves the focus past the header, that a branch of `v-if`, `v-else` or `v-for` that the server did not render shows after hydration and after a page change, and that an unknown path shows the 404 page.
+- `site.test.ts`: builds `test/fixture/` and serves `dist/`. It checks the HTML, the head and the lean chunk of each page, the data of a data module, and the WebP files, the `srcset`, the size and the loading of each image in Markdown and of an image that a component imports. In Chromium, it checks that hydration changes no element of the DOM and logs no mismatch, that components respond, that a click changes the page with no new document and updates the head, that the chunk of a link in view loads before the click and the chunk of a link under the pointer loads at once, that the scroll position comes back on Back and on Forward, that a hash goes to its heading, that the skip link moves the focus past the header, that a branch of `v-if`, `v-else` or `v-for` that the server did not render shows after hydration and after a page change, and that an unknown path shows the 404 page.
 - `dev.test.ts`: the dev server serves a page, and a click changes the page.
 
 `moon run vaporpress:typecheck` type-checks the sources and the tests.

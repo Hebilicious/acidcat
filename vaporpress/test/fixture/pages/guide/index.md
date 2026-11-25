@@ -11,6 +11,8 @@ import Counter from "../../src/Counter.vue";
 
 A paragraph of Markdown, with `inline {{ code }}` and a [link to the long page](/guide/long/).
 
+![A blue diagram](./diagram.png "The diagram")
+
 ## Components in Markdown
 
 <Counter :start="5">
@@ -28,6 +30,8 @@ const answer: number = 1 < 2 ? 42 : 0;
 ### A smaller heading
 
 Text under the smaller heading.
+
+![The same diagram, further down](./diagram.png)
 
 <style>
 #the-guide { color: rgb(1, 2, 3); }

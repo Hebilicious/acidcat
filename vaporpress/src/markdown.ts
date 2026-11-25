@@ -1,6 +1,7 @@
 import { defineHastPlugin, markdownToHtml } from "satteri";
 import type { HastNode, HastPluginList, MdastPluginList } from "satteri";
 import { parse as parseYaml } from "yaml";
+import { imageQuery, isConvertibleImage } from "./images.ts";
 import type { Heading, PageData } from "./page.ts";
 
 /** Colors one code block. It returns the HTML that replaces the `<pre>` element. */
@@ -16,6 +17,8 @@ export interface MarkdownOptions {
   readonly highlight?: Highlight;
   readonly mdastPlugins?: MdastPluginList;
   readonly hastPlugins?: HastPluginList;
+  /** Imports each image of the page that has a relative path with `?image`, so the image service of the Vite plugin converts it. */
+  readonly images?: boolean;
 }
 
 export interface CompiledPage {
@@ -91,6 +94,29 @@ const highlightCode = (highlight: Highlight) =>
     },
   });
 
+const isRelativePath = (src: string): boolean => !/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(src);
+
+/**
+ * Gives each `<img>` with a relative path to a PNG, JPEG, WebP, AVIF or TIFF file the attributes of the image service.
+ * The first image of a page loads at once, because it can be the largest element on screen. The others load when they
+ * come near the screen.
+ */
+const serveImages = (imports: string[]) =>
+  defineHastPlugin({
+    name: "vaporpress:images",
+    element: {
+      filter: ["img"],
+      visit(node, context) {
+        const src = node.properties["src"];
+        if (typeof src !== "string" || !isRelativePath(src) || !isConvertibleImage(src)) return;
+        const name = `__vaporpressImage${imports.length}`;
+        imports.push(`import ${name} from ${JSON.stringify(`${decodeURI(src)}${imageQuery}`)};`);
+        const properties = Object.fromEntries(Object.entries(node.properties).filter(([key]) => key !== "src"));
+        context.setField(node, "properties", { ...properties, "v-bind": name, decoding: "async", ...(imports.length > 1 ? { loading: "lazy" } : {}) });
+      },
+    },
+  });
+
 const collectHeadings = (slugify: (text: string) => string, levels: ReadonlySet<number>, headings: Heading[], title: { value: string | undefined }) => {
   const used = new Map<string, number>();
   return defineHastPlugin({
@@ -117,6 +143,8 @@ const isSetup = (block: string): boolean => /^<script\b[^>]*\bsetup\b/.test(bloc
 
 const withVapor = (block: string): string => (/^<script\b[^>]*\bvapor\b/.test(block) ? block : block.replace(/^<script\b/, "<script vapor"));
 
+const withImports = (block: string, imports: readonly string[]): string => (imports.length === 0 ? block : block.replace(/^<script\b[^>]*>/, (tag) => `${tag}\n${imports.join("\n")}`));
+
 /** The page data rides on the component, so that the layout reads it from the route that the router resolved. */
 const pageScript = (block: string | undefined, page: Omit<PageData, "path">, file: string): string => {
   const exportPage = `export default { __page: ${JSON.stringify(page)} }`;
@@ -131,12 +159,14 @@ export const compileMarkdown = async (source: string, file: string, options: Mar
   const { markdown, blocks } = splitBlocks(transformed);
   const headings: Heading[] = [];
   const title: { value: string | undefined } = { value: undefined };
+  const imports: string[] = [];
   const result = await markdownToHtml(markdown, {
     features: { gfm: true, frontmatter: true, attributes: true },
     ...(options.mdastPlugins === undefined ? {} : { mdastPlugins: options.mdastPlugins }),
     hastPlugins: [
       collectHeadings(options.slugify ?? githubSlug, new Set(options.headingLevels ?? [2, 3]), headings, title),
       ...(options.hastPlugins ?? []),
+      ...(options.images === true ? [serveImages(imports)] : []),
       ...(options.highlight === undefined ? [] : [highlightCode(options.highlight)]),
       preserveCode,
     ],
@@ -156,7 +186,7 @@ export const compileMarkdown = async (source: string, file: string, options: Mar
   if (plain.length > 1 || scripts.length - plain.length > 1) throw new Error(`${file} has more than one <script> or <script setup> block.`);
   const sfc = [
     pageScript(plain[0], page, file),
-    setup === undefined ? "<script setup vapor></script>" : withVapor(setup),
+    withImports(setup === undefined ? "<script setup vapor></script>" : withVapor(setup), imports),
     `<template>${result.html}</template>`,
     ...styles,
   ].join("\n");

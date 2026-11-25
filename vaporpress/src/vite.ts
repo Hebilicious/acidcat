@@ -7,6 +7,8 @@ import type { Plugin, PluginOption, ViteBuilder } from "vite";
 import vueRouter from "vue-router/vite";
 import { dataPlugin } from "./data.ts";
 import { routerWithoutGlobalComponents } from "./router-components.ts";
+import { imagePlugin } from "./images.ts";
+import type { ImageOptions } from "./images.ts";
 import { leanTemplates } from "./lean.ts";
 import { compileMarkdown } from "./markdown.ts";
 import type { MarkdownOptions } from "./markdown.ts";
@@ -23,6 +25,8 @@ export interface VaporpressOptions extends DocumentOptions {
   readonly markdown?: MarkdownOptions;
   /** Pages whose files are outside the folder of the pages, such as the files of a specification in another folder of the repository. */
   readonly extraPages?: () => readonly ExtraPage[] | Promise<readonly ExtraPage[]>;
+  /** The image service: WebP files at several widths, and the size of each image. `false` keeps each image as it is. */
+  readonly images?: false | ImageOptions;
   /** Options for `@vitejs/plugin-vue`. The framework compiles every component in Vapor mode. */
   readonly vue?: VueOptions;
 }
@@ -64,6 +68,7 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
   const siteRoot = resolve(options.root ?? process.cwd());
   const pagesDir = resolve(siteRoot, options.pages ?? "pages");
   const routeFiles = new Map<string, string>();
+  const markdownOptions: MarkdownOptions = { ...options.markdown, images: options.images !== false };
   let extraPages: Promise<readonly ExtraPage[]> | undefined;
   const readExtraPages = (): Promise<readonly ExtraPage[]> => {
     extraPages ??= Promise.resolve(options.extraPages?.() ?? []).then((pages) => {
@@ -79,13 +84,13 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
     async transform(code, id) {
       const { file, query } = splitId(id);
       if (!file.endsWith(".md") || (query !== "" && query !== leanQuery)) return undefined;
-      const { sfc } = await compileMarkdown(code, file, options.markdown);
+      const { sfc } = await compileMarkdown(code, file, markdownOptions);
       return { code: sfc, map: null };
     },
     handleHotUpdate(context) {
       if (!context.file.endsWith(".md")) return;
       const read = context.read;
-      context.read = async () => (await compileMarkdown(await read(), context.file, options.markdown)).sfc;
+      context.read = async () => (await compileMarkdown(await read(), context.file, markdownOptions)).sfc;
     },
   };
 
@@ -175,6 +180,7 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
     }),
     vue({ ...options.vue, include: [/\.vue$/, /\.md$/], features: { ...options.vue?.features, vapor: true } }),
     dataPlugin(),
+    ...(options.images === false ? [] : [imagePlugin(siteRoot, options.images)]),
     routerWithoutGlobalComponents(),
     core,
   ];
