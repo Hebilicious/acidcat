@@ -1,0 +1,14 @@
+{
+  "name": "acid-cat-benchmarks-nuxt",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The fixture of the benchmark, built with Nuxt, Nuxt Content and the Docus theme.",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "docus": "catalog:",
+    "nuxt": "catalog:",
+    "rolldown": "catalog:nuxt",
+    "vue": "catalog:nuxt"
+  }
+}

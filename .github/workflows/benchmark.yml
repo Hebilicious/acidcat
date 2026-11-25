@@ -1,0 +1,163 @@
+name: Benchmark
+
+on:
+  pull_request:
+    paths:
+      - "benchmarks/**"
+      - "!benchmarks/README.md"
+      - "vaporpress/src/**"
+      - ".github/workflows/benchmark.yml"
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Runs of each measure in each of the three jobs"
+        default: "5"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The old build of the AcidCat site, with Astro Starlight.
+  ASTRO_COMMIT: fe26e30142a9889f3eacb2da59a0c2e29101c626
+
+jobs:
+  build:
+    name: Build the fixture and the three builds of the site
+    runs-on: ubuntu-latest
+    outputs:
+      main: ${{ steps.main.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: moon run benchmarks:build site:build
+
+      - id: main
+        name: Build the VitePress site of main
+        run: |
+          git worktree add "$RUNNER_TEMP/main" origin/main
+          echo "sha=$(git -C "$RUNNER_TEMP/main" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          cd "$RUNNER_TEMP/main"
+          pnpm install --frozen-lockfile
+          moon run site:build
+          mkdir -p "$GITHUB_WORKSPACE/.tmp"
+          cp -r site/dist "$GITHUB_WORKSPACE/.tmp/site-vitepress"
+
+      - name: Build the Astro site of ${{ env.ASTRO_COMMIT }}
+        run: |
+          git fetch --no-tags origin "$ASTRO_COMMIT"
+          git worktree add "$RUNNER_TEMP/astro" "$ASTRO_COMMIT"
+          cd "$RUNNER_TEMP/astro"
+          pnpm install --frozen-lockfile
+          moon run site:build
+          cp -r site/dist "$GITHUB_WORKSPACE/.tmp/site-astro"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: builds
+          include-hidden-files: true
+          path: |
+            benchmarks/apps/framework/dist/
+            benchmarks/apps/vitepress/.vitepress/dist/
+            benchmarks/apps/starlight/dist/
+            benchmarks/apps/nuxt/.output/public/
+            site/dist/
+            .tmp/site-vitepress/
+            .tmp/site-astro/
+
+  measure:
+    name: Measure ${{ matrix.suite }}, job ${{ matrix.job }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [fixture, site]
+        job: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - run: pnpm install --frozen-lockfile --filter acid-cat-benchmarks
+
+      - id: playwright
+        run: echo "version=$(pnpm --dir benchmarks exec playwright --version)" >> "$GITHUB_OUTPUT"
+      - id: browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      # The runner image already has the system libraries that Chromium needs.
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --dir benchmarks exec playwright install --with-deps chromium
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: builds
+          path: .
+
+      - name: Measure
+        working-directory: benchmarks
+        run: >-
+          node src/run.ts --suite ${{ matrix.suite }} --job ${{ matrix.job }} --runs ${{ inputs.runs || '5' }} --out results
+          --site-framework ../site/dist --site-vitepress ../.tmp/site-vitepress --site-astro ../.tmp/site-astro
+
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: results-${{ matrix.suite }}-${{ matrix.job }}
+          path: benchmarks/results/
+          if-no-files-found: ignore
+
+  summary:
+    name: Summarize
+    needs: [build, measure]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - run: pnpm install --frozen-lockfile --filter acid-cat-benchmarks
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: results-*
+          path: benchmarks/results/
+
+      - name: Write the tables
+        working-directory: benchmarks
+        env:
+          MAIN_SHA: ${{ needs.build.outputs.main }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          {
+            echo "# Benchmark"
+            echo
+            echo "vaporpress: ${HEAD_SHA::8}. VitePress site: main at ${MAIN_SHA::8}. Astro site: ${ASTRO_COMMIT::8}. No Nuxt build of the AcidCat site exists."
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          node src/summarize.ts --results results --out results/summary.md
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: summary
+          path: benchmarks/results/summary.md

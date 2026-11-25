@@ -194,5 +194,6 @@ moon run verify   # every check and test, as in CI
 | `moon run examples` | Write every catalog in canonical form |
 | `moon run model:generate` | Write the cases of the [formal model](model/README.md) into each core |
 | `moon run site:dev` | Serve the [site](site/README.md): the homepage, the documentation, the examples, the specification and the packages |
+| `gh workflow run benchmark.yml` | Measure vaporpress against VitePress, Astro Starlight and Nuxt Docus on GitHub's runners, on one fixture and on the docs pages of the site. See [`benchmarks/`](benchmarks/README.md) |
 
 Pull requests are squash-merged, with titles like `fix(catalog): reject duplicate ids`. Releases: see [Publishing](packages/README.md#publishing).

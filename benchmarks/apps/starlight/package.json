@@ -1,0 +1,13 @@
+{
+  "name": "acid-cat-benchmarks-starlight",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The fixture of the benchmark, built with Astro Starlight.",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@astrojs/starlight": "catalog:",
+    "astro": "catalog:",
+    "sharp": "catalog:"
+  }
+}

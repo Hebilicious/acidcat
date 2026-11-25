@@ -1,0 +1,15 @@
+# The pages of each app, which src/prepare.ts writes from fixture/.
+apps/framework/pages/
+apps/vitepress/docs/
+apps/starlight/src/content/docs/
+apps/nuxt/content/
+apps/nuxt/public/
+# The builds.
+apps/vitepress/.vitepress/dist/
+apps/vitepress/.vitepress/cache/
+apps/starlight/.astro/
+apps/nuxt/.nuxt/
+apps/nuxt/.output/
+apps/nuxt/dist
+apps/nuxt/.data/
+results/

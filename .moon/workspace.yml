@@ -15,6 +15,7 @@ projects:
   model: "model"
   site: "site"
   vaporpress: "vaporpress"
+  benchmarks: "benchmarks"
 
 defaultProject: "acid-cat"
 telemetry: false
