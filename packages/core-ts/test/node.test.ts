@@ -5,7 +5,7 @@ import type { Socket } from "node:net";
 import { test } from "node:test";
 
 import { serve } from "../src/node.ts";
-import { closeDuringResponse, idleConnection } from "../../../test-support/idle-connection.ts";
+import { checkClose, idleConnection } from "../../../test-support/idle-connection.ts";
 
 test("one handler gets all paths, with the full URL, the method, the headers and the body", async () => {
   await using served = await serve(
@@ -182,6 +182,6 @@ test("serve closes no idle connection and sends no Keep-Alive header, so a clien
   assert.deepEqual(await idleConnection(served.url), { idleTimeoutMs: undefined, keepAlive: null });
 });
 
-test("after close, serve closes each connection when its response is complete", async (t) => {
-  await closeDuringResponse(t, (handler) => serve(handler, { port: 0 }));
+test("close of serve resolves when each connection has ended, and cuts no request that the server accepted", async (t) => {
+  await checkClose(t, (handler) => serve(handler, { port: 0 }));
 });

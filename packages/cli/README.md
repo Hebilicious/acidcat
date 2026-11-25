@@ -105,7 +105,7 @@ A failed check of a SHOULD rule gives a warning, marked `!`, and passes. The exi
 
 ### Use it in code
 
-`conform()` and `serve()` come from `@acid-cat/cli`. This `serve()` is for tests only: it listens on `127.0.0.1`, on a free port, with plain HTTP. Like the servers of the cores, it closes no idle connection, so that a client of a test never sends a request on a connection while the server closes it. After `close()`, it closes each connection when its response is complete. To serve an application, use its core's server: `serve` from `@acid-cat/core-ts/node`, `NodeServer` from `@acid-cat/core-effect`, or `remote::serve` from the crate `acid-cat-core`.
+`conform()` and `serve()` come from `@acid-cat/cli`. This `serve()` is for tests only: it listens on `127.0.0.1`, on a free port, with plain HTTP. Like the servers of the cores, it closes no idle connection, so that a client of a test never sends a request on a connection while the server closes it. Its `close()` ends each idle connection at once, and ends each other connection when both its request and its response are complete, so it cuts no request that the server accepted. It resolves when every connection has ended, so a response that does not end, such as an open event stream, keeps it waiting. To serve an application, use its core's server: `serve` from `@acid-cat/core-ts/node`, `NodeServer` from `@acid-cat/core-effect`, or `remote::serve` from the crate `acid-cat-core`.
 
 ## Implementation
 

@@ -1,5 +1,7 @@
 import { subscribe, unsubscribe } from "node:diagnostics_channel";
+import assert from "node:assert/strict";
 import { connect, Socket } from "node:net";
+import type { TestContext } from "node:test";
 
 const RESPONSE_FINISH = "http.server.response.finish";
 
@@ -33,28 +35,107 @@ export interface Closable {
   close(): Promise<void>;
 }
 
-/**
- * Starts a server with a handler that answers when the test releases it, sends a request on a connection that the
- * client never closes, closes the server while the response is open, and then releases the response. Resolves when
- * the close is complete and the server has closed the connection. When the test ends first, the client closes the
- * connection, so that the server and the test process end.
- */
-export async function closeDuringResponse(t: { readonly signal: AbortSignal }, start: (handler: () => Promise<Response>) => Promise<Closable>): Promise<void> {
-  const received = Promise.withResolvers<void>();
+type Start = (handler: () => Promise<Response>) => Promise<Closable>;
+
+/** A connection to the server that records what it reads, and whether the server ends it without an error. */
+function rawConnection(t: { readonly signal: AbortSignal }, url: string) {
+  const socket = connect(Number(new URL(url).port), "127.0.0.1");
+  let text = "";
+  let read = Promise.withResolvers<void>();
+  let error: Error | undefined;
+  let ended = false;
+  socket.setEncoding("latin1").on("data", (chunk: string) => {
+    text += chunk;
+    read.resolve();
+    read = Promise.withResolvers<void>();
+  });
+  socket.on("error", (cause) => (error = cause));
+  const closed = new Promise<void>((resolve) => socket.on("close", () => resolve()));
+  socket.on("end", () => (ended = true));
+  // When the test ends first, the client closes the connection, so that the server and the test process end.
+  t.signal.addEventListener("abort", () => socket.destroy(), { once: true });
+  const answers = () => text.split("HTTP/1.1 204").length - 1;
+  return {
+    write: (data: string) => socket.write(data),
+    answers,
+    ended: () => ended,
+    async untilAnswers(count: number) {
+      while (answers() < count) await read.promise;
+    },
+    async closed() {
+      await closed;
+      return { answers: answers(), error: error?.message };
+    },
+  };
+}
+
+/** A server whose handler answers `204` when the test releases it, and resolves `received` at each request. */
+async function heldServer(start: Start) {
+  let received = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const served = await start(async () => {
     received.resolve();
+    received = Promise.withResolvers<void>();
     await release.promise;
-    return new Response("ok");
+    return new Response(null, { status: 204 });
   });
-  const client = connect(Number(new URL(served.url).port), "127.0.0.1");
-  const ended = new Promise<void>((resolve) => client.on("close", () => resolve()));
-  client.on("error", () => {});
-  t.signal.addEventListener("abort", () => client.destroy(), { once: true });
-  client.resume();
-  client.write("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
-  await received.promise;
-  const closed = served.close();
-  release.resolve();
-  await Promise.all([closed, ended]);
+  return { served, received: () => received.promise, release: () => release.resolve() };
+}
+
+const GET = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+
+/**
+ * Tests that `close` of a server resolves when the server has ended each connection, and that the server cuts no
+ * request that it accepted: with an idle connection, during a response, during a request whose body is still arriving
+ * when its response is complete, and with a second request sent before the first answer.
+ */
+export async function checkClose(t: TestContext, start: Start): Promise<void> {
+  await t.test("an idle connection ends", async (t) => {
+    const { served, release } = await heldServer(start);
+    release();
+    const client = rawConnection(t, served.url);
+    client.write(GET);
+    await client.untilAnswers(1);
+    await served.close();
+    assert.deepEqual(await client.closed(), { answers: 1, error: undefined });
+  });
+
+  await t.test("a connection ends after the response that runs when the server closes", async (t) => {
+    const { served, received, release } = await heldServer(start);
+    const client = rawConnection(t, served.url);
+    const arrived = received();
+    client.write(GET);
+    await arrived;
+    const closed = served.close();
+    release();
+    await closed;
+    assert.deepEqual(await client.closed(), { answers: 1, error: undefined });
+  });
+
+  await t.test("a connection ends after the end of a request body that still arrives when the response is complete", async (t) => {
+    const { served, received, release } = await heldServer(start);
+    const client = rawConnection(t, served.url);
+    const arrived = received();
+    client.write("POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 2\r\n\r\na");
+    await arrived;
+    const closed = served.close();
+    release();
+    await client.untilAnswers(1);
+    assert.equal(client.ended(), false, "the server waits for the rest of the request");
+    client.write("b");
+    await closed;
+    assert.deepEqual(await client.closed(), { answers: 1, error: undefined });
+  });
+
+  await t.test("a connection ends after the answer to a second request that the client sent before the first answer", async (t) => {
+    const { served, received, release } = await heldServer(start);
+    const client = rawConnection(t, served.url);
+    const arrived = received();
+    client.write(GET + GET);
+    await arrived;
+    const closed = served.close();
+    release();
+    await closed;
+    assert.deepEqual(await client.closed(), { answers: 2, error: undefined });
+  });
 }

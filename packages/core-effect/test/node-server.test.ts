@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { Effect, Exit, Fiber, Layer, Scope } from "effect";
 
 import * as NodeServer from "../src/NodeServer.ts";
-import { closeDuringResponse, idleConnection } from "../../../test-support/idle-connection.ts";
+import { checkClose, idleConnection } from "../../../test-support/idle-connection.ts";
 import { until } from "../../../test-support/until.ts";
 
 async function serve(handler: NodeServer.WebHandler | NodeServer.Routes, options: NodeServer.ServeOptions) {
@@ -179,8 +179,8 @@ test("NodeServer.serve closes no idle connection and sends no Keep-Alive header,
   assert.deepEqual(await idleConnection(served.url), { idleTimeoutMs: undefined, keepAlive: null });
 });
 
-test("when its scope closes, NodeServer.serve closes each connection when its response is complete", async (t) => {
-  await closeDuringResponse(t, async (handler) => {
+test("when its scope closes, NodeServer.serve ends each connection, and cuts no request that the server accepted", async (t) => {
+  await checkClose(t, async (handler) => {
     const served = await serve(handler, { port: 0 });
     return { url: served.url, close: served[Symbol.asyncDispose] };
   });

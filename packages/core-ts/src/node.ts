@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import type { IncomingMessage, Server, ServerResponse } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 
 export { webhookDelivery } from "./webhook.ts";
 export type { WebhookOptions } from "./webhook.ts";
@@ -48,7 +48,13 @@ export interface Served extends AsyncDisposable {
 export function serve(handler: WebHandler | Routes, options: ServeOptions = {}): Promise<Served> {
   const route = router(handler);
   const hostname = options.hostname ?? "127.0.0.1";
-  const server = createServerThatKeepsIdleConnections((incoming, outgoing) => {
+  // With `keepAliveTimeout: 0`, Node.js closes no idle connection and sends no `Keep-Alive` header, so a client never
+  // sends a request on a connection at the moment when the server closes it. `close` ends only the connections that are
+  // idle at that moment, so each other connection ends when both its request and its response are complete.
+  const server = createServer({ keepAliveTimeout: 0 }, (incoming, outgoing) => {
+    const closeIfIdle = () => server.listening || server.closeIdleConnections();
+    incoming.on("end", closeIfIdle);
+    outgoing.on("finish", closeIfIdle);
     void answer(incoming, outgoing, route);
   });
   return new Promise((resolve, reject) => {
@@ -187,21 +193,4 @@ function bodyOf(incoming: IncomingMessage): ReadableStream<Uint8Array> {
     },
     { highWaterMark: 0 },
   );
-}
-
-/**
- * A client that sends a request on an idle connection at the moment when the server closes it gets ECONNRESET. Undici,
- * the `fetch` of Node.js, keeps an idle connection for the `Keep-Alive: timeout` of the server less 2 s, so each idle
- * timeout of the server leaves this race. With `keepAliveTimeout: 0`, Node.js closes no idle connection and sends no
- * `Keep-Alive` header, as hyper does. After `close`, Node.js closes the idle connections once, so each connection that
- * becomes idle later closes when its response is complete.
- */
-function createServerThatKeepsIdleConnections(listener: (incoming: IncomingMessage, outgoing: ServerResponse) => void): Server {
-  const server = createServer({ keepAliveTimeout: 0 }, (incoming, outgoing) => {
-    outgoing.on("finish", () => {
-      if (!server.listening) server.closeIdleConnections();
-    });
-    listener(incoming, outgoing);
-  });
-  return server;
 }
