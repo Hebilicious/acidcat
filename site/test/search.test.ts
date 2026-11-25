@@ -91,7 +91,7 @@ test("the search marks the words that match, Enter goes to the selected result w
   await first.locator("mark").first().waitFor();
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => location.pathname !== "/docs/quick-start/");
-  assert.equal(await page.evaluate(() => location.pathname + location.search + location.hash), "/docs/concepts/conformance/", "Enter goes to the page of the first result, whose first heading is the section of the page");
+  assert.equal(await page.evaluate(() => location.pathname + location.search + location.hash), "/docs/concepts/conformance/#conformance", "Enter goes to the first result: the section of the heading of the page, whose id is conformance in this build");
   assert.equal(await page.evaluate(() => document.documentElement.hasAttribute("data-same-document")), true);
   await page.keyboard.press("Control+k");
   await input.waitFor();
