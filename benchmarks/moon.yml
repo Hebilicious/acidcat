@@ -19,28 +19,28 @@ tasks:
   build-framework:
     deps: ["prepare"]
     description: "Build the fixture with vaporpress into apps/framework/dist/."
-    script: "cd apps/framework && vite build"
+    script: "pnpm --dir apps/framework exec vite build"
     inputs: ["apps/framework/src/**/*", "apps/framework/vite.config.ts", "apps/framework/package.json", "src/fixture.ts", "fixture/**/*", "/vaporpress/src/**/*"]
     outputs: ["apps/framework/dist/**/*"]
 
   build-vitepress:
     deps: ["prepare"]
     description: "Build the fixture with VitePress into apps/vitepress/.vitepress/dist/."
-    script: "cd apps/vitepress && vitepress build"
+    script: "pnpm --dir apps/vitepress exec vitepress build"
     inputs: ["apps/vitepress/.vitepress/config.ts", "apps/vitepress/package.json", "src/fixture.ts", "fixture/**/*"]
     outputs: ["apps/vitepress/.vitepress/dist/**/*"]
 
   build-starlight:
     deps: ["prepare"]
     description: "Build the fixture with Astro Starlight into apps/starlight/dist/."
-    script: "cd apps/starlight && astro build"
+    script: "pnpm --dir apps/starlight exec astro build"
     inputs: ["apps/starlight/astro.config.ts", "apps/starlight/src/content.config.ts", "apps/starlight/package.json", "src/fixture.ts", "fixture/**/*"]
     outputs: ["apps/starlight/dist/**/*"]
 
   build-nuxt:
     deps: ["prepare"]
     description: "Generate the fixture with Nuxt and Docus into apps/nuxt/.output/public/."
-    script: "cd apps/nuxt && nuxt generate"
+    script: "pnpm --dir apps/nuxt exec nuxt generate"
     inputs: ["apps/nuxt/nuxt.config.ts", "apps/nuxt/package.json", "fixture/**/*"]
     outputs: ["apps/nuxt/.output/public/**/*"]
 
