@@ -84,14 +84,14 @@ const siteTabs = (path: string, group: string) => ({
   selected: (n: number) => `${group} li:nth-child(${n}) a[aria-selected="true"]`,
 });
 
-const siteChange = (slash: string) => ({
-  from: `/docs/quick-start${slash}`,
-  link: `nav[aria-label="Main"] a[href="/docs/concepts/catalog${slash}"]`,
+const siteChange = {
+  from: "/docs/quick-start/",
+  link: 'nav[aria-label="Main"] a[href="/docs/concepts/catalog/"]',
   title: "Catalog",
   backTitle: "Quick start",
-});
+};
 
-const sitePages = (slash: string) => ({ "quick-start": `/docs/quick-start${slash}`, catalog: `/docs/concepts/catalog${slash}` });
+const sitePages = { "quick-start": "/docs/quick-start/", catalog: "/docs/concepts/catalog/" };
 
 export const siteSuite = (roots: { readonly framework: string; readonly vitepress: string; readonly astro: string }): Suite => ({
   name: "site",
@@ -101,28 +101,28 @@ export const siteSuite = (roots: { readonly framework: string; readonly vitepres
       name: "framework (#227)",
       root: roots.framework,
       immutable: ["/assets/"],
-      pages: sitePages("/"),
+      pages: sitePages,
       tabs: siteTabs("/docs/quick-start/", ".tabs"),
       search: undefined,
-      change: siteChange("/"),
+      change: siteChange,
     },
     {
       name: "vitepress (main)",
       root: roots.vitepress,
       immutable: ["/assets/"],
-      pages: sitePages(""),
-      tabs: siteTabs("/docs/quick-start", ".tabs"),
-      search: { path: "/docs/quick-start", button: "button.search-button", input: ".VPLocalSearchBox input" },
-      change: siteChange(""),
+      pages: sitePages,
+      tabs: siteTabs("/docs/quick-start/", ".tabs"),
+      search: { path: "/docs/quick-start/", button: "button.search-button", input: ".VPLocalSearchBox input" },
+      change: siteChange,
     },
     {
       name: "astro (fe26e301)",
       root: roots.astro,
       immutable: ["/_astro/", "/pagefind/"],
-      pages: sitePages("/"),
+      pages: sitePages,
       tabs: siteTabs("/docs/quick-start/", "starlight-tabs"),
       search: { path: "/docs/quick-start/", button: "button[data-open-modal]", input: "dialog[open] input" },
-      change: siteChange("/"),
+      change: siteChange,
     },
   ],
 });
