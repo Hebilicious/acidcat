@@ -33,6 +33,7 @@ export default defineConfig({
     pages: "content",
     exclude: ["index.md", "spec/**", "packages/**"],
     extraPages: () => specPages.map((page) => ({ path: `/${page.id}`, file: fileURLToPath(new URL(`../${page.source}`, import.meta.url)) })),
+    search: true,
     headHtml: '<meta name="theme-color" content="#0b0e14">',
     markdown: {
       transformSource: (source, file) => expandComponents(specMarkdown(file) ?? source, { page: relative(repositoryRoot, file), repositoryRoot, content, roles: true }),

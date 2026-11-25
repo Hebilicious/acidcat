@@ -112,14 +112,16 @@ export const loadExcerpt = async (id: string): Promise<string> => {
 
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** Wraps each match of the terms in the text of an element in `<mark>`. */
-export const markTerms = (element: Element, terms: readonly string[]): void => {
-  for (const mark of element.querySelectorAll("mark[data-search-mark]")) mark.replaceWith(...mark.childNodes);
-  element.normalize();
+const escapeHtml = (text: string): string => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+
+/** Wraps each match of the terms in the text of the HTML in `<mark>`, and returns the HTML. */
+export const markTerms = (html: string, terms: readonly string[]): string => {
   const words = [...terms].filter((term) => term !== "").sort((a, b) => b.length - a.length);
-  if (words.length === 0) return;
+  if (words.length === 0) return html;
   const pattern = new RegExp(words.map(escapeRegExp).join("|"), "gi");
-  const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
   const texts: Text[] = [];
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) if (node instanceof Text) texts.push(node);
   for (const text of texts) {
@@ -129,7 +131,6 @@ export const markTerms = (element: Element, terms: readonly string[]): void => {
     for (const match of value.matchAll(pattern)) {
       if (match.index > last) parts.push(document.createTextNode(value.slice(last, match.index)));
       const mark = document.createElement("mark");
-      mark.dataset["searchMark"] = "";
       mark.textContent = match[0];
       parts.push(mark);
       last = match.index + match[0].length;
@@ -138,4 +139,8 @@ export const markTerms = (element: Element, terms: readonly string[]): void => {
     if (last < value.length) parts.push(document.createTextNode(value.slice(last)));
     text.replaceWith(...parts);
   }
+  return container.innerHTML;
 };
+
+/** Wraps each match of the terms in the text in `<mark>`, and returns HTML. */
+export const markText = (text: string, terms: readonly string[]): string => markTerms(escapeHtml(text), terms);

@@ -78,13 +78,8 @@ const differentPixels = (expected: Buffer, actual: Buffer): number => {
 /** Chromium shades the edges of the diamond under the header, a square that CSS turns by 45 degrees, a few levels apart from one render to the next. */
 const hiddenRegions = (page: Page): Promise<readonly Box[]> =>
   page.evaluate(() => {
-    const boxes = [...document.querySelectorAll(".site-search, .site-search *")].map((element) => element.getBoundingClientRect());
-    const left = Math.min(...boxes.map((box) => box.left));
-    const top = Math.min(...boxes.map((box) => box.top));
-    const search = { x: left + scrollX, y: top + scrollY, width: Math.max(...boxes.map((box) => box.right)) - left, height: Math.max(...boxes.map((box) => box.bottom)) - top };
     const header = document.querySelector(".page > .header")?.getBoundingClientRect();
-    const diamond = header === undefined ? [] : [{ x: header.left + header.width / 2 - 8 + scrollX, y: header.bottom - 8 + scrollY, width: 16, height: 16 }];
-    return [search, ...diamond];
+    return header === undefined ? [] : [{ x: header.left + header.width / 2 - 8 + scrollX, y: header.bottom - 8 + scrollY, width: 16, height: 16 }];
   });
 
 /** One screenshot of a long page at full height needs gigabytes of memory. */
@@ -127,7 +122,7 @@ describe("the docs on vaporpress", () => {
     { width: 1440, height: 900 },
     { width: 390, height: 844 },
   ]) {
-    test(`look the same as the VitePress pages at ${viewport.width}px, except the search, which has not moved`, async () => {
+    test(`look the same as the VitePress pages at ${viewport.width}px, search box included`, async () => {
       assert.ok(site && vitepress);
       for (const path of ["/docs/quick-start/", "/examples/core-ts/", "/spec/catalog/"]) {
         const shots: (readonly Buffer[])[] = [];

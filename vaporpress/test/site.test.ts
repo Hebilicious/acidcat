@@ -426,6 +426,7 @@ describe("in the browser", () => {
     const result = page.locator('.search-results a[href="/guide/#a-smaller-heading"]');
     await result.waitFor();
     assert.equal(await result.getAttribute("data-titles"), "The guide > Code");
+    assert.equal(await result.innerHTML(), "A <mark>smaller</mark> heading", "The title marks the words that match.");
     await page.waitForFunction(() => document.querySelector(".search-excerpt")?.textContent?.trim() === "Text under the smaller heading.");
     await page.fill(".search", "quuxfooter");
     await page.waitForFunction(() => document.querySelectorAll(".search-results li").length === 0);

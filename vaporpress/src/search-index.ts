@@ -65,7 +65,7 @@ export const pageSections = (page: IndexedPage): SearchSection[] => {
       const id = node.properties["id"];
       const anchor = first || typeof id !== "string" ? undefined : id;
       first = false;
-      const titles = [...parents.slice(0, level - 1)];
+      const titles = parents.slice(0, level - 1);
       titles[level - 1] = title;
       sections.push({ anchor, titles: titles.filter((part) => part !== undefined && part !== ""), text: [] });
       parents = [...titles];

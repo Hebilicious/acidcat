@@ -1,6 +1,6 @@
 <script setup lang="ts" vapor>
 import { ref } from "vue";
-import { loadExcerpt, loadSearch } from "vaporpress/search";
+import { loadExcerpt, loadSearch, markText } from "vaporpress/search";
 import type { SearchResult } from "vaporpress/search";
 
 const results = ref<readonly SearchResult[]>([]);
@@ -18,7 +18,7 @@ const find = async (event: Event): Promise<void> => {
 <template>
   <input class="search" type="search" aria-label="Search" @input="find" />
   <ul class="search-results">
-    <li v-for="result in results" :key="result.id"><a :href="result.id" :data-titles="result.titles.join(' > ')">{{ result.title }}</a></li>
+    <li v-for="result in results" :key="result.id"><a :href="result.id" :data-titles="result.titles.join(' > ')" v-html="markText(result.title, result.terms)" /></li>
   </ul>
   <div class="search-excerpt" v-html="excerpt" />
 </template>
