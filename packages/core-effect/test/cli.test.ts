@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
@@ -30,7 +30,7 @@ const cliWithRepeated = commandLine("test/fixture-cli-repeated.ts");
 
 const cliWithInherited = commandLine("test/fixture-cli-inherited.ts");
 
-const PROBE = fileURLToPath(new URL("interrupt-probe.ts", import.meta.url));
+const PROBE = fileURLToPath(new URL("../../../test-support/interrupt-probe.ts", import.meta.url));
 
 async function interruptedIgnoring(t: Waiter, command: readonly string[], interrupts: 1 | 2) {
   const directory = mkdtempSync(join(tmpdir(), "core-effect-interrupt-"));
@@ -39,7 +39,7 @@ async function interruptedIgnoring(t: Waiter, command: readonly string[], interr
   const fixture = bundledProgram("test/fixture-cli-ignoring-interruption.ts");
   const child = spawn(process.execPath, ["--import", PROBE, fixture, ...command, "--key", "k", "--marker", marker], {
     stdio: ["ignore", "ignore", "pipe"],
-    env: { ...process.env, INTERRUPT_PROBE_RECORD: record, ...(interrupts === 2 ? { INTERRUPT_PROBE_HOLD: marker } : {}) },
+    env: { ...process.env, INTERRUPT_PROBE_RECORD: record, ...(interrupts === 2 ? { INTERRUPT_PROBE_PAIR: marker } : {}) },
   });
   let stderr = "";
   child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
@@ -58,7 +58,6 @@ async function interruptedIgnoring(t: Waiter, command: readonly string[], interr
       await waitFor(`${marker}.received`, "received the first interrupt");
       interrupted = Date.now();
       child.kill("SIGINT");
-      writeFileSync(`${marker}.go`, "");
     }
     const [code, signal] = await until(t, () => ended, (exit) => exit !== undefined, { next: () => exited, what: "the exit of the process" });
     const exit = existsSync(record) ? readFileSync(record, "utf-8") : undefined;

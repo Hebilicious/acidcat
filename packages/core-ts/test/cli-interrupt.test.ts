@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -12,7 +12,7 @@ import { bundledProgram } from "./bundled-program.ts";
 import { until } from "../../../test-support/until.ts";
 import type { Waiter } from "../../../test-support/until.ts";
 
-const PROBE = fileURLToPath(new URL("interrupt-probe.ts", import.meta.url));
+const PROBE = fileURLToPath(new URL("../../../test-support/interrupt-probe.ts", import.meta.url));
 
 const PROGRAMS = {
   call: { program: "test/fixture-cli-ignoring-cancellation.ts", args: ["fixture", "hold", "--key", "k"], stderr: `${JSON.stringify({ kind: "cancelled", message: "The call was cancelled." })}\n` },
@@ -26,7 +26,7 @@ async function interrupted(t: Waiter, kind: keyof typeof PROGRAMS, interrupts: 1
   const { program, args } = PROGRAMS[kind];
   const child = spawn(process.execPath, ["--import", PROBE, bundledProgram(program), ...args, "--marker", marker], {
     stdio: ["ignore", "ignore", "pipe"],
-    env: { ...process.env, INTERRUPT_PROBE_RECORD: record, ...(interrupts === 2 ? { INTERRUPT_PROBE_HOLD: marker } : {}) },
+    env: { ...process.env, INTERRUPT_PROBE_RECORD: record, ...(interrupts === 2 ? { INTERRUPT_PROBE_PAIR: marker } : {}) },
   });
   let stderr = "";
   child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
@@ -45,7 +45,6 @@ async function interrupted(t: Waiter, kind: keyof typeof PROGRAMS, interrupts: 1
       await waitFor(`${marker}.received`, "received the first interrupt");
       interruptedAt = Date.now();
       child.kill("SIGINT");
-      writeFileSync(`${marker}.go`, "");
     }
     const [code, signal] = await until(t, () => ended, (exit) => exit !== undefined, { next: () => exited, what: "the exit of the process" });
     const exit = existsSync(record) ? readFileSync(record, "utf-8") : undefined;
