@@ -72,7 +72,7 @@ tasks:
 
   build-framework:
     deps: ["fonts"]
-    description: "Build the docs, the examples and the specification with vaporpress into .out/framework/. VitePress builds the deployed site until every part has moved."
+    description: "Build the site with vaporpress into .out/framework/, the build that the Worker deploys."
     command: "vite"
     args: ["build", "--config", "framework.config.ts"]
     inputs:
