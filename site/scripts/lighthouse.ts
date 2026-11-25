@@ -12,7 +12,7 @@ import { contentType } from "../src/lib/content-types.ts";
 const { values } = parseArgs({ options: { runs: { type: "string", default: "5" }, out: { type: "string", default: ".tmp/lighthouse" } } });
 const runs = Number(values.runs);
 const out = values.out;
-const dist = new URL("../dist/", import.meta.url).pathname;
+const dist = new URL("../.out/framework/", import.meta.url).pathname;
 const pages = { home: "/", "quick-start": "/docs/quick-start/" } as const;
 
 /** Audits that pass or fail, with no score in between. Each run of each page must pass them. */
