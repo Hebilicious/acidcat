@@ -7,7 +7,8 @@ import type { SiteDefinition } from "./site.ts";
 
 export const notFoundRoute = "vaporpress:not-found";
 
-const defaultScroll: RouterScrollBehavior = (to, _from, savedPosition) => {
+const defaultScroll: RouterScrollBehavior = (to, from, savedPosition) => {
+  if (to.path === from.path && to.hash === from.hash) return false;
   if (savedPosition !== null) return savedPosition;
   if (to.hash !== "") return { el: decodeURIComponent(to.hash), top: 0 };
   return { top: 0 };

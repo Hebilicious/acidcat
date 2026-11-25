@@ -50,6 +50,7 @@ const chunkUrl = async (file: string): Promise<string> => {
   return `${origin}/${String(chunkFile)}`;
 };
 
+const afterTwoFrames = (page: Page): Promise<void> => page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 const markDocument = (page: Page): Promise<void> => page.evaluate(() => document.documentElement.setAttribute("data-same-document", ""));
 const sameDocument = (page: Page): Promise<boolean> => page.evaluate(() => document.documentElement.hasAttribute("data-same-document"));
 
@@ -100,6 +101,7 @@ describe("the static build", () => {
   test("ships no virtual DOM renderer", async () => {
     const code = [...(await assets()).values()].join("\n");
     assert.doesNotMatch(code, /_vnode/, "The renderer of the virtual DOM keeps the tree of a container in _vnode.");
+    assert.doesNotMatch(code, /RouterLink/, "The router registers no RouterLink, a component of the virtual DOM.");
   });
 
   test("gives a page the data of its loader, and leaves the loader out", async () => {
@@ -253,6 +255,28 @@ describe("in the browser", () => {
     });
     await page.click("#hash-link");
     await page.waitForFunction(() => Math.abs(document.querySelector("#section-9")?.getBoundingClientRect().top ?? -1) < 2);
+    assert.deepEqual(problems, []);
+    await page.close();
+  });
+
+  test("keeps the scroll position when only the query changes, on the way there and back", async () => {
+    const { page, problems } = await open("/guide/long/");
+    await page.evaluate(() => window.scrollTo(0, 1500));
+    await page.waitForFunction(() => window.scrollY === 1500);
+    await page.evaluate(() => {
+      const link = document.createElement("a");
+      link.href = "/guide/long/?view=compact";
+      link.id = "query-link";
+      document.body.prepend(link);
+      link.click();
+    });
+    await page.waitForFunction(() => location.search === "?view=compact");
+    await afterTwoFrames(page);
+    assert.equal(await page.evaluate(() => window.scrollY), 1500);
+    await page.goBack();
+    await page.waitForFunction(() => location.search === "");
+    await afterTwoFrames(page);
+    assert.equal(await page.evaluate(() => window.scrollY), 1500);
     assert.deepEqual(problems, []);
     await page.close();
   });

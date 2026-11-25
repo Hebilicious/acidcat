@@ -6,6 +6,7 @@ import type { Options as VueOptions } from "@vitejs/plugin-vue";
 import type { Plugin, PluginOption, ViteBuilder } from "vite";
 import vueRouter from "vue-router/vite";
 import { dataPlugin } from "./data.ts";
+import { routerWithoutGlobalComponents } from "./router-components.ts";
 import { leanTemplates } from "./lean.ts";
 import { compileMarkdown } from "./markdown.ts";
 import type { MarkdownOptions } from "./markdown.ts";
@@ -174,6 +175,7 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
     }),
     vue({ ...options.vue, include: [/\.vue$/, /\.md$/], features: { ...options.vue?.features, vapor: true } }),
     dataPlugin(),
+    routerWithoutGlobalComponents(),
     core,
   ];
 };
