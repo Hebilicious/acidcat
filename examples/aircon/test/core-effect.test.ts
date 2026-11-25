@@ -18,7 +18,7 @@ import { output } from "../core-effect/output.ts";
 import { bundledProgram } from "./bundled-program.ts";
 import { assertHelp } from "./help.ts";
 import { OFFLINE, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
-import { run, tracked } from "./run.ts";
+import { endsWith, run } from "./run.ts";
 import { firstLine, startServer, subscriptionProxy } from "./server.ts";
 import type { Run } from "./run.ts";
 import { shape, writtenText } from "./shape.ts";
@@ -70,8 +70,8 @@ test("aircon.status.changed gives the new status after each change, and nothing 
     ).pipe(Effect.provide(Layer.fresh(unitLayer))),
   ));
 
-test("the command line runs a capability, writes JSON on one line when standard output is not a terminal, and a flag follows a $ref to its type", async () => {
-  const [status, poweredOff] = await Promise.all([run(cliPath, "aircon", "status", "get"), run(cliPath, "aircon", "mode", "set", "--mode", "heat")]);
+test("the command line runs a capability, writes JSON on one line when standard output is not a terminal, and a flag follows a $ref to its type", async (t) => {
+  const [status, poweredOff] = await Promise.all([run(t, cliPath, "aircon", "status", "get"), run(t, cliPath, "aircon", "mode", "set", "--mode", "heat")]);
   assert.equal(status.code, 0);
   assert.equal(status.stdout, `${JSON.stringify(OFF)}\n`);
   assert.equal(poweredOff.code, 1);
@@ -149,14 +149,14 @@ function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<R
 test("the command line controls the unit of a server, and watch and follow write its changes", async (context) => {
   const url = await startServer(context, process.execPath, [bundledProgram("core-effect/serve.ts")]);
   const client = (target: string) => (...args: string[]) =>
-    tracked(spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"] }));
+    spawn(process.execPath, [cliPath, ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"] , ...endsWith(context) });
   const remote = client(url);
 
   assert.equal((await finish(remote("aircon", "power", "set", "--on"))).code, 0);
   const status = await finish(remote("aircon", "status", "get"));
   assert.equal(status.code, 0);
   assert.partialDeepStrictEqual(JSON.parse(status.stdout), { power: true });
-  assert.partialDeepStrictEqual(JSON.parse((await run(cliPath, "aircon", "status", "get")).stdout), { power: false });
+  assert.partialDeepStrictEqual(JSON.parse((await run(context, cliPath, "aircon", "status", "get")).stdout), { power: false });
   assert.equal((await finish(remote("--output", "human", "aircon", "status", "get"))).stdout, `${STATUS_ON}\n`);
 
   const proxy = await subscriptionProxy(context, url);
@@ -178,18 +178,18 @@ test("aircon.status.export writes a file through the command line", async (conte
   const folder = await mkdtemp(join(tmpdir(), "aircon-"));
   context.after(() => rm(folder, { recursive: true, force: true }));
   const file = join(folder, "status.json");
-  assert.equal((await run(cliPath, "aircon", "status", "export", "--path", file)).code, 0);
+  assert.equal((await run(context, cliPath, "aircon", "status", "export", "--path", file)).code, 0);
   assert.partialDeepStrictEqual(JSON.parse(await readFile(file, "utf-8")), { power: false });
 });
 
 const offline = Layer.effectDiscard(Effect.flatMap(Effect.service(Unit), (unit) => SubscriptionRef.set(unit.connection, unavailable("The unit is offline."))));
 
-test("the command line writes the human form with its output flags, and on a terminal by default", async () => {
+test("the command line writes the human form with its output flags, and on a terminal by default", async (t) => {
   const [status, schedule, list, unknown] = await Promise.all([
-    run(cliPath, "status", "--output", "human"),
-    run(cliPath, "aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18", "--output=human"),
-    run(cliPath, "list", "-o", "human"),
-    run(cliPath, "call", "nope", "-o", "human"),
+    run(t, cliPath, "status", "--output", "human"),
+    run(t, cliPath, "aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18", "--output=human"),
+    run(t, cliPath, "list", "-o", "human"),
+    run(t, cliPath, "call", "nope", "-o", "human"),
   ]);
   assert.deepEqual([status.code, status.stdout], [0, `${STATUS_OFF}\n`]);
   assert.deepEqual([schedule.code, schedule.stdout], [0, `${SCHEDULE_LAYOUT}\n`]);
@@ -208,6 +208,6 @@ test("the command line writes the human form with its output flags, and on a ter
   assert.deepEqual(unreachable, { code: 1, stdout: OFFLINE, stderr: "" });
 });
 
-test("the command line writes the command list of a shared prefix", async () => {
-  await assertHelp((...args) => run(cliPath, ...args));
+test("the command line writes the command list of a shared prefix", async (t) => {
+  await assertHelp((...args) => run(t, cliPath, ...args));
 });

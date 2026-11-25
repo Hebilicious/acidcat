@@ -52,8 +52,8 @@ test("the state gives the current value, then each change, and a capability with
     }),
   ));
 
-test("a flag of the command line of the lamp follows a $ref to its type", async () => {
-  const cli = (...args: string[]) => run(bundledProgram("test/lamp-cli.ts"), ...args);
+test("a flag of the command line of the lamp follows a $ref to its type", async (t) => {
+  const cli = (...args: string[]) => run(t, bundledProgram("test/lamp-cli.ts"), ...args);
   const [night, disco] = await Promise.all([cli("lamp", "scene", "set", "--scene", "night"), cli("lamp", "scene", "set", "--scene", "disco")]);
   assert.equal(night.code, 0, night.stderr);
   assert.equal(JSON.parse(night.stdout), null);

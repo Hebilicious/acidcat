@@ -11,14 +11,15 @@ import { check } from "@acid-cat/cli";
 import { SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import { assertHelp } from "./help.ts";
 import type { Run } from "./run.ts";
-import { tracked } from "./run.ts";
+import { endsWith } from "./run.ts";
+import type { Stoppable } from "./run.ts";
 import { firstLine, startServer, subscriptionProxy } from "./server.ts";
 import { shape, writtenText } from "./shape.ts";
 
 const aircon = new URL("target/debug/aircon", new URL("../core-rust/", import.meta.url)).pathname;
 
-function run(...args: string[]): Promise<Run> {
-  return finish(tracked(spawn(aircon, args, { stdio: ["ignore", "pipe", "pipe"] })));
+function run(t: Stoppable, ...args: string[]): Promise<Run> {
+  return finish(spawn(aircon, args, { stdio: ["ignore", "pipe", "pipe"], ...endsWith(t) }));
 }
 
 function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<Run> {
@@ -32,16 +33,16 @@ function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<R
   });
 }
 
-const cli = (...args: string[]) => run("cli", ...args);
+const cli = (t: Stoppable, ...args: string[]) => run(t, "cli", ...args);
 
-test("the Rust code writes a catalog that conforms and agrees with the Pkl catalog", async () => {
-  const { stdout: text } = await run("catalog");
+test("the Rust code writes a catalog that conforms and agrees with the Pkl catalog", async (t) => {
+  const { stdout: text } = await run(t, "catalog");
   assert.deepEqual(check(JSON.parse(text), text), { errors: [], warnings: [] });
   assert.deepEqual(shape(JSON.parse(text)), shape(JSON.parse(writtenText)));
 });
 
-test("the Rust command line runs a capability, writes JSON on one line when standard output is not a terminal, and a flag follows a $ref to its type", async () => {
-  const [status, poweredOff] = await Promise.all([cli("aircon", "status", "get"), cli("aircon", "mode", "set", "--mode", "heat")]);
+test("the Rust command line runs a capability, writes JSON on one line when standard output is not a terminal, and a flag follows a $ref to its type", async (t) => {
+  const [status, poweredOff] = await Promise.all([cli(t, "aircon", "status", "get"), cli(t, "aircon", "mode", "set", "--mode", "heat")]);
   assert.equal(status.code, 0);
   assert.match(status.stdout, /^[^\n]+\n$/);
   assert.deepEqual(JSON.parse(status.stdout), { power: false, mode: "cool", fan: "auto", targetCelsius: 22, roomCelsius: 25 });
@@ -49,12 +50,12 @@ test("the Rust command line runs a capability, writes JSON on one line when stan
   assert.equal(poweredOff.stdout, `${JSON.stringify({ _tag: "PoweredOff" })}\n`);
 });
 
-test("the Rust command line writes the human form with its output flags", async () => {
+test("the Rust command line writes the human form with its output flags", async (t) => {
   const [status, schedule, list, unknown] = await Promise.all([
-    cli("status", "--output", "human"),
-    cli("aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18", "--output=human"),
-    cli("list", "-o", "human"),
-    cli("call", "nope", "-o", "human"),
+    cli(t, "status", "--output", "human"),
+    cli(t, "aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18", "--output=human"),
+    cli(t, "list", "-o", "human"),
+    cli(t, "call", "nope", "-o", "human"),
   ]);
   assert.deepEqual([status.code, status.stdout], [0, `${STATUS_OFF}\n`]);
   assert.deepEqual([schedule.code, schedule.stdout], [0, `${SCHEDULE_LAYOUT}\n`]);
@@ -67,14 +68,14 @@ test("the Rust command line writes the human form with its output flags", async 
 
 test("the Rust command line controls the unit of a server, and watch and follow write its changes", async (context) => {
   const url = await startServer(context, aircon, ["serve"]);
-  const client = (target: string) => (...args: string[]) => tracked(spawn(aircon, ["cli", ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"] }));
+  const client = (target: string) => (...args: string[]) => spawn(aircon, ["cli", ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"] , ...endsWith(context) });
   const remote = client(url);
 
   assert.equal((await finish(remote("aircon", "power", "set", "--on"))).code, 0);
   const status = await finish(remote("aircon", "status", "get"));
   assert.equal(status.code, 0);
   assert.partialDeepStrictEqual(JSON.parse(status.stdout), { power: true });
-  assert.partialDeepStrictEqual(JSON.parse((await cli("aircon", "status", "get")).stdout), { power: false });
+  assert.partialDeepStrictEqual(JSON.parse((await cli(context, "aircon", "status", "get")).stdout), { power: false });
   assert.equal((await finish(remote("--output", "human", "aircon", "status", "get"))).stdout, `${STATUS_ON}\n`);
 
   const proxy = await subscriptionProxy(context, url);
@@ -96,10 +97,10 @@ test("aircon.status.export writes a file through the command line", async (conte
   const folder = await mkdtemp(join(tmpdir(), "aircon-"));
   context.after(() => rm(folder, { recursive: true, force: true }));
   const file = join(folder, "status.json");
-  assert.equal((await cli("aircon", "status", "export", "--path", file)).code, 0);
+  assert.equal((await cli(context, "aircon", "status", "export", "--path", file)).code, 0);
   assert.partialDeepStrictEqual(JSON.parse(await readFile(file, "utf-8")), { power: false });
 });
 
-test("the Rust command line writes the command list of a shared prefix", async () => {
-  await assertHelp(cli);
+test("the Rust command line writes the command list of a shared prefix", async (t) => {
+  await assertHelp((...args) => cli(t, ...args));
 });

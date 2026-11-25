@@ -146,7 +146,7 @@ test("the command line that calls a server never writes its headers", async (con
   const down = await closedUrl();
   const garbage = await serve(() => new Response("not the HTTP surface", { status: 200 }));
   context.after(garbage.close);
-  const withToken = (url: string, ...args: string[]) => runWith({ FIXTURE_AUTHORIZATION: TOKEN }, remoteCli, url, ...args);
+  const withToken = (url: string, ...args: string[]) => runWith(context, { FIXTURE_AUTHORIZATION: TOKEN }, remoteCli, url, ...args);
   const [unavailable, internal, list] = await Promise.all([
     withToken(down, "fixture", "echo", "--text", "hi"),
     withToken(garbage.url, "fixture", "echo", "--text", "hi"),
@@ -221,7 +221,7 @@ test("an interrupt during a call or list of a server that does not answer is can
 test("list marks a capability that the server does not list as unavailable", async (context) => {
   const server = await serve(() => Response.json([{ id: "fixture.echo", available: true }, { id: "fixture.toggle", available: false, reason: "Off." }]));
   context.after(server.close);
-  const listed = await runWith({}, remoteCli, server.url, "list");
+  const listed = await runWith(context, {}, remoteCli, server.url, "list");
   assert.equal(listed.code, 0, listed.stderr);
   const Entry = Schema.Struct({ id: Schema.String, available: Schema.optionalKey(Schema.Boolean), reason: Schema.optionalKey(Schema.String) });
   const entries = decodeText(Schema.Array(Entry), listed.stdout);
@@ -245,7 +245,7 @@ test("a cursor that is not a header value is invalid-input, and the client sends
     assert.equal(failure.kind, "invalid-input", JSON.stringify(cursor));
   }
   assert.equal(requests, 0);
-  const watched = await runWith({}, remoteCli, server.url, "watch", "fixture.ticks", "--count", "1", "--cursor", "a→b");
+  const watched = await runWith(context, {}, remoteCli, server.url, "watch", "fixture.ticks", "--count", "1", "--cursor", "a→b");
   assert.equal(watched.code, 3, watched.stderr);
   assert.partialDeepStrictEqual(JSON.parse(watched.stderr), { kind: "invalid-input" });
   assert.equal(requests, 0);

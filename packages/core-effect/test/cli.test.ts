@@ -16,11 +16,12 @@ import { App, Capability, Cli } from "../src/index.ts";
 import { CliListing, decodeText } from "./decode.ts";
 import { fixture } from "./fixture.ts";
 import { run } from "./run.ts";
+import type { Stoppable } from "./run.ts";
 import { bundledProgram } from "./bundled-program.ts";
 import { until } from "../../../test-support/until.ts";
 import type { Waiter } from "../../../test-support/until.ts";
 
-const commandLine = (file: string) => (...args: string[]) => run(bundledProgram(file), ...args);
+const commandLine = (file: string) => (t: Stoppable, ...args: string[]) => run(t, bundledProgram(file), ...args);
 
 const cli = commandLine("test/fixture-cli.ts");
 const cliWithFlag = commandLine("test/fixture-cli-flags.ts");
@@ -74,44 +75,45 @@ const toggle = (stdout: string) =>
     .find((entry) => entry.id === "fixture.toggle");
 
 describe("the command line of an application", { concurrency: true }, () => {
-  test("a required repeated flag must occur, an empty JSON array gives no items, and the usage marks the repeated flags", async () => {
+  test("a required repeated flag must occur, an empty JSON array gives no items, and the usage marks the repeated flags", async (t) => {
     const [missing, empty, list] = await Promise.all([
-      cliWithRepeated("probe", "plan"),
-      cliWithRepeated("probe", "plan", "--days", "mon", "--hours", "[]"),
-      cliWithRepeated("list"),
+      cliWithRepeated(t, "probe", "plan"),
+      cliWithRepeated(t, "probe", "plan", "--days", "mon", "--hours", "[]"),
+      cliWithRepeated(t, "list"),
     ]);
     assert.equal(missing.code, 3);
     assert.deepEqual(JSON.parse(empty.stdout), { days: ["mon"], hours: [] });
     assert.match(list.stdout, /"usage":"probe probe plan --days <mon\|tue>\.\.\. \[--hours <integer>\.\.\.\]"/);
   });
 
-  test("a flag of the application decides the services of the capabilities, and the commands keep their exit codes", async () => {
+  test("a flag of the application decides the services of the capabilities, and the commands keep their exit codes", async (t) => {
     const [on, off, echo, unknown, missing] = await Promise.all([
-      cliWithFlag("list"),
-      cliWithFlag("--switch", "false", "list"),
-      cliWithFlag("--switch", "false", "fixture", "echo", "--text", "hi"),
-      cliWithFlag("--switch", "false", "nope"),
-      cliWithFlag("--switch", "false", "fixture", "echo"),
+      cliWithFlag(t, "list"),
+      cliWithFlag(t, "--switch", "false", "list"),
+      cliWithFlag(t, "--switch", "false", "fixture", "echo", "--text", "hi"),
+      cliWithFlag(t, "--switch", "false", "nope"),
+      cliWithFlag(t, "--switch", "false", "fixture", "echo"),
     ]);
     assert.equal(toggle(on.stdout)?.available, true);
     assert.equal(toggle(off.stdout)?.available, false);
     assert.deepEqual([echo.code, unknown.code, missing.code], [0, 2, 3]);
   });
 
-  test("call with input that is not JSON gives unknown-capability, then unavailable, before invalid-input", async () => {
+  test("call with input that is not JSON gives unknown-capability, then unavailable, before invalid-input", async (t) => {
     const [unknown, unavailable, invalid] = await Promise.all([
-      cliWithFlag("call", "fixture.nothing", "{bad"),
-      cliWithFlag("--switch", "false", "call", "fixture.toggle", "{bad"),
-      cliWithFlag("call", "fixture.echo", "{bad"),
+      cliWithFlag(t, "call", "fixture.nothing", "{bad"),
+      cliWithFlag(t, "--switch", "false", "call", "fixture.toggle", "{bad"),
+      cliWithFlag(t, "call", "fixture.echo", "{bad"),
     ]);
     assert.deepEqual([unknown.code, unavailable.code, invalid.code], [2, 4, 3]);
   });
 
-  test("an interrupt as soon as a call holds cancels the call with exit code 130, and writes cancelled to standard error", async () => {
+  test("an interrupt as soon as a call holds cancels the call with exit code 130, and writes cancelled to standard error", async (t) => {
     const directory = mkdtempSync(join(tmpdir(), "core-effect-cli-"));
     const interrupted = async (run: number) => {
       const marker = join(directory, `held-${run}`);
-      const child = spawn(process.execPath, [bundledProgram("test/fixture-cli.ts"), "fixture", "hold", "--key", "k", "--marker", marker]);
+      const child = spawn(process.execPath, [bundledProgram("test/fixture-cli.ts"), "fixture", "hold", "--key", "k", "--marker", marker], { signal: t.signal, killSignal: "SIGKILL" });
+      child.on("error", () => {});
       let stderr = "";
       child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
       const watcher = watch(directory, (_, name) => {
@@ -143,8 +145,8 @@ describe("the command line of an application", { concurrency: true }, () => {
     }
   });
 
-  test("a command of the application runs beside the commands of the capabilities, and the help describes it", async () => {
-    const [position, echo, help] = await Promise.all([cliWithCommand("position", "switch"), cliWithCommand("fixture", "echo", "--text", "hi"), cliWithCommand("--help")]);
+  test("a command of the application runs beside the commands of the capabilities, and the help describes it", async (t) => {
+    const [position, echo, help] = await Promise.all([cliWithCommand(t, "position", "switch"), cliWithCommand(t, "fixture", "echo", "--text", "hi"), cliWithCommand(t, "--help")]);
     assert.equal(position.code, 0);
     assert.equal(position.stdout.trim(), "switch: on");
     assert.equal(echo.code, 0);
@@ -152,12 +154,12 @@ describe("the command line of an application", { concurrency: true }, () => {
     assert.match(help.stdout, /\n {2}position +Write the position of the switch\.\n\nALIASES\n/);
   });
 
-  test("a first -- is not an argument, and a -- after the first argument is an argument", async () => {
+  test("a first -- is not an argument, and a -- after the first argument is an argument", async (t) => {
     const [plain, dashed, extra, value] = await Promise.all([
-      cli("say", "--text", "hi"),
-      cli("--", "say", "--text", "hi"),
-      cli("fixture", "echo", "--text", "hi", "--"),
-      cli("fixture", "echo", "--text", "--"),
+      cli(t, "say", "--text", "hi"),
+      cli(t, "--", "say", "--text", "hi"),
+      cli(t, "fixture", "echo", "--text", "hi", "--"),
+      cli(t, "fixture", "echo", "--text", "--"),
     ]);
     assert.equal(plain.code, 0);
     assert.deepEqual(dashed, plain);
@@ -165,15 +167,15 @@ describe("the command line of an application", { concurrency: true }, () => {
     assert.deepEqual([value.code, JSON.parse(value.stdout)], [0, { text: "--" }]);
   });
 
-  test("the help lists the aliases, and a flag alias with --help gives the usage of the alias", async () => {
-    const [help, helloHelp] = await Promise.all([cli("--help"), cli("--hello", "--help")]);
+  test("the help lists the aliases, and a flag alias with --help gives the usage of the alias", async (t) => {
+    const [help, helloHelp] = await Promise.all([cli(t, "--help"), cli(t, "--hello", "--help")]);
     assert.match(help.stdout, /\nALIASES\n {2}--hello\n {2}broken-ticks \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}echoes '<json>' \[--cursor <string>\] \[--max-age-ms <integer>\]\n {2}fixed-note \[--loud\]\n {2}fixture \[--count <integer>\][^\n]*\n {2}held-keys\n {2}notes '<json>'\n {2}notes add --text <string> \[--loud\]\n {2}notes loud --text <string>\n {2}quick \[--count <integer>\][^\n]*\n {2}raw '<json>'\n {2}say --text <string>\n {2}shout hello\n {2}ticks \[--gap <integer>\] \[--key <string>\] \[--cursor <string>\] \[--max-age-ms <integer>\]\n$/);
     assert.doesNotMatch(help.stdout, /alias --hello/);
     assert.equal(helloHelp.stdout, "Usage: fixture --hello\n\nReturn the input text.\n");
   });
 
-  test("a usage error of a flag alias shows the alias as the user gives it, and no other name selects the alias", async () => {
-    const [unknownFlag, otherName] = await Promise.all([cli("--hello", "--text", "x"), cli("alias --hello")]);
+  test("a usage error of a flag alias shows the alias as the user gives it, and no other name selects the alias", async (t) => {
+    const [unknownFlag, otherName] = await Promise.all([cli(t, "--hello", "--text", "x"), cli(t, "alias --hello")]);
     assert.equal(unknownFlag.code, 3);
     assert.equal(unknownFlag.stdout, "");
     assert.match(unknownFlag.stderr, /\nUSAGE\n {2}fixture --hello \[flags\]\n/);
@@ -182,13 +184,13 @@ describe("the command line of an application", { concurrency: true }, () => {
     assert.match(otherName.stderr, /Unknown subcommand "alias --hello" for "fixture"/);
   });
 
-  test("a flag is a property of the input itself, not a name that every object inherits", async () => {
+  test("a flag is a property of the input itself, not a name that every object inherits", async (t) => {
     const [fixed, changed, alias, command, missing] = await Promise.all([
-      cliWithInherited("go"),
-      cliWithInherited("go", "--constructor", '"changed"'),
-      cliWithInherited("go", "--toString", "x"),
-      cliWithInherited("probe", "name", "--constructor", "own", "--toString", "x"),
-      cliWithInherited("probe", "name", "--text", "no constructor"),
+      cliWithInherited(t, "go"),
+      cliWithInherited(t, "go", "--constructor", '"changed"'),
+      cliWithInherited(t, "go", "--toString", "x"),
+      cliWithInherited(t, "probe", "name", "--constructor", "own", "--toString", "x"),
+      cliWithInherited(t, "probe", "name", "--text", "no constructor"),
     ]);
     assert.deepEqual(JSON.parse(fixed.stdout), { constructor: "fixed" });
     assert.equal(changed.code, 3);
@@ -197,13 +199,13 @@ describe("the command line of an application", { concurrency: true }, () => {
     assert.equal(missing.code, 3);
   });
 
-  test("a usage error writes the help and the error to standard error, and help and version still go to standard output", async () => {
+  test("a usage error writes the help and the error to standard error, and help and version still go to standard output", async (t) => {
     const [unknownFlag, rootHelp, rootShort, commandShort, version] = await Promise.all([
-      cli("fixture", "echo", "--nope", "x"),
-      cli("--help"),
-      cli("-h"),
-      cli("fixture", "echo", "-h"),
-      cli("--version"),
+      cli(t, "fixture", "echo", "--nope", "x"),
+      cli(t, "--help"),
+      cli(t, "-h"),
+      cli(t, "fixture", "echo", "-h"),
+      cli(t, "--version"),
     ]);
     assert.deepEqual([unknownFlag.code, unknownFlag.stdout], [3, ""]);
     assert.match(unknownFlag.stderr, /^Usage: fixture fixture echo --text <string>\n[\s\S]*Unrecognized flag: --nope/);
