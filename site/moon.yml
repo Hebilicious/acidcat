@@ -3,7 +3,7 @@ layer: "application"
 
 project:
   title: "AcidCat site"
-  description: "The homepage and the documentation of AcidCat, built with VitePress."
+  description: "The homepage and the documentation of AcidCat, built with vaporpress."
 
 toolchains:
   default: ["javascript", "node", "pnpm"]
@@ -23,7 +23,7 @@ tasks:
     preset: "server"
 
   fonts:
-    description: "Write the core and the rest of each font face, and their @font-face rules, into .fonts/. Both builds read them."
+    description: "Write the core and the rest of each font face, and their @font-face rules, into .fonts/. The build and the dev server read them."
     command: "node"
     args: ["scripts/write-fonts.ts"]
     inputs: ["scripts/write-fonts.ts", "src/lib/fonts.ts", "src/lib/font-faces.ts", "package.json"]
@@ -32,8 +32,7 @@ tasks:
   dev:
     deps: ["tokens-watch", "fonts"]
     description: "Serve the site with live reload at http://localhost:5173, and write the design tokens on each change."
-    command: "vitepress"
-    args: ["dev"]
+    command: "vite"
     preset: "server"
 
   tokens-check:
@@ -43,15 +42,15 @@ tasks:
 
   build:
     deps: ["fonts"]
-    description: "Build the static site into dist/."
-    command: "vitepress"
+    description: "Build the static site with vaporpress into dist/."
+    command: "vite"
     args: ["build"]
     inputs:
       - "src/**/*"
       - "content/**/*"
       - "public/**/*"
-      - ".vitepress/config.ts"
-      - ".vitepress/theme/**/*"
+      - "vite.config.ts"
+      - "/vaporpress/src/**/*"
       - "cssforge.config.ts"
       - "package.json"
       - "/spec/**/*.md"
@@ -70,22 +69,6 @@ tasks:
       - "/packages/catalog/typescript/src/**/*.ts"
     outputs: ["dist/**/*"]
 
-  build-framework:
-    deps: ["fonts"]
-    description: "Build the site with vaporpress into .out/framework/, the build that the Worker deploys."
-    command: "vite"
-    args: ["build", "--config", "framework.config.ts"]
-    inputs:
-      - "src/**/*"
-      - "content/**/*"
-      - "public/**/*"
-      - "framework.config.ts"
-      - "package.json"
-      - "/spec/**/*.md"
-      - "/examples/**/*"
-      - "/vaporpress/src/**/*"
-    outputs: [".out/framework/**/*"]
-
   catalog:
     description: "Write the catalog of the AcidCat app of the site, site.acidcat.json, from its code."
     command: "node"
@@ -96,16 +79,16 @@ tasks:
       runInCI: false
 
   deploy:
-    deps: ["build-framework"]
-    description: "Bundle the Worker, and deploy it with the build of vaporpress (.out/framework/) as its assets, with the cf command. Set CLOUDFLARE_ACCOUNT_ID first."
+    deps: ["build"]
+    description: "Bundle the Worker, and deploy it with dist/ as its assets, with the cf command. Set CLOUDFLARE_ACCOUNT_ID first."
     script: "node scripts/worker-output.ts && cf deploy --prebuilt"
     options:
       cache: false
       runInCI: false
 
   preview:
-    deps: ["build-framework"]
-    description: "Bundle the Worker, and deploy it with the build of vaporpress (.out/framework/) as a Worker Preview named after the Git branch. Production does not change. Set CLOUDFLARE_ACCOUNT_ID first."
+    deps: ["build"]
+    description: "Bundle the Worker, and deploy it with dist/ as a Worker Preview named after the Git branch. Production does not change. Set CLOUDFLARE_ACCOUNT_ID first."
     script: "node scripts/worker-output.ts --preview && cf previews deploy --prebuilt"
     options:
       cache: false
@@ -120,30 +103,21 @@ tasks:
       runInCI: false
 
   test:
-    deps: ["build", "build-framework", "tokens-check"]
+    deps: ["build", "tokens-check"]
     description: "Test the geometry of the art, render the homepage in Chromium at desktop and phone widths, and call the AcidCat app of the site through the Worker, MCP, HTTP and WebMCP."
     command: "node"
     args: ["--test", "test/"]
-    inputs: ["src/**/*", "content/**/*", ".vitepress/**/*", "framework.config.ts", "test/**/*.ts", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*", "/vaporpress/src/**/*"]
-
-  test-framework:
-    deps: ["build-framework"]
-    description: "Run the tests of the homepage, the page changes, the delivery, the fonts, the pages, the examples, the search, the three browsers and the GPU renderers on the build of vaporpress."
-    command: "node"
-    args: ["--test", "test/home.test.ts", "test/navigation.test.ts", "test/delivery.test.ts", "test/fonts.test.ts", "test/pages.test.ts", "test/examples.test.ts", "test/search.test.ts", "test/browsers.test.ts", "test/gpu-parity.test.ts", "test/agent.test.ts"]
-    env:
-      SITE_BUILD: "framework"
-    inputs: ["src/**/*", "content/**/*", "framework.config.ts", "test/**/*.ts", "/vaporpress/src/**/*"]
+    inputs: ["src/**/*", "content/**/*", "vite.config.ts", "test/**/*.ts", "test/routes.txt", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*", "/vaporpress/src/**/*"]
 
   typecheck:
     description: "Type-check the art geometry, the tests and the configuration."
     command: "tsc"
     args: ["-p", "."]
-    inputs: ["src/lib/**/*.ts", "src/app/**/*.ts", "test/**/*.ts", "worker/**/*.ts", "scripts/**/*.ts", ".vitepress/**/*.ts", "content/**/*.ts", "cssforge.config.ts", "cloudflare.config.ts", "framework.config.ts", "tsconfig.json", "/tsconfig.base.json"]
+    inputs: ["src/lib/**/*.ts", "src/app/**/*.ts", "test/**/*.ts", "worker/**/*.ts", "scripts/**/*.ts", "cssforge.config.ts", "cloudflare.config.ts", "vite.config.ts", "tsconfig.json", "/tsconfig.base.json"]
 
   lighthouse:
-    deps: ["build-framework"]
-    description: "Serve the build of vaporpress (.out/framework/) with compression, run Lighthouse on mobile on the homepage and the quick start several times, and fail when a median score or a pass-or-fail audit misses its budget. The workflow lighthouse.yml runs it on GitHub's runners."
+    deps: ["build"]
+    description: "Serve dist/ with compression, run Lighthouse on mobile on the homepage and the quick start several times, and fail when a median score or a pass-or-fail audit misses its budget. The workflow lighthouse.yml runs it on GitHub's runners."
     command: "node"
     args: ["scripts/lighthouse.ts"]
     options:

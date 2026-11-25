@@ -45,11 +45,10 @@ const starter = (sources: readonly string[]): string => {
  *   tree".
  * - One inline script imports the module scripts in their order when the document is parsed and the browser reports
  *   its first paint, so the browser paints the page from the server before it evaluates the scripts and hydrates the
- *   page. It listens for the load event before anything else, and imports them then at the latest: a page that has
- *   nothing to paint, such as the 404 page of VitePress, reports no paint. A hidden page, such as a background tab or a
- *   prerender, does not paint, so it imports them when the document is parsed, as does a browser without
- *   `PerformanceObserver` or paint timing. A page that the back-forward
- *   cache restores imports them when it shows, if they did not start before.
+ *   page. It also imports them at the load event, if that comes first: on a fast computer it often does, and the
+ *   scripts then run before the first paint. A hidden page, such as a background tab or a prerender, does not paint,
+ *   so it imports them when the document is parsed, as does a browser without `PerformanceObserver` or paint timing.
+ *   A page that the back-forward cache restores imports them when it shows, if they did not start before.
  */
 export const startScriptsAfterFirstPaint = async (html: string, dist: string): Promise<string> => {
   const end = html.indexOf("</head>");

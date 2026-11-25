@@ -10,9 +10,7 @@ const sources: readonly (readonly [RegExp, Route])[] = [
   [/\/site\/src\/styles\/(docs|content|explorer|diagrams)\.css$/, "docs"],
   [/\/site\/src\/components\/PackagesPage\.vue$/, "docs"],
   [/\/site\/src\/app\/SearchDialog\.vue$/, "search"],
-  [/\/site\/src\/app\/pages\/home\.vue$/, "home"],
-  [/\/site\/src\/styles\/search\.css$/, "search"],
-  [/\/vitepress\/dist\/client\/theme-default\/(styles\/icons\.css|components\/VPLocalSearchBox\.vue)$/, "search"],
+  [/\/site\/content\/index\.vue$/, "home"],
   [/\/site\/src\/styles\/home\.css$/, "home"],
   [/\/site\/src\/components\/[^/]+\.vue$/, "home"],
 ];
@@ -28,7 +26,7 @@ const markerPattern = /^@supports\s*\(--acidcat-route:\s*(\w+)\)\s*\{/;
 /**
  * Wraps the CSS of each route in `@supports (--acidcat-route: <route>)`. Every browser that reads custom properties
  * passes this condition, so the wrapper changes nothing on the page. It survives the minifier, so the build can split
- * the one stylesheet of VitePress by route.
+ * the one stylesheet of the build by route.
  */
 export const markRoutes = (): Plugin => ({
   postcssPlugin: "acidcat-route-styles",
@@ -108,7 +106,7 @@ export const inlineStyles = async (dist: string): Promise<void> => {
       if (!sheets.has(href)) sheets.set(href, splitRoutes(await readFile(join(dist, href), "utf8")));
     }
   }
-  if (sheets.size === 0) throw new Error("No page links a stylesheet. Change site/src/lib/route-styles.ts to match the HTML of VitePress.");
+  if (sheets.size === 0) throw new Error("No page links a stylesheet. Change site/src/lib/route-styles.ts to match the HTML of the build.");
   const segments = [...sheets.values()].flat();
   const files: Partial<Record<Route, string>> = {};
   for (const route of routes) {
@@ -124,7 +122,7 @@ export const inlineStyles = async (dist: string): Promise<void> => {
       const route = routeOfPage(pagePath(dist, page));
       const html = await readFile(page, "utf8");
       const hrefs = [...html.matchAll(stylesheetLink)].map((match) => match[1] ?? "");
-      if (hrefs.length === 0) throw new Error(`${page} links no stylesheet. Change site/src/lib/route-styles.ts to match the HTML of VitePress.`);
+      if (hrefs.length === 0) throw new Error(`${page} links no stylesheet. Change site/src/lib/route-styles.ts to match the HTML of the build.`);
       const css = pick(
         hrefs.flatMap((href) => sheets.get(href) ?? []),
         (candidate) => candidate === "shared" || candidate === route,

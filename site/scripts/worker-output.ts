@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import config from "../cloudflare.config.ts";
 
-// `cf` builds a project with a Worker entrypoint through the framework's own command, and VitePress writes only static files.
+// `cf` builds a project with a Worker entrypoint through the command of its framework, and vaporpress writes only static files.
 
 const site = join(import.meta.dirname, "..");
 const output = join(site, ".cloudflare/output/v1");
@@ -30,7 +30,7 @@ await build({
   minify: true,
   logLevel: "warning",
 });
-await cp(join(site, ".out/framework"), join(workerDirectory, "assets"), { recursive: true });
+await cp(join(site, "dist"), join(workerDirectory, "assets"), { recursive: true });
 await writeFile(
   join(workerDirectory, "worker.config.json"),
   JSON.stringify({ ...settings, manifest: { type: "complete", mainModule: "index.js", modules: { "index.js": { type: "esm" } } } }),

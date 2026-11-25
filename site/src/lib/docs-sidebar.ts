@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { SidebarItem, SidebarLink } from "../theme/site-theme.ts";
+import type { SidebarItem, SidebarLink } from "../app/sidebar.ts";
 
 interface DocsPage {
   readonly link: string;

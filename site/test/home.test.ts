@@ -106,6 +106,7 @@ test("reduced motion keeps the hero still and stops the animations", async () =>
 
 /** Each group of the files that the homepage fetches ahead when it is idle, by its budget. */
 const prefetchGroups = [
+  { name: "search dialog ahead", pattern: /^\/assets\/(SearchDialog\.[\w-]+\.js|search\.[\w-]+\.css)$/ },
   { name: "stylesheet ahead", pattern: /\.css$/ },
   { name: "pages ahead", pattern: /\.js$/ },
 ] as const;
@@ -155,19 +156,21 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   assert.deepEqual(files.filter((file) => file.endsWith(".woff2") && !/-core\.[\w-]+\.woff2$/.test(file)), [], "only the core of each font");
   const phonePlate = 88_000;
   const fontCores = 170_000;
-  const scriptOfTheVitePressHomepage = 168_000;
+  const scriptsOfTheHomepage = 166_000;
   const homepageWithItsCss = 176_000;
   const starCount = 1_000;
-  const prefetchOfEachSectionInTheHeaderAndTheDocsLayout = 115_000;
-  const cssOfTheDocs = 40_000;
+  const pagesOfEachSectionInTheHeaderAndTheDocsLayout = 111_000;
+  const cssOfTheDocs = 39_500;
+  const scriptAndCssOfTheSearchDialog = 15_000;
   const budget: Record<string, number> = {
     image: phonePlate,
     font: fontCores,
-    script: scriptOfTheVitePressHomepage,
+    script: scriptsOfTheHomepage,
     document: homepageWithItsCss,
     fetch: starCount,
-    "pages ahead": prefetchOfEachSectionInTheHeaderAndTheDocsLayout,
+    "pages ahead": pagesOfEachSectionInTheHeaderAndTheDocsLayout,
     "stylesheet ahead": cssOfTheDocs,
+    "search dialog ahead": scriptAndCssOfTheSearchDialog,
   };
   for (const [type, size] of bytes) assert.ok(size <= (budget[type] ?? 0), `${type}: ${size} bytes, budget ${budget[type] ?? 0}`);
   await page.close();

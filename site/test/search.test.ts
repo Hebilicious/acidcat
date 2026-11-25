@@ -43,7 +43,7 @@ for (const viewport of [
     await waitForHydration(page);
     assert.equal(await page.locator('link[data-route="search"]').count(), 0, "the page loads the CSS of the search only when the search opens");
     await page.locator(".search-button").click();
-    const input = page.locator("#localsearch-input, #search-input");
+    const input = page.locator("#search-input");
     await input.waitFor();
     assert.equal(await page.locator('link[rel="stylesheet"][data-route="search"]').count(), 1);
 
@@ -63,12 +63,12 @@ for (const viewport of [
     assert.ok(field.box.left >= bar.box.left && field.box.right <= bar.box.right && field.box.top >= bar.box.top && field.box.bottom <= bar.box.bottom, "the input is inside the bar");
 
     await input.fill("catalog");
-    const first = page.locator(".VPLocalSearchBox .result, .search-dialog .result").first();
+    const first = page.locator(".search-dialog .result").first();
     await first.waitFor();
     assert.equal(await first.evaluate((element) => getComputedStyle(element).borderTopColor), await acid(page), "the selected result has the acid border");
 
     await input.fill("zzqqxx");
-    const empty = page.locator(".VPLocalSearchBox .no-results, .search-dialog .no-results");
+    const empty = page.locator(".search-dialog .no-results");
     await empty.waitFor();
     assert.equal(await empty.locator("strong").evaluate((element) => getComputedStyle(element).color), await acid(page));
     await page.close();
@@ -84,15 +84,14 @@ test("the search marks the words that match, Enter goes to the selected result w
   await waitForHydration(page);
   await page.evaluate(() => document.documentElement.setAttribute("data-same-document", ""));
   await page.keyboard.press("Control+k");
-  const input = page.locator("#localsearch-input, #search-input");
+  const input = page.locator("#search-input");
   await input.waitFor();
   await input.fill("conformance");
-  const first = page.locator(".VPLocalSearchBox .result, .search-dialog .result").first();
+  const first = page.locator(".search-dialog .result").first();
   await first.locator("mark").first().waitFor();
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => location.pathname !== "/docs/quick-start/");
-  const firstResult = process.env["SITE_BUILD"] === "framework" ? "/docs/concepts/conformance/" : "/docs/concepts/conformance/#conformance";
-  assert.equal(await page.evaluate(() => location.pathname + location.search + location.hash), firstResult, "Enter goes to the first result: the section of the first heading of the page, which has an id only in the VitePress build");
+  assert.equal(await page.evaluate(() => location.pathname + location.search + location.hash), "/docs/concepts/conformance/", "Enter goes to the first result: the section of the page, which starts at its first heading");
   assert.equal(await page.evaluate(() => document.documentElement.hasAttribute("data-same-document")), true);
   await page.keyboard.press("Control+k");
   await input.waitFor();
@@ -101,8 +100,6 @@ test("the search marks the words that match, Enter goes to the selected result w
   assert.deepEqual(problems, []);
   await page.close();
 });
-
-const vaporpressOnly = { skip: process.env["SITE_BUILD"] === "framework" ? false : "the search of VitePress is its own" };
 
 const searchIndexRequests = (page: Page): string[] => {
   const requests: string[] = [];
@@ -125,7 +122,7 @@ const openDocsPage = async (path = "/docs/quick-start/"): Promise<{ readonly pag
 
 const afterTwoFrames = (page: Page): Promise<void> => page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 
-test("the open search is an entry of the history: Back closes only the search and keeps the scroll, and a result replaces the entry", vaporpressOnly, async () => {
+test("the open search is an entry of the history: Back closes only the search and keeps the scroll, and a result replaces the entry", async () => {
   const { page, problems } = await openDocsPage();
   await page.evaluate(() => window.scrollTo(0, 600));
   await page.waitForFunction(() => window.scrollY === 600);
@@ -161,7 +158,7 @@ test("the open search is an entry of the history: Back closes only the search an
   await page.close();
 });
 
-test("/ opens the search, but not in a text field", vaporpressOnly, async () => {
+test("/ opens the search, but not in a text field", async () => {
   const { page, problems } = await openDocsPage();
   await page.evaluate(() => {
     const field = document.createElement("input");
@@ -180,7 +177,18 @@ test("/ opens the search, but not in a text field", vaporpressOnly, async () => 
   await page.close();
 });
 
-test("the page loads the search index only when the search opens", vaporpressOnly, async () => {
+test("the page fetches ahead the script and the CSS of the search dialog when it is idle, as prefetch links", async () => {
+  const { page, problems } = await openDocsPage();
+  await page.waitForLoadState("networkidle");
+  const dialog = await page.locator('meta[name="acidcat:search-dialog"]').getAttribute("content");
+  assert.match(dialog ?? "", /^\/assets\/SearchDialog\.[\w-]+\.js$/);
+  await page.waitForFunction((href) => document.head.querySelector(`link[rel="prefetch"][href="${href}"]`) !== null, dialog);
+  await page.waitForFunction(() => document.head.querySelector('link[rel="prefetch"][href^="/assets/search."][href$=".css"]') !== null);
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+test("the page loads the search index only when the search opens", async () => {
   const { page, problems, indexRequests } = await openDocsPage();
   await page.hover(".search-button");
   await page.focus(".search-button");
@@ -198,7 +206,7 @@ for (const viewport of [
   { width: 1440, height: 900 },
   { width: 390, height: 844 },
 ]) {
-  test(`at ${viewport.width}px, the open search with results passes every rule of axe-core`, vaporpressOnly, async () => {
+  test(`at ${viewport.width}px, the open search with results passes every rule of axe-core`, async () => {
     if (browser === undefined) throw new Error("No browser.");
     const page = await openPage(browser, { viewport });
     await page.goto(`${origin}/docs/quick-start/`, { waitUntil: "networkidle" });

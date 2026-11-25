@@ -2,13 +2,13 @@
   "name": "acid-cat-site",
   "version": "0.0.0",
   "private": true,
-  "description": "The AcidCat site: a homepage and the documentation, built with VitePress.",
+  "description": "The AcidCat site: a homepage and the documentation, built with vaporpress.",
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "vitepress dev",
-    "build": "vitepress build",
-    "preview": "vitepress preview"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@acid-cat/core-ts": "workspace:*",
@@ -26,7 +26,6 @@
     "subset-font": "catalog:",
     "three": "catalog:",
     "zod": "catalog:",
-    "vitepress": "catalog:",
     "vue": "catalog:",
     "vaporpress": "workspace:*",
     "vue-router": "catalog:"

@@ -55,8 +55,6 @@ test("every character on every page is in the core of the fonts, so no page load
 test("every character that the browser draws beside the text of a page is in the core: list markers, generated content and text from scripts", async () => {
   if (browser === undefined || server === undefined) throw new Error("No browser.");
   const page = await browser.newPage();
-  // A script can write other text on an Apple platform, such as a ⌘ key hint. VitePress reads `navigator.platform` to mark one.
-  await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "platform", { get: () => "MacIntel" }));
   const outside = new Map<string, string>();
   for (const file of await builtPages()) {
     const path = file.slice(dist.length - 1).replace(/index\.html$/, "");

@@ -1,7 +1,7 @@
 <script setup lang="ts" vapor>
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import Mark from "../theme/Mark.vue";
+import Mark from "./Mark.vue";
 
 const repository = "https://github.com/Hebilicious/acidcat";
 const links = [

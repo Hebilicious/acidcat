@@ -1,7 +1,7 @@
 <script setup lang="ts" vapor>
 import { computed, ref, watch } from "vue";
 import type { TocEntry } from "./toc.ts";
-import Caret from "../theme/Caret.vue";
+import Caret from "./Caret.vue";
 import TocList from "./TocList.vue";
 
 const props = defineProps<{ headers: readonly TocEntry[]; active: string }>();

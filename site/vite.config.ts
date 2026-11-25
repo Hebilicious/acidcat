@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { relative } from "node:path";
+import { build as esbuild } from "esbuild";
 import { defineConfig } from "vite";
-import type { Plugin } from "vite";
 import { vaporpress } from "vaporpress/vite";
 import { writeAgentFiles } from "./src/lib/agent/files.ts";
 import { writeExampleFragments } from "./src/lib/example-fragments.ts";
@@ -22,8 +22,17 @@ const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const content = fileURLToPath(new URL("content", import.meta.url));
 const specPages = await readSpecPages(repositoryRoot);
 const favicon = await readFavicon();
-const outDir = fileURLToPath(new URL(".out/framework", import.meta.url));
+const outDir = fileURLToPath(new URL("dist", import.meta.url));
 const specFiles = new Map(specPages.map((page) => [fileURLToPath(new URL(`../${page.source}`, import.meta.url)), page]));
+
+const tabInput = await esbuild({ entryPoints: [fileURLToPath(new URL("src/app/tab-input.ts", import.meta.url))], bundle: true, minify: true, format: "iife", target: "es2022", write: false });
+const tabInputScript = `<script>${tabInput.outputFiles[0]?.text.trim() ?? ""}</script>`;
+
+const searchDialogMeta = (files: readonly string[]): string => {
+  const href = files.find((file) => /\/SearchDialog\.[\w-]+\.js$/.test(file));
+  if (href === undefined) throw new Error("The build has no chunk for SearchDialog.vue.");
+  return `<meta name="acidcat:search-dialog" content="${href}">`;
+};
 
 const specMarkdown = (file: string): string | undefined => {
   const page = specFiles.get(file);
@@ -31,16 +40,7 @@ const specMarkdown = (file: string): string | undefined => {
   return ["---", `title: ${JSON.stringify(page.title)}`, `description: ${JSON.stringify(page.description)}`, `source: ${JSON.stringify(page.source)}`, "---", "", page.body].join("\n");
 };
 
-const homeComponents = fileURLToPath(new URL("src/components/", import.meta.url));
-
-/** The figures of the homepage serve both builds. In this build, they take the directive of the Vapor components. */
-const vaporCodeHtml: Plugin = {
-  name: "acidcat:vapor-code-html",
-  enforce: "pre",
-  resolveId: (source, importer) => (source === "./code-html.ts" && importer?.startsWith(homeComponents) === true ? fileURLToPath(new URL("src/app/code-html.ts", import.meta.url)) : undefined),
-};
-
-/** The AcidCat site on vaporpress. VitePress builds the site that is deployed until every part has moved. */
+/** The AcidCat site on vaporpress. */
 export default defineConfig({
   build: {
     outDir,
@@ -52,29 +52,26 @@ export default defineConfig({
   css: { postcss: { plugins: [markRoutes()] } },
   publicDir: "public",
   server: { fs: { allow: [repositoryRoot] } },
-  plugins: [
-    vaporCodeHtml,
-    vaporpress({
+  plugins: vaporpress({
     root,
     app: "src/app/app.ts",
     pages: "content",
-    exclude: ["index.md", "spec/**", "packages/**"],
-    extraPages: () => [
-      { path: "/", file: fileURLToPath(new URL("src/app/pages/home.vue", import.meta.url)) },
-      { path: "/packages", file: fileURLToPath(new URL("src/app/pages/packages.vue", import.meta.url)) },
-      ...specPages.map((page) => ({ path: `/${page.id}`, file: fileURLToPath(new URL(`../${page.source}`, import.meta.url)) })),
-    ],
+    extraPages: () => specPages.map((page) => ({ path: `/${page.id}`, file: fileURLToPath(new URL(`../${page.source}`, import.meta.url)) })),
     search: true,
     headHtml: `<meta name="theme-color" content="#0b0e14"><link rel="icon" type="image/svg+xml" href="${favicon.href}">`,
     markdown: {
-      transformSource: (source, file) => expandComponents(specMarkdown(file) ?? source, { page: relative(repositoryRoot, file), repositoryRoot, content, roles: true }),
+      transformSource: (source, file) => expandComponents(specMarkdown(file) ?? source, { page: relative(repositoryRoot, file), repositoryRoot, content }),
       slugify: headingSlug,
       highlight: highlightBlock,
       hastPlugins: [headingAnchors, externalLinks],
     },
     preload: (page) => (page.frontmatter["layout"] === "home" ? [] : ["src/app/DocsLayout.vue"]),
-    transformHtml: async (html, page, { files }) =>
-      writeExplorerSources(await startScriptsAfterFirstPaint(html.replace('<link rel="stylesheet"', `${fontPreloadHtml(page.path === "/" ? "home" : "docs", files)}<link rel="stylesheet"`), outDir), repositoryRoot),
+    transformHtml: async (html, page, { files }) => {
+      const scriptsFirst = await startScriptsAfterFirstPaint(html, outDir);
+      const fonts = fontPreloadHtml(page.path === "/" ? "home" : "docs", files);
+      const docsOnly = page.path === "/" ? "" : tabInputScript;
+      return writeExplorerSources(scriptsFirst.replace("</head>", `${fonts}${searchDialogMeta(files)}${docsOnly}</head>`), repositoryRoot);
+    },
     afterBuild: async () => {
       await inlineStyles(outDir);
       await favicon.write(outDir);
@@ -83,5 +80,4 @@ export default defineConfig({
       await writeAgentFiles({ dist: outDir, repositoryRoot, origin: siteUrl });
     },
   }),
-  ],
 });

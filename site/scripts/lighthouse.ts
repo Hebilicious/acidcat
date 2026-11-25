@@ -12,7 +12,7 @@ import { contentType } from "../src/lib/content-types.ts";
 const { values } = parseArgs({ options: { runs: { type: "string", default: "5" }, out: { type: "string", default: ".tmp/lighthouse" } } });
 const runs = Number(values.runs);
 const out = values.out;
-const dist = new URL("../.out/framework/", import.meta.url).pathname;
+const dist = new URL("../dist/", import.meta.url).pathname;
 const pages = { home: "/", "quick-start": "/docs/quick-start/" } as const;
 
 /** Audits that pass or fail, with no score in between. Each run of each page must pass them. */
@@ -117,6 +117,7 @@ try {
       const [html = "", json = ""] = Array.isArray(runner.report) ? runner.report : [runner.report];
       await writeFile(join(out, `${name}-${run}.report.html`), html);
       await writeFile(join(out, `${name}-${run}.report.json`), json);
+      if (run === 1) await writeFile(join(out, `${name}-${run}.trace.json`), JSON.stringify(runner.artifacts.Trace));
       results.push(runner.lhr);
     }
     version = results[0]?.lighthouseVersion ?? "";

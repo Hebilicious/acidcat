@@ -2,13 +2,11 @@ import { createHash } from "node:crypto";
 import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { HeadConfig } from "vitepress";
 
 const source = fileURLToPath(new URL("../assets/favicon.svg", import.meta.url));
 
 export interface Favicon {
   readonly href: string;
-  readonly head: HeadConfig;
   readonly write: (dist: string) => Promise<void>;
 }
 
@@ -21,7 +19,6 @@ export const readFavicon = async (): Promise<Favicon> => {
   const href = `/assets/favicon.${createHash("sha256").update(svg).digest("base64url").slice(0, 8)}.svg`;
   return {
     href,
-    head: ["link", { rel: "icon", type: "image/svg+xml", href }],
     write: async (dist) => {
       await writeFile(join(dist, href), svg);
       await appendFile(join(dist, "_redirects"), `/favicon.ico ${href} 302\n`);

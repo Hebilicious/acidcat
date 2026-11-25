@@ -4,8 +4,7 @@ import type { AddressInfo } from "node:net";
 import { join, normalize } from "node:path";
 import { contentType } from "../src/lib/content-types.ts";
 
-/** The build that the tests read: `dist/` of VitePress, or the build of vaporpress when `SITE_BUILD` is `framework`. */
-export const dist = new URL(process.env["SITE_BUILD"] === "framework" ? "../.out/framework/" : "../dist/", import.meta.url).pathname;
+export const dist = new URL("../dist/", import.meta.url).pathname;
 
 export const builtPages = async (): Promise<string[]> => {
   const entries = await readdir(dist, { withFileTypes: true, recursive: true });

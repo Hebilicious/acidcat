@@ -1,8 +1,9 @@
 <script setup lang="ts" vapor>
 import { computed, defineVaporAsyncComponent, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { isSearchShortcut } from "vaporpress/behaviors";
 import type { LocationQuery } from "vue-router";
-import { loadRouteStyles, prefetchRouteStyles } from "../theme/route-styles.ts";
+import { loadRouteStyles, prefetchRouteStyles } from "./route-styles.ts";
 
 const loadDialog = () => import("./SearchDialog.vue");
 const SearchDialog = defineVaporAsyncComponent(loadDialog);
@@ -45,13 +46,8 @@ const prefetch = (): void => {
   void loadDialog();
 };
 
-const isTextField = (target: EventTarget | null): boolean =>
-  target instanceof HTMLElement && (target.isContentEditable || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLInputElement && !["button", "checkbox", "radio", "reset", "submit"].includes(target.type)));
-
 const shortcut = (event: KeyboardEvent): void => {
-  const controlK = event.key.toLowerCase() === "k" && (event.ctrlKey || event.metaKey);
-  const slash = event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey && !isTextField(event.target);
-  if (!controlK && !slash) return;
+  if (!isSearchShortcut(event)) return;
   event.preventDefault();
   show();
 };

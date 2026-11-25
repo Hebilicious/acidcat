@@ -153,7 +153,7 @@ test("a page change moves no content that stays on the page, from the homepage, 
 test("the router fetches ahead the page that a link in view leads to, before the reader clicks it", async () => {
   if (browser === undefined) throw new Error("No browser.");
   const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
-  const prefetched = page.waitForRequest((request) => /\/assets\/(docs_quick-start_index\.md|quick-start)\.[\w-]+\.js$/.test(new URL(request.url()).pathname));
+  const prefetched = page.waitForRequest((request) => /\/assets\/quick-start\.[\w-]+\.js$/.test(new URL(request.url()).pathname));
   await page.goto(`${origin}/docs/`);
   await prefetched;
   assert.equal(await documentLoads(page), 1);
