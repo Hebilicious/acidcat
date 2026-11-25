@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.19.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.18.0...@acid-cat/core-effect@0.19.0) (2026-11-25)
+
+
+### Features
+
+* **conform:** stop a run of conform with an abort signal ([c7e995a](https://github.com/Hebilicious/acidcat/commit/c7e995ad3dd918f3300109a7a3ce257ce4255dfa))
+* **cores:** serve and reach a server over a Unix socket ([#235](https://github.com/Hebilicious/acidcat/issues/235)) ([9b96297](https://github.com/Hebilicious/acidcat/commit/9b962974fe779338269a3506afe930bdd1ea4a1e))
+
+
+### Bug Fixes
+
+* **cli:** close no idle connection, and cut no accepted request at close ([c7e995a](https://github.com/Hebilicious/acidcat/commit/c7e995ad3dd918f3300109a7a3ce257ce4255dfa))
+* **conform:** check the heartbeat interval from the request ([db50d54](https://github.com/Hebilicious/acidcat/commit/db50d54cc792700db7f7ed893cd40ee5c7860c68))
+* **conform:** give each run of a property-based check the deadline ([c7e995a](https://github.com/Hebilicious/acidcat/commit/c7e995ad3dd918f3300109a7a3ce257ce4255dfa))
+* **core-effect:** close no idle connection, and cut no accepted request at close ([c7e995a](https://github.com/Hebilicious/acidcat/commit/c7e995ad3dd918f3300109a7a3ce257ce4255dfa))
+* **core-effect:** stop listening for interrupts when the program of NodeCli ends with no interrupt ([c7e995a](https://github.com/Hebilicious/acidcat/commit/c7e995ad3dd918f3300109a7a3ce257ce4255dfa))
+* **core-rust:** exit at once at a second interrupt during the cancellation ([c7e995a](https://github.com/Hebilicious/acidcat/commit/c7e995ad3dd918f3300109a7a3ce257ce4255dfa))
+* **core-rust:** listen for interrupts on a thread with its own runtime ([c7e995a](https://github.com/Hebilicious/acidcat/commit/c7e995ad3dd918f3300109a7a3ce257ce4255dfa))
+* **core-rust:** send each message of a stream at once, with TCP_NODELAY ([db50d54](https://github.com/Hebilicious/acidcat/commit/db50d54cc792700db7f7ed893cd40ee5c7860c68))
+* **core-rust:** stop listening for interrupts when run_cli_process returns with no interrupt ([c7e995a](https://github.com/Hebilicious/acidcat/commit/c7e995ad3dd918f3300109a7a3ce257ce4255dfa))
+* **core-ts:** close no idle connection, and cut no accepted request at close ([c7e995a](https://github.com/Hebilicious/acidcat/commit/c7e995ad3dd918f3300109a7a3ce257ce4255dfa))
+* **core-ts:** stop listening for interrupts when the run of cliMain ends with no interrupt ([c7e995a](https://github.com/Hebilicious/acidcat/commit/c7e995ad3dd918f3300109a7a3ce257ce4255dfa))
+* **core-ts:** use the clock of webhookDelivery for the wait for each webhook answer ([db50d54](https://github.com/Hebilicious/acidcat/commit/db50d54cc792700db7f7ed893cd40ee5c7860c68))
+* **core-ts:** use the clock option for the heartbeats of MCP event streams ([db50d54](https://github.com/Hebilicious/acidcat/commit/db50d54cc792700db7f7ed893cd40ee5c7860c68))
+
+
+### Performance Improvements
+
+* **core-effect:** build the TLS context of webhook requests once ([db50d54](https://github.com/Hebilicious/acidcat/commit/db50d54cc792700db7f7ed893cd40ee5c7860c68))
+* **core-ts:** build the TLS context of webhook requests once ([db50d54](https://github.com/Hebilicious/acidcat/commit/db50d54cc792700db7f7ed893cd40ee5c7860c68))
+
 ## [0.18.0](https://github.com/Hebilicious/acidcat/compare/@acid-cat/core-effect@0.17.0...@acid-cat/core-effect@0.18.0) (2026-11-24)
 
 
