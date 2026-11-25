@@ -666,6 +666,17 @@ async fn main() {
             .await;
             std::process::exit(code);
         }
+        Some("cli-then-host") => {
+            use acid_cat_core::cli::{CliOptions, run_cli_process};
+            run_cli_process(
+                app,
+                context,
+                CliOptions::new("fixture", "0.0.0"),
+                args[1..].to_vec(),
+            )
+            .await;
+            go_on_as_a_host();
+        }
         Some("cli-remote") => {
             use acid_cat_core::cli::{CliOptions, run_cli_process};
             use acid_cat_core::http::HttpClient;
@@ -705,7 +716,7 @@ async fn main() {
         }
         _ => {
             eprintln!(
-                "Usage: fixture <catalog|serve|mcp-stdio|cli|cli-blocking|cli-remote> [args]"
+                "Usage: fixture <catalog|serve|mcp-stdio|cli|cli-blocking|cli-then-host|cli-remote> [args]"
             );
             std::process::exit(2);
         }
@@ -728,6 +739,23 @@ fn poll() -> acid_cat_core::mcp::PollOptions {
         buffer_limit: fixture_settings::POLL_BUFFER,
         ..Default::default()
     }
+}
+
+/// Go on after the command line has returned, as a host that does more work: count the interrupts, write each one to
+/// standard error, and exit with 0 when standard input ends.
+fn go_on_as_a_host() -> ! {
+    #[cfg(unix)]
+    {
+        count_interrupts();
+        eprintln!("returned");
+        wait_for_interrupts(1);
+        eprintln!("interrupt 1");
+        wait_for_interrupts(2);
+        eprintln!("interrupt 2");
+    }
+    let _ = std::io::copy(&mut std::io::stdin(), &mut std::io::sink());
+    eprintln!("still running");
+    std::process::exit(0);
 }
 
 unsafe extern "C" {

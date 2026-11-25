@@ -352,7 +352,7 @@ node cli.ts aircon power set --help
 node cli.ts watch aircon.status.changed --cursor 41 --max-age-ms 300000
 ```
 
-After an interrupt (`SIGINT`), `cliMain` waits one second (`INTERRUPT_GRACE_MS` from `@acid-cat/spec-ts`) for the call or subscription to end, then exits with 130.
+After an interrupt (`SIGINT`), `cliMain` waits one second (`INTERRUPT_GRACE_MS` from `@acid-cat/spec-ts`) for the call or subscription to end, then exits with 130. When the run ends with no interrupt, `cliMain` no longer listens for interrupts.
 
 #### Application commands
 

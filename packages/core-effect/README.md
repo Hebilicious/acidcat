@@ -494,7 +494,7 @@ Package specifics:
 
 - A command line that breaks a surface rule (a capability path that is a prefix of another, a duplicate path) fails at startup: `Cli.command` throws, `Cli.run` and `Cli.runCommand` die, and `NodeCli.main` and `NodeCli.runCommand` write the message to standard error and exit with 5.
 - The surface's help replaces the `effect/cli` help for capability commands, aliases, events and shared prefixes. The root command, `call`, `list` and `watch` keep the `effect/cli` help.
-- On `SIGINT`, `NodeCli` interrupts the fiber of the call or subscription. If it has not ended after `INTERRUPT_GRACE_MS` (1 second, from `@acid-cat/spec-ts`), the process exits with 130 and writes nothing more. A second interrupt exits at once.
+- On `SIGINT`, `NodeCli` interrupts the fiber of the call or subscription. If it has not ended after `INTERRUPT_GRACE_MS` (1 second, from `@acid-cat/spec-ts`), the process exits with 130 and writes nothing more. A second interrupt exits at once. When the run ends with no interrupt, `NodeCli` no longer listens for interrupts.
 
 #### Follow an event
 

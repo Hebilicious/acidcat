@@ -18,6 +18,7 @@ import { fixture } from "./fixture.ts";
 import { run } from "./run.ts";
 import type { Stoppable } from "./run.ts";
 import { bundledProgram } from "./bundled-program.ts";
+import { HOST_STILL_RUNNING, interruptedAfterTheRun } from "../../../test-support/interrupt-after-the-run.ts";
 import { until } from "../../../test-support/until.ts";
 import type { Waiter } from "../../../test-support/until.ts";
 
@@ -144,6 +145,11 @@ describe("the command line of an application", () => {
       assert.deepEqual({ ...run, elapsed: undefined }, { code: 130, signal: null, stderr: "", exit, elapsed: undefined }, what);
       if (index % 2 === 0) assert.ok(run.elapsed >= INTERRUPT_GRACE_MS, `${what}: exited ${run.elapsed} ms after the interrupt, before the grace period`);
     }
+  });
+
+  test("after the run of NodeCli.main has ended, an interrupt does not exit the process through the core", async (t) => {
+    const ended = await interruptedAfterTheRun(t, [bundledProgram("test/fixture-cli.ts"), "fixture", "echo", "--text", "hi"]);
+    assert.deepEqual(ended, { code: 0, signal: null, stderr: HOST_STILL_RUNNING });
   });
 
   test("a command of the application runs beside the commands of the capabilities, and the help describes it", async (t) => {

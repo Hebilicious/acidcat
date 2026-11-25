@@ -336,6 +336,75 @@ fn a_subscription_that_blocks_exits_with_130_after_the_grace_period_or_at_once_a
     ]);
 }
 
+/// Run `fixture echo` with `run_cli_process`, then go on as a host that counts interrupts and exits with 0 when its
+/// standard input ends. Give it two interrupts after the call returned. The result is the exit code and standard error.
+#[cfg(unix)]
+fn interrupted_after_the_call() -> (Option<i32>, String) {
+    let mut child = Command::new(fixture())
+        .args(["cli-then-host", "fixture", "echo", "--text", "hi"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the fixture starts");
+    let (lines, line) = std::sync::mpsc::channel();
+    let stderr = BufReader::new(child.stderr.take().expect("standard error"));
+    std::thread::spawn(move || {
+        for text in stderr.lines().map_while(Result::ok) {
+            let _ = lines.send(text);
+        }
+    });
+    let mut written = String::new();
+    let mut wait_for = |expected: &str| loop {
+        let Ok(text) = line.recv_timeout(DEADLINE) else {
+            return false;
+        };
+        written.push_str(&text);
+        written.push('\n');
+        if text == expected {
+            return true;
+        }
+    };
+    let interrupt = || {
+        Command::new("kill")
+            .args(["-INT", &child.id().to_string()])
+            .status()
+            .expect("kill runs");
+    };
+    let mut ended = false;
+    if wait_for("returned") {
+        interrupt();
+        if wait_for("interrupt 1") {
+            interrupt();
+            if wait_for("interrupt 2") {
+                drop(child.stdin.take());
+                ended = wait_for("still running");
+            }
+        }
+    }
+    if !ended {
+        let _ = child.kill();
+    }
+    let status = child.wait().expect("the status of the fixture");
+    while let Ok(text) = line.try_recv() {
+        written.push_str(&text);
+        written.push('\n');
+    }
+    (status.code(), written)
+}
+
+#[cfg(unix)]
+#[test]
+fn after_run_cli_process_returns_an_interrupt_does_not_exit_the_process() {
+    assert_eq!(
+        interrupted_after_the_call(),
+        (
+            Some(0),
+            "returned\ninterrupt 1\ninterrupt 2\nstill running\n".to_owned()
+        )
+    );
+}
+
 #[test]
 fn through_the_command_line_that_calls_a_server() {
     let server = Server::start(&[]);

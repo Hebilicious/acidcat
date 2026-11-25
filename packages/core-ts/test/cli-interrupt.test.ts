@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { INTERRUPT_GRACE_MS } from "@acid-cat/spec-ts";
 
 import { bundledProgram } from "./bundled-program.ts";
+import { HOST_STILL_RUNNING, interruptedAfterTheRun } from "../../../test-support/interrupt-after-the-run.ts";
 import { until } from "../../../test-support/until.ts";
 import type { Waiter } from "../../../test-support/until.ts";
 
@@ -64,3 +65,8 @@ for (const kind of ["call", "watch"] as const) {
     assert.deepEqual({ ...twice, elapsed: undefined }, { ...exit, exit: "exit during interrupt 2" });
   });
 }
+
+test("in a process, after the run of cliMain has ended, an interrupt does not exit the process through the core", async (t) => {
+  const ended = await interruptedAfterTheRun(t, [bundledProgram("test/fixture-cli.ts"), "fixture", "echo", "--text", "hi"]);
+  assert.deepEqual(ended, { code: 0, signal: null, stderr: HOST_STILL_RUNNING });
+});

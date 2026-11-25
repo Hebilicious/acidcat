@@ -148,7 +148,7 @@ class UsageError extends Error {
 /**
  * Run the command line as the main program of the process. An interrupt (`SIGINT`) cancels the call or the subscription.
  * If the run has not ended `INTERRUPT_GRACE_MS` after the interrupt, or at a second interrupt, the process exits with
- * code 130. The default arguments are the arguments of the process. With `default: "auto"` in the option `output`, the
+ * code 130. When the run ends with no interrupt, the process no longer listens for interrupts. The default arguments are the arguments of the process. With `default: "auto"` in the option `output`, the
  * form is human when standard output is a terminal and no CI and no coding agent is detected, and JSON in all other
  * cases.
  */
@@ -167,15 +167,19 @@ export function main<Context>(app: App<Context>, options: CliOptions<Context>, a
     output: defaultCliOutput(process.stdout.isTTY, process.env),
     color: process.stdout.isTTY && (process.env.NO_COLOR ?? "") === "",
     pretty: process.stdout.isTTY,
-  }).then(
-    (code) => {
-      process.exitCode = code;
-    },
-    (problem: unknown) => {
-      process.stderr.write(`${problem instanceof Error ? problem.message : String(problem)}\n`);
-      process.exitCode = CLI_EXIT_CODES.internal;
-    },
-  );
+  })
+    .then(
+      (code) => {
+        process.exitCode = code;
+      },
+      (problem: unknown) => {
+        process.stderr.write(`${problem instanceof Error ? problem.message : String(problem)}\n`);
+        process.exitCode = CLI_EXIT_CODES.internal;
+      },
+    )
+    .finally(() => {
+      if (!interrupt.signal.aborted) process.removeListener("SIGINT", onInterrupt);
+    });
 }
 
 /** Run the command line with arguments. The result is the exit code (spec/surfaces/cli.md#outcomes). */
