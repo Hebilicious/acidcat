@@ -119,7 +119,7 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   const group = (file: string, type: string) => (type === "other" ? (file.endsWith(".css") ? "stylesheet ahead" : "pages ahead") : type);
   for (const { file, type, size } of loaded) bytes.set(group(file, type), (bytes.get(group(file, type)) ?? 0) + size);
 
-  const plates = files.filter((file) => /^\/assets\/(phone|plate)[\w@-]*\./.test(file));
+  const plates = files.filter((file) => /^\/assets\/(phone|plate)[\w@-]*\.[\w-]+\.(avif|webp)$/.test(file));
   assert.equal(plates.length, 1, `the hero loads one plate, not ${plates.join(" and ")}`);
   assert.match(plates[0] ?? "", /^\/assets\/phone-840\.[\w-]+\.avif$/, "on a phone, the hero is the phone plate in AVIF");
   assert.deepEqual(files.filter((file) => /^\/assets\/(clean|data)\./.test(file)), [], "a software renderer loads no texture of the hero");

@@ -3,12 +3,15 @@ import "../styles/site.css";
 import { copyCodeOnClick } from "../theme/copy-code.ts";
 import { pageHead } from "./head.ts";
 import Layout from "./Layout.vue";
+import { useRouteStyles } from "./route-styles.ts";
 
 export default defineSite({
   layout: Layout,
-  title: (page) => (page.title === "" ? "AcidCat" : `${page.title} | AcidCat`),
+  title: (page) => (page.title === "" ? "AcidCat" : page.frontmatter["titleTemplate"] === false ? page.title : `${page.title} | AcidCat`),
   head: pageHead,
-  enhance: () => {
-    if (!import.meta.env.SSR) copyCodeOnClick();
+  enhance: ({ router }) => {
+    if (import.meta.env.SSR) return;
+    copyCodeOnClick();
+    useRouteStyles(router);
   },
 });

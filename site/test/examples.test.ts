@@ -127,7 +127,7 @@ test("the explorer renders the tree of the example, with the selected file and i
 });
 
 test("the script of an Examples page does not carry the opened file, and a page change in the browser loads it", async () => {
-  const script = (await readdir(join(dist, "assets"))).find((file) => /^examples_core-ts_index\.md\.[\w-]+\.js$/.test(file));
+  const script = (await readdir(join(dist, "assets"))).find((file) => /^(examples_core-ts_index\.md|core-ts)\.[\w-]+\.js$/.test(file));
   if (script === undefined) throw new Error("No script for /examples/core-ts/.");
   assert.ok(!(await readFile(join(dist, "assets", script), "utf8")).includes("cliAliasDefault"), "the page script has no highlighted code of core-ts/aircon.ts");
   const page = await open("/examples/");

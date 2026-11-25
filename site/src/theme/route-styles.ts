@@ -22,7 +22,7 @@ const hasStyles = (route: Route): boolean => loading.has(route) || styleElements
  * build, and resolves with it when it is there. The stylesheet applies to print only, so it does not change the page
  * that the reader still sees. The development server gives every page all the CSS, and names no files.
  */
-const fetchRouteStyles = (route: Route): Promise<HTMLLinkElement | undefined> => {
+export const fetchRouteStyles = (route: Route): Promise<HTMLLinkElement | undefined> => {
   const pending = loading.get(route);
   if (pending !== undefined) return pending;
   const href = files()[route];
@@ -41,13 +41,13 @@ const fetchRouteStyles = (route: Route): Promise<HTMLLinkElement | undefined> =>
   return loaded;
 };
 
-const apply = (link: HTMLLinkElement | undefined): void => link?.removeAttribute("media");
+export const applyRouteStyles = (link: HTMLLinkElement | undefined): void => link?.removeAttribute("media");
 
 /** Loads the stylesheet of a route, and resolves when it applies to the page. */
-export const loadRouteStyles = async (route: Route): Promise<void> => apply(await fetchRouteStyles(route));
+export const loadRouteStyles = async (route: Route): Promise<void> => applyRouteStyles(await fetchRouteStyles(route));
 
 /** Loads the faces that the first view of a route draws, so that its text does not move when a face arrives. */
-const loadRouteFonts = async (route: Route): Promise<void> => {
+export const loadRouteFonts = async (route: Route): Promise<void> => {
   const faces = route === "search" ? [] : routeFaces[route];
   await Promise.all(faces.map((face) => document.fonts.load(cssFont(face)))).catch(() => undefined);
 };
@@ -85,6 +85,13 @@ const prefetchLinkedRoutes = (): void => {
   }
 };
 
+/** Fetches ahead the stylesheet of the route of a link under the pointer, and of each link of the page when the browser is idle after the load. */
+export const prefetchRoutesAhead = (): void => {
+  for (const type of ["pointerover", "focusin", "touchstart"]) document.addEventListener(type, intent, { passive: true });
+  if (document.readyState === "complete") whenIdle(prefetchLinkedRoutes);
+  else addEventListener("load", () => whenIdle(prefetchLinkedRoutes), { once: true });
+};
+
 /**
  * Loads the stylesheet and the faces of the next route while VitePress loads the script of the page, and applies the
  * stylesheet when VitePress renders the page. When the browser is idle after the load, it fetches ahead the stylesheet of each other route
@@ -97,8 +104,6 @@ export const useRouteStyles = (router: Router): void => {
     pending = Promise.all([fetchRouteStyles(route), loadRouteFonts(route)]).then(([link]) => link);
   };
   // VitePress renders the new page in the same task as the end of this hook, so no frame shows the old page with the new stylesheet.
-  router.onAfterPageLoad = async () => apply(await pending);
-  for (const type of ["pointerover", "focusin", "touchstart"]) document.addEventListener(type, intent, { passive: true });
-  if (document.readyState === "complete") whenIdle(prefetchLinkedRoutes);
-  else addEventListener("load", () => whenIdle(prefetchLinkedRoutes), { once: true });
+  router.onAfterPageLoad = async () => applyRouteStyles(await pending);
+  prefetchRoutesAhead();
 };

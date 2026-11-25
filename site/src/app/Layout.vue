@@ -20,6 +20,7 @@ const editBase = "https://github.com/Hebilicious/acidcat/edit/main/";
 const page = usePage();
 const route = useRoute();
 
+const home = computed(() => page.value.frontmatter["layout"] === "home");
 const notFound = computed(() => page.value.frontmatter["layout"] === "not-found");
 const section = computed(() => (notFound.value ? undefined : sections.find((candidate) => route.path.startsWith(candidate.prefix))));
 const headers = computed(() => tocTree(page.value.headings));
@@ -57,7 +58,8 @@ usePageBehaviors();
 </script>
 
 <template>
-  <div class="page" :data-has-sidebar="section ? '' : undefined" :data-has-toc="hasToc ? '' : undefined" :data-menu-open="menuOpen ? '' : undefined" :data-not-found="notFound ? '' : undefined" :data-section="section?.prefix.slice(1, -1)">
+  <RouterView v-if="home" />
+  <div v-else class="page" :data-has-sidebar="section ? '' : undefined" :data-has-toc="hasToc ? '' : undefined" :data-menu-open="menuOpen ? '' : undefined" :data-not-found="notFound ? '' : undefined" :data-section="section?.prefix.slice(1, -1)">
     <a class="skip-link" href="#_top">Skip to content</a>
     <header class="header">
       <SiteNav><template #search><SearchButton /></template></SiteNav>
@@ -72,7 +74,7 @@ usePageBehaviors();
         <div class="sidebar-content"><Sidebar :section="section" /></div>
       </nav>
     </template>
-    <div class="main-frame">
+    <div :key="route.path" class="main-frame">
       <div class="main-row">
         <aside v-if="hasToc" class="right-sidebar-container" aria-label="On this page">
           <div class="right-sidebar">

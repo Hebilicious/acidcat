@@ -2,8 +2,7 @@ import { fileURLToPath } from "node:url";
 import { readPublishedPackages } from "../lib/packages.ts";
 import type { PublishedPackage } from "../lib/packages.ts";
 
-declare const data: readonly PublishedPackage[];
-export { data };
+export declare const data: readonly PublishedPackage[];
 
 /** Every package of the release configuration, with its released version and its description. */
 export default {

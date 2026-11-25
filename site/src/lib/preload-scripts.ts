@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join, posix } from "node:path";
 
 const moduleScript = /<script type="module" src="([^"]+)"><\/script>/g;
-const modulePreload = /<link rel="modulepreload" href="([^"]+)">/g;
+const modulePreload = /<link rel="modulepreload" href="([^"]+)"( data-page-chunk)?>/g;
 const staticImport = /(?:^|[;}\n])\s*import\s*(?:[^"'`()]*?from\s*)?"(\.{1,2}\/[^"]+\.js)"/g;
 
 const imports = new Map<string, Promise<readonly string[]>>();
@@ -58,7 +58,8 @@ export const startScriptsAfterFirstPaint = async (html: string, dist: string): P
   if (sources.length === 0) return html;
   const scripts = new Set([...sources, ...[...head.matchAll(modulePreload)].map(([, href = ""]) => href)]);
   for (const href of scripts) for (const imported of await staticImports(dist, href)) scripts.add(imported);
-  const preloads = [...scripts].map((href) => `<link rel="preload" as="script" crossorigin href="${href}">`).join("");
+  const marked = new Set([...head.matchAll(modulePreload)].filter(([, , marker]) => marker !== undefined).map(([, href = ""]) => href));
+  const preloads = [...scripts].map((href) => `<link rel="preload" as="script" crossorigin href="${href}"${marked.has(href) ? " data-page-chunk" : ""}>`).join("");
   let first = true;
   const rewritten = head.replace(modulePreload, "").replace(moduleScript, () => {
     const replacement = first ? preloads + starter(sources) : "";

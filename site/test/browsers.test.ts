@@ -88,8 +88,8 @@ for (const engine of [chromium, firefox, webkit] satisfies BrowserType[]) {
       assert.ok(panel !== null && (await docs.locator(panel).isVisible()), "the panel of the selected tab shows");
 
       await docs.locator(".search-button").click();
-      await docs.locator("#localsearch-input").fill("catalog");
-      await docs.locator(".VPLocalSearchBox .result").first().waitFor();
+      await docs.locator("#localsearch-input, #search-input").fill("catalog");
+      await docs.locator(".VPLocalSearchBox .result, .search-dialog .result").first().waitFor();
       assert.deepEqual(errors, []);
     });
 

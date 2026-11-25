@@ -13,7 +13,7 @@ import type { StaticServer } from "./static-server.ts";
 // The docs, the examples and the specification move to vaporpress before the homepage and the
 // packages page. Until VitePress goes, these tests compare the build of the framework with the build of VitePress.
 const framework = new URL("../.out/framework/", import.meta.url).pathname;
-const notMoved: ReadonlySet<string> = new Set(["index.html", "packages/index.html"]);
+const notMoved: ReadonlySet<string> = new Set();
 
 const htmlFiles = async (root: string): Promise<string[]> => {
   const entries = await readdir(root, { withFileTypes: true, recursive: true });
@@ -44,9 +44,11 @@ after(async () => {
 const open = async (origin: string, path: string, viewport = { width: 1440, height: 900 }): Promise<{ readonly page: Page; readonly problems: string[] }> => {
   assert.ok(browser);
   const page = await openPage(browser, { viewport });
+  // The packages page asks each registry for its latest version. The test blocks the requests, so both builds show the same versions.
+  await page.route(/^https:\/\/(?!api\.github\.com\/)/, (route) => route.abort());
   const problems: string[] = [];
   page.on("console", (message) => {
-    if (message.type() === "error" || message.type() === "warning") problems.push(`${path}: ${message.text()}`);
+    if ((message.type() === "error" || message.type() === "warning") && !message.text().includes("ERR_FAILED") && !message.text().includes("No available adapters")) problems.push(`${path}: ${message.text()}`);
   });
   page.on("pageerror", (error) => problems.push(`${path}: ${error.message}`));
   await page.goto(`${origin}${path}`);
@@ -124,7 +126,7 @@ describe("the docs on vaporpress", () => {
   ]) {
     test(`look the same as the VitePress pages at ${viewport.width}px, search box included`, async () => {
       assert.ok(site && vitepress);
-      for (const path of ["/docs/quick-start/", "/examples/core-ts/", "/spec/catalog/"]) {
+      for (const path of ["/", "/packages/", "/docs/quick-start/", "/examples/core-ts/", "/spec/catalog/"]) {
         const shots: (readonly Buffer[])[] = [];
         let hidden: readonly Box[] | undefined;
         for (const origin of [vitepress.origin, site.origin]) {

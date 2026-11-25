@@ -2,6 +2,7 @@
 import { computed, defineVaporAsyncComponent, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { LocationQuery } from "vue-router";
+import { loadRouteStyles, prefetchRouteStyles } from "../theme/route-styles.ts";
 
 const loadDialog = () => import("./SearchDialog.vue");
 const SearchDialog = defineVaporAsyncComponent(loadDialog);
@@ -10,13 +11,23 @@ const router = useRouter();
 
 const searchKey = "search";
 const mounted = ref(false);
-const open = computed(() => mounted.value && route.query[searchKey] !== undefined);
+const stylesLoaded = ref(false);
+const wanted = computed(() => mounted.value && route.query[searchKey] !== undefined);
+const open = computed(() => wanted.value && stylesLoaded.value);
 let pushed = false;
+
+watch(wanted, (isWanted) => {
+  if (isWanted) {
+    void loadRouteStyles("search").then(() => {
+      stylesLoaded.value = true;
+    });
+  } else pushed = false;
+});
 
 const withoutSearch = (query: LocationQuery): LocationQuery => Object.fromEntries(Object.entries(query).filter(([key]) => key !== searchKey));
 
 const show = (): void => {
-  if (open.value) return;
+  if (wanted.value) return;
   pushed = true;
   void router.push({ path: route.path, query: { ...route.query, [searchKey]: null }, hash: route.hash });
 };
@@ -28,11 +39,9 @@ const go = (path: string): void => {
   pushed = false;
   void router.replace(path);
 };
-watch(open, (isOpen) => {
-  if (!isOpen) pushed = false;
-});
 
 const prefetch = (): void => {
+  prefetchRouteStyles("search");
   void loadDialog();
 };
 
