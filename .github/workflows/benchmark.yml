@@ -55,6 +55,7 @@ jobs:
 
       - name: Build the Astro site of ${{ env.ASTRO_COMMIT }}
         run: |
+          git fetch --no-tags origin "$ASTRO_COMMIT"
           git worktree add "$RUNNER_TEMP/astro" "$ASTRO_COMMIT"
           cd "$RUNNER_TEMP/astro"
           pnpm install --frozen-lockfile
