@@ -1,15 +1,16 @@
 import { onPageUpdated } from "vaporpress/client";
 import { onUnmounted } from "vue";
-import { mountTabs } from "./tabs.ts";
+import { restoreTabChoices, selectTabsOnInput } from "./tabs.ts";
 
 export const usePageBehaviors = (): void => {
+  if (!import.meta.env.SSR) selectTabsOnInput();
   let page = new AbortController();
   onPageUpdated(() => {
     page.abort();
     page = new AbortController();
     const content = document.querySelector<HTMLElement>(".markdown-content");
     if (content === null) return;
-    mountTabs(content, page.signal);
+    restoreTabChoices(content);
     const explorers = content.querySelectorAll<HTMLElement>("[data-explorer]");
     if (explorers.length === 0) return;
     const { signal } = page;

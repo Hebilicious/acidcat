@@ -24,6 +24,12 @@ const favicon = await readFavicon();
 const outDir = fileURLToPath(new URL("dist", import.meta.url));
 const specFiles = new Map(specPages.map((page) => [fileURLToPath(new URL(`../${page.source}`, import.meta.url)), page]));
 
+const searchDialogMeta = (files: readonly string[]): string => {
+  const href = files.find((file) => /\/SearchDialog\.[\w-]+\.js$/.test(file));
+  if (href === undefined) throw new Error("The build has no chunk for SearchDialog.vue.");
+  return `<meta name="acidcat:search-dialog" content="${href}">`;
+};
+
 const specMarkdown = (file: string): string | undefined => {
   const page = specFiles.get(file);
   if (page === undefined) return undefined;
@@ -56,8 +62,11 @@ export default defineConfig({
       hastPlugins: [headingAnchors, externalLinks],
     },
     preload: (page) => (page.frontmatter["layout"] === "home" ? [] : ["src/app/DocsLayout.vue"]),
-    transformHtml: async (html, page, { files }) =>
-      writeExplorerSources(await startScriptsAfterFirstPaint(html.replace('<link rel="stylesheet"', `${fontPreloadHtml(page.path === "/" ? "home" : "docs", files)}<link rel="stylesheet"`), outDir), repositoryRoot),
+    transformHtml: async (html, page, { files }) => {
+      const scriptsFirst = await startScriptsAfterFirstPaint(html, outDir);
+      const fonts = fontPreloadHtml(page.path === "/" ? "home" : "docs", files);
+      return writeExplorerSources(scriptsFirst.replace("</head>", `${fonts}${searchDialogMeta(files)}</head>`), repositoryRoot);
+    },
     afterBuild: async () => {
       await inlineStyles(outDir);
       await favicon.write(outDir);

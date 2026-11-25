@@ -158,34 +158,87 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   const vaporpressHomepageBelowVitePress = 166_000;
   const homepageWithItsCss = 176_000;
   const starCount = 1_000;
-  const prefetchOfEachSectionInTheHeaderAndTheDocsLayout = 115_000;
-  const cssOfTheDocs = 40_000;
+  const prefetchOfEachSectionInTheHeaderTheDocsLayoutAndTheSearchDialog = 122_000;
+  const cssOfTheDocsAndTheSearch = 46_000;
   const budget: Record<string, number> = {
     image: phonePlate,
     font: fontCores,
     script: vaporpressHomepageBelowVitePress,
     document: homepageWithItsCss,
     fetch: starCount,
-    "pages ahead": prefetchOfEachSectionInTheHeaderAndTheDocsLayout,
-    "stylesheet ahead": cssOfTheDocs,
+    "pages ahead": prefetchOfEachSectionInTheHeaderTheDocsLayoutAndTheSearchDialog,
+    "stylesheet ahead": cssOfTheDocsAndTheSearch,
   };
   for (const [type, size] of bytes) assert.ok(size <= (budget[type] ?? 0), `${type}: ${size} bytes, budget ${budget[type] ?? 0}`);
   await page.close();
 });
 
-test("each page preloads every font face that it loads, and the homepage preloads no other", async () => {
+const firstViewFaces = (page: Page): Promise<{ readonly drawn: string[]; readonly preloaded: string[] }> =>
+  page.evaluate(() => {
+    const weightsOf = new Map<string, number[]>();
+    for (const face of document.fonts) weightsOf.set(face.family.replaceAll('"', ""), [...(weightsOf.get(face.family.replaceAll('"', "")) ?? []), Number(face.weight)]);
+    // The order in which CSS Fonts 4 tries the weights of a family for a weight that it has no face for.
+    const matchWeight = (family: string, wanted: number): number | undefined => {
+      const weights = [...new Set(weightsOf.get(family) ?? [])];
+      const up = (from: number, to: number) => weights.filter((weight) => weight >= from && weight <= to).sort((a, b) => a - b);
+      const down = (from: number) => weights.filter((weight) => weight < from).sort((a, b) => b - a);
+      const order =
+        wanted >= 400 && wanted <= 500
+          ? [...up(wanted, 500), ...down(wanted), ...up(501, 1000)]
+          : wanted < 400
+            ? [...weights.filter((weight) => weight <= wanted).sort((a, b) => b - a), ...up(wanted + 1, 1000)]
+            : [...up(wanted, 1000), ...down(wanted)];
+      return order[0];
+    };
+    const drawn = new Set<string>();
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      const element = node.parentElement;
+      if (element === null || (node.textContent ?? "").trim() === "") continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const box = range.getBoundingClientRect();
+      if (box.width === 0 || box.bottom <= 0 || box.top >= innerHeight || box.right <= 0 || box.left >= innerWidth) continue;
+      const style = getComputedStyle(element);
+      const family = style.fontFamily.split(",")[0]?.trim().replaceAll('"', "") ?? "";
+      const weight = matchWeight(family, Number(style.fontWeight));
+      if (weight !== undefined) drawn.add(`${family.toLowerCase().replaceAll(" ", "-")}-${weight}`);
+    }
+    const preloaded = [...document.querySelectorAll<HTMLLinkElement>('link[rel="preload"][as="font"]')]
+      .filter((link) => link.media === "" || matchMedia(link.media).matches)
+      .map((link) => (link.getAttribute("href") ?? "").split("/").pop()?.replace(/-core\..*$/, "") ?? "");
+    return { drawn: [...drawn].sort(), preloaded: preloaded.sort() };
+  });
+
+test("each page preloads the faces that its first view draws, and each preloaded face is in the first view of a page of its route", async () => {
   if (browser === undefined) throw new Error("No browser.");
-  for (const path of ["/", "/docs/", "/spec/catalog/", "/packages/"]) {
-    const page: Page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
-    const loaded = new Set<string>();
-    page.on("requestfinished", (request) => {
-      const file = new URL(request.url()).pathname;
-      if (file.endsWith(".woff2")) loaded.add(file);
-    });
-    await page.goto(`${origin}${path}`, { waitUntil: "networkidle" });
-    const preloaded = new Set<string>(await page.locator('link[rel="preload"][as="font"]').evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? "")));
-    assert.deepEqual([...loaded].filter((file) => !preloaded.has(file)), [], `${path} loads a face that it does not preload`);
-    if (path === "/") assert.deepEqual([...preloaded].filter((file) => !loaded.has(file)), [], "the homepage preloads a face that it does not use");
-    await page.close();
+  const routes = { home: ["/"], docs: ["/docs/", "/docs/quick-start/", "/docs/concepts/catalog/", "/spec/catalog/", "/examples/core-ts/", "/packages/"] };
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 1440, height: 900 },
+  ]) {
+    for (const [route, paths] of Object.entries(routes)) {
+      const drawnInRoute = new Set<string>();
+      let preloaded: string[] = [];
+      for (const path of paths) {
+        const page: Page = await openPage(browser, { viewport });
+        await page.goto(`${origin}${path}`, { waitUntil: "load" });
+        await page.evaluate(() => document.fonts.ready);
+        const faces = await firstViewFaces(page);
+        assert.deepEqual(
+          faces.drawn.filter((face) => !faces.preloaded.includes(face)),
+          [],
+          `${path} at ${viewport.width}px draws a face in its first view that it does not preload`,
+        );
+        for (const face of faces.drawn) drawnInRoute.add(face);
+        preloaded = faces.preloaded;
+        await page.close();
+      }
+      assert.deepEqual(
+        preloaded.filter((face) => !drawnInRoute.has(face)),
+        [],
+        `the ${route} pages at ${viewport.width}px preload a face that no first view of them draws`,
+      );
+    }
   }
 });

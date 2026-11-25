@@ -48,7 +48,7 @@ export const loadRouteStyles = async (route: Route): Promise<void> => applyRoute
 
 /** Loads the faces that the first view of a route draws, so that its text does not move when a face arrives. */
 export const loadRouteFonts = async (route: Route): Promise<void> => {
-  const faces = route === "search" ? [] : routeFaces[route];
+  const faces = route === "search" ? [] : routeFaces[route].filter((face) => face.media === undefined || matchMedia(face.media).matches);
   await Promise.all(faces.map((face) => document.fonts.load(cssFont(face)))).catch(() => undefined);
 };
 
@@ -76,7 +76,19 @@ const whenIdle = (callback: () => void): void => {
   else setTimeout(callback, 0);
 };
 
+/** Fetches ahead the stylesheet and the script of the search dialog, so the dialog opens with no request. */
+const prefetchSearch = (): void => {
+  prefetchRouteStyles("search");
+  const href = document.querySelector<HTMLMetaElement>('meta[name="acidcat:search-dialog"]')?.content;
+  if (href === undefined || document.head.querySelector(`link[rel="prefetch"][href="${href}"]`) !== null) return;
+  const link = document.createElement("link");
+  link.rel = "prefetch";
+  link.href = href;
+  document.head.append(link);
+};
+
 const prefetchLinkedRoutes = (): void => {
+  prefetchSearch();
   const current = routeOfPage(location.pathname);
   for (const link of document.querySelectorAll<HTMLAnchorElement>("#app a[href]")) {
     if (link.origin !== location.origin) continue;

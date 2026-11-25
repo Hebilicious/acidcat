@@ -178,6 +178,17 @@ test("/ opens the search, but not in a text field", async () => {
   await page.close();
 });
 
+test("the page fetches ahead the script and the CSS of the search dialog when it is idle, as prefetch links", async () => {
+  const { page, problems } = await openDocsPage();
+  await page.waitForLoadState("networkidle");
+  const dialog = await page.locator('meta[name="acidcat:search-dialog"]').getAttribute("content");
+  assert.match(dialog ?? "", /^\/assets\/SearchDialog\.[\w-]+\.js$/);
+  await page.waitForFunction((href) => document.head.querySelector(`link[rel="prefetch"][href="${href}"]`) !== null, dialog);
+  await page.waitForFunction(() => document.head.querySelector('link[rel="prefetch"][href^="/assets/search."][href$=".css"]') !== null);
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
 test("the page loads the search index only when the search opens", async () => {
   const { page, problems, indexRequests } = await openDocsPage();
   await page.hover(".search-button");
