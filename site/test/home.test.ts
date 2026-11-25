@@ -128,18 +128,18 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   assert.deepEqual(files.filter((file) => file.endsWith(".woff2") && !/-core\.[\w-]+\.woff2$/.test(file)), [], "only the core of each font");
   const phonePlate = 88_000;
   const fontCores = 170_000;
-  const vueVitePressAndHomepage = 195_000;
+  const scriptOfTheVitePressHomepage = 168_000;
   const homepageWithItsCss = 176_000;
   const starCount = 1_000;
-  const prefetchOfEachSectionInTheHeader = 110_000;
+  const prefetchOfEachSectionInTheHeaderAndTheDocsLayout = 115_000;
   const cssOfTheDocs = 40_000;
   const budget: Record<string, number> = {
     image: phonePlate,
     font: fontCores,
-    script: vueVitePressAndHomepage,
+    script: scriptOfTheVitePressHomepage,
     document: homepageWithItsCss,
     fetch: starCount,
-    "pages ahead": prefetchOfEachSectionInTheHeader,
+    "pages ahead": prefetchOfEachSectionInTheHeaderAndTheDocsLayout,
     "stylesheet ahead": cssOfTheDocs,
   };
   for (const [type, size] of bytes) assert.ok(size <= (budget[type] ?? 0), `${type}: ${size} bytes, budget ${budget[type] ?? 0}`);

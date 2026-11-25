@@ -29,7 +29,7 @@ The site moves from VitePress to [vaporpress](../vaporpress/README.md), one part
 | Part | Built by |
 | --- | --- |
 | The docs, the examples and the specification | Both. `framework.config.ts` builds them with the framework into `.out/framework/` |
-| The packages page and the homepage | Both. In this build, `src/app/pages/packages.vue` and `src/app/pages/home.vue` are the routes `/packages/` and `/` |
+| The packages page and the homepage | Both. In this build, `src/app/pages/packages.vue` and `src/app/pages/home.vue` are the routes `/packages/` and `/`. `src/app/Layout.vue` shows the homepage, or `src/app/DocsLayout.vue` for every other page. The layout of the docs is a chunk of its own, so the homepage does not load it. `preload` gives it to the HTML of each other page, a link to such a page fetches it ahead, and a page change waits for it |
 | The search | Both. In this build, the framework indexes the built pages, and `src/app/SearchDialog.vue` is the dialog: a modal `<dialog>` with a combobox and a list box of results. Ctrl+K and `/` open it, but `/` does nothing in a text field. The open search is an entry of the history (`?search`), so Back closes it, and a result replaces that entry. The page loads the code of the dialog when the pointer or the focus comes to the search button, and the index only when the search opens |
 | The fonts, the route styles, the start of the scripts after the first paint, and the favicon | Both. The `site:fonts` task writes `.fonts/` before each build |
 | The files for agents | VitePress only |

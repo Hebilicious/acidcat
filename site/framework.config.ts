@@ -69,6 +69,7 @@ export default defineConfig({
       highlight: highlightBlock,
       hastPlugins: [headingAnchors, externalLinks],
     },
+    preload: (page) => (page.frontmatter["layout"] === "home" ? [] : ["src/app/DocsLayout.vue"]),
     transformHtml: async (html, page, { files }) =>
       writeExplorerSources(await startScriptsAfterFirstPaint(html.replace('<link rel="stylesheet"', `${fontPreloadHtml(page.path === "/" ? "home" : "docs", files)}<link rel="stylesheet"`), outDir), repositoryRoot),
     afterBuild: async () => {

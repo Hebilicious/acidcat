@@ -1,6 +1,7 @@
 import { defineSite } from "vaporpress/client";
 import "../styles/site.css";
 import { copyCodeOnClick } from "../theme/copy-code.ts";
+import { loadDocsLayoutBeforePageChange } from "./docs-layout.ts";
 import { pageHead } from "./head.ts";
 import Layout from "./Layout.vue";
 import { useRouteStyles } from "./route-styles.ts";
@@ -13,5 +14,6 @@ export default defineSite({
     if (import.meta.env.SSR) return;
     copyCodeOnClick();
     useRouteStyles(router);
+    loadDocsLayoutBeforePageChange(router);
   },
 });
