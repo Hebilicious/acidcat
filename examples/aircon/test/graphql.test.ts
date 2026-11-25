@@ -13,6 +13,8 @@ import { z } from "zod";
 import { statusGet, Unit } from "../core-ts/aircon.ts";
 import { graphqlApi, graphqlWebSocket, schema, yoga } from "../apis/graphql.ts";
 import { openSession } from "../apis/shared.ts";
+import { until } from "../../../test-support/until.ts";
+import type { Waiter } from "../../../test-support/until.ts";
 
 const GraphQLResponse = z.object({
   data: z.unknown().optional(),
@@ -63,26 +65,19 @@ test("the HTTP surface is at /api, and a foreign origin is rejected", async () =
   assert.equal((await post(api, "{ status { power } }", { Origin: "https://example.com" })).status, 403);
 });
 
-async function until(what: string, condition: () => boolean): Promise<void> {
-  const end = Date.now() + 5000;
-  while (!condition()) {
-    if (Date.now() > end) throw new Error(`waiting until ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-}
 
 const StatusChanged = z.object({ data: z.object({ statusChanged: z.object({ power: z.boolean(), fan: z.string() }) }) });
 
-async function followThenEnd(unit: Unit, api: (request: Request) => Promise<Response>, subscription: AsyncIterableIterator<unknown>) {
+async function followThenEnd(t: Waiter, unit: Unit, api: (request: Request) => Promise<Response>, subscription: AsyncIterableIterator<unknown>) {
   const before = unit.statusListeners;
   const first = subscription.next();
-  await until("the subscription listens to the unit", () => unit.statusListeners > before);
+  await until(t, () => unit.statusListeners > before, Boolean, { what: "the subscription listens to the unit" });
   await post(api, "mutation { setPower(on: true) { __typename } }");
   const result = await first;
   assert.equal(result.done, false);
   assert.deepEqual(StatusChanged.parse(result.value).data.statusChanged, { power: true, fan: "auto" });
   await subscription.return?.();
-  await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
+  await until(t, () => unit.statusListeners === before, Boolean, { what: "the subscription stops listening to the unit" });
 }
 
 const SUBSCRIPTION = "subscription { statusChanged { power fan } }";
@@ -94,19 +89,19 @@ async function webSocketServer() {
   return { server, port: typeof address === "object" && address !== null ? address.port : 0 };
 }
 
-test("a subscription through server-sent events, with the graphql-sse client, gets the new status and ends", async () => {
+test("a subscription through server-sent events, with the graphql-sse client, gets the new status and ends", async (t) => {
   const unit = new Unit();
   const api = graphqlApi({ unit });
   await using served = await serve({ "/graphql": api }, { port: 0 });
   const client = createSseClient({ url: `${served.url}/graphql` });
   try {
-    await followThenEnd(unit, api, client.iterate({ query: SUBSCRIPTION }));
+    await followThenEnd(t, unit, api, client.iterate({ query: SUBSCRIPTION }));
   } finally {
     client.dispose();
   }
 });
 
-test("when the client cancels a stream of server-sent events, Yoga ends the subscription, and the session stays open", async () => {
+test("when the client cancels a stream of server-sent events, Yoga ends the subscription, and the session stays open", async (t) => {
   const unit = new Unit();
   const session = openSession({ unit });
   try {
@@ -120,11 +115,11 @@ test("when the client cancels a stream of server-sent events, Yoga ends the subs
     assert.ok(response.body !== null);
     const reader = response.body.getReader();
     await reader.read();
-    await until("the subscription listens to the unit", () => unit.statusListeners > before);
+    await until(t, () => unit.statusListeners > before, Boolean, { what: "the subscription listens to the unit" });
     const waiting = reader.read();
     await reader.cancel();
     assert.equal((await waiting).done, true);
-    await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
+    await until(t, () => unit.statusListeners === before, Boolean, { what: "the subscription stops listening to the unit" });
     const status = await session.call(statusGet, {});
     assert.equal(status.ok, true);
   } finally {
@@ -132,22 +127,22 @@ test("when the client cancels a stream of server-sent events, Yoga ends the subs
   }
 });
 
-test("a subscription through WebSockets, with the graphql-ws client, gets the new status and ends, and the connection is one session", async () => {
+test("a subscription through WebSockets, with the graphql-ws client, gets the new status and ends, and the connection is one session", async (t) => {
   const unit = new Unit();
   const api = graphqlApi({ unit });
   const { server, port } = await webSocketServer();
   const graphql = graphqlWebSocket({ unit }, server);
   const client = createWsClient({ url: `ws://127.0.0.1:${port}/graphql`, webSocketImpl: WebSocket, lazy: true, retryAttempts: 0 });
   try {
-    await followThenEnd(unit, api, client.iterate({ query: SUBSCRIPTION }));
+    await followThenEnd(t, unit, api, client.iterate({ query: SUBSCRIPTION }));
     const failed = await client.iterate({ query: "mutation { setTemperature(celsius: 40) { __typename } }" }).next();
     assert.equal(GraphQLResponse.parse(failed.value).errors?.[0]?.extensions.code, "invalid-input");
     const before = unit.statusListeners;
     const [first, second] = [client.iterate({ query: SUBSCRIPTION }), client.iterate({ query: SUBSCRIPTION })];
     const pending = [first.next(), second.next()];
-    await until("both subscriptions listen to the unit", () => unit.statusListeners === before + 2);
+    await until(t, () => unit.statusListeners === before + 2, Boolean, { what: "both subscriptions listen to the unit" });
     await client.dispose();
-    await until("closing the connection ends both subscriptions", () => unit.statusListeners === before);
+    await until(t, () => unit.statusListeners === before, Boolean, { what: "closing the connection ends both subscriptions" });
     for (const result of await Promise.allSettled(pending)) if (result.status === "fulfilled") assert.equal(result.value.done, true);
   } finally {
     await client.dispose();

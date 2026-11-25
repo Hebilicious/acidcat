@@ -5,6 +5,8 @@ import { test } from "node:test";
 import { Effect, Exit, Fiber, Layer, Scope } from "effect";
 
 import * as NodeServer from "../src/NodeServer.ts";
+import { checkClose, idleConnection } from "../../../test-support/idle-connection.ts";
+import { until } from "../../../test-support/until.ts";
 
 async function serve(handler: NodeServer.WebHandler | NodeServer.Routes, options: NodeServer.ServeOptions) {
   const scope = Effect.runSync(Scope.make());
@@ -42,7 +44,7 @@ test("NodeServer.serve fails with ServeError when the port is in use", async () 
   assert.match(String(exit.cause), /ServeError/);
 });
 
-test("NodeServer.layer serves until the program that launches it is interrupted", async () => {
+test("NodeServer.layer serves until the program that launches it is interrupted", async (t) => {
   const port = await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -53,14 +55,12 @@ test("NodeServer.layer serves until the program that launches it is interrupted"
   );
   const fiber = Effect.runFork(Layer.launch(NodeServer.layer(() => new Response("launched"), { port })));
   const url = `http://127.0.0.1:${port}`;
-  let text: string | undefined;
-  for (let attempt = 0; text === undefined && attempt < 100; attempt++) {
-    text = await fetch(url).then(
-      (response) => response.text(),
-      () => new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 10)),
-    );
-  }
-  assert.equal(text, "launched");
+  const answer = await until(
+    t,
+    async () => fiber.pollUnsafe() ?? (await fetch(url, { signal: t.signal }).then((response) => response.text(), () => undefined)),
+    (seen) => seen !== undefined,
+  );
+  assert.equal(answer, "launched");
   await Effect.runPromise(Fiber.interrupt(fiber));
   await assert.rejects(fetch(url));
 });
@@ -174,3 +174,14 @@ test("the signal does not abort after a complete response", async () => {
   assert.equal(signals[0]?.aborted, false);
 });
 
+test("NodeServer.serve closes no idle connection and sends no Keep-Alive header, so a client never sends a request while the server closes the connection", async () => {
+  await using served = await serve(() => new Response("ok"), { port: 0 });
+  assert.deepEqual(await idleConnection(served.url), { idleTimeoutMs: undefined, keepAlive: null });
+});
+
+test("when its scope closes, NodeServer.serve ends each connection, and cuts no request that the server accepted", async (t) => {
+  await checkClose(t, async (handler) => {
+    const served = await serve(handler, { port: 0 });
+    return { url: served.url, close: served[Symbol.asyncDispose] };
+  });
+});

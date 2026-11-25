@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
-import { request as httpRequest } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
+import { connect } from "node:net";
+import type { Socket } from "node:net";
 import { test } from "node:test";
 
 import { serve } from "../src/node.ts";
+import { checkClose, idleConnection } from "../../../test-support/idle-connection.ts";
 
 test("one handler gets all paths, with the full URL, the method, the headers and the body", async () => {
   await using served = await serve(
@@ -149,4 +152,36 @@ test("close stops the server", async () => {
   const served = await serve(() => new Response("ok"), { port: 0 });
   await served.close();
   await assert.rejects(fetch(served.url));
+});
+
+test("a request on an idle connection at the moment when the server closes it gets no answer", async () => {
+  const server = createServer({ keepAliveTimeout: 1, keepAliveTimeoutBuffer: 0 }, (_incoming, outgoing) => outgoing.end("ok"));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const port = typeof address === "object" && address !== null ? address.port : 0;
+  const client = connect(port, "127.0.0.1");
+  const request = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+  // Node.js closes an idle connection when its socket times out. A listener before that of Node.js sends the second
+  // request at that moment, as a client does that reuses the connection then.
+  server.on("connection", (socket: Socket) => socket.prependListener("timeout", () => client.write(request)));
+  let answers = "";
+  client.setEncoding("utf-8").on("data", (chunk: string) => (answers += chunk));
+  const ended = new Promise<string>((resolve) => {
+    client.on("error", (error: NodeJS.ErrnoException) => resolve(error.code ?? "error"));
+    client.on("close", () => resolve("closed"));
+  });
+  client.write(request);
+  const outcome = await ended;
+  server.close();
+  assert.equal(answers.match(/HTTP\/1\.1 200/g)?.length, 1, "only the first request gets an answer");
+  assert.ok(["ECONNRESET", "closed"].includes(outcome), outcome);
+});
+
+test("serve closes no idle connection and sends no Keep-Alive header, so a client never sends a request while the server closes the connection", async () => {
+  await using served = await serve(() => new Response("ok"), { port: 0 });
+  assert.deepEqual(await idleConnection(served.url), { idleTimeoutMs: undefined, keepAlive: null });
+});
+
+test("close of serve resolves when each connection has ended, and cuts no request that the server accepted", async (t) => {
+  await checkClose(t, (handler) => serve(handler, { port: 0 }));
 });

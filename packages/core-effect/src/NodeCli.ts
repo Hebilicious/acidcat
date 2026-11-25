@@ -15,14 +15,22 @@ import * as Cli from "./Cli.ts";
 const afterInterruptHandlers = <A, E, R>(program: Effect.Effect<A, E, R>) => Effect.andThen(Effect.yieldNow, program);
 
 // `NodeRuntime.runMain` keeps the process running until the main fiber ends, so a fiber that cannot be interrupted
-// keeps it running for ever.
-const exitAfterInterruptGrace = () => {
+// keeps it running for ever. The listener ends with a program that no interrupt cancelled, and stays after an
+// interrupt, so that a second interrupt still exits at once.
+const exitAfterInterruptGrace = <A, E, R>(program: Effect.Effect<A, E, R>) => {
   let interrupted = false;
-  process.on("SIGINT", () => {
+  const onInterrupt = () => {
     if (interrupted) process.exit(CLI_EXIT_CODES.cancelled);
     interrupted = true;
     setTimeout(() => process.exit(CLI_EXIT_CODES.cancelled), INTERRUPT_GRACE_MS).unref();
-  });
+  };
+  process.on("SIGINT", onInterrupt);
+  return Effect.ensuring(
+    program,
+    Effect.sync(() => {
+      if (!interrupted) process.removeListener("SIGINT", onInterrupt);
+    }),
+  );
 };
 
 const withArgs = (args: readonly string[]) =>
@@ -51,14 +59,12 @@ export function main<R, E, const Commands extends ReadonlyArray<Command.Command.
   args: readonly string[] = process.argv.slice(2),
 ): void {
   const services = Layer.provideMerge(Layer.merge(withArgs(args), terminal), NodeServices.layer);
-  exitAfterInterruptGrace();
-  Effect.suspend(() => Cli.run(app, options)).pipe(stopOnBrokenRule, Effect.provide(Layer.merge(layer, services)), afterInterruptHandlers, NodeRuntime.runMain);
+  Effect.suspend(() => Cli.run(app, options)).pipe(stopOnBrokenRule, Effect.provide(Layer.merge(layer, services)), afterInterruptHandlers, exitAfterInterruptGrace, NodeRuntime.runMain);
 }
 
 export function runCommand<Name extends string, Input, ContextInput, E>(
   command: Command.Command<Name, Input, ContextInput, E, Command.Environment>,
   options: { readonly version: string },
 ): void {
-  exitAfterInterruptGrace();
-  Cli.runCommand(command, options).pipe(stopOnBrokenRule, Effect.provide(Layer.provideMerge(terminal, NodeServices.layer)), afterInterruptHandlers, NodeRuntime.runMain);
+  Cli.runCommand(command, options).pipe(stopOnBrokenRule, Effect.provide(Layer.provideMerge(terminal, NodeServices.layer)), afterInterruptHandlers, exitAfterInterruptGrace, NodeRuntime.runMain);
 }

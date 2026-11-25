@@ -52,7 +52,13 @@ export const serve = Effect.fnUntraced(function* (handler: WebHandler | Routes, 
   const hostname = options.hostname ?? "127.0.0.1";
   // The scope closes the server first, which waits for the open requests. Then the set interrupts the fibers that are left.
   const run = yield* FiberSet.makeRuntime();
-  const server = createServer((incoming, outgoing) => {
+  // With `keepAliveTimeout: 0`, Node.js closes no idle connection and sends no `Keep-Alive` header, so a client never
+  // sends a request on a connection at the moment when the server closes it. `close` ends only the connections that are
+  // idle at that moment, so each other connection ends when both its request and its response are complete.
+  const server = createServer({ keepAliveTimeout: 0 }, (incoming, outgoing) => {
+    const closeIfIdle = () => server.listening || server.closeIdleConnections();
+    incoming.on("end", closeIfIdle);
+    outgoing.on("finish", closeIfIdle);
     run(answer(incoming, outgoing, route));
   });
   const port = yield* Effect.acquireRelease(listen(server, options.port ?? 3000, hostname), () => close(server));

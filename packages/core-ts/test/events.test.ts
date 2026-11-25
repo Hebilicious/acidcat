@@ -236,7 +236,7 @@ test("a slow client loses the oldest occurrences, and the next occurrence that i
 
 test("the cursor and maxAgeMs reach the provider, and a skipped occurrence gives truncated", async () => {
   const sensors = new Sensors();
-  const old = new Date(Date.now() - 60_000).toISOString();
+  const old = sensors.ago(60_000);
   sensors.emit("hall", 1, old);
   sensors.emit("hall", 2, old);
   sensors.emit("hall", 3);

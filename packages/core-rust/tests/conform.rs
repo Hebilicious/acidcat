@@ -210,6 +210,7 @@ struct Interrupted {
     code: Option<i32>,
     stderr: String,
     after_interrupt: Duration,
+    exited_on: String,
 }
 
 #[cfg(unix)]
@@ -222,35 +223,26 @@ fn wait_for(path: &Path, what: &str) {
 }
 
 #[cfg(unix)]
-fn release_held_interrupt(child: &mut Child, marker: &Path) -> Instant {
-    assert!(
-        child
-            .try_wait()
-            .expect("the status of the fixture")
-            .is_none(),
-        "the fixture exited before the second interrupt"
-    );
-    let grace_period_can_start = Instant::now();
-    std::fs::write(marker.with_extension("go"), "").expect("the go file is written");
-    grace_period_can_start
-}
-
-#[cfg(unix)]
-fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
+fn interrupted_blocking(args: &[&str], interrupts: usize) -> Interrupted {
     let directory = std::env::temp_dir().join(format!(
-        "acid-cat-core-rust-interrupt-{}-{interrupts}",
-        std::process::id()
+        "acid-cat-core-rust-interrupt-{}-{}-{interrupts}",
+        std::process::id(),
+        args[0]
     ));
     std::fs::create_dir_all(&directory).expect("the directory is made");
     let marker = directory.join("held");
+    let record = directory.join("exit");
     let mut fixture = Command::new(fixture());
     fixture
-        .args(["cli-blocking", "fixture", "hold", "--key", "k", "--marker"])
+        .arg("cli-blocking")
+        .args(args)
+        .arg("--marker")
         .arg(&marker)
+        .env("FIXTURE_EXIT_RECORD", &record)
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
     if interrupts == 2 {
-        fixture.env("FIXTURE_HOLD_INTERRUPT_UNTIL_GO", "1");
+        fixture.env("FIXTURE_HOLD_FIRST_INTERRUPT_UNTIL_SECOND", "1");
     }
     let mut child = fixture.spawn().expect("the fixture starts");
     wait_for(&marker, "did not write its marker file");
@@ -263,13 +255,14 @@ fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
     let mut interrupted = Instant::now();
     interrupt();
     if interrupts == 2 {
-        // Unix merges a signal that is still pending with the next one of the same kind.
+        // The fixture holds the cancellation of the first interrupt until the second interrupt reaches the process, so
+        // the grace period cannot start before the second interrupt, however slow the computer.
         wait_for(
             &directory.join("held.cancelled"),
             "did not write its marker file when it was cancelled",
         );
+        interrupted = Instant::now();
         interrupt();
-        interrupted = release_held_interrupt(&mut child, &marker);
     }
     let status = loop {
         if let Some(status) = child.try_wait().expect("the status of the fixture") {
@@ -290,36 +283,125 @@ fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
         )
         .expect("standard error is text");
     }
+    let exited_on = std::fs::read_to_string(&record).unwrap_or_default();
     let _ = std::fs::remove_dir_all(&directory);
     Interrupted {
         code: status.and_then(|status| status.code()),
         stderr,
         after_interrupt: elapsed,
+        exited_on,
     }
 }
 
 #[cfg(unix)]
-#[test]
-fn a_call_that_blocks_exits_with_130_after_the_grace_period_or_at_once_after_a_second_interrupt() {
-    let once = interrupted_blocking_call(1);
+fn assert_exits_after_the_grace_period_or_at_once_after_a_second_interrupt(args: &[&str]) {
+    let once = interrupted_blocking(args, 1);
     assert_eq!(
-        (once.code, once.stderr.as_str()),
-        (Some(exit::CANCELLED), "")
+        (once.code, once.stderr.as_str(), once.exited_on.is_empty()),
+        (Some(exit::CANCELLED), "", false)
     );
     assert!(
         once.after_interrupt >= INTERRUPT_GRACE,
         "exited {:?} after the interrupt, before the grace period",
         once.after_interrupt
     );
-    let twice = interrupted_blocking_call(2);
+    let twice = interrupted_blocking(args, 2);
     assert_eq!(
         (twice.code, twice.stderr.as_str()),
         (Some(exit::CANCELLED), "")
     );
-    assert!(
-        twice.after_interrupt < INTERRUPT_GRACE,
-        "exited {:?} after the start of the grace period, not at the second interrupt",
-        twice.after_interrupt
+    assert_ne!(
+        twice.exited_on, once.exited_on,
+        "the process exited on the thread of the grace period, not at the second interrupt"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_call_that_blocks_exits_with_130_after_the_grace_period_or_at_once_after_a_second_interrupt() {
+    assert_exits_after_the_grace_period_or_at_once_after_a_second_interrupt(&[
+        "fixture", "hold", "--key", "k",
+    ]);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_subscription_that_blocks_exits_with_130_after_the_grace_period_or_at_once_after_a_second_interrupt()
+ {
+    assert_exits_after_the_grace_period_or_at_once_after_a_second_interrupt(&[
+        "watch",
+        "fixture.watch",
+        "--key",
+        "k",
+    ]);
+}
+
+/// Run `fixture echo` with `run_cli_process`, then go on as a host that counts interrupts and exits with 0 when its
+/// standard input ends. Give it two interrupts after the call returned. The result is the exit code and standard error.
+#[cfg(unix)]
+fn interrupted_after_the_call() -> (Option<i32>, String) {
+    let mut child = Command::new(fixture())
+        .args(["cli-then-host", "fixture", "echo", "--text", "hi"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the fixture starts");
+    let (lines, line) = std::sync::mpsc::channel();
+    let stderr = BufReader::new(child.stderr.take().expect("standard error"));
+    std::thread::spawn(move || {
+        for text in stderr.lines().map_while(Result::ok) {
+            let _ = lines.send(text);
+        }
+    });
+    let mut written = String::new();
+    let mut wait_for = |expected: &str| loop {
+        let Ok(text) = line.recv_timeout(DEADLINE) else {
+            return false;
+        };
+        written.push_str(&text);
+        written.push('\n');
+        if text == expected {
+            return true;
+        }
+    };
+    let interrupt = || {
+        Command::new("kill")
+            .args(["-INT", &child.id().to_string()])
+            .status()
+            .expect("kill runs");
+    };
+    let mut ended = false;
+    if wait_for("returned") {
+        interrupt();
+        if wait_for("interrupt 1") {
+            interrupt();
+            if wait_for("interrupt 2") {
+                drop(child.stdin.take());
+                ended = wait_for("still running");
+            }
+        }
+    }
+    if !ended {
+        let _ = child.kill();
+    }
+    let status = child.wait().expect("the status of the fixture");
+    while let Ok(text) = line.try_recv() {
+        written.push_str(&text);
+        written.push('\n');
+    }
+    (status.code(), written)
+}
+
+#[cfg(unix)]
+#[test]
+fn after_run_cli_process_returns_an_interrupt_does_not_exit_the_process() {
+    assert_eq!(
+        interrupted_after_the_call(),
+        (
+            Some(0),
+            "returned\ninterrupt 1\ninterrupt 2\nstill running\n".to_owned()
+        )
     );
 }
 

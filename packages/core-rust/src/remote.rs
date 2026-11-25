@@ -377,3 +377,50 @@ fn route(
         None => Box::pin(async { empty_response(404) }),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpStream;
+
+    async fn exchange(stream: &mut TcpStream) -> String {
+        stream
+            .write_all(b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+            .await
+            .expect("the request is sent");
+        let mut answer = Vec::new();
+        while !answer.ends_with(b"\r\n\r\n") {
+            let mut byte = [0];
+            let read = stream.read(&mut byte).await.expect("the answer is read");
+            assert_eq!(read, 1, "the server closed the connection: {answer:?}");
+            answer.push(byte[0]);
+        }
+        String::from_utf8(answer).expect("the head of the answer is text")
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn serve_closes_no_idle_connection_and_sends_no_keep_alive_header() {
+        let served = super::serve(
+            "127.0.0.1:0".parse().expect("the address parses"),
+            Vec::new(),
+        )
+        .await
+        .expect("the server listens");
+        let mut stream = TcpStream::connect(served.address)
+            .await
+            .expect("the client connects");
+        let first = exchange(&mut stream).await;
+        tokio::time::advance(Duration::from_secs(24 * 60 * 60)).await;
+        let second = exchange(&mut stream).await;
+        for answer in [first, second] {
+            assert!(answer.starts_with("HTTP/1.1 404"), "{answer}");
+            assert!(
+                !answer.to_ascii_lowercase().contains("keep-alive"),
+                "{answer}"
+            );
+        }
+        served.close().await;
+    }
+}

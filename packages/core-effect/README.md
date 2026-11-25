@@ -212,7 +212,7 @@ Layer.launch(NodeServer.layer({ "/mcp": mcp, "/": http }, { port: 3000 })).pipe(
 
 `@acid-cat/core-effect/NodeServer` needs only Node.js. `@acid-cat/core-effect/node` also exports it, with `NodeWebhook`, `NodeCli` and `NodeMcp` (these last two need `@effect/platform-node`).
 
-`NodeServer` is plain HTTP/1.1. For network clients, end TLS in front of it (a load balancer, a Kubernetes ingress, Cloudflare Tunnel) and set `hostname` to `0.0.0.0` or `::`. For HTTPS in the process, HTTP/2 or middleware, pass the handler to a library such as [srvx](https://srvx.h3.dev), and check that it aborts the request signal when the client disconnects; otherwise a closed connection does not cancel the call.
+`NodeServer` is plain HTTP/1.1. It closes no idle connection and sends no `Keep-Alive` header, as hyper and Go's `net/http` do by default. The client or the proxy in front closes an idle connection. A client that sends a request on an idle connection at the moment when the server closes it gets `ECONNRESET`. Undici (the `fetch` of Node.js) keeps an idle connection for the `Keep-Alive` time of the server less 2 s, and proxies keep one for 60 s (AWS load balancers, nginx) to 90 s (Cloudflare Tunnel) or more, so every idle timeout of the server leaves this race open. When the scope closes, the server stops accepting connections, ends each idle connection at once, and ends each other connection when both its request and its response are complete, so it cuts no request that the server accepted. The close of the scope ends when every connection has ended, so a response that does not end, such as an open event stream, keeps it waiting. For network clients, end TLS in front of it (a load balancer, a Kubernetes ingress, Cloudflare Tunnel) and set `hostname` to `0.0.0.0` or `::`. For HTTPS in the process, HTTP/2 or middleware, pass the handler to a library such as [srvx](https://srvx.h3.dev), and check that it aborts the request signal when the client disconnects; otherwise a closed connection does not cancel the call.
 
 ### MCP through stdio
 
@@ -494,7 +494,7 @@ Package specifics:
 
 - A command line that breaks a surface rule (a capability path that is a prefix of another, a duplicate path) fails at startup: `Cli.command` throws, `Cli.run` and `Cli.runCommand` die, and `NodeCli.main` and `NodeCli.runCommand` write the message to standard error and exit with 5.
 - The surface's help replaces the `effect/cli` help for capability commands, aliases, events and shared prefixes. The root command, `call`, `list` and `watch` keep the `effect/cli` help.
-- On `SIGINT`, `NodeCli` interrupts the fiber of the call or subscription. If it has not ended after `INTERRUPT_GRACE_MS` (1 second, from `@acid-cat/spec-ts`), the process exits with 130 and writes nothing more. A second interrupt exits at once.
+- On `SIGINT`, `NodeCli` interrupts the fiber of the call or subscription. If it has not ended after `INTERRUPT_GRACE_MS` (1 second, from `@acid-cat/spec-ts`), the process exits with 130 and writes nothing more. A second interrupt exits at once. When the run ends with no interrupt, `NodeCli` no longer listens for interrupts.
 
 #### Follow an event
 

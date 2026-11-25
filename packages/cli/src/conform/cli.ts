@@ -7,7 +7,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { isArrayOf, isObject, memberOf, parseJson } from "../json.ts";
 import type { JsonObject } from "../json.ts";
-import { abortable, Checks, eventIdsOf, expect, expectEqual, expectOccurrence, idsOf, sorted, until } from "./check.ts";
+import { abortable, Checks, eventIdsOf, expect, expectEqual, expectOccurrence, idsOf, orStop, sorted, until } from "./check.ts";
 import type { Define } from "./check.ts";
 
 const RULE = "spec/surfaces/cli.md";
@@ -106,10 +106,10 @@ function occurrencesIn(stdout: string, id: string) {
 
 type Listed = (signal: AbortSignal) => Promise<readonly Entry[]>;
 
-export async function checkCli(command: readonly string[], options: { readonly deadline: number }): Promise<Checks> {
-  const checks = new Checks("cli", options.deadline);
+export async function checkCli(command: readonly string[], options: { readonly deadline: number; readonly signal?: AbortSignal | undefined }): Promise<Checks> {
+  const checks = new Checks("cli", options.deadline, options.signal);
   const run = (signal: AbortSignal, ...args: string[]) => start(command, args, signal).run;
-  const listing = start(command, ["list"], AbortSignal.timeout(options.deadline)).run.then((result) => entriesOf(result.stdout));
+  const listing = start(command, ["list"], orStop(AbortSignal.timeout(options.deadline), options.signal)).run.then((result) => entriesOf(result.stdout));
   listing.catch(() => undefined);
   const listed: Listed = (signal) => abortable(listing, signal);
 

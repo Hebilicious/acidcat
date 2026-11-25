@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { Effect, Exit, Schema, Scope, Stream } from "effect";
 
@@ -12,6 +13,7 @@ import { runWith } from "./run.ts";
 import { bundledProgram } from "./bundled-program.ts";
 
 const remoteCli = bundledProgram("test/fixture-cli-remote.ts");
+const WITHOUT_GRACE = fileURLToPath(new URL("../../../test-support/without-interrupt-grace.ts", import.meta.url));
 const TOKEN = "Bearer secret-token-of-the-test";
 
 async function serve(handler: NodeServer.WebHandler): Promise<{ readonly url: string; readonly close: () => Promise<void> }> {
@@ -146,7 +148,7 @@ test("the command line that calls a server never writes its headers", async (con
   const down = await closedUrl();
   const garbage = await serve(() => new Response("not the HTTP surface", { status: 200 }));
   context.after(garbage.close);
-  const withToken = (url: string, ...args: string[]) => runWith({ FIXTURE_AUTHORIZATION: TOKEN }, remoteCli, url, ...args);
+  const withToken = (url: string, ...args: string[]) => runWith(context, { FIXTURE_AUTHORIZATION: TOKEN }, remoteCli, url, ...args);
   const [unavailable, internal, list] = await Promise.all([
     withToken(down, "fixture", "echo", "--text", "hi"),
     withToken(garbage.url, "fixture", "echo", "--text", "hi"),
@@ -174,7 +176,8 @@ test("an interrupt before the server answers a subscription ends watch with 130,
       }),
   );
   context.after(server.close);
-  const child = spawn(process.execPath, [remoteCli, server.url, "watch", "fixture.ticks", "--count", "1"], { stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  const child = spawn(process.execPath, [remoteCli, server.url, "watch", "fixture.ticks", "--count", "1"], { stdio: ["ignore", "pipe", "pipe"] });
+  context.after(() => child.kill("SIGKILL"));
   let stdout = "";
   let stderr = "";
   child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));
@@ -200,7 +203,8 @@ test("an interrupt during a call or list of a server that does not answer is can
   );
   context.after(server.close);
   const interrupted = (...args: string[]) => {
-    const child = spawn(process.execPath, [remoteCli, server.url, ...args], { stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+    const child = spawn(process.execPath, ["--import", WITHOUT_GRACE, remoteCli, server.url, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+    context.after(() => child.kill("SIGKILL"));
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));
@@ -219,7 +223,7 @@ test("an interrupt during a call or list of a server that does not answer is can
 test("list marks a capability that the server does not list as unavailable", async (context) => {
   const server = await serve(() => Response.json([{ id: "fixture.echo", available: true }, { id: "fixture.toggle", available: false, reason: "Off." }]));
   context.after(server.close);
-  const listed = await runWith({}, remoteCli, server.url, "list");
+  const listed = await runWith(context, {}, remoteCli, server.url, "list");
   assert.equal(listed.code, 0, listed.stderr);
   const Entry = Schema.Struct({ id: Schema.String, available: Schema.optionalKey(Schema.Boolean), reason: Schema.optionalKey(Schema.String) });
   const entries = decodeText(Schema.Array(Entry), listed.stdout);
@@ -243,7 +247,7 @@ test("a cursor that is not a header value is invalid-input, and the client sends
     assert.equal(failure.kind, "invalid-input", JSON.stringify(cursor));
   }
   assert.equal(requests, 0);
-  const watched = await runWith({}, remoteCli, server.url, "watch", "fixture.ticks", "--count", "1", "--cursor", "a→b");
+  const watched = await runWith(context, {}, remoteCli, server.url, "watch", "fixture.ticks", "--count", "1", "--cursor", "a→b");
   assert.equal(watched.code, 3, watched.stderr);
   assert.partialDeepStrictEqual(JSON.parse(watched.stderr), { kind: "invalid-input" });
   assert.equal(requests, 0);
@@ -259,7 +263,7 @@ test("a 200 answer to a subscription that is not a stream of server-sent events 
     return new Response(body, { status: 200, headers: { "Content-Type": "application/json" } });
   });
   context.after(server.close);
-  const failure = await Effect.runPromise(Effect.scoped(Effect.flip(Http.client(server.url).subscribe("fixture.watch", {}))).pipe(Effect.timeout("5 seconds")));
+  const failure = await Effect.runPromise(Effect.scoped(Effect.flip(Http.client(server.url).subscribe("fixture.watch", {}))), { signal: context.signal });
   assert.equal(failure.kind, "internal");
   await closed.promise;
 });

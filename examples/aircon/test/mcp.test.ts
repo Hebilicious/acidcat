@@ -7,6 +7,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { z } from "zod";
 
 import { mcpApi } from "../apis/mcp.ts";
+import { until } from "../../../test-support/until.ts";
 
 let served: Served;
 let api: ReturnType<typeof mcpApi>;
@@ -113,13 +114,6 @@ test("the MCP surface serves revision 2026-07-28 only, and the wrapped surface s
   await current.close();
 });
 
-async function until(what: string, condition: () => boolean): Promise<void> {
-  const end = Date.now() + 5000;
-  while (!condition()) {
-    if (Date.now() > end) throw new Error(`waiting until ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-}
 
 const Message = z.looseObject({
   id: z.union([z.string(), z.number()]).optional(),
@@ -179,7 +173,7 @@ test("the server of the application declares the events extension, and lists air
   assert.deepEqual(events.map((each) => [each.name, each.delivery]), [["aircon.status.changed", ["push", "poll"]]]);
 });
 
-test("events/stream on the server of the application grants the suggested heartbeatMs, follows aircon.status.changed, and cancelling it stops listening to the unit", async () => {
+test("events/stream on the server of the application grants the suggested heartbeatMs, follows aircon.status.changed, and cancelling it stops listening to the unit", async (t) => {
   const client = await connect("/mcp");
   const before = api.statusListeners();
   const controller = new AbortController();
@@ -187,21 +181,21 @@ test("events/stream on the server of the application grants the suggested heartb
   const active = await next();
   assert.equal(active?.method, "notifications/events/active");
   assert.equal(active?.params?.heartbeatMs, 30_000);
-  await until("the subscription listens to the unit", () => api.statusListeners() === before + 1);
+  await until(t, () => api.statusListeners() === before + 1, Boolean, { what: "the subscription listens to the unit" });
   await client.callTool({ name: "set_controls", arguments: { power: true, fan: "low" } });
   const event = await next();
   assert.equal(event?.method, "notifications/events/event");
   assert.equal(event?.params?.name, "aircon.status.changed");
   assert.equal(z.looseObject({ fan: z.string() }).parse(event?.params?.data).fan, "low");
   controller.abort();
-  await until("the subscription stops listening to the unit", () => api.statusListeners() === before);
+  await until(t, () => api.statusListeners() === before, Boolean, { what: "the subscription stops listening to the unit" });
   await client.close();
 });
 
-test("events/poll on the server of the application reads aircon.status.changed from a lease", async () => {
+test("events/poll on the server of the application reads aircon.status.changed from a lease", async (t) => {
   const client = await connect("/mcp");
-  const poll = async (cursor?: string) => {
-    const message = Message.parse(await (await eventsRequest("p", "events/poll", { name: "aircon.status.changed", arguments: {}, ...(cursor === undefined ? {} : { cursor }) })).json());
+  const poll = async (cursor?: string, signal?: AbortSignal) => {
+    const message = Message.parse(await (await eventsRequest("p", "events/poll", { name: "aircon.status.changed", arguments: {}, ...(cursor === undefined ? {} : { cursor }) }, signal)).json());
     return z.object({ events: z.array(z.looseObject({ data: z.looseObject({ fan: z.string() }) })), cursor: z.string() }).parse(message.result);
   };
   const before = api.statusListeners();
@@ -209,8 +203,7 @@ test("events/poll on the server of the application reads aircon.status.changed f
   assert.deepEqual(started.events, []);
   assert.equal(api.statusListeners(), before + 1, "the lease listens to the unit");
   await client.callTool({ name: "set_controls", arguments: { power: true, fan: "medium" } });
-  let polled = await poll(started.cursor);
-  for (const end = Date.now() + 5000; polled.events.length === 0 && Date.now() < end; polled = await poll(started.cursor)) await new Promise((resolve) => setTimeout(resolve, 5));
+  const polled = await until(t, (signal) => poll(started.cursor, signal), (seen) => seen.events.length > 0);
   assert.deepEqual(polled.events.map((each) => each.data.fan), ["medium"]);
   await client.close();
 });

@@ -48,7 +48,13 @@ export interface Served extends AsyncDisposable {
 export function serve(handler: WebHandler | Routes, options: ServeOptions = {}): Promise<Served> {
   const route = router(handler);
   const hostname = options.hostname ?? "127.0.0.1";
-  const server = createServer((incoming, outgoing) => {
+  // With `keepAliveTimeout: 0`, Node.js closes no idle connection and sends no `Keep-Alive` header, so a client never
+  // sends a request on a connection at the moment when the server closes it. `close` ends only the connections that are
+  // idle at that moment, so each other connection ends when both its request and its response are complete.
+  const server = createServer({ keepAliveTimeout: 0 }, (incoming, outgoing) => {
+    const closeIfIdle = () => server.listening || server.closeIdleConnections();
+    incoming.on("end", closeIfIdle);
+    outgoing.on("finish", closeIfIdle);
     void answer(incoming, outgoing, route);
   });
   return new Promise((resolve, reject) => {

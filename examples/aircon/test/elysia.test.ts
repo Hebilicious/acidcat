@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import { Status, Unit } from "../core-ts/aircon.ts";
 import { elysiaApi } from "../apis/elysia.ts";
+import { until } from "../../../test-support/until.ts";
 
 const request = (path: string, init: { method?: string; body?: unknown; origin?: string } = {}) =>
   new Request(`http://localhost${path}`, {
@@ -50,13 +51,6 @@ test("the HTTP surface is mounted at /api, and a foreign origin is rejected", as
   assert.equal((await app.handle(request("/status", { origin: "https://example.com" }))).status, 403);
 });
 
-async function until(what: string, condition: () => boolean): Promise<void> {
-  const end = Date.now() + 5000;
-  while (!condition()) {
-    if (Date.now() > end) throw new Error(`waiting until ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-}
 
 function sseEvents(body: ReadableStream<Uint8Array>) {
   const reader = body.getReader();
@@ -75,7 +69,7 @@ function sseEvents(body: ReadableStream<Uint8Array>) {
   };
 }
 
-test("GET /status/changes streams each new status as a server-sent event, and a client that goes away ends the subscription", async () => {
+test("GET /status/changes streams each new status as a server-sent event, and a client that goes away ends the subscription", async (t) => {
   const unit = new Unit();
   const app = elysiaApi({ unit });
   await using served = await serve({ "/status": async (incoming) => app.handle(incoming) }, { port: 0 });
@@ -93,7 +87,7 @@ test("GET /status/changes streams each new status as a server-sent event, and a 
   const last = Status.parse(JSON.parse(changes[1]?.get("data") ?? "null"));
   assert.deepEqual({ power: last.power, fan: last.fan }, { power: true, fan: "high" });
   disconnect.abort();
-  await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
+  await until(t, () => unit.statusListeners === before, Boolean, { what: "the subscription stops listening to the unit" });
 });
 
 async function freePort(): Promise<number> {
@@ -150,14 +144,14 @@ const textOf = (data: Buffer | ArrayBuffer | Buffer[]): string =>
 
 const Message = z.object({ event: z.string(), data: Status.optional() });
 
-test("the WebSocket /status/follow, on the Node.js adapter of Elysia, gets each change, and closing it ends the subscription", async () => {
+test("the WebSocket /status/follow, on the Node.js adapter of Elysia, gets each change, and closing it ends the subscription", async (t) => {
   const unit = new Unit();
   const { port, stop } = await listenOnNode(elysiaApi({ unit }, node()));
   const socket = new WebSocket(`ws://127.0.0.1:${port}/status/follow`);
   try {
     const messages: z.infer<typeof Message>[] = [];
     socket.on("message", (data) => messages.push(Message.parse(JSON.parse(textOf(data)))));
-    await until("the subscription has started", () => messages.some((message) => message.event === "following"));
+    await until(t, () => messages.some((message) => message.event === "following"), Boolean, { what: "the subscription has started" });
     assert.equal(unit.statusListeners, 1);
     const changed = await fetch(`http://127.0.0.1:${port}/status`, {
       method: "PATCH",
@@ -165,10 +159,10 @@ test("the WebSocket /status/follow, on the Node.js adapter of Elysia, gets each 
       body: JSON.stringify({ power: true }),
     });
     assert.equal(changed.status, 200);
-    await until("the change arrives", () => messages.some((message) => message.event === "aircon.status.changed"));
+    await until(t, () => messages.some((message) => message.event === "aircon.status.changed"), Boolean, { what: "the change arrives" });
     assert.equal(messages.find((message) => message.event === "aircon.status.changed")?.data?.power, true);
     socket.close();
-    await until("closing the WebSocket ends the subscription", () => unit.statusListeners === 0);
+    await until(t, () => unit.statusListeners === 0, Boolean, { what: "closing the WebSocket ends the subscription" });
   } finally {
     socket.close();
     await stop();

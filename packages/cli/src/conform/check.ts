@@ -61,6 +61,9 @@ export function expectOccurrence(value: unknown, id: string): Occurrence {
 
 export const DEADLINE = 30_000;
 
+/** A signal that aborts when `signal` aborts, or when `stop`, the signal that stops conform, aborts. */
+export const orStop = (signal: AbortSignal, stop: AbortSignal | undefined): AbortSignal => (stop === undefined ? signal : AbortSignal.any([signal, stop]));
+
 type Body = (signal: AbortSignal) => Promise<void> | void;
 
 export type Define = (name: string, rule: string, body: Body) => void;
@@ -69,14 +72,39 @@ export class Checks {
   readonly results: Check[] = [];
   readonly surface: string;
   readonly deadline: number;
+  /** When it aborts, each check that runs stops as at its deadline, and no other check starts. */
+  readonly signal: AbortSignal | undefined;
 
-  constructor(surface: string, deadline: number) {
+  constructor(surface: string, deadline: number, signal?: AbortSignal) {
     this.surface = surface;
     this.deadline = deadline;
+    this.signal = signal;
   }
 
   async run(name: string, rule: string, body: Body): Promise<void> {
     this.results.push(this.#result(name, rule, await this.#settle(body)));
+  }
+
+  /**
+   * Run a check of several runs, such as the runs of a property. Each run has the deadline, so the number of runs that
+   * fit in the check does not depend on the speed of the computer.
+   */
+  async runEach(name: string, rule: string, body: (each: (run: Body) => Promise<void>) => Promise<void>): Promise<void> {
+    let late = false;
+    const each = async (run: Body) => {
+      const failure = await this.#settle(run);
+      if (failure === undefined) return;
+      late ||= failure.startsWith("did not settle");
+      throw new Error(failure);
+    };
+    let failure: string | undefined;
+    try {
+      await body(each);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failure = late && !message.startsWith("did not settle") ? `did not settle within ${this.deadline} ms: ${message}` : message;
+    }
+    this.results.push(this.#result(name, rule, failure));
   }
 
   async concurrently(define: (check: Define) => void): Promise<void> {
@@ -100,17 +128,26 @@ export class Checks {
     this.results.push(failure === undefined ? { surface: this.surface, name, rule, passed: true } : { surface: this.surface, name, rule, passed: true, warning: true, detail: failure });
   }
 
+  #stopped(): boolean {
+    return this.signal?.aborted === true;
+  }
+
   async #settle(body: Body): Promise<string | undefined> {
+    if (this.#stopped()) return "conform stopped before the check";
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.deadline);
+    const stop = () => controller.abort();
+    const timer = setTimeout(stop, this.deadline);
+    this.signal?.addEventListener("abort", stop, { once: true });
     try {
       await body(controller.signal);
       return undefined;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (this.#stopped()) return `conform stopped during the check: ${message}`;
       return controller.signal.aborted ? `did not settle within ${this.deadline} ms: ${message}` : message;
     } finally {
       clearTimeout(timer);
+      this.signal?.removeEventListener("abort", stop);
       controller.abort();
     }
   }

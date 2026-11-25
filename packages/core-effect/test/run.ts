@@ -6,12 +6,17 @@ export interface Run {
   readonly stderr: string;
 }
 
-export function run(path: string, ...args: string[]): Promise<Run> {
-  return runWith({}, path, ...args);
+/** The part of the context of a `node:test` test that a process uses: the process ends when the test ends. */
+export interface Stoppable {
+  readonly signal: AbortSignal;
 }
 
-export function runWith(environment: Readonly<Record<string, string>>, path: string, ...args: string[]): Promise<Run> {
-  const child = spawn(process.execPath, [path, ...args], { env: { ...process.env, ...environment }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+export function run(t: Stoppable, path: string, ...args: string[]): Promise<Run> {
+  return runWith(t, {}, path, ...args);
+}
+
+export function runWith(t: Stoppable, environment: Readonly<Record<string, string>>, path: string, ...args: string[]): Promise<Run> {
+  const child = spawn(process.execPath, [path, ...args], { env: { ...process.env, ...environment }, stdio: ["ignore", "pipe", "pipe"], signal: t.signal, killSignal: "SIGKILL" });
   let stdout = "";
   let stderr = "";
   child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));

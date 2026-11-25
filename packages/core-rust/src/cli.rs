@@ -47,6 +47,10 @@ use crate::facts_generated::{
 pub const INTERRUPT_GRACE: std::time::Duration =
     std::time::Duration::from_millis(INTERRUPT_GRACE_MS);
 
+/// The name of the thread that exits the process [`INTERRUPT_GRACE`] after an interrupt. The exit at a second
+/// interrupt runs on another thread.
+const INTERRUPT_GRACE_THREAD: &str = "acid-cat-interrupt-grace";
+
 fn resume_words() -> impl Iterator<Item = &'static str> {
     RESUME_FLAGS
         .iter()
@@ -440,7 +444,8 @@ pub async fn cli_main<C: Send + Sync + 'static>(
 
 /// Run the command line with arguments, on standard output and standard error. An interrupt (`SIGINT`) cancels the
 /// call or the subscription. If the process has not exited [`INTERRUPT_GRACE`] after the interrupt, or at a second
-/// interrupt, it exits with code 130. The result is the exit code.
+/// interrupt, it exits with code 130. When the function returns with no interrupt, it no longer listens for interrupts.
+/// The result is the exit code.
 pub async fn run_cli_process<C: Send + Sync + 'static>(
     app: Arc<Application<C>>,
     context: Arc<C>,
@@ -457,7 +462,7 @@ pub async fn run_cli_process<C: Send + Sync + 'static>(
         .get_or_insert_with(|| output_color(is_terminal, env));
     options.pretty.get_or_insert(is_terminal);
     let cancel = CancellationToken::new();
-    listen_for_interrupt(cancel.clone());
+    let _listener = listen_for_interrupt(cancel.clone());
     let mut io = CliIo::standard(cancel);
     match run_cli(&app, context, &options, &args, &mut io).await {
         Ok(code) => code,
@@ -468,20 +473,73 @@ pub async fn run_cli_process<C: Send + Sync + 'static>(
     }
 }
 
-fn listen_for_interrupt(cancel: CancellationToken) {
+/// Listens for interrupts until it is dropped with no interrupt. The drop waits until the listener has stopped, so
+/// that an interrupt after [`run_cli_process`] returns reaches the process as it did before the call. After an
+/// interrupt, the listener stays, so that a second interrupt still exits at once.
+struct InterruptListener {
+    interrupted: CancellationToken,
+    stop: CancellationToken,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Drop for InterruptListener {
+    fn drop(&mut self) {
+        if self.interrupted.is_cancelled() {
+            return;
+        }
+        self.stop.cancel();
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+fn listen_for_interrupt(cancel: CancellationToken) -> InterruptListener {
+    let stop = CancellationToken::new();
     #[cfg(unix)]
     {
-        use tokio::signal::unix::{SignalKind, signal};
-        if let Ok(mut interrupts) = signal(SignalKind::interrupt()) {
-            tokio::spawn(async move {
-                if interrupts.recv().await.is_some() {
-                    interrupted(&cancel);
+        // A thread with its own runtime, so that a call or a subscription that blocks every thread of the runtime of the
+        // command line cannot hold back an interrupt.
+        let (listening, listens) = std::sync::mpsc::channel();
+        let cancelled = cancel.clone();
+        let stopped = stop.clone();
+        let started = std::thread::Builder::new()
+            .name("acid-cat-interrupts".to_owned())
+            .spawn(move || {
+                use tokio::signal::unix::{SignalKind, signal};
+                let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                else {
+                    return;
+                };
+                runtime.block_on(stopped.run_until_cancelled_owned(async move {
+                    let Ok(mut interrupts) = signal(SignalKind::interrupt()) else {
+                        return;
+                    };
+                    let _ = listening.send(());
                     if interrupts.recv().await.is_some() {
+                        cancelled.cancel();
+                        // A second interrupt that came while the cancellation ran exits at once, before the grace
+                        // period starts.
+                        if interrupts.recv().now_or_never().flatten().is_none() {
+                            start_grace_period();
+                            if interrupts.recv().await.is_none() {
+                                return;
+                            }
+                        }
                         std::process::exit(exit::CANCELLED);
                     }
-                }
+                }));
             });
-            return;
+        if let Ok(thread) = started
+            && listens.recv().is_ok()
+        {
+            return InterruptListener {
+                interrupted: cancel,
+                stop,
+                thread: Some(thread),
+            };
         }
     }
     // `ctrl_c` puts its handler in place when it is first polled. Poll it once here, so that it is in place now.
@@ -490,24 +548,32 @@ fn listen_for_interrupt(cancel: CancellationToken) {
     let _ = interrupt
         .as_mut()
         .poll(&mut std::task::Context::from_waker(&waker));
-    tokio::spawn(async move {
+    let interrupted = cancel.clone();
+    tokio::spawn(stop.clone().run_until_cancelled_owned(async move {
         if interrupt.await.is_ok() {
-            interrupted(&cancel);
+            cancel.cancel();
+            start_grace_period();
             if tokio::signal::ctrl_c().await.is_ok() {
                 std::process::exit(exit::CANCELLED);
             }
         }
-    });
+    }));
+    InterruptListener {
+        interrupted,
+        stop,
+        thread: None,
+    }
 }
 
-fn interrupted(cancel: &CancellationToken) {
-    cancel.cancel();
+fn start_grace_period() {
     // A thread, not a task: the runtime drops its tasks when it shuts down, and a capability can block the threads
-    // of the runtime.
-    std::thread::spawn(|| {
-        std::thread::sleep(INTERRUPT_GRACE);
-        std::process::exit(exit::CANCELLED);
-    });
+    // of the runtime. Its name tells a test which of the two exits ran.
+    let _ = std::thread::Builder::new()
+        .name(INTERRUPT_GRACE_THREAD.to_owned())
+        .spawn(|| {
+            std::thread::sleep(INTERRUPT_GRACE);
+            std::process::exit(exit::CANCELLED);
+        });
 }
 
 struct UsageError {

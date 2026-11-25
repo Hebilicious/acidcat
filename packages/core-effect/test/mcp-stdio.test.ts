@@ -5,7 +5,7 @@ import { Cause, Effect, Fiber, Queue, Schema, Sink, Stdio, Stream } from "effect
 import { Mcp } from "../src/index.ts";
 import { fixture, fixtureLayer } from "./fixture.ts";
 
-test("serveStdio tells each change of the tools, also when the availability changes back before the server reads the change", async () => {
+test("serveStdio tells each change of the tools, also when the availability changes back before the server reads the change", async (t) => {
   const program = Effect.gen(function* () {
     const stdin = yield* Queue.unbounded<string, Cause.Done>();
     const stdout = yield* Queue.unbounded<string>();
@@ -46,5 +46,5 @@ test("serveStdio tells each change of the tools, also when the availability chan
     yield* Queue.end(stdin);
     yield* Fiber.join(served);
   });
-  await Effect.runPromise(Effect.scoped(program).pipe(Effect.timeout("5 seconds")));
+  await Effect.runPromise(Effect.scoped(program), { signal: t.signal });
 });

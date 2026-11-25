@@ -12,6 +12,7 @@ import { Unit } from "../core-ts/aircon.ts";
 import type { Status } from "../core-ts/aircon.ts";
 import { capnwebApi, capnwebWebSocket } from "../apis/capnweb.ts";
 import type { AirconApi } from "../apis/capnweb.ts";
+import { until } from "../../../test-support/until.ts";
 
 const unit = new Unit();
 let served: Served;
@@ -47,13 +48,6 @@ test("the HTTP surface is at /api", async () => {
   assert.equal(unit.state.fan, "high");
 });
 
-async function until(what: string, condition: () => boolean): Promise<void> {
-  const end = Date.now() + 5000;
-  while (!condition()) {
-    if (Date.now() > end) throw new Error(`waiting until ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-}
 
 async function webSocketServer(unit: Unit, allowedOrigins: readonly string[] = []) {
   const server = new WebSocketServer({ host: "127.0.0.1", port: 0, path: "/rpc" });
@@ -64,7 +58,7 @@ async function webSocketServer(unit: Unit, allowedOrigins: readonly string[] = [
   return { server, url: `ws://127.0.0.1:${port}/rpc`, [Symbol.dispose]: () => server.close() };
 }
 
-test("followStatus calls the listener with each new status, and disposing its result ends the subscription", async () => {
+test("followStatus calls the listener with each new status, and disposing its result ends the subscription", async (t) => {
   const unit = new Unit();
   using ws = await webSocketServer(unit);
   using api = newWebSocketRpcSession<AirconApi>(ws.url);
@@ -73,14 +67,14 @@ test("followStatus calls the listener with each new status, and disposing its re
   const following = await api.followStatus((status) => void statuses.push(status));
   assert.equal(unit.statusListeners, before + 1, "the subscription has started when followStatus resolves");
   assert.deepEqual(await api.setPower(true), { ok: true, value: null });
-  await until("the listener gets the new status", () => statuses.length === 1);
+  await until(t, () => statuses.length === 1, Boolean, { what: "the listener gets the new status" });
   assert.equal(statuses[0]?.power, true);
   following[Symbol.dispose]();
-  await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
+  await until(t, () => unit.statusListeners === before, Boolean, { what: "the subscription stops listening to the unit" });
   assert.equal((await api.status()).ok, true);
 });
 
-test("when the listener of the client throws, the subscription ends", async () => {
+test("when the listener of the client throws, the subscription ends", async (t) => {
   const unit = new Unit();
   using ws = await webSocketServer(unit);
   using api = newWebSocketRpcSession<AirconApi>(ws.url);
@@ -89,10 +83,10 @@ test("when the listener of the client throws, the subscription ends", async () =
     throw new Error("The listener failed.");
   });
   await api.setPower(true);
-  await until("the subscription stops listening to the unit", () => unit.statusListeners === before);
+  await until(t, () => unit.statusListeners === before, Boolean, { what: "the subscription stops listening to the unit" });
 });
 
-test("closing the connection closes its session, which ends each subscription of the connection", async () => {
+test("closing the connection closes its session, which ends each subscription of the connection", async (t) => {
   const unit = new Unit();
   using ws = await webSocketServer(unit);
   const api = newWebSocketRpcSession<AirconApi>(ws.url);
@@ -100,7 +94,7 @@ test("closing the connection closes its session, which ends each subscription of
   await Promise.all([api.followStatus(() => undefined), api.followStatus(() => undefined)]);
   assert.equal(unit.statusListeners, before + 2);
   api[Symbol.dispose]();
-  await until("closing the connection ends both subscriptions", () => unit.statusListeners === before);
+  await until(t, () => unit.statusListeners === before, Boolean, { what: "closing the connection ends both subscriptions" });
 });
 
 test("a WebSocket connection from an origin that the API does not allow is closed", async () => {

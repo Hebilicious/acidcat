@@ -10,7 +10,7 @@ import { bundledProgram } from "./bundled-program.ts";
 
 const ignoring = () => options(new HoldsThatIgnoreCancellation());
 
-test("acid-cat conform fails only the cancellation checks of an implementation that ignores cancellation, and returns", { timeout }, async () => {
+test("acid-cat conform fails only the cancellation checks of an implementation that ignores cancellation, and returns", { timeout }, async (t) => {
   const mcp = mcpHandler(fixture, { name: "fixture", version: "0.0.0", allowedOrigins: [], ...ignoring() });
   const served = await serve({
     "/mcp": mcp,
@@ -18,10 +18,11 @@ test("acid-cat conform fails only the cancellation checks of an implementation t
   });
   try {
     const runs = await Promise.all([
-      conform({ mcp: `${served.url}/mcp`, deadline }),
-      conform({ http: `${served.url}/api`, deadline }),
-      conform({ cli: [process.execPath, bundledProgram("test/fixture-cli-ignoring-cancellation.ts")], deadline }),
+      conform({ signal: t.signal, mcp: `${served.url}/mcp`, deadline }),
+      conform({ signal: t.signal, http: `${served.url}/api`, deadline }),
+      conform({ signal: t.signal, cli: [process.execPath, bundledProgram("test/fixture-cli-ignoring-cancellation.ts")], deadline }),
       conform({
+        signal: t.signal,
         webmcp: (modelContext) => {
           const session = createSession(fixture, { target: "app", ...ignoring() });
           const installation = installWebMcp(session, { host: modelContext });

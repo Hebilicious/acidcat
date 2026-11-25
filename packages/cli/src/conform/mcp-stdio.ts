@@ -7,7 +7,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
 import { isObject, memberOf } from "../json.ts";
 import type { JsonObject } from "../json.ts";
-import { abortable, Checks, expect, expectEqual, until } from "./check.ts";
+import { abortable, Checks, expect, expectEqual, orStop, until } from "./check.ts";
 import { checkEvents, checkTools, META, subscriptionOf } from "./mcp.ts";
 import type { Channel, EventStream, Message } from "./mcp.ts";
 import type { PollSettings } from "./poll.ts";
@@ -36,10 +36,10 @@ async function connect(command: readonly string[], options: ClientOptions, chang
   return client;
 }
 
-export async function checkMcpStdio(command: readonly string[], options: { readonly deadline: number; readonly poll: PollSettings }): Promise<readonly Checks[]> {
+export async function checkMcpStdio(command: readonly string[], options: { readonly deadline: number; readonly signal?: AbortSignal | undefined; readonly poll: PollSettings }): Promise<readonly Checks[]> {
   const all: Checks[] = [];
   for (const era of ERAS) {
-    const checks = new Checks(`mcp-stdio ${era.revision}`, options.deadline);
+    const checks = new Checks(`mcp-stdio ${era.revision}`, options.deadline, options.signal);
     all.push(checks);
     const changes = { count: 0 };
     let client: Client | undefined;
@@ -52,7 +52,7 @@ export async function checkMcpStdio(command: readonly string[], options: { reado
     try {
       await checkTools(checks, mcp);
       await checkChanges(checks, mcp, changes);
-      all.push(await checkProperties(`mcp-stdio ${era.revision} properties`, clientInvoke(mcp), options.deadline));
+      all.push(await checkProperties(`mcp-stdio ${era.revision} properties`, clientInvoke(mcp), options.deadline, options.signal));
     } finally {
       await mcp.close();
     }
@@ -62,10 +62,10 @@ export async function checkMcpStdio(command: readonly string[], options: { reado
   return all;
 }
 
-async function checkStdioEvents(command: readonly string[], options: { readonly deadline: number; readonly poll: PollSettings }): Promise<Checks> {
-  const checks = new Checks("mcp-stdio events", options.deadline);
+async function checkStdioEvents(command: readonly string[], options: { readonly deadline: number; readonly signal?: AbortSignal | undefined; readonly poll: PollSettings }): Promise<Checks> {
+  const checks = new Checks("mcp-stdio events", options.deadline, options.signal);
   const controller = new AbortController();
-  const server = startRaw(command, controller.signal);
+  const server = startRaw(command, orStop(controller.signal, options.signal));
   try {
     await checkEvents(checks, stdioChannel(server), { transport: "stdio", poll: options.poll, webhook: false });
   } finally {
@@ -174,8 +174,8 @@ async function handshake(server: ReturnType<typeof startRaw>, revision = "2025-1
   return response;
 }
 
-async function checkLines(command: readonly string[], options: { readonly deadline: number }): Promise<Checks> {
-  const checks = new Checks("mcp-stdio", options.deadline);
+async function checkLines(command: readonly string[], options: { readonly deadline: number; readonly signal?: AbortSignal | undefined }): Promise<Checks> {
+  const checks = new Checks("mcp-stdio", options.deadline, options.signal);
   const withServer = (body: (server: ReturnType<typeof startRaw>, signal: AbortSignal) => Promise<void>) => async (signal: AbortSignal) => {
     const controller = new AbortController();
     const server = startRaw(command, AbortSignal.any([controller.signal, signal]));

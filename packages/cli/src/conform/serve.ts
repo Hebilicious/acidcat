@@ -18,7 +18,13 @@ export interface Routes {
 export function serve(handler: WebHandler | Routes): Promise<Served> {
   const routes: Routes = typeof handler === "function" ? { "/": handler } : handler;
   const prefixes = Object.keys(routes).sort((a, b) => b.length - a.length);
-  const server = createServer((incoming, outgoing) => {
+  // With `keepAliveTimeout: 0`, Node.js closes no idle connection and sends no `Keep-Alive` header, so a client never
+  // sends a request on a connection at the moment when the server closes it. `close` ends only the connections that are
+  // idle at that moment, so each other connection ends when both its request and its response are complete.
+  const server = createServer({ keepAliveTimeout: 0 }, (incoming, outgoing) => {
+    const closeIfIdle = () => server.listening || server.closeIdleConnections();
+    incoming.on("end", closeIfIdle);
+    outgoing.on("finish", closeIfIdle);
     void answer(incoming, outgoing, prefixes, routes);
   });
   return new Promise((resolve) => {

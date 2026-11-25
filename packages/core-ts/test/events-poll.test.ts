@@ -111,7 +111,7 @@ test("poll: a cursor that is not a string, or a maxAgeMs that is not an integer 
 
 test("poll: maxAgeMs bounds the replay of a lease that resumes", async (t) => {
   const { handler, poll, sensors } = httpServer();
-  const old = new Date(Date.now() - 60_000).toISOString();
+  const old = sensors.ago(60_000);
   sensors.emit("hall", 0, old);
   sensors.emit("hall", 1, old);
   sensors.emit("hall", 2);
@@ -130,9 +130,11 @@ test("poll: a lease that gets no poll for the lease time ends, and its subscript
   await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   clock.advance(59_000);
   await poll({ ...READINGS, cursor: start.cursor });
-  clock.advance(59_000);
-  assert.equal(sensors.listeners, 1);
-  clock.advance(1000);
+  assert.equal(clock.pending, 1, "the timer of the lease waits");
+  clock.advance(59_999);
+  assert.equal(clock.pending, 1, "the lease does not end 1 ms before the lease time after the last poll");
+  clock.advance(1);
+  assert.equal(clock.pending, 0, "the lease ends the lease time after the last poll");
   await until(t, () => sensors.listeners, (listeners) => listeners === 0);
   const restarted = await poll({ ...READINGS, cursor: start.cursor });
   assert.equal(restarted.truncated, true);

@@ -91,7 +91,7 @@ Each flag has an equivalent option for `conform()` in code. Give one or more sur
 - [Hints](../../spec/surfaces/mcp.md#tools): Each MCP tool's annotations match its capability's hints.
 - [Heartbeat](../../spec/surfaces/mcp.md#push): Through MCP with each transport, each `notifications/events/active` grants a `heartbeatMs`. A suggestion is clamped between 1000 and 60 000, a heartbeat comes no sooner than the grant after the request and before the deadline ([why](../../spec/conformance.md#the-silence-before-a-heartbeat)), and a suggestion that is not valid gets `-32602`.
 - [Headers](../../spec/surfaces/mcp.md#headers): Through MCP over HTTP, a missing or wrong `Mcp-Method`, `Mcp-Name` or `Mcp-Param-*` header on `tools/call` and `events/stream` gets 400 and `-32020`, and a value in the base64 form is decoded, with a leading U+FEFF kept. Every request of conform mirrors the annotated arguments of the fixture (`fixture.switch.set` and `fixture.ticks`) into their headers.
-- Properties: With fast-check, through MCP and HTTP: concurrent calls each get their own outcome, and a cancellation changes only its own call.
+- Properties: With fast-check, through MCP and HTTP: concurrent calls each get their own outcome, and a cancellation changes only its own call. Each run of a property has the deadline.
 
 Each poll check uses a new key, so leases from an earlier run do not change the result.
 
@@ -105,7 +105,7 @@ A failed check of a SHOULD rule gives a warning, marked `!`, and passes. The exi
 
 ### Use it in code
 
-`conform()` and `serve()` come from `@acid-cat/cli`. This `serve()` is for tests only: it listens on `127.0.0.1`, on a free port, with plain HTTP. To serve an application, use its core's server: `serve` from `@acid-cat/core-ts/node`, `NodeServer` from `@acid-cat/core-effect`, or `remote::serve` from the crate `acid-cat-core`.
+`conform()` and `serve()` come from `@acid-cat/cli`. Give `conform()` the signal of the test as `signal`, so that it stops when the test ends: each check that runs stops and kills the processes that it started, no other check and no other surface starts, and the promise rejects with the reason of the signal. This `serve()` is for tests only: it listens on `127.0.0.1`, on a free port, with plain HTTP. Like the servers of the cores, it closes no idle connection, so that a client of a test never sends a request on a connection while the server closes it. Its `close()` ends each idle connection at once, and ends each other connection when both its request and its response are complete, so it cuts no request that the server accepted. It resolves when every connection has ended, so a response that does not end, such as an open event stream, keeps it waiting. To serve an application, use its core's server: `serve` from `@acid-cat/core-ts/node`, `NodeServer` from `@acid-cat/core-effect`, or `remote::serve` from the crate `acid-cat-core`.
 
 ## Implementation
 

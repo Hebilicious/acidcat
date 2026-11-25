@@ -10,6 +10,7 @@ import { events, Feed, feedForPromises, feedLayer, following, publish } from "./
 import { decodeMessage, decodePollResult, json, mcpRequest, meta, ORIGIN } from "./mcp-client.ts";
 import { until } from "../../../test-support/until.ts";
 import type { Message } from "./mcp-client.ts";
+import { testClock } from "./test-clock.ts";
 
 const base = { name: "feed", version: "0.0.0", allowedOrigins: [ORIGIN] };
 
@@ -97,21 +98,28 @@ test("through HTTP, dispose ends the leases", async () => {
   await feed.following(0);
 });
 
-test("through HTTP with per-request services, a lease keeps the services of its request until it ends", async (t) => {
+test("through HTTP with per-request services, a lease keeps the services of its request until it gets no poll for the lease time", async (t) => {
   const feed = feedForPromises();
+  const clock = testClock();
   let released = 0;
-  const layer = Layer.effect(Feed, Effect.acquireRelease(Effect.service(Feed), () => Effect.sync(() => (released += 1)))).pipe(Layer.provide(feed.layer));
-  const handler = Mcp.toWebHandler(events, layer, { ...base, services: "per-request", poll: { leaseMs: 200 } });
+  const services = Layer.effect(Feed, Effect.acquireRelease(Effect.service(Feed), () => Effect.sync(() => (released += 1)))).pipe(Layer.provide(feed.layer));
+  const handler = Mcp.toWebHandler(events, Layer.merge(services, clock.layer), { ...base, services: "per-request", poll: { leaseMs: 60_000 } });
   try {
     await json(await handler(mcpRequest("events/list")));
     assert.equal(released, 1);
-    await poll(handler, { name: "feed.ticked" });
+    const started = await poll(handler, { name: "feed.ticked" });
     await feed.following(1);
-    assert.equal(released, 1);
+    await clock.adjust(59_999);
+    const renewed = await poll(handler, { name: "feed.ticked", cursor: started.cursor });
+    assert.equal(decodePollCursor(renewed.cursor)?.lease, decodePollCursor(started.cursor)?.lease);
+    await clock.adjust(59_999);
+    assert.equal(released, 2, "only the services of the second poll are released, and the lease still holds its own");
+    await clock.adjust(1);
     await feed.following(0);
-    await until(t, async () => released, (count) => count === 2);
+    await until(t, () => released, (count) => count === 3, { what: "the release of the services of the lease" });
   } finally {
     await handler.dispose();
+    await clock.close();
   }
 });
 

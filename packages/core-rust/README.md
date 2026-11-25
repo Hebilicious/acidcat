@@ -169,7 +169,7 @@ The card gives `McpOptions::version`, and the revisions of the `initialize` hand
 
 ### Serving the remote surfaces
 
-`McpSurface` and `HttpSurface` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. To use another server, pass each request through `remote::request_body`, then to `handle`.
+`McpSurface` and `HttpSurface` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. Like the Node.js servers of the TypeScript cores, it closes no idle connection and sends no `Keep-Alive` header, so a client never sends a request on a connection while the server closes it. The client or the proxy in front closes an idle connection. It sends each message of a stream at once (`TCP_NODELAY`). `close()` of the server stops it from accepting connections and ends each open connection at once, also one whose response is not complete, so the client of a stream gets no more of it. The Node.js servers of the TypeScript cores end each connection at their close only when both its request and its response are complete. To use another server, pass each request through `remote::request_body`, then to `handle`.
 
 Each request gets its own session. With `new`, requests share one context.
 
@@ -197,7 +197,7 @@ let surface = HttpSurface::with_request_context(app, move |parts: &http::request
 
 ## Command line
 
-`cli_main` runs the command line and exits the process. `cli::run_cli_process` returns the exit code instead. Commands, help, exit codes and interrupts follow the [CLI surface](../../spec/surfaces/cli.md). The grace period after an interrupt is `cli::INTERRUPT_GRACE` (one second). When the application breaks a rule of the surface, for example two commands with the same path, both functions write the message to standard error. `run_cli_process` returns 5, and `cli_main` exits with 5.
+`cli_main` runs the command line and exits the process. `cli::run_cli_process` returns the exit code instead. Commands, help, exit codes and interrupts follow the [CLI surface](../../spec/surfaces/cli.md). The grace period after an interrupt is `cli::INTERRUPT_GRACE` (one second). The command line listens for interrupts on a thread with its own runtime, so a call or a subscription that blocks every thread of the runtime cannot hold back an interrupt. A second interrupt exits at once, also when it comes while the cancellation of the first runs. When `run_cli_process` returns with no interrupt, the command line no longer listens for interrupts, so an interrupt during later work of the program does not exit it with 130. When the application breaks a rule of the surface, for example two commands with the same path, both functions write the message to standard error. `run_cli_process` returns 5, and `cli_main` exits with 5.
 
 ### Aliases
 

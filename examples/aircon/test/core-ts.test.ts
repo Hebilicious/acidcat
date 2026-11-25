@@ -14,7 +14,7 @@ import { aircon, fanSet, powerSet, Status, output, statusChanged, statusGet, toJ
 import { catalogOf, createSession, renderCatalog, runCli } from "@acid-cat/core-ts";
 import { OFFLINE, SCHEDULE_LAYOUT, STATUS_OFF, STATUS_ON } from "./human.ts";
 import { bundledProgram } from "./bundled-program.ts";
-import { run } from "./run.ts";
+import { endsWith, run } from "./run.ts";
 import { firstLine, startServer, subscriptionProxy } from "./server.ts";
 import { assertHelp } from "./help.ts";
 import { shape, writtenText } from "./shape.ts";
@@ -116,20 +116,20 @@ test("the alias follow of the command line writes each change of the status", as
 
 const program = bundledProgram("core-ts/cli.ts");
 
-test("the command line runs a capability, writes JSON on one line when standard output is not a terminal, and a flag follows a $ref to its type", async () => {
-  const [status, poweredOff] = await Promise.all([run(program, "aircon", "status", "get"), run(program, "aircon", "mode", "set", "--mode", "heat")]);
+test("the command line runs a capability, writes JSON on one line when standard output is not a terminal, and a flag follows a $ref to its type", async (t) => {
+  const [status, poweredOff] = await Promise.all([run(t, program, "aircon", "status", "get"), run(t, program, "aircon", "mode", "set", "--mode", "heat")]);
   assert.equal(status.code, 0);
   assert.equal(status.stdout, `${JSON.stringify(OFF)}\n`);
   assert.equal(poweredOff.code, 1);
   assert.equal(poweredOff.stdout, `${JSON.stringify({ _tag: "PoweredOff" })}\n`);
 });
 
-test("the command line writes the human form with its output flags, and on a terminal by default", async () => {
+test("the command line writes the human form with its output flags, and on a terminal by default", async (t) => {
   const [status, schedule, list, unknown] = await Promise.all([
-    run(program, "status", "--output", "human"),
-    run(program, "aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18", "--output=human"),
-    run(program, "list", "-o", "human"),
-    run(program, "call", "nope", "-o", "human"),
+    run(t, program, "status", "--output", "human"),
+    run(t, program, "aircon", "schedule", "set", "--days", "mon", "--days", "fri", "--hours", "7", "--hours", "18", "--output=human"),
+    run(t, program, "list", "-o", "human"),
+    run(t, program, "call", "nope", "-o", "human"),
   ]);
   assert.deepEqual([status.code, status.stdout], [0, `${STATUS_OFF}\n`]);
   assert.deepEqual([schedule.code, schedule.stdout], [0, `${SCHEDULE_LAYOUT}\n`]);
@@ -169,14 +169,14 @@ function finish(child: ChildProcessByStdio<null, Readable, Readable>): Promise<{
 
 test("the TypeScript command line controls the unit of a server, and watch follows its changes", async (context) => {
   const url = await startServer(context, process.execPath, [bundledProgram("core-ts/serve.ts")]);
-  const client = (target: string) => (...args: string[]) => spawn(process.execPath, [program, ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"], timeout: 20_000 });
+  const client = (target: string) => (...args: string[]) => spawn(process.execPath, [program, ...args], { env: { ...process.env, AIRCON_URL: target }, stdio: ["ignore", "pipe", "pipe"] , ...endsWith(context) });
   const remote = client(url);
 
   assert.equal((await finish(remote("aircon", "power", "set", "--on"))).code, 0);
   const status = await finish(remote("aircon", "status", "get"));
   assert.equal(status.code, 0);
   assert.partialDeepStrictEqual(JSON.parse(status.stdout), { power: true });
-  assert.partialDeepStrictEqual(JSON.parse((await run(program, "aircon", "status", "get")).stdout), { power: false });
+  assert.partialDeepStrictEqual(JSON.parse((await run(context, program, "aircon", "status", "get")).stdout), { power: false });
   assert.equal((await finish(remote("--output", "human", "aircon", "status", "get"))).stdout, `${STATUS_ON}\n`);
 
   const proxy = await subscriptionProxy(context, url);
@@ -197,10 +197,10 @@ test("aircon.status.export writes a file through the command line", async (conte
   const folder = await mkdtemp(join(tmpdir(), "aircon-"));
   context.after(() => rm(folder, { recursive: true, force: true }));
   const file = join(folder, "status.json");
-  assert.equal((await run(program, "aircon", "status", "export", "--path", file)).code, 0);
+  assert.equal((await run(context, program, "aircon", "status", "export", "--path", file)).code, 0);
   assert.partialDeepStrictEqual(JSON.parse(await readFile(file, "utf-8")), { power: false });
 });
 
-test("the command line writes the command list of a shared prefix", async () => {
-  await assertHelp((...args) => run(program, ...args));
+test("the command line writes the command list of a shared prefix", async (t) => {
+  await assertHelp((...args) => run(t, program, ...args));
 });

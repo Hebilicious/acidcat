@@ -97,14 +97,14 @@ import { test } from "node:test";
 
 import { conform } from "@acid-cat/cli";
 
-test("the fixture passes acid-cat conform through HTTP", async () => {
-  const checks = await conform({ http: "http://127.0.0.1:3000/api" });
+test("the fixture passes acid-cat conform through HTTP", async (t) => {
+  const checks = await conform({ http: "http://127.0.0.1:3000/api", signal: t.signal });
   const failed = checks.filter((check) => !check.passed);
   assert.deepEqual(failed, [], failed.map((check) => `${check.surface}: ${check.name}: ${check.detail}`).join("\n"));
 });
 ```
 
-In code, `cli` and `mcpStdio` take the command as an array, for example `[process.execPath, "cli.js"]`. `webmcp` can also be a function that installs the implementation on a host in the same process.
+Give `signal` the signal of the test, so that conform stops when the test ends, for example at its timeout: each check that runs stops and kills the processes that it started, no other check and no other surface starts, and the promise rejects with the reason of the signal. In code, `cli` and `mcpStdio` take the command as an array, for example `[process.execPath, "cli.js"]`. `webmcp` can also be a function that installs the implementation on a host in the same process.
 
 ::: caution
 `serve()` from `@acid-cat/cli` is for tests only. It listens on `127.0.0.1`, on a free port, with plain HTTP. To serve an application, use the server of its core.

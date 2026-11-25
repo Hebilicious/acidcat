@@ -106,7 +106,7 @@ test("webhook: a new subscription has no watermark and a delivery status with no
 
 test("webhook: a truncated occurrence before the first delivery comes after a gap message with no cursor", async (t) => {
   const { handler, subscribe, sensors } = server(t);
-  const old = new Date(Date.now() - 60_000).toISOString();
+  const old = sensors.ago(60_000);
   sensors.emit("hall", 1, old);
   sensors.emit("hall", 2, old);
   sensors.emit("hall", 3);

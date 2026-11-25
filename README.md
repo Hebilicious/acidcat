@@ -131,6 +131,7 @@ Pass the same `aircon` to `mcpStdioMain` for an MCP server, or to `httpHandler` 
 - WebMCP lets a browser agent call your page's capabilities directly, with the user's session ([surface](spec/surfaces/webmcp.md)).
 - The command line has aliases such as `home --on`, JSON or human output, and Ctrl+C cancellation. In a pipe, it writes each result as one line of JSON, so an agent or a script reads less text ([surface](spec/surfaces/cli.md)).
 - In code, a session gives a handle for each capability and an event handle for each event. The [programmatic surface](spec/surfaces/programmatic.md) gives the rules of handles, outcomes, availability, state, cancellation and events for every language. The [TypeScript](spec/surfaces/typescript.md) and [Rust](spec/surfaces/rust.md) surfaces map it to their language.
+- The HTTP server of each core (`serve` of `@acid-cat/core-ts/node`, `NodeServer` of `@acid-cat/core-effect`, `remote::serve` of `acid-cat-core`) closes no idle connection, so a client never sends a request on a connection at the moment when the server closes it. When a Node.js server closes, it cuts no request that it accepted: it ends each connection when both its request and its response are complete. `close()` of `remote::serve` ends each open connection at once, also one whose response is not complete.
 - For an API you design yourself, such as GraphQL, call the same capabilities through a session ([examples](examples/aircon/README.md#apis)).
 
 ## 📚 Specification
