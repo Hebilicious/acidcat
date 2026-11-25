@@ -1,6 +1,6 @@
 import { defineSite } from "vaporpress/client";
 import "../styles/site.css";
-import { copyCodeOnClick } from "../theme/copy-code.ts";
+import { copyCodeOnClick } from "./copy-code.ts";
 import { pageHead } from "./head.ts";
 import Layout from "./Layout.vue";
 import { useRouteStyles } from "./route-styles.ts";

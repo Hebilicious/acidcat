@@ -1,5 +1,3 @@
-import type { DefaultTheme } from "vitepress";
-
 export interface SidebarLink {
   readonly text: string;
   readonly link: string;
@@ -18,12 +16,6 @@ export interface Section {
   readonly note: string;
   readonly href: string;
   readonly items: readonly SidebarItem[];
-}
-
-export interface SiteTheme {
-  readonly editBase: string;
-  readonly sections: readonly Section[];
-  readonly search: DefaultTheme.Config["search"];
 }
 
 export const isGroup = (item: SidebarItem): item is SidebarGroup => "items" in item;

@@ -3,7 +3,7 @@ import { defineLoader } from "vaporpress/data";
 import type { LoadedData } from "vaporpress/data";
 import { docsSidebar, examplesSidebar } from "../lib/docs-sidebar.ts";
 import { readSpecPages, specSidebar } from "../lib/spec-pages.ts";
-import type { Section } from "../theme/site-theme.ts";
+import type { Section } from "./sidebar.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const content = fileURLToPath(new URL("../../content", import.meta.url));

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SidebarLink } from "./site-theme.ts";
+import type { SidebarLink } from "./sidebar.ts";
 
 defineProps<{ previous: SidebarLink | undefined; next: SidebarLink | undefined }>();
 </script>

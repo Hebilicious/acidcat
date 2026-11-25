@@ -1,16 +1,25 @@
-<script setup lang="ts">
+<script setup lang="ts" vapor>
 import { onMounted, onUnmounted, ref } from "vue";
-import { isExternal } from "../lib/external-links.ts";
-import { revealSections, showStarCount } from "../lib/home-page.ts";
-import Mark from "../theme/Mark.vue";
-import SiteNav from "../theme/SiteNav.vue";
-import LivingPlate from "./LivingPlate.vue";
-import { nearFigure } from "./near-figure.ts";
+import LivingPlate from "../src/components/LivingPlate.vue";
+import { isExternal } from "../src/lib/external-links.ts";
+import { revealSections, showStarCount } from "../src/lib/home-page.ts";
+import Mark from "../src/app/Mark.vue";
+import { nearFigure, releaseNearFigures } from "../src/app/near-figure.ts";
+import SiteNav from "../src/app/SiteNav.vue";
 
-const Schematic = nearFigure(() => import("./Schematic.vue"));
-const Blueprint = nearFigure(() => import("./Blueprint.vue"));
-const Surfaces = nearFigure(() => import("./Surfaces.vue"));
-const CoreScreens = nearFigure(() => import("./CoreScreens.vue"));
+defineOptions({
+  __page: {
+    title: "AcidCat — Application Capability Identification Catalog",
+    description: "Describe what your application can do once. Serve it as a CLI, an MCP server, an HTTP API and typed client code.",
+    frontmatter: { layout: "home", titleTemplate: false },
+    headings: [],
+  },
+});
+
+const Schematic = nearFigure(".schematic", () => import("../src/components/Schematic.vue"));
+const Blueprint = nearFigure(".blueprint-row", () => import("../src/components/Blueprint.vue"));
+const Surfaces = nearFigure(".surfaces", () => import("../src/components/Surfaces.vue"));
+const CoreScreens = nearFigure(".cores", () => import("../src/components/CoreScreens.vue"));
 
 const repository = "https://github.com/Hebilicious/acidcat";
 const footerColumns = [
@@ -53,7 +62,10 @@ onMounted(() => {
   if (starCount.value !== undefined) showStarCount(starCount.value, lifetime.signal);
   if (root.value !== undefined) revealSections(root.value, lifetime.signal);
 });
-onUnmounted(() => lifetime.abort());
+onUnmounted(() => {
+  lifetime.abort();
+  releaseNearFigures();
+});
 </script>
 
 <template>

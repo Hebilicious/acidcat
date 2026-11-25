@@ -1,8 +1,8 @@
 <script setup lang="ts" vapor>
 import { useRoute } from "vue-router";
-import Caret from "../theme/Caret.vue";
-import { isGroup } from "../theme/site-theme.ts";
-import type { Section } from "../theme/site-theme.ts";
+import Caret from "./Caret.vue";
+import { isGroup } from "./sidebar.ts";
+import type { Section } from "./sidebar.ts";
 
 defineProps<{ section: Section }>();
 const route = useRoute();

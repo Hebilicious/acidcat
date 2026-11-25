@@ -1,4 +1,4 @@
-import type { Header } from "vitepress";
+import type { Heading } from "vaporpress/client";
 import type { PublishedPackage } from "./packages.ts";
 
 export interface PackageGroup {
@@ -16,7 +16,7 @@ export const packageGroups: readonly PackageGroup[] = [
 ];
 
 /** The headings of the packages page, for its table of contents: one for each group that has a package. */
-export const packageHeaders = (packages: readonly PublishedPackage[]): Header[] =>
+export const packageHeadings = (packages: readonly PublishedPackage[]): Heading[] =>
   packageGroups
     .filter((group) => packages.some((entry) => entry.kind === group.kind))
-    .map((group) => ({ level: 2, title: group.title, slug: `group-${group.kind}`, link: `#group-${group.kind}`, children: [] }));
+    .map((group) => ({ level: 2, title: group.title, slug: `group-${group.kind}` }));

@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, posix, relative, sep } from "node:path";
-import type { SidebarItem, SidebarLink } from "../theme/site-theme.ts";
+import type { SidebarItem, SidebarLink } from "../app/sidebar.ts";
 import { replaceDiagrams } from "./spec-diagrams.ts";
 
 export const repositoryUrl = "https://github.com/Hebilicious/acidcat";

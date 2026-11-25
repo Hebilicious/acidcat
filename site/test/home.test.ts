@@ -155,7 +155,7 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   assert.deepEqual(files.filter((file) => file.endsWith(".woff2") && !/-core\.[\w-]+\.woff2$/.test(file)), [], "only the core of each font");
   const phonePlate = 88_000;
   const fontCores = 170_000;
-  const scriptOfTheVitePressHomepage = 168_000;
+  const vaporpressHomepageBelowVitePress = 166_000;
   const homepageWithItsCss = 176_000;
   const starCount = 1_000;
   const prefetchOfEachSectionInTheHeaderAndTheDocsLayout = 115_000;
@@ -163,7 +163,7 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   const budget: Record<string, number> = {
     image: phonePlate,
     font: fontCores,
-    script: scriptOfTheVitePressHomepage,
+    script: vaporpressHomepageBelowVitePress,
     document: homepageWithItsCss,
     fetch: starCount,
     "pages ahead": prefetchOfEachSectionInTheHeaderAndTheDocsLayout,

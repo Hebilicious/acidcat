@@ -363,7 +363,6 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 
 ## Roadmap
 
-- Move the rest of the AcidCat site onto the framework: the files for agents; then remove VitePress. The docs, the examples, the specification, the packages page and the homepage build on it.
 - Built-in features: the Markdown of each page and `llms.txt`, social cards, the subsets of the font faces, and the design tokens of cssforge.
 - A skill that gives the checklist of the verification loop for a site.
 - Move the framework to a repository of its own.

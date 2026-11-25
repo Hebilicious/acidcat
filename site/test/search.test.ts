@@ -43,7 +43,7 @@ for (const viewport of [
     await waitForHydration(page);
     assert.equal(await page.locator('link[data-route="search"]').count(), 0, "the page loads the CSS of the search only when the search opens");
     await page.locator(".search-button").click();
-    const input = page.locator("#localsearch-input, #search-input");
+    const input = page.locator("#search-input");
     await input.waitFor();
     assert.equal(await page.locator('link[rel="stylesheet"][data-route="search"]').count(), 1);
 
@@ -63,12 +63,12 @@ for (const viewport of [
     assert.ok(field.box.left >= bar.box.left && field.box.right <= bar.box.right && field.box.top >= bar.box.top && field.box.bottom <= bar.box.bottom, "the input is inside the bar");
 
     await input.fill("catalog");
-    const first = page.locator(".VPLocalSearchBox .result, .search-dialog .result").first();
+    const first = page.locator(".search-dialog .result").first();
     await first.waitFor();
     assert.equal(await first.evaluate((element) => getComputedStyle(element).borderTopColor), await acid(page), "the selected result has the acid border");
 
     await input.fill("zzqqxx");
-    const empty = page.locator(".VPLocalSearchBox .no-results, .search-dialog .no-results");
+    const empty = page.locator(".search-dialog .no-results");
     await empty.waitFor();
     assert.equal(await empty.locator("strong").evaluate((element) => getComputedStyle(element).color), await acid(page));
     await page.close();
@@ -84,10 +84,10 @@ test("the search marks the words that match, Enter goes to the selected result w
   await waitForHydration(page);
   await page.evaluate(() => document.documentElement.setAttribute("data-same-document", ""));
   await page.keyboard.press("Control+k");
-  const input = page.locator("#localsearch-input, #search-input");
+  const input = page.locator("#search-input");
   await input.waitFor();
   await input.fill("conformance");
-  const first = page.locator(".VPLocalSearchBox .result, .search-dialog .result").first();
+  const first = page.locator(".search-dialog .result").first();
   await first.locator("mark").first().waitFor();
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => location.pathname !== "/docs/quick-start/");

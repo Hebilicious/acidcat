@@ -2,7 +2,7 @@
 import { computed, defineVaporAsyncComponent, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { LocationQuery } from "vue-router";
-import { loadRouteStyles, prefetchRouteStyles } from "../theme/route-styles.ts";
+import { loadRouteStyles, prefetchRouteStyles } from "./route-styles.ts";
 
 const loadDialog = () => import("./SearchDialog.vue");
 const SearchDialog = defineVaporAsyncComponent(loadDialog);

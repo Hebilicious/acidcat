@@ -1,6 +1,6 @@
 import { onPageUpdated } from "vaporpress/client";
 import { onUnmounted } from "vue";
-import { mountTabs } from "../theme/tabs.ts";
+import { mountTabs } from "./tabs.ts";
 
 export const usePageBehaviors = (): void => {
   let page = new AbortController();
