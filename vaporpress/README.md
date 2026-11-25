@@ -12,7 +12,7 @@ The framework lives in the AcidCat repository while it grows, and the AcidCat si
 
 ## Use
 
-A site is a folder with a Vite configuration, an app module and a folder of pages:
+A site is a folder with a configuration of [Vite+](https://viteplus.dev), an app module and a folder of pages:
 
 ```text
 my-site/
@@ -32,7 +32,7 @@ my-site/
 ```ts
 // vite.config.ts
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig } from "vite-plus";
 import { vaporpress } from "vaporpress/vite";
 
 export default defineConfig({
@@ -67,7 +67,7 @@ const page = usePage();
 </template>
 ```
 
-`vite` serves the site with live reload. `vite build` writes the static site into `dist/`: one HTML file for each page, at `<path>/index.html`, and `404.html`.
+`vp dev` serves the site with live reload. `vp build` writes the static site into `dist/`: one HTML file for each page, at `<path>/index.html`, and `404.html`. vaporpress is a set of Vite plugins, so the commands `vite` and `vite build` of Vite 8 do the same.
 
 ## Conventions
 
@@ -300,11 +300,24 @@ The framework follows the page model of VitePress: each page is a component of o
 
 ### Build and render
 
-**Chosen: one Vite configuration, and a `buildApp` hook.** `vaporpress` returns the Vite plugins: the Markdown plugin, `vue-router/vite` for the routes, `@vitejs/plugin-vue` in Vapor mode, the data plugin, and the core plugin. `vite build` builds the client environment, then the ssr environment, then the hook renders each route with `renderToString` from Vue 3.6 and writes its HTML file (`src/prerender.ts`). The browser hydrates the page with `createVaporSSRApp`. In development, `vite` serves one HTML document for every page, and the browser renders it with `createVaporApp`. A site adds its own Vite plugins next to these.
+**Chosen: one Vite configuration, and a `buildApp` hook.** `vaporpress` returns the Vite plugins: the Markdown plugin, `vue-router/vite` for the routes, `@vitejs/plugin-vue` in Vapor mode, the data plugin, and the core plugin. `vp build` builds the client environment, then the ssr environment, then the hook renders each route with `renderToString` from Vue 3.6 and writes its HTML file (`src/prerender.ts`). The browser hydrates the page with `createVaporSSRApp`. In development, `vp dev` serves one HTML document for every page, and the browser renders it with `createVaporApp`. A site adds its own Vite plugins next to these.
 
 **Rejected: a command of its own that drives Vite twice, with its own configuration file (the shape of VitePress).** It gives a second configuration format to learn and to keep in step with Vite, and a site cannot simply add a Vite plugin.
 
 The routes are the routes of `vue-router/unplugin`: each page is a dynamic import, so each page has its own chunk. `extraPages` inserts more routes into its tree. Data that the build reads once comes from `.data.ts` modules: the plugin runs the loader in Node and gives the browser the JSON. A page imports a data module, so the data is in the chunk of the page that needs it. The experimental data loaders of Vue Router (`vue-router/experimental`) load data on each navigation; a documentation site needs no data at run time, so the framework does not use them yet.
+
+### Toolchain
+
+**Chosen: Vite+ for the commands and the build, and `@vitejs/plugin-vue` for the compiler.** A site runs `vp dev` and `vp build` of [Vite+](https://viteplus.dev), and its `vite.config.ts` imports `defineConfig` from `vite-plus`. Vite+ bundles its own build of Vite 8 and Rolldown, `@voidzero-dev/vite-plus-core`. The AcidCat repository gives that package the name `vite` in its pnpm catalog, so vaporpress, `vue-router/vite`, `@vitejs/plugin-vue` and `vp` load one copy of Vite. The build is the build of Vite: the same plugins, the same `buildApp` hook and the same files.
+
+The other commands of Vite+ are not in use: in this repository, Moon runs the tasks (`vp run`), oxlint lints (`vp lint`, `vp check`), and `node:test` runs the tests (`vp test`).
+
+**Rejected: [Vize](https://vizejs.dev) in place of `@vitejs/plugin-vue`.** Vize compiles single-file components in Rust, and it has a Vapor compiler. Version 0.797.0 compiles a Vapor component for the browser, but these parts that vaporpress needs do not work:
+
+- Its server output for a Vapor component writes the fragment markers of the virtual DOM, so `createVaporSSRApp` reports `Hydration node mismatch` on the first element of the page.
+- Its static templates have no flag 2 (`template("<p>…</p>")`), and its templates render in a separate `render` function. So `src/lean.ts` finds no static template, and the lean chunk of a page keeps all its HTML.
+- It does not compile the lean chunk of a page, a module with a query of its own: `page.vue?lean` reaches Rolldown as the source of the component, and `page.md?lean` imports its style as `page.md.__vize_style_0.css?lean?vue=…`, which does not resolve.
+- Its server output imports `@vue/server-renderer`. A site that depends on `vue` cannot resolve that package with pnpm. With an alias to `vue/server-renderer` and with no lean chunks, the server render of `test/fixture/` writes no page inside `RouterView`, and 11 of the 49 tests of vaporpress fail.
 
 ### Fast page changes
 
@@ -342,10 +355,10 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 ## A second site
 
 1. Make a folder with `vite.config.ts`, `src/app.ts`, a layout and `pages/`, as [Use](#use) shows.
-2. Add `vaporpress`, `vue` and `vite` to its dependencies.
+2. Add `vaporpress`, `vue` and `vite-plus` to its dependencies. Give `vite` the version of `@voidzero-dev/vite-plus-core` that `vite-plus` uses (`vp toolchain`), with an alias such as `"vite": "npm:@voidzero-dev/vite-plus-core@8.3.8001"`, so that vaporpress and `vp` load one copy of Vite.
 3. Write the layout and the homepage of the site as its own components. Import `RouterView` and `usePage` from the framework.
 4. Add the parts that the site needs: a highlighter in `markdown.highlight`, data modules, `extraPages`.
-5. Run `vite build`, and serve `dist/` from a static host. `404.html` is the page for unknown paths.
+5. Run `vp build`, and serve `dist/` from a static host. `404.html` is the page for unknown paths.
 
 `test/fixture/` is a small site that uses each part of the framework.
 

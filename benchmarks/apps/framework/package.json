@@ -10,6 +10,7 @@
     "shiki": "catalog:",
     "vite": "catalog:",
     "vue-router": "catalog:",
-    "vue": "catalog:"
+    "vue": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

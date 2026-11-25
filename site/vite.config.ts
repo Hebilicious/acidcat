@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { relative } from "node:path";
 import { build as esbuild } from "esbuild";
-import { defineConfig } from "vite";
+import { defineConfig } from "vite-plus";
 import { vaporpress } from "vaporpress/vite";
 import { writeAgentFiles } from "./src/lib/agent/files.ts";
 import { writeExampleFragments } from "./src/lib/example-fragments.ts";
