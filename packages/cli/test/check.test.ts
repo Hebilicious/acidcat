@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { setTimeout as pause } from "node:timers/promises";
 
+import { MCP_PROTOCOL_VERSION, MCP_SERVER_CARD_PATH } from "@acid-cat/spec-ts";
+
 import { Checks } from "../src/conform/check.ts";
+import { conform, serve } from "../src/conform/index.ts";
+import type { Served } from "../src/conform/index.ts";
+import { isObject } from "../src/json.ts";
 
 test("checks that run at the same time keep the order in which they are defined", async () => {
   const checks = new Checks("cli", 1_000);
@@ -55,6 +60,56 @@ test("when the signal of conform aborts, the check that runs stops, and no other
     [
       ["runs", false, "conform stopped during the check: aborted"],
       ["later", false, "conform stopped before the check"],
+    ],
+  );
+});
+
+test("when the signal aborts in the cleanup after the last check, conform rejects with its reason", async () => {
+  const stop = new AbortController();
+  const reason = new Error("the test ended");
+  const install = () => () => stop.abort(reason);
+  await assert.rejects(conform({ webmcp: install, deadline: 10, signal: stop.signal }), (error) => error === reason);
+});
+
+/** An MCP server that answers only server/discover, so that conform reaches each check of the MCP surface, which fails. */
+async function discoverOnly(onRequest: (path: string) => void): Promise<Served> {
+  return serve(async (request) => {
+    onRequest(new URL(request.url).pathname);
+    if (request.headers.get("Mcp-Method") !== "server/discover") return new Response(null, { status: 404 });
+    const message: unknown = await request.json();
+    const id = isObject(message) ? message.id : null;
+    return Response.json({ jsonrpc: "2.0", id, result: { resultType: "complete", supportedVersions: [MCP_PROTOCOL_VERSION], capabilities: {} } });
+  });
+}
+
+test("when the signal aborts during the request for the Server Card, conform rejects with its reason and starts no later surface", async (t) => {
+  const stop = new AbortController();
+  const reason = new Error("the test ended");
+  const server = await discoverOnly((path) => {
+    if (path.endsWith(MCP_SERVER_CARD_PATH)) stop.abort(reason);
+  });
+  t.after(() => server.close());
+  let installed = false;
+  const install = () => {
+    installed = true;
+  };
+  await assert.rejects(conform({ mcp: `${server.url}/mcp`, webmcp: install, signal: stop.signal }), (error) => error === reason);
+  assert.equal(installed, false);
+});
+
+test("with no signal, conform gives the report of its checks", async () => {
+  const checks = await conform({ webmcp: () => () => undefined, deadline: 10 });
+  assert.deepEqual(
+    checks.map(({ surface, name }) => `${surface}: ${name}`),
+    [
+      "webmcp: each available capability of the target is a tool",
+      "webmcp: a tool has the description and the bundled input schema of its capability",
+      "webmcp: a value resolves as a result",
+      "webmcp: a failure resolves as a result",
+      "webmcp: a defect rejects with the kind internal",
+      "webmcp: invalid input rejects with the kind invalid-input, as a TypeError",
+      "webmcp: the signal of the host cancels a call, as an AbortError",
+      "webmcp: a tool is removed while its capability is unavailable, and registered again after",
     ],
   );
 });

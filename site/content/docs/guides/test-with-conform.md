@@ -104,7 +104,7 @@ test("the fixture passes acid-cat conform through HTTP", async (t) => {
 });
 ```
 
-Give `signal` the signal of the test, so that conform stops when the test ends, for example at its timeout: each check that runs stops and kills the processes that it started, and no other check starts. In code, `cli` and `mcpStdio` take the command as an array, for example `[process.execPath, "cli.js"]`. `webmcp` can also be a function that installs the implementation on a host in the same process.
+Give `signal` the signal of the test, so that conform stops when the test ends, for example at its timeout: each check that runs stops and kills the processes that it started, no other check and no other surface starts, and the promise rejects with the reason of the signal. In code, `cli` and `mcpStdio` take the command as an array, for example `[process.execPath, "cli.js"]`. `webmcp` can also be a function that installs the implementation on a host in the same process.
 
 ::: caution
 `serve()` from `@acid-cat/cli` is for tests only. It listens on `127.0.0.1`, on a free port, with plain HTTP. To serve an application, use the server of its core.

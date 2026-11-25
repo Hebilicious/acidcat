@@ -66,8 +66,9 @@ export interface ConformOptions {
    */
   readonly deadline?: number | undefined;
   /**
-   * When it aborts, conform stops: each check that runs stops as at its deadline and cleans up, no other check starts,
-   * and the promise resolves soon after. A test gives its own signal, so that conform ends with the test.
+   * When it aborts, conform stops: each check that runs stops as at its deadline and cleans up, no other check and no
+   * other surface starts, and the promise rejects with the reason of the signal. A test gives its own signal, so that
+   * conform ends with the test.
    */
   readonly signal?: AbortSignal | undefined;
 }
@@ -79,27 +80,36 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
   const poll = options.poll ?? {};
   const { signal } = options;
   const results: Check[] = [];
+  signal?.throwIfAborted();
   if (options.mcp !== undefined) {
     results.push(...(await checkMcp(options.mcp, { maximumBytes, deadline, signal, handshake: options.mcpHandshake === true, poll, webhook: options.webhook })).results);
+    signal?.throwIfAborted();
     const mcp = await mcpInvoke(options.mcp, orStop(AbortSignal.timeout(deadline), signal)).catch(() => undefined);
     if (mcp !== undefined) {
       results.push(...(await checkProperties("mcp", mcp.invoke, deadline, signal)).results);
       await mcp.close();
     }
+    signal?.throwIfAborted();
   }
   if (options.pollLease !== undefined) {
     const checks = new Checks("mcp", deadline, signal);
     await checkPollLease(checks, httpChannel(options.pollLease.mcp), options.pollLease.leaseMs);
     results.push(...checks.results);
+    signal?.throwIfAborted();
   }
   if (options.mcpStdio !== undefined) {
     for (const checks of await checkMcpStdio(options.mcpStdio, { deadline, signal, poll })) results.push(...checks.results);
+    signal?.throwIfAborted();
   }
   if (options.http !== undefined) {
     results.push(...(await checkHttp(options.http, { maximumBytes, deadline, signal })).results);
     results.push(...(await checkProperties("http", httpInvoke(options.http), deadline, signal)).results);
+    signal?.throwIfAborted();
   }
-  if (options.cli !== undefined) results.push(...(await checkCli(options.cli, { deadline, signal })).results);
+  if (options.cli !== undefined) {
+    results.push(...(await checkCli(options.cli, { deadline, signal })).results);
+    signal?.throwIfAborted();
+  }
   if (options.webmcp !== undefined) {
     const driver = typeof options.webmcp === "string" ? await browserDriver(options.webmcp) : await processDriver(options.webmcp);
     try {
@@ -107,6 +117,7 @@ export async function conform(options: ConformOptions): Promise<readonly Check[]
     } finally {
       await driver.close();
     }
+    signal?.throwIfAborted();
   }
   return results;
 }
