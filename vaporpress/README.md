@@ -200,7 +200,7 @@ const home = computed(() => page.value.path === "/");
 
 ## Behaviors
 
-`vaporpress/behaviors` gives the logic of the controls that most documentation sites have, with no markup and no styles: each site keeps its own HTML, CSS and policy, and calls these functions. They use only the DOM, so a site can also run them in an inline script before any module script, for example to make tabs respond at once.
+`vaporpress/behaviors` gives the logic of the controls that most documentation sites have, with no markup and no styles: each site keeps its own HTML, CSS and policy, and calls these functions. They use only the DOM, so a site can also run them in an inline script before any module script, for example to make tabs respond at once. Each behavior is a module of its own, so the bundler puts each in the chunk of the page or the component that uses it.
 
 | Export | Use |
 | --- | --- |

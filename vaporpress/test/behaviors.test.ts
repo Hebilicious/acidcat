@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { stripTypeScriptTypes } from "node:module";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -20,7 +20,7 @@ const tabs = `
   <div id="one" role="tabpanel">First</div><div id="two" role="tabpanel" hidden>Second</div><div id="three" role="tabpanel" hidden>Third</div>
 </div>
 <script type="module">
-  import { listenToTabs, selectTab } from "/behaviors.js";
+  import { listenToTabs, selectTab } from "/behaviors/index.js";
   const tabsOf = (group) => [...group.querySelectorAll('[role="tab"]')];
   listenToTabs({ tab: '[role="tab"]', group: ".tabs", tabsOf, choose: (group, tab) => selectTab(tabsOf(group), tab, (each) => document.getElementById(each.getAttribute("aria-controls"))) });
   document.body.dataset.ready = "";
@@ -30,7 +30,7 @@ const listbox = `
 <button id="opener">Search</button>
 <dialog><input id="query"><ul id="options"></ul></dialog>
 <script type="module">
-  import { isSearchShortcut, onListboxKey, openModal } from "/behaviors.js";
+  import { isSearchShortcut, onListboxKey, openModal } from "/behaviors/index.js";
   const dialog = document.querySelector("dialog");
   const options = ["Alpha", "Beta", "Gamma"];
   let selected = 0;
@@ -61,7 +61,7 @@ const listbox = `
 const copy = `
 <figure><button class="copy">Copy</button><pre><code>pnpm add vaporpress</code></pre></figure>
 <script type="module">
-  import { copyCodeOnClick } from "/behaviors.js";
+  import { copyCodeOnClick } from "/behaviors/index.js";
   copyCodeOnClick({ button: ".copy", code: (button) => button.parentElement.querySelector("pre code"), copied: (button, copied) => button.setAttribute("aria-label", copied ? "Copied" : "Copy code") });
   document.body.dataset.ready = "";
 </script>`;
@@ -70,7 +70,7 @@ const headings = `
 <style>h2 { margin: 0 0 120vh; } p { height: 50vh; }</style><p></p>
 <h2 id="first">First</h2><h2 id="second">Second</h2><h2 id="third">Third</h2>
 <script type="module">
-  import { observeActiveHeading } from "/behaviors.js";
+  import { observeActiveHeading } from "/behaviors/index.js";
   observeActiveHeading([...document.querySelectorAll("h2")], 100, (id) => { document.body.dataset.active = id ?? "none"; });
   document.body.dataset.ready = "";
 </script>`;
@@ -78,7 +78,12 @@ const headings = `
 before(async () => {
   await rm(root, { recursive: true, force: true });
   await mkdir(root, { recursive: true });
-  await writeFile(join(root, "behaviors.js"), stripTypeScriptTypes(await readFile(new URL("../src/behaviors.ts", import.meta.url), "utf8")));
+  const sources = new URL("../src/behaviors/", import.meta.url);
+  await mkdir(join(root, "behaviors"));
+  for (const file of await readdir(sources)) {
+    const code = stripTypeScriptTypes(await readFile(new URL(file, sources), "utf8")).replaceAll(/(from "\.\/[\w-]+)\.ts"/g, '$1.js"');
+    await writeFile(join(root, "behaviors", file.replace(/\.ts$/, ".js")), code);
+  }
   for (const [name, body] of Object.entries({ tabs, listbox, copy, headings })) await writeFile(join(root, `${name}.html`), `<!doctype html><html><body>${body}</body></html>`);
   const served = await serve(root.replace(/\/$/, ""));
   origin = served.origin;
