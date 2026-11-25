@@ -52,7 +52,7 @@ export const serve = Effect.fnUntraced(function* (handler: WebHandler | Routes, 
   const hostname = options.hostname ?? "127.0.0.1";
   // The scope closes the server first, which waits for the open requests. Then the set interrupts the fibers that are left.
   const run = yield* FiberSet.makeRuntime();
-  const server = createServer((incoming, outgoing) => {
+  const server = createServerThatKeepsIdleConnections((incoming, outgoing) => {
     run(answer(incoming, outgoing, route));
   });
   const port = yield* Effect.acquireRelease(listen(server, options.port ?? 3000, hostname), () => close(server));
@@ -227,4 +227,21 @@ function bodyOf(incoming: IncomingMessage): ReadableStream<Uint8Array> {
     },
     { highWaterMark: 0 },
   );
+}
+
+/**
+ * A client that sends a request on an idle connection at the moment when the server closes it gets ECONNRESET. Undici,
+ * the `fetch` of Node.js, keeps an idle connection for the `Keep-Alive: timeout` of the server less 2 s, so each idle
+ * timeout of the server leaves this race. With `keepAliveTimeout: 0`, Node.js closes no idle connection and sends no
+ * `Keep-Alive` header, as hyper does. After `close`, Node.js closes the idle connections once, so each connection that
+ * becomes idle later closes when its response is complete.
+ */
+function createServerThatKeepsIdleConnections(listener: (incoming: IncomingMessage, outgoing: ServerResponse) => void): Server {
+  const server = createServer({ keepAliveTimeout: 0 }, (incoming, outgoing) => {
+    outgoing.on("finish", () => {
+      if (!server.listening) server.closeIdleConnections();
+    });
+    listener(incoming, outgoing);
+  });
+  return server;
 }

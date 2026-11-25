@@ -28,13 +28,13 @@ tasks:
     description: "Test canonical form, the catalog of a target, bundling and the catalog rules."
     command: "node"
     args: ["--test", "test/"]
-    inputs: ["src/**/*.ts", "test/**/*.ts", "test/fixtures/**/*.json", "/schemas/**/*.json", "/packages/catalog/typescript/src/**/*.ts"]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "test/fixtures/**/*.json", "/test-support/**/*.ts", "/schemas/**/*.json", "/packages/catalog/typescript/src/**/*.ts"]
 
   typecheck:
     description: "Type-check the sources, tests and examples."
     command: "tsc"
     args: ["-p", "."]
-    inputs: ["src/**/*.ts", "test/**/*.ts", "examples/**/*.ts", "tsconfig.json", "/tsconfig.base.json"]
+    inputs: ["src/**/*.ts", "test/**/*.ts", "examples/**/*.ts", "/test-support/**/*.ts", "tsconfig.json", "/tsconfig.base.json"]
 
   browser:
     description: "Install Chromium for `acid-cat conform --webmcp`. It does nothing if Chromium is installed."
