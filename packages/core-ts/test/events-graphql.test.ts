@@ -7,7 +7,7 @@ import { createSession } from "../src/index.ts";
 import type { Occurrence } from "../src/index.ts";
 import { readingChanged, sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
 import type { Reading } from "./sensors.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 
 const ReadingType = new GraphQLObjectType<Reading>({
   name: "Reading",
@@ -34,13 +34,13 @@ function schemaFor(sensors: Sensors) {
   return { schema, session };
 }
 
-test("graphql-js subscribes through an event handle, and its return() ends the subscription while next() waits", async () => {
+test("graphql-js subscribes through an event handle, and its return() ends the subscription while next() waits", async (t) => {
   const sensors = new Sensors();
   const { schema, session } = schemaFor(sensors);
   await using _ = session;
   const result = await subscribe({ schema, document: parse('subscription { reading(room: "kitchen") { room celsius } }') });
   assert.ok(Symbol.asyncIterator in result, "the subscription started");
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   sensors.emit("kitchen", 21);
   const first = await result.next();
   assert.equal(JSON.stringify(first), JSON.stringify({ value: { data: { reading: { room: "kitchen", celsius: 21 } } }, done: false }));
@@ -48,5 +48,5 @@ test("graphql-js subscribes through an event handle, and its return() ends the s
   const waiting = result.next();
   await result.return();
   assert.deepEqual(await waiting, { done: true, value: undefined });
-  await until(() => sensors.listeners === 0);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 0);
 });

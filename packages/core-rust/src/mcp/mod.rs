@@ -546,6 +546,79 @@ mod tests {
         }
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn the_heartbeat_comes_when_the_stream_sent_nothing_for_the_interval_counted_from_the_last_message()
+     {
+        use crate::app::{App, Emitted, Event, NoPayload};
+        use tokio::time::{Instant, advance};
+
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel::<()>();
+        let receiver = Arc::new(Mutex::new(Some(receiver)));
+        let app = App::new()
+            .title("Test")
+            .target("mcp", ["mcp"])
+            .event(
+                Event::new(
+                    "test.signal",
+                    "Give an occurrence for each signal of the test.",
+                )
+                .audience(["mcp"])
+                .subscribe(move |(), _| {
+                    let receiver = receiver.lock().ok().and_then(|mut taken| taken.take());
+                    futures::stream::unfold(receiver, |receiver| async move {
+                        let mut receiver = receiver?;
+                        receiver.recv().await?;
+                        Some((Ok(Emitted::new(NoPayload {})), Some(receiver)))
+                    })
+                }),
+            )
+            .build()
+            .unwrap_or_else(|problems| panic!("the application does not conform: {problems:?}"));
+        let session = Session::open(&app, "mcp", Arc::new(()));
+        let params = Map::from_iter([
+            ("name".to_owned(), json!("test.signal")),
+            ("heartbeatMs".to_owned(), json!(1000)),
+        ]);
+        let mut stream = EventStream::start(
+            &session,
+            json!(1),
+            &params,
+            json!({}),
+            Duration::from_secs(15),
+        )
+        .unwrap_or_else(|error| panic!("the stream starts: {}", error.message));
+        let method = |messages: Option<Vec<Value>>| {
+            messages
+                .and_then(|messages| messages.last().cloned())
+                .and_then(|message| message.get("method").cloned())
+        };
+
+        assert_eq!(
+            method(stream.next().await),
+            Some(json!("notifications/events/active"))
+        );
+        let active = Instant::now();
+        assert_eq!(
+            method(stream.next().await),
+            Some(json!("notifications/events/heartbeat"))
+        );
+        assert_eq!(active.elapsed(), Duration::from_millis(1000));
+
+        let next = tokio::spawn(async move {
+            let event = method(stream.next().await);
+            let sent = Instant::now();
+            let heartbeat = method(stream.next().await);
+            (event, heartbeat, sent.elapsed())
+        });
+        tokio::task::yield_now().await;
+        advance(Duration::from_millis(400)).await;
+        let _ = sender.send(());
+        let (event, heartbeat, silence) = next.await.unwrap_or_default();
+        assert_eq!(event, Some(json!("notifications/events/event")));
+        assert_eq!(heartbeat, Some(json!("notifications/events/heartbeat")));
+        assert_eq!(silence, Duration::from_millis(1000));
+    }
+
     #[test]
     fn heartbeat_grant_defaults_to_the_deployment_and_rejects_an_invalid_suggestion() {
         let deployment = Duration::from_millis(7_000);

@@ -675,3 +675,4 @@ The package runs everywhere, browsers included; only `/node` and `/NodeServer` n
   - [`test/fixture.ts`](test/fixture.ts): one capability per `acid-cat conform` behavior. CLIs: [`test/fixture-cli.ts`](test/fixture-cli.ts), [`test/fixture-cli-remote.ts`](test/fixture-cli-remote.ts) (calls a server).
   - [`test/events-fixture.ts`](test/events-fixture.ts): one event per subscription behavior (filters, cursors, a defect, a bad payload, an event outside the target). CLI: [`test/events-cli.ts`](test/events-cli.ts).
   - [`test/lamp.ts`](test/lamp.ts): a smart lamp with shared types, failures, state and availability. CLI: [`test/lamp-cli.ts`](test/lamp-cli.ts), run as a separate process.
+- The heartbeats, poll leases and webhook timers of `Mcp.toWebHandler` (lifetimes, retries and the wait for each answer) use the `Clock` of its layer. A test gives a `TestClock` in the layer and moves it with `adjust`, as [`test/test-clock.ts`](test/test-clock.ts) does.

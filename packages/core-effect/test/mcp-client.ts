@@ -14,7 +14,7 @@ export const decodeMessage = (text: string): Message => Schema.decodeUnknownSync
 
 export const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} };
 
-export function mcpRequest(method: string, params: Record<string, unknown> = {}, init: { readonly id?: string | number; readonly headers?: Record<string, string> } = {}) {
+export function mcpRequest(method: string, params: Record<string, unknown> = {}, init: { readonly id?: string | number; readonly headers?: Record<string, string>; readonly signal?: AbortSignal | undefined } = {}) {
   const headers = new Headers({
     Accept: "application/json, text/event-stream",
     "Content-Type": "application/json",
@@ -27,6 +27,7 @@ export function mcpRequest(method: string, params: Record<string, unknown> = {},
     method: "POST",
     headers,
     body: JSON.stringify({ jsonrpc: "2.0", id: init.id ?? 1, method, params: { ...params, _meta: meta } }),
+    signal: init.signal ?? null,
   });
 }
 
@@ -44,14 +45,3 @@ export const PollResult = Schema.Struct({
 });
 export type PollResult = typeof PollResult.Type;
 export const decodePollResult = Schema.decodeUnknownSync(PollResult);
-
-export const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-export async function eventually<A>(attempt: () => Promise<A>, done: (value: A) => boolean, what = "the condition"): Promise<A> {
-  for (let tries = 0; tries < 200; tries += 1) {
-    const value = await attempt();
-    if (done(value)) return value;
-    await delay(10);
-  }
-  throw new Error(`Timed out while waiting for ${what}.`);
-}

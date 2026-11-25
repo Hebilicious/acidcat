@@ -9,6 +9,9 @@ import { join } from "node:path";
 import { isJsonObject } from "@acid-cat/spec-ts";
 import type { JsonObject, WebhookSigningJwk } from "@acid-cat/spec-ts";
 
+import { until } from "../../../test-support/until.ts";
+import type { Waiter } from "../../../test-support/until.ts";
+
 export interface Received {
   readonly headers: IncomingHttpHeaders;
   readonly text: string;
@@ -34,19 +37,27 @@ export function testCertificate(): { readonly cert: string; readonly key: string
 
 export async function startReceiver(certificate: { readonly cert: string; readonly key: string }) {
   const received: Received[] = [];
-  let answer: (request: Received) => Answer | undefined = () => undefined;
+  let arrived = Promise.withResolvers<void>();
+  let answer: (request: Received) => Answer | Promise<Answer | undefined> | undefined = () => undefined;
   const server = createServer({ cert: certificate.cert, key: certificate.key }, (request, response) => {
     const chunks: Buffer[] = [];
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
-    request.on("end", () => {
+    request.on("end", async () => {
       const text = Buffer.concat(chunks).toString("utf8");
       const parsed: unknown = JSON.parse(text);
       const each: Received = { headers: request.headers, text, body: isJsonObject(parsed) ? parsed : {} };
       received.push(each);
-      const chosen = answer(each) ?? (each.body["type"] === "verification" ? { status: 200, body: JSON.stringify({ challenge: each.body["challenge"] }) } : { status: 200 });
-      response.writeHead(chosen.status, { "Content-Type": "application/json" }).end(chosen.body ?? "");
+      arrived.resolve();
+      arrived = Promise.withResolvers<void>();
+      const chosen = (await answer(each)) ?? (each.body["type"] === "verification" ? { status: 200, body: JSON.stringify({ challenge: each.body["challenge"] }) } : { status: 200 });
+      if (!response.destroyed) response.writeHead(chosen.status, { "Content-Type": "application/json" }).end(chosen.body ?? "");
     });
   });
+  const deliveries = () => received.filter((each) => each.body["type"] !== "verification");
+  const waitFor = async (t: Waiter, list: () => Received[], count: number, what: string) => {
+    await until(t, () => list().map((each) => each.body), (bodies) => bodies.length >= count, { next: () => arrived.promise, what });
+    return list();
+  };
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   const port = typeof address === "object" && address !== null ? address.port : 0;
@@ -54,8 +65,11 @@ export async function startReceiver(certificate: { readonly cert: string; readon
     port,
     url: `https://127.0.0.1:${port}/hook`,
     received,
-    deliveries: () => received.filter((each) => each.body["type"] !== "verification"),
-    answer: (choose: (request: Received) => Answer | undefined) => {
+    deliveries,
+    waitForRequests: (t: Waiter, count: number) => waitFor(t, () => received, count, `${count} requests`),
+    waitForDeliveries: (t: Waiter, count: number) => waitFor(t, deliveries, count, `${count} deliveries`),
+    /** Choose the answer to each request. A promise holds the answer until it settles, and `undefined` is the default answer. */
+    answer: (choose: (request: Received) => Answer | Promise<Answer | undefined> | undefined) => {
       answer = choose;
     },
     close: () =>

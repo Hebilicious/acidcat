@@ -63,10 +63,10 @@ tasks:
     inputs: ["scripts/npm-packages.ts", "scripts/check-npm-packages.ts", "packages/**/package.json"]
 
   typecheck:
-    description: "Type-check the scripts."
+    description: "Type-check the scripts and the shared test support."
     command: "tsc"
     args: ["-p", "."]
-    inputs: ["scripts/**/*.ts", "tsconfig.json", "tsconfig.base.json"]
+    inputs: ["scripts/**/*.ts", "test-support/**/*.ts", "tsconfig.json", "tsconfig.base.json"]
 
   verify:
     description: "Every check: the catalogs, the lint, the toolchain, every catalog library, and every core."

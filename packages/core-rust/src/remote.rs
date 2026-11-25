@@ -335,6 +335,9 @@ pub async fn serve(address: SocketAddr, routes: Routes) -> std::io::Result<Serve
                 accepted = listener.accept() => accepted,
             };
             let Ok((stream, _)) = accepted else { continue };
+            // With Nagle's algorithm, the kernel holds a small message of a stream, such as an MCP notification, until
+            // the client acknowledges the last one, which can take 40 ms.
+            let _ = stream.set_nodelay(true);
             let routes = routes.clone();
             let stopped = stopped.clone();
             tokio::spawn(async move {

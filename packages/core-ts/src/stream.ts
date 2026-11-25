@@ -1,5 +1,7 @@
 import type { Occurrence } from "@acid-cat/spec-ts";
 
+import { systemClock } from "./clock.ts";
+import type { Clock } from "./clock.ts";
 import type { Occurrences } from "./subscription.ts";
 
 export type Pulled<Payload> =
@@ -7,23 +9,23 @@ export type Pulled<Payload> =
   | { readonly step: IteratorResult<Occurrence<Payload>, undefined> }
   | { readonly error: unknown };
 
-export function idlePuller<Payload>(occurrences: Occurrences<Payload>, idleMs: number): () => Promise<Pulled<Payload>> {
+export function idlePuller<Payload>(occurrences: Occurrences<Payload>, idleMs: number, clock: Clock = systemClock): () => Promise<Pulled<Payload>> {
   let nextKeptAcrossIdlePulls: Promise<Pulled<Payload>> | undefined;
   return async () => {
     const next = (nextKeptAcrossIdlePulls ??= occurrences.next().then(
       (step): Pulled<Payload> => ({ step }),
       (error: unknown): Pulled<Payload> => ({ error }),
     ));
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancel = () => {};
     const idle = new Promise<Pulled<Payload>>((resolve) => {
-      timer = setTimeout(() => resolve({ idle: true }), idleMs);
+      cancel = clock.schedule(() => resolve({ idle: true }), idleMs);
     });
     try {
       const pulled = await Promise.race([next, idle]);
       if (!("idle" in pulled)) nextKeptAcrossIdlePulls = undefined;
       return pulled;
     } finally {
-      clearTimeout(timer);
+      cancel();
     }
   };
 }

@@ -293,3 +293,5 @@ cli_main(app, context, CliOptions::new("aircon", "1.0.0").remote(client)).await;
 ## Tests
 
 `moon run core-rust:test` runs the tests. It needs `pnpm install` at the repository root, and `openssl`. The tests run `acid-cat conform` against the fixture through every protocol surface, including poll and webhook delivery and the command line against a server.
+
+The heartbeats, poll leases and webhook timers (lifetimes, retries and the wait for each answer) use the clock of Tokio. A test pauses it with `#[tokio::test(start_paused = true)]` and moves it with `tokio::time::advance`, or lets Tokio move it to the next timer when every task waits.

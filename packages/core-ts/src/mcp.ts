@@ -25,6 +25,7 @@ import type { JsonObject, McpServerCardSettings, Rejection } from "@acid-cat/spe
 import type { App, ToJsonSchema } from "./app.ts";
 import { openContext, refusalResponse } from "./context.ts";
 import type { ContextOption } from "./context.ts";
+import { systemClock } from "./clock.ts";
 import type { Clock } from "./clock.ts";
 import { eventCapabilities, forbidden, listEvents, servesEvents, startEventStream, unsupportedWebhook } from "./mcp-events.ts";
 import type { OpenSession, RpcAnswer, WebhookDelivery } from "./mcp-events.ts";
@@ -67,7 +68,7 @@ export interface McpSettings {
    * A request to `events/subscribe` or `events/unsubscribe` with no principal gets `Forbidden`.
    */
   readonly webhooks?: WebhookDelivery | undefined;
-  /** The clock of the poll leases. The default is the clock of the system. */
+  /** The clock of the poll leases and of the heartbeats of `events/stream`. The default is the clock of the system. */
   readonly clock?: Clock | undefined;
   /**
    * The Server Card at the URL of the server and `/server-card` (spec/surfaces/mcp.md#server-card). The server serves
@@ -188,6 +189,7 @@ export function mcpHandler<Context>(app: App<Context>, options: McpOptions<Conte
           defaultHeartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS,
           resultMeta: serverInfoOf(options),
           signal: request.signal,
+          clock: options.clock ?? systemClock,
         });
         if ("error" in started) return error(200, id, started.error.code, started.error.message, started.error.data);
         const { messages, cancel } = started;

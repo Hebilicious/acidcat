@@ -15,6 +15,9 @@ import type { WebhookSettings } from "./webhook.ts";
 
 const RULE = "spec/surfaces/mcp.md";
 
+/** Runtimes measure the idle time of a stream with timers of 1 ms resolution, so a heartbeat can come 1 ms early. */
+const TIMER_RESOLUTION_MS = 1;
+
 type ToolResult = Awaited<ReturnType<Client["callTool"]>>;
 
 export async function mcpClient(url: string, signal?: AbortSignal, handshake = false): Promise<Client> {
@@ -513,14 +516,14 @@ export async function checkEvents(checks: Checks, channel: Channel, options: Eve
     const name = `events/stream with heartbeatMs: ${suggested} grants heartbeatMs: ${granted} on notifications/events/active${granted === MCP_HEARTBEAT_MIN_MS ? ", then sends heartbeats at that interval" : ""}`;
     await checks.run(name, `${RULE}#push`, async (signal) => {
       const id = streamId();
+      const requested = performance.now();
       const stream = await channel.stream(id, { name: "fixture.watch", arguments: { key: randomUUID() }, heartbeatMs: suggested }, signal);
       try {
         await active(stream, id, granted);
         if (granted !== MCP_HEARTBEAT_MIN_MS) return;
-        const started = Date.now();
         expectEqual(paramsOf(await notification(stream, id, "notifications/events/heartbeat")), { cursor: null }, "the params of notifications/events/heartbeat");
-        const waited = Date.now() - started;
-        expect(waited >= granted / 2 && waited < granted * 3, `the heartbeat must come about ${granted} ms after notifications/events/active, came after ${waited} ms`);
+        const waited = Math.round(performance.now() - requested);
+        expect(waited >= granted - TIMER_RESOLUTION_MS, `the heartbeat must come when the stream was idle for ${granted} ms, but it came ${waited} ms after the request`);
       } finally {
         await stream.cancel();
       }

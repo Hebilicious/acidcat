@@ -3,7 +3,7 @@ import type { LookupAddress, LookupOptions } from "node:dns";
 import { request } from "node:https";
 import { isIP } from "node:net";
 import type { LookupFunction } from "node:net";
-import { rootCertificates } from "node:tls";
+import { createSecureContext, rootCertificates } from "node:tls";
 
 import { isGloballyRoutable } from "@acid-cat/spec-ts";
 import { Effect } from "effect";
@@ -40,7 +40,7 @@ const NOT_ALLOWED = "EADDRNOTALLOWED";
  */
 export function sender(options: SenderOptions = {}): WebhookSender {
   const allowed = (address: string) => options.allowPrivateNetworks === true || isGloballyRoutable(address);
-  const ca = options.ca === undefined ? undefined : [...rootCertificates, ...(typeof options.ca === "string" ? [options.ca] : options.ca)];
+  const secureContext = options.ca === undefined ? undefined : createSecureContext({ ca: [...rootCertificates, ...(typeof options.ca === "string" ? [options.ca] : options.ca)] });
   const maxResponseBytes = options.maxResponseBytes ?? 65_536;
 
   const lookup: LookupFunction = (hostname: string, lookupOptions: LookupOptions, callback) => {
@@ -75,7 +75,7 @@ export function sender(options: SenderOptions = {}): WebhookSender {
           headers: { ...webhook.headers, "Content-Length": String(body.byteLength) },
           lookup,
           agent: false,
-          ...(ca === undefined ? {} : { ca }),
+          ...(secureContext === undefined ? {} : { secureContext }),
         },
         (incoming) => {
           const chunks: Buffer[] = [];

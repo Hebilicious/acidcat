@@ -8,7 +8,7 @@ import { serve } from "../src/node.ts";
 import type { WebHandler } from "../src/node.ts";
 import { fixture, options } from "./fixture.ts";
 import type { Context } from "./fixture.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 
 const SECRET = "Bearer s3cr3t-t0k3n";
 
@@ -115,7 +115,7 @@ describe("the command line that calls a server", () => {
       assert.equal(run.code, 130, args.join(" "));
       assert.equal(kindOf(run.stderr), "cancelled");
       assert.equal(run.stdout, "");
-      await until(() => closed);
+      await until(context, () => closed);
     }
   });
 
@@ -146,7 +146,7 @@ describe("the command line that calls a server", () => {
     assert.equal(run.code, 130);
     assert.equal(run.stderr, "");
     assert.equal(run.stdout, "");
-    await until(() => closed);
+    await until(context, () => closed);
   });
 
   test("a cursor that cannot be a header value is invalid-input, with exit code 3, and sends no request", async (context) => {

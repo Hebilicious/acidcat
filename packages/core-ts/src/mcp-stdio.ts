@@ -3,6 +3,7 @@ import type { JsonObject } from "@acid-cat/spec-ts";
 
 import type { App, ToJsonSchema } from "./app.ts";
 import { hasObjectOutput, listTools } from "./mcp.ts";
+import { systemClock } from "./clock.ts";
 import type { Clock } from "./clock.ts";
 import { eventCapabilities, listEvents, servesEvents, startEventStream, unsupportedWebhook } from "./mcp-events.ts";
 import type { OpenSession } from "./mcp-events.ts";
@@ -29,7 +30,7 @@ export interface McpStdioOptions<Context> {
    * has a session of its own with `context`. The leases have no identity, because the process serves one client.
    */
   readonly poll?: PollOptions | undefined;
-  /** The clock of the poll leases. The default is the clock of the system. */
+  /** The clock of the poll leases and of the heartbeats of `events/stream`. The default is the clock of the system. */
   readonly clock?: Clock | undefined;
 }
 
@@ -90,7 +91,7 @@ export async function runMcpStdio<Context>(app: App<Context>, options: McpStdioO
     return Promise.resolve({ session: own, close: own.dispose });
   };
   const leases = new PollLeases(options.poll, options.clock);
-  const server = new StdioServer(session, { name: options.name, version: options.version, instructions, heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS }, io.write, { leases, open });
+  const server = new StdioServer(session, { name: options.name, version: options.version, instructions, heartbeatMs: options.heartbeatMs ?? KEEPALIVE_MS, clock: options.clock ?? systemClock }, io.write, { leases, open });
   try {
     for await (const line of lines(io.input)) server.receive(line);
   } finally {
@@ -124,6 +125,7 @@ interface ServerInfo {
   readonly version: string;
   readonly instructions: string | undefined;
   readonly heartbeatMs: number;
+  readonly clock: Clock;
 }
 
 class StdioServer {
@@ -254,7 +256,7 @@ class StdioServer {
     const controller = new AbortController();
     this.#streamsOnlyTheClientCancels.set(id, controller);
     try {
-      const started = await startEventStream(this.#session, id, params, { defaultHeartbeatMs: this.#options.heartbeatMs, resultMeta: this.#serverInfo(), signal: controller.signal });
+      const started = await startEventStream(this.#session, id, params, { defaultHeartbeatMs: this.#options.heartbeatMs, resultMeta: this.#serverInfo(), signal: controller.signal, clock: this.#options.clock });
       if (controller.signal.aborted) return;
       if ("error" in started) return this.#error(id, started.error.code, started.error.message, started.error.data);
       for (let messages = await started.messages(); messages !== undefined; messages = await started.messages()) {

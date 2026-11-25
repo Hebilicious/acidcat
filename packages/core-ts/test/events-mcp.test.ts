@@ -8,7 +8,9 @@ import { defineApp, mcpHandler, mcpHandshake, ok, defineCapability, runMcpStdio 
 import { sensorOptions, Sensors, sensorsApp, toJsonSchema } from "./sensors.ts";
 import { mcpHeaders } from "./mcp-headers.ts";
 import { sseReader } from "./sse.ts";
-import { until } from "./until.ts";
+import type { SseMessage } from "./sse.ts";
+import { until } from "../../../test-support/until.ts";
+import { ManualClock } from "./manual-clock.ts";
 
 const VERSION = "2026-07-28";
 const META = { "io.modelcontextprotocol/protocolVersion": VERSION };
@@ -27,8 +29,8 @@ function member(value: unknown, key: string): JsonObject {
   return inner;
 }
 
-function httpServer(sensors = new Sensors(), heartbeatMs?: number) {
-  const handler = mcpHandler(sensorsApp, { name: "sensors", version: "0.0.0", allowedOrigins: [], ...sensorOptions(sensors), ...(heartbeatMs === undefined ? {} : { heartbeatMs }) });
+function httpServer(sensors = new Sensors(), heartbeatMs?: number, clock?: ManualClock) {
+  const handler = mcpHandler(sensorsApp, { name: "sensors", version: "0.0.0", allowedOrigins: [], ...sensorOptions(sensors), ...(heartbeatMs === undefined ? {} : { heartbeatMs }), ...(clock === undefined ? {} : { clock }) });
   const request = (method: string, params: object = {}, signal?: AbortSignal, id: number | string = 1) =>
     new Request("https://sensors.example/mcp", {
       method: "POST",
@@ -103,6 +105,41 @@ test("MCP through HTTP: maxAgeMs reaches the provider, and an idle stream gets h
   await reader.cancel();
 });
 
+async function isPending(promise: Promise<unknown>): Promise<boolean> {
+  const pending = Symbol("pending");
+  return (await Promise.race([promise, new Promise((resolve) => setImmediate(() => resolve(pending)))])) === pending;
+}
+
+test("MCP through HTTP: the heartbeat comes when the stream has sent nothing for heartbeatMs on the clock of the server, counted from the last message", async (t) => {
+  const clock = new ManualClock();
+  const { handler, request, sensors } = httpServer(new Sensors(), undefined, clock);
+  const reader = sseReader(await handler(request("events/stream", { name: "sensor.reading.changed", heartbeatMs: 1000 })));
+  const method = async (read: Promise<SseMessage | undefined>) => objectOf((await read)?.data ?? "null")["method"];
+  const timerStarted = () => until(t, () => clock.pending, (pending) => pending === 1);
+  try {
+    assert.equal(await method(reader.next()), "notifications/events/active");
+    const first = reader.next();
+    await timerStarted();
+    clock.advance(999);
+    assert.equal(await isPending(first), true);
+    clock.advance(1);
+    assert.equal(await method(first), "notifications/events/heartbeat");
+    const event = reader.next();
+    await timerStarted();
+    clock.advance(400);
+    sensors.emit("hall", 20);
+    assert.equal(await method(event), "notifications/events/event");
+    const second = reader.next();
+    await timerStarted();
+    clock.advance(999);
+    assert.equal(await isPending(second), true);
+    clock.advance(1);
+    assert.equal(await method(second), "notifications/events/heartbeat");
+  } finally {
+    await reader.cancel();
+  }
+});
+
 test("MCP through HTTP: notifications/events/active grants the heartbeatMs of the deployment when the request suggests none, and an invalid suggestion is the error -32602", async () => {
   const { handler, request, rpc } = httpServer(new Sensors(), 7000);
   const reader = sseReader(await handler(request("events/stream", { name: "sensor.reading.changed" })));
@@ -161,23 +198,23 @@ function stdio(sensors = new Sensors(), heartbeatMs?: number) {
   };
 }
 
-test("MCP through stdio: the end of standard input completes each open stream, and its provider stops", async () => {
+test("MCP through stdio: the end of standard input completes each open stream, and its provider stops", async (t) => {
   const sensors = new Sensors();
   const io = stdio(sensors);
   io.send({ id: 1, method: "events/stream", params: { name: "sensor.reading.changed", _meta: META } });
-  await until(() => sensors.listeners === 1);
+  await until(t, () => sensors.listeners, (listeners) => listeners === 1);
   io.end();
   await io.served;
   assert.deepEqual(io.of(1).at(-1), { jsonrpc: "2.0", id: 1, result: { resultType: "complete", _meta: { ...SERVER_INFO, ...sub(1) } } });
   assert.equal(sensors.listeners, 0);
 });
 
-test("MCP through stdio: an idle stream gets heartbeats", async () => {
+test("MCP through stdio: an idle stream gets heartbeats", async (t) => {
   const io = stdio(new Sensors(), 20);
   io.send({ id: 1, method: "events/stream", params: { name: "sensor.reading.changed", _meta: META } });
   const heartbeat = () => io.of(1).find((message) => message["method"] === "notifications/events/heartbeat");
   try {
-    await until(() => heartbeat() !== undefined);
+    await until(t, () => heartbeat() !== undefined);
     assert.deepEqual(io.of(1)[0], { jsonrpc: "2.0", method: "notifications/events/active", params: { truncated: false, heartbeatMs: 20, _meta: sub(1) } });
     assert.deepEqual(heartbeat(), { jsonrpc: "2.0", method: "notifications/events/heartbeat", params: { cursor: null, _meta: sub(1) } });
   } finally {
@@ -186,11 +223,11 @@ test("MCP through stdio: an idle stream gets heartbeats", async () => {
   }
 });
 
-test("MCP through stdio: a request with no _meta is -32601, and initialize gives no events extension", async () => {
+test("MCP through stdio: a request with no _meta is -32601, and initialize gives no events extension", async (t) => {
   const io = stdio();
   io.send({ id: 1, method: "events/stream", params: { name: "sensor.reading.changed" } });
   io.send({ id: 2, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } });
-  await until(() => io.of(1).length === 1 && io.of(2).length === 1);
+  await until(t, () => io.of(1).length === 1 && io.of(2).length === 1);
   assert.equal(member(io.of(1)[0], "error")["code"], -32601);
   assert.deepEqual(member(member(io.of(2)[0], "result"), "capabilities"), { tools: { listChanged: true } });
   io.end();

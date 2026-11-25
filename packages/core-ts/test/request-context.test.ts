@@ -10,7 +10,7 @@ import { readJson, toJsonSchema } from "./fixture.ts";
 import { ManualClock } from "./manual-clock.ts";
 import { sseReader } from "./sse.ts";
 import { startReceiver, testCertificate } from "./webhook-receiver.ts";
-import { until } from "./until.ts";
+import { until } from "../../../test-support/until.ts";
 import { mcpHeaders } from "./mcp-headers.ts";
 
 interface Services {
@@ -93,7 +93,7 @@ test("through HTTP, a capability reads the caller from the context of the reques
   assert.deepEqual(counts, { created: 1, released: 1 });
 });
 
-test("through HTTP, the provider of an event reads the caller and the target, and the stream releases the context when it ends", async () => {
+test("through HTTP, the provider of an event reads the caller and the target, and the stream releases the context when it ends", async (t) => {
   const { counts, createContext } = bearerContexts();
   const handler = httpHandler(app, { allowedOrigins: [], toJsonSchema, createContext });
   const subscribe = (headers: Record<string, string>) =>
@@ -107,7 +107,7 @@ test("through HTTP, the provider of an event reads the caller and the target, an
   assert.deepEqual(z.object({ data: Who }).parse(JSON.parse(first?.data ?? "")).data, { caller: "grace", target: "api" });
   assert.equal((await reader.next())?.event, "complete");
   assert.equal(await reader.next(), undefined);
-  await until(() => counts.released === 1);
+  await until(t, () => counts.released, (released) => released === 1);
   assert.deepEqual(counts, { created: 1, released: 1 });
 
   const refused = await subscribe({});
@@ -166,7 +166,7 @@ function mcpRequest(caller: string, method: string, params: object): Request {
 
 const Poll = z.object({ result: z.object({ events: z.array(z.object({ data: Who })), cursor: z.string() }) });
 
-test("through MCP, a poll lease uses the context of the request that started it, and releases it when the lease ends", async () => {
+test("through MCP, a poll lease uses the context of the request that started it, and releases it when the lease ends", async (t) => {
   const { counts, createContext } = bearerContexts();
   const clock = new ManualClock();
   await using handler = mcpHandler(app, { name: "who", version: "0.0.0", allowedOrigins: [], toJsonSchema, createContext, clock, poll: { leaseMs: 1000 } });
@@ -181,10 +181,10 @@ test("through MCP, a poll lease uses the context of the request that started it,
   assert.equal(counts.created - counts.released, 1);
 
   clock.advance(1000);
-  await until(() => counts.released === counts.created);
+  await until(t, () => ({ ...counts }), (seen) => seen.released === seen.created);
 });
 
-test("through MCP, a webhook subscription uses the context of the request that started it, and releases it when the subscription ends", async () => {
+test("through MCP, a webhook subscription uses the context of the request that started it, and releases it when the subscription ends", async (t) => {
   const certificate = testCertificate();
   const receiver = await startReceiver(certificate);
   try {
@@ -206,14 +206,13 @@ test("through MCP, a webhook subscription uses the context of the request that s
     await readJson(subscribed, z.object({ result: z.object({ id: z.string() }) }));
     assert.deepEqual(counts, { created: 1, released: 0 });
 
-    await until(() => receiver.received.some((each) => each.body["type"] !== "verification"));
-    const delivered = receiver.received.find((each) => each.body["type"] !== "verification");
+    const [delivered] = await receiver.waitForDeliveries(t, 1);
     assert.deepEqual(z.object({ data: Who }).parse(delivered?.body).data, { caller: "grace", target: "mcp" });
     assert.deepEqual(counts, { created: 1, released: 0 });
 
     const ended = await handler(mcpRequest("grace", "events/unsubscribe", { name: "caller.watched", delivery: { url: receiver.url } }));
     assert.equal(ended.status, 200);
-    await until(() => counts.released === counts.created);
+    await until(t, () => ({ ...counts }), (seen) => seen.released === seen.created);
     assert.deepEqual(counts, { created: 2, released: 2 });
   } finally {
     await receiver.close();

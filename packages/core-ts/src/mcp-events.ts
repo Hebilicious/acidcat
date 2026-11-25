@@ -3,6 +3,7 @@ import type { JsonObject } from "@acid-cat/spec-ts";
 
 import { maxAgeOf, subscribeWithMaxAge } from "./session.ts";
 import type { MaxAge, Session } from "./session.ts";
+import type { Clock } from "./clock.ts";
 import { idlePuller } from "./stream.ts";
 
 export interface JsonRpcError {
@@ -86,6 +87,7 @@ export interface StreamSettings {
   readonly defaultHeartbeatMs: number;
   readonly resultMeta: JsonObject;
   readonly signal: AbortSignal;
+  readonly clock: Clock;
 }
 
 export async function startEventStream(session: Session, id: string | number, params: JsonObject, settings: StreamSettings): Promise<{ readonly error: JsonRpcError } | { readonly messages: StreamMessages; readonly cancel: () => void }> {
@@ -100,7 +102,7 @@ export async function startEventStream(session: Session, id: string | number, pa
   const meta = { [MCP_SUBSCRIPTION_ID]: id };
   const notification = (method: string, members: JsonObject): JsonObject => ({ jsonrpc: "2.0", method: `notifications/events/${method}`, params: { ...members, _meta: meta } });
   const result: JsonObject = { jsonrpc: "2.0", id, result: { resultType: "complete", _meta: { ...settings.resultMeta, ...meta } } };
-  const pull = idlePuller(subscribed, heartbeatMs);
+  const pull = idlePuller(subscribed, heartbeatMs, settings.clock);
   let state: "start" | "open" | "ended" = "start";
   let lastCursor: string | null = null;
 
