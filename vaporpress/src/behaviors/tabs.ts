@@ -9,13 +9,6 @@ export interface TabGroups {
   readonly choose: (group: HTMLElement, tab: HTMLElement) => void;
 }
 
-const tabKeys: Readonly<Record<string, (index: number, count: number) => number>> = {
-  ArrowRight: (index, count) => (index + 1) % count,
-  ArrowLeft: (index, count) => (index - 1 + count) % count,
-  Home: () => 0,
-  End: (_index, count) => count - 1,
-};
-
 /**
  * Gives every tab group its behavior with one click listener and one keydown listener on the document, so a group
  * that a page change adds needs nothing more: a click chooses a tab, and ArrowRight, ArrowLeft, Home and End choose
@@ -35,10 +28,11 @@ export const listenToTabs = ({ tab, group, tabsOf, choose }: TabGroups): void =>
   });
   document.addEventListener("keydown", (event) => {
     const found = tabOf(event);
-    const step = tabKeys[event.key];
-    if (found === undefined || step === undefined) return;
+    if (found === undefined) return;
     const tabs = tabsOf(found.group);
-    const target = tabs[step(tabs.indexOf(found.tab), tabs.length)];
+    const index = tabs.indexOf(found.tab);
+    const targets: Readonly<Record<string, number>> = { ArrowRight: (index + 1) % tabs.length, ArrowLeft: (index + tabs.length - 1) % tabs.length, Home: 0, End: tabs.length - 1 };
+    const target = tabs[targets[event.key] ?? -1];
     if (target === undefined) return;
     event.preventDefault();
     choose(found.group, target);

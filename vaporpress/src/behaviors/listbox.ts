@@ -7,19 +7,14 @@ export interface Listbox {
   readonly open: (index: number) => void;
 }
 
-/**
- * ArrowDown and ArrowUp select the next and the previous option of a list box, around its ends, and Enter opens the
- * selected option. Returns true when it handled the key.
- */
-export const onListboxKey = (event: KeyboardEvent, listbox: Listbox): boolean => {
-  const { count, selected } = listbox;
-  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+/** ArrowDown and ArrowUp select the next and the previous option of a list box, around its ends, and Enter opens the selected option. */
+export const onListboxKey = (event: KeyboardEvent, { count, selected, select, open }: Listbox): void => {
+  const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+  if (step !== 0) {
     event.preventDefault();
-    if (count > 0) listbox.select((selected + (event.key === "ArrowDown" ? 1 : -1) + count) % count);
-    return true;
+    if (count > 0) select((selected + step + count) % count);
+  } else if (event.key === "Enter" && !event.isComposing) {
+    event.preventDefault();
+    if (selected > -1 && selected < count) open(selected);
   }
-  if (event.key !== "Enter" || event.isComposing) return false;
-  event.preventDefault();
-  if (selected > -1 && selected < count) listbox.open(selected);
-  return true;
 };
