@@ -261,7 +261,7 @@ The search finds words by prefix, and with one wrong letter in five. A match in 
 | `vaporpress/data` | `defineLoader({ load, watch })`, `LoadedData` | A module of data that the build reads once |
 | `vaporpress/behaviors` | `listenToTabs`, `selectTab`, `copyCodeOnClick`, `observeActiveHeading`, `isSearchShortcut`, `isTextField`, `onListboxKey`, `openModal` | The logic of tabs, copy buttons, the table of contents and a search dialog, with no markup and no styles. See [Behaviors](#behaviors) |
 | `vaporpress/search` | `loadSearch()`, `SiteSearch`, `SearchResult` | Loads the engine and the index of the site, once. `search(query, limit)` gives the sections that match, best first |
-| | `loadExcerpt(id)`, `sectionHtml(document, id)` | The HTML of the content of a section |
+| | `loadExcerpt(id)`, `sectionHtml(document, id)` | The HTML of the content of a section, with no `id` and no reference to an id, so it can show in another page |
 | | `markText(text, terms)`, `markTerms(html, terms)` | HTML with each match of the terms in `<mark>` |
 | `vaporpress/image` | — | The type of an import with `?image`, for a declaration file of the site |
 | `vaporpress/markdown` | `compileMarkdown(source, file, options)`, `githubSlug`, `hastText`, `defineHastPlugin`, `defineMdastPlugin` | The Markdown compiler, for tools that need the page of a file outside the build, such as a search index |

@@ -74,7 +74,16 @@ const nextOutside = (node: Element, root: Element): Element | undefined => {
   return undefined;
 };
 
-/** The HTML of the content under the heading of a section, up to the next heading. */
+const idAttributes = ["id", "for", "headers", "aria-activedescendant", "aria-controls", "aria-describedby", "aria-details", "aria-errormessage", "aria-flowto", "aria-labelledby", "aria-owns"];
+
+const withoutIds = (element: Element): string => {
+  const copy = element.cloneNode(true);
+  if (!(copy instanceof Element)) return "";
+  for (const node of [copy, ...copy.querySelectorAll("*")]) for (const attribute of idAttributes) node.removeAttribute(attribute);
+  return copy.outerHTML;
+};
+
+/** The HTML of the content under the heading of a section, up to the next heading, with no id and no reference to an id, so it can show in another page. */
 export const sectionHtml = (document: Document, id: string): string => {
   const root = document.querySelector(`[${searchAttribute}]`);
   if (root === null) return "";
@@ -88,7 +97,7 @@ export const sectionHtml = (document: Document, id: string): string => {
       node = node.firstElementChild ?? nextOutside(node, root);
       continue;
     }
-    if (node.closest(`[${searchIgnoreAttribute}]`) === null) parts.push(node.outerHTML);
+    if (node.closest(`[${searchIgnoreAttribute}]`) === null) parts.push(withoutIds(node));
     node = nextOutside(node, root);
   }
   return parts.join("");

@@ -431,6 +431,7 @@ describe("in the browser", () => {
     assert.equal(await result.getAttribute("data-titles"), "The guide > Code");
     assert.equal(await result.innerHTML(), "A <mark>smaller</mark> heading", "The title marks the words that match.");
     await page.waitForFunction(() => document.querySelector(".search-excerpt")?.textContent?.trim() === "Text under the smaller heading.");
+    assert.equal(await page.locator(".search-excerpt [id], .search-excerpt [aria-labelledby]").count(), 0, "The excerpt has no id that the page could have too.");
     await page.fill(".search", "quuxfooter");
     await page.waitForFunction(() => document.querySelectorAll(".search-results li").length === 0);
     await page.fill(".search", "smaller");

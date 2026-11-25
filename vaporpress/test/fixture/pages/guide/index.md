@@ -30,7 +30,7 @@ const answer: number = 1 < 2 ? 42 : 0;
 
 ### A smaller heading
 
-Text under the smaller heading.
+Text under the smaller heading.<span id="smaller-anchor" aria-labelledby="smaller-anchor"></span>
 
 ![The same diagram, further down](diagram.png)
 

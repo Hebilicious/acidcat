@@ -1,10 +1,9 @@
 <script setup lang="ts" vapor>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
-import { useRouter } from "vue-router";
 import { loadExcerpt, loadSearch, markTerms, markText } from "vaporpress/search";
 import type { SearchResult, SiteSearch } from "vaporpress/search";
 
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{ close: []; go: [path: string] }>();
 
 interface ShownResult extends SearchResult {
   readonly titlesHtml: readonly string[];
@@ -30,10 +29,9 @@ const writeStorage = (storage: () => Storage, key: string, value: string): void 
 const queryKey = "acidcat:search-query";
 const detailedKey = "acidcat:search-detailed";
 
-const dialog = useTemplateRef<HTMLElement>("dialog");
+const dialog = useTemplateRef<HTMLDialogElement>("dialog");
 const input = useTemplateRef<HTMLInputElement>("input");
 const list = useTemplateRef<HTMLElement>("list");
-const router = useRouter();
 
 const query = ref(readStorage(() => sessionStorage, queryKey) ?? "");
 const detailed = ref(readStorage(() => localStorage, detailedKey) === "true");
@@ -89,12 +87,8 @@ const move = (step: number): void => {
 
 const close = (): void => emit("close");
 const go = (result: ShownResult | undefined): void => {
-  if (result === undefined) return;
-  void router.push(result.id);
-  close();
+  if (result !== undefined) emit("go", result.id);
 };
-
-const focusable = (): HTMLElement[] => [...(dialog.value?.querySelectorAll<HTMLElement>("button:not([disabled]), input, a[href]") ?? [])].filter((element) => element.offsetParent !== null);
 
 const keydown = (event: KeyboardEvent): void => {
   if (event.key === "Escape") {
@@ -109,19 +103,12 @@ const keydown = (event: KeyboardEvent): void => {
   } else if (event.key === "Enter" && !event.isComposing && event.target instanceof HTMLInputElement) {
     event.preventDefault();
     go(results.value[selected.value]);
-  } else if (event.key === "Tab") {
-    const elements = focusable();
-    const first = elements[0];
-    const last = elements.at(-1);
-    if (first === undefined || last === undefined) return;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
   }
+};
+
+const cancel = (event: Event): void => {
+  event.preventDefault();
+  close();
 };
 
 const hover = (index: number): void => {
@@ -142,7 +129,7 @@ let returnFocus: Element | null = null;
 onMounted(() => {
   returnFocus = document.activeElement;
   document.documentElement.dataset["searchOpen"] = "";
-  window.addEventListener("popstate", close);
+  dialog.value?.showModal();
   input.value?.focus();
   input.value?.select();
   loadSearch().then(
@@ -157,83 +144,91 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("popstate", close);
+  dialog.value?.close();
   delete document.documentElement.dataset["searchOpen"];
   if (returnFocus instanceof HTMLElement) returnFocus.focus();
 });
 </script>
 
 <template>
-  <Teleport to="body">
-    <div ref="dialog" class="search-dialog" role="dialog" aria-modal="true" aria-labelledby="search-label" @keydown="keydown">
-      <div class="search-backdrop" @click="close" />
-      <div class="search-shell">
-        <form class="search-bar" @submit.prevent>
-          <label id="search-label" for="search-input" title="Search">
-            <svg class="search-icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
-            <span class="sr-only">Search</span>
-          </label>
-          <button type="button" class="search-action search-back" title="Close search" @click="close">
-            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
-          </button>
-          <input
-            id="search-input"
-            ref="input"
-            v-model="query"
-            class="search-input"
-            type="search"
-            placeholder="Search"
-            autocapitalize="off"
-            autocomplete="off"
-            spellcheck="false"
-            enterkeyhint="go"
-            maxlength="64"
-            aria-autocomplete="list"
-            :aria-controls="results.length > 0 ? 'search-results' : undefined"
-            :aria-activedescendant="selected > -1 ? `search-result-${selected}` : undefined"
-          />
-          <span class="search-loading" :class="{ active: loading }" :role="loading ? 'status' : undefined" :aria-label="loading ? 'Loading the search' : undefined" />
-          <button type="button" class="search-action" :class="{ on: detailed }" title="Display detailed list" :aria-pressed="detailed" @click="toggleDetails">
-            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 5h4M3 12h4M3 19h4M11 5h10M11 12h10M11 19h10" /></svg>
-          </button>
-          <button type="button" class="search-action" title="Reset search" :disabled="query === ''" @click="clear">
-            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 5H9l-7 7 7 7h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2ZM18 9l-6 6M12 9l6 6" /></svg>
-          </button>
-        </form>
+  <dialog ref="dialog" class="search-dialog" aria-labelledby="search-label" @keydown="keydown" @cancel="cancel">
+    <div class="search-backdrop" @click="close" />
+    <div class="search-shell">
+      <form class="search-bar" @submit.prevent>
+        <label id="search-label" for="search-input" title="Search">
+          <svg class="search-icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+          <span class="sr-only">Search</span>
+        </label>
+        <button type="button" class="search-action search-back" aria-label="Close search" title="Close search" @click="close">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+        </button>
+        <input
+          id="search-input"
+          ref="input"
+          v-model="query"
+          class="search-input"
+          type="search"
+          role="combobox"
+          placeholder="Search"
+          autocapitalize="off"
+          autocomplete="off"
+          spellcheck="false"
+          enterkeyhint="go"
+          maxlength="64"
+          aria-autocomplete="list"
+          :aria-expanded="results.length > 0 ? 'true' : 'false'"
+          :aria-controls="results.length > 0 ? 'search-results' : undefined"
+          :aria-activedescendant="selected > -1 ? `search-result-${selected}` : undefined"
+        />
+        <span class="search-loading" :class="{ active: loading }" :role="loading ? 'status' : undefined" :aria-label="loading ? 'Loading the search' : undefined" />
+        <button type="button" class="search-action" :class="{ on: detailed }" aria-label="Display detailed list" title="Display detailed list" :aria-pressed="detailed" @click="toggleDetails">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 5h4M3 12h4M3 19h4M11 5h10M11 12h10M11 19h10" /></svg>
+        </button>
+        <button type="button" class="search-action" aria-label="Reset search" title="Reset search" :disabled="query === ''" @click="clear">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 5H9l-7 7 7 7h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2ZM18 9l-6 6M12 9l6 6" /></svg>
+        </button>
+      </form>
 
-        <ul id="search-results" ref="list" class="search-results" :role="results.length > 0 ? 'listbox' : undefined" aria-label="Results" @pointermove="pointerMoved = true">
-          <li v-for="(result, index) in results" :id="`search-result-${index}`" :key="result.id" role="option" :aria-selected="selected === index ? 'true' : 'false'">
-            <a :href="result.id" class="result" :class="{ selected: selected === index }" :aria-label="[...result.titles, result.title].join(' > ')" @pointerenter="hover(index)" @focusin="selected = index" @click="close">
-              <span class="result-titles">
-                <span class="result-mark" aria-hidden="true">#</span>
-                <span v-for="(title, part) in result.titlesHtml" :key="part" class="result-title">
-                  <span v-html="title" />
-                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg>
-                </span>
-                <span class="result-title main" v-html="result.titleHtml" />
-              </span>
-              <span v-if="detailed && result.excerpt !== ''" class="excerpt markdown-content" inert v-html="result.excerpt" />
-            </a>
-          </li>
-          <li v-if="failed" class="no-results">The search did not load. Close it and try again.</li>
-          <li v-else-if="query.trim() !== '' && results.length === 0 && searched" class="no-results">No results for "<strong>{{ query }}</strong>"</li>
-        </ul>
+      <ul v-if="results.length > 0" id="search-results" ref="list" class="search-results" role="listbox" aria-label="Results" @pointermove="pointerMoved = true">
+        <li
+          v-for="(result, index) in results"
+          :id="`search-result-${index}`"
+          :key="result.id"
+          class="result"
+          :class="{ selected: selected === index }"
+          role="option"
+          :aria-selected="selected === index ? 'true' : 'false'"
+          @pointerenter="hover(index)"
+          @click="go(result)"
+        >
+          <span class="result-titles">
+            <span class="result-mark" aria-hidden="true">#</span>
+            <span v-for="(title, part) in result.titlesHtml" :key="part" class="result-title">
+              <span v-html="title" />
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg>
+            </span>
+            <span class="result-title main" v-html="result.titleHtml" />
+          </span>
+          <span v-if="detailed && result.excerpt !== ''" class="excerpt markdown-content" inert v-html="result.excerpt" />
+        </li>
+      </ul>
+      <p v-if="failed" class="no-results">The search did not load. Close it and try again.</p>
+      <p v-else-if="query.trim() !== '' && results.length === 0 && searched" class="no-results">No results for "<strong>{{ query }}</strong>"</p>
 
-        <div class="search-keys">
-          <span>
-            <kbd aria-label="up arrow"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" /></svg></kbd>
-            <kbd aria-label="down arrow"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7" /></svg></kbd>
-            to navigate
-          </span>
-          <span>
-            <kbd aria-label="enter"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 4v7a4 4 0 0 1-4 4H4M9 10l-5 5 5 5" /></svg></kbd>
-            to select
-          </span>
-          <span><kbd aria-label="escape">esc</kbd> to close</span>
-        </div>
+      <div class="search-keys">
+        <span>
+          <kbd><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" /></svg><span class="sr-only">Up arrow</span></kbd>
+          <kbd><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7" /></svg><span class="sr-only">Down arrow</span></kbd>
+          to navigate
+        </span>
+        <span>
+          <kbd><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 4v7a4 4 0 0 1-4 4H4M9 10l-5 5 5 5" /></svg><span class="sr-only">Enter</span></kbd>
+          to select
+        </span>
+        <span><kbd>esc</kbd> to close</span>
       </div>
     </div>
-  </Teleport>
+  </dialog>
 </template>
 
 <style>
@@ -243,11 +238,26 @@ onBeforeUnmount(() => {
 
   .search-dialog {
     position: fixed;
-    z-index: 100;
     inset: 0;
-    display: flex;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    background: none;
     color: var(--palette-cream-100);
     font-family: var(--font-family-sans);
+  }
+
+  .search-dialog[open] {
+    display: flex;
+  }
+
+  .search-dialog::backdrop {
+    background: none;
   }
 
   .search-backdrop {
@@ -398,6 +408,7 @@ onBeforeUnmount(() => {
 
   .result {
     display: flex;
+    cursor: pointer;
     flex-direction: column;
     gap: var(--spacing_fluid-space-3xs);
     padding: var(--spacing_fluid-space-xs);
@@ -407,8 +418,6 @@ onBeforeUnmount(() => {
     color: inherit;
     font-size: var(--typography_fluid-text-s);
     line-height: 1;
-    text-decoration: none;
-    outline: none;
   }
 
   .result.selected {
