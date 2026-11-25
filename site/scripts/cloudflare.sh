@@ -4,7 +4,7 @@
 set -euo pipefail
 
 case "${1:-build}" in
-  build) task="site:build" ;;
+  build) task="site:build-framework" ;;
   deploy) task="site:deploy" ;;
   *)
     echo "Unknown action: $1. Use build or deploy." >&2

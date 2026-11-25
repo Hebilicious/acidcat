@@ -13,5 +13,6 @@ export default defineSite({
     if (import.meta.env.SSR) return;
     copyCodeOnClick();
     useRouteStyles(router);
+    if ("modelContext" in document || "modelContext" in navigator) void import("../lib/agent/page.ts");
   },
 });

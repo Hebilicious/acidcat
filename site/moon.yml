@@ -72,7 +72,7 @@ tasks:
 
   build-framework:
     deps: ["fonts"]
-    description: "Build the docs, the examples and the specification with vaporpress into .out/framework/. VitePress builds the deployed site until every part has moved."
+    description: "Build the site with vaporpress into .out/framework/, the build that the Worker deploys."
     command: "vite"
     args: ["build", "--config", "framework.config.ts"]
     inputs:
@@ -96,16 +96,16 @@ tasks:
       runInCI: false
 
   deploy:
-    deps: ["build"]
-    description: "Bundle the Worker, and deploy it with dist/ as its assets, with the cf command. Set CLOUDFLARE_ACCOUNT_ID first."
+    deps: ["build-framework"]
+    description: "Bundle the Worker, and deploy it with the build of vaporpress (.out/framework/) as its assets, with the cf command. Set CLOUDFLARE_ACCOUNT_ID first."
     script: "node scripts/worker-output.ts && cf deploy --prebuilt"
     options:
       cache: false
       runInCI: false
 
   preview:
-    deps: ["build"]
-    description: "Bundle the Worker, and deploy it with dist/ as a Worker Preview named after the Git branch. Production does not change. Set CLOUDFLARE_ACCOUNT_ID first."
+    deps: ["build-framework"]
+    description: "Bundle the Worker, and deploy it with the build of vaporpress (.out/framework/) as a Worker Preview named after the Git branch. Production does not change. Set CLOUDFLARE_ACCOUNT_ID first."
     script: "node scripts/worker-output.ts --preview && cf previews deploy --prebuilt"
     options:
       cache: false
@@ -130,7 +130,7 @@ tasks:
     deps: ["build-framework"]
     description: "Run the tests of the homepage, the page changes, the delivery, the fonts, the pages, the examples, the search, the three browsers and the GPU renderers on the build of vaporpress."
     command: "node"
-    args: ["--test", "test/home.test.ts", "test/navigation.test.ts", "test/delivery.test.ts", "test/fonts.test.ts", "test/pages.test.ts", "test/examples.test.ts", "test/search.test.ts", "test/browsers.test.ts", "test/gpu-parity.test.ts"]
+    args: ["--test", "test/home.test.ts", "test/navigation.test.ts", "test/delivery.test.ts", "test/fonts.test.ts", "test/pages.test.ts", "test/examples.test.ts", "test/search.test.ts", "test/browsers.test.ts", "test/gpu-parity.test.ts", "test/agent.test.ts"]
     env:
       SITE_BUILD: "framework"
     inputs: ["src/**/*", "content/**/*", "framework.config.ts", "test/**/*.ts", "/vaporpress/src/**/*"]
@@ -142,8 +142,8 @@ tasks:
     inputs: ["src/lib/**/*.ts", "src/app/**/*.ts", "test/**/*.ts", "worker/**/*.ts", "scripts/**/*.ts", ".vitepress/**/*.ts", "content/**/*.ts", "cssforge.config.ts", "cloudflare.config.ts", "framework.config.ts", "tsconfig.json", "/tsconfig.base.json"]
 
   lighthouse:
-    deps: ["build"]
-    description: "Serve dist/ with compression, run Lighthouse on mobile on the homepage and the quick start several times, and fail when a median score or a pass-or-fail audit misses its budget. The workflow lighthouse.yml runs it on GitHub's runners."
+    deps: ["build-framework"]
+    description: "Serve the build of vaporpress (.out/framework/) with compression, run Lighthouse on mobile on the homepage and the quick start several times, and fail when a median score or a pass-or-fail audit misses its budget. The workflow lighthouse.yml runs it on GitHub's runners."
     command: "node"
     args: ["scripts/lighthouse.ts"]
     options:

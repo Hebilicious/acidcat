@@ -3,6 +3,7 @@ import { relative } from "node:path";
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
 import { vaporpress } from "vaporpress/vite";
+import { writeAgentFiles } from "./src/lib/agent/files.ts";
 import { writeExampleFragments } from "./src/lib/example-fragments.ts";
 import { readFavicon } from "./src/lib/favicon.ts";
 import { startScriptsAfterFirstPaint } from "./src/lib/preload-scripts.ts";
@@ -12,6 +13,8 @@ import { writeExplorerSources } from "./src/lib/example-highlight.ts";
 import { expandComponents } from "./src/lib/markdown/components.ts";
 import { highlightBlock, headingAnchors, externalLinks } from "./src/app/markdown.ts";
 import { headingSlug } from "./src/lib/heading-slug.ts";
+import { writeSitemap } from "./src/lib/sitemap.ts";
+import { siteUrl } from "./src/lib/social.ts";
 import { readSpecPages } from "./src/lib/spec-pages.ts";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
@@ -76,6 +79,8 @@ export default defineConfig({
       await inlineStyles(outDir);
       await favicon.write(outDir);
       await writeExampleFragments(outDir, repositoryRoot);
+      await writeSitemap(outDir, siteUrl);
+      await writeAgentFiles({ dist: outDir, repositoryRoot, origin: siteUrl });
     },
   }),
   ],

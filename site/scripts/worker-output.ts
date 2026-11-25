@@ -30,7 +30,7 @@ await build({
   minify: true,
   logLevel: "warning",
 });
-await cp(join(site, "dist"), join(workerDirectory, "assets"), { recursive: true });
+await cp(join(site, ".out/framework"), join(workerDirectory, "assets"), { recursive: true });
 await writeFile(
   join(workerDirectory, "worker.config.json"),
   JSON.stringify({ ...settings, manifest: { type: "complete", mainModule: "index.js", modules: { "index.js": { type: "esm" } } } }),
