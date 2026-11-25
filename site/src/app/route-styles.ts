@@ -76,7 +76,7 @@ const whenIdle = (callback: () => void): void => {
   else setTimeout(callback, 0);
 };
 
-/** Fetches ahead the stylesheet and the script of the search dialog, so the dialog opens with no request. */
+/** Fetches ahead the stylesheet and the script of the search dialog. The dialog loads the search index when it opens. */
 const prefetchSearch = (): void => {
   prefetchRouteStyles("search");
   const href = document.querySelector<HTMLMetaElement>('meta[name="acidcat:search-dialog"]')?.content;
