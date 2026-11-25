@@ -12,21 +12,26 @@ The workflow [`benchmark.yml`](../.github/workflows/benchmark.yml) runs both sui
 | Measure | What the reader sees | How |
 | --- | --- | --- |
 | Performance score | The summary of Lighthouse for a first visit on a phone | Lighthouse 13.6.0, mobile, simulated throttling (slow 4G, 4× CPU slowdown) |
-| First Contentful Paint (FCP) | The first text or image on screen | Lighthouse |
-| Largest Contentful Paint (LCP) | The main content on screen | Lighthouse |
+| First Contentful Paint (FCP), simulated | The first text or image on screen, on a slow phone | Lighthouse, simulated |
+| Largest Contentful Paint (LCP), simulated | The main content on screen, on a slow phone | Lighthouse, simulated |
+| First Contentful Paint, observed | The first text or image on screen, on the runner | `observedFirstContentfulPaint` of the Lighthouse report: the time in the trace of the load |
+| Largest Contentful Paint, observed | The main content on screen, on the runner | `observedLargestContentfulPaint` of the Lighthouse report |
 | Cumulative Layout Shift (CLS) | Content that jumps while the page loads | Lighthouse |
-| Total Blocking Time (TBT) | Time when the page does not respond, because a script runs | Lighthouse |
-| Speed Index | How fast the visible part of the page fills | Lighthouse |
+| Total Blocking Time (TBT), simulated | Time when the page does not respond, because a script runs | Lighthouse, simulated |
+| Speed Index, simulated | How fast the visible part of the page fills | Lighthouse, simulated |
 | JavaScript transferred | The bytes of script that the first visit downloads, with Brotli | The `network-requests` audit of Lighthouse: the requests of type Script until the network is quiet. A chunk that a framework prefetches with `import()` counts here. A chunk that a framework prefetches with `<link rel="prefetch">` (VitePress) has the type Other, so it counts only in the total |
 | JavaScript decoded | The bytes of script that the browser must read, without compression | The same requests, their size after decompression |
 | Total transferred, requests | The full cost of the first visit on a metered connection | The same requests. Requests to other origins are counted apart |
-| Ready | The time until a click works | From the start of the navigation, a probe clicks the second tab every 50 ms. The time of the first click that selects it. A click before that does nothing, so the probe does not change the page |
+| Tab responds | The time until a click on a tab works | From the start of the navigation, a probe clicks the second tab every 50 ms. The time of the first click that selects it. A click before that does nothing, so the probe does not change the page. A site can make its tabs work before its other scripts: the AcidCat site on vaporpress runs a small inline script for them, so this row does not tell when the rest of the page responds |
+| Search button responds | The time until a control that needs the scripts of the framework works | From the start of the navigation, a probe clicks the search button every 50 ms. The time of the first paint that shows the search field. In each app, the search button needs the scripts of the framework, and the time includes the code of the dialog when the app loads it on the first click |
 | Tab switch | The delay of a click on a tab | A real click on the third tab, from the press to the first paint that shows it selected |
 | Search | The delay until the search field shows | A real click on the search button, from the press to the first paint that shows the field |
 | Page change, cold | A click on a sidebar link, as soon as the page has loaded | From the press to the first paint with the `h1` of the new page. Only what the framework loaded before the click helps |
 | Page change, prefetched | The same click, after the pointer rested on the link for 2 s | The framework had the time to load the next page ahead |
 | Back | The Back button after the page change | From `history.back()` to the first paint with the `h1` of the first page |
 | Page change loads, Back loads | Whether the page change keeps the document, loads a new one, or takes it from the back/forward cache | A token on `window` before the click, and the `pageshow` event |
+
+Lighthouse loads the page on the runner with no throttling, and computes the simulated values from the trace of that load: it models a slow phone (slow 4G, 4× CPU) with the requests and the tasks that it saw. A simulated value can change with the order of the tasks in the trace, also when a reader on the runner sees no difference; an observed value is what the runner showed, on a fast computer. Read the two together: a difference in both is a difference that a person sees.
 
 The probes in the browser use Playwright and Chromium in a desktop window (1350 × 940), so that each framework shows its sidebar and its search button. DevTools slows the CPU 4× and the network to the slow 4G of Lighthouse (150 ms of latency, 1.6 Mbit/s). The probes do not intercept requests, because interception turns off the HTTP cache.
 
@@ -52,18 +57,18 @@ Each table cell is the median of all the runs of all the jobs, and between brack
   | No flash of the wrong theme | An inline script in the head | An inline script in the head | An inline script in the head | An inline script in the head |
   | Mobile menu | Yes | Yes | Yes | Yes |
   | Copy button on code blocks | Yes | Yes | Yes | Yes |
-  | Search shortcut | Control+K and `/` | Control+K and `/` | Control+K and `/` | Control+K |
+  | Search shortcut | Control+K and `/` | Control+K and `/` | Control+K | Control+K |
   | Search results | The section, the title, and an excerpt around the first match, with each match marked | The section and the title. An excerpt only in the detailed view, which is off by default | The page, its sections, and an excerpt of each, with each match marked | The section, the title, and an excerpt |
   | Arrow keys in the results | Yes | Yes | No: Tab moves between the result links | Yes |
-  | Table of contents | Marks the heading of the section on screen | Marks the heading of the section on screen | Marks the heading of the section on screen | Marks the heading of the section on screen |
+  | Table of contents | Marks the heading of the section on screen | Marks the heading of the section on screen, from the first heading that reaches the top | Marks the heading of the section on screen | Marks each heading whose section is on screen |
   | Table of contents on a phone | "On this page", which opens | "On this page", which opens | "On this page", which opens | "On this page", which opens |
   | Previous and next page | Yes | Yes | Yes | Yes, with the description of each page |
   | Skip link | Yes | Yes | Yes | No |
   | Arrow keys in the tabs | Yes | Yes: each tab is a radio button | Yes | Yes |
   | Web font | None: the font of the system | Inter, preloaded | None | None |
-  | Other | — | — | — | "Copy page", with a menu that opens the page in AI assistants |
+  | Other | — | — | — | "Copy page", with a menu that opens the page in AI assistants; "Edit this page" and "Report an issue" |
 
-  The features of the vaporpress app are in `apps/framework/src/`. `test/framework-app.test.ts` checks each of them in Chromium, and runs every rule of axe-core on the pages in both themes, at desktop and phone widths, with the menu and the search open.
+  Each cell comes from the built apps, in Chromium at 1350 × 940: the keys pressed on the page, the controls on screen, and the table of contents before and after a scroll. The features of the vaporpress app are in `apps/framework/src/`. The app takes the logic of its tabs, its copy buttons, its table of contents and the keys of its search from `vaporpress/behaviors`, and keeps its own markup and styles. `test/framework-app.test.ts` checks each of its features in Chromium, and runs every rule of axe-core, the enhanced contrast too, on the pages in both themes, at desktop and phone widths, with the menu and the search open.
 - **Pinned versions.** The pnpm catalog pins each version. The Nuxt app uses the stable Vue and the `rolldown` that Nuxt asks for, from the catalog `nuxt`. One build-only fix applies: an override gives Starlight satteri 0.11, the version that Astro uses. Without it, the build of a page with tabs crashes. The pages that it writes do not change.
 - **One server.** [`src/server.ts`](src/server.ts) serves each build from memory in the same way: Brotli at quality 11 for text, compressed once before the first request; an ETag on each file; a year of cache for the hashed assets of the framework, and a check on each load for the rest. It is HTTP/1.1 on localhost.
 - **One runner for each job.** Each job measures every build of its suite on the same runner, in turns: run 1 starts with the first build, run 2 with the second, and so on. Each Lighthouse run and each probe starts in a new browser context, with an empty cache. The `build` job builds once, and each measure job downloads the same files.
@@ -71,7 +76,7 @@ Each table cell is the median of all the runs of all the jobs, and between brack
 
 ## Run
 
-On GitHub: run the workflow **Benchmark** (`gh workflow run benchmark.yml`), or push a change to `benchmarks/`. A pull request that changes `benchmarks/`, `vaporpress/src/` or the workflow runs it too. Read the tables in the summary of the run, or download the artifact `summary`.
+On GitHub: run the workflow **Benchmark** (`gh workflow run benchmark.yml`), or push a change to `benchmarks/`. A pull request that changes `benchmarks/` (except this README), `vaporpress/src/` or the workflow runs it too. Read the tables in the summary of the run, or download the artifact `summary`.
 
 On this machine, for a test of the probes, not for numbers to compare:
 
@@ -93,6 +98,6 @@ Each job writes `results/<suite>-<job>/results.json`, with each sample, and the 
 
 ## Tests
 
-`moon run benchmarks:test` tests the transform of the fixture for each framework, the static server, and the statistics and the tables of the results. It builds the vaporpress app, and checks its features in Chromium: the theme before the first paint and the switch, the mobile menu, the copy button, the search with its excerpts and its keys, the table of contents, the previous and next pages, the keys of the tabs, and every rule of axe-core (`test/framework-app.test.ts`). It does not measure.
+`moon run benchmarks:test` tests the transform of the fixture for each framework, the static server, and the statistics and the tables of the results. It builds the vaporpress app, and checks its features in Chromium: the theme before the first paint and the switch, the mobile menu, the copy button, the search with its excerpts and its keys, the table of contents, the previous and next pages, the keys of the tabs, and every rule of axe-core, which `axe.getRules()` lists (`test/framework-app.test.ts`). It does not measure.
 
 The framework app imports the framework as `framework`, an alias in [`apps/framework/package.json`](apps/framework/package.json). A new name of the framework changes that line, and the name of its Vite plugin in `apps/framework/vite.config.ts` when that name changes too.
