@@ -21,6 +21,7 @@
   "exports": {
     "./vite": "./src/vite.ts",
     "./client": "./src/client/index.ts",
+    "./behaviors": "./src/behaviors.ts",
     "./markdown": "./src/markdown.ts",
     "./data": "./src/data.ts",
     "./image": "./src/image-module.d.ts"

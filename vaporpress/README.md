@@ -198,6 +198,32 @@ const home = computed(() => page.value.path === "/");
 
 `defineVaporAsyncComponent` of Vue renders nothing until it has loaded its chunk, also when another import loaded the module already. So a page change to a layout from `defineVaporAsyncComponent` removes the page before it, and the browser can paint the empty page before the layout comes.
 
+## Behaviors
+
+`vaporpress/behaviors` gives the logic of the controls that most documentation sites have, with no markup and no styles: each site keeps its own HTML, CSS and policy, and calls these functions. They use only the DOM, so a site can also run them in an inline script before any module script, for example to make tabs respond at once.
+
+| Export | Use |
+| --- | --- |
+| `listenToTabs({ tab, group, tabsOf, choose })` | One click listener and one keydown listener on the document for every tab group: a click chooses a tab, and ArrowRight, ArrowLeft, Home and End choose a tab and move the focus to it |
+| `selectTab(tabs, chosen, panelOf)` | Marks a tab as selected and shows its panel. The other tabs leave the tab order, and their panels hide |
+| `copyCodeOnClick({ button, code, copied })` | Copies the text of a code block when the reader clicks its copy button, and gives the button `data-copied` for two seconds |
+| `observeActiveHeading(headings, line, change)` | Calls `change` with the id of the last heading above a line under the top of the window, each time it changes. It reads no layout |
+| `isSearchShortcut(event)`, `isTextField(target)` | Control+K or Command+K anywhere, or `/` outside a text field |
+| `onListboxKey(event, { count, selected, select, open })` | ArrowDown and ArrowUp select the next and the previous option of a list box, around its ends, and Enter opens the selected option |
+| `openModal(dialog)` | Opens a dialog as a modal, and returns the function that closes it and gives the focus back |
+
+```ts
+import { listenToTabs, selectTab } from "vaporpress/behaviors";
+
+const tabsOf = (group: HTMLElement) => [...group.querySelectorAll<HTMLElement>('[role="tab"]')];
+listenToTabs({
+  tab: '[role="tab"]',
+  group: ".tabs",
+  tabsOf,
+  choose: (group, tab) => selectTab(tabsOf(group), tab, (each) => document.getElementById(each.getAttribute("aria-controls") ?? "")),
+});
+```
+
 ## API
 
 | Import | Export | Use |
@@ -209,6 +235,7 @@ const home = computed(() => page.value.path === "/");
 | | `usePage()` | The data of the page on screen |
 | | `prefetchPage(router, path)` | Loads the chunk of a page before the reader goes to it |
 | `vaporpress/data` | `defineLoader({ load, watch })`, `LoadedData` | A module of data that the build reads once |
+| `vaporpress/behaviors` | `listenToTabs`, `selectTab`, `copyCodeOnClick`, `observeActiveHeading`, `isSearchShortcut`, `isTextField`, `onListboxKey`, `openModal` | The logic of tabs, copy buttons, the table of contents and a search dialog, with no markup and no styles. See [Behaviors](#behaviors) |
 | `vaporpress/image` | — | The type of an import with `?image`, for a declaration file of the site |
 | `vaporpress/markdown` | `compileMarkdown(source, file, options)`, `githubSlug` | The Markdown compiler, for tools that need the page of a file outside the build, such as a search index |
 
@@ -284,6 +311,7 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 `moon run vaporpress:test` runs `test/`:
 
 - `markdown.test.ts`: the page data, the heading ids and the table of contents, components and `<script setup>` in Markdown, code that Vue does not compile, the highlighter, `transformSource`, and the lean copy of a component, which keeps the templates that hydration may not meet.
+- `behaviors.test.ts`: in Chromium, the tabs with a click and with the arrow keys, the search shortcuts, the keys of a list box and the focus that comes back when a modal closes, a copy button, and the active heading as the page scrolls.
 - `site-definition.test.ts`: the checks of a site definition and of a component, and that `defineLazyLayout` throws in the setup of a component.
 - `site.test.ts`: builds `test/fixture/` and serves `dist/`. It checks the HTML, the head and the lean chunk of each page, that the build checks each lazy layout once for each page, the data of a data module, and the WebP files, the `srcset`, the size and the loading of each image in Markdown and of an image that a component imports. In Chromium, it checks that hydration changes no element of the DOM and logs no mismatch, that components respond, that a click changes the page with no new document and updates the head, that a lazy layout renders in the same task as the page that uses it and hydrates with the first page, that a page change loads a new document when the chunk of its page or of its layout does not load, that the first page keeps its HTML and its links when a chunk of the page does not load, that the chunk of a link in view loads before the click and the chunk of a link under the pointer loads at once, that the scroll position comes back on Back and on Forward, that a hash goes to its heading, that the skip link moves the focus past the header, that a branch of `v-if`, `v-else` or `v-for` that the server did not render shows after hydration and after a page change, and that an unknown path shows the 404 page.
 - `dev.test.ts`: the dev server serves a page, and a click changes the page.
