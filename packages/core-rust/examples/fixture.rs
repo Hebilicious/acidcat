@@ -36,7 +36,6 @@ struct Holds {
     next: AtomicU64,
     holding: Mutex<HashMap<u64, (String, Arc<Notify>)>>,
     blocks_its_thread: bool,
-    holds_interrupt_until_go: bool,
 }
 
 impl Holds {
@@ -50,20 +49,10 @@ impl Holds {
         let _forget = Forget(|| {
             self.holding.lock().unwrap().remove(&id);
         });
-        let _cancelled = match &marker {
-            Some(path) if self.blocks_its_thread => Some(write_cancel_marker_then_hold_interrupt(
-                &cancel,
-                path,
-                self.holds_interrupt_until_go,
-            )),
-            _ => None,
-        };
-        let _marker = marker.map(MarkerFileWhileAlive::write);
         if self.blocks_its_thread {
-            loop {
-                std::thread::park();
-            }
+            block_its_thread(&cancel, marker);
         }
+        let _marker = marker.map(MarkerFileWhileAlive::write);
         released.notified().await;
     }
 
@@ -115,33 +104,89 @@ impl Watchers {
 
 struct Forget<F: FnMut()>(F);
 
+/// Write the marker, then block the thread of the runtime for good, as a call or a subscription that ignores
+/// cancellation does.
+fn block_its_thread(cancel: &CancellationToken, marker: Option<String>) -> ! {
+    let _cancelled = marker
+        .as_deref()
+        .map(|path| write_cancel_marker_then_hold_interrupt(cancel, path));
+    let _marker = marker.map(MarkerFileWhileAlive::write);
+    loop {
+        std::thread::park();
+    }
+}
+
 struct CancelMarkerThenHoldInterrupt {
     marker: String,
-    holds_until_go: bool,
+}
+
+/// With `FIXTURE_HOLD_FIRST_INTERRUPT_UNTIL_SECOND`, the number of interrupts that have reached the process, so that the
+/// fixture holds the cancellation of the first interrupt until the second interrupt has come.
+#[cfg(unix)]
+static INTERRUPTS: std::sync::OnceLock<(Mutex<usize>, std::sync::Condvar)> =
+    std::sync::OnceLock::new();
+
+/// Count the interrupts on a thread with its own runtime. The runtime of the command line cannot tell the interrupts to
+/// its listeners while a call blocks its threads, and this runtime tells them to every listener of the process.
+#[cfg(unix)]
+fn count_interrupts() {
+    let (listening, listens) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("the runtime of the interrupts starts");
+        runtime.block_on(async {
+            let mut interrupts =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+                    .expect("the fixture listens to interrupts");
+            let (count, changed) =
+                INTERRUPTS.get_or_init(|| (Mutex::new(0), std::sync::Condvar::new()));
+            let _ = listening.send(());
+            while interrupts.recv().await.is_some() {
+                *count.lock().unwrap() += 1;
+                changed.notify_all();
+            }
+        });
+    });
+    let _ = listens.recv();
+}
+
+/// Wait until `count` interrupts have reached the process, or until the test process ends, so that a test that stops
+/// early leaves no process behind.
+#[cfg(unix)]
+fn wait_for_interrupts(count: usize) {
+    let Some((seen, changed)) = INTERRUPTS.get() else {
+        return;
+    };
+    let test = parent_process();
+    let mut seen = seen.lock().unwrap();
+    while *seen < count && parent_process() == test {
+        seen = changed
+            .wait_timeout(seen, std::time::Duration::from_millis(5))
+            .unwrap()
+            .0;
+    }
 }
 
 // tokio_util wakes this waker inside the `cancel` of the token, so it holds that `cancel` while it waits.
 impl std::task::Wake for CancelMarkerThenHoldInterrupt {
     fn wake(self: Arc<Self>) {
+        #[cfg(unix)]
+        wait_for_interrupts(1);
         let _ = std::fs::write(format!("{}.cancelled", self.marker), "");
-        let go = std::path::PathBuf::from(format!("{}.go", self.marker));
-        // The hold ends when the test process ends, so a test that stops early leaves no process behind.
-        let test = parent_process();
-        while self.holds_until_go && !go.exists() && parent_process() == test {
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
+        #[cfg(unix)]
+        wait_for_interrupts(2);
     }
 }
 
 fn write_cancel_marker_then_hold_interrupt(
     cancel: &CancellationToken,
     marker: &str,
-    holds_until_go: bool,
 ) -> std::pin::Pin<Box<tokio_util::sync::WaitForCancellationFutureOwned>> {
     let mut cancelled = Box::pin(cancel.clone().cancelled_owned());
     let waker = std::task::Waker::from(Arc::new(CancelMarkerThenHoldInterrupt {
         marker: marker.to_owned(),
-        holds_until_go,
     }));
     if cancelled
         .as_mut()
@@ -476,7 +521,11 @@ pub fn fixture() -> Arc<Application<Fixture>> {
             .payload::<Watched>()
             .subscribe(|Watch { key, marker }, subscription| {
                 let context = subscription.context_arc();
+                let cancel = subscription.cancel_token().clone();
                 async_stream::stream! {
+                    if context.holds.blocks_its_thread {
+                        block_its_thread(&cancel, marker);
+                    }
                     let (sender, mut values) = mpsc::unbounded_channel();
                     let id = context.watchers.next.fetch_add(1, Ordering::Relaxed);
                     context.watchers.watching.lock().unwrap().insert(id, (key.clone(), sender));
@@ -634,11 +683,13 @@ async fn main() {
         Some("cli-blocking") => {
             use acid_cat_core::cli::{CliOptions, run_cli_process};
             record_the_thread_of_the_exit();
+            #[cfg(unix)]
+            if std::env::var_os("FIXTURE_HOLD_FIRST_INTERRUPT_UNTIL_SECOND").is_some() {
+                count_interrupts();
+            }
             let context = Fixture {
                 holds: Holds {
                     blocks_its_thread: true,
-                    holds_interrupt_until_go: std::env::var_os("FIXTURE_HOLD_INTERRUPT_UNTIL_GO")
-                        .is_some(),
                     ..Holds::default()
                 },
                 ..Fixture::default()

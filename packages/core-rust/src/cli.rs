@@ -479,10 +479,16 @@ fn listen_for_interrupt(cancel: CancellationToken) {
         if let Ok(mut interrupts) = signal(SignalKind::interrupt()) {
             tokio::spawn(async move {
                 if interrupts.recv().await.is_some() {
-                    interrupted(&cancel);
-                    if interrupts.recv().await.is_some() {
-                        std::process::exit(exit::CANCELLED);
+                    cancel.cancel();
+                    // A second interrupt that came while the cancellation ran exits at once, before the grace
+                    // period starts.
+                    if interrupts.recv().now_or_never().flatten().is_none() {
+                        start_grace_period();
+                        if interrupts.recv().await.is_none() {
+                            return;
+                        }
                     }
+                    std::process::exit(exit::CANCELLED);
                 }
             });
             return;
@@ -496,7 +502,8 @@ fn listen_for_interrupt(cancel: CancellationToken) {
         .poll(&mut std::task::Context::from_waker(&waker));
     tokio::spawn(async move {
         if interrupt.await.is_ok() {
-            interrupted(&cancel);
+            cancel.cancel();
+            start_grace_period();
             if tokio::signal::ctrl_c().await.is_ok() {
                 std::process::exit(exit::CANCELLED);
             }
@@ -504,8 +511,7 @@ fn listen_for_interrupt(cancel: CancellationToken) {
     });
 }
 
-fn interrupted(cancel: &CancellationToken) {
-    cancel.cancel();
+fn start_grace_period() {
     // A thread, not a task: the runtime drops its tasks when it shuts down, and a capability can block the threads
     // of the runtime. Its name tells a test which of the two exits ran.
     let _ = std::thread::Builder::new()

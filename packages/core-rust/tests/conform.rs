@@ -223,37 +223,26 @@ fn wait_for(path: &Path, what: &str) {
 }
 
 #[cfg(unix)]
-fn release_held_interrupt(child: &mut Child, marker: &Path) -> Instant {
-    assert!(
-        child
-            .try_wait()
-            .expect("the status of the fixture")
-            .is_none(),
-        "the fixture exited before the second interrupt"
-    );
-    let grace_period_can_start = Instant::now();
-    std::fs::write(marker.with_extension("go"), "").expect("the go file is written");
-    grace_period_can_start
-}
-
-#[cfg(unix)]
-fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
+fn interrupted_blocking(args: &[&str], interrupts: usize) -> Interrupted {
     let directory = std::env::temp_dir().join(format!(
-        "acid-cat-core-rust-interrupt-{}-{interrupts}",
-        std::process::id()
+        "acid-cat-core-rust-interrupt-{}-{}-{interrupts}",
+        std::process::id(),
+        args[0]
     ));
     std::fs::create_dir_all(&directory).expect("the directory is made");
     let marker = directory.join("held");
     let record = directory.join("exit");
     let mut fixture = Command::new(fixture());
     fixture
-        .args(["cli-blocking", "fixture", "hold", "--key", "k", "--marker"])
+        .arg("cli-blocking")
+        .args(args)
+        .arg("--marker")
         .arg(&marker)
         .env("FIXTURE_EXIT_RECORD", &record)
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
     if interrupts == 2 {
-        fixture.env("FIXTURE_HOLD_INTERRUPT_UNTIL_GO", "1");
+        fixture.env("FIXTURE_HOLD_FIRST_INTERRUPT_UNTIL_SECOND", "1");
     }
     let mut child = fixture.spawn().expect("the fixture starts");
     wait_for(&marker, "did not write its marker file");
@@ -266,13 +255,14 @@ fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
     let mut interrupted = Instant::now();
     interrupt();
     if interrupts == 2 {
-        // Unix merges a signal that is still pending with the next one of the same kind.
+        // The fixture holds the cancellation of the first interrupt until the second interrupt reaches the process, so
+        // the grace period cannot start before the second interrupt, however slow the computer.
         wait_for(
             &directory.join("held.cancelled"),
             "did not write its marker file when it was cancelled",
         );
+        interrupted = Instant::now();
         interrupt();
-        interrupted = release_held_interrupt(&mut child, &marker);
     }
     let status = loop {
         if let Some(status) = child.try_wait().expect("the status of the fixture") {
@@ -304,9 +294,8 @@ fn interrupted_blocking_call(interrupts: usize) -> Interrupted {
 }
 
 #[cfg(unix)]
-#[test]
-fn a_call_that_blocks_exits_with_130_after_the_grace_period_or_at_once_after_a_second_interrupt() {
-    let once = interrupted_blocking_call(1);
+fn assert_exits_after_the_grace_period_or_at_once_after_a_second_interrupt(args: &[&str]) {
+    let once = interrupted_blocking(args, 1);
     assert_eq!(
         (once.code, once.stderr.as_str(), once.exited_on.as_str()),
         (Some(exit::CANCELLED), "", INTERRUPT_GRACE_THREAD)
@@ -316,7 +305,7 @@ fn a_call_that_blocks_exits_with_130_after_the_grace_period_or_at_once_after_a_s
         "exited {:?} after the interrupt, before the grace period",
         once.after_interrupt
     );
-    let twice = interrupted_blocking_call(2);
+    let twice = interrupted_blocking(args, 2);
     assert_eq!(
         (twice.code, twice.stderr.as_str()),
         (Some(exit::CANCELLED), "")
@@ -325,6 +314,26 @@ fn a_call_that_blocks_exits_with_130_after_the_grace_period_or_at_once_after_a_s
         twice.exited_on, INTERRUPT_GRACE_THREAD,
         "the process exited after the grace period, not at the second interrupt"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_call_that_blocks_exits_with_130_after_the_grace_period_or_at_once_after_a_second_interrupt() {
+    assert_exits_after_the_grace_period_or_at_once_after_a_second_interrupt(&[
+        "fixture", "hold", "--key", "k",
+    ]);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_subscription_that_blocks_exits_with_130_after_the_grace_period_or_at_once_after_a_second_interrupt()
+ {
+    assert_exits_after_the_grace_period_or_at_once_after_a_second_interrupt(&[
+        "watch",
+        "fixture.watch",
+        "--key",
+        "k",
+    ]);
 }
 
 #[test]
