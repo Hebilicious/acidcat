@@ -205,7 +205,8 @@ test("a URL that the deployment allows needs no verification", async (t) => {
   }
 });
 
-const statusOf = async (handler: Mcp.WebHandler, path: string) => decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", subscription(path), as("alice"))))).result);
+const statusOf = async (handler: Mcp.WebHandler, path: string, signal?: AbortSignal) =>
+  decodeSubscribeResult((await json(await handler(mcpRequest("events/subscribe", subscription(path), { ...as("alice"), signal })))).result);
 
 test("a 410 abandons a delivery with no retry and the delivery status tells it, and the next success clears the error", async (t) => {
   const feed = feedForPromises();
@@ -215,11 +216,11 @@ test("a 410 abandons a delivery with no retry and the delivery status tells it, 
     await statusOf(handler, "/retry");
     await feed.following(1);
     await feed.publish({ room: "/retry", count: 1 });
-    const abandoned = await until(t, () => statusOf(handler, "/retry"), (status) => status.cursor === "1");
+    const abandoned = await until(t, (signal) => statusOf(handler, "/retry", signal), (status) => status.cursor === "1");
     assert.equal(abandoned.deliveryStatus.lastError, "http_4xx");
     await feed.publish({ room: "/retry", count: 2 });
     await waitAt(t, "/retry", 3);
-    const healthy = await until(t, () => statusOf(handler, "/retry"), (status) => status.cursor === "2");
+    const healthy = await until(t, (signal) => statusOf(handler, "/retry", signal), (status) => status.cursor === "2");
     assert.equal(healthy.deliveryStatus.lastError, null);
     assert.notEqual(healthy.deliveryStatus.lastDeliveryAt, null);
     await handler.dispose();
@@ -238,7 +239,7 @@ test("a delivery that fails each time is abandoned after the maximum number of a
     await statusOf(handler, "/failing");
     await feed.following(1);
     await feed.publish({ room: "/failing", count: 1 });
-    const failed = await until(t, () => statusOf(handler, "/failing"), (status) => status.deliveryStatus.lastError !== null);
+    const failed = await until(t, (signal) => statusOf(handler, "/failing", signal), (status) => status.deliveryStatus.lastError !== null);
     assert.equal(failed.deliveryStatus.lastError, "http_5xx");
     await feed.publish({ room: "/failing", count: 2 });
     await waitAt(t, "/failing", 5);

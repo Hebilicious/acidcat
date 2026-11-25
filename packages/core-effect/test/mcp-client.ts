@@ -14,7 +14,7 @@ export const decodeMessage = (text: string): Message => Schema.decodeUnknownSync
 
 export const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} };
 
-export function mcpRequest(method: string, params: Record<string, unknown> = {}, init: { readonly id?: string | number; readonly headers?: Record<string, string> } = {}) {
+export function mcpRequest(method: string, params: Record<string, unknown> = {}, init: { readonly id?: string | number; readonly headers?: Record<string, string>; readonly signal?: AbortSignal | undefined } = {}) {
   const headers = new Headers({
     Accept: "application/json, text/event-stream",
     "Content-Type": "application/json",
@@ -27,6 +27,7 @@ export function mcpRequest(method: string, params: Record<string, unknown> = {},
     method: "POST",
     headers,
     body: JSON.stringify({ jsonrpc: "2.0", id: init.id ?? 1, method, params: { ...params, _meta: meta } }),
+    signal: init.signal ?? null,
   });
 }
 

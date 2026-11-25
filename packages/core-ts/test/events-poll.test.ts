@@ -149,7 +149,7 @@ test("poll: the principal is part of the key, so two principals have two leases"
   assert.notEqual(positionOf(alice.cursor).lease, positionOf(bob.cursor).lease);
   assert.notEqual(positionOf(alice.cursor).lease, positionOf(nobody.cursor).lease);
   sensors.emit("hall", 20);
-  await until(t, async () => (await poll({ ...READINGS, cursor: alice.cursor }, "alice")).events, (events) => events.length === 1);
+  await until(t, async (signal) => (await poll({ ...READINGS, cursor: alice.cursor }, "alice", signal)).events, (events) => events.length === 1);
   const stolen = await poll({ ...READINGS, cursor: alice.cursor }, "bob");
   assert.equal(positionOf(stolen.cursor).lease, positionOf(bob.cursor).lease);
   await poll({ name: "sensor.reading.changed", arguments: { room: "hall" } }, "alice");
