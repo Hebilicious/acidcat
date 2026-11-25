@@ -91,7 +91,7 @@ Each flag has an equivalent option for `conform()` in code. Give one or more sur
 - [Hints](../../spec/surfaces/mcp.md#tools): Each MCP tool's annotations match its capability's hints.
 - [Heartbeat](../../spec/surfaces/mcp.md#push): Through MCP with each transport, each `notifications/events/active` grants a `heartbeatMs`. A suggestion is clamped between 1000 and 60 000, a heartbeat comes no sooner than the grant after the request and before the deadline ([why](../../spec/conformance.md#the-silence-before-a-heartbeat)), and a suggestion that is not valid gets `-32602`.
 - [Headers](../../spec/surfaces/mcp.md#headers): Through MCP over HTTP, a missing or wrong `Mcp-Method`, `Mcp-Name` or `Mcp-Param-*` header on `tools/call` and `events/stream` gets 400 and `-32020`, and a value in the base64 form is decoded, with a leading U+FEFF kept. Every request of conform mirrors the annotated arguments of the fixture (`fixture.switch.set` and `fixture.ticks`) into their headers.
-- Properties: With fast-check, through MCP and HTTP: concurrent calls each get their own outcome, and a cancellation changes only its own call.
+- Properties: With fast-check, through MCP and HTTP: concurrent calls each get their own outcome, and a cancellation changes only its own call. Each run of a property has the deadline.
 
 Each poll check uses a new key, so leases from an earlier run do not change the result.
 

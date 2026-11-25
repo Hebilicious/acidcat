@@ -148,23 +148,21 @@ const cancellations = fc.array(fc.boolean(), { minLength: 2, maxLength: 5 }).fil
 export async function checkProperties(surface: string, invoke: Invoke, deadline: number): Promise<Checks> {
   const checks = new Checks(`${surface} properties`, deadline);
 
-  await checks.run("concurrent calls each get exactly their own outcome", RULE, async (signal) => {
+  await checks.runEach("concurrent calls each get exactly their own outcome", RULE, async (each) => {
     await fc.assert(
-      fc.asyncProperty(fc.array(operation, { minLength: 1, maxLength: 12 }), async (operations) => {
-        fc.pre(!signal.aborted);
-        const calls = await Promise.all(operations.map(async (op) => ({ op, outcome: await callFor(invoke, op, signal) })));
-        calls.forEach(({ op, outcome }) => expect(agrees(op, outcome), `${op.kind} gave ${JSON.stringify(outcome)}`));
-      }),
+      fc.asyncProperty(fc.array(operation, { minLength: 1, maxLength: 12 }), (operations) =>
+        each(async (signal) => {
+          const calls = await Promise.all(operations.map(async (op) => ({ op, outcome: await callFor(invoke, op, signal) })));
+          calls.forEach(({ op, outcome }) => expect(agrees(op, outcome), `${op.kind} gave ${JSON.stringify(outcome)}`));
+        }),
+      ),
       { numRuns: 25, includeErrorInReport: true },
     );
   });
 
-  await checks.run("cancelling a call affects only that call", RULE, async (signal) => {
+  await checks.runEach("cancelling a call affects only that call", RULE, async (each) => {
     await fc.assert(
-      fc.asyncProperty(cancellations, (flags) => {
-        fc.pre(!signal.aborted);
-        return cancelSome(invoke, flags, signal, deadline);
-      }),
+      fc.asyncProperty(cancellations, (flags) => each((signal) => cancelSome(invoke, flags, signal, deadline))),
       { numRuns: 5, includeErrorInReport: true },
     );
   });

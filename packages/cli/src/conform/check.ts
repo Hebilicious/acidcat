@@ -79,6 +79,28 @@ export class Checks {
     this.results.push(this.#result(name, rule, await this.#settle(body)));
   }
 
+  /**
+   * Run a check of several runs, such as the runs of a property. Each run has the deadline, so the number of runs that
+   * fit in the check does not depend on the speed of the computer.
+   */
+  async runEach(name: string, rule: string, body: (each: (run: Body) => Promise<void>) => Promise<void>): Promise<void> {
+    let late = false;
+    const each = async (run: Body) => {
+      const failure = await this.#settle(run);
+      if (failure === undefined) return;
+      late ||= failure.startsWith("did not settle");
+      throw new Error(failure);
+    };
+    let failure: string | undefined;
+    try {
+      await body(each);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failure = late && !message.startsWith("did not settle") ? `did not settle within ${this.deadline} ms: ${message}` : message;
+    }
+    this.results.push(this.#result(name, rule, failure));
+  }
+
   async concurrently(define: (check: Define) => void): Promise<void> {
     const defined: { readonly name: string; readonly rule: string; readonly body: Body }[] = [];
     define((name, rule, body) => defined.push({ name, rule, body }));
