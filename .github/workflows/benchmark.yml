@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "benchmarks/**"
+      - "!benchmarks/README.md"
       - "vaporpress/src/**"
       - ".github/workflows/benchmark.yml"
   workflow_dispatch:
