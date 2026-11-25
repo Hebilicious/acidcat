@@ -9,16 +9,25 @@ packages:
   - "model"
   - "site"
   - "vaporpress"
+  - "benchmarks"
+  - "benchmarks/apps/*"
 
 allowBuilds:
+  better-sqlite3: true
   esbuild: true
   protobufjs: false
+  vue-demi: false
   workerd: false
 
 # `effect` and its platform packages depend on each other with `^` ranges. Give them `^` ranges too, so that the
 # published packages do not hold `effect` back while a platform package moves on. The lockfile keeps the installs exact.
 catalog:
+  "@astrojs/starlight": 0.42.10
   "@conventional-commits/parser": 0.4.1
+  astro: 7.4.10
+  better-sqlite3: 12.11.1
+  docus: 5.15.0
+  nuxt: 4.6.4
   "@modelcontextprotocol/client": 2.4.0
   "@effect/platform-node": ^4.1.3
   "@effect/platform-node-shared": ^4.1.3
@@ -66,6 +75,7 @@ catalog:
   typescript: 7.0.2
   vite: 8.3.8
   yaml: 2.9.1
+  vitepress: 2.0.0-alpha.21
   vue: 3.6.0-rc.16
   ws: 8.22.2
   zod: 4.6.7
@@ -75,10 +85,19 @@ catalog:
   vue-router: 5.5.1
 
 catalogs:
+  # The Nuxt app of the benchmark uses the stable Vue and the rolldown that Nuxt asks for, as a new Nuxt site does.
+  nuxt:
+    rolldown: 1.2.18
+    vue: 3.5.45
   peers:
     "@effect/platform-node": ^4.0.0
     effect: ^4.0.0
     playwright: ^1.64.0
+
+# Starlight asks for satteri 0.10 and Astro for 0.11. The build bundles Starlight's copy, which then loads the native
+# binding of 0.11 and crashes on a page with tabs. One version for both avoids the mismatch.
+overrides:
+  "@astrojs/starlight>satteri": 0.11.7
 
 minimumReleaseAgeExclude:
   - zod@4.6.7

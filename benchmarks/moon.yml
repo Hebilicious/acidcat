@@ -1,0 +1,77 @@
+language: "typescript"
+layer: "automation"
+
+project:
+  title: "Benchmarks"
+  description: "Measure what a reader sees on a documentation site: the same fixture in vaporpress, VitePress, Astro Starlight and Nuxt Docus, and the docs pages of the AcidCat site in its three builds."
+
+toolchains:
+  default: ["javascript", "node", "pnpm"]
+
+tasks:
+  prepare:
+    description: "Write the pages of each app of the fixture from fixture/."
+    command: "node"
+    args: ["src/prepare.ts"]
+    inputs: ["fixture/**/*", "src/prepare.ts", "src/fixture.ts"]
+    outputs: ["apps/framework/pages/**/*", "apps/vitepress/docs/**/*", "apps/starlight/src/content/docs/**/*", "apps/nuxt/content/**/*", "apps/nuxt/public/**/*"]
+
+  build-framework:
+    deps: ["prepare"]
+    description: "Build the fixture with vaporpress into apps/framework/dist/."
+    script: "cd apps/framework && vite build"
+    inputs: ["apps/framework/src/**/*", "apps/framework/vite.config.ts", "apps/framework/package.json", "src/fixture.ts", "fixture/**/*", "/vaporpress/src/**/*"]
+    outputs: ["apps/framework/dist/**/*"]
+
+  build-vitepress:
+    deps: ["prepare"]
+    description: "Build the fixture with VitePress into apps/vitepress/.vitepress/dist/."
+    script: "cd apps/vitepress && vitepress build"
+    inputs: ["apps/vitepress/.vitepress/config.ts", "apps/vitepress/package.json", "src/fixture.ts", "fixture/**/*"]
+    outputs: ["apps/vitepress/.vitepress/dist/**/*"]
+
+  build-starlight:
+    deps: ["prepare"]
+    description: "Build the fixture with Astro Starlight into apps/starlight/dist/."
+    script: "cd apps/starlight && astro build"
+    inputs: ["apps/starlight/astro.config.ts", "apps/starlight/src/content.config.ts", "apps/starlight/package.json", "src/fixture.ts", "fixture/**/*"]
+    outputs: ["apps/starlight/dist/**/*"]
+
+  build-nuxt:
+    deps: ["prepare"]
+    description: "Generate the fixture with Nuxt and Docus into apps/nuxt/.output/public/."
+    script: "cd apps/nuxt && nuxt generate"
+    inputs: ["apps/nuxt/nuxt.config.ts", "apps/nuxt/package.json", "fixture/**/*"]
+    outputs: ["apps/nuxt/.output/public/**/*"]
+
+  build:
+    deps: ["build-framework", "build-vitepress", "build-starlight", "build-nuxt"]
+    description: "Build the fixture with each framework."
+
+  fixture:
+    deps: ["build"]
+    description: "Measure the fixture in each framework: Lighthouse on mobile, and the probes in Chromium. Pass --runs and --job after --. The workflow benchmark.yml runs it on GitHub's runners."
+    command: "node"
+    args: ["src/run.ts", "--suite", "fixture"]
+    options:
+      cache: false
+      runInCI: false
+
+  summarize:
+    description: "Write the Markdown tables of each results.json under results/, with the median and the quartiles of each measure."
+    command: "node"
+    args: ["src/summarize.ts"]
+    options:
+      cache: false
+      runInCI: false
+
+  test:
+    description: "Test the transform of the fixture for each framework, the static server, and the statistics and tables of the results."
+    command: "node"
+    args: ["--test", "test/"]
+    inputs: ["src/**/*", "test/**/*", "fixture/**/*"]
+
+  typecheck:
+    description: "Type-check the benchmark, its tests, and the TypeScript of the apps of the framework and of Starlight."
+    script: "tsc -p . && tsc -p apps/framework && tsc -p apps/starlight"
+    inputs: ["src/**/*.ts", "test/**/*.ts", "tsconfig.json", "apps/framework/src/**/*", "apps/framework/vite.config.ts", "apps/framework/tsconfig.json", "apps/starlight/src/*.ts", "apps/starlight/astro.config.ts", "apps/starlight/tsconfig.json", "/tsconfig.base.json"]

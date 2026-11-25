@@ -1,0 +1,12 @@
+{
+  "name": "acid-cat-benchmarks-vitepress",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The fixture of the benchmark, built with VitePress and its default theme.",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "vitepress": "catalog:",
+    "vue": "catalog:"
+  }
+}
