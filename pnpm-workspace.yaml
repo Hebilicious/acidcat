@@ -66,19 +66,15 @@ catalog:
   vite: 8.3.8
   yaml: 2.9.1
   vitepress: 2.0.0-alpha.21
-  vue: 3.5.45
+  vue: 3.6.0-rc.16
   ws: 8.22.2
   zod: 4.6.7
+  "@vitejs/plugin-vue": 6.0.11
+  "@vue/compiler-sfc": 3.6.0-rc.16
+  satteri: 0.11.7
+  vue-router: 5.5.1
 
 catalogs:
-  vapor:
-    "@vitejs/plugin-vue": 6.0.11
-    "@vue/compiler-sfc": 3.6.0-rc.16
-    "@vue/compiler-vapor": 3.6.0-rc.16
-    "@vue/server-renderer": 3.6.0-rc.16
-    satteri: 0.11.7
-    vue: 3.6.0-rc.16
-    vue-router: 5.5.1
   peers:
     "@effect/platform-node": ^4.0.0
     effect: ^4.0.0

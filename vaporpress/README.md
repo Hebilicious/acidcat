@@ -74,6 +74,7 @@ const page = usePage();
 | Convention | Rule |
 | --- | --- |
 | Pages | Each `.md` and `.vue` file in the folder of the pages (`pages/` by default) is a route, as [the file-based routing of Vue Router](https://router.vuejs.org/file-based-routing/) names it. `index` is the folder itself. The URL of a page ends with a slash: `pages/guide/setup.md` is `/guide/setup/` |
+| Files that are not pages | `exclude` lists globs of files in the folder of the pages that are not routes, relative to that folder |
 | Pages from other folders | `extraPages` adds pages whose files are elsewhere, for example the files of a specification: `{ path: "/spec/catalog", file: "/abs/spec/catalog.md" }` |
 | 404 | `pages/404.md` (or `404.vue`) is written to `404.html`, and the browser shows it for every path that has no page |
 | Links | A plain `<a href="/guide/">` changes the page in the browser. A Markdown link needs no component. The browser loads the link itself when it opens in a new tab or window, goes to another origin, has `download`, or leads to a path that has no page, such as `/llms.txt` |
@@ -81,8 +82,9 @@ const page = usePage();
 | Data at build time | A module whose name ends with `.data.ts` exports a loader as its default export, from `defineLoader`. The build runs the loader and gives the importer `data`, the JSON result. The browser gets the data, not the loader or what it imports |
 | Head | `title(page)` and `head(page)` of `defineSite` write the title and the elements of the head that change with the page. The server writes them in each HTML file, and the browser replaces them after each page change. `headHtml` adds HTML that every page has, such as the icon |
 | Images | An image in Markdown with a local file, such as `![A diagram](diagram.png)`, gets WebP files at several widths in `srcset`, and its `width` and `height`. A component imports an image with `?image`. See [Images](#images) |
-| Components | Every `.vue` file compiles in Vapor mode, with or without the `vapor` attribute. The router registers no global component: import `RouterView` from `vaporpress/client`, and write plain links. The `RouterLink` and `RouterView` of Vue Router render virtual DOM, so the framework removes their registration from `app.use(router)` |
+| Components | Every `.vue` file compiles in Vapor mode, with or without the `vapor` attribute. Vite resolves one copy of `vue` and `vue-router` for the site and the framework. The router registers no global component: import `RouterView` from `vaporpress/client`, and write plain links. The `RouterLink` and `RouterView` of Vue Router render virtual DOM, so the framework removes their registration from `app.use(router)` |
 | Lazy layouts | `defineLazyLayout(loader, usedBy)` gives a layout in a chunk of its own, for the pages for which `usedBy(page)` is true. See [Lazy layouts](#lazy-layouts) |
+| Scripts on the content | `onPageUpdated(fn)` runs `fn` each time the content of a page is in the DOM: after hydration, and after each page change. Use it to start the behaviors of static HTML, such as tabs |
 
 ### Markdown pages
 
@@ -111,6 +113,7 @@ pnpm add the-tool
 ```
 ````
 
+- `page.file` is the file of the page, relative to the root of the site, for example for an "Edit page" link.
 - The title is `title` of the frontmatter, or the text of the first `h1`.
 - Each heading gets an id: the slug that GitHub writes, or `{#id}` after the text. The headings of the levels in `headingLevels` (2 and 3 by default) are in `page.headings`, for the table of contents.
 - Vue does not compile code: `{{` in a code block or in inline code is text.
@@ -233,11 +236,12 @@ listenToTabs({
 | | `RouterView` | Shows the page of the current route. It is a Vapor component, so the site loads no virtual DOM renderer |
 | | `defineLazyLayout(loader, usedBy)` | A layout in a chunk of its own, which the router loads before a page change to a page that uses it. See [Lazy layouts](#lazy-layouts) |
 | | `usePage()` | The data of the page on screen |
+| | `onPageUpdated(fn)` | Runs `fn` each time the content of a page is in the DOM |
 | | `prefetchPage(router, path)` | Loads the chunk of a page before the reader goes to it |
 | `vaporpress/data` | `defineLoader({ load, watch })`, `LoadedData` | A module of data that the build reads once |
 | `vaporpress/behaviors` | `listenToTabs`, `selectTab`, `copyCodeOnClick`, `observeActiveHeading`, `isSearchShortcut`, `isTextField`, `onListboxKey`, `openModal` | The logic of tabs, copy buttons, the table of contents and a search dialog, with no markup and no styles. See [Behaviors](#behaviors) |
 | `vaporpress/image` | — | The type of an import with `?image`, for a declaration file of the site |
-| `vaporpress/markdown` | `compileMarkdown(source, file, options)`, `githubSlug` | The Markdown compiler, for tools that need the page of a file outside the build, such as a search index |
+| `vaporpress/markdown` | `compileMarkdown(source, file, options)`, `githubSlug`, `hastText`, `defineHastPlugin`, `defineMdastPlugin` | The Markdown compiler, for tools that need the page of a file outside the build, such as a search index |
 
 `vaporpress` options:
 
@@ -246,11 +250,13 @@ listenToTabs({
 | `root` | the folder where Vite runs | The folder of the site |
 | `app` | — | The module whose default export is the result of `defineSite`, relative to `root` |
 | `pages` | `"pages"` | The folder of the pages |
+| `exclude` | none | Globs of files in the folder of the pages that are not pages |
 | `extraPages` | none | A function that returns the pages whose files are in other folders |
 | `markdown` | — | See [Markdown pages](#markdown-pages) |
 | `lang`, `headHtml` | `"en"`, none | The language of each page, and the HTML that the head of every page has |
-| `transformHtml(html, page)` | none | Changes the HTML file of each page before the build writes it |
+| `transformHtml(html, page, { files })` | none | Changes the HTML file of each page before the build writes it. `files` lists the path of each file of the client build, for example to preload a font |
 | `images` | `{}` | The widths and the quality of the image service, or `false` to keep each image as it is. See [Images](#images) |
+| `afterBuild(outDir)` | none | Runs after the build has written every page, for example to write more files |
 | `vue` | — | Options for `@vitejs/plugin-vue` |
 
 ## Design
@@ -320,7 +326,7 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 
 ## Roadmap
 
-- Move the AcidCat site onto the framework: the docs, the specification, the examples and the packages; the homepage; the files for agents; then remove VitePress.
+- Move the rest of the AcidCat site onto the framework: the packages page, the search, the homepage, the files for agents, the fonts; then remove VitePress. The docs, the examples and the specification build on it.
 - Built-in features: search, the Markdown of each page and `llms.txt`, social cards, the subsets of the font faces, and the design tokens of cssforge.
 - A skill that gives the checklist of the verification loop for a site.
 - Move the framework to a repository of its own.

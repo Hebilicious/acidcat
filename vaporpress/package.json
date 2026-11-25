@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@vitejs/plugin-vue": "catalog:vapor",
-    "@vue/compiler-sfc": "catalog:vapor",
-    "satteri": "catalog:vapor",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/compiler-sfc": "catalog:",
+    "satteri": "catalog:",
     "sharp": "catalog:",
-    "vue": "catalog:vapor",
-    "vue-router": "catalog:vapor",
+    "vue": "catalog:",
+    "vue-router": "catalog:",
     "vite": "catalog:",
     "yaml": "catalog:"
   },

@@ -84,6 +84,7 @@ describe("the static build", () => {
     const outside = await readDist("more/outside/index.html");
     assert.match(outside, /<h1 id="a-page-from-another-folder">A page from another folder<\/h1>/);
     chunkOf(outside);
+    await assert.rejects(readDist("draft/index.html"), "An excluded file is not a page.");
   });
 
   test("names the lean chunk of each page, which leaves its static HTML to the DOM", async () => {
@@ -174,9 +175,11 @@ describe("in the browser", () => {
   test("changes the page with no new document, and updates the title and the head", async () => {
     const { page, problems } = await open("/");
     await markDocument(page);
+    assert.equal(await page.getAttribute("body", "data-updated-for"), "A unique homepage");
     await page.click(".to-guide");
     await page.waitForSelector("#the-guide");
     assert.equal(await sameDocument(page), true);
+    await page.waitForFunction(() => document.body.dataset["updatedFor"] === "The guide");
     assert.equal(await page.title(), "Guide | Fixture");
     assert.equal(await page.getAttribute('meta[name="description"]', "content"), "How the fixture works.");
     assert.equal(await page.getAttribute('link[rel="canonical"]', "href"), "https://fixture.test/guide/");

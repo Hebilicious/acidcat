@@ -15,6 +15,8 @@ import type { MarkdownOptions } from "./markdown.ts";
 import { prerender } from "./prerender.ts";
 import type { DocumentOptions } from "./prerender.ts";
 
+export type { BuildFiles } from "./prerender.ts";
+
 export interface VaporpressOptions extends DocumentOptions {
   /** The folder of the site. The default is the folder where Vite runs. */
   readonly root?: string;
@@ -22,11 +24,15 @@ export interface VaporpressOptions extends DocumentOptions {
   readonly app: string;
   /** The folder of the pages, relative to the root of Vite. Each `.md` and `.vue` file in it is a route. */
   readonly pages?: string;
+  /** Globs of files in the folder of the pages that are not pages, relative to that folder. */
+  readonly exclude?: readonly string[];
   readonly markdown?: MarkdownOptions;
   /** Pages whose files are outside the folder of the pages, such as the files of a specification in another folder of the repository. */
   readonly extraPages?: () => readonly ExtraPage[] | Promise<readonly ExtraPage[]>;
   /** The image service: WebP files at several widths, and the size of each image. `false` keeps each image as it is. */
   readonly images?: false | ImageOptions;
+  /** Runs after the build has written every page, with the folder of the build. */
+  readonly afterBuild?: (outDir: string) => void | Promise<void>;
   /** Options for `@vitejs/plugin-vue`. The framework compiles every component in Vapor mode. */
   readonly vue?: VueOptions;
 }
@@ -68,7 +74,7 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
   const siteRoot = resolve(options.root ?? process.cwd());
   const pagesDir = resolve(siteRoot, options.pages ?? "pages");
   const routeFiles = new Map<string, string>();
-  let markdownOptions: MarkdownOptions = { ...options.markdown };
+  let markdownOptions: MarkdownOptions = { root: siteRoot, ...options.markdown };
   let extraPages: Promise<readonly ExtraPage[]> | undefined;
   const readExtraPages = (): Promise<readonly ExtraPage[]> => {
     extraPages ??= Promise.resolve(options.extraPages?.() ?? []).then((pages) => {
@@ -83,7 +89,7 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
     enforce: "pre",
     configResolved(config) {
       if (options.images === false) return;
-      markdownOptions = { ...options.markdown, images: config.publicDir === "" ? {} : { publicDir: config.publicDir } };
+      markdownOptions = { root: siteRoot, ...options.markdown, images: config.publicDir === "" ? {} : { publicDir: config.publicDir } };
     },
     async transform(code, id) {
       const { file, query } = splitId(id);
@@ -105,6 +111,7 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
       return {
         root: siteRoot,
         appType: "custom",
+        resolve: { dedupe: ["vue", "vue-router"] },
         builder: { sharedConfigBuild: true },
         build: { manifest: true },
         environments: {
@@ -128,7 +135,7 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
     },
     async buildStart() {
       if (this.environment.name !== "client" || this.environment.mode !== "build") return;
-      const files = [...globSync("**/*.{md,vue}", { cwd: pagesDir }).map((file) => join(pagesDir, file)), ...(await readExtraPages()).map((page) => page.file)];
+      const files = [...globSync("**/*.{md,vue}", { cwd: pagesDir, exclude: [...(options.exclude ?? [])] }).map((file) => join(pagesDir, file)), ...(await readExtraPages()).map((page) => page.file)];
       for (const file of files) this.emitFile({ type: "chunk", id: `${file}${leanQuery}`, preserveSignature: "exports-only" });
     },
     transform: {
@@ -164,6 +171,7 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
         options,
         clientEntryName,
       });
+      await options.afterBuild?.(resolve(siteRoot, client.config.build.outDir));
     },
   };
 
@@ -172,6 +180,7 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
     vueRouter({
       root: siteRoot,
       routesFolder: [{ src: pagesDir }],
+      exclude: (options.exclude ?? []).map((glob) => join(pagesDir, glob)),
       extensions: [".vue", ".md"],
       dts: false,
       async beforeWriteFiles(rootRoute) {

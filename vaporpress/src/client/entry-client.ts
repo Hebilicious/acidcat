@@ -3,7 +3,7 @@ import { createVaporApp, createVaporSSRApp } from "vue";
 import { createWebHistory, START_LOCATION } from "vue-router";
 import { handleHotUpdate, routes } from "vue-router/auto-routes";
 import { updateHead } from "./head.ts";
-import { isComponent, readSite } from "./site.ts";
+import { isComponent, isVaporComponent, readSite } from "./site.ts";
 import { interceptLinks } from "./links.ts";
 import { startPrefetch } from "./prefetch.ts";
 import { createSiteRouter, pageOf } from "./router.ts";
@@ -12,6 +12,9 @@ import { leanPageChunkMarker } from "./markers.ts";
 const site = readSite(appModule);
 
 const hasDefault = (value: unknown): value is { readonly default: unknown } => typeof value === "object" && value !== null && "default" in value;
+
+const layout: unknown = site.layout;
+if (!isVaporComponent(layout)) throw new Error("The layout of the site is not a component.");
 
 const router = createSiteRouter(site, createWebHistory(import.meta.env.BASE_URL), routes);
 if (import.meta.hot) handleHotUpdate(router);
@@ -26,7 +29,7 @@ if (pageChunk instanceof HTMLLinkElement) {
   }
 }
 
-const app = pageChunk === null ? createVaporApp(site.layout) : createVaporSSRApp(site.layout);
+const app = pageChunk === null ? createVaporApp(layout) : createVaporSSRApp(layout);
 // Each page is a static HTML file, so a page change that fails, for example on a chunk that a deploy removed, loads the page as a new document.
 // A first page that fails keeps the HTML of the server, and its links load new documents.
 router.onError((error: unknown, to, from) => {

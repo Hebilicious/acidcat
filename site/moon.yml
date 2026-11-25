@@ -22,8 +22,15 @@ tasks:
     args: ["--mode", "css", "--watch"]
     preset: "server"
 
+  fonts:
+    description: "Write the core and the rest of each font face, and their @font-face rules, into .fonts/. Both builds read them."
+    command: "node"
+    args: ["scripts/write-fonts.ts"]
+    inputs: ["scripts/write-fonts.ts", "src/lib/fonts.ts", "src/lib/font-faces.ts", "package.json"]
+    outputs: [".fonts/**/*"]
+
   dev:
-    deps: ["tokens-watch"]
+    deps: ["tokens-watch", "fonts"]
     description: "Serve the site with live reload at http://localhost:5173, and write the design tokens on each change."
     command: "vitepress"
     args: ["dev"]
@@ -35,6 +42,7 @@ tasks:
     inputs: ["cssforge.config.ts", ".cssforge/output.css"]
 
   build:
+    deps: ["fonts"]
     description: "Build the static site into dist/."
     command: "vitepress"
     args: ["build"]
@@ -61,6 +69,22 @@ tasks:
       - "/packages/mcp-handshake/src/**/*.ts"
       - "/packages/catalog/typescript/src/**/*.ts"
     outputs: ["dist/**/*"]
+
+  build-framework:
+    deps: ["fonts"]
+    description: "Build the docs, the examples and the specification with vaporpress into .out/framework/. VitePress builds the deployed site until every part has moved."
+    command: "vite"
+    args: ["build", "--config", "framework.config.ts"]
+    inputs:
+      - "src/**/*"
+      - "content/**/*"
+      - "public/**/*"
+      - "framework.config.ts"
+      - "package.json"
+      - "/spec/**/*.md"
+      - "/examples/**/*"
+      - "/vaporpress/src/**/*"
+    outputs: [".out/framework/**/*"]
 
   catalog:
     description: "Write the catalog of the AcidCat app of the site, site.acidcat.json, from its code."
@@ -96,17 +120,17 @@ tasks:
       runInCI: false
 
   test:
-    deps: ["build", "tokens-check"]
+    deps: ["build", "build-framework", "tokens-check"]
     description: "Test the geometry of the art, render the homepage in Chromium at desktop and phone widths, and call the AcidCat app of the site through the Worker, MCP, HTTP and WebMCP."
     command: "node"
     args: ["--test", "test/"]
-    inputs: ["src/**/*", "content/**/*", ".vitepress/**/*", "test/**/*.ts", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*"]
+    inputs: ["src/**/*", "content/**/*", ".vitepress/**/*", "framework.config.ts", "test/**/*.ts", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*", "/vaporpress/src/**/*"]
 
   typecheck:
     description: "Type-check the art geometry, the tests and the configuration."
     command: "tsc"
     args: ["-p", "."]
-    inputs: ["src/lib/**/*.ts", "test/**/*.ts", "worker/**/*.ts", "scripts/**/*.ts", ".vitepress/**/*.ts", "content/**/*.ts", "cssforge.config.ts", "cloudflare.config.ts", "tsconfig.json", "/tsconfig.base.json"]
+    inputs: ["src/lib/**/*.ts", "src/app/**/*.ts", "test/**/*.ts", "worker/**/*.ts", "scripts/**/*.ts", ".vitepress/**/*.ts", "content/**/*.ts", "cssforge.config.ts", "cloudflare.config.ts", "framework.config.ts", "tsconfig.json", "/tsconfig.base.json"]
 
   lighthouse:
     deps: ["build"]

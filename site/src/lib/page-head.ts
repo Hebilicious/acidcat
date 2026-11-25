@@ -1,5 +1,5 @@
 import type { HeadConfig, PageData } from "vitepress";
-import { sectionOf, socialImage } from "./social.ts";
+import { pageCard } from "./social.ts";
 
 const text = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
 
@@ -24,23 +24,11 @@ export const applyRouteParams = (pageData: PageData): void => {
 };
 
 /** The canonical link, the Open Graph and Twitter cards, and the social image of a page. */
-export const pageHead = (pageData: PageData, siteUrl: string): HeadConfig[] => {
-  const path = pagePath(pageData.relativePath);
-  const url = `${siteUrl}${path}`;
-  const title = text(pageData.frontmatter["title"]) ?? pageData.title;
-  const description = text(pageData.frontmatter["description"]) ?? pageData.description;
-  const home = path === "/";
-  return [
-    ["link", { rel: "canonical", href: url }],
-    ["meta", { property: "og:type", content: home ? "website" : "article" }],
-    ["meta", { property: "og:site_name", content: "AcidCat" }],
-    ["meta", { property: "og:url", content: url }],
-    ["meta", { property: "og:title", content: title }],
-    ["meta", { property: "og:description", content: description }],
-    ["meta", { property: "og:locale", content: "en" }],
-    ["meta", { name: "twitter:card", content: "summary_large_image" }],
-    ["meta", { name: "twitter:title", content: title }],
-    ["meta", { name: "twitter:description", content: description }],
-    ...socialImage(sectionOf(path)).map((attrs): HeadConfig => ["meta", attrs]),
-  ];
+export const pageHead = (pageData: PageData): HeadConfig[] => {
+  const card = pageCard({
+    path: pagePath(pageData.relativePath),
+    title: text(pageData.frontmatter["title"]) ?? pageData.title,
+    description: text(pageData.frontmatter["description"]) ?? pageData.description,
+  });
+  return [["link", { rel: "canonical", href: card.url }], ...card.meta.map((attrs): HeadConfig => ["meta", attrs])];
 };

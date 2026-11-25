@@ -36,7 +36,8 @@ const isPageFields = (value: unknown): value is Omit<PageData, "path"> =>
   (value["description"] === undefined || typeof value["description"] === "string") &&
   isRecord(value["frontmatter"]) &&
   Array.isArray(value["headings"]) &&
-  value["headings"].every((heading) => isHeading(heading));
+  value["headings"].every((heading) => isHeading(heading)) &&
+  (value["file"] === undefined || typeof value["file"] === "string");
 
 /** The data of the page of a resolved route. A component that is not a Markdown page can give its own with `defineOptions({ __page: { … } })`. */
 export const pageOf = (route: RouteLocationNormalizedLoaded): PageData => {

@@ -97,11 +97,21 @@ export const writeFonts = async (directory: string): Promise<void> => {
   await writeFile(join(directory, "fonts.css"), fontFaceCss());
 };
 
-/** A preload link for the core file of each face that the first view of the page draws, so that the browser lays out the text once. */
-export const fontPreloads = (page: "home" | "docs", assets: readonly string[]): HeadConfig[] =>
+/** VitePress names a built file `<name>.<hash>`, and Vite `<name>-<hash>`. */
+const hashSeparators = [".", "-"];
+
+const preloadedFonts = (page: "home" | "docs", assets: readonly string[]): string[] =>
   routeFaces[page].map((face) => {
     const stem = fontFile(face, "core").replace(/\.woff2$/, "");
-    const href = assets.find((asset) => asset.split("/").pop()?.startsWith(`${stem}.`) === true && asset.endsWith(".woff2"));
+    const href = assets.find((asset) => asset.endsWith(".woff2") && hashSeparators.some((separator) => (asset.split("/").pop() ?? "").startsWith(`${stem}${separator}`)));
     if (href === undefined) throw new Error(`The build has no file for ${stem}.woff2.`);
-    return ["link", { rel: "preload", as: "font", type: "font/woff2", href, crossorigin: "" }];
+    return href;
   });
+
+export const fontPreloads = (page: "home" | "docs", assets: readonly string[]): HeadConfig[] =>
+  preloadedFonts(page, assets).map((href) => ["link", { rel: "preload", as: "font", type: "font/woff2", href, crossorigin: "" }]);
+
+export const fontPreloadHtml = (page: "home" | "docs", assets: readonly string[]): string =>
+  preloadedFonts(page, assets)
+    .map((href) => `<link rel="preload" as="font" type="font/woff2" href="${href}" crossorigin>`)
+    .join("");

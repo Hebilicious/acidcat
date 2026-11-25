@@ -11,11 +11,14 @@ const Toc = defineLazyLayout(() => import("./Toc.vue"), hasToc);
 
 <script setup lang="ts" vapor>
 import { onMounted } from "vue";
-import { RouterView, usePage } from "vaporpress/client";
+import { onPageUpdated, RouterView, usePage } from "vaporpress/client";
 
 const page = usePage();
 onMounted(() => {
   document.body.dataset["mounted"] = `${document.body.dataset["mounted"] ?? ""}layout `;
+});
+onPageUpdated(() => {
+  document.body.dataset["updatedFor"] = document.querySelector("h1")?.textContent ?? "";
 });
 </script>
 
