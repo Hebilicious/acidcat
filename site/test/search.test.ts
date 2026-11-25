@@ -91,8 +91,7 @@ test("the search marks the words that match, Enter goes to the selected result w
   await first.locator("mark").first().waitFor();
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => location.pathname !== "/docs/quick-start/");
-  const firstResult = process.env["SITE_BUILD"] === "framework" ? "/docs/concepts/conformance/" : "/docs/concepts/conformance/#conformance";
-  assert.equal(await page.evaluate(() => location.pathname + location.search + location.hash), firstResult, "Enter goes to the first result: the section of the first heading of the page, which has an id only in the VitePress build");
+  assert.equal(await page.evaluate(() => location.pathname + location.search + location.hash), "/docs/concepts/conformance/", "Enter goes to the first result: the section of the page, which starts at its first heading");
   assert.equal(await page.evaluate(() => document.documentElement.hasAttribute("data-same-document")), true);
   await page.keyboard.press("Control+k");
   await input.waitFor();
