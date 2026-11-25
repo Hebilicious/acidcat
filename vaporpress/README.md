@@ -198,6 +198,7 @@ const home = computed(() => page.value.path === "/");
 - Call `defineLazyLayout` once, when its module loads: in a plain `<script>` block, or in a module of its own. The router then knows the layout before the first page. A call in `<script setup>` or in any other `setup` throws an error, because it would add a layout for each render.
 - Before each page change to a page for which `usedBy(page)` is true, the router loads the chunk of the layout. Then the layout renders in the same task that removes the page before it, so no frame shows an empty page. The first page of a visit waits for it too, so the layout hydrates with the app, and the render on the server waits for it.
 - `usedBy(page)` must be true for each page that shows the layout. For a page that shows it while `usedBy` is false, the layout renders nothing until its chunk loads.
+- Add the module to `preload(page)` for the same pages, so the HTML of such a page preloads the chunk, and a link to the page fetches it ahead.
 - When the chunk does not load, the page change loads the page as a new document, as for the chunk of a page. See [Fast page changes](#fast-page-changes).
 
 `defineVaporAsyncComponent` of Vue renders nothing until it has loaded its chunk, also when another import loaded the module already. So a page change to a layout from `defineVaporAsyncComponent` removes the page before it, and the browser can paint the empty page before the layout comes.
@@ -280,7 +281,7 @@ The search finds words by prefix, and with one wrong letter in five. A match in 
 | `lang`, `headHtml` | `"en"`, none | The language of each page, and the HTML that the head of every page has |
 | `search` | `false` | Writes the search index of the built pages. See [Search](#search) |
 | `transformHtml(html, page, { files })` | none | Changes the HTML file of each page before the build writes it. `files` lists the path of each file of the client build, for example to preload a font |
-| `preload(page)` | none | The modules, relative to `root`, that a page needs at once but that the site loads with a dynamic import, such as a layout that only some pages use. The HTML of the page preloads their chunks, and a link to the page fetches them ahead with the chunk of the page. The build fails when a module has no chunk of its own |
+| `preload(page)` | none | The modules, relative to `root`, that a page needs at once but that the site loads with a dynamic import, such as a [lazy layout](#lazy-layouts). The HTML of the page preloads their chunks, and a link to the page fetches them ahead with the chunk of the page. The build fails when a module has no chunk of its own |
 | `images` | `{}` | The widths and the quality of the image service, or `false` to keep each image as it is. See [Images](#images) |
 | `afterBuild(outDir)` | none | Runs after the build has written every page, for example to write more files |
 | `vue` | — | Options for `@vitejs/plugin-vue` |
