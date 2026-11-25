@@ -1,11 +1,11 @@
 :root {
   color-scheme: light dark;
   --text: light-dark(#1f2328, #e6edf3);
-  --muted: light-dark(#59636e, #9198a1);
+  --muted: light-dark(#4b535c, #aeb6bf);
   --background: light-dark(#ffffff, #0d1117);
   --surface: light-dark(#f6f8fa, #161b22);
   --border: light-dark(#d1d9e0, #30363d);
-  --accent: light-dark(#0969da, #4493f8);
+  --accent: light-dark(#0550ae, #71b7ff);
   --mark: light-dark(#fff8c5, #4b3c00);
   --nav-height: 3.5rem;
   font-family: system-ui, sans-serif;

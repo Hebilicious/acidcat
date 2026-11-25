@@ -1,6 +1,7 @@
 <script setup lang="ts" vapor>
 import { nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
+import { onListboxKey, openModal } from "framework/behaviors";
 import { loadExcerpt, loadSearch, markText } from "framework/search";
 import type { SearchResult, SiteSearch } from "framework/search";
 import { excerptAround } from "./excerpt.ts";
@@ -46,41 +47,28 @@ const go = (result: ShownResult | undefined): void => {
   void router.push(result.id);
 };
 
-const move = async (step: number): Promise<void> => {
-  const count = results.value.length;
-  if (count === 0) return;
-  selected.value = (selected.value + step + count) % count;
+const select = async (index: number): Promise<void> => {
+  selected.value = index;
   await nextTick();
   dialog.value?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
 };
 
-const keydown = (event: KeyboardEvent): void => {
-  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-    event.preventDefault();
-    void move(event.key === "ArrowDown" ? 1 : -1);
-  } else if (event.key === "Enter" && !event.isComposing) {
-    event.preventDefault();
-    go(results.value[selected.value]);
-  }
-};
+const keydown = (event: KeyboardEvent): void => onListboxKey(event, { count: results.value.length, selected: selected.value, select: (index) => void select(index), open: (index) => go(results.value[index]) });
 
 const closeOnBackdrop = (event: MouseEvent): void => {
   if (event.target === dialog.value) emit("close");
 };
 
-let returnFocus: Element | null = null;
+let closeModal: (() => void) | undefined;
 onMounted(() => {
-  returnFocus = document.activeElement;
-  dialog.value?.showModal();
+  if (dialog.value !== null) closeModal = openModal(dialog.value);
   input.value?.focus();
   void loadSearch().then((loaded) => {
     engine.value = loaded;
     void search();
   });
 });
-onBeforeUnmount(() => {
-  if (returnFocus instanceof HTMLElement) returnFocus.focus();
-});
+onBeforeUnmount(() => closeModal?.());
 </script>
 
 <template>

@@ -1,10 +1,10 @@
 <script setup lang="ts" vapor>
 import { computed, defineVaporAsyncComponent, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { onPageUpdated, RouterView, usePage } from "framework/client";
+import { isSearchShortcut } from "framework/behaviors";
+import { RouterView, usePage } from "framework/client";
 import { useActiveHeading } from "./active-heading.ts";
 import { data as groups } from "./sidebar.data.ts";
-import { mountTabs } from "./tabs.ts";
 import ThemeToggle from "./ThemeToggle.vue";
 
 const loadSearch = () => import("./Search.vue");
@@ -20,10 +20,6 @@ const position = computed(() => links.findIndex((link) => link.href === page.val
 const previous = computed(() => (position.value > 0 ? links[position.value - 1] : undefined));
 const next = computed(() => (position.value >= 0 ? links[position.value + 1] : undefined));
 
-onPageUpdated(() => {
-  const content = document.getElementById("content");
-  if (content !== null) mountTabs(content);
-});
 watch(
   () => route.path,
   () => {
@@ -31,14 +27,9 @@ watch(
   },
 );
 
-const isTextField = (target: EventTarget | null): boolean =>
-  target instanceof HTMLElement && (target.isContentEditable || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLInputElement && !["button", "checkbox", "radio", "reset", "submit"].includes(target.type)));
-
 const onKey = (event: KeyboardEvent): void => {
   if (event.key === "Escape" && menuOpen.value) menuOpen.value = false;
-  const controlK = event.key.toLowerCase() === "k" && (event.ctrlKey || event.metaKey);
-  const slash = event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey && !isTextField(event.target);
-  if (!controlK && !slash) return;
+  if (!isSearchShortcut(event)) return;
   event.preventDefault();
   searching.value = true;
 };
