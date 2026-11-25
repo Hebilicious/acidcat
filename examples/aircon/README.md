@@ -95,6 +95,17 @@ AIRCON_URL=http://localhost:8081/cli node core-effect/cli.ts aircon power set --
 AIRCON_URL=http://localhost:8082/cli core-rust/target/debug/aircon cli aircon power set --on
 ```
 
+With `AIRCON_SOCKET` set, a server serves on a new Unix socket at that path in place of an address, and prints `http://localhost/cli`. With `AIRCON_SOCKET` set, the command line connects through that socket. `AIRCON_URL` is still necessary: it gives the path and the `Host` header of each request. Unix sockets work on Linux and macOS:
+
+```sh
+AIRCON_SOCKET=aircon-ts.sock node core-ts/serve.ts
+AIRCON_SOCKET=aircon-ts.sock AIRCON_URL=http://localhost/cli node core-ts/cli.ts aircon power set --on
+AIRCON_SOCKET=aircon-effect.sock node core-effect/serve.ts
+AIRCON_SOCKET=aircon-effect.sock AIRCON_URL=http://localhost/cli node core-effect/cli.ts aircon power set --on
+AIRCON_SOCKET=aircon-rust.sock core-rust/target/debug/aircon serve
+AIRCON_SOCKET=aircon-rust.sock AIRCON_URL=http://localhost/cli core-rust/target/debug/aircon cli aircon power set --on
+```
+
 ### Command line only
 
 `aircon.status.export` writes the status to a file. Its audience is only `cli`, because only the command line gives its sessions the file system:

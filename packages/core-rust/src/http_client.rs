@@ -21,6 +21,7 @@ pub struct HttpClient {
     headers: Vec<(HeaderName, HeaderValue)>,
     trusted_certificates: Vec<String>,
     tls: Arc<rustls::ClientConfig>,
+    unix_socket: Option<std::path::PathBuf>,
 }
 
 impl std::fmt::Debug for HttpClient {
@@ -66,6 +67,7 @@ impl HttpClient {
             headers: Vec::new(),
             trusted_certificates: Vec::new(),
             tls: Arc::new(crate::client::tls_config(&[])),
+            unix_socket: None,
         })
     }
 
@@ -84,6 +86,14 @@ impl HttpClient {
     pub fn trust_certificate(mut self, pem: impl Into<String>) -> Self {
         self.trusted_certificates.push(pem.into());
         self.tls = Arc::new(crate::client::tls_config(&self.trusted_certificates));
+        self
+    }
+
+    /// Connect to the server through the Unix socket at `path`, with plain HTTP/1.1, in place of the host and the port of
+    /// the base URL. The base URL still gives the path and the `Host` header of each request, for example
+    /// `http://localhost/cli`. On a system that is not Unix, each call gives the call failure `unavailable`.
+    pub fn unix_socket(mut self, path: impl Into<std::path::PathBuf>) -> Self {
+        self.unix_socket = Some(path.into());
         self
     }
 
@@ -177,6 +187,16 @@ impl HttpClient {
         Ok(server_sent_events(answer.into_body()))
     }
 
+    async fn connect(
+        &self,
+        url: &Uri,
+    ) -> Result<hyper::client::conn::http1::SendRequest<Full<Bytes>>, &'static str> {
+        if let Some(path) = &self.unix_socket {
+            return crate::client::connect_unix(path).await;
+        }
+        crate::client::connect(url, &self.tls, &|_| true).await
+    }
+
     async fn send(
         &self,
         method: Method,
@@ -193,9 +213,7 @@ impl HttpClient {
         let url: Uri = format!("{}{path}", self.base)
             .parse()
             .map_err(|_| CallFailure::new(Kind::InvalidInput, format!("{path} is not a path.")))?;
-        let mut sender = crate::client::connect(&url, &self.tls, &|_| true)
-            .await
-            .map_err(|_| unreachable())?;
+        let mut sender = self.connect(&url).await.map_err(|_| unreachable())?;
         let mut request = Request::builder()
             .method(method)
             .uri(url.path_and_query().map_or("/", |path| path.as_str()))

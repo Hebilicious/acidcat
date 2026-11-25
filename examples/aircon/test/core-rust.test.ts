@@ -13,7 +13,7 @@ import { assertHelp } from "./help.ts";
 import type { Run } from "./run.ts";
 import { endsWith } from "./run.ts";
 import type { Stoppable } from "./run.ts";
-import { firstLine, startServer, subscriptionProxy } from "./server.ts";
+import { assertUnixSocketCli, firstLine, startServer, subscriptionProxy } from "./server.ts";
 import { shape, writtenText } from "./shape.ts";
 
 const aircon = new URL("target/debug/aircon", new URL("../core-rust/", import.meta.url)).pathname;
@@ -91,6 +91,10 @@ test("the Rust command line controls the unit of a server, and watch and follow 
   const exited = new Promise<number | null>((resolve) => watch.on("close", resolve));
   watch.kill("SIGINT");
   assert.equal(await exited, 130);
+});
+
+test("the Rust command line reaches a server on a Unix socket", async (context) => {
+  await assertUnixSocketCli(context, [aircon, "serve"], [aircon, "cli"]);
 });
 
 test("aircon.status.export writes a file through the command line", async (context) => {

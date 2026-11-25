@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, request as httpRequest } from "node:http";
 import { connect } from "node:net";
 import type { Socket } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
-import { serve } from "../src/node.ts";
+import { httpClient, httpHandler } from "../src/index.ts";
+import { serve, unixSocketFetch } from "../src/node.ts";
 import { checkClose, idleConnection } from "../../../test-support/idle-connection.ts";
+import { until } from "../../../test-support/until.ts";
+import { sensorOptions, Sensors, sensorsApp } from "./sensors.ts";
 
 test("one handler gets all paths, with the full URL, the method, the headers and the body", async () => {
   await using served = await serve(
@@ -184,4 +190,35 @@ test("serve closes no idle connection and sends no Keep-Alive header, so a clien
 
 test("close of serve resolves when each connection has ended, and cuts no request that the server accepted", async (t) => {
   await checkClose(t, (handler) => serve(handler, { port: 0 }));
+});
+
+test("a client with unixSocketFetch reaches a server on a Unix socket: capabilities, a call and a subscription that an abort closes", async (context) => {
+  const folder = await mkdtemp(join(tmpdir(), "acid-cat-"));
+  context.after(() => rm(folder, { recursive: true, force: true }));
+  const path = join(folder, "server.sock");
+  const sensors = new Sensors();
+  sensors.emit("kitchen", 21);
+  const handler = httpHandler(sensorsApp, { allowedOrigins: [], target: "api", base: "/api", ...sensorOptions(sensors) });
+  await using served = await serve({ "/api": handler }, { path });
+  assert.deepEqual([served.url, served.path], ["http://localhost", path]);
+  const client = httpClient(`${served.url}/api`, { fetch: unixSocketFetch(path) });
+
+  const capabilities = await client.capabilities();
+  assert.ok(capabilities instanceof Map);
+  assert.deepEqual(capabilities.get("sensor.read"), { available: true });
+  assert.deepEqual(await client.invoke("sensor.read", {}), { ok: true, value: { room: "kitchen", celsius: 21 } });
+
+  const abort = new AbortController();
+  const occurrences = await client.subscribe("sensor.reading.changed", {}, { signal: abort.signal });
+  assert.ok(Symbol.asyncIterator in occurrences);
+  await until(context, () => sensors.listeners === 1);
+  sensors.emit("hall", 19);
+  for await (const occurrence of occurrences) {
+    assert.deepEqual(occurrence.data, { room: "hall", celsius: 19 });
+    abort.abort();
+  }
+  await until(context, () => sensors.listeners === 0);
+
+  const missing = httpClient("http://localhost/api", { fetch: unixSocketFetch(join(folder, "missing.sock")) });
+  assert.deepEqual(await missing.capabilities(), { kind: "unavailable", message: "The server at http://localhost/api does not answer." });
 });

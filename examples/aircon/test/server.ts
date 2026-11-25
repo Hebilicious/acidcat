@@ -1,13 +1,32 @@
+import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import type { ChildProcessByStdio } from "node:child_process";
+import type { ChildProcessByStdio, SpawnOptions } from "node:child_process";
 import { once } from "node:events";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, request } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Readable } from "node:stream";
 import type { TestContext } from "node:test";
 
-export async function startServer(context: TestContext, command: string, args: readonly string[]): Promise<string> {
-  const server = spawn(command, args, { stdio: ["ignore", "pipe", "inherit"] });
+import { runCommand } from "./run.ts";
+
+export async function startServer(context: TestContext, command: string, args: readonly string[], options: SpawnOptions = {}): Promise<string> {
+  const server = spawn(command, args, { ...options, stdio: ["ignore", "pipe", "inherit"] });
   return (await firstLine(server, context)).trim();
+}
+
+export async function assertUnixSocketCli(context: TestContext, server: readonly [string, ...string[]], cli: readonly [string, ...string[]]): Promise<void> {
+  const folder = await mkdtemp(join(tmpdir(), "aircon-"));
+  context.after(() => rm(folder, { recursive: true, force: true }));
+  const [command, ...args] = server;
+  assert.equal(await startServer(context, command, args, { cwd: folder, env: { ...process.env, AIRCON_SOCKET: "aircon.sock" } }), "http://localhost/cli");
+  const env = { ...process.env, AIRCON_SOCKET: join(folder, "aircon.sock"), AIRCON_URL: "http://localhost/cli" };
+  const remote = (...args: string[]) => runCommand(context, cli[0], [...cli.slice(1), ...args], env);
+  assert.equal((await remote("aircon", "power", "set", "--on")).code, 0);
+  const status = await remote("aircon", "status", "get");
+  assert.equal(status.code, 0);
+  assert.partialDeepStrictEqual(JSON.parse(status.stdout), { power: true });
 }
 
 export function firstLine(child: ChildProcessByStdio<null, Readable, Readable | null>, context: TestContext): Promise<string> {

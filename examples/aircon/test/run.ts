@@ -15,7 +15,11 @@ export interface Stoppable {
 export const endsWith = (t: Stoppable) => ({ signal: t.signal, killSignal: "SIGKILL" }) as const;
 
 export function run(t: Stoppable, path: string, ...args: string[]): Promise<Run> {
-  const child = spawn(process.execPath, [path, ...args], { stdio: ["ignore", "pipe", "pipe"], ...endsWith(t) });
+  return runCommand(t, process.execPath, [path, ...args]);
+}
+
+export function runCommand(t: Stoppable, command: string, args: readonly string[], env: NodeJS.ProcessEnv = process.env): Promise<Run> {
+  const child = spawn(command, args, { env, stdio: ["ignore", "pipe", "pipe"], ...endsWith(t) });
   let stdout = "";
   let stderr = "";
   child.stdout.setEncoding("utf-8").on("data", (chunk: string) => (stdout += chunk));

@@ -14,12 +14,13 @@ if (colon <= 0 || !Number.isInteger(port) || port < 0 || port > 65_535) {
   process.exit(2);
 }
 
+const socket = process.env.AIRCON_SOCKET;
 const cli = Http.toWebHandler(aircon, unitLayer, { allowedOrigins: [], base: "/cli", target: "cli" });
 
 Effect.runFork(
   Effect.scoped(
     Effect.gen(function* () {
-      const served = yield* NodeServer.serve({ "/cli": cli }, { hostname, port });
+      const served = yield* NodeServer.serve({ "/cli": cli }, socket === undefined ? { hostname, port } : { path: socket });
       yield* Console.log(`${served.url}/cli`);
       return yield* Effect.never;
     }),

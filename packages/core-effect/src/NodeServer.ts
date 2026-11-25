@@ -1,7 +1,9 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
+import type { ListenOptions } from "node:net";
 
 import { Data, Effect, Exit, FiberSet, Layer } from "effect";
+import type { Scope } from "effect";
 
 export type WebHandler = (request: Request) => Promise<Response> | Response;
 
@@ -24,10 +26,21 @@ export interface ServeOptions {
   readonly hostname?: string | undefined;
 }
 
+export interface UnixServeOptions {
+  /** The path of a new Unix socket to listen on. Serving fails when a file is at this path. */
+  readonly path: string;
+}
+
 export interface Address {
   /** The base URL, for example `http://127.0.0.1:3000`. */
   readonly url: string;
   readonly port: number;
+}
+
+export interface UnixAddress {
+  /** The base URL to give with the path of the socket, `http://localhost`. Each request uses it for its path and its `Host` header. */
+  readonly url: string;
+  readonly path: string;
 }
 
 /** The server cannot listen, for example because the port is in use. `cause` is the error of Node.js. */
@@ -46,10 +59,19 @@ export class ServeError extends Data.TaggedError("ServeError")<{ readonly cause:
  * - The body of a request is a stream that reads from the connection only when the handler reads it.
  * - The headers of a response with a body go to the client before the first chunk of the body, so that a client of a
  *   stream, for example of server-sent events, gets the status before the first message.
+ *
+ * With `path`, the server listens on a Unix socket. Give its clients the layer `NodeHttpClient.layerUndiciOptions({
+ * connect: { socketPath } })` of `@effect/platform-node`.
  */
-export const serve = Effect.fnUntraced(function* (handler: WebHandler | Routes, options: ServeOptions = {}) {
+export function serve(handler: WebHandler | Routes, options: UnixServeOptions): Effect.Effect<UnixAddress, ServeError, Scope.Scope>;
+export function serve(handler: WebHandler | Routes, options?: ServeOptions): Effect.Effect<Address, ServeError, Scope.Scope>;
+export function serve(handler: WebHandler | Routes, options?: ServeOptions | UnixServeOptions): Effect.Effect<Address | UnixAddress, ServeError, Scope.Scope>;
+export function serve(handler: WebHandler | Routes, options: ServeOptions | UnixServeOptions = {}): Effect.Effect<Address | UnixAddress, ServeError, Scope.Scope> {
+  return serveOn(handler, options);
+}
+
+const serveOn = Effect.fnUntraced(function* (handler: WebHandler | Routes, options: ServeOptions | UnixServeOptions) {
   const route = router(handler);
-  const hostname = options.hostname ?? "127.0.0.1";
   // The scope closes the server first, which waits for the open requests. Then the set interrupts the fibers that are left.
   const run = yield* FiberSet.makeRuntime();
   // With `keepAliveTimeout: 0`, Node.js closes no idle connection and sends no `Keep-Alive` header, so a client never
@@ -61,8 +83,16 @@ export const serve = Effect.fnUntraced(function* (handler: WebHandler | Routes, 
     outgoing.on("finish", closeIfIdle);
     run(answer(incoming, outgoing, route));
   });
-  const port = yield* Effect.acquireRelease(listen(server, options.port ?? 3000, hostname), () => close(server));
-  const address: Address = { url: `http://${hostname.includes(":") ? `[${hostname}]` : hostname}:${port}`, port };
+  const listenOn = "path" in options ? { path: options.path } : { port: options.port ?? 3000, host: options.hostname ?? "127.0.0.1" };
+  yield* Effect.acquireRelease(listen(server, listenOn), () => close(server));
+  if ("path" in listenOn) {
+    const address: UnixAddress = { url: "http://localhost", path: listenOn.path };
+    return address;
+  }
+  const { host } = listenOn;
+  const listened = server.address();
+  const port = typeof listened === "object" && listened !== null ? listened.port : 0;
+  const address: Address = { url: `http://${host.includes(":") ? `[${host}]` : host}:${port}`, port };
   return address;
 });
 
@@ -70,17 +100,16 @@ export const serve = Effect.fnUntraced(function* (handler: WebHandler | Routes, 
  * A layer that serves the handlers while it is built. Run it as a program with `Layer.launch`, which serves until the
  * program is interrupted. See `serve` for the options.
  */
-export const layer = (handler: WebHandler | Routes, options: ServeOptions = {}): Layer.Layer<never, ServeError> =>
-  Layer.effectDiscard(serve(handler, options));
+export const layer = (handler: WebHandler | Routes, options: ServeOptions | UnixServeOptions = {}): Layer.Layer<never, ServeError> =>
+  Layer.effectDiscard(serveOn(handler, options));
 
-const listen = (server: Server, port: number, hostname: string) =>
-  Effect.callback<number, ServeError>((resume) => {
+const listen = (server: Server, options: ListenOptions) =>
+  Effect.callback<void, ServeError>((resume) => {
     const failed = (cause: unknown) => resume(Effect.fail(new ServeError({ cause })));
     server.once("error", failed);
-    server.listen(port, hostname, () => {
+    server.listen(options, () => {
       server.off("error", failed);
-      const address = server.address();
-      resume(Effect.succeed(typeof address === "object" && address !== null ? address.port : 0));
+      resume(Effect.void);
     });
   });
 

@@ -38,20 +38,39 @@ pub(crate) async fn connect(
         .map_err(|_| "connection_refused")?;
     let _ = stream.set_nodelay(true);
     if !secure {
-        let (sender, connection) =
-            hyper::client::conn::http1::handshake(hyper_util::rt::TokioIo::new(stream))
-                .await
-                .map_err(|_| "connection_refused")?;
-        tokio::spawn(connection);
-        return Ok(sender);
+        return handshake(stream).await;
     }
     let server_name = rustls::pki_types::ServerName::try_from(host).map_err(|_| "tls_error")?;
     let tls = tokio_rustls::TlsConnector::from(tls.clone())
         .connect(server_name, stream)
         .await
         .map_err(|_| "tls_error")?;
+    handshake(tls).await
+}
+
+#[cfg(unix)]
+pub(crate) async fn connect_unix(
+    path: &std::path::Path,
+) -> Result<SendRequest<Full<Bytes>>, &'static str> {
+    let stream = tokio::net::UnixStream::connect(path)
+        .await
+        .map_err(|_| "connection_refused")?;
+    handshake(stream).await
+}
+
+#[cfg(not(unix))]
+pub(crate) async fn connect_unix(
+    _path: &std::path::Path,
+) -> Result<SendRequest<Full<Bytes>>, &'static str> {
+    Err("connection_refused")
+}
+
+async fn handshake<S>(stream: S) -> Result<SendRequest<Full<Bytes>>, &'static str>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
+{
     let (sender, connection) =
-        hyper::client::conn::http1::handshake(hyper_util::rt::TokioIo::new(tls))
+        hyper::client::conn::http1::handshake(hyper_util::rt::TokioIo::new(stream))
             .await
             .map_err(|_| "connection_refused")?;
     tokio::spawn(connection);

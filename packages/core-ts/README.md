@@ -251,6 +251,7 @@ console.log(server.url); // http://127.0.0.1:3000
 - `serve` takes one handler, or handlers by path prefix. The longest matching prefix wins, and `/` matches every path. The MCP handler answers on every path, so give it its own prefix. No match gets `404`; a handler that rejects gets `500`.
 - `port` defaults to `3000`; `0` picks a free port (read it from `server.port`). `hostname` defaults to `127.0.0.1`; use `0.0.0.0` or `::` to accept network connections.
 - `serve` resolves once the server listens. `server.close()` or `await using` stops it. A closed client connection aborts the request's signal, which cancels the call.
+- `serve(handler, { path })` listens on a new Unix socket at `path` in place of a port, for example in a private data folder. It rejects when a file is at `path`. The result has `path`, and the `url` `http://localhost` to give with the socket. `close` removes the socket file. Windows named pipes are not supported.
 
 `serve` is plain HTTP/1.1. It closes no idle connection and sends no `Keep-Alive` header, as hyper and Go's `net/http` do by default. The client or the proxy in front closes an idle connection. A client that sends a request on an idle connection at the moment when the server closes it gets `ECONNRESET`. Undici (the `fetch` of Node.js) keeps an idle connection for the `Keep-Alive` time of the server less 2 s, and proxies keep one for 60 s (AWS load balancers, nginx) to 90 s (Cloudflare Tunnel) or more, so every idle timeout of the server leaves this race open. `close()` stops the server from accepting connections, ends each idle connection at once, and ends each other connection when both its request and its response are complete, so it cuts no request that the server accepted. It resolves when every connection has ended, so a response that does not end, such as an open event stream, keeps it waiting. For network clients, terminate TLS on the platform in front of it (a load balancer, a Kubernetes ingress, Cloudflare Tunnel) and set `hostname` so the platform can connect. For in-process HTTPS, HTTP/2, middleware, or Bun and Deno, give the handler to a library such as [srvx](https://srvx.h3.dev). Check that it aborts the request's signal when the client disconnects, or calls are not cancelled.
 
@@ -469,6 +470,18 @@ cliMain(aircon, { name: "aircon", version: "0.1.0", context: { unit: new Unit() 
 ```
 
 The client also works alone: `capabilities()`, `invoke(id, input, { signal })` and `subscribe(id, input, { signal, cursor, maxAgeMs })`. No method rejects; each returns the call failure.
+
+To reach a server on a Unix socket, give the fetch of `unixSocketFetch(path)` from `@acid-cat/core-ts/node`. It sends plain HTTP/1.1 through the socket, and the URL gives the path and the `Host` header. A socket that does not exist gives `unavailable`. With `AIRCON_SOCKET` set, the command line of the example does this:
+
+```ts
+import { unixSocketFetch } from "@acid-cat/core-ts/node";
+
+// On the server.
+serve({ "/cli": cli }, { path: "/var/lib/aircon/aircon.sock" });
+
+// In the command line.
+const remote = httpClient("http://localhost/cli", { fetch: unixSocketFetch("/var/lib/aircon/aircon.sock") });
+```
 
 ## Examples and tests
 

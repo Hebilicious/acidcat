@@ -432,3 +432,56 @@ async fn a_provider_that_panics_before_it_gives_its_work_fails_as_internal() {
     assert_eq!(failure.kind, Kind::Internal);
     assert_eq!(*defects.lock().unwrap(), ["test.panics", "test.broken"]);
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_client_reaches_a_server_on_a_unix_socket_and_a_missing_socket_is_unavailable() {
+    use acid_cat_core::http::{HttpClient, HttpOptions, HttpSurface};
+    let folder = std::env::temp_dir().join(format!("acid-cat-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&folder).unwrap();
+    let socket = folder.join("server.sock");
+    let surface = HttpSurface::new(
+        application(),
+        Arc::new(Services::default()),
+        HttpOptions {
+            target: "mcp".into(),
+            base: "/mcp".into(),
+            ..HttpOptions::default()
+        },
+    );
+    let served =
+        acid_cat_core::remote::serve_unix(&socket, vec![("/mcp".into(), Arc::new(surface))])
+            .await
+            .unwrap();
+    let client = HttpClient::new(&format!("{}/mcp", served.url()))
+        .unwrap()
+        .unix_socket(&socket);
+
+    let listed = client.capabilities().await.unwrap();
+    assert!(listed.iter().any(|(id, _)| id == "test.echo"), "{listed:?}");
+    assert_eq!(
+        client.invoke("test.echo", &json!({ "text": "hi" })).await,
+        Outcome::Value(json!({ "text": "hi" }))
+    );
+    let first = client
+        .subscribe("test.slow", &json!({}), None, None)
+        .await
+        .unwrap()
+        .next()
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(first.name, "test.slow");
+
+    let missing = HttpClient::new("http://localhost/mcp")
+        .unwrap()
+        .unix_socket(folder.join("missing.sock"));
+    assert_eq!(
+        missing.capabilities().await.unwrap_err().kind,
+        Kind::Unavailable
+    );
+
+    served.close().await;
+    assert!(!socket.exists(), "close removes the socket file");
+    std::fs::remove_dir_all(&folder).unwrap();
+}

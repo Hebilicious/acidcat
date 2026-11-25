@@ -209,6 +209,7 @@ Layer.launch(NodeServer.layer({ "/mcp": mcp, "/": http }, { port: 3000 })).pipe(
 | --- | --- | --- |
 | `port` | `3000` | The port. With `0`, the system picks a free port |
 | `hostname` | `127.0.0.1` | The address. The default accepts connections only from the same computer. Use `0.0.0.0` or `::` to accept connections from the network |
+| `path` | none | The path of a new Unix socket, in place of `port` and `hostname`. The address is then `{ url: "http://localhost", path }`. Serving fails with `ServeError` when a file is at `path`, and the socket file goes away when the scope closes. Windows named pipes are not supported |
 
 `@acid-cat/core-effect/NodeServer` needs only Node.js. `@acid-cat/core-effect/node` also exports it, with `NodeWebhook`, `NodeCli` and `NodeMcp` (these last two need `@effect/platform-node`).
 
@@ -608,7 +609,8 @@ NodeCli.main(aircon, unitLayer, {
 ```
 
 - `options.headers` go on each request and are never written to the output.
-- `options.layer` gives the `effect/http` client. The default `FetchHttpClient.layer` uses `globalThis.fetch`; pass another, for example to trust a certificate.
+- `options.layer` gives the `effect/http` client. The default `FetchHttpClient.layer` uses `globalThis.fetch`; pass another, for example to trust a certificate. The client builds the layer for each request, and keeps it until the response is read.
+- To reach a server on a Unix socket, pass `NodeHttpClient.layerUndiciOptions({ connect: { socketPath } })` from `@effect/platform-node/NodeHttpClient`, with a base URL such as `http://localhost/cli`. The URL gives the path and the `Host` header. A socket that does not exist gives `unavailable`. Serve with `NodeServer.serve(handler, { path })`. With `AIRCON_SOCKET` set, [`examples/aircon/core-effect/cli.ts`](../../examples/aircon/core-effect/cli.ts) does this.
 - `Http.client` throws when `base` is not an `http` or `https` URL or a header is invalid. The message contains no header value.
 - No session opens in the process, but `NodeCli.main` still builds the services layer.
 
