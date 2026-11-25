@@ -475,22 +475,40 @@ pub async fn run_cli_process<C: Send + Sync + 'static>(
 fn listen_for_interrupt(cancel: CancellationToken) {
     #[cfg(unix)]
     {
-        use tokio::signal::unix::{SignalKind, signal};
-        if let Ok(mut interrupts) = signal(SignalKind::interrupt()) {
-            tokio::spawn(async move {
-                if interrupts.recv().await.is_some() {
-                    cancel.cancel();
-                    // A second interrupt that came while the cancellation ran exits at once, before the grace
-                    // period starts.
-                    if interrupts.recv().now_or_never().flatten().is_none() {
-                        start_grace_period();
-                        if interrupts.recv().await.is_none() {
-                            return;
+        // A thread with its own runtime, so that a call or a subscription that blocks every thread of the runtime of the
+        // command line cannot hold back an interrupt.
+        let (listening, listens) = std::sync::mpsc::channel();
+        let cancelled = cancel.clone();
+        let started = std::thread::Builder::new()
+            .name("acid-cat-interrupts".to_owned())
+            .spawn(move || {
+                use tokio::signal::unix::{SignalKind, signal};
+                let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                else {
+                    return;
+                };
+                runtime.block_on(async move {
+                    let Ok(mut interrupts) = signal(SignalKind::interrupt()) else {
+                        return;
+                    };
+                    let _ = listening.send(());
+                    if interrupts.recv().await.is_some() {
+                        cancelled.cancel();
+                        // A second interrupt that came while the cancellation ran exits at once, before the grace
+                        // period starts.
+                        if interrupts.recv().now_or_never().flatten().is_none() {
+                            start_grace_period();
+                            if interrupts.recv().await.is_none() {
+                                return;
+                            }
                         }
+                        std::process::exit(exit::CANCELLED);
                     }
-                    std::process::exit(exit::CANCELLED);
-                }
+                });
             });
+        if started.is_ok() && listens.recv().is_ok() {
             return;
         }
     }
