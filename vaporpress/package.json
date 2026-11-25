@@ -1,0 +1,29 @@
+{
+  "name": "vaporpress",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@vitejs/plugin-vue": "catalog:vapor",
+    "@vue/compiler-sfc": "catalog:vapor",
+    "satteri": "catalog:vapor",
+    "sharp": "catalog:",
+    "vue": "catalog:vapor",
+    "vue-router": "catalog:vapor",
+    "vite": "catalog:",
+    "yaml": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "playwright": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./vite": "./src/vite.ts",
+    "./client": "./src/client/index.ts",
+    "./behaviors": "./src/behaviors/index.ts",
+    "./markdown": "./src/markdown.ts",
+    "./data": "./src/data.ts",
+    "./image": "./src/image-module.d.ts"
+  }
+}
