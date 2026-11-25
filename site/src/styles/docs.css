@@ -39,9 +39,11 @@
 
 html:has(.page) {
   scroll-padding-top: calc(1.5rem + var(--sl-nav-height) + var(--sl-mobile-toc-height));
-  /* A software rasterizer draws an OKLab gradient slowly. This one fades one color to transparent, so sRGB looks the same. */
+  /* A software rasterizer draws an OKLab gradient slowly. This one fades one color to transparent, so sRGB looks the same.
+     Without repeat, Chromium rasters only the tiles on screen. The page is at least as tall as the window, so the gradient
+     fills all that the reader can see either way. */
   background:
-    radial-gradient(ellipse 70% 40% at 80% 0% in srgb, color-mix(in oklch, var(--palette-acid-400) 4%, transparent), transparent 60%),
+    radial-gradient(ellipse 70% 40% at 80% 0% in srgb, color-mix(in oklch, var(--palette-acid-400) 4%, transparent), transparent 60%) no-repeat,
     var(--palette-ink-900);
 }
 
