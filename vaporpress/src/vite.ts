@@ -18,6 +18,7 @@ import { searchIndexJson, searchMeta } from "./search-index.ts";
 import { devPageUrl, devSearchIndexUrl } from "./search-shared.ts";
 
 export type { BuildFiles } from "./prerender.ts";
+export { inlineScript } from "./inline-script.ts";
 
 export interface VaporpressOptions extends DocumentOptions {
   /** The folder of the site. The default is the folder where Vite runs. */

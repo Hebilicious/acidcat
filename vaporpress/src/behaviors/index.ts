@@ -2,6 +2,8 @@
 export { observeActiveHeading } from "./active-heading.ts";
 export { copyCodeOnClick } from "./copy-code.ts";
 export type { CopyButtons } from "./copy-code.ts";
+export { openDialogOnInput } from "./dialog.ts";
+export type { DialogOpeners } from "./dialog.ts";
 export { onListboxKey } from "./listbox.ts";
 export type { Listbox } from "./listbox.ts";
 export { openModal } from "./modal.ts";

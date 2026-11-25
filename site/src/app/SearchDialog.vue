@@ -3,8 +3,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, wa
 import { onListboxKey, openModal } from "vaporpress/behaviors";
 import { loadExcerpt, loadSearch, markTerms, markText } from "vaporpress/search";
 import type { SearchResult, SiteSearch } from "vaporpress/search";
+import { readStorage, searchQueryKey } from "./search-input.ts";
 
-const emit = defineEmits<{ close: []; go: [path: string] }>();
+const props = defineProps<{ open: boolean }>();
+const emit = defineEmits<{ open: []; close: []; go: [path: string] }>();
 
 interface ShownResult extends SearchResult {
   readonly titlesHtml: readonly string[];
@@ -12,13 +14,6 @@ interface ShownResult extends SearchResult {
   readonly excerpt: string;
 }
 
-const readStorage = (storage: () => Storage, key: string): string | null => {
-  try {
-    return storage().getItem(key);
-  } catch {
-    return null;
-  }
-};
 const writeStorage = (storage: () => Storage, key: string, value: string): void => {
   try {
     storage().setItem(key, value);
@@ -27,15 +22,17 @@ const writeStorage = (storage: () => Storage, key: string, value: string): void 
   }
 };
 
-const queryKey = "acidcat:search-query";
 const detailedKey = "acidcat:search-detailed";
 
 const dialog = useTemplateRef<HTMLDialogElement>("dialog");
 const input = useTemplateRef<HTMLInputElement>("input");
 const list = useTemplateRef<HTMLElement>("list");
 
-const query = ref(readStorage(() => sessionStorage, queryKey) ?? "");
-const detailed = ref(readStorage(() => localStorage, detailedKey) === "true");
+// Hydration adopts the field of the dialog that `openSearchOnInput` opened before the app, with the text that the reader typed in it.
+const typedBeforeHydration = import.meta.env.SSR ? undefined : document.querySelector<HTMLInputElement>("#search-dialog[open] input")?.value;
+const stored = (storage: () => Storage, key: string): string | null => (import.meta.env.SSR ? null : readStorage(storage, key));
+const query = ref(typedBeforeHydration ?? stored(() => sessionStorage, searchQueryKey) ?? "");
+const detailed = ref(stored(() => localStorage, detailedKey) === "true");
 const engine = ref<SiteSearch>();
 const failed = ref(false);
 const results = ref<readonly ShownResult[]>([]);
@@ -66,7 +63,7 @@ const search = async (): Promise<void> => {
 
 watch(query, () => {
   searched.value = false;
-  writeStorage(() => sessionStorage, queryKey, query.value);
+  writeStorage(() => sessionStorage, searchQueryKey, query.value);
   void search();
 });
 watch(detailed, () => {
@@ -118,11 +115,14 @@ const toggleDetails = (): void => {
 
 let closeModal: (() => void) | undefined;
 
-onMounted(() => {
-  document.documentElement.dataset["searchOpen"] = "";
-  if (dialog.value !== null) closeModal = openModal(dialog.value);
-  input.value?.focus();
-  input.value?.select();
+const show = (element: HTMLDialogElement): void => {
+  const typing = element.open;
+  closeModal = openModal(element);
+  failed.value = false;
+  if (!typing) {
+    input.value?.focus();
+    input.value?.select();
+  }
   loadSearch().then(
     (loaded) => {
       engine.value = loaded;
@@ -132,16 +132,30 @@ onMounted(() => {
       failed.value = true;
     },
   );
+};
+
+const hide = (): void => {
+  closeModal?.();
+  closeModal = undefined;
+};
+
+watch(
+  () => props.open,
+  (open) => {
+    if (!open) hide();
+    else if (dialog.value !== null) show(dialog.value);
+  },
+);
+
+onMounted(() => {
+  if (dialog.value?.open === true) emit("open");
 });
 
-onBeforeUnmount(() => {
-  delete document.documentElement.dataset["searchOpen"];
-  closeModal?.();
-});
+onBeforeUnmount(hide);
 </script>
 
 <template>
-  <dialog ref="dialog" class="search-dialog" aria-labelledby="search-label" @keydown="keydown" @cancel="cancel">
+  <dialog id="search-dialog" ref="dialog" class="search-dialog" aria-labelledby="search-label" @keydown="keydown" @cancel="cancel">
     <div class="search-backdrop" @click="close" />
     <div class="search-shell">
       <form class="search-bar" @submit.prevent>
@@ -222,7 +236,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-  :root[data-search-open] {
+  :root:has(.search-dialog[open]) {
     overflow: hidden;
   }
 

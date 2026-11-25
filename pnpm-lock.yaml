@@ -798,6 +798,9 @@ importers:
       '@vue/compiler-sfc':
         specifier: 'catalog:'
         version: 3.6.0-rc.16
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.2
       hast-util-from-html:
         specifier: 'catalog:'
         version: 2.0.3

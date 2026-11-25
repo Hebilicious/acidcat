@@ -215,7 +215,8 @@ const home = computed(() => page.value.path === "/");
 | `observeActiveHeading(headings, line, change)` | Calls `change` with the id of the last heading above a line under the top of the window, each time it changes. It reads no layout |
 | `isSearchShortcut(event)`, `isTextField(target)` | Control+K or Command+K anywhere, or `/` outside a text field |
 | `onListboxKey(event, { count, selected, select, open })` | ArrowDown and ArrowUp select the next and the previous option of a list box, around its ends, and Enter opens the selected option |
-| `openModal(dialog)` | Opens a dialog as a modal, and returns the function that closes it and gives the focus back |
+| `openDialogOnInput({ control, dialog, shortcut, opened })` | One click listener and one keydown listener on the document: a click on a control or the shortcut opens the dialog as a modal, and calls `opened`. A dialog that is open already stays as it is |
+| `openModal(dialog)` | Opens a dialog as a modal, and returns the function that closes it and gives the focus back. A dialog that is open already stays open, and the browser gives the focus back when it closes |
 
 ```ts
 import { listenToTabs, selectTab } from "vaporpress/behaviors";
@@ -229,6 +230,41 @@ listenToTabs({
 });
 ```
 
+### A control that answers before hydration
+
+On a slow phone, the app of a page hydrates some seconds after the first paint. A control that needs the app does nothing until then. A control can answer at once when its HTML and its CSS are in the page, and when an inline script gives it its behavior:
+
+1. The server renders the control, closed, in the HTML of each page: for example, a component that always renders its `<dialog>`, and opens it with `openModal` when its state says so.
+2. `inlineScript(file)` of `vaporpress/vite` bundles a module into an inline `<script>`. Give it to `headHtml`, or add it to some pages with `transformHtml`. The script runs while the HTML parses, before any module script.
+3. The module calls a behavior, such as `listenToTabs` or `openDialogOnInput`. The behavior changes only the DOM, so the component reads its state from the DOM when it hydrates.
+4. When the component hydrates, it takes what the reader did: a component reads the text of a field before `v-model` writes its own value, and treats a dialog that is open as open.
+
+```ts
+// src/search-input.ts, in an inline script of each page
+import { isSearchShortcut, openDialogOnInput } from "vaporpress/behaviors";
+import { preloadSearchIndex } from "vaporpress/search";
+
+openDialogOnInput({
+  control: ".search-button",
+  dialog: "#search",
+  shortcut: isSearchShortcut,
+  opened: (dialog) => {
+    dialog.querySelector("input")?.focus();
+    preloadSearchIndex();
+  },
+});
+```
+
+```ts
+// vite.config.ts
+import { inlineScript, vaporpress } from "vaporpress/vite";
+
+const searchScript = await inlineScript(fileURLToPath(new URL("src/search-input.ts", import.meta.url)));
+export default defineConfig({ plugins: vaporpress({ app: "src/app.ts", search: true, headHtml: searchScript }) });
+```
+
+The component of such a control hydrates with the page, so its code is in the scripts that the page loads at once, and not in a chunk that loads on the first click. The fixture app of the benchmark (`benchmarks/apps/framework/`) and the AcidCat site give their search dialog this behavior. On the AcidCat site, the dialog adds 0.6 kB to the HTML of a docs page with Brotli, its CSS 0.7 kB, and the inline script of the tabs and the search is 1.2 kB.
+
 ## Search
 
 The framework gives the index and the engine of a search. The site gives the dialog, in its own style.
@@ -240,6 +276,7 @@ The framework gives the index and the engine of a search. The site gives the dia
 ```ts
 import { loadExcerpt, loadSearch, markText } from "vaporpress/search";
 
+preloadSearchIndex(); // starts the download of the index at a low priority, with no script, for example in an inline script
 const search = await loadSearch(); // loads the engine and the index once
 const results = search.search("catalog"); // [{ id: "/guide/catalog/#writing-a-catalog", title, titles, terms, score }]
 const html = await loadExcerpt(results[0].id); // the content under the heading, from the HTML file of the page
@@ -253,6 +290,7 @@ The search finds words by prefix, and with one wrong letter in five. A match in 
 | Import | Export | Use |
 | --- | --- | --- |
 | `vaporpress/vite` | `vaporpress(options)` | The Vite plugins: Markdown pages, Vue in Vapor mode, routes from files, data modules, the dev server and the static build |
+| | `inlineScript(file)` | Bundles a module and its imports into one inline `<script>` element, for the head of a page. See [A control that answers before hydration](#a-control-that-answers-before-hydration) |
 | `vaporpress/client` | `defineSite(site)` | The site: `layout`, `title`, `head`, `scrollBehavior` and `enhance({ app, router })` |
 | | `RouterView` | Shows the page of the current route. It is a Vapor component, so the site loads no virtual DOM renderer |
 | | `defineLazyLayout(loader, usedBy)` | A layout in a chunk of its own, which the router loads before a page change to a page that uses it. See [Lazy layouts](#lazy-layouts) |
@@ -261,8 +299,9 @@ The search finds words by prefix, and with one wrong letter in five. A match in 
 | | `prefetchPage(router, path)` | Loads the chunk of a page before the reader goes to it |
 | | `Router` | The type of the router of the site, from Vue Router |
 | `vaporpress/data` | `defineLoader({ load, watch })`, `LoadedData` | A module of data that the build reads once |
-| `vaporpress/behaviors` | `listenToTabs`, `selectTab`, `copyCodeOnClick`, `observeActiveHeading`, `isSearchShortcut`, `isTextField`, `onListboxKey`, `openModal` | The logic of tabs, copy buttons, the table of contents and a search dialog, with no markup and no styles. See [Behaviors](#behaviors) |
+| `vaporpress/behaviors` | `listenToTabs`, `selectTab`, `copyCodeOnClick`, `observeActiveHeading`, `isSearchShortcut`, `isTextField`, `onListboxKey`, `openDialogOnInput`, `openModal` | The logic of tabs, copy buttons, the table of contents and a search dialog, with no markup and no styles. See [Behaviors](#behaviors) |
 | `vaporpress/search` | `loadSearch()`, `SiteSearch`, `SearchResult` | Loads the engine and the index of the site, once. `search(query, limit)` gives the sections that match, best first |
+| | `preloadSearchIndex()` | Starts the download of the index at a low priority, so that `loadSearch` takes it from the cache. It loads no script |
 | | `loadExcerpt(id)`, `sectionHtml(document, id)` | The HTML of the content of a section, with no `id` and no reference to an id, so it can show in another page |
 | | `markText(text, terms)`, `markTerms(html, terms)` | HTML with each match of the terms in `<mark>` |
 | `vaporpress/image` | — | The type of an import with `?image`, for a declaration file of the site |
@@ -354,7 +393,7 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 `moon run vaporpress:test` runs `test/`:
 
 - `markdown.test.ts`: the page data, the heading ids and the table of contents, components and `<script setup>` in Markdown, code that Vue does not compile, the highlighter, `transformSource`, and the lean copy of a component, which keeps the templates that hydration may not meet.
-- `behaviors.test.ts`: in Chromium, the tabs with a click and with the arrow keys, the search shortcuts, the keys of a list box and the focus that comes back when a modal closes, a copy button, and the active heading as the page scrolls.
+- `behaviors.test.ts`: in Chromium, the tabs with a click and with the arrow keys, the search shortcuts, the keys of a list box and the focus that comes back when a modal closes, a dialog that a control or a shortcut opens once, a copy button, and the active heading as the page scrolls.
 - `site-definition.test.ts`: the checks of a site definition and of a component, and that `defineLazyLayout` throws in the setup of a component.
 - `site.test.ts`: builds `test/fixture/` and serves `dist/`. It checks the HTML, the head and the lean chunk of each page, that the build checks each lazy layout once for each page, the data of a data module, and the search index: its name, its meta element, and the content that it leaves out. In Chromium, it checks that the search finds a section under its headings, marks the words that match, gives the excerpt of the section, and goes to a result with no new document. In Chromium, it checks that hydration changes no element of the DOM and logs no mismatch, that components respond, that a click changes the page with no new document and updates the head, that a lazy layout renders in the same task as the page that uses it and hydrates with the first page, that a page change loads a new document when the chunk of its page or of its layout does not load, that the first page keeps its HTML and its links when a chunk of the page does not load, that a prefetch link fetches the chunk of a link in view before the click and the page change takes it from the cache, that the chunk of a link under the pointer loads at once, that the scroll position comes back on Back and on Forward, that a hash goes to its heading, that the skip link moves the focus past the header, that a branch of `v-if`, `v-else` or `v-for` that the server did not render shows after hydration and after a page change, and that an unknown path shows the 404 page.
 - `dev.test.ts`: the dev server serves a page, a click changes the page, and the search finds a section and its excerpt.

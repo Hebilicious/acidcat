@@ -23,7 +23,7 @@ The workflow [`benchmark.yml`](../.github/workflows/benchmark.yml) runs both sui
 | JavaScript decoded | The bytes of script that the browser must read, without compression | The same requests, their size after decompression |
 | Total transferred, requests | The full cost of the first visit on a metered connection | The same requests. Requests to other origins are counted apart |
 | Tab responds | The time until a click on a tab works | From the start of the navigation, a probe clicks the second tab every 50 ms. The time of the first click that selects it. A click before that does nothing, so the probe does not change the page. A site can make its tabs work before its other scripts: the AcidCat site on vaporpress runs a small inline script for them, so this row does not tell when the rest of the page responds |
-| Search button responds | The time until a control that needs the scripts of the framework works | From the start of the navigation, a probe clicks the search button every 50 ms. The time of the first paint that shows the search field. In each app, the search button needs the scripts of the framework, and the time includes the code of the dialog when the app loads it on the first click |
+| Search button responds | The time until the search button works | From the start of the navigation, a probe clicks the search button every 50 ms. The time of the first paint that shows the search field. The fixture and the AcidCat site on vaporpress have the closed dialog in their HTML, and a small inline script opens it before the app hydrates. Astro and Starlight also have the dialog in the HTML. In VitePress and Docus, the search button needs the scripts of the framework, and the time includes the code of the dialog when the app loads it on the first click |
 | Tab switch | The delay of a click on a tab | A real click on the third tab, from the press to the first paint that shows it selected |
 | Search | The delay until the search field shows | A real click on the search button, from the press to the first paint that shows the field |
 | Page change, cold | A click on a sidebar link, as soon as the page has loaded | From the press to the first paint with the `h1` of the new page. Only what the framework loaded before the click helps |
@@ -44,7 +44,7 @@ Each table cell is the median of all the runs of all the jobs, and between brack
 
   | App | Setup | Tabs | Search |
   | --- | --- | --- | --- |
-  | [`apps/framework`](apps/framework/) | vaporpress, with a layout written for the benchmark in the way that a vaporpress site builds one (`site/src/app/` of the AcidCat site is the model), Shiki for code | Static HTML from Markdown, made interactive with `onPageUpdated` | The index and the engine of vaporpress, in a dialog that the page loads when the pointer or the focus comes to the search button |
+  | [`apps/framework`](apps/framework/) | vaporpress, with a layout written for the benchmark in the way that a vaporpress site builds one (`site/src/app/` of the AcidCat site is the model), Shiki for code | Static HTML from Markdown, made interactive with `onPageUpdated` | The index and the engine of vaporpress, in a dialog that is in the HTML of each page. An inline script opens it before the app hydrates, with `openDialogOnInput` of `vaporpress/behaviors` |
   | [`apps/vitepress`](apps/vitepress/) | VitePress 2 with its default theme | `::: code-group` | Local search |
   | [`apps/starlight`](apps/starlight/) | Astro and Starlight | `<Tabs>` in MDX | Pagefind |
   | [`apps/nuxt`](apps/nuxt/) | Nuxt, Nuxt Content and the Docus theme, statically generated with `nuxt generate` | `::code-group` | Docus search |
@@ -262,6 +262,6 @@ Each job writes `results/<suite>-<job>/results.json`, with each sample, and the 
 
 ## Tests
 
-`moon run benchmarks:test` tests the transform of the fixture for each framework, the static server, and the statistics and the tables of the results. It builds the vaporpress app, and checks its features in Chromium: the theme before the first paint and the switch, the mobile menu, the copy button, the search with its excerpts and its keys, the table of contents, the previous and next pages, the keys of the tabs, and every rule of axe-core, which `axe.getRules()` lists (`test/framework-app.test.ts`). It does not measure.
+`moon run benchmarks:test` tests the transform of the fixture for each framework, the static server, and the statistics and the tables of the results. It builds the vaporpress app, and checks its features in Chromium: the theme before the first paint and the switch, the mobile menu, the copy button, the search with its excerpts and its keys, the search that opens before the app hydrates, the table of contents, the previous and next pages, the keys of the tabs, and every rule of axe-core, which `axe.getRules()` lists (`test/framework-app.test.ts`). It does not measure.
 
 The framework app imports the framework as `framework`, an alias in [`apps/framework/package.json`](apps/framework/package.json). A new name of the framework changes that line, and the name of its Vite plugin in `apps/framework/vite.config.ts` when that name changes too.

@@ -9,7 +9,7 @@ import type { Route } from "./routes.ts";
 const sources: readonly (readonly [RegExp, Route])[] = [
   [/\/site\/src\/styles\/(docs|content|explorer|diagrams)\.css$/, "docs"],
   [/\/site\/src\/components\/PackagesPage\.vue$/, "docs"],
-  [/\/site\/src\/app\/SearchDialog\.vue$/, "search"],
+  [/\/site\/src\/app\/SearchDialog\.vue$/, "docs"],
   [/\/site\/content\/index\.vue$/, "home"],
   [/\/site\/src\/styles\/home\.css$/, "home"],
   [/\/site\/src\/components\/[^/]+\.vue$/, "home"],
@@ -95,7 +95,7 @@ const pagePath = (dist: string, file: string): string => `/${relative(dist, file
 /**
  * Writes into each page the CSS that every page shares and the CSS of its route, so that no request for a stylesheet
  * blocks the first render, and writes the CSS of each route into its own file in `/assets/`. The page names those
- * files in `#route-styles`, and loads one when the reader goes to another route or opens the search.
+ * files in `#route-styles`, and loads one when the reader goes to another route.
  */
 export const inlineStyles = async (dist: string): Promise<void> => {
   const entries = await readdir(dist, { withFileTypes: true, recursive: true });

@@ -49,7 +49,7 @@ const choose = (group: HTMLElement, tab: HTMLElement): void => {
 /**
  * Gives every tab group its behavior with one listener on the document: a click or an arrow key selects a tab, and the
  * choice in a group with a sync key applies to each group with that key, on this page and on the next ones. The HTML
- * of each docs page runs it inline (`tab-input.ts`), so a tab responds before any module script runs, and the layout of
+ * of each docs page runs it inline (`page-input.ts`), so a tab responds before any module script runs, and the layout of
  * the docs runs it for a page that the reader reached from the homepage. The attribute on the root element keeps it to
  * one listener, because the inline copy and the module copy do not share their variables.
  */
