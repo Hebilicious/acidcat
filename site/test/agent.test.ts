@@ -9,6 +9,7 @@ import { serve } from "@acid-cat/core-ts/node";
 import type { Served } from "@acid-cat/core-ts/node";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { chromium } from "playwright";
+import type { Page } from "playwright";
 import { site, toJsonSchema } from "../src/lib/agent/app.ts";
 import { siteContext, SiteContent } from "../src/lib/agent/content.ts";
 import { catalogPath } from "../src/lib/agent/write-catalog.ts";
@@ -155,19 +156,31 @@ test("the HTTP API reads a page", async () => {
   assert.equal(outcome["value"]["title"], "Catalog");
 });
 
-test("a browser with WebMCP gets the tools of the site when the page loads, and a browser without it loads none of their code", async () => {
+test("a browser with WebMCP gets the tools of the site when the page loads, and a browser without it loads none of their code", async (t) => {
   if (assets === undefined) throw new Error("No server.");
+  const toolNames = ["site.packages.list", "site.pages.list", "site.pages.read", "site.pages.search"];
   const browser = await chromium.launch({ args: ["--enable-features=WebMCP"] });
-  const page = await browser.newPage();
-  const scripts = (target: typeof page): string[] => {
+  t.after(() => browser.close());
+  const plain = await chromium.launch();
+  t.after(() => plain.close());
+  const scripts = (target: Page): string[] => {
     const loaded: string[] = [];
     target.on("request", (request) => {
       if (request.resourceType() === "script") loaded.push(new URL(request.url()).pathname);
     });
     return loaded;
   };
+  const page = await browser.newPage();
   const withTools = scripts(page);
   await page.goto(`${assets.origin}/docs/`, { waitUntil: "networkidle" });
+  // The page imports the code of its tools after hydration and registers them one at a time, so the network can be idle before the list is complete.
+  await page.waitForFunction(async (count) => {
+    const host: unknown = Reflect.get(document, "modelContext");
+    const getTools: unknown = typeof host === "object" && host !== null ? Reflect.get(host, "getTools") : undefined;
+    if (typeof getTools !== "function") return false;
+    const all: unknown = await Reflect.apply(getTools, host, []);
+    return Array.isArray(all) && all.length === count;
+  }, toolNames.length);
   const tools = await page.evaluate(async () => {
     const host: unknown = Reflect.get(document, "modelContext");
     if (typeof host !== "object" || host === null) return { names: [], result: "" };
@@ -180,16 +193,13 @@ test("a browser with WebMCP gets the tools of the site when the page loads, and 
     const result: unknown = await Reflect.apply(executeTool, host, [search, { query: "WebMCP" }]);
     return { names: all.map((tool: unknown) => String(Reflect.get(Object(tool), "name"))).sort(), result: String(result) };
   });
-  assert.deepEqual(tools.names, ["site.packages.list", "site.pages.list", "site.pages.read", "site.pages.search"]);
+  assert.deepEqual(tools.names, toolNames);
   assert.match(tools.result, /"ok":true/);
-  await browser.close();
 
-  const plain = await chromium.launch();
   const without = await plain.newPage();
   const withoutTools = scripts(without);
   await without.goto(`${assets.origin}/docs/`, { waitUntil: "networkidle" });
   assert.equal(await without.evaluate(() => "modelContext" in document || "modelContext" in navigator), false);
   const toolCode = withTools.filter((path) => !withoutTools.includes(path));
   assert.ok(toolCode.length > 0, "the tools load their own code");
-  await plain.close();
 });
