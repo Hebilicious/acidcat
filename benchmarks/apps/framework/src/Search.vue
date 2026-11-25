@@ -18,7 +18,7 @@ interface ShownResult extends SearchResult {
 const router = useRouter();
 const dialog = useTemplateRef<HTMLDialogElement>("dialog");
 const input = useTemplateRef<HTMLInputElement>("input");
-// Hydration adopts the field of the dialog that the inline script opened before the app, with the text that the reader typed in it.
+// v-model writes the value of its ref into the field when the component hydrates, so the ref starts with the text that the reader typed before.
 const query = ref(import.meta.env.SSR ? "" : (document.querySelector<HTMLInputElement>("#search[open] input")?.value ?? ""));
 const engine = ref<SiteSearch>();
 const results = ref<readonly ShownResult[]>([]);

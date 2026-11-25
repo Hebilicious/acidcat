@@ -1,8 +1,4 @@
-/**
- * Opens a dialog as a modal. The function that it returns closes the dialog, and gives the focus back to the element
- * that had it. A dialog that is open already, for example from `openDialogOnInput` before the app hydrated, stays as
- * it is: the browser gives the focus back to the element that had it before the dialog opened.
- */
+// For a dialog that was open already, the browser gives the focus back on close() to the element that had it before the dialog opened.
 export const openModal = (dialog: HTMLDialogElement): (() => void) => {
   const returnFocus = dialog.open ? null : document.activeElement;
   if (!dialog.open) dialog.showModal();

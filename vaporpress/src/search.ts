@@ -51,10 +51,6 @@ const load = async (): Promise<SiteSearch> => {
   };
 };
 
-/**
- * Starts the download of the search index at a low priority, so that `loadSearch` takes it from the cache. It loads no
- * script, so an inline script can run it before the app hydrates, for example when the reader opens the search.
- */
 export const preloadSearchIndex = (): void => {
   const href = indexUrl();
   if (document.head.querySelector(`link[rel="preload"][href="${href}"]`) !== null) return;

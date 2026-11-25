@@ -92,11 +92,6 @@ const pick = (segments: readonly Segment[], keep: (route: Segment["route"]) => b
 
 const pagePath = (dist: string, file: string): string => `/${relative(dist, file).split(sep).join("/")}`.replace(/index\.html$/, "").replace(/\.html$/, "/");
 
-/**
- * Writes into each page the CSS that every page shares and the CSS of its route, so that no request for a stylesheet
- * blocks the first render, and writes the CSS of each route into its own file in `/assets/`. The page names those
- * files in `#route-styles`, and loads one when the reader goes to another route.
- */
 export const inlineStyles = async (dist: string): Promise<void> => {
   const entries = await readdir(dist, { withFileTypes: true, recursive: true });
   const pages = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".html")).map((entry) => join(entry.parentPath, entry.name));

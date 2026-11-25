@@ -28,7 +28,7 @@ const dialog = useTemplateRef<HTMLDialogElement>("dialog");
 const input = useTemplateRef<HTMLInputElement>("input");
 const list = useTemplateRef<HTMLElement>("list");
 
-// Hydration adopts the field of the dialog that `openSearchOnInput` opened before the app, with the text that the reader typed in it.
+// v-model writes the value of its ref into the field when the component hydrates, so the ref starts with the text that the reader typed before.
 const typedBeforeHydration = import.meta.env.SSR ? undefined : document.querySelector<HTMLInputElement>("#search-dialog[open] input")?.value;
 const stored = (storage: () => Storage, key: string): string | null => (import.meta.env.SSR ? null : readStorage(storage, key));
 const query = ref(typedBeforeHydration ?? stored(() => sessionStorage, searchQueryKey) ?? "");
