@@ -169,7 +169,7 @@ The card gives `McpOptions::version`, and the revisions of the `initialize` hand
 
 ### Serving the remote surfaces
 
-`McpSurface` and `HttpSurface` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. Like the Node.js servers of the TypeScript cores, it closes no idle connection and sends no `Keep-Alive` header, so a client never sends a request on a connection while the server closes it. The client or the proxy in front closes an idle connection. It sends each message of a stream at once (`TCP_NODELAY`). To use another server, pass each request through `remote::request_body`, then to `handle`.
+`McpSurface` and `HttpSurface` implement `remote::Handler`. `remote::serve(address, routes)` serves handlers by path prefix with hyper. Like the Node.js servers of the TypeScript cores, it closes no idle connection and sends no `Keep-Alive` header, so a client never sends a request on a connection while the server closes it. The client or the proxy in front closes an idle connection. It sends each message of a stream at once (`TCP_NODELAY`). `close()` of the server stops it from accepting connections and ends each open connection at once, also one whose response is not complete, so the client of a stream gets no more of it. The Node.js servers of the TypeScript cores end each connection at their close only when both its request and its response are complete. To use another server, pass each request through `remote::request_body`, then to `handle`.
 
 Each request gets its own session. With `new`, requests share one context.
 
