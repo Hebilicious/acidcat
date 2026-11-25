@@ -49,7 +49,7 @@ pub const INTERRUPT_GRACE: std::time::Duration =
 
 /// The name of the thread that exits the process [`INTERRUPT_GRACE`] after an interrupt. The exit at a second
 /// interrupt runs on another thread.
-pub const INTERRUPT_GRACE_THREAD: &str = "acid-cat-interrupt-grace";
+const INTERRUPT_GRACE_THREAD: &str = "acid-cat-interrupt-grace";
 
 fn resume_words() -> impl Iterator<Item = &'static str> {
     RESUME_FLAGS

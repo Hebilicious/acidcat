@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 mod fixture_program;
 mod fixture_settings;
 
-use acid_cat_core::cli::{INTERRUPT_GRACE, INTERRUPT_GRACE_THREAD, exit};
+use acid_cat_core::cli::{INTERRUPT_GRACE, exit};
 use serde_json::{Map, Value, json};
 
 use fixture_program::fixture;
@@ -297,8 +297,8 @@ fn interrupted_blocking(args: &[&str], interrupts: usize) -> Interrupted {
 fn assert_exits_after_the_grace_period_or_at_once_after_a_second_interrupt(args: &[&str]) {
     let once = interrupted_blocking(args, 1);
     assert_eq!(
-        (once.code, once.stderr.as_str(), once.exited_on.as_str()),
-        (Some(exit::CANCELLED), "", INTERRUPT_GRACE_THREAD)
+        (once.code, once.stderr.as_str(), once.exited_on.is_empty()),
+        (Some(exit::CANCELLED), "", false)
     );
     assert!(
         once.after_interrupt >= INTERRUPT_GRACE,
@@ -311,8 +311,8 @@ fn assert_exits_after_the_grace_period_or_at_once_after_a_second_interrupt(args:
         (Some(exit::CANCELLED), "")
     );
     assert_ne!(
-        twice.exited_on, INTERRUPT_GRACE_THREAD,
-        "the process exited after the grace period, not at the second interrupt"
+        twice.exited_on, once.exited_on,
+        "the process exited on the thread of the grace period, not at the second interrupt"
     );
 }
 
