@@ -80,7 +80,7 @@ Give each round of work to a new subagent, with the full scope in its brief: wha
 - Each issue or task gets its own branch and its own worktree in `.worktrees/<branch>`. Create it from `main` with `git worktree add .worktrees/<branch> -b <branch> main`, and do all the work in that worktree. Keep the main worktree as you found it.
 - When you start a subagent, tell it which branch and worktree it uses: the parent's, or a new one that you name. The subagent does not choose.
 - Commit titles and pull request titles are semantic: `type(scope): subject`, for example `fix(catalog): reject duplicate ids`. The types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore` and `revert`. The scope is required. Add `!` after the scope for a breaking change. The `semantic` check (`scripts/check-semantic.sh`) enforces this. The pull request title and body become the commit on `main`. The `semantic` check also fails when release-please cannot parse that commit (`scripts/check-commit-message.ts`), because release-please then skips it without a warning. See [Publishing](packages/README.md#the-release-pull-request).
-- Push the branch and open a pull request against `main` with `gh pr create --base main --head <branch>`. A pull request that closes an issue says `Closes #<number>` in its body.
+- Push the branch and open a pull request against `main` with `gh pr create --base main --head <branch>`. The body of a pull request for an issue ends with the line `Refs: <issue id>`, as the skill [`quadratique`](.agents/skills/quadratique/SKILL.md) tells.
 - When a change is too large for one pull request, use `gh stack` (see `.agents/skills/gh-stack`): one branch and one pull request for each layer, in one worktree. Use it when the work splits into layers that a reviewer can read one at a time.
 - Before you hand off a pull request, verify it as [Verification](#verification) tells.
 - A human reviews each pull request. Hand off the pull request URL. Merge only after the human accepts the work, or when the human explicitly says to merge without review.
@@ -90,3 +90,5 @@ Give each round of work to a new subagent, with the full scope in its brief: wha
 - Merge a stack with `gh stack merge <top pull request> --yes --squash`. GitHub does not merge one pull request of a stack by itself, and does not change its base.
 - "Merge" means the work is on `main` both locally and on `origin`: merge the pull request and pull `main`. It is one step: never stop halfway, and never ask whether to do the second half. `main` and `origin/main` are always the same commit: check before reporting a merge as done, and if you find them apart, pull.
 - After the merge, remove the worktree with `git worktree remove .worktrees/<branch>`.
+
+We use Quadratique for issues: every task is an issue there. Use the `quadratique` skill (`.agents/skills/quadratique/SKILL.md`) for anything about tasks.
