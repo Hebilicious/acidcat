@@ -46,13 +46,14 @@ const textOf = (node: RootContent | ElementContent): string => {
 
 const clean = (text: string): string => text.replace(/\s+/g, " ").trim();
 
-/** Splits the content of a page into one section for each heading, as the reader finds them: the title of the heading, the titles of the headings above it, and the text under it. */
+/** Splits the content of a page into one section for each heading with an id, and its first heading, as the reader finds them: the title of the heading, the titles of the headings above it, and the text under it. */
 export const pageSections = (page: IndexedPage): SearchSection[] => {
   const root = findSearchRoot(fromHtml(page.html));
   if (root === undefined) return [];
   const sections: { anchor: string | undefined; titles: string[]; text: string[] }[] = [];
   let parents: string[] = [];
   let first = true;
+  const anchors = new Set<string>();
   const visit = (node: ElementContent): void => {
     if (node.type === "text") {
       sections.at(-1)?.text.push(node.value);
@@ -60,10 +61,11 @@ export const pageSections = (page: IndexedPage): SearchSection[] => {
     }
     if (node.type !== "element" || skippedTags.has(node.tagName) || hasAttribute(node, searchIgnoreAttribute)) return;
     const level = headingLevel(node);
-    if (level !== undefined) {
+    const id = node.properties["id"];
+    if (level !== undefined && (first || (typeof id === "string" && !anchors.has(id)))) {
       const title = clean(node.children.map(textOf).join(""));
-      const id = node.properties["id"];
       const anchor = first || typeof id !== "string" ? undefined : id;
+      if (anchor !== undefined) anchors.add(anchor);
       first = false;
       const titles = parents.slice(0, level - 1);
       titles[level - 1] = title;

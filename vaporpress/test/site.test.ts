@@ -113,6 +113,9 @@ describe("the static build", () => {
     assert.match(index, /a-smaller-heading/);
     assert.doesNotMatch(index, /quuxfooter/, "The search leaves out the content with data-search-ignore.");
     assert.doesNotMatch(index, /"\/404"/, "A page without data-search is not in the index.");
+    const parsed: unknown = JSON.parse(index);
+    const ids: unknown = typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "documentIds") : undefined;
+    assert.equal(Object.values(typeof ids === "object" && ids !== null ? ids : {}).filter((id) => id === "/").length, 1, "Headings with no id add no section of their own.");
   });
 
   test("checks each lazy layout once for each page that it renders", async () => {
