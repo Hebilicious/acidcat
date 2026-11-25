@@ -35,9 +35,9 @@ router.onError((error: unknown, to, from) => {
 });
 app.use(router);
 await site.enhance?.({ app, router });
+startPrefetch(router);
 if (await router.isReady().then(() => true, () => false)) {
   interceptLinks(router);
-  startPrefetch(router);
   router.afterEach((to, from) => {
     if (to.path !== from.path) updateHead(site, pageOf(to));
   });
