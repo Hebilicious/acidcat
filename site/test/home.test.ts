@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
-import type { Browser, Page } from "playwright";
+import type { Browser, Page, Request } from "playwright";
 import { openPage } from "./github.ts";
 import { dist, serveDist } from "./static-server.ts";
 import type { StaticServer } from "./static-server.ts";
@@ -104,22 +104,49 @@ test("reduced motion keeps the hero still and stops the animations", async () =>
   await page.close();
 });
 
+/** Each group of the files that the homepage fetches ahead when it is idle, by its budget. */
+const prefetchGroups = [
+  { name: "stylesheet ahead", pattern: /\.css$/ },
+  { name: "pages ahead", pattern: /\.js$/ },
+] as const;
+
+/** An image of the hero in any format. The scripts of the hero have names that start the same way. */
+const isPlate = (file: string): boolean => /^\/assets\/(phone|plate)/.test(file) && !/\.(js|css)$/.test(file);
+
 test("on a phone, the homepage loads less than its budget of bytes before the reader acts", async () => {
   if (browser === undefined) throw new Error("No browser.");
   const page = await openPage(browser, { viewport: { width: 400, height: 860 } });
   const requests: Promise<{ file: string; type: string; size: number }>[] = [];
-  page.on("requestfinished", (request) => {
+  const finished = new Set<string>();
+  const measure = (request: Request): void => {
+    finished.add(request.url());
     requests.push(request.sizes().then(({ responseBodySize }) => ({ file: new URL(request.url()).pathname, type: request.resourceType(), size: responseBodySize })));
-  });
+  };
+  page.on("requestfinished", measure);
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
   await page.locator("[data-plate] canvas").waitFor({ state: "detached", timeout: 10000 });
+  // The page adds the prefetch links of a group in one task, when it is idle. Each group must have its links, and each link must have finished.
+  const prefetches = await page.waitForFunction(
+    (groups) => {
+      const hrefs = [...document.querySelectorAll<HTMLLinkElement>('link[rel="prefetch"]')].map((link) => link.href);
+      const present = groups.every(([, pattern]) => hrefs.some((href) => new RegExp(pattern).test(new URL(href).pathname)));
+      const done = hrefs.every((href) => performance.getEntriesByName(href).length > 0);
+      return present && done ? hrefs : undefined;
+    },
+    prefetchGroups.map(({ name, pattern }) => [name, pattern.source] as const),
+  );
+  const prefetched = (await prefetches.jsonValue()) ?? [];
+  while (prefetched.some((href) => !finished.has(href))) await page.waitForEvent("requestfinished");
+  // The size of a request that finishes later would be read after the page closes, and that read rejects.
+  page.off("requestfinished", measure);
   const loaded = await Promise.all(requests);
   const files = loaded.map(({ file }) => file);
   const bytes = new Map<string, number>();
-  const group = (file: string, type: string) => (type === "other" ? (file.endsWith(".css") ? "stylesheet ahead" : "pages ahead") : type);
+  const group = (file: string, type: string) => (type === "other" ? (prefetchGroups.find(({ pattern }) => pattern.test(file))?.name ?? "other") : type);
   for (const { file, type, size } of loaded) bytes.set(group(file, type), (bytes.get(group(file, type)) ?? 0) + size);
+  for (const { name } of prefetchGroups) assert.ok((bytes.get(name) ?? 0) > 0, `the page fetches ahead ${name}`);
 
-  const plates = files.filter((file) => /^\/assets\/(phone|plate)[\w@-]*\./.test(file));
+  const plates = files.filter(isPlate);
   assert.equal(plates.length, 1, `the hero loads one plate, not ${plates.join(" and ")}`);
   assert.match(plates[0] ?? "", /^\/assets\/phone-840\.[\w-]+\.avif$/, "on a phone, the hero is the phone plate in AVIF");
   assert.deepEqual(files.filter((file) => /^\/assets\/(clean|data)\./.test(file)), [], "a software renderer loads no texture of the hero");
@@ -128,18 +155,18 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   assert.deepEqual(files.filter((file) => file.endsWith(".woff2") && !/-core\.[\w-]+\.woff2$/.test(file)), [], "only the core of each font");
   const phonePlate = 88_000;
   const fontCores = 170_000;
-  const vueVitePressAndHomepage = 195_000;
+  const scriptOfTheVitePressHomepage = 168_000;
   const homepageWithItsCss = 176_000;
   const starCount = 1_000;
-  const prefetchOfEachSectionInTheHeader = 110_000;
+  const prefetchOfEachSectionInTheHeaderAndTheDocsLayout = 115_000;
   const cssOfTheDocs = 40_000;
   const budget: Record<string, number> = {
     image: phonePlate,
     font: fontCores,
-    script: vueVitePressAndHomepage,
+    script: scriptOfTheVitePressHomepage,
     document: homepageWithItsCss,
     fetch: starCount,
-    "pages ahead": prefetchOfEachSectionInTheHeader,
+    "pages ahead": prefetchOfEachSectionInTheHeaderAndTheDocsLayout,
     "stylesheet ahead": cssOfTheDocs,
   };
   for (const [type, size] of bytes) assert.ok(size <= (budget[type] ?? 0), `${type}: ${size} bytes, budget ${budget[type] ?? 0}`);

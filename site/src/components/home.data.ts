@@ -3,8 +3,7 @@ import type { HomeCode } from "../lib/home-code.ts";
 
 export type HomeData = Omit<HomeCode, "code">;
 
-declare const data: HomeData;
-export { data };
+export declare const data: HomeData;
 
 /** The panels of the homepage figures. Their code comes from the directive `v-code-html`. */
 export default {

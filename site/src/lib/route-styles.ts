@@ -9,6 +9,8 @@ import type { Route } from "./routes.ts";
 const sources: readonly (readonly [RegExp, Route])[] = [
   [/\/site\/src\/styles\/(docs|content|explorer|diagrams)\.css$/, "docs"],
   [/\/site\/src\/components\/PackagesPage\.vue$/, "docs"],
+  [/\/site\/src\/app\/SearchDialog\.vue$/, "search"],
+  [/\/site\/src\/app\/pages\/home\.vue$/, "home"],
   [/\/site\/src\/styles\/search\.css$/, "search"],
   [/\/vitepress\/dist\/client\/theme-default\/(styles\/icons\.css|components\/VPLocalSearchBox\.vue)$/, "search"],
   [/\/site\/src\/styles\/home\.css$/, "home"],
@@ -83,7 +85,7 @@ export const splitRoutes = (css: string): Segment[] => {
   return segments.filter((segment) => segment.css !== "");
 };
 
-const stylesheetLink = /<link rel="preload stylesheet" href="(\/assets\/[^"]+\.css)" as="style"[^>]*>/g;
+const stylesheetLink = /<link rel="(?:preload )?stylesheet" href="(\/assets\/[^"]+\.css)"[^>]*>/g;
 const pick = (segments: readonly Segment[], keep: (route: Segment["route"]) => boolean): string =>
   segments
     .filter((segment) => keep(segment.route))

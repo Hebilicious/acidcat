@@ -1,8 +1,7 @@
 import { highlight } from "../lib/highlight.ts";
 import { readHomeCode } from "../lib/home-code.ts";
 
-declare const data: Readonly<Record<string, string>>;
-export { data };
+export declare const data: Readonly<Record<string, string>>;
 
 /** The highlighted code of each panel of the homepage, by its name. */
 export default {

@@ -126,6 +126,15 @@ tasks:
     args: ["--test", "test/"]
     inputs: ["src/**/*", "content/**/*", ".vitepress/**/*", "framework.config.ts", "test/**/*.ts", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*", "/vaporpress/src/**/*"]
 
+  test-framework:
+    deps: ["build-framework"]
+    description: "Run the tests of the homepage, the page changes, the delivery, the fonts, the pages, the examples, the search, the three browsers and the GPU renderers on the build of vaporpress."
+    command: "node"
+    args: ["--test", "test/home.test.ts", "test/navigation.test.ts", "test/delivery.test.ts", "test/fonts.test.ts", "test/pages.test.ts", "test/examples.test.ts", "test/search.test.ts", "test/browsers.test.ts", "test/gpu-parity.test.ts"]
+    env:
+      SITE_BUILD: "framework"
+    inputs: ["src/**/*", "content/**/*", "framework.config.ts", "test/**/*.ts", "/vaporpress/src/**/*"]
+
   typecheck:
     description: "Type-check the art geometry, the tests and the configuration."
     command: "tsc"

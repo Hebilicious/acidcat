@@ -3,6 +3,8 @@
 @import "../../.fonts/fonts.css";
 
 :root {
+  color-scheme: dark;
+  background: var(--palette-ink-900);
   font-feature-settings: "calt" 1, "liga" 1;
   -webkit-tap-highlight-color: transparent;
 }

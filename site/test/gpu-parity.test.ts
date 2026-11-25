@@ -101,7 +101,7 @@ const capture = async (origin: string, item: Case, backend: Backend): Promise<{ 
   const plates: string[] = [];
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
-    if (/^\/assets\/(plate|phone)/.test(path)) plates.push(path);
+    if (/^\/assets\/(plate|phone)/.test(path) && !/\.(js|css)$/.test(path)) plates.push(path);
   });
   if (item.reducedMotion === "no-preference") {
     await page.clock.install({ time: 0 });

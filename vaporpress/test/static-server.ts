@@ -30,7 +30,8 @@ export const serve = async (dist: string): Promise<{ readonly origin: string; re
       createReadStream(join(dist, "404.html")).pipe(response);
       return;
     }
-    response.writeHead(200, { "Content-Type": types[extname(file)] ?? "application/octet-stream" });
+    const cache = pathname.startsWith("/assets/") ? { "Cache-Control": "public, max-age=31536000, immutable" } : {};
+    response.writeHead(200, { "Content-Type": types[extname(file)] ?? "application/octet-stream", ...cache });
     createReadStream(file).pipe(response);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
