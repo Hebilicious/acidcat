@@ -383,21 +383,19 @@ test("events/unsubscribe of another principal does not find the subscription", a
 
 test("a subscription ends after its terminated message", async (t) => {
   const feed = feedForPromises();
-  const handler = webhookHandler(feed);
+  let released = 0;
+  const layer = Layer.effect(Feed, Effect.acquireRelease(Effect.service(Feed), () => Effect.sync(() => void released++))).pipe(Layer.provide(feed.layer));
+  const handler = withTestClock((clock) => Mcp.toWebHandler(events, Layer.merge(layer, clock), { ...webhookOptions(), services: "per-request" }));
+  const crash = { name: "feed.crashing", arguments: {}, delivery: { mode: "webhook", url: receiver.url("/crash"), secret: SECRET } };
   try {
-    await json(await handler(mcpRequest("events/subscribe", { ...subscription("/crash"), name: "feed.crashing", arguments: {} }, as("alice"))));
-    await waitAt(t, "/crash", 3);
-    const missing = await until(
-      t,
-      async () => json(await handler(mcpRequest("events/unsubscribe", { name: "feed.crashing", arguments: {}, delivery: { url: receiver.url("/crash") } }, as("alice")))),
-      (answer) => answer.error !== undefined,
-    );
-    assert.equal(missing.error?.code, -32023);
-    await handler.dispose();
+    await json(await handler(mcpRequest("events/subscribe", crash, { ...as("alice"), signal: t.signal })));
+    await until(t, () => released, (count) => count === 1, { what: "the end of the subscription, which releases the services of its request" });
     assert.deepEqual(
       at("/crash").map((each) => bodyOf(each).type ?? bodyOf(each).name),
       ["verification", "feed.crashing", "terminated"],
     );
+    const missing = await json(await handler(mcpRequest("events/unsubscribe", { name: crash.name, arguments: crash.arguments, delivery: { url: crash.delivery.url } }, { ...as("alice"), signal: t.signal })));
+    assert.equal(missing.error?.code, -32023);
   } finally {
     await handler.dispose();
   }

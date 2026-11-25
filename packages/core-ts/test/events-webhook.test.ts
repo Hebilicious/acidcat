@@ -294,6 +294,17 @@ test("webhook: a complete subscription ends with no message", async (t) => {
   assert.equal(receiver.deliveries().length, 3);
 });
 
+test("webhook: a defect after an occurrence sends one terminated message, then the subscription ends", async (t) => {
+  const { subscribe } = server(t, { maxSubscriptions: 1 });
+  assert.ok(isJsonObject((await subscribe({ name: "sensor.failing" }))["result"]));
+  const firstEnded = async (signal: AbortSignal) => isJsonObject((await subscribe({}, "alice", signal))["result"]);
+  await until(t, firstEnded);
+  assert.deepEqual(
+    receiver.received.map((each) => each.body["type"] ?? each.body["name"]),
+    ["verification", "sensor.failing", "terminated"],
+  );
+});
+
 test("webhook: parallel new subscriptions of one principal cannot pass the limit together", async (t) => {
   const { subscribe } = server(t, { maxSubscriptions: 2 });
   const answers = await Promise.all(["a", "b", "c", "d"].map((room) => subscribe({ arguments: { room }, url: `${receiver.url}?room=${room}` })));

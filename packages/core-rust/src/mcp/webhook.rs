@@ -1017,6 +1017,96 @@ mod tests {
         silent.abort();
     }
 
+    #[tokio::test]
+    async fn a_defect_after_an_occurrence_sends_one_terminated_message_then_the_pump_ends() {
+        use crate::app::{Emitted, NoPayload};
+        use crate::outcome::Defect;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("the listener binds");
+        let port = listener
+            .local_addr()
+            .expect("the listener has an address")
+            .port();
+        let received = Arc::new(Mutex::new(Vec::<Value>::new()));
+        let recorded = received.clone();
+        let receiver = tokio::spawn(async move {
+            while let Ok((stream, _)) = listener.accept().await {
+                let recorded = recorded.clone();
+                let answer = hyper::service::service_fn(
+                    move |request: http::Request<hyper::body::Incoming>| {
+                        let recorded = recorded.clone();
+                        async move {
+                            let body = request.into_body().collect().await?.to_bytes();
+                            lock(&recorded)
+                                .push(serde_json::from_slice(&body).unwrap_or(Value::Null));
+                            Ok::<_, hyper::Error>(http::Response::new(Full::new(Bytes::new())))
+                        }
+                    },
+                );
+                tokio::spawn(
+                    hyper::server::conn::http1::Builder::new()
+                        .serve_connection(hyper_util::rt::TokioIo::new(stream), answer),
+                );
+            }
+        });
+        let app = App::new()
+            .title("Test")
+            .target("mcp", ["mcp"])
+            .event(
+                Event::new("test.failing", "Give one occurrence, then fail.")
+                    .audience(["mcp"])
+                    .subscribe(|(), _| {
+                        futures::stream::iter([
+                            Ok(Emitted::new(NoPayload {})),
+                            Err(Defect::new("The sensor is down.")),
+                        ])
+                    }),
+            )
+            .build()
+            .unwrap_or_else(|problems| panic!("the application does not conform: {problems:?}"));
+        let session = Session::open(&app, "mcp", Arc::new(Services));
+        let occurrences = session
+            .subscribe("test.failing", json!({}), SubscribeOptions::default())
+            .unwrap_or_else(|failure| panic!("the subscription starts: {}", failure.message));
+        let webhooks = Webhooks::new(WebhookOptions {
+            allow_private_networks: true,
+            ..WebhookOptions::default()
+        });
+        let subscription = Subscription {
+            id: "sub_test".to_owned(),
+            key: "test".to_owned(),
+            principal: "principal".to_owned(),
+            url: format!("http://127.0.0.1:{port}/hook")
+                .parse()
+                .expect("the URL parses"),
+            ended: CancellationToken::new(),
+            state: Mutex::new(SubscriptionState {
+                secret: format!("whsec_{}", STANDARD.encode([7u8; 32])),
+                previous: None,
+                expires_at: SystemTime::now(),
+                deadline: Instant::now(),
+                watermark: None,
+                last_delivery_at: None,
+                last_error: None,
+            }),
+        };
+
+        webhooks.pump(&subscription, occurrences).await;
+        let kinds: Vec<Value> = lock(&received)
+            .iter()
+            .map(|body| {
+                body.get("type")
+                    .or(body.get("name"))
+                    .cloned()
+                    .unwrap_or(Value::Null)
+            })
+            .collect();
+        assert_eq!(kinds, [json!("test.failing"), json!("terminated")]);
+        receiver.abort();
+    }
+
     #[test]
     fn a_subscription_that_starts_counts_for_the_limit_until_it_ends() {
         let webhooks = Webhooks::new(WebhookOptions {
