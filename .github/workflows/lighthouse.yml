@@ -5,6 +5,7 @@ on:
     # The inputs of the built site, as the build of Workers Builds watches them, and this workflow.
     paths:
       - "site/**"
+      - "vaporpress/**"
       - "spec/**"
       - "schemas/**"
       - "examples/**"
