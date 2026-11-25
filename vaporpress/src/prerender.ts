@@ -3,6 +3,7 @@ import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { leanPageChunkMarker } from "./client/markers.ts";
 import type { PageData } from "./page.ts";
+import { searchIndexJson, searchMeta, writeSearchIndex } from "./search-index.ts";
 
 export interface DocumentOptions {
   /** The language of every page. */
@@ -78,6 +79,9 @@ export interface PrerenderInput {
   readonly routeFiles: ReadonlyMap<string, string>;
   readonly options: DocumentOptions;
   readonly clientEntryName: string;
+  /** Writes the search index of the pages, and names it in the head of each page. */
+  readonly search: boolean;
+  readonly assetsDir: string;
 }
 
 export const prerender = async (input: PrerenderInput): Promise<void> => {
@@ -90,6 +94,7 @@ export const prerender = async (input: PrerenderInput): Promise<void> => {
   const entries = await readdir(input.outDir, { withFileTypes: true, recursive: true });
   const files = entries.filter((entry) => entry.isFile()).map((entry) => relative(input.outDir, join(entry.parentPath, entry.name)));
   const build: BuildFiles = { files: files.filter((file) => !file.startsWith(".vite/")).map((file) => `${base}${file}`) };
+  const written: { readonly path: string; readonly html: string }[] = [];
   for (const path of server.paths()) {
     const { html, head, page } = await server.render(pageUrl(path));
     const scripts = new Set<string>();
@@ -116,8 +121,12 @@ export const prerender = async (input: PrerenderInput): Promise<void> => {
       `<script type="module" src="${base}${entryFile ?? ""}"></script>`,
       `</head><body><div id="app">${html}</div></body></html>`,
     ].join("");
-    const output = outputFile(input.outDir, path);
+    written.push({ path, html: input.options.transformHtml === undefined ? document : await input.options.transformHtml(document, page, build) });
+  }
+  const meta = input.search ? searchMeta(await writeSearchIndex(input.outDir, input.assetsDir, searchIndexJson(written.map((page) => ({ url: pageUrl(page.path), html: page.html }))))) : "";
+  for (const page of written) {
+    const output = outputFile(input.outDir, page.path);
     await mkdir(dirname(output), { recursive: true });
-    await writeFile(output, input.options.transformHtml === undefined ? document : await input.options.transformHtml(document, page, build));
+    await writeFile(output, meta === "" ? page.html : page.html.replace("</head>", `${meta}</head>`));
   }
 };

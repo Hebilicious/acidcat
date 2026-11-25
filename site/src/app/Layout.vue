@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import { RouterView, usePage } from "vaporpress/client";
 import { siteUrl } from "../lib/social.ts";
 import PageActions from "../theme/PageActions.vue";
+import SearchButton from "./SearchButton.vue";
 import Pagination from "../theme/Pagination.vue";
 import { flatLinks } from "../theme/site-theme.ts";
 import { useActiveHeading } from "./active-heading.ts";
@@ -59,7 +60,7 @@ usePageBehaviors();
   <div class="page" :data-has-sidebar="section ? '' : undefined" :data-has-toc="hasToc ? '' : undefined" :data-menu-open="menuOpen ? '' : undefined" :data-not-found="notFound ? '' : undefined" :data-section="section?.prefix.slice(1, -1)">
     <a class="skip-link" href="#_top">Skip to content</a>
     <header class="header">
-      <SiteNav />
+      <SiteNav><template #search><SearchButton /></template></SiteNav>
     </header>
     <template v-if="section">
       <button type="button" class="menu-button" :aria-expanded="menuOpen" aria-controls="site-sidebar" @click="menuOpen = !menuOpen">
@@ -87,7 +88,7 @@ usePageBehaviors();
         </aside>
         <div class="main-pane">
           <MobileToc v-if="hasToc" :headers="headers" :active="active" />
-          <main>
+          <main :data-search="notFound || page.frontmatter['search'] === false ? undefined : ''">
             <div class="content-panel">
               <div class="container">
                 <div v-if="notFound" class="hero">
@@ -102,7 +103,7 @@ usePageBehaviors();
             <div v-if="!notFound" class="content-panel">
               <div class="container">
                 <div class="markdown-content"><RouterView /></div>
-                <footer class="page-footer">
+                <footer class="page-footer" data-search-ignore>
                   <PageActions :edit-url="editUrl" :issue-url="issueUrl" />
                   <Pagination v-if="previous || next" :previous="previous" :next="next" />
                 </footer>

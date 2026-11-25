@@ -84,6 +84,7 @@ const page = usePage();
 | Images | An image in Markdown with a local file, such as `![A diagram](diagram.png)`, gets WebP files at several widths in `srcset`, and its `width` and `height`. A component imports an image with `?image`. See [Images](#images) |
 | Components | Every `.vue` file compiles in Vapor mode, with or without the `vapor` attribute. Vite resolves one copy of `vue` and `vue-router` for the site and the framework. The router registers no global component: import `RouterView` from `vaporpress/client`, and write plain links. The `RouterLink` and `RouterView` of Vue Router render virtual DOM, so the framework removes their registration from `app.use(router)` |
 | Lazy layouts | `defineLazyLayout(loader, usedBy)` gives a layout in a chunk of its own, for the pages for which `usedBy(page)` is true. See [Lazy layouts](#lazy-layouts) |
+| Search | With `search: true`, the build indexes the content of each built page. A page marks its content with the attribute `data-search`, and an element inside it with `data-search-ignore` to leave it out. A page without `data-search`, such as the 404 page, is not in the index. See [Search](#search) |
 | Scripts on the content | `onPageUpdated(fn)` runs `fn` each time the content of a page is in the DOM: after hydration, and after each page change. Use it to start the behaviors of static HTML, such as tabs |
 
 ### Markdown pages
@@ -227,6 +228,25 @@ listenToTabs({
 });
 ```
 
+## Search
+
+The framework gives the index and the engine of a search. The site gives the dialog, in its own style.
+
+- The build reads the HTML of each page after `transformHtml`, takes the content of the element with `data-search`, and splits it into one section for each heading: the title of the heading, the titles of the headings above it, and the text under it. The first heading of a page is the section of the page itself.
+- It writes the index to `assets/search.<hash>.json` and names it in a meta element of the head of each page. The browser keeps the file for as long as its name does not change.
+- The dev server makes the index from the pages that it renders, at `/@vaporpress/search.json`.
+
+```ts
+import { loadExcerpt, loadSearch, markText } from "vaporpress/search";
+
+const search = await loadSearch(); // loads the engine and the index once
+const results = search.search("catalog"); // [{ id: "/guide/catalog/#writing-a-catalog", title, titles, terms, score }]
+const html = await loadExcerpt(results[0].id); // the content under the heading, from the HTML file of the page
+const title = markText(results[0].title, results[0].terms); // HTML, with each match in <mark>
+```
+
+The search finds words by prefix, and with one wrong letter in five. A match in a title counts four times as much as a match in the text.
+
 ## API
 
 | Import | Export | Use |
@@ -240,6 +260,9 @@ listenToTabs({
 | | `prefetchPage(router, path)` | Loads the chunk of a page before the reader goes to it |
 | `vaporpress/data` | `defineLoader({ load, watch })`, `LoadedData` | A module of data that the build reads once |
 | `vaporpress/behaviors` | `listenToTabs`, `selectTab`, `copyCodeOnClick`, `observeActiveHeading`, `isSearchShortcut`, `isTextField`, `onListboxKey`, `openModal` | The logic of tabs, copy buttons, the table of contents and a search dialog, with no markup and no styles. See [Behaviors](#behaviors) |
+| `vaporpress/search` | `loadSearch()`, `SiteSearch`, `SearchResult` | Loads the engine and the index of the site, once. `search(query, limit)` gives the sections that match, best first |
+| | `loadExcerpt(id)`, `sectionHtml(document, id)` | The HTML of the content of a section, with no `id` and no reference to an id, so it can show in another page |
+| | `markText(text, terms)`, `markTerms(html, terms)` | HTML with each match of the terms in `<mark>` |
 | `vaporpress/image` | — | The type of an import with `?image`, for a declaration file of the site |
 | `vaporpress/markdown` | `compileMarkdown(source, file, options)`, `githubSlug`, `hastText`, `defineHastPlugin`, `defineMdastPlugin` | The Markdown compiler, for tools that need the page of a file outside the build, such as a search index |
 
@@ -254,6 +277,7 @@ listenToTabs({
 | `extraPages` | none | A function that returns the pages whose files are in other folders |
 | `markdown` | — | See [Markdown pages](#markdown-pages) |
 | `lang`, `headHtml` | `"en"`, none | The language of each page, and the HTML that the head of every page has |
+| `search` | `false` | Writes the search index of the built pages. See [Search](#search) |
 | `transformHtml(html, page, { files })` | none | Changes the HTML file of each page before the build writes it. `files` lists the path of each file of the client build, for example to preload a font |
 | `images` | `{}` | The widths and the quality of the image service, or `false` to keep each image as it is. See [Images](#images) |
 | `afterBuild(outDir)` | none | Runs after the build has written every page, for example to write more files |
@@ -296,6 +320,14 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 
 **Rejected: fetch the HTML file of the next page and take its content.** It is a router that swaps HTML fragments, and it loses the state of the components of the page.
 
+### Search
+
+**Chosen: index the built pages, as Pagefind does, with MiniSearch in the browser.** The index holds what the reader sees: the output of the components of the docs, the pages from other folders, and the headings with their final ids. The site marks the content with an attribute, so the search does not depend on the layout. The index does not hold the text of the sections: an excerpt comes from the HTML file of its page, which the browser often has in its cache already.
+
+**Rejected: index the Markdown sources.** A component that writes content at build time, such as a table of packages, has no text in the source, and a heading id in the source can differ from the id in the page.
+
+**Rejected: Pagefind itself.** It is a binary with its own interface and its own index format, and it does not run in the dev server. The site would load a second set of scripts and styles next to its own dialog.
+
 ### The site and the framework
 
 **Chosen: building blocks that a site imports.** The framework owns the build, the routes, the render and hydration, the data modules, the head, links, prefetch, and the scroll. The site owns its app module (`defineSite`), its layout, its homepage, its components and its styles. To change a part of the framework, a site does not import it, and writes its own: its own layout around `RouterView`, its own `head(page)`, its own `scrollBehavior`, or its own component in place of a built-in one. A page of one site can be a Markdown file, and the homepage can be a `.vue` file that looks like nothing else on the site.
@@ -319,14 +351,14 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 - `markdown.test.ts`: the page data, the heading ids and the table of contents, components and `<script setup>` in Markdown, code that Vue does not compile, the highlighter, `transformSource`, and the lean copy of a component, which keeps the templates that hydration may not meet.
 - `behaviors.test.ts`: in Chromium, the tabs with a click and with the arrow keys, the search shortcuts, the keys of a list box and the focus that comes back when a modal closes, a copy button, and the active heading as the page scrolls.
 - `site-definition.test.ts`: the checks of a site definition and of a component, and that `defineLazyLayout` throws in the setup of a component.
-- `site.test.ts`: builds `test/fixture/` and serves `dist/`. It checks the HTML, the head and the lean chunk of each page, that the build checks each lazy layout once for each page, the data of a data module, and the WebP files, the `srcset`, the size and the loading of each image in Markdown and of an image that a component imports. In Chromium, it checks that hydration changes no element of the DOM and logs no mismatch, that components respond, that a click changes the page with no new document and updates the head, that a lazy layout renders in the same task as the page that uses it and hydrates with the first page, that a page change loads a new document when the chunk of its page or of its layout does not load, that the first page keeps its HTML and its links when a chunk of the page does not load, that the chunk of a link in view loads before the click and the chunk of a link under the pointer loads at once, that the scroll position comes back on Back and on Forward, that a hash goes to its heading, that the skip link moves the focus past the header, that a branch of `v-if`, `v-else` or `v-for` that the server did not render shows after hydration and after a page change, and that an unknown path shows the 404 page.
-- `dev.test.ts`: the dev server serves a page, and a click changes the page.
+- `site.test.ts`: builds `test/fixture/` and serves `dist/`. It checks the HTML, the head and the lean chunk of each page, that the build checks each lazy layout once for each page, the data of a data module, and the search index: its name, its meta element, and the content that it leaves out. In Chromium, it checks that the search finds a section under its headings, marks the words that match, gives the excerpt of the section, and goes to a result with no new document. In Chromium, it checks that hydration changes no element of the DOM and logs no mismatch, that components respond, that a click changes the page with no new document and updates the head, that a lazy layout renders in the same task as the page that uses it and hydrates with the first page, that a page change loads a new document when the chunk of its page or of its layout does not load, that the first page keeps its HTML and its links when a chunk of the page does not load, that the chunk of a link in view loads before the click and the chunk of a link under the pointer loads at once, that the scroll position comes back on Back and on Forward, that a hash goes to its heading, that the skip link moves the focus past the header, that a branch of `v-if`, `v-else` or `v-for` that the server did not render shows after hydration and after a page change, and that an unknown path shows the 404 page.
+- `dev.test.ts`: the dev server serves a page, a click changes the page, and the search finds a section and its excerpt.
 
 `moon run vaporpress:typecheck` type-checks the sources and the tests.
 
 ## Roadmap
 
-- Move the rest of the AcidCat site onto the framework: the packages page, the search, the homepage, the files for agents, the fonts; then remove VitePress. The docs, the examples and the specification build on it.
-- Built-in features: search, the Markdown of each page and `llms.txt`, social cards, the subsets of the font faces, and the design tokens of cssforge.
+- Move the rest of the AcidCat site onto the framework: the packages page, the homepage, the files for agents, the fonts; then remove VitePress. The docs, the examples and the specification build on it.
+- Built-in features: the Markdown of each page and `llms.txt`, social cards, the subsets of the font faces, and the design tokens of cssforge.
 - A skill that gives the checklist of the verification loop for a site.
 - Move the framework to a repository of its own.

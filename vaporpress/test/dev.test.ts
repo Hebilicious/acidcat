@@ -25,6 +25,9 @@ describe("the dev server", () => {
       await page.click("text=link to the long page");
       await page.waitForSelector("#section-12");
       assert.equal(await page.title(), "Long page | Fixture");
+      await page.fill(".search", "smaller");
+      await page.waitForSelector('.search-results a[href="/guide/#a-smaller-heading"]');
+      await page.waitForFunction(() => document.querySelector(".search-excerpt")?.textContent?.trim() === "Text under the smaller heading.");
     } finally {
       await browser.close();
       await server.close();

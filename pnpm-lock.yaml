@@ -275,6 +275,9 @@ catalogs:
     mdast-util-to-markdown:
       specifier: 2.2.2
       version: 2.2.2
+    minisearch:
+      specifier: 7.2.0
+      version: 7.2.0
     oxlint:
       specifier: 1.93.0
       version: 1.93.0
@@ -697,6 +700,12 @@ importers:
       '@vue/compiler-sfc':
         specifier: 'catalog:'
         version: 3.6.0-rc.16
+      hast-util-from-html:
+        specifier: 'catalog:'
+        version: 2.0.3
+      minisearch:
+        specifier: 'catalog:'
+        version: 7.2.0
       satteri:
         specifier: 'catalog:'
         version: 0.11.7
@@ -716,6 +725,9 @@ importers:
         specifier: 'catalog:'
         version: 2.9.1
     devDependencies:
+      '@types/hast':
+        specifier: 'catalog:'
+        version: 3.0.5
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6

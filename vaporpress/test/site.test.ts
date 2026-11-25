@@ -124,6 +124,19 @@ describe("the static build", () => {
     assert.match(await readDist("index.html"), /<img class="home-diagram" src="\/assets\/diagram-1000\.[\w-]+\.webp" srcset="[^"]+ 1000w" sizes="[^"]+" width="1000" height="400" alt="A blue diagram">/);
   });
 
+  test("writes the search index of the pages with a hash in its name, and names it in the head of each page", async () => {
+    const url = /<meta name="vaporpress:search" content="(\/assets\/search\.[\w-]{8}\.json)">/.exec(await readDist("guide/index.html"))?.[1];
+    assert.ok(url !== undefined);
+    assert.match(await readDist("404.html"), new RegExp(`content="${url}"`));
+    const index = await readDist(url);
+    assert.match(index, /a-smaller-heading/);
+    assert.doesNotMatch(index, /quuxfooter/, "The search leaves out the content with data-search-ignore.");
+    assert.doesNotMatch(index, /"\/404"/, "A page without data-search is not in the index.");
+    const parsed: unknown = JSON.parse(index);
+    const ids: unknown = typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "documentIds") : undefined;
+    assert.equal(Object.values(typeof ids === "object" && ids !== null ? ids : {}).filter((id) => id === "/").length, 1, "Headings with no id add no section of their own.");
+  });
+
   test("checks each lazy layout once for each page that it renders", async () => {
     const pages = (await readdir(dist, { recursive: true })).filter((file) => file.endsWith(".html"));
     assert.equal(Reflect.get(globalThis, "tocChecks"), pages.length);
@@ -423,6 +436,26 @@ describe("in the browser", () => {
     await markDocument(page);
     await page.click("text=Home");
     await page.waitForSelector(".home-title");
+    assert.equal(await sameDocument(page), true);
+    assert.deepEqual(problems, []);
+    await page.close();
+  });
+
+  test("finds the sections of the pages, gives the excerpt of a section, and goes to a result with no new document", async () => {
+    const { page, problems } = await open("/");
+    await markDocument(page);
+    await page.fill(".search", "smaller");
+    const result = page.locator('.search-results a[href="/guide/#a-smaller-heading"]');
+    await result.waitFor();
+    assert.equal(await result.getAttribute("data-titles"), "The guide > Code");
+    assert.equal(await result.innerHTML(), "A <mark>smaller</mark> heading", "The title marks the words that match.");
+    await page.waitForFunction(() => document.querySelector(".search-excerpt")?.textContent?.trim() === "Text under the smaller heading.");
+    assert.equal(await page.locator(".search-excerpt [id], .search-excerpt [aria-labelledby]").count(), 0, "The excerpt has no id that the page could have too.");
+    await page.fill(".search", "quuxfooter");
+    await page.waitForFunction(() => document.querySelectorAll(".search-results li").length === 0);
+    await page.fill(".search", "smaller");
+    await result.click();
+    await page.waitForSelector("#the-guide");
     assert.equal(await sameDocument(page), true);
     assert.deepEqual(problems, []);
     await page.close();
