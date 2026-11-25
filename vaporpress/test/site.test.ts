@@ -105,6 +105,25 @@ describe("the static build", () => {
     assert.doesNotMatch(code, /RouterLink/, "The router registers no RouterLink, a component of the virtual DOM.");
   });
 
+  test("serves each image of a page as WebP files at several widths, with its size", async () => {
+    const guide = await readDist("guide/index.html");
+    const images = [...guide.matchAll(/<img [^>]*>/g)].map(([tag]) => tag);
+    assert.equal(images.length, 2);
+    const [first = "", second = ""] = images;
+    for (const tag of [first, second]) {
+      assert.match(tag, /width="1000" height="400"/);
+      assert.match(tag, /srcset="\/assets\/diagram-480\.[\w-]+\.webp 480w, \/assets\/diagram-800\.[\w-]+\.webp 800w, \/assets\/diagram-1000\.[\w-]+\.webp 1000w"/);
+      assert.match(tag, /sizes="\(min-width: 1000px\) 1000px, 100vw"/);
+      assert.match(tag, /decoding="async"/);
+    }
+    assert.match(first, /alt="A blue diagram" title="The diagram"/);
+    assert.doesNotMatch(first, /loading=/, "The first image of a page can be its largest element, so it loads at once.");
+    assert.match(second, /loading="lazy"/);
+    const files = await readdir(join(dist, "assets"));
+    for (const [, file = ""] of first.matchAll(/\/assets\/([^ "]+\.webp)/g)) assert.ok(files.includes(file), `The build writes ${file}.`);
+    assert.match(await readDist("index.html"), /<img class="home-diagram" src="\/assets\/diagram-1000\.[\w-]+\.webp" srcset="[^"]+ 1000w" sizes="[^"]+" width="1000" height="400" alt="A blue diagram">/);
+  });
+
   test("writes the search index of the pages with a hash in its name, and names it in the head of each page", async () => {
     const url = /<meta name="vaporpress:search" content="(\/assets\/search\.[\w-]{8}\.json)">/.exec(await readDist("guide/index.html"))?.[1];
     assert.ok(url !== undefined);
