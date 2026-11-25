@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
-import type { Browser, Page } from "playwright";
+import type { Browser, Page, Request } from "playwright";
 import { openPage } from "./github.ts";
 import { dist, serveDist } from "./static-server.ts";
 import type { StaticServer } from "./static-server.ts";
@@ -108,11 +108,14 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   if (browser === undefined) throw new Error("No browser.");
   const page = await openPage(browser, { viewport: { width: 400, height: 860 } });
   const requests: Promise<{ file: string; type: string; size: number }>[] = [];
-  page.on("requestfinished", (request) => {
+  const measure = (request: Request): void => {
     requests.push(request.sizes().then(({ responseBodySize }) => ({ file: new URL(request.url()).pathname, type: request.resourceType(), size: responseBodySize })));
-  });
+  };
+  page.on("requestfinished", measure);
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
   await page.locator("[data-plate] canvas").waitFor({ state: "detached", timeout: 10000 });
+  // The size of a request that finishes later would be read after the page closes, and that read rejects.
+  page.off("requestfinished", measure);
   const loaded = await Promise.all(requests);
   const files = loaded.map(({ file }) => file);
   const bytes = new Map<string, number>();
