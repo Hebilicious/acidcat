@@ -68,7 +68,7 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
   const siteRoot = resolve(options.root ?? process.cwd());
   const pagesDir = resolve(siteRoot, options.pages ?? "pages");
   const routeFiles = new Map<string, string>();
-  const markdownOptions: MarkdownOptions = { ...options.markdown, images: options.images !== false };
+  let markdownOptions: MarkdownOptions = { ...options.markdown };
   let extraPages: Promise<readonly ExtraPage[]> | undefined;
   const readExtraPages = (): Promise<readonly ExtraPage[]> => {
     extraPages ??= Promise.resolve(options.extraPages?.() ?? []).then((pages) => {
@@ -81,6 +81,10 @@ export const vaporpress = (options: VaporpressOptions): PluginOption[] => {
   const markdown: Plugin = {
     name: "vaporpress:markdown",
     enforce: "pre",
+    configResolved(config) {
+      if (options.images === false) return;
+      markdownOptions = { ...options.markdown, images: config.publicDir === "" ? {} : { publicDir: config.publicDir } };
+    },
     async transform(code, id) {
       const { file, query } = splitId(id);
       if (!file.endsWith(".md") || (query !== "" && query !== leanQuery)) return undefined;

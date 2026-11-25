@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { defineHastPlugin, markdownToHtml } from "satteri";
 import type { HastNode, HastPluginList, MdastPluginList } from "satteri";
 import { parse as parseYaml } from "yaml";
@@ -17,8 +19,12 @@ export interface MarkdownOptions {
   readonly highlight?: Highlight;
   readonly mdastPlugins?: MdastPluginList;
   readonly hastPlugins?: HastPluginList;
-  /** Imports each image of the page that has a relative path with `?image`, so the image service of the Vite plugin converts it. */
-  readonly images?: boolean;
+  /**
+   * Imports each local image of the page with `?image`, so the image service of the Vite plugin converts it. A path
+   * such as `diagram.png`, `./diagram.png` or `../diagram.png` is relative to the page, and `/diagram.png` is a file of
+   * `publicDir`.
+   */
+  readonly images?: { readonly publicDir?: string };
 }
 
 export interface CompiledPage {
@@ -94,23 +100,34 @@ const highlightCode = (highlight: Highlight) =>
     },
   });
 
-const isRelativePath = (src: string): boolean => !/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(src);
+const isUrl = (src: string): boolean => /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(src);
+
+/** The file of a local image, as a Markdown reader finds it: next to the page, or in the public folder for a path from the root. */
+const imageFile = (src: string, page: string, publicDir: string | undefined): string | undefined => {
+  if (isUrl(src)) return undefined;
+  const path = decodeURI(src);
+  if (!path.startsWith("/")) return resolve(dirname(page), path);
+  return publicDir === undefined ? undefined : join(publicDir, path);
+};
 
 /**
- * Gives each `<img>` with a relative path to a PNG, JPEG, WebP, AVIF or TIFF file the attributes of the image service.
+ * Gives each `<img>` of a local PNG, JPEG, WebP, AVIF or TIFF file the attributes of the image service.
  * The first image of a page loads at once, because it can be the largest element on screen. The others load when they
  * come near the screen.
  */
-const serveImages = (imports: string[]) =>
+const serveImages = (imports: string[], page: string, publicDir: string | undefined) =>
   defineHastPlugin({
     name: "vaporpress:images",
     element: {
       filter: ["img"],
       visit(node, context) {
         const src = node.properties["src"];
-        if (typeof src !== "string" || !isRelativePath(src) || !isConvertibleImage(src)) return;
+        if (typeof src !== "string" || !isConvertibleImage(src)) return;
+        const file = imageFile(src, page, publicDir);
+        if (file === undefined) return;
+        if (!existsSync(file)) throw new Error(`${page}: the image "${src}" has no file at ${file}.`);
         const name = `__vaporpressImage${imports.length}`;
-        imports.push(`import ${name} from ${JSON.stringify(`${decodeURI(src)}${imageQuery}`)};`);
+        imports.push(`import ${name} from ${JSON.stringify(`${file}${imageQuery}`)};`);
         const properties = Object.fromEntries(Object.entries(node.properties).filter(([key]) => key !== "src"));
         context.setField(node, "properties", { ...properties, "v-bind": name, decoding: "async", ...(imports.length > 1 ? { loading: "lazy" } : {}) });
       },
@@ -166,7 +183,7 @@ export const compileMarkdown = async (source: string, file: string, options: Mar
     hastPlugins: [
       collectHeadings(options.slugify ?? githubSlug, new Set(options.headingLevels ?? [2, 3]), headings, title),
       ...(options.hastPlugins ?? []),
-      ...(options.images === true ? [serveImages(imports)] : []),
+      ...(options.images === undefined ? [] : [serveImages(imports, file, options.images.publicDir)]),
       ...(options.highlight === undefined ? [] : [highlightCode(options.highlight)]),
       preserveCode,
     ],

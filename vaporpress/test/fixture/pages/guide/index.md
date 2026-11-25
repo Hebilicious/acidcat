@@ -31,7 +31,7 @@ const answer: number = 1 < 2 ? 42 : 0;
 
 Text under the smaller heading.
 
-![The same diagram, further down](./diagram.png)
+![The same diagram, further down](diagram.png)
 
 <style>
 #the-guide { color: rgb(1, 2, 3); }

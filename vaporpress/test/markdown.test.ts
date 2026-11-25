@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { compileScript, parse } from "@vue/compiler-sfc";
 import { leanTemplates } from "../src/lean.ts";
@@ -101,4 +102,26 @@ test("the lean copy keeps each template that hydration may not meet", () => {
     const code = vaporModule(template);
     assert.deepEqual(templatesOf(leanTemplates(code)), templatesOf(code), template);
   }
+});
+
+test("an image path finds its file as a Markdown reader finds it, and a URL keeps its src", async () => {
+  const guide = fileURLToPath(new URL("./fixture/pages/guide/", import.meta.url));
+  const diagram = `${guide}diagram.png`;
+  const forms = ["diagram.png", "./diagram.png", "../guide/diagram.png", "/diagram.png"];
+  const source = [...forms.map((src) => `![Diagram](${src})`), "![Remote](https://example.com/diagram.png)", "![Other](//example.com/diagram.png)"].join("\n\n");
+  const { sfc } = await compileMarkdown(source, `${guide}index.md`, { images: { publicDir: guide } });
+  const imports = [...sfc.matchAll(/^import __vaporpressImage\d+ from ("[^"]+");/gm)].map(([, specifier = ""]): unknown => JSON.parse(specifier));
+  assert.deepEqual(imports, forms.map(() => `${diagram}?image`));
+  assert.match(sfc, /<img src="https:\/\/example\.com\/diagram\.png" alt="Remote">/);
+  assert.match(sfc, /<img src="\/\/example\.com\/diagram\.png" alt="Other">/);
+});
+
+test("a path from the root keeps its src when the site has no public folder", async () => {
+  const { sfc } = await compileMarkdown("![Diagram](/diagram.png)", "/site/pages/index.md", { images: {} });
+  assert.match(sfc, /<img src="\/diagram\.png" alt="Diagram">/);
+});
+
+test("an image with no file fails the build with the path that it looked for", async () => {
+  const page = fileURLToPath(new URL("./fixture/pages/guide/index.md", import.meta.url));
+  await assert.rejects(compileMarkdown("![Missing](missing.png)", page, { images: {} }), (error: unknown) => error instanceof Error && error.message.includes(`the image "missing.png" has no file at ${fileURLToPath(new URL("./fixture/pages/guide/missing.png", import.meta.url))}`));
 });

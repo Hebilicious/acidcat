@@ -80,7 +80,7 @@ const page = usePage();
 | Page data | `usePage()` gives the page on screen: `path`, `title`, `description`, `frontmatter` and `headings`. A Markdown page gets them from its frontmatter and its headings. A `.vue` page gives its own with `defineOptions({ __page: { title, description, frontmatter, headings } })` |
 | Data at build time | A module whose name ends with `.data.ts` exports a loader as its default export, from `defineLoader`. The build runs the loader and gives the importer `data`, the JSON result. The browser gets the data, not the loader or what it imports |
 | Head | `title(page)` and `head(page)` of `defineSite` write the title and the elements of the head that change with the page. The server writes them in each HTML file, and the browser replaces them after each page change. `headHtml` adds HTML that every page has, such as the icon |
-| Images | An image in Markdown with a relative path, such as `![A diagram](./diagram.png)`, gets WebP files at several widths in `srcset`, and its `width` and `height`. A component imports an image with `?image`. See [Images](#images) |
+| Images | An image in Markdown with a local file, such as `![A diagram](diagram.png)`, gets WebP files at several widths in `srcset`, and its `width` and `height`. A component imports an image with `?image`. See [Images](#images) |
 | Components | Every `.vue` file compiles in Vapor mode, with or without the `vapor` attribute. The router registers no global component: import `RouterView` from `vaporpress/client`, and write plain links. The `RouterLink` and `RouterView` of Vue Router render virtual DOM, so the framework removes their registration from `app.use(router)` |
 
 ### Markdown pages
@@ -123,7 +123,16 @@ The build converts each PNG, JPEG, WebP, AVIF and TIFF image that a page uses, w
 - It writes WebP files at the widths 480, 800, 1200, 1600 and 2400 pixels that are smaller than the image, and one at the width of the image. The `srcset` of the image lists them, so the browser loads the smallest file that fills the space on the screen.
 - It writes the `width` and the `height` of the image, so the page keeps the space of the image before the image loads, and the content does not move.
 - `sizes` is `(min-width: <width>px) <width>px, 100vw`: the image is never wider than its own width, or than the window.
-- In Markdown, an image whose path is relative to the page gets these attributes. The first image of a page loads at once, because it can be the largest element on the screen. Each other image has `loading="lazy"`, and loads when it comes near the screen. Every image has `decoding="async"`. An image with an absolute path or a URL, an SVG file and a GIF file keep their `src`.
+- In Markdown, an image of a local file gets these attributes. The path finds the file as a Markdown reader finds it:
+
+  | Path | File |
+  | --- | --- |
+  | `diagram.png`, `./diagram.png` | Next to the page |
+  | `../images/diagram.png` | Relative to the folder of the page |
+  | `/diagram.png` | In the public folder of Vite (`public/`) |
+
+  When the file does not exist, the build fails with the path that it looked for. A URL, such as `https://example.com/diagram.png`, an SVG file and a GIF file keep their `src`.
+- The first image of a page loads at once, because it can be the largest element on the screen. Each other image has `loading="lazy"`, and loads when it comes near the screen. Every image has `decoding="async"`.
 - A component imports an image with `?image`. The import gives the attributes of the `<img>` element:
 
 ```vue
