@@ -17,7 +17,7 @@ The workflow [`benchmark.yml`](../.github/workflows/benchmark.yml) runs both sui
 | Cumulative Layout Shift (CLS) | Content that jumps while the page loads | Lighthouse |
 | Total Blocking Time (TBT) | Time when the page does not respond, because a script runs | Lighthouse |
 | Speed Index | How fast the visible part of the page fills | Lighthouse |
-| JavaScript transferred | The bytes of script that the first visit downloads, with Brotli | The `network-requests` audit of Lighthouse: the scripts until the network is quiet, prefetched chunks included |
+| JavaScript transferred | The bytes of script that the first visit downloads, with Brotli | The `network-requests` audit of Lighthouse: the requests of type Script until the network is quiet. A chunk that a framework prefetches with `import()` counts here. A chunk that a framework prefetches with `<link rel="prefetch">` (VitePress) has the type Other, so it counts only in the total |
 | JavaScript decoded | The bytes of script that the browser must read, without compression | The same requests, their size after decompression |
 | Total transferred, requests | The full cost of the first visit on a metered connection | The same requests. Requests to other origins are counted apart |
 | Ready | The time until a click works | From the start of the navigation, a probe clicks the second tab every 50 ms. The time of the first click that selects it. A click before that does nothing, so the probe does not change the page |
