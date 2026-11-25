@@ -116,6 +116,9 @@ export class Checks {
   }
 }
 
+/** How long `until` waits between two reads. */
+export const POLL_MS = 10;
+
 export async function until<T, Done extends T>(what: string, read: () => Promise<T>, done: (value: T) => value is Done, signal: AbortSignal): Promise<Done>;
 export async function until<T>(what: string, read: () => Promise<T>, done: (value: T) => boolean, signal: AbortSignal): Promise<T>;
 export async function until<T>(what: string, read: () => Promise<T>, done: (value: T) => boolean, signal: AbortSignal): Promise<T> {
@@ -124,7 +127,7 @@ export async function until<T>(what: string, read: () => Promise<T>, done: (valu
     for (;;) {
       last = await read();
       if (done(last)) return last;
-      await pause(10, undefined, { signal });
+      await pause(POLL_MS, undefined, { signal });
     }
   } catch (error) {
     throw signal.aborted ? new Error(`waiting until ${what}; the last value was ${JSON.stringify(last)}`) : error;

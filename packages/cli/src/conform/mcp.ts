@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { monitorEventLoopDelay } from "node:perf_hooks";
 
 import { bundle, encodeMcpHeaderValue, MCP_EVENTS_EXTENSION, MCP_HEADER_MISMATCH, MCP_HEARTBEAT_MAX_MS, MCP_HEARTBEAT_MIN_MS, MCP_PROTOCOL_VERSION_KEY, MCP_SUBSCRIPTION_ID, mcpParamHeaders, targetCatalog } from "@acid-cat/spec-ts";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 import { isArrayOf, isObject, isStringArray, memberOf, parseJson, readJson } from "../json.ts";
 import type { JsonObject } from "../json.ts";
-import { Checks, eventIdsOf, expect, expectEqual, expectOccurrence, fixture, FORBIDDEN_ORIGIN, idsOf, sorted, until } from "./check.ts";
+import { Checks, eventIdsOf, expect, expectEqual, expectOccurrence, fixture, FORBIDDEN_ORIGIN, idsOf, POLL_MS, sorted, until } from "./check.ts";
 import { checkPoll } from "./poll.ts";
 import type { PollSettings } from "./poll.ts";
 import { sseReader } from "./sse.ts";
@@ -19,28 +18,44 @@ const RULE = "spec/surfaces/mcp.md";
 /** Runtimes measure the idle time of a stream with timers of 1 ms resolution, so a heartbeat can come 1 ms early. */
 const TIMER_RESOLUTION_MS = 1;
 
+/** A gap between two ticks of the stall meter that is longer than this is a stall of conform. */
+const STALL_MS = 2;
+
 /**
  * Measures how long a stream was silent before a message, as far as a client can observe it. A client sees when it
  * reads each message, not when the server sent it. It reads a message late when its own process does not run, for
- * example on a busy computer, and such a pause also delays the timers of its event loop. So the silence starts at the
- * read of the last message less the longest delay of the event loop, but never before the request. The time that a
- * message spends in transit, and a proxy that holds messages back, are not visible to a client.
+ * example on a busy computer, or runs other work first. A timer that ticks each millisecond measures these stalls:
+ * each gap between two ticks of more than STALL_MS counts. The silence starts at the read of the last message, less
+ * the stalls since the request, less the time that a client takes to look for a message that came (POLL_MS) and the
+ * slack of the measure, but never before the request. The time that a message spends in transit, and a proxy that
+ * holds messages back, are not visible to a client.
  */
 function silenceMeter() {
-  const delay = monitorEventLoopDelay({ resolution: TIMER_RESOLUTION_MS });
-  delay.enable();
   const requested = performance.now();
   let lastRead = requested;
+  let tick = requested;
+  let stalled = 0;
+  let stalledAtRead: number | undefined;
+  let snapshot = false;
+  const ticks = setInterval(() => {
+    const now = performance.now();
+    if (now - tick > STALL_MS) stalled += now - tick;
+    tick = now;
+    // A stall that delays a read can end in the same turn of the event loop as the read, before this tick counts it.
+    if (snapshot) [stalledAtRead, snapshot] = [stalled, false];
+  }, 1);
   return {
     /** Mark that the client read a message of the stream now. */
-    read: () => void (lastRead = performance.now()),
+    read: () => {
+      lastRead = performance.now();
+      snapshot = true;
+    },
     /** The silence before the message that the client read just now, in milliseconds. */
     silence: () => {
-      const now = performance.now();
-      const paused = delay.max / 1e6 + TIMER_RESOLUTION_MS;
-      return Math.round(now - Math.max(requested, lastRead - paused));
+      const slack = (stalledAtRead ?? stalled) + POLL_MS + STALL_MS + TIMER_RESOLUTION_MS;
+      return Math.round(performance.now() - Math.max(requested, lastRead - slack));
     },
-    stop: () => delay.disable(),
+    stop: () => clearInterval(ticks),
   };
 }
 
