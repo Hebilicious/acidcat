@@ -29,11 +29,20 @@ jobs:
         with:
           token: ${{ steps.app.outputs.token }}
 
-      # release-please makes one tag for each package.
+      # release-please makes one tag for each package, and release-npm.yml starts from one tag for all of them. A run
+      # can stop after it released packages/cli, so each run makes the npm tag when the release exists without it.
       - name: Tag the npm release
-        if: steps.release.outputs['packages/cli--release_created']
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
-          TAG: npm/v${{ steps.release.outputs['packages/cli--version'] }}
-          SHA: ${{ steps.release.outputs['packages/cli--sha'] }}
-        run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$SHA"
+        run: |
+          set -euo pipefail
+          tag_sha() {
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$1" --jq '.object.sha' 2>"$RUNNER_TEMP/error"; then return 0; fi
+            if grep -q 'HTTP 404' "$RUNNER_TEMP/error"; then return 1; fi
+            cat "$RUNNER_TEMP/error" >&2
+            exit 1
+          }
+          version=$(gh api "repos/$GITHUB_REPOSITORY/contents/.release-please-manifest.json?ref=$GITHUB_SHA" --jq '.content' | base64 -d | jq -r '."packages/cli"')
+          if ! sha=$(tag_sha "@acid-cat/cli@$version"); then echo "No release of @acid-cat/cli@$version."; exit 0; fi
+          if tag_sha "npm/v$version" >/dev/null; then echo "npm/v$version exists."; exit 0; fi
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/npm/v$version" -f sha="$sha"

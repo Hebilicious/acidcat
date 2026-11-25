@@ -19,7 +19,7 @@ The six npm packages are `@acid-cat/spec-ts`, `mcp-handshake`, `catalog`, `cli`,
 1. release-please keeps the pull request `chore(release): release main` open. It lists each package and its new version.
 2. On each push to `main`, `release.yml` writes the pull request again on top of `main` (`always-update`). Wait for that run and for the checks of the pull request. Do not update its branch by hand: the next run of `release.yml` writes it again, and a merge commit fails the `semantic` check.
 3. When the checks pass, merge it with `gh pr merge <number> --squash`, and pull `main`.
-4. The workflow `release.yml` tags each package. The tag `npm/v<version>` starts `release-npm.yml`. It runs `moon run verify`, then `node scripts/publish-npm.ts --version <version>`.
+4. The workflow `release.yml` tags each package. When the release of `@acid-cat/cli` exists and the tag `npm/v<version>` does not, it makes that tag. It does this on each run, so a run that stopped after the release of `@acid-cat/cli` makes the tag when the job runs again. The tag `npm/v<version>` starts `release-npm.yml`. It runs `moon run verify`, then `node scripts/publish-npm.ts --version <version>`.
 5. Check the result:
 
    ```sh
