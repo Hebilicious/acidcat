@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { createHighlighter } from "shiki";
-import { defineConfig } from "vite";
+import { defineConfig } from "vite-plus";
 import { vaporpress } from "framework/vite";
 
 const highlighter = await createHighlighter({ themes: ["github-light-high-contrast", "github-dark-high-contrast"], langs: ["sh", "json", "ts"] });

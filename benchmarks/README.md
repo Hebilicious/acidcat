@@ -44,7 +44,7 @@ Each table cell is the median of all the runs of all the jobs, and between brack
 
   | App | Setup | Tabs | Search |
   | --- | --- | --- | --- |
-  | [`apps/framework`](apps/framework/) | vaporpress, with a layout written for the benchmark in the way that a vaporpress site builds one (`site/src/app/` of the AcidCat site is the model), Shiki for code | Static HTML from Markdown, made interactive with `onPageUpdated` | The index and the engine of vaporpress, in a dialog that the page loads when the pointer or the focus comes to the search button |
+  | [`apps/framework`](apps/framework/) | vaporpress, built with `vp build` of Vite+, with a layout written for the benchmark in the way that a vaporpress site builds one (`site/src/app/` of the AcidCat site is the model), Shiki for code | Static HTML from Markdown, made interactive with `onPageUpdated` | The index and the engine of vaporpress, in a dialog that the page loads when the pointer or the focus comes to the search button |
   | [`apps/vitepress`](apps/vitepress/) | VitePress 2 with its default theme | `::: code-group` | Local search |
   | [`apps/starlight`](apps/starlight/) | Astro and Starlight | `<Tabs>` in MDX | Pagefind |
   | [`apps/nuxt`](apps/nuxt/) | Nuxt, Nuxt Content and the Docus theme, statically generated with `nuxt generate` | `::code-group` | Docus search |
@@ -69,7 +69,7 @@ Each table cell is the median of all the runs of all the jobs, and between brack
   | Other | — | — | — | "Copy page", with a menu that opens the page in AI assistants; "Edit this page" and "Report an issue" |
 
   Each cell comes from the built apps, in Chromium at 1350 × 940: the keys pressed on the page, the controls on screen, and the table of contents before and after a scroll. The features of the vaporpress app are in `apps/framework/src/`. The app takes the logic of its tabs, its copy buttons, its table of contents and the keys of its search from `vaporpress/behaviors`, and keeps its own markup and styles. `test/framework-app.test.ts` checks each of its features in Chromium, and runs every rule of axe-core, the enhanced contrast too, on the pages in both themes, at desktop and phone widths, with the menu and the search open.
-- **Pinned versions.** The pnpm catalog pins each version. The Nuxt app uses the stable Vue and the `rolldown` that Nuxt asks for, from the catalog `nuxt`. One build-only fix applies: an override gives Starlight satteri 0.11, the version that Astro uses. Without it, the build of a page with tabs crashes. The pages that it writes do not change.
+- **Pinned versions.** The pnpm catalog pins each version. The name `vite` in the catalog is the build of Vite that Vite+ bundles, for the vaporpress app and the AcidCat site; the apps of VitePress, Starlight and Nuxt install the Vite that they ask for. The Nuxt app uses the stable Vue and the `rolldown` that Nuxt asks for, from the catalog `nuxt`. One build-only fix applies: an override gives Starlight satteri 0.11, the version that Astro uses. Without it, the build of a page with tabs crashes. The pages that it writes do not change.
 - **One server.** [`src/server.ts`](src/server.ts) serves each build from memory in the same way: Brotli at quality 11 for text, compressed once before the first request; an ETag on each file; a year of cache for the hashed assets of the framework, and a check on each load for the rest. It is HTTP/1.1 on localhost.
 - **One runner for each job.** Each job measures every build of its suite on the same runner, in turns: run 1 starts with the first build, run 2 with the second, and so on. Each Lighthouse run and each probe starts in a new browser context, with an empty cache. The `build` job builds once, and each measure job downloads the same files.
 - **Medians over jobs.** Each suite runs in three jobs on three runners, with five runs in each job by default. The tables pool the fifteen samples.
@@ -260,8 +260,12 @@ moon run benchmarks:summarize
 
 Each job writes `results/<suite>-<job>/results.json`, with each sample, and the Lighthouse report of each page of its first run. `src/summarize.ts` reads each `results.json` under `results/` and writes the tables.
 
+## Build cost
+
+The workflow [`build-cost.yml`](../.github/workflows/build-cost.yml) measures what the toolchain costs a developer: the time of `pnpm install` with an empty store, the size of the `node_modules` folders, and the time of the build of the AcidCat site and of the vaporpress app, three times each. A pull request that changes the lockfile, the workspace, `.prototools`, `vaporpress/src/` or the build configuration runs it. Each of its three jobs measures the base of the pull request and its head on the same runner, in its own worktree, in turns. The job `Summarize` writes a table to the summary of the run with `src/build-cost.ts`: the median, the quartiles and the range of each measure, and the ratio of the head to the base.
+
 ## Tests
 
-`moon run benchmarks:test` tests the transform of the fixture for each framework, the static server, and the statistics and the tables of the results. It builds the vaporpress app, and checks its features in Chromium: the theme before the first paint and the switch, the mobile menu, the copy button, the search with its excerpts and its keys, the table of contents, the previous and next pages, the keys of the tabs, and every rule of axe-core, which `axe.getRules()` lists (`test/framework-app.test.ts`). It does not measure.
+`moon run benchmarks:test` tests the transform of the fixture for each framework, the static server, the statistics and the tables of the results, and the table of the build cost. It builds the vaporpress app, and checks its features in Chromium: the theme before the first paint and the switch, the mobile menu, the copy button, the search with its excerpts and its keys, the table of contents, the previous and next pages, the keys of the tabs, and every rule of axe-core, which `axe.getRules()` lists (`test/framework-app.test.ts`). It does not measure.
 
 The framework app imports the framework as `framework`, an alias in [`apps/framework/package.json`](apps/framework/package.json). A new name of the framework changes that line, and the name of its Vite plugin in `apps/framework/vite.config.ts` when that name changes too.

@@ -72,7 +72,10 @@ catalog:
   subset-font: 2.9.0
   three: 0.187.0
   typescript: 7.0.2
-  vite: 8.3.8
+  # Vite+ bundles its own build of Vite 8. Each package that names `vite` gets that build, so the site, vaporpress and
+  # `vp` share one copy. The apps of VitePress, Starlight and Nuxt in the benchmark keep the Vite that they ask for.
+  vite: npm:@voidzero-dev/vite-plus-core@8.3.8001
+  vite-plus: 1.8.0
   yaml: 2.9.1
   vitepress: 2.0.0-alpha.21
   vue: 3.6.0-rc.16

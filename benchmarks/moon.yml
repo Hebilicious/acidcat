@@ -19,7 +19,7 @@ tasks:
   build-framework:
     deps: ["prepare"]
     description: "Build the fixture with vaporpress into apps/framework/dist/."
-    script: "pnpm --dir apps/framework exec vite build"
+    script: "pnpm --dir apps/framework exec vp build"
     inputs: ["apps/framework/src/**/*", "apps/framework/vite.config.ts", "apps/framework/package.json", "src/fixture.ts", "fixture/**/*", "/vaporpress/src/**/*"]
     outputs: ["apps/framework/dist/**/*"]
 

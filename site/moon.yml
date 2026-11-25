@@ -32,7 +32,8 @@ tasks:
   dev:
     deps: ["tokens-watch", "fonts"]
     description: "Serve the site with live reload at http://localhost:5173, and write the design tokens on each change."
-    command: "vite"
+    command: "vp"
+    args: ["dev"]
     preset: "server"
 
   tokens-check:
@@ -43,7 +44,7 @@ tasks:
   build:
     deps: ["fonts"]
     description: "Build the static site with vaporpress into dist/."
-    command: "vite"
+    command: "vp"
     args: ["build"]
     inputs:
       - "src/**/*"
