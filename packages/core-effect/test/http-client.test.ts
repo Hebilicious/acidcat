@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { Effect, Exit, Schema, Scope, Stream } from "effect";
 
@@ -12,6 +13,7 @@ import { runWith } from "./run.ts";
 import { bundledProgram } from "./bundled-program.ts";
 
 const remoteCli = bundledProgram("test/fixture-cli-remote.ts");
+const WITHOUT_GRACE = fileURLToPath(new URL("../../../test-support/without-interrupt-grace.ts", import.meta.url));
 const TOKEN = "Bearer secret-token-of-the-test";
 
 async function serve(handler: NodeServer.WebHandler): Promise<{ readonly url: string; readonly close: () => Promise<void> }> {
@@ -201,7 +203,7 @@ test("an interrupt during a call or list of a server that does not answer is can
   );
   context.after(server.close);
   const interrupted = (...args: string[]) => {
-    const child = spawn(process.execPath, [remoteCli, server.url, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(process.execPath, ["--import", WITHOUT_GRACE, remoteCli, server.url, ...args], { stdio: ["ignore", "pipe", "pipe"] });
     context.after(() => child.kill("SIGKILL"));
     let stdout = "";
     let stderr = "";

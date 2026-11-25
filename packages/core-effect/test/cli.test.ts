@@ -32,6 +32,7 @@ const cliWithRepeated = commandLine("test/fixture-cli-repeated.ts");
 const cliWithInherited = commandLine("test/fixture-cli-inherited.ts");
 
 const PROBE = fileURLToPath(new URL("../../../test-support/interrupt-probe.ts", import.meta.url));
+const WITHOUT_GRACE = fileURLToPath(new URL("../../../test-support/without-interrupt-grace.ts", import.meta.url));
 
 async function interruptedIgnoring(t: Waiter, command: readonly string[], interrupts: 1 | 2) {
   const directory = mkdtempSync(join(tmpdir(), "core-effect-interrupt-"));
@@ -112,7 +113,7 @@ describe("the command line of an application", { concurrency: true }, () => {
     const directory = mkdtempSync(join(tmpdir(), "core-effect-cli-"));
     const interrupted = async (run: number) => {
       const marker = join(directory, `held-${run}`);
-      const child = spawn(process.execPath, [bundledProgram("test/fixture-cli.ts"), "fixture", "hold", "--key", "k", "--marker", marker], { signal: t.signal, killSignal: "SIGKILL" });
+      const child = spawn(process.execPath, ["--import", WITHOUT_GRACE, bundledProgram("test/fixture-cli.ts"), "fixture", "hold", "--key", "k", "--marker", marker], { signal: t.signal, killSignal: "SIGKILL" });
       child.on("error", () => {});
       let stderr = "";
       child.stderr.setEncoding("utf-8").on("data", (chunk: string) => (stderr += chunk));
