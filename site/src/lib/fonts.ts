@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import subsetFont from "subset-font";
 import { routeFaces } from "./font-faces.ts";
-import type { Face, RouteFace } from "./font-faces.ts";
+import type { Face } from "./font-faces.ts";
 
 type CodeRange = readonly [number, number];
 
@@ -96,15 +96,15 @@ export const writeFonts = async (directory: string): Promise<void> => {
   await writeFile(join(directory, "fonts.css"), fontFaceCss());
 };
 
-const preloadedFont = (face: RouteFace, assets: readonly string[]): string => {
-  const stem = fontFile(face, "core").replace(/\.woff2$/, "");
-  const href = assets.find((asset) => asset.endsWith(".woff2") && (asset.split("/").pop() ?? "").startsWith(`${stem}.`));
-  if (href === undefined) throw new Error(`The build has no file for ${stem}.woff2.`);
-  return href;
-};
+const preloadedFonts = (page: "home" | "docs", assets: readonly string[]): string[] =>
+  routeFaces[page].map((face) => {
+    const stem = fontFile(face, "core").replace(/\.woff2$/, "");
+    const href = assets.find((asset) => asset.endsWith(".woff2") && (asset.split("/").pop() ?? "").startsWith(`${stem}.`));
+    if (href === undefined) throw new Error(`The build has no file for ${stem}.woff2.`);
+    return href;
+  });
 
-/** A preload link for the core of each face that the first view of the page draws, for the windows whose first view draws it. */
 export const fontPreloadHtml = (page: "home" | "docs", assets: readonly string[]): string =>
-  routeFaces[page]
-    .map((face) => `<link rel="preload" as="font" type="font/woff2" href="${preloadedFont(face, assets)}"${face.media === undefined ? "" : ` media="${face.media}"`} crossorigin>`)
+  preloadedFonts(page, assets)
+    .map((href) => `<link rel="preload" as="font" type="font/woff2" href="${href}" crossorigin>`)
     .join("");

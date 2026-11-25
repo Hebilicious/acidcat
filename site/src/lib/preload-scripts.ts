@@ -42,7 +42,8 @@ const starter = (sources: readonly string[]): string => {
  * - Each module script and `modulepreload` link of the head, and each script that they import statically at any depth,
  *   becomes a `preload` link. The browser fetches each script at once, and compiles it only when the page imports it.
  *   Lighthouse counts no preload in a chain of critical requests, so the page passes the audit "Network dependency
- *   tree".
+ *   tree". With `priority: "low"`, the links ask for a low priority, so the browser fetches the image of the hero
+ *   and the font faces first.
  * - One inline script imports the module scripts in their order when the document is parsed and the browser reports
  *   its first paint, so the browser paints the page from the server before it evaluates the scripts and hydrates the
  *   page. It listens for the load event before anything else, and imports them then at the latest: a page that has
@@ -51,7 +52,7 @@ const starter = (sources: readonly string[]): string => {
  *   `PerformanceObserver` or paint timing. A page that the back-forward
  *   cache restores imports them when it shows, if they did not start before.
  */
-export const startScriptsAfterFirstPaint = async (html: string, dist: string): Promise<string> => {
+export const startScriptsAfterFirstPaint = async (html: string, dist: string, priority?: "low"): Promise<string> => {
   const end = html.indexOf("</head>");
   const head = html.slice(0, end);
   const sources = [...head.matchAll(moduleScript)].map(([, src = ""]) => src);
@@ -59,7 +60,8 @@ export const startScriptsAfterFirstPaint = async (html: string, dist: string): P
   const scripts = new Set([...sources, ...[...head.matchAll(modulePreload)].map(([, href = ""]) => href)]);
   for (const href of scripts) for (const imported of await staticImports(dist, href)) scripts.add(imported);
   const marked = new Set([...head.matchAll(modulePreload)].filter(([, , marker]) => marker !== undefined).map(([, href = ""]) => href));
-  const preloads = [...scripts].map((href) => `<link rel="preload" as="script" crossorigin href="${href}"${marked.has(href) ? " data-page-chunk" : ""}>`).join("");
+  const fetchPriority = priority === undefined ? "" : ` fetchpriority="${priority}"`;
+  const preloads = [...scripts].map((href) => `<link rel="preload" as="script" crossorigin href="${href}"${fetchPriority}${marked.has(href) ? " data-page-chunk" : ""}>`).join("");
   let first = true;
   const rewritten = head.replace(modulePreload, "").replace(moduleScript, () => {
     const replacement = first ? preloads + starter(sources) : "";

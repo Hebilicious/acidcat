@@ -63,7 +63,7 @@ export default defineConfig({
     },
     preload: (page) => (page.frontmatter["layout"] === "home" ? [] : ["src/app/DocsLayout.vue"]),
     transformHtml: async (html, page, { files }) => {
-      const scriptsFirst = await startScriptsAfterFirstPaint(html, outDir);
+      const scriptsFirst = await startScriptsAfterFirstPaint(html, outDir, page.path === "/" ? "low" : undefined);
       const fonts = fontPreloadHtml(page.path === "/" ? "home" : "docs", files);
       return writeExplorerSources(scriptsFirst.replace("</head>", `${fonts}${searchDialogMeta(files)}</head>`), repositoryRoot);
     },

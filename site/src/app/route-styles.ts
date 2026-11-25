@@ -48,7 +48,7 @@ export const loadRouteStyles = async (route: Route): Promise<void> => applyRoute
 
 /** Loads the faces that the first view of a route draws, so that its text does not move when a face arrives. */
 export const loadRouteFonts = async (route: Route): Promise<void> => {
-  const faces = route === "search" ? [] : routeFaces[route].filter((face) => face.media === undefined || matchMedia(face.media).matches);
+  const faces = route === "search" ? [] : routeFaces[route];
   await Promise.all(faces.map((face) => document.fonts.load(cssFont(face)))).catch(() => undefined);
 };
 
