@@ -116,7 +116,7 @@ export const toFramework = (page: FixturePage): Output => ({
   source: `${frontmatter({ title: page.title, description: page.description })}\n# ${page.title}\n\n${replaceTabs(page.body, (tabs, group) =>
     [
       '<div class="tabs">',
-      `<div role="tablist">${tabs.map((tab, index) => `<button type="button" role="tab" id="tab-${group}-${index}" aria-controls="panel-${group}-${index}" aria-selected="${index === 0}">${escapeHtml(tab.label)}</button>`).join("")}</div>`,
+      `<div role="tablist">${tabs.map((tab, index) => `<button type="button" role="tab" id="tab-${group}-${index}" aria-controls="panel-${group}-${index}" aria-selected="${index === 0}"${index === 0 ? "" : ' tabindex="-1"'}>${escapeHtml(tab.label)}</button>`).join("")}</div>`,
       ...tabs.map((tab, index) => `<div role="tabpanel" id="panel-${group}-${index}" aria-labelledby="tab-${group}-${index}"${index === 0 ? "" : " hidden"}>\n\n${tab.code}\n\n</div>`),
       "</div>",
     ].join("\n"),

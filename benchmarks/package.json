@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "axe-core": "catalog:",
     "sharp": "catalog:",
     "typescript": "catalog:"
   }

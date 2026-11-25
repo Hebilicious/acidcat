@@ -66,10 +66,11 @@ tasks:
       runInCI: false
 
   test:
-    description: "Test the transform of the fixture for each framework, the static server, and the statistics and tables of the results."
+    deps: ["build-framework"]
+    description: "Test the transform of the fixture for each framework, the static server, the statistics and tables of the results, and the features of the vaporpress app in Chromium."
     command: "node"
     args: ["--test", "test/"]
-    inputs: ["src/**/*", "test/**/*", "fixture/**/*"]
+    inputs: ["src/**/*", "test/**/*", "fixture/**/*", "apps/framework/dist/**/*"]
 
   typecheck:
     description: "Type-check the benchmark, its tests, and the TypeScript of the apps of the framework and of Starlight."

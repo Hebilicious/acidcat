@@ -39,12 +39,31 @@ Each table cell is the median of all the runs of all the jobs, and between brack
 
   | App | Setup | Tabs | Search |
   | --- | --- | --- | --- |
-  | [`apps/framework`](apps/framework/) | vaporpress, with a layout written for the benchmark (sidebar, table of contents, a search dialog), Shiki for code | Static HTML from Markdown, made interactive with `onPageUpdated` | The index and the engine of vaporpress, in a dialog that loads on the first click |
+  | [`apps/framework`](apps/framework/) | vaporpress, with a layout written for the benchmark in the way that a vaporpress site builds one (`site/src/app/` of the AcidCat site is the model), Shiki for code | Static HTML from Markdown, made interactive with `onPageUpdated` | The index and the engine of vaporpress, in a dialog that the page loads when the pointer or the focus comes to the search button |
   | [`apps/vitepress`](apps/vitepress/) | VitePress 2 with its default theme | `::: code-group` | Local search |
   | [`apps/starlight`](apps/starlight/) | Astro and Starlight | `<Tabs>` in MDX | Pagefind |
   | [`apps/nuxt`](apps/nuxt/) | Nuxt, Nuxt Content and the Docus theme, statically generated with `nuxt generate` | `::code-group` | Docus search |
 
-  The framework has no theme. Its app has a smaller layout than the three themes: no dark mode switch, no mobile menu, no copy button on code blocks, and a search dialog with only a field and a list of titles. Read its numbers with this in mind.
+  The framework has no theme, so its app has a layout of its own. It has each feature that the three themes have, so the numbers compare like with like:
+
+  | Feature | vaporpress | VitePress | Starlight | Docus |
+  | --- | --- | --- | --- | --- |
+  | Theme switch | A button: light or dark. The page follows the system until the reader chooses | A button: light or dark. The page follows the system until the reader chooses | A list: dark, light or auto | A button: light or dark. The page follows the system until the reader chooses |
+  | No flash of the wrong theme | An inline script in the head | An inline script in the head | An inline script in the head | An inline script in the head |
+  | Mobile menu | Yes | Yes | Yes | Yes |
+  | Copy button on code blocks | Yes | Yes | Yes | Yes |
+  | Search shortcut | Control+K and `/` | Control+K and `/` | Control+K and `/` | Control+K |
+  | Search results | The section, the title, and an excerpt around the first match, with each match marked | The section and the title. An excerpt only in the detailed view, which is off by default | The page, its sections, and an excerpt of each, with each match marked | The section, the title, and an excerpt |
+  | Arrow keys in the results | Yes | Yes | No: Tab moves between the result links | Yes |
+  | Table of contents | Marks the heading of the section on screen | Marks the heading of the section on screen | Marks the heading of the section on screen | Marks the heading of the section on screen |
+  | Table of contents on a phone | "On this page", which opens | "On this page", which opens | "On this page", which opens | "On this page", which opens |
+  | Previous and next page | Yes | Yes | Yes | Yes, with the description of each page |
+  | Skip link | Yes | Yes | Yes | No |
+  | Arrow keys in the tabs | Yes | Yes: each tab is a radio button | Yes | Yes |
+  | Web font | None: the font of the system | Inter, preloaded | None | None |
+  | Other | — | — | — | "Copy page", with a menu that opens the page in AI assistants |
+
+  The features of the vaporpress app are in `apps/framework/src/`. `test/framework-app.test.ts` checks each of them in Chromium, and runs every rule of axe-core on the pages in both themes, at desktop and phone widths, with the menu and the search open.
 - **Pinned versions.** The pnpm catalog pins each version. The Nuxt app uses the stable Vue and the `rolldown` that Nuxt asks for, from the catalog `nuxt`. One build-only fix applies: an override gives Starlight satteri 0.11, the version that Astro uses. Without it, the build of a page with tabs crashes. The pages that it writes do not change.
 - **One server.** [`src/server.ts`](src/server.ts) serves each build from memory in the same way: Brotli at quality 11 for text, compressed once before the first request; an ETag on each file; a year of cache for the hashed assets of the framework, and a check on each load for the rest. It is HTTP/1.1 on localhost.
 - **One runner for each job.** Each job measures every build of its suite on the same runner, in turns: run 1 starts with the first build, run 2 with the second, and so on. Each Lighthouse run and each probe starts in a new browser context, with an empty cache. The `build` job builds once, and each measure job downloads the same files.
@@ -74,6 +93,6 @@ Each job writes `results/<suite>-<job>/results.json`, with each sample, and the 
 
 ## Tests
 
-`moon run benchmarks:test` tests the transform of the fixture for each framework, the static server, and the statistics and the tables of the results. It does not build or measure.
+`moon run benchmarks:test` tests the transform of the fixture for each framework, the static server, and the statistics and the tables of the results. It builds the vaporpress app, and checks its features in Chromium: the theme before the first paint and the switch, the mobile menu, the copy button, the search with its excerpts and its keys, the table of contents, the previous and next pages, the keys of the tabs, and every rule of axe-core (`test/framework-app.test.ts`). It does not measure.
 
 The framework app imports the framework as `framework`, an alias in [`apps/framework/package.json`](apps/framework/package.json). A new name of the framework changes that line, and the name of its Vite plugin in `apps/framework/vite.config.ts` when that name changes too.

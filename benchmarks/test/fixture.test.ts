@@ -54,7 +54,7 @@ test("Docus gets numbered files in the order of the sidebar, a code group, and t
 test("the framework gets static tabs with roles, the first one selected, and the other panels hidden", () => {
   const { source } = toFramework(page);
   assert.match(source, /\n# Installation\n/);
-  assert.match(source, /<button type="button" role="tab" id="tab-0-0" aria-controls="panel-0-0" aria-selected="true">pnpm<\/button>/);
+  assert.match(source, /<button type="button" role="tab" id="tab-0-0" aria-controls="panel-0-0" aria-selected="true">pnpm<\/button><button type="button" role="tab" id="tab-0-1" aria-controls="panel-0-1" aria-selected="false" tabindex="-1">npm<\/button>/);
   assert.match(source, /<div role="tabpanel" id="panel-0-1" aria-labelledby="tab-0-1" hidden>\n\n```sh\nnpm install x\n```\n\n<\/div>/);
   assert.match(source, /\(\/guide\/configuration\/\)/);
 });
