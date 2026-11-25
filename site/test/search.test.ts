@@ -125,7 +125,8 @@ for (const viewport of [
     assert.equal(await first.evaluate((element) => getComputedStyle(element).borderTopColor), await acid(page), "the selected result has the acid border");
     assert.ok((await first.locator("mark").count()) > 0, "the result marks the words that match");
     await page.keyboard.press("Enter");
-    await page.waitForFunction(() => location.pathname !== "/docs/quick-start/" && location.search === "");
+    await page.waitForFunction(() => location.pathname !== "/docs/quick-start/");
+    assert.equal(await page.evaluate(() => location.pathname + location.search + location.hash), "/docs/concepts/conformance/", "Enter goes to the page of the first result, whose first heading is the section of the page");
     assert.equal(await page.locator(".search-dialog").count(), 0);
     assert.equal(await page.evaluate(() => document.documentElement.hasAttribute("data-same-document")), true);
 
@@ -180,6 +181,7 @@ test("on vaporpress, the open search is an entry of the history: Back closes onl
   await page.locator(".search-dialog .result").first().waitFor();
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => location.pathname !== "/docs/quick-start/");
+  assert.equal(await page.evaluate(() => location.pathname + location.search + location.hash), "/docs/concepts/conformance/");
   await page.goBack();
   await page.waitForFunction(() => location.pathname === "/docs/quick-start/");
   assert.equal(await page.evaluate(() => location.search), "", "the result replaced the entry of the open search");
