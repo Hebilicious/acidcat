@@ -34,7 +34,7 @@ Each table cell is the median of all the runs of all the jobs, and between brack
 
 ## Fairness
 
-- **One fixture.** [`fixture/`](fixture/) holds the ten pages as Markdown: a home page with text and one image, docs pages with headings, highlighted code blocks, a table, tabs, and long and short pages. [`src/prepare.ts`](src/prepare.ts) writes the pages of each app from it, and changes only what each framework writes differently: the tabs, the title, the paths of the links, and where the image goes.
+- **One fixture.** [`fixture/`](fixture/) holds the ten pages as Markdown: a home page with text and one image, docs pages with headings, highlighted code blocks, a table, tabs, and long and short pages. [`src/prepare.ts`](src/prepare.ts) writes the pages of each app from it, and changes only what each framework writes differently: the tabs, the title, the paths of the links, and where the image goes. Each framework serves the image in its default way: vaporpress and Starlight convert it to WebP at build time and write its size.
 - **The standard setup of each framework.** Each app uses the documented way of its framework for each feature, and no tuning for speed:
 
   | App | Setup | Tabs | Search |
