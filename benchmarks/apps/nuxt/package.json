@@ -6,7 +6,6 @@
   "license": "MIT",
   "type": "module",
   "dependencies": {
-    "better-sqlite3": "catalog:",
     "docus": "catalog:",
     "nuxt": "catalog:",
     "rolldown": "catalog:nuxt",

@@ -236,9 +236,6 @@ catalogs:
     axe-core:
       specifier: 4.14.0
       version: 4.14.0
-    better-sqlite3:
-      specifier: 12.11.1
-      version: 12.11.1
     capnweb:
       specifier: 0.12.0
       version: 0.12.0
@@ -432,9 +429,6 @@ importers:
 
   benchmarks/apps/nuxt:
     dependencies:
-      better-sqlite3:
-        specifier: 'catalog:'
-        version: 12.11.1
       docus:
         specifier: 'catalog:'
         version: 5.15.0(ec996c54bc2512746d4306cbc719f099)
