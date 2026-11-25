@@ -258,6 +258,7 @@ The search finds words by prefix, and with one wrong letter in five. A match in 
 | | `usePage()` | The data of the page on screen |
 | | `onPageUpdated(fn)` | Runs `fn` each time the content of a page is in the DOM |
 | | `prefetchPage(router, path)` | Loads the chunk of a page before the reader goes to it |
+| | `Router` | The type of the router of the site, from Vue Router |
 | `vaporpress/data` | `defineLoader({ load, watch })`, `LoadedData` | A module of data that the build reads once |
 | `vaporpress/behaviors` | `listenToTabs`, `selectTab`, `copyCodeOnClick`, `observeActiveHeading`, `isSearchShortcut`, `isTextField`, `onListboxKey`, `openModal` | The logic of tabs, copy buttons, the table of contents and a search dialog, with no markup and no styles. See [Behaviors](#behaviors) |
 | `vaporpress/search` | `loadSearch()`, `SiteSearch`, `SearchResult` | Loads the engine and the index of the site, once. `search(query, limit)` gives the sections that match, best first |
@@ -283,6 +284,8 @@ The search finds words by prefix, and with one wrong letter in five. A match in 
 | `afterBuild(outDir)` | none | Runs after the build has written every page, for example to write more files |
 | `vue` | — | Options for `@vitejs/plugin-vue` |
 
+The options of Vite apply too. With `build.cssCodeSplit: false`, Vite writes one stylesheet, and every page links it.
+
 ## Design
 
 The framework follows the page model of VitePress: each page is a component of one client-side app, the router changes the page in the browser, and the pages of the links in view load ahead. It has no islands, no partial hydration and no router that swaps HTML fragments: a page change in a documentation site must feel instant, and a client-side app does that best.
@@ -306,7 +309,7 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 | Part | How |
 | --- | --- |
 | A chunk for each page | Each route imports its page dynamically |
-| Prefetch | When the browser is idle, an `IntersectionObserver` loads the chunk of each link in view. A link under the pointer, under a finger or with the focus loads at once. The loaded component replaces the loader in the route record, so the page change does not wait (`src/client/prefetch.ts`) |
+| Prefetch | When the browser is idle, an `IntersectionObserver` finds each link in view, and a `prefetch` link fetches the chunk of its page at a low priority. The browser runs none of it until the page change. Each page names the chunk of every page in a JSON element at the end of its body. A link under the pointer, under a finger or with the focus loads its page at once: the loaded component replaces the loader in the route record, so the page change does not wait (`src/client/prefetch.ts`) |
 | Links | One click listener on the document changes the page with `router.push` (`src/client/links.ts`). A link to a hash of the same page, such as a skip link, moves the focus to its target, so the next Tab goes on from there, as the browser does |
 | A failed page change | Each page is a static HTML file. When a page change fails, for example because the chunk of the page or of its layout does not load, or because a deploy removed the chunks that an open tab knows, the browser loads the page as a new document (`router.onError` in `src/client/entry-client.ts`). When the first page of a visit fails, the HTML from the server stays on the screen, and its links load new documents |
 | Scroll | The router keeps the position when only the query changes, restores the position of a page that the reader comes back to, goes to the heading of a hash, or goes to the top. `scrollBehavior` of `defineSite` replaces this |
@@ -351,14 +354,14 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 - `markdown.test.ts`: the page data, the heading ids and the table of contents, components and `<script setup>` in Markdown, code that Vue does not compile, the highlighter, `transformSource`, and the lean copy of a component, which keeps the templates that hydration may not meet.
 - `behaviors.test.ts`: in Chromium, the tabs with a click and with the arrow keys, the search shortcuts, the keys of a list box and the focus that comes back when a modal closes, a copy button, and the active heading as the page scrolls.
 - `site-definition.test.ts`: the checks of a site definition and of a component, and that `defineLazyLayout` throws in the setup of a component.
-- `site.test.ts`: builds `test/fixture/` and serves `dist/`. It checks the HTML, the head and the lean chunk of each page, that the build checks each lazy layout once for each page, the data of a data module, and the search index: its name, its meta element, and the content that it leaves out. In Chromium, it checks that the search finds a section under its headings, marks the words that match, gives the excerpt of the section, and goes to a result with no new document. In Chromium, it checks that hydration changes no element of the DOM and logs no mismatch, that components respond, that a click changes the page with no new document and updates the head, that a lazy layout renders in the same task as the page that uses it and hydrates with the first page, that a page change loads a new document when the chunk of its page or of its layout does not load, that the first page keeps its HTML and its links when a chunk of the page does not load, that the chunk of a link in view loads before the click and the chunk of a link under the pointer loads at once, that the scroll position comes back on Back and on Forward, that a hash goes to its heading, that the skip link moves the focus past the header, that a branch of `v-if`, `v-else` or `v-for` that the server did not render shows after hydration and after a page change, and that an unknown path shows the 404 page.
+- `site.test.ts`: builds `test/fixture/` and serves `dist/`. It checks the HTML, the head and the lean chunk of each page, that the build checks each lazy layout once for each page, the data of a data module, and the search index: its name, its meta element, and the content that it leaves out. In Chromium, it checks that the search finds a section under its headings, marks the words that match, gives the excerpt of the section, and goes to a result with no new document. In Chromium, it checks that hydration changes no element of the DOM and logs no mismatch, that components respond, that a click changes the page with no new document and updates the head, that a lazy layout renders in the same task as the page that uses it and hydrates with the first page, that a page change loads a new document when the chunk of its page or of its layout does not load, that the first page keeps its HTML and its links when a chunk of the page does not load, that a prefetch link fetches the chunk of a link in view before the click and the page change takes it from the cache, that the chunk of a link under the pointer loads at once, that the scroll position comes back on Back and on Forward, that a hash goes to its heading, that the skip link moves the focus past the header, that a branch of `v-if`, `v-else` or `v-for` that the server did not render shows after hydration and after a page change, and that an unknown path shows the 404 page.
 - `dev.test.ts`: the dev server serves a page, a click changes the page, and the search finds a section and its excerpt.
 
 `moon run vaporpress:typecheck` type-checks the sources and the tests.
 
 ## Roadmap
 
-- Move the rest of the AcidCat site onto the framework: the packages page, the homepage, the files for agents, the fonts; then remove VitePress. The docs, the examples and the specification build on it.
+- Move the rest of the AcidCat site onto the framework: the files for agents; then remove VitePress. The docs, the examples, the specification, the packages page and the homepage build on it.
 - Built-in features: the Markdown of each page and `llms.txt`, social cards, the subsets of the font faces, and the design tokens of cssforge.
 - A skill that gives the checklist of the verification loop for a site.
 - Move the framework to a repository of its own.

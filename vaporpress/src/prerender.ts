@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
-import { leanPageChunkMarker } from "./client/markers.ts";
+import { leanPageChunkMarker, pageChunksId } from "./client/markers.ts";
 import type { PageData } from "./page.ts";
 import { searchIndexJson, searchMeta, writeSearchIndex } from "./search-index.ts";
 
@@ -94,11 +94,23 @@ export const prerender = async (input: PrerenderInput): Promise<void> => {
   const entries = await readdir(input.outDir, { withFileTypes: true, recursive: true });
   const files = entries.filter((entry) => entry.isFile()).map((entry) => relative(input.outDir, join(entry.parentPath, entry.name)));
   const build: BuildFiles = { files: files.filter((file) => !file.startsWith(".vite/")).map((file) => `${base}${file}`) };
+  const chunkStyles = new Set(Object.values(manifest).flatMap((chunk) => chunk.css ?? []));
+  // With `build.cssCodeSplit: false`, Vite writes one stylesheet that no chunk names.
+  const sharedStyles = Object.values(manifest)
+    .map((chunk) => chunk.file)
+    .filter((file) => file.endsWith(".css") && !chunkStyles.has(file));
+  const pageChunks: Record<string, string> = {};
+  for (const path of server.paths()) {
+    const file = input.routeFiles.get(path);
+    const chunk = file === undefined ? undefined : manifest[file]?.file;
+    if (chunk !== undefined && path !== "/404") pageChunks[pageUrl(path)] = `${base}${chunk}`;
+  }
+  const pageChunksJson = `<script type="application/json" id="${pageChunksId}">${JSON.stringify(pageChunks).replaceAll("<", "\\u003c")}</script>`;
   const written: { readonly path: string; readonly html: string }[] = [];
   for (const path of server.paths()) {
     const { html, head, page } = await server.render(pageUrl(path));
     const scripts = new Set<string>();
-    const styles = new Set<string>();
+    const styles = new Set<string>(sharedStyles);
     collect(manifest, entryKey, scripts, styles);
     const file = input.routeFiles.get(path);
     const leanKey = file === undefined ? undefined : `${file}?lean`;
@@ -119,7 +131,7 @@ export const prerender = async (input: PrerenderInput): Promise<void> => {
       input.options.headHtml ?? "",
       ...links,
       `<script type="module" src="${base}${entryFile ?? ""}"></script>`,
-      `</head><body><div id="app">${html}</div></body></html>`,
+      `</head><body><div id="app">${html}</div>${pageChunksJson}</body></html>`,
     ].join("");
     written.push({ path, html: input.options.transformHtml === undefined ? document : await input.options.transformHtml(document, page, build) });
   }

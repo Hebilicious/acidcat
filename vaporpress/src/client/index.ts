@@ -6,4 +6,4 @@ export { pageOf, usePage } from "./router.ts";
 export { onPageUpdated } from "./page-updated.ts";
 export { prefetchPage } from "./prefetch.ts";
 export type { Heading, HeadTag, PageData } from "../page.ts";
-export type { Image } from "../images.ts";
+export type { Router } from "vue-router";

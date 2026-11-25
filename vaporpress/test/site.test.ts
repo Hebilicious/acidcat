@@ -14,6 +14,7 @@ const dist = join(fixture, "dist");
 let origin = "";
 let browser: Browser | undefined;
 let close: (() => void) | undefined;
+const served: string[] = [];
 
 const readDist = (path: string): Promise<string> => readFile(join(dist, path), "utf8");
 
@@ -57,9 +58,10 @@ const sameDocument = (page: Page): Promise<boolean> => page.evaluate(() => docum
 before(async () => {
   const builder = await createBuilder({ configFile: join(fixture, "vite.config.ts"), logLevel: "warn" });
   await builder.buildApp();
-  const served = await serve(dist);
-  origin = served.origin;
-  close = () => served.server.close();
+  const site = await serve(dist);
+  site.server.on("request", (request: { readonly url?: string }) => served.push(request.url ?? ""));
+  origin = site.origin;
+  close = () => site.server.close();
   browser = await chromium.launch();
 });
 
@@ -264,18 +266,18 @@ describe("in the browser", () => {
     await page.close();
   });
 
-  test("loads the page of a link in view before the click", async () => {
+  test("fetches ahead the page of a link in view with a prefetch link, before the click", async () => {
     const file = await chunkUrl("pages/guide/long.md");
     let prefetched: Promise<unknown> = Promise.resolve();
     const { page, problems } = await open("/", (page) => {
       prefetched = page.waitForResponse((response) => response.url() === file);
     });
     await prefetched;
-    const requested: string[] = [];
-    page.on("request", (request) => requested.push(request.url()));
+    assert.equal(await page.locator(`link[rel="prefetch"][href="${new URL(file).pathname}"]`).count(), 1, "A prefetch link fetches the chunk, and runs none of it.");
+    const before = served.length;
     await page.click("header a[href='/guide/long/']");
     await page.waitForSelector("#section-12");
-    assert.deepEqual(requested.filter((url) => url.endsWith(".js")), [], "The page change loads no script: the chunk is already there.");
+    assert.deepEqual(served.slice(before).filter((url) => url === new URL(file).pathname), [], "The page change takes the chunk from the cache.");
     assert.deepEqual(problems, []);
     await page.close();
   });
