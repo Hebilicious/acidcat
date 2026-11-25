@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { relative } from "node:path";
+import { build as esbuild } from "esbuild";
 import { defineConfig } from "vite";
 import { vaporpress } from "vaporpress/vite";
 import { writeAgentFiles } from "./src/lib/agent/files.ts";
@@ -23,6 +24,9 @@ const specPages = await readSpecPages(repositoryRoot);
 const favicon = await readFavicon();
 const outDir = fileURLToPath(new URL("dist", import.meta.url));
 const specFiles = new Map(specPages.map((page) => [fileURLToPath(new URL(`../${page.source}`, import.meta.url)), page]));
+
+const tabInput = await esbuild({ entryPoints: [fileURLToPath(new URL("src/app/tab-input.ts", import.meta.url))], bundle: true, minify: true, format: "iife", target: "es2022", write: false });
+const tabInputScript = `<script>${tabInput.outputFiles[0]?.text.trim() ?? ""}</script>`;
 
 const searchDialogMeta = (files: readonly string[]): string => {
   const href = files.find((file) => /\/SearchDialog\.[\w-]+\.js$/.test(file));
@@ -65,7 +69,8 @@ export default defineConfig({
     transformHtml: async (html, page, { files }) => {
       const scriptsFirst = await startScriptsAfterFirstPaint(html, outDir, page.path === "/" ? "low" : undefined);
       const fonts = fontPreloadHtml(page.path === "/" ? "home" : "docs", files);
-      return writeExplorerSources(scriptsFirst.replace("</head>", `${fonts}${searchDialogMeta(files)}</head>`), repositoryRoot);
+      const docsOnly = page.path === "/" ? "" : tabInputScript;
+      return writeExplorerSources(scriptsFirst.replace("</head>", `${fonts}${searchDialogMeta(files)}${docsOnly}</head>`), repositoryRoot);
     },
     afterBuild: async () => {
       await inlineStyles(outDir);

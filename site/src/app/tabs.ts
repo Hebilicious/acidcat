@@ -58,16 +58,17 @@ const tabOf = (event: Event): { readonly tab: HTMLAnchorElement; readonly group:
   return tab === null || tab === undefined || group === null || group === undefined ? undefined : { tab, group };
 };
 
-let listening = false;
-
 /**
- * Gives every tab group its behavior with one listener on the document, once, so a tab responds before the content of
- * the page hydrates: a click or an arrow key selects a tab, and the choice in a group with a sync key applies to each
- * group with that key, on this page and on the next ones.
+ * Gives every tab group its behavior with one listener on the document: a click or an arrow key selects a tab, and the
+ * choice in a group with a sync key applies to each group with that key, on this page and on the next ones. The HTML
+ * of each docs page runs it inline (`tab-input.ts`), so a tab responds before any module script runs, and the layout of
+ * the docs runs it for a page that the reader reached from the homepage. The attribute on the root element keeps it to
+ * one listener, because the inline copy and the module copy do not share their variables.
  */
 export const selectTabsOnInput = (): void => {
-  if (listening) return;
-  listening = true;
+  const root = document.documentElement;
+  if (root.hasAttribute("data-tab-input")) return;
+  root.setAttribute("data-tab-input", "");
   document.addEventListener("click", (event) => {
     const found = tabOf(event);
     if (found === undefined) return;

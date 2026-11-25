@@ -73,6 +73,30 @@ describe("the layout of the site", () => {
     await page.close();
   });
 
+  test("a tab responds before any module script runs", async () => {
+    assert.ok(site && browser);
+    const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
+    await page.route(/\/assets\/[^/]+\.js$/, (route) => route.abort());
+    await page.goto(`${site.origin}/docs/quick-start/`, { waitUntil: "domcontentloaded" });
+    const tabs = page.locator('[role="tablist"]').first().locator('[role="tab"]');
+    await tabs.nth(1).click();
+    assert.equal(await tabs.nth(1).getAttribute("aria-selected"), "true");
+    assert.equal(await page.evaluate(() => document.querySelector("#app")?.hasAttribute("data-v-app")), false, "no module script ran");
+    await page.close();
+  });
+
+  test("start the tabs of a page after a page change from the homepage", async () => {
+    assert.ok(site);
+    const { page, problems } = await open(site.origin, "/");
+    await page.evaluate(() => document.querySelector<HTMLAnchorElement>('a[href="/docs/quick-start/"]')?.click());
+    await page.waitForFunction(() => document.title === "Quick start | AcidCat");
+    const tabs = page.locator('[role="tablist"]').first().locator('[role="tab"]');
+    await tabs.nth(1).click();
+    assert.equal(await tabs.nth(1).getAttribute("aria-selected"), "true");
+    assert.deepEqual(problems, []);
+    await page.close();
+  });
+
   test("start the tabs of a page after a page change", async () => {
     assert.ok(site);
     const { page, problems } = await open(site.origin, "/docs/");
