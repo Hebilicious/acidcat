@@ -65,6 +65,60 @@ test("a page change from the homepage to the docs loads the CSS of the docs befo
   await page.close();
 });
 
+test("a page change between the homepage and the docs always has a page in the app, whether the browser fetched the layout of the docs ahead or not", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  const pathsWithoutPage: Record<string, unknown> = {};
+  for (const fetchedAhead of [false, true]) {
+    const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
+    if (!fetchedAhead) await page.route("**/*", async (route) => ((await route.request().allHeaders())["sec-purpose"] === "prefetch" ? route.abort() : route.fallback()));
+    await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+    await waitForHydration(page);
+    if (fetchedAhead) {
+      await page.waitForFunction(() => {
+        const links = [...document.querySelectorAll<HTMLLinkElement>('link[rel="prefetch"]')];
+        return links.length > 0 && links.every((link) => performance.getEntriesByName(link.href).length > 0);
+      });
+    }
+    // The browser paints only after the microtasks of a task, and a mutation observer runs in those microtasks. So a
+    // state that this observer never sees is a state that no frame shows.
+    await page.evaluate(() => {
+      const app = document.getElementById("app");
+      if (app === null) throw new Error("No app.");
+      const withoutPage: string[] = [];
+      Reflect.set(window, "withoutPage", withoutPage);
+      new MutationObserver(() => {
+        if (app.querySelector(".home-page, .page") === null) withoutPage.push(location.pathname);
+      }).observe(app, { childList: true, subtree: true });
+    });
+    await page.locator('.site-links a[href="/docs/"]').click();
+    await page.locator("h1#_top").waitFor();
+    await page.locator('.site-brand[href="/"]').click();
+    await page.locator("#hero-title").waitFor();
+    await page.locator('.site-links a[href="/docs/"]').click();
+    await page.locator("h1#_top").waitFor();
+    pathsWithoutPage[fetchedAhead ? "fetched ahead" : "not fetched ahead"] = await page.evaluate((): unknown => Reflect.get(window, "withoutPage"));
+    await page.close();
+  }
+  assert.deepEqual(pathsWithoutPage, { "not fetched ahead": [], "fetched ahead": [] });
+});
+
+test("the root has the background of the site when the app has no page", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
+  await page.goto(`${origin}/docs/`, { waitUntil: "networkidle" });
+  await waitForHydration(page);
+  const root = await page.evaluate(() => {
+    document.getElementById("app")?.replaceChildren();
+    const probe = document.createElement("div");
+    probe.style.background = "var(--palette-ink-900)";
+    document.body.append(probe);
+    const style = getComputedStyle(document.documentElement);
+    return { background: style.backgroundColor === getComputedStyle(probe).backgroundColor, colorScheme: style.colorScheme };
+  });
+  assert.deepEqual(root, { background: true, colorScheme: "dark" });
+  await page.close();
+});
+
 test("a page change moves no content that stays on the page, from the homepage, into the examples and out of them", async () => {
   if (browser === undefined) throw new Error("No browser.");
   const changes = [

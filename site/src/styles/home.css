@@ -5,9 +5,7 @@
 }
 
 html:has(.home-page) {
-  color-scheme: dark;
   scroll-behavior: smooth;
-  background: var(--palette-ink-900);
 }
 
 body:has(.home-page) {

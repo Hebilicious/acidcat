@@ -38,8 +38,11 @@
 }
 
 html:has(.page) {
-  color-scheme: dark;
   scroll-padding-top: calc(1.5rem + var(--sl-nav-height) + var(--sl-mobile-toc-height));
+  /* A software rasterizer draws an OKLab gradient slowly. This one fades one color to transparent, so sRGB looks the same. */
+  background:
+    radial-gradient(ellipse 70% 40% at 80% 0% in srgb, color-mix(in oklch, var(--palette-acid-400) 4%, transparent), transparent 60%),
+    var(--palette-ink-900);
 }
 
 html:has(.page:not([data-has-toc])) {
@@ -59,10 +62,6 @@ body:has(.page) {
   line-height: var(--sl-line-height);
   color: var(--palette-cream-400);
   -webkit-font-smoothing: antialiased;
-  /* A software rasterizer draws an OKLab gradient slowly. This one fades one color to transparent, so sRGB looks the same. */
-  background:
-    radial-gradient(ellipse 70% 40% at 80% 0% in srgb, color-mix(in oklch, var(--palette-acid-400) 4%, transparent), transparent 60%),
-    var(--palette-ink-900);
 }
 
 :where(.page) *,
