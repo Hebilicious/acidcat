@@ -18,7 +18,8 @@ body:has(.home-page) {
   /* A gradient between colors of CSS Color 4 interpolates in OKLab, and a software rasterizer draws that slowly. A
      gradient that fades one color to transparent looks the same in sRGB.
      Chromium rasters a repeated gradient as one image of the whole tile, here the whole body, before the first frame.
-     Each gradient fills the body, so with no-repeat the pixels are the same, and Chromium draws only the tiles on screen. */
+     Each gradient fills the body, so with no-repeat it is the same gradient, and Chromium draws only the tiles on screen.
+     Chromium then draws it directly and not as one image of a tile, so a pixel can differ by one level of 255 in a channel. */
   background:
     radial-gradient(ellipse 80% 60% at 75% 10% in srgb, color-mix(in oklch, var(--palette-acid-400) 7%, transparent), transparent 60%) no-repeat,
     radial-gradient(ellipse 60% 50% at 10% 30% in srgb, color-mix(in oklch, var(--palette-cyan-400) 6%, transparent), transparent 60%) no-repeat,
