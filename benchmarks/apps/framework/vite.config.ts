@@ -3,7 +3,7 @@ import { createHighlighter } from "shiki";
 import { defineConfig } from "vite";
 import { vaporpress } from "framework/vite";
 
-const highlighter = await createHighlighter({ themes: ["github-light", "github-dark"], langs: ["sh", "json", "ts"] });
+const highlighter = await createHighlighter({ themes: ["github-light-high-contrast", "github-dark-high-contrast"], langs: ["sh", "json", "ts"] });
 
 // Runs before the first paint, so a page shows the theme that the reader chose, with no flash of the other one.
 const themeScript = `<script>try{const t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch{}</script>`;
@@ -17,7 +17,7 @@ export default defineConfig({
     headHtml: themeScript,
     markdown: {
       highlight: (code, language) =>
-        `<div class="code-block">${copyButton}${highlighter.codeToHtml(code.replace(/\n$/, ""), { lang: language === "" ? "text" : language, themes: { light: "github-light", dark: "github-dark" }, defaultColor: false })}</div>`,
+        `<div class="code-block">${copyButton}${highlighter.codeToHtml(code.replace(/\n$/, ""), { lang: language === "" ? "text" : language, themes: { light: "github-light-high-contrast", dark: "github-dark-high-contrast" }, defaultColor: false })}</div>`,
     },
   }),
 });

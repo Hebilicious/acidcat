@@ -39,7 +39,7 @@ const open = async (path: string, options: BrowserContextOptions = {}): Promise<
 
 const axeViolations = async (page: Page): Promise<unknown> => {
   await page.addScriptTag({ content: await axeSource });
-  return page.evaluate(`axe.run(document).then((result) => result.violations.map((violation) => violation.id + ": " + violation.nodes.map((node) => node.target.join(" ")).join(", ")))`);
+  return page.evaluate(`axe.run(document, { runOnly: { type: "rule", values: axe.getRules().map((rule) => rule.ruleId) } }).then((result) => result.violations.map((violation) => violation.id + ": " + violation.nodes.map((node) => node.target.join(" ")).join(", ")))`);
 };
 
 const sameDocument = (page: Page): Promise<unknown> => page.evaluate((): unknown => Reflect.get(window, "sameDocument"));
