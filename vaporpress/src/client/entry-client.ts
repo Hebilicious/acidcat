@@ -1,6 +1,6 @@
 import appModule from "virtual:vaporpress/app";
 import { createVaporApp, createVaporSSRApp } from "vue";
-import { createWebHistory } from "vue-router";
+import { createWebHistory, START_LOCATION } from "vue-router";
 import { handleHotUpdate, routes } from "vue-router/auto-routes";
 import { updateHead } from "./head.ts";
 import { isComponent, readSite } from "./site.ts";
@@ -27,13 +27,20 @@ if (pageChunk instanceof HTMLLinkElement) {
 }
 
 const app = pageChunk === null ? createVaporApp(site.layout) : createVaporSSRApp(site.layout);
+// Each page is a static HTML file, so a page change that fails, for example on a chunk that a deploy removed, loads the page as a new document.
+// A first page that fails keeps the HTML of the server, and its links load new documents.
+router.onError((error: unknown, to, from) => {
+  if (from === START_LOCATION) console.error(error);
+  else location.assign(router.resolve(to.fullPath).href);
+});
 app.use(router);
 await site.enhance?.({ app, router });
-interceptLinks(router);
-startPrefetch(router);
-await router.isReady();
-router.afterEach((to, from) => {
-  if (to.path !== from.path) updateHead(site, pageOf(to));
-});
-if (pageChunk === null) updateHead(site, pageOf(router.currentRoute.value));
-app.mount("#app");
+if (await router.isReady().then(() => true, () => false)) {
+  interceptLinks(router);
+  startPrefetch(router);
+  router.afterEach((to, from) => {
+    if (to.path !== from.path) updateHead(site, pageOf(to));
+  });
+  if (pageChunk === null) updateHead(site, pageOf(router.currentRoute.value));
+  app.mount("#app");
+}

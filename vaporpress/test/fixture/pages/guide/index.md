@@ -1,6 +1,7 @@
 ---
 title: Guide
 description: How the fixture works.
+toc: true
 ---
 
 <script setup>

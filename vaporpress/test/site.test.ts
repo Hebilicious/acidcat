@@ -123,6 +123,11 @@ describe("the static build", () => {
     assert.match(await readDist("index.html"), /<img class="home-diagram" src="\/assets\/diagram-1000\.[\w-]+\.webp" srcset="[^"]+ 1000w" sizes="[^"]+" width="1000" height="400" alt="A blue diagram">/);
   });
 
+  test("checks each lazy layout once for each page that it renders", async () => {
+    const pages = (await readdir(dist, { recursive: true })).filter((file) => file.endsWith(".html"));
+    assert.equal(Reflect.get(globalThis, "tocChecks"), pages.length);
+  });
+
   test("gives a page the data of its loader, and leaves the loader out", async () => {
     assert.match(await readDist("index.html"), /<p class="numbers">1, 2, 3 at build time<\/p>/);
     const code = [...(await assets()).values()].join("\n");
@@ -183,6 +188,63 @@ describe("in the browser", () => {
     assert.equal(await sameDocument(page), true);
     assert.equal(await page.title(), "Home | Fixture");
     assert.deepEqual(problems, []);
+    await page.close();
+  });
+
+  test("renders a lazy layout in the same task as the page that uses it", async () => {
+    const { page, problems } = await open("/");
+    // The browser paints only after the microtasks of a task, and a mutation observer runs in those microtasks.
+    await page.evaluate(() => {
+      const states: boolean[] = [];
+      Reflect.set(window, "tocWithGuide", states);
+      new MutationObserver(() => {
+        if (document.querySelector("#the-guide") !== null) states.push(document.querySelector(".toc") !== null);
+      }).observe(document.body, { childList: true, subtree: true });
+    });
+    await page.click(".to-guide");
+    await page.waitForSelector("#the-guide");
+    assert.deepEqual(await page.evaluate((): unknown => Reflect.get(window, "tocWithGuide")), [true]);
+    assert.deepEqual(problems, []);
+    await page.close();
+  });
+
+  test("hydrates a lazy layout with the first page, because the router loads it before the first render", async () => {
+    const { page, problems } = await open("/guide/");
+    await page.waitForFunction(() => document.body.dataset["mounted"]?.includes("toc") === true);
+    assert.equal(await page.evaluate(() => document.body.dataset["mounted"]), "toc layout ", "The layout of the page mounts with the app, before its root.");
+    assert.deepEqual(problems, []);
+    await page.close();
+  });
+
+  for (const [name, file] of [
+    ["a lazy layout", "src/Toc.vue"],
+    ["the page", "pages/guide/index.md"],
+  ] as const) {
+    test(`loads the page as a new document when the chunk of ${name} does not load on a page change`, async () => {
+      const chunk = await chunkUrl(file);
+      const { page } = await open("/", (page) => void page.route(chunk, (route) => route.abort()));
+      await markDocument(page);
+      await page.click(".to-guide");
+      await page.waitForURL(`${origin}/guide/`);
+      await page.waitForSelector("#the-guide");
+      assert.equal(await sameDocument(page), false);
+      await page.close();
+    });
+  }
+
+  test("keeps the HTML of the first page and its links when a chunk of the first page does not load", async () => {
+    assert.ok(browser);
+    const page = await browser.newPage();
+    await page.route(await chunkUrl("src/Toc.vue"), (route) => route.abort());
+    const failed = page.waitForEvent("console", (message) => message.type() === "error" && message.text().includes("dynamically imported module"));
+    await page.goto(`${origin}/guide/`);
+    await failed;
+    await markDocument(page);
+    assert.equal(await page.textContent("#the-guide"), "The guide");
+    assert.equal(await page.evaluate(() => document.querySelector("#app")?.hasAttribute("data-v-app")), false);
+    await page.click("header a[href='/guide/long/']");
+    await page.waitForSelector("#section-12");
+    assert.equal(await sameDocument(page), false, "The link loads a new document.");
     await page.close();
   });
 

@@ -82,6 +82,7 @@ const page = usePage();
 | Head | `title(page)` and `head(page)` of `defineSite` write the title and the elements of the head that change with the page. The server writes them in each HTML file, and the browser replaces them after each page change. `headHtml` adds HTML that every page has, such as the icon |
 | Images | An image in Markdown with a local file, such as `![A diagram](diagram.png)`, gets WebP files at several widths in `srcset`, and its `width` and `height`. A component imports an image with `?image`. See [Images](#images) |
 | Components | Every `.vue` file compiles in Vapor mode, with or without the `vapor` attribute. The router registers no global component: import `RouterView` from `vaporpress/client`, and write plain links. The `RouterLink` and `RouterView` of Vue Router render virtual DOM, so the framework removes their registration from `app.use(router)` |
+| Lazy layouts | `defineLazyLayout(loader, usedBy)` gives a layout in a chunk of its own, for the pages for which `usedBy(page)` is true. See [Lazy layouts](#lazy-layouts) |
 
 ### Markdown pages
 
@@ -164,6 +165,39 @@ The files go to `node_modules/.vaporpress/images/`, under a name from the conten
 | `headingLevels` | The levels of the headings in `page.headings` |
 | `mdastPlugins`, `hastPlugins` | [Sätteri plugins](https://satteri.bruits.org/docs/plugins/), on the Markdown tree and on the HTML tree |
 
+## Lazy layouts
+
+A layout that only some pages use can be a chunk of its own, so the other pages do not load it. For example, the homepage of a site often has a layout of its own, and does not need the layout of the docs:
+
+```vue
+<!-- src/Layout.vue -->
+<script lang="ts">
+import { defineLazyLayout } from "vaporpress/client";
+
+const DocsLayout = defineLazyLayout(() => import("./DocsLayout.vue"), (page) => page.path !== "/");
+</script>
+
+<script setup lang="ts" vapor>
+import { computed } from "vue";
+import { RouterView, usePage } from "vaporpress/client";
+
+const page = usePage();
+const home = computed(() => page.value.path === "/");
+</script>
+
+<template>
+  <RouterView v-if="home" />
+  <DocsLayout v-else />
+</template>
+```
+
+- Call `defineLazyLayout` once, when its module loads: in a plain `<script>` block, or in a module of its own. The router then knows the layout before the first page. A call in `<script setup>` or in any other `setup` throws an error, because it would add a layout for each render.
+- Before each page change to a page for which `usedBy(page)` is true, the router loads the chunk of the layout. Then the layout renders in the same task that removes the page before it, so no frame shows an empty page. The first page of a visit waits for it too, so the layout hydrates with the app, and the render on the server waits for it.
+- `usedBy(page)` must be true for each page that shows the layout. For a page that shows it while `usedBy` is false, the layout renders nothing until its chunk loads.
+- When the chunk does not load, the page change loads the page as a new document, as for the chunk of a page. See [Fast page changes](#fast-page-changes).
+
+`defineVaporAsyncComponent` of Vue renders nothing until it has loaded its chunk, also when another import loaded the module already. So a page change to a layout from `defineVaporAsyncComponent` removes the page before it, and the browser can paint the empty page before the layout comes.
+
 ## API
 
 | Import | Export | Use |
@@ -171,6 +205,7 @@ The files go to `node_modules/.vaporpress/images/`, under a name from the conten
 | `vaporpress/vite` | `vaporpress(options)` | The Vite plugins: Markdown pages, Vue in Vapor mode, routes from files, data modules, the dev server and the static build |
 | `vaporpress/client` | `defineSite(site)` | The site: `layout`, `title`, `head`, `scrollBehavior` and `enhance({ app, router })` |
 | | `RouterView` | Shows the page of the current route. It is a Vapor component, so the site loads no virtual DOM renderer |
+| | `defineLazyLayout(loader, usedBy)` | A layout in a chunk of its own, which the router loads before a page change to a page that uses it. See [Lazy layouts](#lazy-layouts) |
 | | `usePage()` | The data of the page on screen |
 | | `prefetchPage(router, path)` | Loads the chunk of a page before the reader goes to it |
 | `vaporpress/data` | `defineLoader({ load, watch })`, `LoadedData` | A module of data that the build reads once |
@@ -216,10 +251,15 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 | A chunk for each page | Each route imports its page dynamically |
 | Prefetch | When the browser is idle, an `IntersectionObserver` loads the chunk of each link in view. A link under the pointer, under a finger or with the focus loads at once. The loaded component replaces the loader in the route record, so the page change does not wait (`src/client/prefetch.ts`) |
 | Links | One click listener on the document changes the page with `router.push` (`src/client/links.ts`). A link to a hash of the same page, such as a skip link, moves the focus to its target, so the next Tab goes on from there, as the browser does |
+| A failed page change | Each page is a static HTML file. When a page change fails, for example because the chunk of the page or of its layout does not load, or because a deploy removed the chunks that an open tab knows, the browser loads the page as a new document (`router.onError` in `src/client/entry-client.ts`). When the first page of a visit fails, the HTML from the server stays on the screen, and its links load new documents |
 | Scroll | The router keeps the position when only the query changes, restores the position of a page that the reader comes back to, goes to the heading of a hash, or goes to the top. `scrollBehavior` of `defineSite` replaces this |
 | Head | `src/client/head.ts`: the server writes the title and the marked elements, and the browser replaces them after a page change |
 
 **The static HTML of a page stays out of its script in the first load.** The Vapor compiler writes each static part of a template as a string: `template("<p>Static text…", 2)`, where the flag 2 says that the template has no dynamic part. While it hydrates, Vapor takes a static template from the DOM when its string is empty, and keeps a copy of it for the next render. So the build emits a second, lean chunk of each page, with the strings of its static templates empty (`src/lean.ts`). The HTML file of a page names its lean chunk; the client gives the lean component to the route of the first page, and hydrates it. A page change loads the full chunk, which has the HTML. A template stays in the lean chunk only when hydration is sure to find its DOM: when the `setup` of the component always renders it. A template in a callback keeps its HTML: a branch of `v-if` or `v-else` that the server may not render, an item of `v-for` that comes later, a slot, or the content of `<Teleport>`. This is the same result as the lean chunks of VitePress, with no change to Vue.
+
+**Chosen for a failed page change: one error handler of the router loads the page as a new document.** The router reports each error of a page change to `router.onError`: a chunk of a page, a lazy layout, or a guard of the site that fails. The handler covers all of them in a few lines, and a reader with a tab from before a deploy gets the new page.
+
+**Rejected: a wrapper around each loader of a route and of a lazy layout, which loads the document when its import fails.** It needs a change to each route that `vue-router/auto-routes` writes, and it does not cover the guards of the site.
 
 **Rejected: fetch the HTML file of the next page and take its content.** It is a router that swaps HTML fragments, and it loses the state of the components of the page.
 
@@ -244,8 +284,8 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 `moon run vaporpress:test` runs `test/`:
 
 - `markdown.test.ts`: the page data, the heading ids and the table of contents, components and `<script setup>` in Markdown, code that Vue does not compile, the highlighter, `transformSource`, and the lean copy of a component, which keeps the templates that hydration may not meet.
-- `site-definition.test.ts`: the checks of a site definition and of a component.
-- `site.test.ts`: builds `test/fixture/` and serves `dist/`. It checks the HTML, the head and the lean chunk of each page, the data of a data module, and the WebP files, the `srcset`, the size and the loading of each image in Markdown and of an image that a component imports. In Chromium, it checks that hydration changes no element of the DOM and logs no mismatch, that components respond, that a click changes the page with no new document and updates the head, that the chunk of a link in view loads before the click and the chunk of a link under the pointer loads at once, that the scroll position comes back on Back and on Forward, that a hash goes to its heading, that the skip link moves the focus past the header, that a branch of `v-if`, `v-else` or `v-for` that the server did not render shows after hydration and after a page change, and that an unknown path shows the 404 page.
+- `site-definition.test.ts`: the checks of a site definition and of a component, and that `defineLazyLayout` throws in the setup of a component.
+- `site.test.ts`: builds `test/fixture/` and serves `dist/`. It checks the HTML, the head and the lean chunk of each page, that the build checks each lazy layout once for each page, the data of a data module, and the WebP files, the `srcset`, the size and the loading of each image in Markdown and of an image that a component imports. In Chromium, it checks that hydration changes no element of the DOM and logs no mismatch, that components respond, that a click changes the page with no new document and updates the head, that a lazy layout renders in the same task as the page that uses it and hydrates with the first page, that a page change loads a new document when the chunk of its page or of its layout does not load, that the first page keeps its HTML and its links when a chunk of the page does not load, that the chunk of a link in view loads before the click and the chunk of a link under the pointer loads at once, that the scroll position comes back on Back and on Forward, that a hash goes to its heading, that the skip link moves the focus past the header, that a branch of `v-if`, `v-else` or `v-for` that the server did not render shows after hydration and after a page change, and that an unknown path shows the 404 page.
 - `dev.test.ts`: the dev server serves a page, and a click changes the page.
 
 `moon run vaporpress:typecheck` type-checks the sources and the tests.

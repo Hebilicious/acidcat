@@ -47,10 +47,13 @@ export const interceptLinks = (router: Router): void => {
       focusHash(url.hash);
       return;
     }
-    void router.push(href).then(async () => {
-      await nextTick();
-      focusHash(url.hash);
-    });
+    void router.push(href).then(
+      async () => {
+        await nextTick();
+        focusHash(url.hash);
+      },
+      () => undefined,
+    );
   });
 };
 

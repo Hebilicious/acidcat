@@ -3,6 +3,7 @@ import type { ComputedRef } from "vue";
 import { createRouter, useRoute } from "vue-router";
 import type { RouteLocationNormalizedLoaded, RouteRecordRaw, Router, RouterHistory, RouterScrollBehavior } from "vue-router";
 import type { Heading, PageData } from "../page.ts";
+import { loadLazyLayouts } from "./lazy-layout.ts";
 import type { SiteDefinition } from "./site.ts";
 
 export const notFoundRoute = "vaporpress:not-found";
@@ -19,7 +20,9 @@ const findNotFound = (routes: readonly RouteRecordRaw[]): RouteRecordRaw | undef
 export const createSiteRouter = (site: SiteDefinition, history: RouterHistory, routes: readonly RouteRecordRaw[]): Router => {
   const component = findNotFound(routes)?.component;
   const fallback: RouteRecordRaw[] = component === undefined || component === null ? [] : [{ path: "/:path(.*)*", name: notFoundRoute, component }];
-  return createRouter({ history, routes: [...routes, ...fallback], scrollBehavior: site.scrollBehavior ?? defaultScroll });
+  const router = createRouter({ history, routes: [...routes, ...fallback], scrollBehavior: site.scrollBehavior ?? defaultScroll });
+  router.beforeResolve((to) => loadLazyLayouts(pageOf(to)));
+  return router;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
