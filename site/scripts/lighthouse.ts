@@ -117,6 +117,7 @@ try {
       const [html = "", json = ""] = Array.isArray(runner.report) ? runner.report : [runner.report];
       await writeFile(join(out, `${name}-${run}.report.html`), html);
       await writeFile(join(out, `${name}-${run}.report.json`), json);
+      if (run === 1) await writeFile(join(out, `${name}-${run}.trace.json`), JSON.stringify(runner.artifacts.Trace));
       results.push(runner.lhr);
     }
     version = results[0]?.lighthouseVersion ?? "";
