@@ -7,7 +7,6 @@ import type { FixturePage, Output } from "./fixture.ts";
 const apps = fileURLToPath(new URL("../apps/", import.meta.url));
 const hero = fileURLToPath(new URL("hero.png", fixtureDir));
 
-/** Where each app reads its pages, how it writes a page, and where the image goes. */
 const targets: readonly { readonly pages: string; readonly write: (page: FixturePage) => Output; readonly image: string }[] = [
   { pages: "framework/pages", write: toFramework, image: "framework/pages/hero.png" },
   { pages: "vitepress/docs", write: toVitePress, image: "vitepress/docs/hero.png" },

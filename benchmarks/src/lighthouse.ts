@@ -33,7 +33,6 @@ const numeric = (result: Result, id: string): number => {
   return value;
 };
 
-/** The requests of the load, from the `network-requests` audit. */
 export const networkRequests = (result: Result): readonly NetworkRequest[] => {
   const details: unknown = result.audits["network-requests"]?.details;
   const items = isRecord(details) && Array.isArray(details["items"]) ? details["items"] : [];

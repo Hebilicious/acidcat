@@ -56,7 +56,6 @@ export const parseTabs = (block: string): readonly Tab[] =>
       return { label: part.slice(0, newline).trim(), code: part.slice(newline + 1).trim() };
     });
 
-/** Replaces each `:::tabs` block of a body with the Markdown that `render` gives for its tabs. */
 export const replaceTabs = (body: string, render: (tabs: readonly Tab[], index: number) => string): string => {
   let index = 0;
   return body.replace(tabsPattern, (_block, inner: string) => render(parseTabs(inner), index++));
@@ -64,10 +63,9 @@ export const replaceTabs = (body: string, render: (tabs: readonly Tab[], index: 
 
 export const hasTabs = (body: string): boolean => new RegExp(tabsPattern.source, "m").test(body);
 
-/** Rewrites each site-relative Markdown link, such as `](/guide/installation/)`, with the path that a framework writes. */
 export const replaceLinks = (body: string, path: (href: string) => string): string => body.replace(/\]\((\/[^)\s]*)\)/g, (_link, href: string) => `](${path(href)})`);
 
-/** The path of a page without a trailing slash, for the frameworks whose pages have no slash at the end: `/guide/installation/` is `/guide/installation`, and `/guide/` stays. */
+/** `/guide/installation/` is `/guide/installation`. The index of a section keeps its slash: `/guide/`. */
 export const withoutTrailingSlash = (href: string): string => {
   const segments = href.split("/").filter((segment) => segment !== "");
   const last = segments.at(-1);

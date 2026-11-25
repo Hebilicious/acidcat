@@ -7,7 +7,6 @@ const select = (group: Element, chosen: Element): void => {
   }
 };
 
-/** Makes the static tabs of the content respond to a click. */
 export const mountTabs = (root: HTMLElement): void => {
   for (const group of root.querySelectorAll(".tabs")) {
     group.addEventListener("click", (event) => {

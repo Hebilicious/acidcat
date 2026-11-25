@@ -1,12 +1,10 @@
 import { fileURLToPath } from "node:url";
 
-/** A built site to measure, and the selectors of the parts that the probes click. */
 export interface Target {
   readonly name: string;
   readonly root: string;
   /** Path prefixes of the hashed assets, which the server lets the browser keep for a year. */
   readonly immutable: readonly string[];
-  /** The pages that Lighthouse loads, by name. */
   readonly pages: Readonly<Record<string, string>>;
   /** A tab group on `path`: the selector of tab `n` (from 1), and a selector that matches only when tab `n` is selected. */
   readonly tabs: { readonly path: string; readonly tab: (n: number) => string; readonly selected: (n: number) => string };
@@ -33,7 +31,6 @@ const fixtureChange = (sidebar: string, slash: string) => ({
 
 const fixturePages = (slash: string) => ({ home: "/", installation: `/guide/installation${slash}`, routing: `/guide/routing${slash}` });
 
-/** The fixture in each framework. The framework is the folder `apps/framework`, which imports it as `framework`. */
 export const fixtureSuite: Suite = {
   name: "fixture",
   title: "The same fixture in each framework",
@@ -96,7 +93,6 @@ const siteChange = (slash: string) => ({
 
 const sitePages = (slash: string) => ({ "quick-start": `/docs/quick-start${slash}`, catalog: `/docs/concepts/catalog${slash}` });
 
-/** The docs pages of the AcidCat site, in the three builds that the workflow makes. */
 export const siteSuite = (roots: { readonly framework: string; readonly vitepress: string; readonly astro: string }): Suite => ({
   name: "site",
   title: "The docs pages of the AcidCat site",

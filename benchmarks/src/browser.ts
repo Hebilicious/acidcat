@@ -152,7 +152,6 @@ const elapsed = async (page: Page, doneKey: string, startKey: string): Promise<n
   return done === undefined || start === undefined ? undefined : done - start;
 };
 
-/** A real click, then the time from the press to the first paint that shows `selector`. */
 const clickAndMeasure = async (page: Page, click: string, selector: string, text?: string): Promise<number | undefined> => {
   await page.evaluate(() => sessionStorage.removeItem("bench:input"));
   const done = await expect(page, selector, text);
@@ -160,7 +159,6 @@ const clickAndMeasure = async (page: Page, click: string, selector: string, text
   return elapsed(page, done, "bench:input");
 };
 
-/** First visit: when the page first responds to a click, then the latency of a tab switch and of opening the search box. */
 const firstVisit = async (browser: Browser, origin: string, target: Target): Promise<Pick<InteractionMetrics, "ready" | "tabSwitch" | "searchOpen">> => {
   const { context, page } = await open(browser, { readyTab: target.tabs.tab(2), readySelected: target.tabs.selected(2) });
   try {

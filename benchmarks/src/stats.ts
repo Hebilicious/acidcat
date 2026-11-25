@@ -1,4 +1,3 @@
-/** The value at quantile `q` of sorted numbers, with linear interpolation between the two nearest ranks. */
 export const quantile = (sorted: readonly number[], q: number): number => {
   if (sorted.length === 0) return Number.NaN;
   const position = (sorted.length - 1) * q;

@@ -40,7 +40,6 @@ interface Asset {
 
 const brotli = promisify(brotliCompress);
 
-/** Reads each file of a folder once, and compresses each text file with Brotli at its highest quality, as a host that precompresses does. */
 export const readAssets = async (root: string): Promise<ReadonlyMap<string, Asset>> => {
   const files = await readdir(root, { recursive: true, withFileTypes: true });
   const entries = await Promise.all(

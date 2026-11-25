@@ -88,7 +88,6 @@ const format = (value: number, unit: Metric["unit"]): string => {
 
 const unitLabel: Readonly<Record<Metric["unit"], string>> = { score: "", ms: " (ms)", cls: "", kB: " (kB)", count: "" };
 
-/** The cell of a measure: its median, and between brackets the range from the first to the third quartile. */
 export const cell = (stats: Spread, unit: Metric["unit"]): string => (stats.n === 0 ? "–" : `${format(stats.median, unit)} (${format(stats.q1, unit)}–${format(stats.q3, unit)})`);
 
 const numbers = (samples: readonly Sample[], target: string, page: string, metric: string): number[] =>
@@ -117,7 +116,6 @@ const mostCommon = (values: readonly string[]): string => {
   return sorted.map(([value, count]) => `${value} (${count}/${values.length})`).join(", ") || "–";
 };
 
-/** The Markdown tables of the results of one suite, from the results of each of its jobs. */
 export const summarize = (results: readonly RunResult[]): string => {
   const first = results[0];
   if (first === undefined) return "";
