@@ -280,6 +280,7 @@ The search finds words by prefix, and with one wrong letter in five. A match in 
 | `lang`, `headHtml` | `"en"`, none | The language of each page, and the HTML that the head of every page has |
 | `search` | `false` | Writes the search index of the built pages. See [Search](#search) |
 | `transformHtml(html, page, { files })` | none | Changes the HTML file of each page before the build writes it. `files` lists the path of each file of the client build, for example to preload a font |
+| `preload(page)` | none | The modules, relative to `root`, that a page needs at once but that the site loads with a dynamic import, such as a layout that only some pages use. The HTML of the page preloads their chunks, and a link to the page fetches them ahead with the chunk of the page. The build fails when a module has no chunk of its own |
 | `images` | `{}` | The widths and the quality of the image service, or `false` to keep each image as it is. See [Images](#images) |
 | `afterBuild(outDir)` | none | Runs after the build has written every page, for example to write more files |
 | `vue` | — | Options for `@vitejs/plugin-vue` |
@@ -309,7 +310,7 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 | Part | How |
 | --- | --- |
 | A chunk for each page | Each route imports its page dynamically |
-| Prefetch | When the browser is idle, an `IntersectionObserver` finds each link in view, and a `prefetch` link fetches the chunk of its page at a low priority. The browser runs none of it until the page change. Each page names the chunk of every page in a JSON element at the end of its body. A link under the pointer, under a finger or with the focus loads its page at once: the loaded component replaces the loader in the route record, so the page change does not wait (`src/client/prefetch.ts`) |
+| Prefetch | When the browser is idle, an `IntersectionObserver` finds each link in view, and a `prefetch` link fetches the chunk of its page at a low priority. The browser runs none of it until the page change. Each page names the chunks of every page in a JSON element at the end of its body: the chunk of the page, the chunks that it imports, and the chunks of the modules of `preload(page)`. A link under the pointer, under a finger or with the focus loads its page at once: the loaded component replaces the loader in the route record, so the page change does not wait (`src/client/prefetch.ts`) |
 | Links | One click listener on the document changes the page with `router.push` (`src/client/links.ts`). A link to a hash of the same page, such as a skip link, moves the focus to its target, so the next Tab goes on from there, as the browser does |
 | A failed page change | Each page is a static HTML file. When a page change fails, for example because the chunk of the page or of its layout does not load, or because a deploy removed the chunks that an open tab knows, the browser loads the page as a new document (`router.onError` in `src/client/entry-client.ts`). When the first page of a visit fails, the HTML from the server stays on the screen, and its links load new documents |
 | Scroll | The router keeps the position when only the query changes, restores the position of a page that the reader comes back to, goes to the heading of a hash, or goes to the top. `scrollBehavior` of `defineSite` replaces this |

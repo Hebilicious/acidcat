@@ -10,6 +10,7 @@ export default defineConfig({
     exclude: ["draft.md"],
     extraPages: () => [{ path: "/more/outside", file: fileURLToPath(new URL("content/outside.md", import.meta.url)) }],
     search: true,
+    preload: (page) => (page.frontmatter["toc"] === true ? ["src/Toc.vue"] : []),
     headHtml: '<meta name="theme-color" content="#000000">',
     markdown: { highlight: (code, language, meta) => `<pre class="highlighted" data-language="${language}" data-meta="${meta.replaceAll('"', "&quot;")}"><code>${code.replaceAll("&", "&amp;").replaceAll("<", "&lt;")}</code></pre>` },
   }),

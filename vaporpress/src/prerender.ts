@@ -1,5 +1,5 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { leanPageChunkMarker, pageChunksId } from "./client/markers.ts";
 import type { PageData } from "./page.ts";
@@ -12,6 +12,12 @@ export interface DocumentOptions {
   readonly headHtml?: string;
   /** Changes the HTML of each page after the render, before it is written. */
   readonly transformHtml?: (html: string, page: PageData, build: BuildFiles) => string | Promise<string>;
+  /**
+   * The modules, relative to the root of the site, that a page needs at once but that the site loads with a dynamic
+   * import, such as the layout of the docs. The HTML of the page preloads their chunks, and a link to the page fetches
+   * them ahead with the chunk of the page.
+   */
+  readonly preload?: (page: PageData) => readonly string[];
 }
 
 export interface BuildFiles {
@@ -29,9 +35,15 @@ interface ManifestChunk {
 
 type Manifest = Readonly<Record<string, ManifestChunk>>;
 
+interface RenderedPage {
+  readonly html: string;
+  readonly head: string;
+  readonly page: PageData;
+}
+
 interface ServerEntry {
   readonly paths: () => readonly string[];
-  readonly render: (path: string) => Promise<{ readonly html: string; readonly head: string; readonly page: PageData }>;
+  readonly render: (path: string) => Promise<RenderedPage>;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -99,16 +111,29 @@ export const prerender = async (input: PrerenderInput): Promise<void> => {
   const sharedStyles = Object.values(manifest)
     .map((chunk) => chunk.file)
     .filter((file) => file.endsWith(".css") && !chunkStyles.has(file));
-  const pageChunks: Record<string, string> = {};
-  for (const path of server.paths()) {
+  const entryScripts = new Set<string>();
+  collect(manifest, entryKey, entryScripts, new Set());
+  const preloadKeys = (page: PageData): readonly string[] =>
+    (input.options.preload?.(page) ?? []).map((module) => {
+      const key = relative(input.root, resolve(input.root, module));
+      if (manifest[key] === undefined) throw new Error(`The page ${page.path} preloads ${module}, which has no chunk of its own. Import it with a dynamic import.`);
+      return key;
+    });
+  const chunksOf = (keys: readonly string[]): string[] => {
+    const scripts = new Set<string>();
+    for (const key of keys) collect(manifest, key, scripts, new Set());
+    return [...scripts].filter((script) => !entryScripts.has(script));
+  };
+  const rendered: (RenderedPage & { readonly path: string })[] = [];
+  for (const path of server.paths()) rendered.push({ path, ...(await server.render(pageUrl(path))) });
+  const pageChunks: Record<string, readonly string[]> = {};
+  for (const { path, page } of rendered) {
     const file = input.routeFiles.get(path);
-    const chunk = file === undefined ? undefined : manifest[file]?.file;
-    if (chunk !== undefined && path !== "/404") pageChunks[pageUrl(path)] = `${base}${chunk}`;
+    if (file !== undefined && manifest[file] !== undefined && path !== "/404") pageChunks[pageUrl(path)] = chunksOf([file, ...preloadKeys(page)]).map((chunk) => `${base}${chunk}`);
   }
   const pageChunksJson = `<script type="application/json" id="${pageChunksId}">${JSON.stringify(pageChunks).replaceAll("<", "\\u003c")}</script>`;
   const written: { readonly path: string; readonly html: string }[] = [];
-  for (const path of server.paths()) {
-    const { html, head, page } = await server.render(pageUrl(path));
+  for (const { path, html, head, page } of rendered) {
     const scripts = new Set<string>();
     const styles = new Set<string>(sharedStyles);
     collect(manifest, entryKey, scripts, styles);
@@ -116,6 +141,7 @@ export const prerender = async (input: PrerenderInput): Promise<void> => {
     const leanKey = file === undefined ? undefined : `${file}?lean`;
     const lean = leanKey === undefined ? undefined : manifest[leanKey];
     if (leanKey !== undefined) collect(manifest, leanKey, scripts, styles);
+    for (const key of preloadKeys(page)) collect(manifest, key, scripts, styles);
     const entryFile = manifest[entryKey]?.file;
     const links = [
       ...[...styles].map((style) => `<link rel="stylesheet" href="${base}${style}">`),

@@ -101,6 +101,17 @@ describe("the static build", () => {
     assert.doesNotMatch(leanHome, /lean chunk leaves out/);
   });
 
+  test("preloads the chunk of a module that a page names in preload, and lists it with the chunks of the page for a prefetch", async () => {
+    const toc = new URL(await chunkUrl("src/Toc.vue")).pathname;
+    const guide = await readDist("guide/index.html");
+    const home = await readDist("index.html");
+    assert.ok(guide.includes(`<link rel="modulepreload" href="${toc}">`), "The guide shows the table of contents, so it preloads it.");
+    assert.equal(home.includes(`<link rel="modulepreload" href="${toc}">`), false, "The homepage does not show it.");
+    const chunks: unknown = JSON.parse(/<script type="application\/json" id="vaporpress-pages">(.*?)<\/script>/.exec(home)?.[1] ?? "{}");
+    const guideChunks: unknown = typeof chunks === "object" && chunks !== null ? Reflect.get(chunks, "/guide/") : undefined;
+    assert.ok(Array.isArray(guideChunks) && guideChunks.includes(toc), "A link to the guide fetches the table of contents ahead.");
+  });
+
   test("ships no virtual DOM renderer", async () => {
     const code = [...(await assets()).values()].join("\n");
     assert.doesNotMatch(code, /_vnode/, "The renderer of the virtual DOM keeps the tree of a container in _vnode.");
@@ -172,8 +183,9 @@ describe("in the browser", () => {
         if (document.readyState === "interactive") observer.observe(document, { childList: true, subtree: true });
       });
     });
-    await page.goto(`${origin}/guide/`);
+    await page.goto(`${origin}/guide/`, { waitUntil: "networkidle" });
     await page.waitForFunction(() => document.querySelector("#app")?.hasAttribute("data-v-app") === true);
+    await afterTwoFrames(page);
     const changes = await page.evaluate(() => {
       const value: unknown = Reflect.get(window, "domChanges");
       if (!Array.isArray(value)) return ["no record"];

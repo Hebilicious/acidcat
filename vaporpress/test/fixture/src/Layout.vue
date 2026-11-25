@@ -14,6 +14,7 @@ import { onMounted } from "vue";
 import { onPageUpdated, RouterView, usePage } from "vaporpress/client";
 import Search from "./Search.vue";
 
+
 const page = usePage();
 onMounted(() => {
   document.body.dataset["mounted"] = `${document.body.dataset["mounted"] ?? ""}layout `;
