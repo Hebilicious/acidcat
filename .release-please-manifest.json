@@ -7,7 +7,7 @@
   "packages/core-ts": "0.19.0",
   "packages/catalog/python": "0.5.0",
   "packages/catalog/rust": "0.4.0",
-  "packages/core-rust": "0.9.0",
+  "packages/core-rust": "0.9.1",
   "packages/catalog/go": "0.4.0",
   "packages/catalog/pkl": "0.4.0"
 }
