@@ -1,6 +1,7 @@
 <script setup lang="ts" vapor>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from "vue";
-import { onListboxKey, openModal } from "vaporpress/behaviors";
+import { computed, nextTick, ref, shallowRef, useTemplateRef, watch } from "vue";
+import { onListboxKey } from "vaporpress/behaviors";
+import { fieldValueBeforeHydration, useModalDialog } from "vaporpress/client";
 import type * as Search from "vaporpress/search";
 import type { SearchResult, SiteSearch } from "vaporpress/search";
 import { readStorage, searchQueryKey } from "./search-input.ts";
@@ -28,8 +29,7 @@ const dialog = useTemplateRef<HTMLDialogElement>("dialog");
 const input = useTemplateRef<HTMLInputElement>("input");
 const list = useTemplateRef<HTMLElement>("list");
 
-// v-model writes the value of its ref into the field when the component hydrates, so the ref starts with the text that the reader typed before.
-const typedBeforeHydration = import.meta.env.SSR ? undefined : document.querySelector<HTMLInputElement>("#search-dialog[open] input")?.value;
+const typedBeforeHydration = fieldValueBeforeHydration("#search-dialog[open] input");
 const stored = (storage: () => Storage, key: string): string | null => (import.meta.env.SSR ? null : readStorage(storage, key));
 const query = ref(typedBeforeHydration ?? stored(() => sessionStorage, searchQueryKey) ?? "");
 const detailed = ref(stored(() => localStorage, detailedKey) === "true");
@@ -115,11 +115,7 @@ const toggleDetails = (): void => {
   detailed.value = !detailed.value;
 };
 
-let closeModal: (() => void) | undefined;
-
-const show = (element: HTMLDialogElement): void => {
-  const typing = element.open;
-  closeModal = openModal(element);
+const shown = (typing: boolean): void => {
   failed.value = false;
   if (!typing) {
     input.value?.focus();
@@ -138,24 +134,7 @@ const show = (element: HTMLDialogElement): void => {
   );
 };
 
-const hide = (): void => {
-  closeModal?.();
-  closeModal = undefined;
-};
-
-watch(
-  () => props.open,
-  (open) => {
-    if (!open) hide();
-    else if (dialog.value !== null) show(dialog.value);
-  },
-);
-
-onMounted(() => {
-  if (dialog.value?.open === true) emit("open");
-});
-
-onBeforeUnmount(hide);
+useModalDialog(dialog, { open: () => props.open, shown, openBeforeMount: () => emit("open") });
 </script>
 
 <template>

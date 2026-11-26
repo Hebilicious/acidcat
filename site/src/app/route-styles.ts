@@ -52,14 +52,18 @@ export const loadRouteFonts = async (route: Route): Promise<void> => {
   await Promise.all(routeFaces[route].map((face) => document.fonts.load(cssFont(face)))).catch(() => undefined);
 };
 
-export const prefetchRouteStyles = (route: Route): void => {
-  const href = files()[route];
-  if (href === undefined || prefetched.has(route) || hasStyles(route)) return;
-  prefetched.add(route);
+const prefetch = (href: string): void => {
   const link = document.createElement("link");
   link.rel = "prefetch";
   link.href = href;
   document.head.append(link);
+};
+
+export const prefetchRouteStyles = (route: Route): void => {
+  const href = files()[route];
+  if (href === undefined || prefetched.has(route) || hasStyles(route)) return;
+  prefetched.add(route);
+  prefetch(href);
 };
 
 const intent = (event: Event): void => {
@@ -78,11 +82,7 @@ const whenIdle = (callback: () => void): void => {
 
 const prefetchSearchModule = (): void => {
   const href = searchModuleHref();
-  if (href === undefined || document.head.querySelector(`link[href="${href}"]`) !== null) return;
-  const link = document.createElement("link");
-  link.rel = "prefetch";
-  link.href = href;
-  document.head.append(link);
+  if (href !== undefined && document.head.querySelector(`link[href="${href}"]`) === null) prefetch(href);
 };
 
 const prefetchLinkedRoutes = (): void => {

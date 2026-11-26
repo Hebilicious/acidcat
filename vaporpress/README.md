@@ -237,7 +237,7 @@ On a slow phone, the app of a page hydrates some seconds after the first paint. 
 1. The server renders the control, closed, in the HTML of each page: for example, a component that always renders its `<dialog>`, and opens it with `openModal` when its state says so.
 2. `inlineScript(file)` of `vaporpress/vite` bundles a module into an inline `<script>`. Give it to `headHtml`, or add it to some pages with `transformHtml`. The script runs while the HTML parses, before any module script.
 3. The module calls a behavior, such as `listenToTabs` or `openDialogOnInput`. The behavior changes only the DOM, so the component reads its state from the DOM when it hydrates.
-4. When the component hydrates, it takes what the reader did: a component reads the text of a field before `v-model` writes its own value, and treats a dialog that is open as open.
+4. When the component hydrates, it takes what the reader did. `fieldValueBeforeHydration(selector)` of `vaporpress/client` gives the text of a field in the HTML, for the ref of its `v-model`, which writes the value of the ref into the field when it hydrates. `useModalDialog(dialog, { open, shown, openBeforeMount })` opens and closes the dialog with `openModal` each time `open()` changes, and calls `shown(typing)` after each opening: `typing` is true when the dialog was open already, so the component does not move the focus or select the text. When the component mounts on a dialog that is open, it calls `openBeforeMount`, so the app takes the open dialog into its state, for example as an entry of the history.
 
 ```ts
 // src/search-input.ts, in an inline script of each page
@@ -297,6 +297,7 @@ The search finds words by prefix, and with one wrong letter in five. A match in 
 | | `usePage()` | The data of the page on screen |
 | | `onPageUpdated(fn)` | Runs `fn` each time the content of a page is in the DOM |
 | | `prefetchPage(router, path)` | Loads the chunk of a page before the reader goes to it |
+| | `useModalDialog(dialog, { open, shown, openBeforeMount })`, `fieldValueBeforeHydration(selector)` | A modal dialog of a component that takes over the dialog and the text that an inline script opened before hydration. See [A control that answers before hydration](#a-control-that-answers-before-hydration) |
 | | `Router` | The type of the router of the site, from Vue Router |
 | `vaporpress/data` | `defineLoader({ load, watch })`, `LoadedData` | A module of data that the build reads once |
 | `vaporpress/behaviors` | `listenToTabs`, `selectTab`, `copyCodeOnClick`, `observeActiveHeading`, `isSearchShortcut`, `isTextField`, `onListboxKey`, `openDialogOnInput`, `openModal` | The logic of tabs, copy buttons, the table of contents and a search dialog, with no markup and no styles. See [Behaviors](#behaviors) |
