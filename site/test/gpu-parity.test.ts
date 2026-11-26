@@ -271,7 +271,8 @@ test("the code of each language fits the catalog screen of Fig. 1, wide and tall
     return;
   }
   for (const width of [390, 1440]) {
-    const page = await openPage(browser, { viewport: { width, height: 900 } });
+    // The test checks a layout, not motion. With reduced motion, the hero and the engine draw no frames while the engine builds, so the build does not compete with them for the CPU.
+    const page = await openPage(browser, { viewport: { width, height: 900 }, reducedMotion: "reduce" });
     await page.goto(`${server.origin}/`);
     await page.locator(".engine-stage").evaluate((element) => element.scrollIntoView({ block: "center" }));
     await page.waitForFunction(() => document.querySelector<HTMLElement>(".engine-stage")?.dataset["engine"] === "live", undefined, { timeout: 20000 });
