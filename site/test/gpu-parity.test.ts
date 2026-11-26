@@ -63,6 +63,35 @@ const hideWebgpu = (context: BrowserContext) =>
     Object.defineProperty(Navigator.prototype, "gpu", { get: () => undefined, configurable: true });
   });
 
+/** Records each canvas that got a `paint` event of HTML-in-Canvas, the event after which a renderer draws the HTML of the canvas. */
+const recordPaints = (context: BrowserContext) =>
+  context.addInitScript(() => {
+    const painted = new WeakSet<EventTarget>();
+    Reflect.set(window, "wasPainted", (target: EventTarget) => painted.has(target));
+    addEventListener(
+      "paint",
+      (event) => {
+        if (event.target !== null) painted.add(event.target);
+      },
+      { capture: true },
+    );
+  });
+
+/**
+ * Resolves when the canvas of `selector` shows the HTML that it draws: the fonts are there, the canvas got a paint
+ * event, and three frames went by. A paint event that a late font causes comes in the next frame, a renderer that
+ * draws in an animation frame draws in the frame after it, and the screenshot takes a frame after that.
+ */
+const htmlDrawn = async (page: Page, selector: string): Promise<void> => {
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  await page.waitForFunction((region) => {
+    const canvas = document.querySelector(region);
+    const wasPainted: unknown = Reflect.get(window, "wasPainted");
+    return canvas !== null && typeof wasPainted === "function" && wasPainted(canvas) === true;
+  }, selector);
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))));
+};
+
 const missingHardware = async (page: Page): Promise<string | undefined> =>
   page.evaluate(async () => {
     const canvas = document.createElement("canvas");
@@ -95,6 +124,7 @@ const capture = async (origin: string, item: Case, backend: Backend): Promise<{ 
   const context = await browser.newContext({ viewport: item.viewport, reducedMotion: item.reducedMotion });
   if (backend === "webgl2") await hideWebgpu(context);
   await stubGitHub(context);
+  await recordPaints(context);
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -116,7 +146,9 @@ const capture = async (origin: string, item: Case, backend: Backend): Promise<{ 
   }
   await page.waitForFunction((selector) => document.querySelector<HTMLElement>(selector)?.dataset["gpu"] !== undefined, item.backendOf, { timeout: 20000 });
   if (item.reducedMotion === "no-preference") await page.clock.runFor(3000);
-  await page.waitForTimeout(1500);
+  else await htmlDrawn(page, item.region);
+  // The clock of the page does not drive CSS transitions, such as the fade of the live hero.
+  await page.locator(item.region).first().evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)).then(() => undefined));
   const image = await page.locator(item.region).first().screenshot({ animations: "allow" });
   const used = await page.locator(item.backendOf).first().evaluate((element) => (element instanceof HTMLElement ? element.dataset["gpu"] : undefined));
   const region = await page.locator(item.region).first().boundingBox();
@@ -205,6 +237,7 @@ test("the hero keeps its animation after a resize across 960px", async (t) => {
   const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.clock.install({ time: 0 });
   await page.goto(`${server.origin}/`);
   await page.waitForFunction(() => document.querySelector<HTMLElement>("[data-plate]")?.dataset["gpu"] !== undefined, undefined, { timeout: 20000 });
   for (const [width, plate] of [[390, "phone"], [1440, "plate"]] as const) {
@@ -213,10 +246,9 @@ test("the hero keeps its animation after a resize across 960px", async (t) => {
       const still = document.querySelector<HTMLImageElement>("[data-plate] img");
       return still !== null && still.complete && new URL(still.currentSrc).pathname.startsWith(`/assets/${name}`);
     }, plate);
-    await page.waitForTimeout(1000);
     const canvas = page.locator("[data-plate].is-live canvas");
     const first = await canvas.screenshot({ animations: "allow" });
-    await page.waitForTimeout(500);
+    await page.clock.runFor(500);
     const second = await canvas.screenshot({ animations: "allow" });
     assert.notDeepEqual(first, second, `at ${width}px, the hero still moves`);
   }
