@@ -666,8 +666,12 @@ async fn main() {
             .await;
             std::process::exit(code);
         }
-        Some("cli-then-host") => {
+        Some(mode @ ("cli-then-host" | "host-then-cli" | "cli-then-host-with-no-handler")) => {
             use acid_cat_core::cli::{CliOptions, run_cli_process};
+            #[cfg(unix)]
+            if mode == "host-then-cli" {
+                count_interrupts();
+            }
             run_cli_process(
                 app,
                 context,
@@ -675,6 +679,12 @@ async fn main() {
                 args[1..].to_vec(),
             )
             .await;
+            if mode == "cli-then-host-with-no-handler" {
+                eprintln!("returned");
+                let _ = std::io::copy(&mut std::io::stdin(), &mut std::io::sink());
+                eprintln!("still running");
+                std::process::exit(0);
+            }
             go_on_as_a_host();
         }
         Some("cli-remote") => {
@@ -746,7 +756,9 @@ fn poll() -> acid_cat_core::mcp::PollOptions {
 fn go_on_as_a_host() -> ! {
     #[cfg(unix)]
     {
-        count_interrupts();
+        if INTERRUPTS.get().is_none() {
+            count_interrupts();
+        }
         eprintln!("returned");
         wait_for_interrupts(1);
         eprintln!("interrupt 1");
