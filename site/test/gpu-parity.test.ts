@@ -67,7 +67,7 @@ const hideWebgpu = (context: BrowserContext) =>
 const recordPaints = (context: BrowserContext) =>
   context.addInitScript(() => {
     const painted = new WeakSet<EventTarget>();
-    Reflect.set(window, "wasPainted", (target: EventTarget) => painted.has(target));
+    Reflect.set(window, "paintedTargets", painted);
     addEventListener(
       "paint",
       (event) => {
@@ -86,8 +86,8 @@ const htmlDrawn = async (page: Page, selector: string): Promise<void> => {
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
   await page.waitForFunction((region) => {
     const canvas = document.querySelector(region);
-    const wasPainted: unknown = Reflect.get(window, "wasPainted");
-    return canvas !== null && typeof wasPainted === "function" && wasPainted(canvas) === true;
+    const painted: unknown = Reflect.get(window, "paintedTargets");
+    return canvas !== null && painted instanceof WeakSet && painted.has(canvas);
   }, selector);
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))));
 };
