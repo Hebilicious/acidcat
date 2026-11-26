@@ -42,7 +42,7 @@ const cases: readonly Case[] = [
   { name: "the wide Fig. 1 at 1440px, still", viewport: { width: 1440, height: 900 }, reducedMotion: "reduce", region: ".holo-canvas", backendOf: ".engine-stage", scroll: ".engine-stage" },
   { name: "the tall Fig. 1 at 390px, still", viewport: { width: 390, height: 844 }, reducedMotion: "reduce", region: ".holo-canvas", backendOf: ".engine-stage", scroll: ".engine-stage" },
   { name: "the key specifications of Fig. 2 at 1440px, still", viewport: { width: 1440, height: 900 }, reducedMotion: "reduce", region: ".spec-frame canvas", backendOf: ".spec-frame canvas", scroll: ".spec-frame" },
-  { name: "the console of Fig. 4 at 390px, still", viewport: { width: 390, height: 844 }, reducedMotion: "reduce", region: ".cores .bluescreen-canvas", backendOf: ".cores .bluescreen-canvas", scroll: ".console" },
+  { name: "the console of Fig. 4 at 390px, still", viewport: { width: 390, height: 1300 }, reducedMotion: "reduce", region: ".cores .bluescreen-canvas", backendOf: ".cores .bluescreen-canvas", scroll: ".console" },
 ];
 
 let server: StaticServer | undefined;
@@ -149,7 +149,14 @@ const capture = async (origin: string, item: Case, backend: Backend): Promise<{ 
   else await htmlDrawn(page, item.region);
   // The clock of the page does not drive CSS transitions, such as the fade of the live hero.
   await page.locator(item.region).first().evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)).then(() => undefined));
-  const image = await page.locator(item.region).first().screenshot({ animations: "allow" });
+  // The sections above the region lay out after the first scroll and move it, so the test centers it again on the final layout.
+  if (item.scroll !== undefined) await page.locator(item.scroll).first().evaluate((element) => element.scrollIntoView({ block: "center" }));
+  const box = await page.locator(item.region).first().boundingBox();
+  // Chromium captures an element taller than the window by making the window taller, which resizes the canvas, and the renderer draws again during the capture.
+  if (box === null) throw new Error(`${item.region} has no box.`);
+  assert.ok(box.y >= 0 && box.y + box.height <= item.viewport.height, `the region of ${item.name} is inside the window: from ${box.y}px to ${box.y + box.height}px in ${item.viewport.height}px`);
+  // The sections above the region can end a fraction of a pixel apart between two loads. Chromium draws the canvas at its position rounded to a pixel, so the capture takes the same rounded rectangle.
+  const image = await page.screenshot({ clip: { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) }, animations: "allow" });
   const used = await page.locator(item.backendOf).first().evaluate((element) => (element instanceof HTMLElement ? element.dataset["gpu"] : undefined));
   const region = await page.locator(item.region).first().boundingBox();
   await context.close();
