@@ -195,8 +195,11 @@ catalogs:
       specifier: 5.3.0
       version: 5.3.0
     '@hebilicious/cssforge':
-      specifier: 0.10.1
-      version: 0.10.1
+      specifier: 0.11.1
+      version: 0.11.1
+    '@hebilicious/cssforge-unplugin':
+      specifier: 0.1.3
+      version: 0.1.3
     '@informalsystems/quint':
       specifier: 0.33.1
       version: 0.33.1
@@ -746,7 +749,10 @@ importers:
         version: link:../packages/cli
       '@hebilicious/cssforge':
         specifier: 'catalog:'
-        version: 0.10.1
+        version: 0.11.1
+      '@hebilicious/cssforge-unplugin':
+        specifier: 'catalog:'
+        version: 0.1.3(esbuild@0.28.2)(rolldown@1.3.1)(rollup@4.68.8)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.4)(yaml@2.9.1))
       '@modelcontextprotocol/client':
         specifier: 'catalog:'
         version: 2.4.0
@@ -840,6 +846,22 @@ importers:
         version: 7.0.2
 
 packages:
+
+  '@acid-cat/catalog@0.13.0':
+    resolution: {integrity: sha512-KD67iK20urO4DMES5GaMDdd+KPzFQASiiEijfKyKWCM7JxmWm54Q9b5en2j57TgrnxXZ5cQAACRT5BTDM8WZjw==}
+    engines: {node: '>=24'}
+
+  '@acid-cat/core-ts@0.13.0':
+    resolution: {integrity: sha512-Vg7yHQQc9I+0oKSSAvScdgQLXCzYBDeiWZB77xrzN+AeD3w+cwvNFYtC7eON1umgmMCbV0pwCEa9g8QbQvvs+w==}
+    engines: {node: '>=24'}
+
+  '@acid-cat/mcp-handshake@0.13.0':
+    resolution: {integrity: sha512-F9ddrvktaJPNFK5MmLfilcn0RZYeronzrgw9FEzj99QBGJlT/zGr7T+oDAk1uPvbJso7nklAF07lRalh3xpuQQ==}
+    engines: {node: '>=24'}
+
+  '@acid-cat/spec-ts@0.13.0':
+    resolution: {integrity: sha512-4N2eDx+3YIR4L3gpjHLeNsmrcvO3uwgLNBTSNteuualoAq+Z/TBFKnbpweUgZZAqqDHEYYrrblIdut+mzQSBJw==}
+    engines: {node: '>=24'}
 
   '@ai-sdk/gateway@4.0.154':
     resolution: {integrity: sha512-7noB6L/iZ55MRey35rrcbB/J+rAeyRafhJP6G/+/CkOSHxrcdFeMEbtvdIuXTr5S+AAMMQpka+xnD4zVwn04Sw==}
@@ -1807,8 +1829,12 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@hebilicious/cssforge@0.10.1':
-    resolution: {integrity: sha512-sE8zg6buP6kXkKV9j9WNxItVINQev52MQDylW5rRoja3NRgn7+a5ZlvlpF70oaM0VGG92uBwUz8HklCg+jon+Q==}
+  '@hebilicious/cssforge-unplugin@0.1.3':
+    resolution: {integrity: sha512-eBPQ2g1rjq9M/mIbOFZaWeM9sxPHLJQPA/HDa0Le9yj5Z6d4TLkDA5r8S+oAJ+iaXo1kly1NaqUS6qZSsLGq1A==}
+    engines: {node: '>=24.0.0'}
+
+  '@hebilicious/cssforge@0.11.1':
+    resolution: {integrity: sha512-kzgkXFCW1v3+nUaIjwsqhklrF6RF6J7vziVQJby0fjx46Mw313Gzs2iuvWmJf8//1+JgN9XwDuhgDGPC2dQyUQ==}
     engines: {node: '>=24.0.0'}
     hasBin: true
 
@@ -8719,6 +8745,42 @@ packages:
     resolution: {integrity: sha512-5uKD0nqiYVzlmCRs01Fhs2BdkEgBS3SAVP6ndrBsuK42iC2+JHyxM05Rm9G8+5mkmRtzMZGY8Ct5+mliZxU/Ww==}
     engines: {node: '>=18.12.0'}
 
+  unplugin@3.4.0:
+    resolution: {integrity: sha512-9skdIFlCsPdFV7wUfZxNsFInlW+7nJmGu2gkTu0OUhF56aXGsHab9x52/QhdJ4lC7ZDPWTxbiC4ANqVlsuaW3w==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    peerDependencies:
+      '@farmfe/core': '*'
+      '@rsbuild/core': '*'
+      '@rspack/core': '*'
+      bun-types-no-globals: '*'
+      esbuild: '*'
+      rolldown: '*'
+      rollup: '*'
+      unloader: '*'
+      vite: '*'
+      webpack: '*'
+    peerDependenciesMeta:
+      '@farmfe/core':
+        optional: true
+      '@rsbuild/core':
+        optional: true
+      '@rspack/core':
+        optional: true
+      bun-types-no-globals:
+        optional: true
+      esbuild:
+        optional: true
+      rolldown:
+        optional: true
+      rollup:
+        optional: true
+      unloader:
+        optional: true
+      vite:
+        optional: true
+      webpack:
+        optional: true
+
   unplugin@3.7.0:
     resolution: {integrity: sha512-GrM2uq3DQo3hvLU2FjeYhooJ8BY9N6j1Fbzgx7Pta3VVJevsD3VP4dPjZkZOS0mLvN8w9zzr9OlP+31bSMyuLw==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -9291,6 +9353,20 @@ packages:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
 snapshots:
+
+  '@acid-cat/catalog@0.13.0': {}
+
+  '@acid-cat/core-ts@0.13.0':
+    dependencies:
+      '@acid-cat/catalog': 0.13.0
+      '@acid-cat/mcp-handshake': 0.13.0
+      '@acid-cat/spec-ts': 0.13.0
+
+  '@acid-cat/mcp-handshake@0.13.0':
+    dependencies:
+      '@acid-cat/spec-ts': 0.13.0
+
+  '@acid-cat/spec-ts@0.13.0': {}
 
   '@ai-sdk/gateway@4.0.154(zod@4.6.7)':
     dependencies:
@@ -10234,12 +10310,29 @@ snapshots:
       protobufjs: 7.6.6
       yargs: 17.7.3
 
-  '@hebilicious/cssforge@0.10.1':
+  '@hebilicious/cssforge-unplugin@0.1.3(esbuild@0.28.2)(rolldown@1.3.1)(rollup@4.68.8)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.4)(yaml@2.9.1))':
     dependencies:
+      '@hebilicious/cssforge': 0.11.1
+      unplugin: 3.4.0(esbuild@0.28.2)(rolldown@1.3.1)(rollup@4.68.8)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.4)(yaml@2.9.1))
+    transitivePeerDependencies:
+      - '@farmfe/core'
+      - '@rsbuild/core'
+      - '@rspack/core'
+      - bun-types-no-globals
+      - esbuild
+      - rolldown
+      - rollup
+      - unloader
+      - vite
+      - webpack
+
+  '@hebilicious/cssforge@0.11.1':
+    dependencies:
+      '@acid-cat/core-ts': 0.13.0
       chokidar: 4.0.3
-      citty: 0.1.6
       colorjs.io: 0.5.2
       utopia-core: 1.6.0
+      zod: 4.6.7
 
   '@hono/node-server@2.1.11(hono@4.13.21)':
     dependencies:
@@ -18764,6 +18857,17 @@ snapshots:
       acorn: 8.19.0
       picomatch: 4.0.7
       webpack-virtual-modules: 0.6.2
+
+  unplugin@3.4.0(esbuild@0.28.2)(rolldown@1.3.1)(rollup@4.68.8)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.4)(yaml@2.9.1)):
+    dependencies:
+      '@jridgewell/remapping': 2.3.5
+      picomatch: 4.0.7
+      webpack-virtual-modules: 0.6.2
+    optionalDependencies:
+      esbuild: 0.28.2
+      rolldown: 1.3.1
+      rollup: 4.68.8
+      vite: 8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.4)(yaml@2.9.1)
 
   unplugin@3.7.0(esbuild@0.28.2)(rolldown@1.2.18)(rollup@4.68.8)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.4)(yaml@2.9.1)):
     dependencies:

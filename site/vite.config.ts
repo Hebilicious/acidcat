@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { relative } from "node:path";
+import cssforge from "@hebilicious/cssforge-unplugin/vite";
 import { defineConfig } from "vite";
 import { inlineScript, vaporpress } from "vaporpress/vite";
 import { writeAgentFiles } from "./src/lib/agent/files.ts";
@@ -51,32 +52,35 @@ export default defineConfig({
   css: { postcss: { plugins: [markRoutes()] } },
   publicDir: "public",
   server: { fs: { allow: [repositoryRoot] } },
-  plugins: vaporpress({
-    root,
-    app: "src/app/app.ts",
-    pages: "content",
-    extraPages: () => specPages.map((page) => ({ path: `/${page.id}`, file: fileURLToPath(new URL(`../${page.source}`, import.meta.url)) })),
-    search: true,
-    headHtml: `<meta name="theme-color" content="#0b0e14"><link rel="icon" type="image/svg+xml" href="${favicon.href}">`,
-    markdown: {
-      transformSource: (source, file) => expandComponents(specMarkdown(file) ?? source, { page: relative(repositoryRoot, file), repositoryRoot, content }),
-      slugify: headingSlug,
-      highlight: highlightBlock,
-      hastPlugins: [headingAnchors, externalLinks],
-    },
-    preload: (page) => (page.frontmatter["layout"] === "home" ? [] : ["src/app/DocsLayout.vue"]),
-    transformHtml: async (html, page, { files }) => {
-      const scriptsFirst = await startScriptsAfterFirstPaint(html, outDir);
-      const fonts = fontPreloadHtml(page.path === "/" ? "home" : "docs", files);
-      const docsOnly = page.path === "/" ? "" : pageInputScript;
-      return writeExplorerSources(scriptsFirst.replace("</head>", `${fonts}${searchModuleHtml(files)}${docsOnly}</head>`), repositoryRoot);
-    },
-    afterBuild: async () => {
-      await inlineStyles(outDir);
-      await favicon.write(outDir);
-      await writeExampleFragments(outDir, repositoryRoot);
-      await writeSitemap(outDir, siteUrl);
-      await writeAgentFiles({ dist: outDir, repositoryRoot, origin: siteUrl });
-    },
-  }),
+  plugins: [
+    cssforge({ config: fileURLToPath(new URL("cssforge.config.ts", import.meta.url)) }),
+    vaporpress({
+      root,
+      app: "src/app/app.ts",
+      pages: "content",
+      extraPages: () => specPages.map((page) => ({ path: `/${page.id}`, file: fileURLToPath(new URL(`../${page.source}`, import.meta.url)) })),
+      search: true,
+      headHtml: `<meta name="theme-color" content="#0b0e14"><link rel="icon" type="image/svg+xml" href="${favicon.href}">`,
+      markdown: {
+        transformSource: (source, file) => expandComponents(specMarkdown(file) ?? source, { page: relative(repositoryRoot, file), repositoryRoot, content }),
+        slugify: headingSlug,
+        highlight: highlightBlock,
+        hastPlugins: [headingAnchors, externalLinks],
+      },
+      preload: (page) => (page.frontmatter["layout"] === "home" ? [] : ["src/app/DocsLayout.vue"]),
+      transformHtml: async (html, page, { files }) => {
+        const scriptsFirst = await startScriptsAfterFirstPaint(html, outDir);
+        const fonts = fontPreloadHtml(page.path === "/" ? "home" : "docs", files);
+        const docsOnly = page.path === "/" ? "" : pageInputScript;
+        return writeExplorerSources(scriptsFirst.replace("</head>", `${fonts}${searchModuleHtml(files)}${docsOnly}</head>`), repositoryRoot);
+      },
+      afterBuild: async () => {
+        await inlineStyles(outDir);
+        await favicon.write(outDir);
+        await writeExampleFragments(outDir, repositoryRoot);
+        await writeSitemap(outDir, siteUrl);
+        await writeAgentFiles({ dist: outDir, repositoryRoot, origin: siteUrl });
+      },
+    }),
+  ],
 });

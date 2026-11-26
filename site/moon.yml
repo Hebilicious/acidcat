@@ -9,19 +9,6 @@ toolchains:
   default: ["javascript", "node", "pnpm"]
 
 tasks:
-  tokens:
-    description: "Write the design tokens from cssforge.config.ts into .cssforge/output.css."
-    command: "cssforge"
-    args: ["--mode", "css"]
-    inputs: ["cssforge.config.ts"]
-    outputs: [".cssforge/output.css"]
-
-  tokens-watch:
-    description: "Write the design tokens again each time cssforge.config.ts changes."
-    command: "cssforge"
-    args: ["--mode", "css", "--watch"]
-    preset: "server"
-
   fonts:
     description: "Write the core and the rest of each font face, and their @font-face rules, into .fonts/. The build and the dev server read them."
     command: "node"
@@ -30,15 +17,10 @@ tasks:
     outputs: [".fonts/**/*"]
 
   dev:
-    deps: ["tokens-watch", "fonts"]
-    description: "Serve the site with live reload at http://localhost:5173, and write the design tokens on each change."
+    deps: ["fonts"]
+    description: "Serve the site with live reload at http://localhost:5173."
     command: "vite"
     preset: "server"
-
-  tokens-check:
-    description: "Check that .cssforge/output.css matches cssforge.config.ts."
-    script: "cssforge --mode css --css .tmp-tokens.css >/dev/null && diff -q .tmp-tokens.css .cssforge/output.css; status=$?; rm -f .tmp-tokens.css; exit $status"
-    inputs: ["cssforge.config.ts", ".cssforge/output.css"]
 
   build:
     deps: ["fonts"]
@@ -103,11 +85,11 @@ tasks:
       runInCI: false
 
   test:
-    deps: ["build", "tokens-check"]
+    deps: ["build"]
     description: "Test the geometry of the art, render the homepage in Chromium at desktop and phone widths, and call the AcidCat app of the site through the Worker, MCP, HTTP and WebMCP."
     command: "node"
     args: ["--test", "test/"]
-    inputs: ["src/**/*", "content/**/*", "vite.config.ts", "test/**/*.ts", "test/routes.txt", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*", "/vaporpress/src/**/*"]
+    inputs: ["src/**/*", "content/**/*", "vite.config.ts", "cssforge.config.ts", "test/**/*.ts", "test/routes.txt", "worker/**/*.ts", "site.acidcat.json", "/skills/**/*", "/vaporpress/src/**/*"]
 
   typecheck:
     description: "Type-check the art geometry, the tests and the configuration."
