@@ -33,8 +33,11 @@
   font-size: var(--sl-text-h4);
 }
 
+/* The link sits after the last word and takes no place in the line, so a heading wraps as its text does.
+   When the text fills the line, the link is past the edge: the heading clips it, so it does not widen the page. */
 .markdown-content :is(h2, h3, h4) {
   position: relative;
+  overflow-x: clip;
 }
 
 .markdown-content .header-anchor {
@@ -70,6 +73,10 @@
 
 .markdown-content li {
   overflow-wrap: anywhere;
+}
+
+.markdown-content p {
+  overflow-wrap: break-word;
 }
 
 .markdown-content strong {
