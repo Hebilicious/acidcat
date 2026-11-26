@@ -169,6 +169,32 @@ The files go to `node_modules/.vaporpress/images/`, under a name from the conten
 | `headingLevels` | The levels of the headings in `page.headings` |
 | `mdastPlugins`, `hastPlugins` | [Sätteri plugins](https://satteri.bruits.org/docs/plugins/), on the Markdown tree and on the HTML tree |
 
+## Design tokens
+
+A site gets design tokens from [cssforge](https://github.com/Hebilicious/cssforge) through its Vite plugin, `@hebilicious/cssforge-unplugin`. Add the plugin next to the plugins of the framework, and import its stylesheet in the app module:
+
+```ts
+// vite.config.ts
+import { fileURLToPath } from "node:url";
+import cssforge from "@hebilicious/cssforge-unplugin/vite";
+import { defineConfig } from "vite";
+import { vaporpress } from "vaporpress/vite";
+
+export default defineConfig({
+  plugins: [
+    cssforge({ config: fileURLToPath(new URL("cssforge.config.ts", import.meta.url)) }),
+    vaporpress({ root: fileURLToPath(new URL(".", import.meta.url)), app: "src/app.ts" }),
+  ],
+});
+```
+
+```ts
+// src/app.ts
+import "virtual:cssforge.css";
+```
+
+The build writes the tokens into the stylesheet of the site. In the dev server, a change to `cssforge.config.ts`, or to a module that it imports, updates the tokens on the page through hot module replacement, with no restart. For the type of the import, add `/// <reference types="@hebilicious/cssforge-unplugin/client" />` to a declaration file of the site. Import the module from a script: a CSS `@import` cannot load it.
+
 ## Lazy layouts
 
 A layout that only some pages use can be a chunk of its own, so the other pages do not load it. For example, the homepage of a site often has a layout of its own, and does not need the layout of the docs:
@@ -373,6 +399,12 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 
 **Rejected: Pagefind itself.** It is a binary with its own interface and its own index format, and it does not run in the dev server. The site would load a second set of scripts and styles next to its own dialog.
 
+### Design tokens
+
+**Chosen: the site adds the Vite plugin of cssforge next to the plugins of the framework.** The plugin works in a vaporpress site with no change, and a site that uses no tokens does not install cssforge.
+
+**Rejected: an option of `vaporpress` that adds the plugin.** It gives every site a dependency on cssforge, and a second set of options to keep in step with the options of the plugin. It saves the site only one entry in `plugins` and one import.
+
 ### The site and the framework
 
 **Chosen: building blocks that a site imports.** The framework owns the build, the routes, the render and hydration, the data modules, the head, links, prefetch, and the scroll. The site owns its app module (`defineSite`), its layout, its homepage, its components and its styles. To change a part of the framework, a site does not import it, and writes its own: its own layout around `RouterView`, its own `head(page)`, its own `scrollBehavior`, or its own component in place of a built-in one. A page of one site can be a Markdown file, and the homepage can be a `.vue` file that looks like nothing else on the site.
@@ -403,6 +435,6 @@ The routes are the routes of `vue-router/unplugin`: each page is a dynamic impor
 
 ## Roadmap
 
-- Built-in features: the Markdown of each page and `llms.txt`, social cards, the subsets of the font faces, and the design tokens of cssforge.
+- Built-in features: the Markdown of each page and `llms.txt`, social cards, and the subsets of the font faces.
 - A skill that gives the checklist of the verification loop for a site.
 - Move the framework to a repository of its own.

@@ -1,4 +1,5 @@
 import { defineSite } from "vaporpress/client";
+import "virtual:cssforge.css";
 import "../styles/site.css";
 import { pageHead } from "./head.ts";
 import Layout from "./Layout.vue";

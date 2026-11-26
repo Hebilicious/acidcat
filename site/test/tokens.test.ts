@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
+import { generateCSS, loadConfig } from "@hebilicious/cssforge";
 
 const site = new URL("../", import.meta.url).pathname;
 const families = ["palette", "spacing_fluid", "typography_fluid", "typography", "font", "radius", "layout"];
@@ -19,7 +20,7 @@ const sources = async (directory: string): Promise<string[]> => {
 };
 
 test("every design token that the site uses exists in the cssforge output", async () => {
-  const output = await readFile(join(site, ".cssforge/output.css"), "utf8");
+  const output = generateCSS((await loadConfig(join(site, "cssforge.config.ts"))).config);
   const defined = new Set(Array.from(output.matchAll(/^(--[\w-]+):/gm), (match) => match[1]));
   const pattern = new RegExp(`var\\((--(?:${families.join("|")})-[\\w-]+)`, "g");
   const missing: string[] = [];
