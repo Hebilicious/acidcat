@@ -42,7 +42,7 @@ const cases: readonly Case[] = [
   { name: "the wide Fig. 1 at 1440px, still", viewport: { width: 1440, height: 900 }, reducedMotion: "reduce", region: ".holo-canvas", backendOf: ".engine-stage", scroll: ".engine-stage" },
   { name: "the tall Fig. 1 at 390px, still", viewport: { width: 390, height: 844 }, reducedMotion: "reduce", region: ".holo-canvas", backendOf: ".engine-stage", scroll: ".engine-stage" },
   { name: "the key specifications of Fig. 2 at 1440px, still", viewport: { width: 1440, height: 900 }, reducedMotion: "reduce", region: ".spec-frame canvas", backendOf: ".spec-frame canvas", scroll: ".spec-frame" },
-  { name: "the console of Fig. 4 at 390px, still", viewport: { width: 390, height: 844 }, reducedMotion: "reduce", region: ".cores .bluescreen-canvas", backendOf: ".cores .bluescreen-canvas", scroll: ".console" },
+  { name: "the console of Fig. 4 at 390px, still", viewport: { width: 390, height: 1300 }, reducedMotion: "reduce", region: ".cores .bluescreen-canvas", backendOf: ".cores .bluescreen-canvas", scroll: ".console" },
 ];
 
 let server: StaticServer | undefined;
@@ -62,6 +62,35 @@ const hideWebgpu = (context: BrowserContext) =>
   context.addInitScript(() => {
     Object.defineProperty(Navigator.prototype, "gpu", { get: () => undefined, configurable: true });
   });
+
+/** Records each canvas that got a `paint` event of HTML-in-Canvas, the event after which a renderer draws the HTML of the canvas. */
+const recordPaints = (context: BrowserContext) =>
+  context.addInitScript(() => {
+    const painted = new WeakSet<EventTarget>();
+    Reflect.set(window, "paintedTargets", painted);
+    addEventListener(
+      "paint",
+      (event) => {
+        if (event.target !== null) painted.add(event.target);
+      },
+      { capture: true },
+    );
+  });
+
+/**
+ * Resolves when the canvas of `selector` shows the HTML that it draws: the fonts are there, the canvas got a paint
+ * event, and three frames went by. A paint event that a late font causes comes in the next frame, a renderer that
+ * draws in an animation frame draws in the frame after it, and the screenshot takes a frame after that.
+ */
+const htmlDrawn = async (page: Page, selector: string): Promise<void> => {
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  await page.waitForFunction((region) => {
+    const canvas = document.querySelector(region);
+    const painted: unknown = Reflect.get(window, "paintedTargets");
+    return canvas !== null && painted instanceof WeakSet && painted.has(canvas);
+  }, selector);
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))));
+};
 
 const missingHardware = async (page: Page): Promise<string | undefined> =>
   page.evaluate(async () => {
@@ -95,6 +124,7 @@ const capture = async (origin: string, item: Case, backend: Backend): Promise<{ 
   const context = await browser.newContext({ viewport: item.viewport, reducedMotion: item.reducedMotion });
   if (backend === "webgl2") await hideWebgpu(context);
   await stubGitHub(context);
+  await recordPaints(context);
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -116,8 +146,17 @@ const capture = async (origin: string, item: Case, backend: Backend): Promise<{ 
   }
   await page.waitForFunction((selector) => document.querySelector<HTMLElement>(selector)?.dataset["gpu"] !== undefined, item.backendOf, { timeout: 20000 });
   if (item.reducedMotion === "no-preference") await page.clock.runFor(3000);
-  await page.waitForTimeout(1500);
-  const image = await page.locator(item.region).first().screenshot({ animations: "allow" });
+  else await htmlDrawn(page, item.region);
+  // The clock of the page does not drive CSS transitions, such as the fade of the live hero.
+  await page.locator(item.region).first().evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)).then(() => undefined));
+  // The sections above the region lay out after the first scroll and move it, so the test centers it again on the final layout.
+  if (item.scroll !== undefined) await page.locator(item.scroll).first().evaluate((element) => element.scrollIntoView({ block: "center" }));
+  const box = await page.locator(item.region).first().boundingBox();
+  // Chromium captures an element taller than the window by making the window taller, which resizes the canvas, and the renderer draws again during the capture.
+  if (box === null) throw new Error(`${item.region} has no box.`);
+  assert.ok(box.y >= 0 && box.y + box.height <= item.viewport.height, `the region of ${item.name} is inside the window: from ${box.y}px to ${box.y + box.height}px in ${item.viewport.height}px`);
+  // The sections above the region can end a fraction of a pixel apart between two loads. Chromium draws the canvas at its position rounded to a pixel, so the capture takes the same rounded rectangle.
+  const image = await page.screenshot({ clip: { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) }, animations: "allow" });
   const used = await page.locator(item.backendOf).first().evaluate((element) => (element instanceof HTMLElement ? element.dataset["gpu"] : undefined));
   const region = await page.locator(item.region).first().boundingBox();
   await context.close();
@@ -205,6 +244,7 @@ test("the hero keeps its animation after a resize across 960px", async (t) => {
   const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.clock.install({ time: 0 });
   await page.goto(`${server.origin}/`);
   await page.waitForFunction(() => document.querySelector<HTMLElement>("[data-plate]")?.dataset["gpu"] !== undefined, undefined, { timeout: 20000 });
   for (const [width, plate] of [[390, "phone"], [1440, "plate"]] as const) {
@@ -213,10 +253,9 @@ test("the hero keeps its animation after a resize across 960px", async (t) => {
       const still = document.querySelector<HTMLImageElement>("[data-plate] img");
       return still !== null && still.complete && new URL(still.currentSrc).pathname.startsWith(`/assets/${name}`);
     }, plate);
-    await page.waitForTimeout(1000);
     const canvas = page.locator("[data-plate].is-live canvas");
     const first = await canvas.screenshot({ animations: "allow" });
-    await page.waitForTimeout(500);
+    await page.clock.runFor(500);
     const second = await canvas.screenshot({ animations: "allow" });
     assert.notDeepEqual(first, second, `at ${width}px, the hero still moves`);
   }
@@ -232,7 +271,8 @@ test("the code of each language fits the catalog screen of Fig. 1, wide and tall
     return;
   }
   for (const width of [390, 1440]) {
-    const page = await openPage(browser, { viewport: { width, height: 900 } });
+    // The test checks a layout, not motion. With reduced motion, the hero and the engine draw no frames while the engine builds, so the build does not compete with them for the CPU.
+    const page = await openPage(browser, { viewport: { width, height: 900 }, reducedMotion: "reduce" });
     await page.goto(`${server.origin}/`);
     await page.locator(".engine-stage").evaluate((element) => element.scrollIntoView({ block: "center" }));
     await page.waitForFunction(() => document.querySelector<HTMLElement>(".engine-stage")?.dataset["engine"] === "live", undefined, { timeout: 20000 });
