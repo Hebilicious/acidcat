@@ -11,6 +11,7 @@ import { fontPreloadHtml } from "./src/lib/fonts.ts";
 import { writeExplorerSources } from "./src/lib/example-highlight.ts";
 import { expandComponents } from "./src/lib/markdown/components.ts";
 import { highlightBlock, headingAnchors, externalLinks } from "./src/app/markdown.ts";
+import { searchModuleMeta } from "./src/app/search-module.ts";
 import { headingSlug } from "./src/lib/heading-slug.ts";
 import { writeSitemap } from "./src/lib/sitemap.ts";
 import { siteUrl } from "./src/lib/social.ts";
@@ -25,6 +26,12 @@ const outDir = fileURLToPath(new URL("dist", import.meta.url));
 const specFiles = new Map(specPages.map((page) => [fileURLToPath(new URL(`../${page.source}`, import.meta.url)), page]));
 
 const pageInputScript = await inlineScript(fileURLToPath(new URL("src/app/page-input.ts", import.meta.url)));
+
+const searchModuleHtml = (files: readonly string[]): string => {
+  const chunks = files.filter((file) => /\/search\.[\w-]+\.js$/.test(file));
+  if (chunks.length !== 1) throw new Error(`The build has ${chunks.length} chunks for vaporpress/search, not one.`);
+  return `<meta name="${searchModuleMeta}" content="${chunks[0] ?? ""}">`;
+};
 
 const specMarkdown = (file: string): string | undefined => {
   const page = specFiles.get(file);
@@ -62,7 +69,7 @@ export default defineConfig({
       const scriptsFirst = await startScriptsAfterFirstPaint(html, outDir);
       const fonts = fontPreloadHtml(page.path === "/" ? "home" : "docs", files);
       const docsOnly = page.path === "/" ? "" : pageInputScript;
-      return writeExplorerSources(scriptsFirst.replace("</head>", `${fonts}${docsOnly}</head>`), repositoryRoot);
+      return writeExplorerSources(scriptsFirst.replace("</head>", `${fonts}${searchModuleHtml(files)}${docsOnly}</head>`), repositoryRoot);
     },
     afterBuild: async () => {
       await inlineStyles(outDir);

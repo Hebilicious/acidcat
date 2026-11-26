@@ -1,7 +1,7 @@
 <script setup lang="ts" vapor>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { onListboxKey, openModal } from "vaporpress/behaviors";
-import { loadExcerpt, loadSearch, markTerms, markText } from "vaporpress/search";
+import type * as Search from "vaporpress/search";
 import type { SearchResult, SiteSearch } from "vaporpress/search";
 import { readStorage, searchQueryKey } from "./search-input.ts";
 
@@ -33,7 +33,7 @@ const typedBeforeHydration = import.meta.env.SSR ? undefined : document.querySel
 const stored = (storage: () => Storage, key: string): string | null => (import.meta.env.SSR ? null : readStorage(storage, key));
 const query = ref(typedBeforeHydration ?? stored(() => sessionStorage, searchQueryKey) ?? "");
 const detailed = ref(stored(() => localStorage, detailedKey) === "true");
-const engine = ref<SiteSearch>();
+const engine = shallowRef<{ readonly sections: SiteSearch; readonly tools: typeof Search }>();
 const failed = ref(false);
 const results = ref<readonly ShownResult[]>([]);
 const searched = ref(false);
@@ -45,16 +45,18 @@ let run = 0;
 const search = async (): Promise<void> => {
   const current = ++run;
   const text = query.value.trim();
-  const found = engine.value === undefined || text === "" ? [] : engine.value.search(text);
-  const excerpts = detailed.value ? await Promise.all(found.map((result) => loadExcerpt(result.id).catch(() => ""))) : [];
+  if (engine.value === undefined) return;
+  const { sections, tools } = engine.value;
+  const found = text === "" ? [] : sections.search(text);
+  const excerpts = detailed.value ? await Promise.all(found.map((result) => tools.loadExcerpt(result.id).catch(() => ""))) : [];
   if (current !== run) return;
   results.value = found.map((result, index) => ({
     ...result,
-    titlesHtml: result.titles.map((title) => markText(title, result.terms)),
-    titleHtml: markText(result.title, result.terms),
-    excerpt: markTerms(excerpts[index] ?? "", result.terms),
+    titlesHtml: result.titles.map((title) => tools.markText(title, result.terms)),
+    titleHtml: tools.markText(result.title, result.terms),
+    excerpt: tools.markTerms(excerpts[index] ?? "", result.terms),
   }));
-  searched.value = engine.value !== undefined;
+  searched.value = true;
   selected.value = results.value.length > 0 ? 0 : -1;
   await nextTick();
   for (const mark of dialog.value?.querySelectorAll(".excerpt mark:first-of-type") ?? []) mark.scrollIntoView({ block: "center" });
@@ -123,7 +125,9 @@ const show = (element: HTMLDialogElement): void => {
     input.value?.focus();
     input.value?.select();
   }
-  loadSearch().then(
+  import("vaporpress/search")
+    .then(async (tools) => ({ sections: await tools.loadSearch(), tools }))
+    .then(
     (loaded) => {
       engine.value = loaded;
       void search();

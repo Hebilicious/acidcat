@@ -222,6 +222,15 @@ test("with scripts blocked, the search button does nothing", async () => {
   await page.close();
 });
 
+test("the page fetches ahead the script of the search when it is idle, as a prefetch link", async () => {
+  const { page, problems } = await openDocsPage();
+  const href = await page.locator('meta[name="acidcat:search-module"]').getAttribute("content");
+  assert.match(href ?? "", /^\/assets\/search\.[\w-]+\.js$/);
+  await page.waitForFunction((script) => document.head.querySelector(`link[rel="prefetch"][href="${script}"]`) !== null, href);
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
 test("the page loads the search index only when the search opens", async () => {
   const { page, problems, indexRequests } = await openDocsPage();
   await page.hover(".search-button");

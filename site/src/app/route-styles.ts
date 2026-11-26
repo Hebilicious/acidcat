@@ -3,6 +3,7 @@ import { cssFont, routeFaces } from "../lib/font-faces.ts";
 import { preloadPlate } from "../lib/plate-images.ts";
 import { isRoute, routeOfPage, routes } from "../lib/routes.ts";
 import type { Route } from "../lib/routes.ts";
+import { searchModuleHref } from "./search-module.ts";
 
 const files = (): Partial<Record<Route, string>> => {
   const parsed: unknown = JSON.parse(document.getElementById("route-styles")?.textContent ?? "{}");
@@ -75,7 +76,17 @@ const whenIdle = (callback: () => void): void => {
   else setTimeout(callback, 0);
 };
 
+const prefetchSearchModule = (): void => {
+  const href = searchModuleHref();
+  if (href === undefined || document.head.querySelector(`link[href="${href}"]`) !== null) return;
+  const link = document.createElement("link");
+  link.rel = "prefetch";
+  link.href = href;
+  document.head.append(link);
+};
+
 const prefetchLinkedRoutes = (): void => {
+  prefetchSearchModule();
   const current = routeOfPage(location.pathname);
   for (const link of document.querySelectorAll<HTMLAnchorElement>("#app a[href]")) {
     if (link.origin !== location.origin) continue;

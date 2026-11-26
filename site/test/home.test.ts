@@ -106,6 +106,7 @@ test("reduced motion keeps the hero still and stops the animations", async () =>
 
 /** Each group of the files that the homepage fetches ahead when it is idle, by its budget. */
 const prefetchGroups = [
+  { name: "search ahead", pattern: /^\/assets\/search\.[\w-]+\.js$/ },
   { name: "stylesheet ahead", pattern: /\.css$/ },
   { name: "pages ahead", pattern: /\.js$/ },
 ] as const;
@@ -160,8 +161,9 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
   const starCount = 1_000;
   const pagesOfEachSectionInTheHeaderAndTheDocsLayout = 111_000;
   const cssOfTheDocs = 39_500;
-  const scriptOfTheSearchDialog = 9_800;
+  const scriptOfTheSearchDialog = 6_900;
   const cssOfTheSearchDialog = 5_900;
+  const scriptOfTheSearch = 3_500;
   const budget: Record<string, number> = {
     image: phonePlate,
     font: fontCores,
@@ -170,6 +172,7 @@ test("on a phone, the homepage loads less than its budget of bytes before the re
     fetch: starCount,
     "pages ahead": pagesOfEachSectionInTheHeaderAndTheDocsLayout + scriptOfTheSearchDialog,
     "stylesheet ahead": cssOfTheDocs + cssOfTheSearchDialog,
+    "search ahead": scriptOfTheSearch,
   };
   for (const [type, size] of bytes) assert.ok(size <= (budget[type] ?? 0), `${type}: ${size} bytes, budget ${budget[type] ?? 0}`);
   await page.close();
