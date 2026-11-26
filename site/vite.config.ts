@@ -1,8 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { relative } from "node:path";
-import { build as esbuild } from "esbuild";
 import { defineConfig } from "vite";
-import { vaporpress } from "vaporpress/vite";
+import { inlineScript, vaporpress } from "vaporpress/vite";
 import { writeAgentFiles } from "./src/lib/agent/files.ts";
 import { writeExampleFragments } from "./src/lib/example-fragments.ts";
 import { readFavicon } from "./src/lib/favicon.ts";
@@ -12,6 +11,7 @@ import { fontPreloadHtml } from "./src/lib/fonts.ts";
 import { writeExplorerSources } from "./src/lib/example-highlight.ts";
 import { expandComponents } from "./src/lib/markdown/components.ts";
 import { highlightBlock, headingAnchors, externalLinks } from "./src/app/markdown.ts";
+import { searchModuleMeta } from "./src/app/search-module.ts";
 import { headingSlug } from "./src/lib/heading-slug.ts";
 import { writeSitemap } from "./src/lib/sitemap.ts";
 import { siteUrl } from "./src/lib/social.ts";
@@ -25,13 +25,12 @@ const favicon = await readFavicon();
 const outDir = fileURLToPath(new URL("dist", import.meta.url));
 const specFiles = new Map(specPages.map((page) => [fileURLToPath(new URL(`../${page.source}`, import.meta.url)), page]));
 
-const tabInput = await esbuild({ entryPoints: [fileURLToPath(new URL("src/app/tab-input.ts", import.meta.url))], bundle: true, minify: true, format: "iife", target: "es2022", write: false });
-const tabInputScript = `<script>${tabInput.outputFiles[0]?.text.trim() ?? ""}</script>`;
+const pageInputScript = await inlineScript(fileURLToPath(new URL("src/app/page-input.ts", import.meta.url)));
 
-const searchDialogMeta = (files: readonly string[]): string => {
-  const href = files.find((file) => /\/SearchDialog\.[\w-]+\.js$/.test(file));
-  if (href === undefined) throw new Error("The build has no chunk for SearchDialog.vue.");
-  return `<meta name="acidcat:search-dialog" content="${href}">`;
+const searchModuleHtml = (files: readonly string[]): string => {
+  const chunks = files.filter((file) => /\/search\.[\w-]+\.js$/.test(file));
+  if (chunks.length !== 1) throw new Error(`The build has ${chunks.length} chunks for vaporpress/search, not one.`);
+  return `<meta name="${searchModuleMeta}" content="${chunks[0] ?? ""}">`;
 };
 
 const specMarkdown = (file: string): string | undefined => {
@@ -69,8 +68,8 @@ export default defineConfig({
     transformHtml: async (html, page, { files }) => {
       const scriptsFirst = await startScriptsAfterFirstPaint(html, outDir);
       const fonts = fontPreloadHtml(page.path === "/" ? "home" : "docs", files);
-      const docsOnly = page.path === "/" ? "" : tabInputScript;
-      return writeExplorerSources(scriptsFirst.replace("</head>", `${fonts}${searchDialogMeta(files)}${docsOnly}</head>`), repositoryRoot);
+      const docsOnly = page.path === "/" ? "" : pageInputScript;
+      return writeExplorerSources(scriptsFirst.replace("</head>", `${fonts}${searchModuleHtml(files)}${docsOnly}</head>`), repositoryRoot);
     },
     afterBuild: async () => {
       await inlineStyles(outDir);

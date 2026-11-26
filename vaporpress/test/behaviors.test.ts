@@ -58,6 +58,17 @@ const listbox = `
   document.body.dataset.ready = "";
 </script>`;
 
+const dialog = `
+<button id="before">Before</button><button class="opener">Search</button>
+<dialog id="search"><input id="field"><button id="done">Done</button></dialog>
+<script type="module">
+  import { isSearchShortcut, openDialogOnInput, openModal } from "/behaviors/index.js";
+  let opened = 0;
+  openDialogOnInput({ control: ".opener", dialog: "#search", shortcut: isSearchShortcut, opened: (element) => { opened += 1; document.body.dataset.opened = String(opened); element.querySelector("input").focus(); } });
+  document.querySelector("#done").addEventListener("click", () => openModal(document.querySelector("#search"))());
+  document.body.dataset.ready = "";
+</script>`;
+
 const copy = `
 <figure><button class="copy">Copy</button><pre><code>pnpm add vaporpress</code></pre></figure>
 <script type="module">
@@ -84,7 +95,7 @@ before(async () => {
     const code = stripTypeScriptTypes(await readFile(new URL(file, sources), "utf8")).replaceAll(/(from "\.\/[\w-]+)\.ts"/g, '$1.js"');
     await writeFile(join(root, "behaviors", file.replace(/\.ts$/, ".js")), code);
   }
-  for (const [name, body] of Object.entries({ tabs, listbox, copy, headings })) await writeFile(join(root, `${name}.html`), `<!doctype html><html><body>${body}</body></html>`);
+  for (const [name, body] of Object.entries({ tabs, listbox, dialog, copy, headings })) await writeFile(join(root, `${name}.html`), `<!doctype html><html><body>${body}</body></html>`);
   const served = await serve(root.replace(/\/$/, ""));
   origin = served.origin;
   close = () => served.server.close();
@@ -150,6 +161,29 @@ test("the search shortcuts open a modal, the arrow keys move around the list, En
   assert.equal(await page.evaluate(() => document.activeElement?.id), "opener");
   await page.keyboard.press("/");
   assert.equal(await page.evaluate(() => document.querySelector("dialog")?.open), true, "A slash outside a text field opens the search.");
+  await page.close();
+});
+
+test("a click on a control or a shortcut opens the dialog once, and a modal that is open already keeps its focus and closes", async () => {
+  const page = await open("dialog");
+  const state = () => page.evaluate(() => ({ open: document.querySelector("dialog")?.open, focus: document.activeElement?.id || document.activeElement?.className, opened: document.body.dataset["opened"] }));
+  await page.focus("#before");
+  await page.keyboard.press("Control+k");
+  assert.deepEqual(await state(), { open: true, focus: "field", opened: "1" });
+  await page.click("#done");
+  assert.deepEqual(await state(), { open: false, focus: "before", opened: "1" }, "The browser gives the focus back to the element that had it before the dialog opened.");
+  await page.click(".opener");
+  assert.deepEqual(await state(), { open: true, focus: "field", opened: "2" });
+  await page.keyboard.press("Control+k");
+  assert.deepEqual(await state(), { open: true, focus: "field", opened: "2" }, "A dialog that is open stays as it is.");
+  await page.keyboard.type("abc");
+  assert.equal(await page.inputValue("#field"), "abc", "The shortcut types nothing in the field.");
+  await page.click("#done");
+  await page.focus("#before");
+  await page.keyboard.press("/");
+  assert.deepEqual(await state(), { open: true, focus: "field", opened: "3" }, "A slash outside a text field opens the dialog.");
+  await page.click("#done");
+  assert.deepEqual(await state(), { open: false, focus: "before", opened: "3" });
   await page.close();
 });
 

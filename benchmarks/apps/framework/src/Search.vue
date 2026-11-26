@@ -1,12 +1,14 @@
 <script setup lang="ts" vapor>
-import { nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
+import { nextTick, ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
-import { onListboxKey, openModal } from "framework/behaviors";
+import { onListboxKey } from "framework/behaviors";
+import { fieldValueBeforeHydration, useModalDialog } from "framework/client";
 import { loadExcerpt, loadSearch, markText } from "framework/search";
 import type { SearchResult, SiteSearch } from "framework/search";
 import { excerptAround } from "./excerpt.ts";
 
-const emit = defineEmits<{ close: [] }>();
+const props = defineProps<{ open: boolean }>();
+const emit = defineEmits<{ open: []; close: [] }>();
 
 interface ShownResult extends SearchResult {
   readonly titleHtml: string;
@@ -17,7 +19,7 @@ interface ShownResult extends SearchResult {
 const router = useRouter();
 const dialog = useTemplateRef<HTMLDialogElement>("dialog");
 const input = useTemplateRef<HTMLInputElement>("input");
-const query = ref("");
+const query = ref(fieldValueBeforeHydration("#search[open] input") ?? "");
 const engine = ref<SiteSearch>();
 const results = ref<readonly ShownResult[]>([]);
 const searched = ref(false);
@@ -59,20 +61,21 @@ const closeOnBackdrop = (event: MouseEvent): void => {
   if (event.target === dialog.value) emit("close");
 };
 
-let closeModal: (() => void) | undefined;
-onMounted(() => {
-  if (dialog.value !== null) closeModal = openModal(dialog.value);
-  input.value?.focus();
+const shown = (typing: boolean): void => {
+  if (!typing) {
+    input.value?.focus();
+    input.value?.select();
+  }
   void loadSearch().then((loaded) => {
     engine.value = loaded;
     void search();
   });
-});
-onBeforeUnmount(() => closeModal?.());
+};
+useModalDialog(dialog, { open: () => props.open, shown, openBeforeMount: () => emit("open") });
 </script>
 
 <template>
-  <dialog ref="dialog" class="search" aria-label="Search" @close="emit('close')" @click="closeOnBackdrop">
+  <dialog id="search" ref="dialog" class="search" aria-label="Search" @close="emit('close')" @click="closeOnBackdrop">
     <div class="search-panel">
       <input
         ref="input"

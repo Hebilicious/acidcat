@@ -1,14 +1,13 @@
 <script setup lang="ts" vapor>
-import { computed, defineVaporAsyncComponent, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { isSearchShortcut } from "framework/behaviors";
 import { RouterView, usePage } from "framework/client";
 import { useActiveHeading } from "./active-heading.ts";
 import { data as groups } from "./sidebar.data.ts";
+import Search from "./Search.vue";
 import ThemeToggle from "./ThemeToggle.vue";
 
-const loadSearch = () => import("./Search.vue");
-const Search = defineVaporAsyncComponent(loadSearch);
 const searching = ref(false);
 const menuOpen = ref(false);
 const page = usePage();
@@ -46,14 +45,14 @@ onUnmounted(() => removeEventListener("keydown", onKey));
     </button>
     <a class="brand" href="/">Example Docs</a>
     <nav class="nav-links" aria-label="Sections"><a href="/guide/">Guide</a> <a href="/reference/">Reference</a></nav>
-    <button type="button" class="search-button" aria-keyshortcuts="Control+K /" @click="searching = true" @pointerover="loadSearch" @focus="loadSearch">
+    <button type="button" class="search-button" aria-keyshortcuts="Control+K /" @click="searching = true">
       <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
       <span class="search-label">Search</span>
       <kbd aria-hidden="true">Ctrl K</kbd>
     </button>
     <ThemeToggle />
   </header>
-  <Search v-if="searching" @close="searching = false" />
+  <Search :open="searching" @open="searching = true" @close="searching = false" />
   <div class="layout">
     <nav id="sidebar" class="sidebar" :class="{ open: menuOpen }" aria-label="Pages">
       <section v-for="group in groups" :key="group.label">

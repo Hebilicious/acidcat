@@ -3,6 +3,7 @@ import { cssFont, routeFaces } from "../lib/font-faces.ts";
 import { preloadPlate } from "../lib/plate-images.ts";
 import { isRoute, routeOfPage, routes } from "../lib/routes.ts";
 import type { Route } from "../lib/routes.ts";
+import { searchModuleHref } from "./search-module.ts";
 
 const files = (): Partial<Record<Route, string>> => {
   const parsed: unknown = JSON.parse(document.getElementById("route-styles")?.textContent ?? "{}");
@@ -48,18 +49,21 @@ export const loadRouteStyles = async (route: Route): Promise<void> => applyRoute
 
 /** Loads the faces that the first view of a route draws, so that its text does not move when a face arrives. */
 export const loadRouteFonts = async (route: Route): Promise<void> => {
-  const faces = route === "search" ? [] : routeFaces[route];
-  await Promise.all(faces.map((face) => document.fonts.load(cssFont(face)))).catch(() => undefined);
+  await Promise.all(routeFaces[route].map((face) => document.fonts.load(cssFont(face)))).catch(() => undefined);
+};
+
+const prefetch = (href: string): void => {
+  const link = document.createElement("link");
+  link.rel = "prefetch";
+  link.href = href;
+  document.head.append(link);
 };
 
 export const prefetchRouteStyles = (route: Route): void => {
   const href = files()[route];
   if (href === undefined || prefetched.has(route) || hasStyles(route)) return;
   prefetched.add(route);
-  const link = document.createElement("link");
-  link.rel = "prefetch";
-  link.href = href;
-  document.head.append(link);
+  prefetch(href);
 };
 
 const intent = (event: Event): void => {
@@ -76,19 +80,13 @@ const whenIdle = (callback: () => void): void => {
   else setTimeout(callback, 0);
 };
 
-/** Fetches ahead the stylesheet and the script of the search dialog. The dialog loads the search index when it opens. */
-const prefetchSearch = (): void => {
-  prefetchRouteStyles("search");
-  const href = document.querySelector<HTMLMetaElement>('meta[name="acidcat:search-dialog"]')?.content;
-  if (href === undefined || document.head.querySelector(`link[rel="prefetch"][href="${href}"]`) !== null) return;
-  const link = document.createElement("link");
-  link.rel = "prefetch";
-  link.href = href;
-  document.head.append(link);
+const prefetchSearchModule = (): void => {
+  const href = searchModuleHref();
+  if (href !== undefined && document.head.querySelector(`link[href="${href}"]`) === null) prefetch(href);
 };
 
 const prefetchLinkedRoutes = (): void => {
-  prefetchSearch();
+  prefetchSearchModule();
   const current = routeOfPage(location.pathname);
   for (const link of document.querySelectorAll<HTMLAnchorElement>("#app a[href]")) {
     if (link.origin !== location.origin) continue;

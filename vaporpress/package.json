@@ -6,6 +6,7 @@
   "dependencies": {
     "@vitejs/plugin-vue": "catalog:",
     "@vue/compiler-sfc": "catalog:",
+    "esbuild": "catalog:",
     "hast-util-from-html": "catalog:",
     "minisearch": "catalog:",
     "satteri": "catalog:",

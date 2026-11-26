@@ -41,11 +41,11 @@ for (const viewport of [
     const page = await openPage(browser, { viewport });
     await page.goto(`${origin}/docs/quick-start/`, { waitUntil: "networkidle" });
     await waitForHydration(page);
-    assert.equal(await page.locator('link[data-route="search"]').count(), 0, "the page loads the CSS of the search only when the search opens");
+    const stylesheets = await page.locator('link[rel="stylesheet"]').count();
     await page.locator(".search-button").click();
     const input = page.locator("#search-input");
     await input.waitFor();
-    assert.equal(await page.locator('link[rel="stylesheet"][data-route="search"]').count(), 1);
+    assert.equal(await page.locator('link[rel="stylesheet"]').count(), stylesheets, "the CSS of the search is in the page");
 
     const bar = await page.locator(".search-bar").evaluate((element) => {
       const style = getComputedStyle(element);
@@ -96,7 +96,7 @@ test("the search marks the words that match, Enter goes to the selected result w
   await page.keyboard.press("Control+k");
   await input.waitFor();
   await page.keyboard.press("Escape");
-  await input.waitFor({ state: "detached" });
+  await input.waitFor({ state: "hidden" });
   assert.deepEqual(problems, []);
   await page.close();
 });
@@ -133,7 +133,7 @@ test("the open search is an entry of the history: Back closes only the search an
   assert.equal(await page.evaluate(() => window.scrollY), 600, "opening the search keeps the scroll");
 
   await page.goBack();
-  await page.locator(".search-dialog").waitFor({ state: "detached" });
+  await input.waitFor({ state: "hidden" });
   await afterTwoFrames(page);
   assert.equal(await page.evaluate(() => location.pathname + location.search), "/docs/quick-start/");
   assert.equal(await page.evaluate(() => window.scrollY), 600, "Back closes the search and keeps the scroll");
@@ -147,12 +147,12 @@ test("the open search is an entry of the history: Back closes only the search an
   await page.goBack();
   await page.waitForFunction(() => location.pathname === "/docs/quick-start/");
   assert.equal(await page.evaluate(() => location.search), "", "the result replaced the entry of the open search");
-  assert.equal(await page.locator(".search-dialog").count(), 0);
+  assert.equal(await page.locator("#search-dialog[open]").count(), 0);
 
   await page.keyboard.press("Control+k");
   await input.waitFor();
   await page.keyboard.press("Escape");
-  await page.locator(".search-dialog").waitFor({ state: "detached" });
+  await input.waitFor({ state: "hidden" });
   assert.equal(await page.evaluate(() => location.pathname + location.search), "/docs/quick-start/", "Escape closes the search and leaves its entry");
   assert.deepEqual(problems, []);
   await page.close();
@@ -168,7 +168,7 @@ test("/ opens the search, but not in a text field", async () => {
   await page.focus("#text-field");
   await page.keyboard.press("/");
   assert.equal(await page.inputValue("#text-field"), "/");
-  assert.equal(await page.locator(".search-dialog").count(), 0);
+  assert.equal(await page.locator("#search-dialog[open]").count(), 0);
   await page.evaluate(() => document.querySelector<HTMLElement>("#text-field")?.blur());
   await page.keyboard.press("/");
   await page.locator("#search-input").waitFor();
@@ -177,13 +177,56 @@ test("/ opens the search, but not in a text field", async () => {
   await page.close();
 });
 
-test("the page fetches ahead the script and the CSS of the search dialog when it is idle, as prefetch links", async () => {
+test("before the app hydrates, a click opens the search field at once, and the text typed in it stays and gives results after hydration", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
+  const problems: string[] = [];
+  page.on("pageerror", (error) => problems.push(error.message));
+  let release = (): void => undefined;
+  const scripts = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(/\/assets\/[^/]+\.js$/, async (route) => {
+    await scripts;
+    await route.continue();
+  });
+  await page.goto(`${origin}/docs/quick-start/`, { waitUntil: "domcontentloaded" });
+  await page.locator(".search-button").click();
+  const input = page.locator("#search-dialog[open] #search-input");
+  await input.waitFor();
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "search-input");
+  await page.keyboard.type("conformance");
+  assert.equal(await page.evaluate(() => Reflect.has(document.getElementById("app") ?? {}, "__vue_app__")), false, "the app has not hydrated");
+  release();
+  await waitForHydration(page);
+  await page.locator(".search-dialog .result").first().waitFor();
+  assert.equal(await input.inputValue(), "conformance");
+  assert.equal(await page.evaluate(() => location.search), "?search", "the app takes the open search into the history");
+  await page.goBack();
+  await input.waitFor({ state: "hidden" });
+  assert.equal(await page.evaluate(() => location.pathname + location.search), "/docs/quick-start/", "Back closes only the search");
+  assert.equal(await page.evaluate(() => document.activeElement?.classList.contains("search-button")), true, "the focus comes back to the search button");
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+test("with scripts blocked, the search button does nothing", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  const page = await openPage(browser, { viewport: { width: 1440, height: 900 }, javaScriptEnabled: false });
+  await page.goto(`${origin}/docs/quick-start/`);
+  await page.locator(".search-button").click();
+  await page.keyboard.press("Control+k");
+  assert.equal(await page.locator("#search-dialog[open]").count(), 0);
+  assert.equal(await page.locator("#search-input").isVisible(), false);
+  assert.equal(page.url(), `${origin}/docs/quick-start/`);
+  await page.close();
+});
+
+test("the page fetches ahead the script of the search when it is idle, as a prefetch link", async () => {
   const { page, problems } = await openDocsPage();
-  await page.waitForLoadState("networkidle");
-  const dialog = await page.locator('meta[name="acidcat:search-dialog"]').getAttribute("content");
-  assert.match(dialog ?? "", /^\/assets\/SearchDialog\.[\w-]+\.js$/);
-  await page.waitForFunction((href) => document.head.querySelector(`link[rel="prefetch"][href="${href}"]`) !== null, dialog);
-  await page.waitForFunction(() => document.head.querySelector('link[rel="prefetch"][href^="/assets/search."][href$=".css"]') !== null);
+  const href = await page.locator('meta[name="acidcat:search-module"]').getAttribute("content");
+  assert.match(href ?? "", /^\/assets\/search\.[\w-]+\.js$/);
+  await page.waitForFunction((script) => document.head.querySelector(`link[rel="prefetch"][href="${script}"]`) !== null, href);
   assert.deepEqual(problems, []);
   await page.close();
 });

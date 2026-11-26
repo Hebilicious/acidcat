@@ -23,13 +23,13 @@ concurrency:
 env:
   # The old build of the AcidCat site, with Astro Starlight.
   ASTRO_COMMIT: fe26e30142a9889f3eacb2da59a0c2e29101c626
+  # The last build of the AcidCat site with VitePress. The commit after it builds the site with vaporpress only.
+  VITEPRESS_COMMIT: c2eb27d37f529d22a02f838686f933c89fa4ed04
 
 jobs:
   build:
     name: Build the fixture and the three builds of the site
     runs-on: ubuntu-latest
-    outputs:
-      main: ${{ steps.main.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,12 +43,10 @@ jobs:
 
       - run: moon run benchmarks:build site:build
 
-      - id: main
-        name: Build the VitePress site of main
+      - name: Build the VitePress site of ${{ env.VITEPRESS_COMMIT }}
         run: |
-          git worktree add "$RUNNER_TEMP/main" origin/main
-          echo "sha=$(git -C "$RUNNER_TEMP/main" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          cd "$RUNNER_TEMP/main"
+          git worktree add "$RUNNER_TEMP/vitepress" "$VITEPRESS_COMMIT"
+          cd "$RUNNER_TEMP/vitepress"
           pnpm install --frozen-lockfile
           moon run site:build
           mkdir -p "$GITHUB_WORKSPACE/.tmp"
@@ -146,13 +144,12 @@ jobs:
       - name: Write the tables
         working-directory: benchmarks
         env:
-          MAIN_SHA: ${{ needs.build.outputs.main }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           {
             echo "# Benchmark"
             echo
-            echo "vaporpress: ${HEAD_SHA::8}. VitePress site: main at ${MAIN_SHA::8}. Astro site: ${ASTRO_COMMIT::8}. No Nuxt build of the AcidCat site exists."
+            echo "vaporpress: ${HEAD_SHA::8}. VitePress site: ${VITEPRESS_COMMIT::8}. Astro site: ${ASTRO_COMMIT::8}. No Nuxt build of the AcidCat site exists."
             echo
           } >> "$GITHUB_STEP_SUMMARY"
           node src/summarize.ts --results results --out results/summary.md

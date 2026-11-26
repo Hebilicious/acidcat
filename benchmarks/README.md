@@ -3,7 +3,7 @@
 This project measures what a reader sees on a documentation site. It compares vaporpress with VitePress, Astro Starlight and Nuxt Docus, in two suites:
 
 - **fixture**: the same small docs site in each framework. It shows the defaults of each framework.
-- **site**: the homepage and two docs pages of the AcidCat site, in its three builds: vaporpress (`moon run site:build`), VitePress (`main`, the site in production), and Astro Starlight (commit `fe26e301`). No Nuxt build of the AcidCat site exists.
+- **site**: the homepage and two docs pages of the AcidCat site, in its three builds: vaporpress (`moon run site:build`), VitePress (commit `c2eb27d3`, the last build of the site with VitePress), and Astro Starlight (commit `fe26e301`). No Nuxt build of the AcidCat site exists.
 
 The workflow [`benchmark.yml`](../.github/workflows/benchmark.yml) runs both suites on GitHub's runners. It writes the tables to the summary of the run, and uploads the raw results.
 
@@ -23,7 +23,7 @@ The workflow [`benchmark.yml`](../.github/workflows/benchmark.yml) runs both sui
 | JavaScript decoded | The bytes of script that the browser must read, without compression | The same requests, their size after decompression |
 | Total transferred, requests | The full cost of the first visit on a metered connection | The same requests. Requests to other origins are counted apart |
 | Tab responds | The time until a click on a tab works | From the start of the navigation, a probe clicks the second tab every 50 ms. The time of the first click that selects it. A click before that does nothing, so the probe does not change the page. A site can make its tabs work before its other scripts: the AcidCat site on vaporpress runs a small inline script for them, so this row does not tell when the rest of the page responds |
-| Search button responds | The time until a control that needs the scripts of the framework works | From the start of the navigation, a probe clicks the search button every 50 ms. The time of the first paint that shows the search field. In each app, the search button needs the scripts of the framework, and the time includes the code of the dialog when the app loads it on the first click |
+| Search button responds | The time until the search button works | From the start of the navigation, a probe clicks the search button every 50 ms. The time of the first paint that shows the search field. The fixture and the AcidCat site on vaporpress have the closed dialog in their HTML, and a small inline script opens it before the app hydrates. Astro and Starlight also have the dialog in the HTML. In VitePress and Docus, the search button needs the scripts of the framework, and the time includes the code of the dialog when the app loads it on the first click |
 | Tab switch | The delay of a click on a tab | A real click on the third tab, from the press to the first paint that shows it selected |
 | Search | The delay until the search field shows | A real click on the search button, from the press to the first paint that shows the field |
 | Page change, cold | A click on a sidebar link, as soon as the page has loaded | From the press to the first paint with the `h1` of the new page. Only what the framework loaded before the click helps |
@@ -44,7 +44,7 @@ Each table cell is the median of all the runs of all the jobs, and between brack
 
   | App | Setup | Tabs | Search |
   | --- | --- | --- | --- |
-  | [`apps/framework`](apps/framework/) | vaporpress, with a layout written for the benchmark in the way that a vaporpress site builds one (`site/src/app/` of the AcidCat site is the model), Shiki for code | Static HTML from Markdown, made interactive with `onPageUpdated` | The index and the engine of vaporpress, in a dialog that the page loads when the pointer or the focus comes to the search button |
+  | [`apps/framework`](apps/framework/) | vaporpress, with a layout written for the benchmark in the way that a vaporpress site builds one (`site/src/app/` of the AcidCat site is the model), Shiki for code | Static HTML from Markdown, made interactive with `onPageUpdated` | The index and the engine of vaporpress, in a dialog that is in the HTML of each page. An inline script opens it before the app hydrates, with `openDialogOnInput` of `vaporpress/behaviors` |
   | [`apps/vitepress`](apps/vitepress/) | VitePress 2 with its default theme | `::: code-group` | Local search |
   | [`apps/starlight`](apps/starlight/) | Astro and Starlight | `<Tabs>` in MDX | Pagefind |
   | [`apps/nuxt`](apps/nuxt/) | Nuxt, Nuxt Content and the Docus theme, statically generated with `nuxt generate` | `::code-group` | Docus search |
@@ -76,23 +76,29 @@ Each table cell is the median of all the runs of all the jobs, and between brack
 
 ## Results
 
-The tables below pool two runs of the workflow on commit `26dd7a2f`, 3 jobs each for each suite: [45608982279](https://github.com/Hebilicious/acidcat/actions/runs/45608982279) and [45608969254](https://github.com/Hebilicious/acidcat/actions/runs/45608969254). Their artifacts keep the raw results. The commit that adds this section changes only this README.
+The tables below pool four runs of the workflow on commit `9dcf013c`, 3 jobs each for each suite: [45742673507](https://github.com/Hebilicious/acidcat/actions/runs/45742673507), [45742736206](https://github.com/Hebilicious/acidcat/actions/runs/45742736206), [45745028813](https://github.com/Hebilicious/acidcat/actions/runs/45745028813) and [45746518501](https://github.com/Hebilicious/acidcat/actions/runs/45746518501). Their artifacts keep the raw results. The commits that write these tables change no code that the measures load.
 
 Where vaporpress is not the best:
 
-- **Script weight, in every first visit.** On the fixture, vaporpress transfers 43.7–44.3 kB of script (123–124 kB decoded), and Starlight 26.9–28.2 kB (106–108 kB). On the AcidCat site, vaporpress transfers 57.0–62.0 kB (159–166 kB decoded), VitePress 49.4–58.8 kB, and Astro 16.7–29.1 kB.
-- **Total transfer and requests on the AcidCat site.** On all three routes, vaporpress transfers the most and makes the most requests: the homepage 370.9 kB and 34 requests (VitePress 359.6 kB and 25, Astro 294.9 kB and 21), the quick start 302.3 kB and 31 (281.6 and 21, 254.1 and 19), the catalog 296.3 kB and 31 (275.7 and 21, 246.3 and 19). On the fixture homepage, vaporpress transfers 54.2 kB and Starlight 51.6 kB.
-- **The simulated first paint of the homepage of the AcidCat site**: FCP and Speed Index 1,721 ms, against 786 and 796 ms for Astro and 1,163 ms for VitePress; LCP 3,159 ms against 2,711 ms for Astro and 3,009 ms for VitePress. The observed values of the same runs are the best of the three: first paint 107 ms, against 144 ms for Astro and 155 ms for VitePress. The quick start and the catalog have a simulated Speed Index of 970 and 1,000 ms, against 796 and 797 ms for Astro.
-- **The observed first paint and largest paint of the catalog page**: both 87 ms, against 71 ms for VitePress. On the fixture, Starlight paints first on each page (39–47 ms, against 48–54 ms for vaporpress), with overlapping spreads.
-- **Search.** From the press to the search field on screen, vaporpress takes 204 ms on the fixture and 86 ms on the AcidCat site, Starlight 50 ms and Astro 68 ms, whose dialog is in the HTML. From the start of the navigation, the search button of the AcidCat site responds after 2,406 ms on vaporpress, 2,326 ms on VitePress and 1,679 ms on Astro.
-- **Tab switch on the AcidCat site**: 51 ms, against 35 ms for VitePress.
-- **By a few milliseconds of simulation**: the simulated FCP and Speed Index of the fixture homepage (753 ms, Starlight 752 ms), and the simulated FCP and LCP of the quick start (both 798 ms; the FCP of VitePress and Astro is 796 ms, the LCP 796 ms for VitePress and 797 ms for Astro) and of the catalog (799 and 804 ms, VitePress 796 ms).
+- **Script weight, in every first visit.** On the fixture, vaporpress transfers 44.0–44.6 kB of script (126–127 kB decoded), and Starlight 26.9–28.2 kB (106–108 kB). On the AcidCat site, vaporpress transfers 59.4–62.3 kB (166–167 kB decoded), VitePress 51.1–60.5 kB, and Astro 16.7–29.1 kB.
+- **Total transfer and requests on the AcidCat site.** On all three routes, vaporpress transfers the most and makes the most requests: the homepage 370.5 kB and 34 requests (VitePress 361.3 kB and 25, Astro 294.9 kB and 21), the quick start 303.0 kB and 31 (283.3 and 21, 254.1 and 19), the catalog 296.9 kB and 31 (277.3 and 21, 246.3 and 19). On the fixture, Starlight transfers less on the homepage (51.6 kB, against 55.2 kB) and on `routing` (50.2 kB, against 51.1 kB).
+- **The homepage of the AcidCat site.** The performance score is 93, against 95 for VitePress and 93 for Astro. Simulated: FCP and Speed Index 1,570 ms, against 795 and 820 ms for Astro and 817 and 854 ms for VitePress; LCP 3,162 ms, against 2,714 ms for Astro and 3,010 ms for VitePress. Observed first paint: 120 ms, against 118 ms for VitePress. TBT: 28 ms, against 20 ms for VitePress.
+- **The docs pages of the AcidCat site.** Simulated Speed Index: 1,006 ms on the quick start and 977 ms on the catalog, against 797 ms for Astro. Observed first paint: 103 ms on the quick start and 99 ms on the catalog, against 100 and 86 ms for VitePress. TBT of the quick start: 3 ms, against 0 ms for VitePress.
+- **The first paint of the fixture.** Observed, Starlight paints first on each page (40–42 ms, against 45–50 ms for vaporpress). Simulated, VitePress paints first on `installation` and `routing` (646 and 656 ms, against 751 ms), with a wide spread (634–1,115 ms), and Starlight paints the homepage 1 ms earlier (751 ms, against 752 ms for FCP and Speed Index).
+- **Tab switch on the AcidCat site**: 50 ms, against 36 ms for VitePress.
 
-vaporpress is the best, or tied, on the other rows: the scores, CLS, TBT, the requests of the fixture, the observed largest paint (except on the catalog page), when a tab and the search button respond on the fixture, when a tab responds on the AcidCat site, and the page changes and Back in both suites.
+vaporpress is the best, or tied, on the other rows: the scores of the docs pages and of the fixture, CLS, the requests of the fixture, when a tab and the search button respond, the search field, and the page changes and Back in both suites.
+
+**Search before hydration.** On vaporpress, the search dialog is in the HTML of each page, and a small inline script opens it before the app hydrates (see [A control that answers before hydration](../vaporpress/README.md#a-control-that-answers-before-hydration)). On the AcidCat site, the search button responds after 414 ms, against 1,697 ms for Astro and 2,340 ms for VitePress, and the search field shows 66 ms after a press. Four runs of the same workflow on `main` at `672eb8d0`, before this behavior ([45721115411](https://github.com/Hebilicious/acidcat/actions/runs/45721115411), [45723908094](https://github.com/Hebilicious/acidcat/actions/runs/45723908094), [45745017060](https://github.com/Hebilicious/acidcat/actions/runs/45745017060) and [45746846747](https://github.com/Hebilicious/acidcat/actions/runs/45746846747)), give 2,412 ms and 82 ms.
+
+**Rows where the AcidCat site on vaporpress is slower than on `main`:**
+
+- **Tab responds**: 262 ms, against 231 ms. The HTML before the first tab of the quick start has 1.7 kB more with Brotli: the closed dialog, its CSS and the inline script of the search. At slow 4G, this is about 8 ms. The probe clicks every 50 ms, and the main thread starts the scripts of the page soon after the first paint, so a tab that is ready a few milliseconds later can answer one click later.
+- **The page changes and Back**: 144, 109 and 85 ms, against 118, 93 and 71 ms. The runners of these runs were slower: on the same jobs, Astro takes 279, 269 and 279 ms, against 255, 247 and 222 ms in the runs of `main`. On jobs where Astro takes 250 to 280 ms, vaporpress takes 112 to 130 ms on `main` and 128 to 145 ms on this commit.
 
 ### The same fixture in each framework
 
-6 jobs × 5 runs = 30 samples for each cell: the median, and the first to the third quartile. Lighthouse 13.6.0, Chromium 158.0.8127.18. The best median of each row is in bold.
+12 jobs × 5 runs = 60 samples for each cell: the median, and the first to the third quartile. Lighthouse 13.6.0, Chromium 158.0.8127.18. The best median of each row is in bold.
 
 A simulated value is what Lighthouse computes for a slow phone (slow 4G, 4× CPU) from the trace of the load. An observed value is in the trace itself: the runner loads the page with no throttling.
 
@@ -100,143 +106,143 @@ A simulated value is what Lighthouse computes for a slow phone (slow 4G, 4× CPU
 
 | Metric | vaporpress | vitepress | starlight | docus |
 | --- | --- | --- | --- | --- |
-| Performance score | **100 (100–100)** | 97 (97–97) | **100 (100–100)** | 72 (70–73) |
-| First Contentful Paint, simulated (ms) | 753 (752–754) | 866 (628–1102) | **752 (751–752)** | 1037 (1008–1083) |
-| Largest Contentful Paint, simulated (ms) | **1353 (1352–1354)** | 2556 (2554–2558) | **1353 (1352–1354)** | 5957 (5556–6391) |
-| First Contentful Paint, observed (ms) | 48 (39–61) | 89 (71–102) | **39 (30–51)** | 144 (118–154) |
-| Largest Contentful Paint, observed (ms) | **57 (49–69)** | 89 (71–102) | 61 (55–75) | 177 (162–199) |
+| Performance score | **100 (100–100)** | 97 (97–97) | **100 (100–100)** | 74 (71–75) |
+| First Contentful Paint, simulated (ms) | 752 (752–753) | 1091 (633–1102) | **751 (751–752)** | 1009 (979–1039) |
+| Largest Contentful Paint, simulated (ms) | **1352 (1352–1353)** | 2555 (2554–2557) | **1352 (1352–1353)** | 5896 (5422–6329) |
+| First Contentful Paint, observed (ms) | 50 (36–65) | 79 (68–91) | **42 (32–55)** | 123 (102–144) |
+| Largest Contentful Paint, observed (ms) | **57 (45–72)** | 79 (68–91) | 63 (55–78) | 163 (138–191) |
 | Cumulative Layout Shift | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** | 0.077 (0.077–0.077) |
-| Total Blocking Time, simulated (ms) | **0 (0–0)** | 26 (13–40) | **0 (0–0)** | 285 (202–336) |
-| Speed Index, simulated (ms) | 753 (752–754) | 1001 (674–1102) | **752 (751–752)** | 1037 (1008–1083) |
-| JavaScript transferred (Brotli) (kB) | 44.3 (44.3–44.3) | 62.2 (62.2–62.2) | **26.9 (26.9–26.9)** | 360.2 (360.2–360.2) |
-| JavaScript decoded (kB) | 123.3 (123.3–123.3) | 190.3 (190.3–190.3) | **105.6 (105.6–105.6)** | 1246.4 (1246.4–1246.4) |
-| Total transferred (kB) | 54.2 (54.2–54.2) | 284.3 (284.3–284.3) | **51.6 (51.6–51.6)** | 1116.0 (1115.9–1116.0) |
-| Requests | **9 (9–9)** | 11 (11–11) | 10 (10–10) | 216 (216–216) |
+| Total Blocking Time, simulated (ms) | **0 (0–4)** | 10 (4–29) | **0 (0–0)** | 225 (153–318) |
+| Speed Index, simulated (ms) | 752 (752–753) | 1091 (653–1102) | **751 (751–752)** | 1010 (979–1040) |
+| JavaScript transferred (Brotli) (kB) | 44.6 (44.6–44.6) | 62.2 (62.2–62.2) | **26.9 (26.9–26.9)** | 360.2 (360.2–360.4) |
+| JavaScript decoded (kB) | 125.7 (125.7–125.7) | 190.3 (190.3–190.3) | **105.6 (105.6–105.6)** | 1246.4 (1246.4–1246.4) |
+| Total transferred (kB) | 55.2 (55.2–55.2) | 284.3 (284.3–284.3) | **51.6 (51.6–51.6)** | 1115.9 (1115.9–1116.1) |
+| Requests | **8 (8–8)** | 11 (11–11) | 10 (10–10) | 216 (216–216) |
 | Requests to other origins | **0 (0–0)** | **0 (0–0)** | **0 (0–0)** | **0 (0–0)** |
 
 #### First visit: `installation`, Lighthouse on mobile
 
 | Metric | vaporpress | vitepress | starlight | docus |
 | --- | --- | --- | --- | --- |
-| Performance score | **100 (100–100)** | **100 (100–100)** | **100 (100–100)** | 94 (92–97) |
-| First Contentful Paint, simulated (ms) | **752 (751–752)** | 1099 (635–1113) | 903 (902–904) | 1049 (1009–1092) |
-| Largest Contentful Paint, simulated (ms) | **752 (751–752)** | 1099 (635–1113) | 1354 (1353–1355) | 1059 (1017–1097) |
-| First Contentful Paint, observed (ms) | 48 (39–57) | 82 (65–92) | **42 (35–48)** | 180 (161–207) |
-| Largest Contentful Paint, observed (ms) | **48 (39–57)** | 82 (65–92) | 67 (56–73) | 180 (161–207) |
+| Performance score | **100 (100–100)** | **100 (100–100)** | **100 (100–100)** | 97 (94–99) |
+| First Contentful Paint, simulated (ms) | 751 (751–752) | **646 (634–1102)** | 903 (902–904) | 1018 (960–1058) |
+| Largest Contentful Paint, simulated (ms) | 751 (751–752) | **647 (634–1103)** | 1353 (1055–1355) | 1018 (960–1058) |
+| First Contentful Paint, observed (ms) | 45 (35–56) | 72 (58–87) | **42 (31–52)** | 167 (140–197) |
+| Largest Contentful Paint, observed (ms) | **45 (35–56)** | 72 (58–87) | 62 (52–71) | 167 (140–197) |
 | Cumulative Layout Shift | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** |
-| Total Blocking Time, simulated (ms) | **0 (0–1)** | 24 (11–45) | **0 (0–0)** | 277 (184–337) |
-| Speed Index, simulated (ms) | **752 (751–752)** | 1099 (642–1113) | 903 (902–904) | 1216 (1167–1303) |
-| JavaScript transferred (Brotli) (kB) | 43.7 (43.7–43.7) | 61.5 (61.5–61.5) | **28.2 (28.2–28.2)** | 323.8 (323.8–323.9) |
-| JavaScript decoded (kB) | 123.1 (123.1–123.1) | 189.5 (189.5–189.5) | **108.1 (108.1–108.1)** | 1148.8 (1148.8–1148.8) |
-| Total transferred (kB) | **49.2 (49.2–49.2)** | 155.1 (155.1–155.1) | 50.2 (50.2–50.2) | 954.3 (954.3–954.4) |
-| Requests | **8 (8–8)** | 9 (9–9) | 11 (11–11) | 224 (224–224) |
+| Total Blocking Time, simulated (ms) | **0 (0–3)** | 15 (6–34) | **0 (0–0)** | 202 (146–297) |
+| Speed Index, simulated (ms) | **751 (751–752)** | 793 (641–1102) | 903 (902–904) | 1172 (1124–1250) |
+| JavaScript transferred (Brotli) (kB) | 44.0 (44.0–44.0) | 61.5 (61.5–61.5) | **28.2 (28.2–28.2)** | 323.7 (323.7–323.9) |
+| JavaScript decoded (kB) | 125.5 (125.5–125.5) | 189.5 (189.5–189.5) | **108.1 (108.1–108.1)** | 1148.8 (1148.8–1148.8) |
+| Total transferred (kB) | **50.1 (50.1–50.1)** | 155.1 (155.1–155.1) | 50.2 (50.2–50.2) | 954.3 (954.2–954.3) |
+| Requests | **7 (7–7)** | 9 (9–9) | 11 (11–11) | 224 (224–224) |
 | Requests to other origins | **0 (0–0)** | **0 (0–0)** | **0 (0–0)** | **0 (0–0)** |
 
 #### First visit: `routing`, Lighthouse on mobile
 
 | Metric | vaporpress | vitepress | starlight | docus |
 | --- | --- | --- | --- | --- |
-| Performance score | **100 (100–100)** | **100 (100–100)** | **100 (100–100)** | 94 (92–98) |
-| First Contentful Paint, simulated (ms) | **752 (751–753)** | 883 (649–1118) | 903 (902–904) | 1058 (1028–1110) |
-| Largest Contentful Paint, simulated (ms) | **752 (751–753)** | 883 (649–1118) | 1353 (970–1354) | 1058 (1028–1118) |
-| First Contentful Paint, observed (ms) | 54 (44–60) | 85 (64–95) | **47 (34–59)** | 190 (164–202) |
-| Largest Contentful Paint, observed (ms) | **54 (44–60)** | 85 (64–95) | 67 (57–76) | 190 (164–202) |
+| Performance score | **100 (100–100)** | **100 (100–100)** | **100 (100–100)** | 96 (93–98) |
+| First Contentful Paint, simulated (ms) | 751 (751–752) | **656 (643–1115)** | 903 (902–904) | 1039 (992–1080) |
+| Largest Contentful Paint, simulated (ms) | 751 (751–752) | **656 (643–1115)** | 1353 (1057–1355) | 1042 (997–1083) |
+| First Contentful Paint, observed (ms) | 50 (39–61) | 82 (63–97) | **40 (31–54)** | 173 (141–206) |
+| Largest Contentful Paint, observed (ms) | **50 (39–61)** | 82 (63–97) | 62 (52–75) | 173 (141–206) |
 | Cumulative Layout Shift | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** |
-| Total Blocking Time, simulated (ms) | **0 (0–2)** | 30 (17–50) | **0 (0–0)** | 295 (179–353) |
-| Speed Index, simulated (ms) | **752 (751–753)** | 966 (653–1118) | 903 (902–904) | 1199 (1144–1235) |
-| JavaScript transferred (Brotli) (kB) | 44.0 (44.0–44.0) | 61.6 (61.6–61.6) | **28.2 (28.2–28.2)** | 323.9 (323.8–324.0) |
-| JavaScript decoded (kB) | 124.2 (124.2–124.2) | 189.5 (189.5–189.5) | **108.1 (108.1–108.1)** | 1143.6 (1143.5–1143.6) |
-| Total transferred (kB) | **50.2 (50.2–50.2)** | 155.9 (155.9–155.9) | **50.2 (50.2–50.2)** | 956.7 (956.7–956.8) |
-| Requests | **8 (8–8)** | 9 (9–9) | 11 (11–11) | 228 (228–228) |
+| Total Blocking Time, simulated (ms) | **0 (0–3)** | 24 (6–48) | **0 (0–0)** | 225 (151–324) |
+| Speed Index, simulated (ms) | 751 (751–752) | **657 (643–1115)** | 903 (902–904) | 1131 (1090–1212) |
+| JavaScript transferred (Brotli) (kB) | 44.3 (44.3–44.3) | 61.6 (61.6–61.6) | **28.2 (28.2–28.2)** | 323.8 (323.8–323.9) |
+| JavaScript decoded (kB) | 126.7 (126.7–126.7) | 189.5 (189.5–189.5) | **108.1 (108.1–108.1)** | 1143.6 (1143.6–1143.6) |
+| Total transferred (kB) | 51.1 (51.1–51.1) | 155.9 (155.9–155.9) | **50.2 (50.2–50.2)** | 956.6 (956.6–956.7) |
+| Requests | **7 (7–7)** | 9 (9–9) | 11 (11–11) | 228 (228–228) |
 | Requests to other origins | **0 (0–0)** | **0 (0–0)** | **0 (0–0)** | **0 (0–0)** |
 
 #### In the browser: desktop window, 4× CPU slowdown, slow 4G
 
 | Metric | vaporpress | vitepress | starlight | docus |
 | --- | --- | --- | --- | --- |
-| Tab responds: navigation start to the first click that selects a tab (ms) | **634 (619–643)** | 1154 (1123–1181) | 669 (642–677) | 3237 (3170–3297) |
-| Search button responds: navigation start to the search field on screen, with a click every 50 ms (ms) | **857 (842–869)** | 1510 (1470–1541) | 927 (888–946) | 4253 (4102–4405) |
-| Tab switch: press to paint (ms) | **26 (26–27)** | 27 (27–28) | 27 (26–27) | 37 (34–41) |
-| Search: press to search field on screen (ms) | 204 (202–207) | 312 (308–317) | **50 (45–55)** | 254 (219–290) |
-| Page change, cold: press to new page on screen (ms) | **162 (153–166)** | 168 (134–178) | 284 (274–300) | 401 (362–432) |
-| Page change, link prefetched (ms) | **31 (30–32)** | 55 (52–57) | 283 (265–297) | 561 (544–573) |
-| Back: call to previous page on screen (ms) | **25 (23–32)** | 39 (37–41) | 120 (100–129) | 181 (154–197) |
-| Page change loads | same document (30/30) | same document (30/30) | new document (30/30) | same document (30/30) |
-| Back loads | same document (30/30) | same document (30/30) | new document (30/30) | same document (30/30) |
+| Tab responds: navigation start to the first click that selects a tab (ms) | **627 (622–648)** | 1128 (1108–1171) | 666 (656–681) | 3181 (3148–3264) |
+| Search button responds: navigation start to the search field on screen, with a click every 50 ms (ms) | **389 (386–397)** | 1485 (1458–1539) | 910 (872–944) | 4188 (4104–4301) |
+| Tab switch: press to paint (ms) | **26 (26–27)** | 27 (27–28) | **26 (26–27)** | 38 (33–44) |
+| Search: press to search field on screen (ms) | **30 (29–31)** | 311 (305–317) | 48 (44–53) | 254 (211–282) |
+| Page change, cold: press to new page on screen (ms) | **161 (151–163)** | 162 (138–171) | 279 (265–295) | 376 (339–415) |
+| Page change, link prefetched (ms) | **31 (30–33)** | 52 (50–59) | 273 (264–291) | 555 (526–579) |
+| Back: call to previous page on screen (ms) | **26 (22–32)** | 39 (33–41) | 104 (93–121) | 168 (153–195) |
+| Page change loads | same document (60/60) | same document (60/60) | new document (60/60) | same document (60/60) |
+| Back loads | same document (60/60) | same document (60/60) | new document (60/60) | same document (60/60) |
 
 ### The AcidCat site
 
-6 jobs × 5 runs = 30 samples for each cell: the median, and the first to the third quartile. Lighthouse 13.6.0, Chromium 158.0.8127.18. The best median of each row is in bold.
+12 jobs × 5 runs = 60 samples for each cell: the median, and the first to the third quartile. Lighthouse 13.6.0, Chromium 158.0.8127.18. The best median of each row is in bold.
 
 A simulated value is what Lighthouse computes for a slow phone (slow 4G, 4× CPU) from the trace of the load. An observed value is in the trace itself: the runner loads the page with no throttling.
 
 #### First visit: `home`, Lighthouse on mobile
 
-| Metric | vaporpress | vitepress (main) | astro (fe26e301) |
+| Metric | vaporpress | vitepress (c2eb27d3) | astro (fe26e301) |
 | --- | --- | --- | --- |
-| Performance score | **93 (92–93)** | 92 (90–94) | **93 (92–95)** |
-| First Contentful Paint, simulated (ms) | 1721 (1702–1729) | 1163 (795–1429) | **786 (755–796)** |
-| Largest Contentful Paint, simulated (ms) | 3159 (3157–3163) | 3009 (3007–3011) | **2711 (2709–2714)** |
-| First Contentful Paint, observed (ms) | **107 (93–129)** | 155 (136–178) | 144 (125–155) |
-| Largest Contentful Paint, observed (ms) | **107 (93–129)** | 155 (136–178) | 144 (125–155) |
+| Performance score | 93 (93–93) | **95 (94–95)** | 93 (92–94) |
+| First Contentful Paint, simulated (ms) | 1570 (814–1585) | 817 (795–1559) | **795 (765–929)** |
+| Largest Contentful Paint, simulated (ms) | 3162 (3161–3164) | 3010 (3007–3015) | **2714 (2711–2719)** |
+| First Contentful Paint, observed (ms) | 120 (109–128) | **118 (105–129)** | 161 (151–169) |
+| Largest Contentful Paint, observed (ms) | 120 (109–128) | **118 (105–129)** | 161 (151–169) |
 | Cumulative Layout Shift | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** |
-| Total Blocking Time, simulated (ms) | **21 (10–27)** | 80 (10–251) | 198 (139–244) |
-| Speed Index, simulated (ms) | 1721 (1702–1729) | 1163 (795–1429) | **796 (755–897)** |
-| JavaScript transferred (Brotli) (kB) | 62.0 (62.0–62.0) | 58.8 (58.8–58.8) | **16.7 (16.7–16.7)** |
-| JavaScript decoded (kB) | 165.8 (165.8–165.8) | 161.8 (161.8–161.8) | **34.7 (34.7–34.7)** |
-| Total transferred (kB) | 370.9 (370.9–370.9) | 359.6 (359.6–359.6) | **294.9 (294.9–294.9)** |
+| Total Blocking Time, simulated (ms) | 28 (16–42) | **20 (15–38)** | 207 (148–234) |
+| Speed Index, simulated (ms) | 1570 (1193–1585) | 854 (795–1559) | **820 (794–932)** |
+| JavaScript transferred (Brotli) (kB) | 62.3 (62.3–62.3) | 60.5 (60.5–60.5) | **16.7 (16.7–16.7)** |
+| JavaScript decoded (kB) | 165.7 (165.7–165.7) | 167.4 (167.4–167.4) | **34.7 (34.7–34.7)** |
+| Total transferred (kB) | 370.5 (370.5–370.5) | 361.3 (361.3–361.3) | **294.9 (294.9–294.9)** |
 | Requests | 34 (34–34) | 25 (25–25) | **21 (21–21)** |
 | Requests to other origins | **2 (2–2)** | **2 (2–2)** | **2 (2–2)** |
 
 #### First visit: `quick-start`, Lighthouse on mobile
 
-| Metric | vaporpress | vitepress (main) | astro (fe26e301) |
+| Metric | vaporpress | vitepress (c2eb27d3) | astro (fe26e301) |
 | --- | --- | --- | --- |
-| Performance score | **100 (100–100)** | **100 (100–100)** | **100 (99–100)** |
-| First Contentful Paint, simulated (ms) | 798 (794–806) | **796 (794–918)** | **796 (795–894)** |
-| Largest Contentful Paint, simulated (ms) | 798 (794–806) | **796 (794–918)** | 797 (795–914) |
-| First Contentful Paint, observed (ms) | **94 (81–107)** | 134 (115–153) | 96 (75–106) |
-| Largest Contentful Paint, observed (ms) | **94 (81–107)** | 134 (115–153) | 96 (75–106) |
+| Performance score | **100 (100–100)** | **100 (100–100)** | **100 (100–100)** |
+| First Contentful Paint, simulated (ms) | **795 (793–805)** | **795 (794–805)** | 797 (795–834) |
+| Largest Contentful Paint, simulated (ms) | **795 (793–805)** | **795 (794–805)** | 797 (795–834) |
+| First Contentful Paint, observed (ms) | 103 (87–111) | **100 (88–110)** | 107 (96–115) |
+| Largest Contentful Paint, observed (ms) | 103 (87–111) | **100 (88–110)** | 107 (96–115) |
 | Cumulative Layout Shift | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** |
-| Total Blocking Time, simulated (ms) | **0 (0–0)** | 19 (0–40) | 52 (25–68) |
-| Speed Index, simulated (ms) | 970 (835–1100) | 936 (848–1161) | **796 (795–894)** |
-| JavaScript transferred (Brotli) (kB) | 57.3 (57.3–57.3) | 49.6 (49.6–49.6) | **29.1 (29.1–29.1)** |
-| JavaScript decoded (kB) | 160.0 (160.0–160.0) | 139.6 (139.6–139.6) | **108.4 (108.4–108.4)** |
-| Total transferred (kB) | 302.3 (302.3–302.3) | 281.6 (281.6–281.6) | **254.1 (254.1–254.1)** |
+| Total Blocking Time, simulated (ms) | 3 (0–9) | **0 (0–1)** | 49 (27–63) |
+| Speed Index, simulated (ms) | 1006 (956–1135) | 988 (862–1056) | **797 (795–834)** |
+| JavaScript transferred (Brotli) (kB) | 59.7 (59.7–59.7) | 51.3 (51.3–51.3) | **29.1 (29.1–29.1)** |
+| JavaScript decoded (kB) | 166.7 (166.7–166.7) | 145.2 (145.2–145.2) | **108.4 (108.4–108.4)** |
+| Total transferred (kB) | 303.0 (303.0–303.0) | 283.3 (283.3–283.3) | **254.1 (254.1–254.1)** |
 | Requests | 31 (31–31) | 21 (21–21) | **19 (19–19)** |
 | Requests to other origins | **0 (0–0)** | **0 (0–0)** | **0 (0–0)** |
 
 #### First visit: `catalog`, Lighthouse on mobile
 
-| Metric | vaporpress | vitepress (main) | astro (fe26e301) |
+| Metric | vaporpress | vitepress (c2eb27d3) | astro (fe26e301) |
 | --- | --- | --- | --- |
 | Performance score | **100 (100–100)** | **100 (100–100)** | **100 (100–100)** |
-| First Contentful Paint, simulated (ms) | 799 (794–1383) | **796 (768–956)** | 797 (796–822) |
-| Largest Contentful Paint, simulated (ms) | 804 (794–1386) | **796 (768–956)** | 808 (796–833) |
-| First Contentful Paint, observed (ms) | 87 (75–100) | **71 (64–88)** | 86 (66–106) |
-| Largest Contentful Paint, observed (ms) | 87 (75–100) | **71 (64–88)** | 86 (66–106) |
+| First Contentful Paint, simulated (ms) | **795 (794–803)** | 798 (794–1078) | 797 (795–823) |
+| Largest Contentful Paint, simulated (ms) | **795 (794–804)** | 798 (794–1529) | 797 (796–828) |
+| First Contentful Paint, observed (ms) | 99 (82–107) | **86 (78–94)** | 95 (82–107) |
+| Largest Contentful Paint, observed (ms) | 99 (82–107) | **86 (78–94)** | 95 (82–107) |
 | Cumulative Layout Shift | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** | **0.000 (0.000–0.000)** |
-| Total Blocking Time, simulated (ms) | **0 (0–2)** | **0 (0–0)** | 3 (0–15) |
-| Speed Index, simulated (ms) | 1000 (805–1383) | 1029 (938–1218) | **797 (796–822)** |
-| JavaScript transferred (Brotli) (kB) | 57.0 (57.0–57.0) | 49.4 (49.4–49.4) | **29.1 (29.1–29.1)** |
-| JavaScript decoded (kB) | 159.1 (159.1–159.1) | 138.8 (138.8–138.8) | **108.4 (108.4–108.4)** |
-| Total transferred (kB) | 296.3 (296.3–296.3) | 275.7 (275.7–275.7) | **246.3 (246.3–246.3)** |
+| Total Blocking Time, simulated (ms) | **0 (0–2)** | **0 (0–0)** | 7 (3–11) |
+| Speed Index, simulated (ms) | 977 (831–1047) | 1033 (916–1287) | **797 (795–823)** |
+| JavaScript transferred (Brotli) (kB) | 59.4 (59.4–59.4) | 51.1 (51.1–51.1) | **29.1 (29.1–29.1)** |
+| JavaScript decoded (kB) | 165.8 (165.8–165.8) | 144.4 (144.4–144.4) | **108.4 (108.4–108.4)** |
+| Total transferred (kB) | 296.9 (296.9–296.9) | 277.3 (277.3–277.3) | **246.3 (246.3–246.3)** |
 | Requests | 31 (31–31) | 21 (21–21) | **19 (19–19)** |
 | Requests to other origins | **0 (0–0)** | **0 (0–0)** | **0 (0–0)** |
 
 #### In the browser: desktop window, 4× CPU slowdown, slow 4G
 
-| Metric | vaporpress | vitepress (main) | astro (fe26e301) |
+| Metric | vaporpress | vitepress (c2eb27d3) | astro (fe26e301) |
 | --- | --- | --- | --- |
-| Tab responds: navigation start to the first click that selects a tab (ms) | **235 (226–241)** | 1661 (1649–1702) | 662 (609–689) |
-| Search button responds: navigation start to the search field on screen, with a click every 50 ms (ms) | 2406 (2386–2423) | 2326 (2284–2350) | **1679 (1648–1712)** |
-| Tab switch: press to paint (ms) | 51 (41–55) | **35 (32–41)** | 54 (43–62) |
-| Search: press to search field on screen (ms) | 86 (71–102) | 508 (498–529) | **68 (56–78)** |
-| Page change, cold: press to new page on screen (ms) | **121 (98–145)** | 338 (330–343) | 255 (225–284) |
-| Page change, link prefetched (ms) | **102 (82–114)** | 112 (91–124) | 254 (223–282) |
-| Back: call to previous page on screen (ms) | **80 (60–86)** | 108 (91–125) | 238 (204–277) |
-| Page change loads | same document (30/30) | same document (30/30) | new document (30/30) |
-| Back loads | same document (30/30) | same document (30/30) | new document (30/30) |
+| Tab responds: navigation start to the first click that selects a tab (ms) | **262 (239–283)** | 1701 (1681–1714) | 666 (622–680) |
+| Search button responds: navigation start to the search field on screen, with a click every 50 ms (ms) | **414 (396–454)** | 2340 (2312–2364) | 1697 (1676–1719) |
+| Tab switch: press to paint (ms) | 50 (46–55) | **36 (34–38)** | 53 (50–59) |
+| Search: press to search field on screen (ms) | **66 (61–69)** | 512 (503–522) | 73 (69–78) |
+| Page change, cold: press to new page on screen (ms) | **144 (134–149)** | 334 (328–340) | 279 (268–301) |
+| Page change, link prefetched (ms) | **109 (104–116)** | 117 (110–125) | 269 (258–284) |
+| Back: call to previous page on screen (ms) | **85 (80–90)** | 123 (111–129) | 279 (262–289) |
+| Page change loads | same document (60/60) | same document (60/60) | new document (60/60) |
+| Back loads | same document (60/60) | same document (60/60) | new document (60/60) |
 
 ## Run
 
@@ -262,6 +268,6 @@ Each job writes `results/<suite>-<job>/results.json`, with each sample, and the 
 
 ## Tests
 
-`moon run benchmarks:test` tests the transform of the fixture for each framework, the static server, and the statistics and the tables of the results. It builds the vaporpress app, and checks its features in Chromium: the theme before the first paint and the switch, the mobile menu, the copy button, the search with its excerpts and its keys, the table of contents, the previous and next pages, the keys of the tabs, and every rule of axe-core, which `axe.getRules()` lists (`test/framework-app.test.ts`). It does not measure.
+`moon run benchmarks:test` tests the transform of the fixture for each framework, the static server, and the statistics and the tables of the results. It builds the vaporpress app, and checks its features in Chromium: the theme before the first paint and the switch, the mobile menu, the copy button, the search with its excerpts and its keys, the search that opens before the app hydrates, the table of contents, the previous and next pages, the keys of the tabs, and every rule of axe-core, which `axe.getRules()` lists (`test/framework-app.test.ts`). It does not measure.
 
 The framework app imports the framework as `framework`, an alias in [`apps/framework/package.json`](apps/framework/package.json). A new name of the framework changes that line, and the name of its Vite plugin in `apps/framework/vite.config.ts` when that name changes too.

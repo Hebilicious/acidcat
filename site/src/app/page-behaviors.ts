@@ -1,6 +1,7 @@
 import { copyCodeOnClick } from "vaporpress/behaviors";
 import { onPageUpdated } from "vaporpress/client";
 import { onUnmounted } from "vue";
+import { openSearchOnInput } from "./search-input.ts";
 import { restoreTabChoices, selectTabsOnInput } from "./tabs.ts";
 
 let copying = false;
@@ -15,6 +16,7 @@ const copyCode = (): void => {
 export const usePageBehaviors = (): void => {
   if (!import.meta.env.SSR) {
     selectTabsOnInput();
+    openSearchOnInput();
     copyCode();
   }
   let page = new AbortController();

@@ -1,10 +1,13 @@
 <script setup lang="ts" vapor>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
-import { onListboxKey, openModal } from "vaporpress/behaviors";
-import { loadExcerpt, loadSearch, markTerms, markText } from "vaporpress/search";
+import { computed, nextTick, ref, shallowRef, useTemplateRef, watch } from "vue";
+import { onListboxKey } from "vaporpress/behaviors";
+import { fieldValueBeforeHydration, useModalDialog } from "vaporpress/client";
+import type * as Search from "vaporpress/search";
 import type { SearchResult, SiteSearch } from "vaporpress/search";
+import { readStorage, searchQueryKey } from "./search-input.ts";
 
-const emit = defineEmits<{ close: []; go: [path: string] }>();
+const props = defineProps<{ open: boolean }>();
+const emit = defineEmits<{ open: []; close: []; go: [path: string] }>();
 
 interface ShownResult extends SearchResult {
   readonly titlesHtml: readonly string[];
@@ -12,13 +15,6 @@ interface ShownResult extends SearchResult {
   readonly excerpt: string;
 }
 
-const readStorage = (storage: () => Storage, key: string): string | null => {
-  try {
-    return storage().getItem(key);
-  } catch {
-    return null;
-  }
-};
 const writeStorage = (storage: () => Storage, key: string, value: string): void => {
   try {
     storage().setItem(key, value);
@@ -27,16 +23,17 @@ const writeStorage = (storage: () => Storage, key: string, value: string): void 
   }
 };
 
-const queryKey = "acidcat:search-query";
 const detailedKey = "acidcat:search-detailed";
 
 const dialog = useTemplateRef<HTMLDialogElement>("dialog");
 const input = useTemplateRef<HTMLInputElement>("input");
 const list = useTemplateRef<HTMLElement>("list");
 
-const query = ref(readStorage(() => sessionStorage, queryKey) ?? "");
-const detailed = ref(readStorage(() => localStorage, detailedKey) === "true");
-const engine = ref<SiteSearch>();
+const typedBeforeHydration = fieldValueBeforeHydration("#search-dialog[open] input");
+const stored = (storage: () => Storage, key: string): string | null => (import.meta.env.SSR ? null : readStorage(storage, key));
+const query = ref(typedBeforeHydration ?? stored(() => sessionStorage, searchQueryKey) ?? "");
+const detailed = ref(stored(() => localStorage, detailedKey) === "true");
+const engine = shallowRef<{ readonly sections: SiteSearch; readonly tools: typeof Search }>();
 const failed = ref(false);
 const results = ref<readonly ShownResult[]>([]);
 const searched = ref(false);
@@ -48,16 +45,18 @@ let run = 0;
 const search = async (): Promise<void> => {
   const current = ++run;
   const text = query.value.trim();
-  const found = engine.value === undefined || text === "" ? [] : engine.value.search(text);
-  const excerpts = detailed.value ? await Promise.all(found.map((result) => loadExcerpt(result.id).catch(() => ""))) : [];
+  if (engine.value === undefined) return;
+  const { sections, tools } = engine.value;
+  const found = text === "" ? [] : sections.search(text);
+  const excerpts = detailed.value ? await Promise.all(found.map((result) => tools.loadExcerpt(result.id).catch(() => ""))) : [];
   if (current !== run) return;
   results.value = found.map((result, index) => ({
     ...result,
-    titlesHtml: result.titles.map((title) => markText(title, result.terms)),
-    titleHtml: markText(result.title, result.terms),
-    excerpt: markTerms(excerpts[index] ?? "", result.terms),
+    titlesHtml: result.titles.map((title) => tools.markText(title, result.terms)),
+    titleHtml: tools.markText(result.title, result.terms),
+    excerpt: tools.markTerms(excerpts[index] ?? "", result.terms),
   }));
-  searched.value = engine.value !== undefined;
+  searched.value = true;
   selected.value = results.value.length > 0 ? 0 : -1;
   await nextTick();
   for (const mark of dialog.value?.querySelectorAll(".excerpt mark:first-of-type") ?? []) mark.scrollIntoView({ block: "center" });
@@ -66,7 +65,7 @@ const search = async (): Promise<void> => {
 
 watch(query, () => {
   searched.value = false;
-  writeStorage(() => sessionStorage, queryKey, query.value);
+  writeStorage(() => sessionStorage, searchQueryKey, query.value);
   void search();
 });
 watch(detailed, () => {
@@ -116,14 +115,15 @@ const toggleDetails = (): void => {
   detailed.value = !detailed.value;
 };
 
-let closeModal: (() => void) | undefined;
-
-onMounted(() => {
-  document.documentElement.dataset["searchOpen"] = "";
-  if (dialog.value !== null) closeModal = openModal(dialog.value);
-  input.value?.focus();
-  input.value?.select();
-  loadSearch().then(
+const shown = (typing: boolean): void => {
+  failed.value = false;
+  if (!typing) {
+    input.value?.focus();
+    input.value?.select();
+  }
+  import("vaporpress/search")
+    .then(async (tools) => ({ sections: await tools.loadSearch(), tools }))
+    .then(
     (loaded) => {
       engine.value = loaded;
       void search();
@@ -132,16 +132,13 @@ onMounted(() => {
       failed.value = true;
     },
   );
-});
+};
 
-onBeforeUnmount(() => {
-  delete document.documentElement.dataset["searchOpen"];
-  closeModal?.();
-});
+useModalDialog(dialog, { open: () => props.open, shown, openBeforeMount: () => emit("open") });
 </script>
 
 <template>
-  <dialog ref="dialog" class="search-dialog" aria-labelledby="search-label" @keydown="keydown" @cancel="cancel">
+  <dialog id="search-dialog" ref="dialog" class="search-dialog" aria-labelledby="search-label" @keydown="keydown" @cancel="cancel">
     <div class="search-backdrop" @click="close" />
     <div class="search-shell">
       <form class="search-bar" @submit.prevent>
@@ -222,7 +219,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-  :root[data-search-open] {
+  :root:has(.search-dialog[open]) {
     overflow: hidden;
   }
 

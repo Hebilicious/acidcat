@@ -51,6 +51,18 @@ const load = async (): Promise<SiteSearch> => {
   };
 };
 
+export const preloadSearchIndex = (): void => {
+  const href = indexUrl();
+  if (document.head.querySelector(`link[rel="preload"][href="${href}"]`) !== null) return;
+  const link = document.createElement("link");
+  link.rel = "preload";
+  link.as = "fetch";
+  link.crossOrigin = "anonymous";
+  link.fetchPriority = "low";
+  link.href = href;
+  document.head.append(link);
+};
+
 let loading: Promise<SiteSearch> | undefined;
 
 /** Loads the search engine and the index of the site, once. A failed load loads again on the next call. */

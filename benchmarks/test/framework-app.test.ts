@@ -95,6 +95,29 @@ test("on a phone, the menu button opens the sidebar, a link closes it, and Escap
   await page.context().close();
 });
 
+test("before the app hydrates, a click opens the search, and the text typed in it gives results after hydration", async () => {
+  if (browser === undefined) throw new Error("No browser.");
+  const context = await browser.newContext({ viewport: desktop });
+  const page = await context.newPage();
+  let release = (): void => undefined;
+  const scripts = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(/\/assets\/[^/]+\.js$/, async (route) => {
+    await scripts;
+    await route.continue();
+  });
+  await page.goto(`${origin}/guide/installation/`, { waitUntil: "commit" });
+  await page.click(".search-button");
+  await page.keyboard.type("trailing");
+  assert.equal(await page.inputValue("dialog.search[open] input"), "trailing");
+  assert.equal(await page.evaluate(() => document.querySelector("#app")?.hasAttribute("data-v-app")), false, "the app has not hydrated");
+  release();
+  await page.waitForSelector('[role="option"] .result-title mark');
+  assert.equal(await page.inputValue("dialog.search[open] input"), "trailing");
+  await context.close();
+});
+
 test("the copy button of a code block copies its code", async () => {
   const page = await open("/guide/installation/", { permissions: ["clipboard-read", "clipboard-write"] });
   const block = page.locator(".code-block").first();
@@ -127,7 +150,7 @@ test("the search shows the section, the title and an excerpt with the match, and
   assert.equal(await page.getAttribute("dialog.search input", "aria-activedescendant"), await second.getAttribute("id"));
   await page.keyboard.press("ArrowUp");
   await page.keyboard.press("Enter");
-  await page.waitForSelector("dialog.search", { state: "detached" });
+  await page.waitForSelector("dialog.search[open]", { state: "detached" });
   await page.waitForURL(`${origin}/reference/cli/#examples`);
   assert.equal(await sameDocument(page), true);
   await page.context().close();

@@ -107,7 +107,7 @@ export const siteSuite = (roots: { readonly framework: string; readonly vitepres
       change: siteChange,
     },
     {
-      name: "vitepress (main)",
+      name: "vitepress (c2eb27d3)",
       root: roots.vitepress,
       immutable: ["/assets/"],
       pages: sitePages,
