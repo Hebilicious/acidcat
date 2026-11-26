@@ -6,6 +6,7 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -17,7 +18,9 @@ use http_body_util::{BodyExt, Empty, Full, StreamBody};
 use hyper::body::Frame;
 use serde_json::Value;
 use tokio::net::TcpListener;
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -34,12 +37,48 @@ pub trait Handler: Send + Sync + 'static {
     fn handle(&self, request: Request<RequestBody>) -> BoxFuture<'static, Response<ResponseBody>>;
 }
 
+/// When a handler drops the body before its end, the rest of the body is read and discarded, so that the connection
+/// ends only when the request is complete.
 pub fn request_body<B>(request: Request<B>) -> Request<RequestBody>
 where
     B: http_body::Body<Data = Bytes> + Send + 'static,
     B::Error: Into<BoxError>,
 {
-    request.map(|body| body.map_err(Into::into).boxed_unsync())
+    request.map(|body| Discarded(Some(body.map_err(Into::into).boxed_unsync())).boxed_unsync())
+}
+
+struct Discarded(Option<RequestBody>);
+
+impl http_body::Body for Discarded {
+    type Data = Bytes;
+    type Error = BoxError;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Bytes>, BoxError>>> {
+        match self.0.as_mut() {
+            Some(body) => Pin::new(body).poll_frame(context),
+            None => Poll::Ready(None),
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.0.as_ref().is_none_or(http_body::Body::is_end_stream)
+    }
+}
+
+impl Drop for Discarded {
+    fn drop(&mut self) {
+        if let Some(mut body) = self
+            .0
+            .take()
+            .filter(|body| !http_body::Body::is_end_stream(body))
+            && let Ok(runtime) = tokio::runtime::Handle::try_current()
+        {
+            runtime.spawn(async move { while let Some(Ok(_)) = body.frame().await {} });
+        }
+    }
 }
 
 /// The first rule of a remote surface that a request breaks.
@@ -91,29 +130,16 @@ pub(crate) fn screen<B>(request: &Request<B>, rules: &Rules<'_>) -> Option<Rejec
     None
 }
 
-/// Before a rejection, the server discards the rest of the body, up to a second limit, so that the client reads the
-/// answer and does not see a connection that closes while it sends.
 pub(crate) async fn read_request(
     request: Request<RequestBody>,
     rules: &Rules<'_>,
 ) -> Result<(http::request::Parts, String), Rejection> {
-    let rejection = screen(&request, rules);
-    let (parts, mut body) = request.into_parts();
-    let read = match rejection {
-        Some(rejection) => Err(rejection),
-        None => read_bounded(&mut body, rules.maximum_bytes).await,
-    };
-    match read {
-        Ok(text) => Ok((parts, text)),
-        Err(rejection) => {
-            discard(
-                &mut body,
-                rules.maximum_bytes.saturating_add(DEFAULT_MAXIMUM_BYTES),
-            )
-            .await;
-            Err(rejection)
-        }
+    if let Some(rejection) = screen(&request, rules) {
+        return Err(rejection);
     }
+    let (parts, mut body) = request.into_parts();
+    let text = read_bounded(&mut body, rules.maximum_bytes).await?;
+    Ok((parts, text))
 }
 
 async fn read_bounded(body: &mut RequestBody, maximum_bytes: usize) -> Result<String, Rejection> {
@@ -130,19 +156,6 @@ async fn read_bounded(body: &mut RequestBody, maximum_bytes: usize) -> Result<St
         }
     }
     String::from_utf8(bytes).map_err(|_| Rejection::NotUtf8)
-}
-
-async fn discard(body: &mut RequestBody, limit: usize) {
-    let drain = async {
-        let mut read = 0;
-        while read <= limit {
-            match body.frame().await {
-                Some(Ok(frame)) => read += frame.data_ref().map_or(0, Bytes::len),
-                _ => return,
-            }
-        }
-    };
-    let _ = tokio::time::timeout(Duration::from_secs(1), drain).await;
 }
 
 pub(crate) fn header_text<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
@@ -418,33 +431,60 @@ fn run(listener: impl Listener, routes: Routes) -> Running {
     let routes = Arc::new(routes);
     let stop = CancellationToken::new();
     let stopped = stop.clone();
+    let connections = TaskTracker::new();
     let task = tokio::spawn(async move {
         loop {
             let accepted = tokio::select! {
-                () = stopped.cancelled() => return,
+                () = stopped.cancelled() => break,
                 accepted = listener.accept() => accepted,
             };
             let Ok(stream) = accepted else { continue };
-            let routes = routes.clone();
-            let stopped = stopped.clone();
-            tokio::spawn(async move {
-                let service = hyper::service::service_fn(
-                    move |request: Request<hyper::body::Incoming>| {
-                        let routes = routes.clone();
-                        async move { Ok::<_, Infallible>(route(&routes, request_body(request)).await) }
-                    },
-                );
-                let connection = hyper::server::conn::http1::Builder::new()
-                    .serve_connection(hyper_util::rt::TokioIo::new(stream), service);
-                tokio::pin!(connection);
-                tokio::select! {
-                    _ = connection.as_mut() => {}
-                    () = stopped.cancelled() => {}
-                }
-            });
+            connections.spawn(serve_connection(stream, routes.clone(), stopped.clone()));
         }
+        drop(listener);
+        connections.close();
+        connections.wait().await;
     });
     Running { stop, task }
+}
+
+async fn serve_connection(
+    stream: impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
+    routes: Arc<Routes>,
+    stopped: CancellationToken,
+) {
+    let (opened, mut open_responses) = watch::channel(0_usize);
+    let service = hyper::service::service_fn(move |request: Request<hyper::body::Incoming>| {
+        let routes = routes.clone();
+        opened.send_modify(|open| *open += 1);
+        let opened = opened.clone();
+        let complete = OnDrop(move || opened.send_modify(|open| *open -= 1));
+        async move {
+            let response = route(&routes, request_body(request)).await;
+            Ok::<_, Infallible>(response.map(|body| until_dropped(body, complete)))
+        }
+    });
+    let connection = hyper::server::conn::http1::Builder::new()
+        .serve_connection(hyper_util::rt::TokioIo::new(stream), service);
+    tokio::pin!(connection);
+    let closed_with_no_open_response = async {
+        stopped.cancelled().await;
+        let _ = open_responses.wait_for(|open| *open == 0).await;
+    };
+    tokio::select! {
+        _ = connection.as_mut() => return,
+        () = closed_with_no_open_response => {}
+    }
+    connection.as_mut().graceful_shutdown();
+    let _ = connection.await;
+}
+
+fn until_dropped(body: ResponseBody, guard: impl Send + 'static) -> ResponseBody {
+    body.map_frame(move |frame| {
+        let _ = &guard;
+        frame
+    })
+    .boxed_unsync()
 }
 
 fn route(
@@ -463,10 +503,16 @@ fn route(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use std::time::Duration;
 
+    use futures::future::BoxFuture;
+    use http::{Request, Response};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
+    use tokio::sync::{mpsc, watch};
+
+    use super::{Handler, RequestBody, ResponseBody, Served};
 
     async fn exchange(stream: &mut TcpStream) -> String {
         stream
@@ -505,5 +551,208 @@ mod tests {
             );
         }
         served.close().await;
+    }
+
+    struct Held {
+        received: mpsc::UnboundedSender<()>,
+        released: watch::Receiver<bool>,
+    }
+
+    impl Handler for Held {
+        fn handle(
+            &self,
+            _request: Request<RequestBody>,
+        ) -> BoxFuture<'static, Response<ResponseBody>> {
+            let _ = self.received.send(());
+            let mut released = self.released.clone();
+            Box::pin(async move {
+                let _ = released.wait_for(|released| *released).await;
+                super::empty_response(204)
+            })
+        }
+    }
+
+    struct HeldServer {
+        served: Served,
+        received: mpsc::UnboundedReceiver<()>,
+        release: watch::Sender<bool>,
+    }
+
+    async fn held_server() -> HeldServer {
+        let (received, receiver) = mpsc::unbounded_channel();
+        let (release, released) = watch::channel(false);
+        let served = super::serve(
+            "127.0.0.1:0".parse().expect("the address parses"),
+            vec![("/".into(), Arc::new(Held { received, released }))],
+        )
+        .await
+        .expect("the server listens");
+        HeldServer {
+            served,
+            received: receiver,
+            release,
+        }
+    }
+
+    async fn start_close(served: Served) -> impl Future<Output = ()> {
+        let mut closed = Box::pin(served.close());
+        assert!(
+            futures::poll!(&mut closed).is_pending(),
+            "close waits for the connection"
+        );
+        // On a runtime of one thread, `yield_now` lets the tasks of the server act on the close first.
+        tokio::task::yield_now().await;
+        closed
+    }
+
+    struct Client {
+        stream: TcpStream,
+        text: String,
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct Closed {
+        answers: usize,
+        error: Option<String>,
+    }
+
+    impl Client {
+        async fn connect(served: &Served) -> Self {
+            let stream = TcpStream::connect(served.address)
+                .await
+                .expect("the client connects");
+            Client {
+                stream,
+                text: String::new(),
+            }
+        }
+
+        async fn write(&mut self, data: &str) {
+            self.stream
+                .write_all(data.as_bytes())
+                .await
+                .expect("the client writes");
+        }
+
+        fn answers(&self) -> usize {
+            self.text.matches("HTTP/1.1 204").count()
+        }
+
+        async fn read(&mut self) -> std::io::Result<usize> {
+            let mut buffer = [0; 1024];
+            let read = self.stream.read(&mut buffer).await?;
+            self.text
+                .push_str(&String::from_utf8_lossy(&buffer[..read]));
+            Ok(read)
+        }
+
+        async fn until_answers(&mut self, count: usize) {
+            while self.answers() < count {
+                let read = self.read().await.expect("the client reads");
+                assert_ne!(read, 0, "the server ended the connection: {}", self.text);
+            }
+        }
+
+        fn ended(&self) -> bool {
+            let mut buffer = [0; 1];
+            !matches!(self.stream.try_read(&mut buffer), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock)
+        }
+
+        async fn closed(mut self) -> Closed {
+            let error = loop {
+                match self.read().await {
+                    Ok(0) => break None,
+                    Ok(_) => {}
+                    Err(error) => break Some(error.to_string()),
+                }
+            };
+            Closed {
+                answers: self.answers(),
+                error,
+            }
+        }
+    }
+
+    const GET: &str = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+
+    #[tokio::test]
+    async fn close_ends_an_idle_connection() {
+        let server = held_server().await;
+        let _ = server.release.send(true);
+        let mut client = Client::connect(&server.served).await;
+        client.write(GET).await;
+        client.until_answers(1).await;
+        server.served.close().await;
+        assert_eq!(
+            client.closed().await,
+            Closed {
+                answers: 1,
+                error: None
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn close_ends_a_connection_after_the_response_that_runs_when_the_server_closes() {
+        let mut server = held_server().await;
+        let mut client = Client::connect(&server.served).await;
+        client.write(GET).await;
+        server.received.recv().await;
+        let closed = start_close(server.served).await;
+        let _ = server.release.send(true);
+        closed.await;
+        assert_eq!(
+            client.closed().await,
+            Closed {
+                answers: 1,
+                error: None
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn close_ends_a_connection_after_the_end_of_a_request_body_that_still_arrives_when_the_response_is_complete()
+     {
+        let mut server = held_server().await;
+        let mut client = Client::connect(&server.served).await;
+        client
+            .write("POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 2\r\n\r\na")
+            .await;
+        server.received.recv().await;
+        let closed = start_close(server.served).await;
+        let _ = server.release.send(true);
+        client.until_answers(1).await;
+        assert!(
+            !client.ended(),
+            "the server waits for the rest of the request"
+        );
+        client.write("b").await;
+        closed.await;
+        assert_eq!(
+            client.closed().await,
+            Closed {
+                answers: 1,
+                error: None
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn close_ends_a_connection_after_the_answer_to_a_second_request_that_the_client_sent_before_the_first_answer()
+     {
+        let mut server = held_server().await;
+        let mut client = Client::connect(&server.served).await;
+        client.write(&format!("{GET}{GET}")).await;
+        server.received.recv().await;
+        let closed = start_close(server.served).await;
+        let _ = server.release.send(true);
+        closed.await;
+        assert_eq!(
+            client.closed().await,
+            Closed {
+                answers: 2,
+                error: None
+            }
+        );
     }
 }
