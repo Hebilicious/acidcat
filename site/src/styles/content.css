@@ -33,12 +33,7 @@
   font-size: var(--sl-text-h4);
 }
 
-.markdown-content :is(h2, h3, h4) {
-  position: relative;
-}
-
 .markdown-content .header-anchor {
-  position: absolute;
   margin-inline-start: 0.25em;
   color: var(--palette-brass-600);
   text-decoration: none;
@@ -70,6 +65,10 @@
 
 .markdown-content li {
   overflow-wrap: anywhere;
+}
+
+.markdown-content p {
+  overflow-wrap: break-word;
 }
 
 .markdown-content strong {
