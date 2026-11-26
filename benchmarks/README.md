@@ -3,7 +3,7 @@
 This project measures what a reader sees on a documentation site. It compares vaporpress with VitePress, Astro Starlight and Nuxt Docus, in two suites:
 
 - **fixture**: the same small docs site in each framework. It shows the defaults of each framework.
-- **site**: the homepage and two docs pages of the AcidCat site, in its three builds: vaporpress (`moon run site:build`), VitePress (`main`, the site in production), and Astro Starlight (commit `fe26e301`). No Nuxt build of the AcidCat site exists.
+- **site**: the homepage and two docs pages of the AcidCat site, in its three builds: vaporpress (`moon run site:build`), VitePress (commit `c2eb27d3`, the last build of the site with VitePress), and Astro Starlight (commit `fe26e301`). No Nuxt build of the AcidCat site exists.
 
 The workflow [`benchmark.yml`](../.github/workflows/benchmark.yml) runs both suites on GitHub's runners. It writes the tables to the summary of the run, and uploads the raw results.
 
