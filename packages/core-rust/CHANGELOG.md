@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.1](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.9.0...crates-core/v0.9.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* **core-rust:** close() of remote::serve finishes each accepted request ([#241](https://github.com/Hebilicious/acidcat/issues/241)) ([a21250f](https://github.com/Hebilicious/acidcat/commit/a21250faf0bd28558183cb603d5609b380b383cc))
+* **core-rust:** give SIGINT back to the host after run_cli_process ([#242](https://github.com/Hebilicious/acidcat/issues/242)) ([e0e4ad5](https://github.com/Hebilicious/acidcat/commit/e0e4ad532400ba2db4d0d8c3b96a247f08cbb8f6))
+
 ## [0.9.0](https://github.com/Hebilicious/acidcat/compare/crates-core/v0.8.0...crates-core/v0.9.0) (2026-11-25)
 
 
